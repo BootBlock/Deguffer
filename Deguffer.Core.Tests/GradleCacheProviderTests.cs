@@ -13,13 +13,27 @@ public sealed class GradleCacheProviderTests : IDisposable
 {
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
+    private readonly FakeSystemDirectories _system;
 
-    public GradleCacheProviderTests() => _environment = new FakeUserEnvironment(_temp.Path);
+    public GradleCacheProviderTests()
+    {
+        _environment = new FakeUserEnvironment(_temp.Path);
+        _system = new FakeSystemDirectories(Path.Combine(_temp.Path, "system"));
+    }
 
     public void Dispose() => _temp.Dispose();
 
     private GradleCacheProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system);
+
+    /// <summary>A Gradle user home somewhere other than the profile, named by the variable.</summary>
+    private string MoveGradleHome()
+    {
+        var moved = Path.Combine(_temp.Path, "drive-d", "gradle");
+        Directory.CreateDirectory(moved);
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, moved);
+        return moved;
+    }
 
     private string CreateGradleHome()
     {
@@ -60,13 +74,13 @@ public sealed class GradleCacheProviderTests : IDisposable
     {
         CreateGradleHome();
         var provider = CreateProvider();
-        CreateAt(provider.RootPath, "caches", 1024);
+        CreateAt(provider.ResolveHome()!, "caches", 1024);
 
         var plan = await provider.PlanAsync();
 
-        Assert.DoesNotContain(provider.RootPath, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(provider.ResolveHome()!, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.All(plan.TargetedPaths, path => Assert.NotEqual(
-            provider.RootPath.TrimEnd(Path.DirectorySeparatorChar),
+            provider.ResolveHome()!.TrimEnd(Path.DirectorySeparatorChar),
             path.TrimEnd(Path.DirectorySeparatorChar),
             StringComparer.OrdinalIgnoreCase));
     }
@@ -338,6 +352,165 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         // Not "could not list", which would assert the folder is there. Nothing established that.
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("could not list", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The variable moves the whole home, so the moved caches are what Gradle uses. A <c>.gradle</c>
+    /// left in the profile is no longer Gradle's home and is not offered in its place.
+    /// </summary>
+    [Fact]
+    public async Task PlansTheCachesWhereTheVariableMovedTheHome()
+    {
+        var stale = CreateAt(CreateGradleHome(), "caches", 4096);
+        var moved = MoveGradleHome();
+        CreateAt(moved, "caches", 4096);
+        CreateAt(moved, "wrapper", 4096);
+
+        var provider = CreateProvider();
+        Assert.Equal(moved, provider.ResolveHome());
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            [Path.Combine(moved, "caches"), Path.Combine(moved, "wrapper")],
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain(stale, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The variable naming a home that is not there yet is Gradle not having run, not the default.</summary>
+    [Fact]
+    public async Task AMovedHomeThatIsNotThereIsNotPresentEvenWithTheDefaultOnDisk()
+    {
+        CreateAt(CreateGradleHome(), "caches", 4096);
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, Path.Combine(_temp.Path, "drive-d", "gradle"));
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.True((await provider.PlanAsync()).IsEmpty);
+    }
+
+    /// <summary>
+    /// Both homes are declared, because a <c>gradle.properties</c> written before the move is still in
+    /// the profile, and the moved one is the one Gradle reads now.
+    /// </summary>
+    [Fact]
+    public void DeclaresTheMovedHomeAndTheDefaultHomeAsToolRoots()
+    {
+        var moved = MoveGradleHome();
+        var provider = CreateProvider();
+
+        Assert.Equal(
+            [moved, provider.DefaultHome],
+            provider.ToolRoots.Select(root => root.Path));
+    }
+
+    [Fact]
+    public void DeclaresTheDefaultHomeOnceWhereTheVariableNamesIt()
+    {
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, CreateGradleHome() + Path.DirectorySeparatorChar);
+
+        var provider = CreateProvider();
+
+        Assert.Equal([provider.DefaultHome], provider.ToolRoots.Select(root => root.Path));
+    }
+
+    /// <summary>
+    /// §5.6 in the moved home. The configuration moves with the caches, so it is what the run has to
+    /// prove survived there.
+    /// </summary>
+    [Fact]
+    public async Task ExecutingInAMovedHomeLeavesItsConfigStanding()
+    {
+        var moved = MoveGradleHome();
+        CreateAt(moved, "caches", 4096);
+        var unknown = CreateAt(moved, "jdks", 4096);
+        var properties = Path.Combine(moved, "gradle.properties");
+        File.WriteAllText(properties, "signing.keyId=DEADBEEF");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(properties, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(Path.Combine(moved, "caches")));
+        Assert.True(File.Exists(properties));
+        Assert.True(Directory.Exists(unknown));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// Gradle resolves a relative value against the build's working directory, which Deguffer is not,
+    /// and the default home is not what the user asked for either. The default is still declared,
+    /// because what it holds is still Gradle's configuration.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingWhenTheVariableIsRelative()
+    {
+        var stale = CreateAt(CreateGradleHome(), "caches", 4096);
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"..\gradle-home");
+
+        var provider = CreateProvider();
+
+        Assert.Null(provider.ResolveHome());
+        Assert.False(await provider.IsPresentAsync());
+        Assert.Equal([provider.DefaultHome], provider.ToolRoots.Select(root => root.Path));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.DoesNotContain(stale, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("not a full path", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <c>caches</c> and <c>wrapper</c> are names anything may use, so a drive root is never read as
+    /// Gradle's home, and is not declared to Explore as one: that would let Explore remove whatever is
+    /// called <c>caches</c> there.
+    /// </summary>
+    [Fact]
+    public async Task WillNotTreatADriveRootAsGradlesHome()
+    {
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"Q:\");
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.Equal([provider.DefaultHome], provider.ToolRoots.Select(root => root.Path));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("root of a drive", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The variable naming one of the account's own folders would offer the user's own folder called
+    /// <c>caches</c>, so the folder is declined whole and nothing in it is planned.
+    /// </summary>
+    [Fact]
+    public async Task WillNotTreatTheAccountsDocumentsAsGradlesHome()
+    {
+        var documents = _environment.Documents!;
+        var theirs = CreateAt(documents, "caches", 4096);
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, documents);
+
+        var provider = CreateProvider();
+
+        Assert.Null(provider.ResolveHome());
+        Assert.False(await provider.IsPresentAsync());
+        Assert.DoesNotContain(provider.ToolRoots, root => root.Path.Equals(documents, StringComparison.OrdinalIgnoreCase));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.DoesNotContain(theirs, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("will not treat that as Gradle's folder", StringComparison.Ordinal));
     }
 
     /// <summary>Create <paramref name="child"/> under the root holding one file of the given size.</summary>

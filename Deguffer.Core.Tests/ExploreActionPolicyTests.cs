@@ -1586,13 +1586,35 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public async Task ThePolicyReadsSection52OutOfTheProvidersThemselves()
     {
-        var provider = new GradleCacheProvider(_environment);
+        var provider = new GradleCacheProvider(_environment, system: _system);
         var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
-        Assert.Equal(GradleRoot, provider.RootPath);
-        Assert.False(policy.MayRemove(provider.RootPath).IsAllowed);
-        Assert.False(policy.MayRemove(Path.Combine(provider.RootPath, "gradle.properties")).IsAllowed);
-        Assert.True(policy.MayRemove(Path.Combine(provider.RootPath, "caches")).IsAllowed);
+        Assert.Equal(GradleRoot, provider.ResolveHome());
+        Assert.False(policy.MayRemove(GradleRoot).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+    }
+
+    /// <summary>
+    /// <c>GRADLE_USER_HOME</c> moves the configuration with the caches, so the moved
+    /// <c>gradle.properties</c> is refused exactly as the default one is. The <c>.gradle</c> left in the
+    /// profile is still refused too: whatever was written there before the move is still there.
+    /// </summary>
+    [Fact]
+    public async Task AMovedGradleHomeIsRefusedAsTheDefaultOneIsAndTheDefaultStaysRefused()
+    {
+        const string moved = @"Q:\gradle";
+        _volumes.With(@"Q:\");
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, moved);
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
+
+        foreach (var home in (string[])[moved, GradleRoot])
+        {
+            Assert.False(policy.MayRemove(home).IsAllowed, home);
+            Assert.False(policy.MayRemove(Path.Combine(home, "gradle.properties")).IsAllowed, home);
+            Assert.True(policy.MayRemove(Path.Combine(home, "caches")).IsAllowed, home);
+        }
     }
 
     /// <summary>
