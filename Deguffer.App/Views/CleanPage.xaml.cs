@@ -35,6 +35,7 @@ public sealed partial class CleanPage : Page
             ElevatedRelaunch.IsElevated,
             App.Selections,
             App.Keeps,
+            App.Running,
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         InitializeComponent();

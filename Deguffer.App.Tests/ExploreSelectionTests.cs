@@ -275,7 +275,7 @@ public sealed class ExploreSelectionTests : IDisposable
     private ExploreSelection Selection(ExploreTree tree)
     {
         var selection = new ExploreSelection(
-            new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, new FakeRecycleBin()));
+            new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, _explore.Running, new FakeRecycleBin()));
 
         selection.Show(tree);
 
