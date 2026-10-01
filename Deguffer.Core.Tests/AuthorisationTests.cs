@@ -146,6 +146,23 @@ public sealed class AuthorisationTests
     }
 
     /// <summary>
+    /// A run cancelled before it starts asks no question at all, so the check comes before the first
+    /// question rather than after it. The test below pins that it is made again for every finding.
+    /// </summary>
+    [Fact]
+    public async Task ARunCancelledBeforeItStartsAsksNothing()
+    {
+        var asker = new Asker(agree: true);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Authorisation.CollectAsync(
+            [Selected("sdk", SafetyTier.RegenerableWithCost)], requireTypedPhrase: true, asker.AskAsync, cancelled.Token));
+
+        Assert.Empty(asker.Asked);
+    }
+
+    /// <summary>
     /// A run cancelled after its first answer asks nothing further. Cancelled from the first question
     /// rather than before the call, because a token cancelled up front is caught by a check above the
     /// loop just as well as by the one in it, and only the one in it stops the second question.
