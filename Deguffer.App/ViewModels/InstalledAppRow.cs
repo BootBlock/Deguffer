@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.InstalledApps;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.ViewModels;
 
@@ -9,7 +10,7 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class InstalledAppRow : ObservableObject
 {
-    public InstalledAppRow(InstalledEntry entry) => Show(entry);
+    public InstalledAppRow(InstalledEntry entry, EntryMarks marks) => Show(entry, marks);
 
     public UninstallKey Key => Entry.Key;
 
@@ -23,17 +24,65 @@ public sealed partial class InstalledAppRow : ObservableObject
     [ObservableProperty]
     public partial string Detail { get; private set; }
 
-    /// <summary>What the evidence showed, and why Windows hides the entry where it does.</summary>
+    /// <summary>The standing badge's word.</summary>
+    [ObservableProperty]
+    public partial string Standing { get; private set; }
+
+    /// <summary>Which standing badge style the row wears.</summary>
+    [ObservableProperty]
+    public partial EntryStanding StandingKind { get; private set; }
+
+    /// <summary>Why the entry is in its list: the standing badge's tooltip.</summary>
     [ObservableProperty]
     public partial string Reason { get; private set; }
 
-    public void Show(InstalledEntry entry)
+    /// <summary>Why Windows hides the entry, or empty where it lists it.</summary>
+    [ObservableProperty]
+    public partial string Hidden { get; private set; }
+
+    [ObservableProperty]
+    public partial bool IsHidden { get; private set; }
+
+    /// <summary>What needs administrator rights, or empty where nothing does.</summary>
+    [ObservableProperty]
+    public partial string Shield { get; private set; }
+
+    [ObservableProperty]
+    public partial bool HasShield { get; private set; }
+
+    /// <summary>Why the program cannot be uninstalled, or empty where it can.</summary>
+    [ObservableProperty]
+    public partial string Refusal { get; private set; }
+
+    [ObservableProperty]
+    public partial bool HasRefusal { get; private set; }
+
+    [ObservableProperty]
+    public partial string Size { get; private set; }
+
+    [ObservableProperty]
+    public partial bool HasSize { get; private set; }
+
+    /// <summary>Everything the row's marks say, for a screen reader.</summary>
+    [ObservableProperty]
+    public partial string Description { get; private set; }
+
+    public void Show(InstalledEntry entry, EntryMarks marks)
     {
         Entry = entry;
         Name = entry.Name;
         Detail = string.Join(" · ", new[] { entry.Publisher, entry.Version, entry.Key.Scope.Describe() }.Where(p => p is not null));
-        Reason = EntryListing.WhyHidden(entry.Visibility) is { } hidden
-            ? $"{entry.Standing.Reason} {hidden}"
-            : entry.Standing.Reason;
+        Standing = marks.Standing;
+        StandingKind = entry.Standing.Standing;
+        Reason = marks.Reason;
+        Hidden = marks.Hidden ?? string.Empty;
+        IsHidden = marks.Hidden is not null;
+        Shield = marks.Shield ?? string.Empty;
+        HasShield = marks.Shield is not null;
+        Refusal = marks.Refusal ?? string.Empty;
+        HasRefusal = marks.Refusal is not null;
+        Size = marks.Size is { } bytes ? FreeSpace.Format(bytes) : string.Empty;
+        HasSize = marks.Size is not null;
+        Description = string.Join(" ", new[] { $"{marks.Standing}.", marks.Reason, marks.Hidden, marks.Shield, marks.Refusal, HasSize ? $"Its installer estimated {Size}." : null }.Where(p => p is not null));
     }
 }

@@ -13,6 +13,7 @@
 
             <converters:TierChipStyleConverter x:Key="TierChipStyle" />
             <converters:RunStatementStyleConverter x:Key="RunStatementStyle" />
+            <converters:StandingChipStyleConverter x:Key="StandingChipStyle" />
 
             <!--
                 §7's "colour by tier". These are Styles rather than loose brushes so the colours
@@ -70,6 +71,18 @@
             <Style x:Key="TierChipDoNotTouch" TargetType="ContentControl" BasedOn="{StaticResource TierChipBase}">
                 <Setter Property="Background" Value="{ThemeResource ControlAltFillColorSecondaryBrush}" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+
+            <!-- An installed app's standing, on the tier chip's shape. Neutral, because a standing is
+                 a finding rather than a warning, except where nothing could prove it either way. -->
+            <Style x:Key="StandingChip" TargetType="ContentControl" BasedOn="{StaticResource TierChipBase}">
+                <Setter Property="Background" Value="{ThemeResource ControlAltFillColorSecondaryBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+
+            <Style x:Key="StandingChipUnproven" TargetType="ContentControl" BasedOn="{StaticResource TierChipBase}">
+                <Setter Property="Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
             </Style>
 
             <!--

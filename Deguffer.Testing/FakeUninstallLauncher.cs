@@ -14,14 +14,22 @@ public sealed class FakeUninstallLauncher : IUninstallLauncher
     /// <summary>The outcome it reports: started and exited, by default.</summary>
     public LaunchOutcome Outcome { get; set; } = new(true, "The uninstaller exited with code 0.");
 
-    public Task<LaunchOutcome> RunAsync(UninstallLaunch launch, CancellationToken ct)
+    /// <summary>Whether the uninstaller never exits, so only a cancel ends the wait.</summary>
+    public bool RunsUntilCancelled { get; set; }
+
+    public async Task<LaunchOutcome> RunAsync(UninstallLaunch launch, CancellationToken ct)
     {
         if (Outcome.Started)
         {
             Started.Add(launch);
             WhileRunning?.Invoke(launch);
+
+            if (RunsUntilCancelled)
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
         }
 
-        return Task.FromResult(Outcome);
+        return Outcome;
     }
 }

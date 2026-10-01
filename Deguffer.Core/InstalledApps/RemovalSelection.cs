@@ -11,15 +11,6 @@ public sealed record RemovalSelection(IReadOnlyList<InstalledEntry> Removable, s
         var removable = verdicts.Where(v => v.Verdict.IsAllowed).Select(v => v.Entry).ToList();
         var refused = verdicts.Where(v => !v.Verdict.IsAllowed).ToList();
 
-        if (refused.Count == 0)
-        {
-            return new RemovalSelection(removable, null);
-        }
-
-        var note = refused is [var only]
-            ? $"'{only.Entry.Name}' will be left. {only.Verdict.Reason}"
-            : $"{refused.Count} of the selected entries will be left. '{refused[0].Entry.Name}': {refused[0].Verdict.Reason}";
-
-        return new RemovalSelection(removable, note);
+        return new RemovalSelection(removable, LeftNote.For(refused, removable.Count, "entries"));
     }
 }

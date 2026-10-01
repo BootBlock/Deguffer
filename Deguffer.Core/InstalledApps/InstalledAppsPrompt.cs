@@ -35,13 +35,32 @@ public sealed record InstalledAppsPrompt(string Title, string Consequence, IRead
         [backup.KeyPath],
         "Restore");
 
-    public static InstalledAppsPrompt ForUninstall(InstalledEntry entry, UninstallLaunch launch) => new(
-        $"Uninstall '{entry.Name}'?",
-        "Deguffer runs the program's own uninstaller, which may ask you questions and may ask for administrator "
-        + "rights. What it removes is up to the uninstaller. When it exits, Deguffer reads the entry again and "
-        + "reports what the list now says.",
-        [launch.Display],
-        "Uninstall");
+    public static InstalledAppsPrompt ForUninstall(IReadOnlyList<PreparedUninstall> programs) => programs is [var only]
+        ? new InstalledAppsPrompt(
+            $"Uninstall '{only.Entry.Name}'?",
+            "Deguffer runs the program's own uninstaller, which may ask you questions and may ask for administrator "
+            + "rights. What it removes is up to the uninstaller. When it exits, Deguffer reads the entry again and "
+            + "reports what the list now says.",
+            [only.Launch.Display],
+            "Uninstall")
+        : new InstalledAppsPrompt(
+            $"Uninstall {programs.Count} programs?",
+            "Deguffer runs each program's own uninstaller, one at a time and in this order. Each may ask you questions "
+            + "and may ask for administrator rights, and what it removes is up to the uninstaller. Many uninstallers "
+            + "keep working after they exit, so after each one Deguffer asks before it starts the next, and you can "
+            + "stop there.",
+            [.. programs.Select(p => $"{p.Entry.Name}: {p.Launch.Display}")],
+            "Uninstall all");
+
+    /// <summary>Asked between two uninstallers of a queue, once the first has exited.</summary>
+    /// <param name="after">How many programs are queued behind <paramref name="next"/>.</param>
+    public static InstalledAppsPrompt ForNextUninstall(UninstallReport previous, PreparedUninstall next, int after) => new(
+        $"Uninstall '{next.Entry.Name}' next?",
+        $"{previous.Summary} Its uninstaller may still be working in another window, so wait until it has finished. "
+        + (after == 0 ? "This is the last program queued." : after == 1 ? "One more program is queued after this one." : $"{after} more programs are queued after this one.")
+        + " Cancel starts no more uninstallers.",
+        [next.Launch.Display],
+        "Uninstall next");
 }
 
 /// <summary>

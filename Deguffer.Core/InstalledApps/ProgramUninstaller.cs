@@ -39,34 +39,46 @@ public sealed record UninstallReport(InstalledEntry Entry, AfterUninstall After,
 public sealed class ProgramUninstaller(InstalledAppsReader reader, IUninstallLauncher launcher, string msiexec)
 {
     /// <summary>
+    /// What <paramref name="entry"/> would run as it was read, with no fresh read. For the page's
+    /// first decision, made whenever the selection changes; <see cref="Prepare"/> makes the second.
+    /// </summary>
+    public UninstallJudgement Judge(InstalledEntry entry)
+    {
+        var (verdict, launch) = UninstallPolicy.MayUninstall(entry, msiexec);
+
+        return new UninstallJudgement(verdict, launch is null ? null : new PreparedUninstall(entry, launch));
+    }
+
+    /// <summary>
     /// The launch <paramref name="chosen"/> would run now, for the confirmation, or the refusal. Read
     /// again so the command confirmed is the command that runs.
     /// </summary>
-    public (ActionVerdict Verdict, UninstallLaunch? Launch, InstalledEntry? Current) Prepare(InstalledEntry chosen)
+    public UninstallJudgement Prepare(InstalledEntry chosen) =>
+        reader.ReadAgain(chosen.Key) is { } current
+            ? Judge(current)
+            : new UninstallJudgement(ActionVerdict.Refuse("The entry is already gone."), null);
+
+    public async Task<UninstallReport> UninstallAsync(PreparedUninstall confirmed, CancellationToken ct)
     {
-        if (reader.ReadAgain(chosen.Key) is not { } current)
+        var (verdict, prepared) = Prepare(confirmed.Entry);
+
+        if (prepared is not { Entry: var current, Launch: var launch })
         {
-            return (ActionVerdict.Refuse("The entry is already gone."), null, null);
+            return new UninstallReport(confirmed.Entry, AfterUninstall.NotRun, verdict.Reason);
         }
 
-        var (verdict, launch) = UninstallPolicy.MayUninstall(current, msiexec);
-
-        return (verdict, launch, current);
-    }
-
-    public async Task<UninstallReport> UninstallAsync(InstalledEntry chosen, UninstallLaunch confirmed, CancellationToken ct)
-    {
-        var (verdict, launch, current) = Prepare(chosen);
-
-        if (!verdict.IsAllowed || launch is null || current is null)
+        if (launch != confirmed.Launch)
         {
-            return new UninstallReport(chosen, AfterUninstall.NotRun, verdict.Reason);
-        }
-
-        if (launch != confirmed)
-        {
-            return new UninstallReport(chosen, AfterUninstall.NotRun,
+            return new UninstallReport(confirmed.Entry, AfterUninstall.NotRun,
                 "The entry's uninstall command changed after you confirmed it, so Deguffer did not run it.");
+        }
+
+        // The last moment a cancel can still keep the uninstaller from starting: the launcher sees
+        // the token only once the process is running.
+        if (ct.IsCancellationRequested)
+        {
+            return new UninstallReport(confirmed.Entry, AfterUninstall.NotRun,
+                $"The uninstaller of '{confirmed.Entry.Name}' was cancelled before it started, so Deguffer did not run it.");
         }
 
         var outcome = await launcher.RunAsync(launch, ct).ConfigureAwait(false);
