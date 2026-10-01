@@ -424,7 +424,9 @@ public sealed class ExploreActionPolicy
     /// written about the whole folder — a program is using it, it holds the programs
     /// <c>go install</c> put there — while the sentence <see cref="ToolRootChildren.Refusal"/> gives
     /// an unrecognised child speaks of configuration beside a cache. Said of a file in a folder a program is working
-    /// in, that sentence is untrue, and the user reading it is deciding whether to wait.</para>
+    /// in, that sentence is untrue, and the user reading it is deciding whether to wait. A root that
+    /// claims only <see cref="ToolRootClaim.NamedEntries"/> is the exception: the rest of its folder is
+    /// someone else's, so its refusal names the entry rather than the folder.</para>
     /// </summary>
     private ExploreVerdict? ProbedRefusal(string target, ToolRootChildren children)
     {
@@ -443,9 +445,11 @@ public sealed class ExploreActionPolicy
 
             refusal = target.Length == path.Length
                 ? refused
-                : ExploreVerdict.Refuse(
-                    $"'{Path.GetFileName(target)}' is inside '{path}', and Explore refuses what is in there "
-                    + $"as well as '{Path.GetFileName(path)}' itself: {root.Reason}");
+                : root.Claim == ToolRootClaim.NamedEntries
+                    ? ExploreVerdict.Refuse($"'{Path.GetFileName(target)}' is the tool's, in '{path}': {root.Reason}")
+                    : ExploreVerdict.Refuse(
+                        $"'{Path.GetFileName(target)}' is inside '{path}', and Explore refuses what is in there "
+                        + $"as well as '{Path.GetFileName(path)}' itself: {root.Reason}");
             depth = path.Length;
         }
 

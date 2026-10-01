@@ -1630,7 +1630,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var policy = await ExploreActionPolicy.ForAsync(
             _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
 
-        Assert.False(policy.MayRemove(@"Q:\gradle.properties").IsAllowed);
+        var properties = policy.MayRemove(@"Q:\gradle.properties");
+        Assert.False(properties.IsAllowed);
+        Assert.Contains("'gradle.properties' is the tool's", properties.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("refuses what is in there", properties.Reason, StringComparison.Ordinal);
         Assert.False(policy.MayRemove(@"Q:\init.gradle.kts").IsAllowed);
         Assert.False(policy.MayRemove(@"Q:\init.d\company.gradle").IsAllowed);
         Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
