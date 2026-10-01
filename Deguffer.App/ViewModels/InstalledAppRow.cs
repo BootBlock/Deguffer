@@ -74,6 +74,6 @@ public sealed partial class InstalledAppRow : ObservableObject
         HasShield = marks.Shield is not null;
         Size = marks.Size is { } bytes ? FreeSpace.Format(bytes) : string.Empty;
         HasSize = marks.Size is not null;
-        Description = string.Join(" ", new[] { $"{marks.Standing}.", marks.Reason, marks.Hidden, marks.Shield, HasSize ? $"About {Size}." : null }.Where(p => p is not null));
+        Description = string.Join(" ", new[] { $"{marks.Standing}.", marks.Reason, marks.Hidden, marks.Shield, HasSize ? $"Its installer estimated {Size}." : null }.Where(p => p is not null));
     }
 }

@@ -11,41 +11,47 @@
              is, with the installer's size beside both. §7.3 puts the reason on every row: it is the
              standing badge's tooltip, and the row's help text for a screen reader. -->
         <DataTemplate x:Key="EntryTemplate" x:DataType="vm:InstalledAppRow">
-            <Grid Padding="0,8" ColumnSpacing="12" RowSpacing="2"
-                  ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto"
+            <!-- The size sits outside the two lines, so it cannot make one row taller than the rest,
+                 and its column keeps its width where a row has no size, so the badges line up. -->
+            <Grid Padding="0,8" ColumnSpacing="12"
                   AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
                   AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}">
-                <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" MinWidth="80" />
+                </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xEA18;" FontSize="14" VerticalAlignment="Center"
-                              Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                              Visibility="{x:Bind HasShield, Mode=OneWay}"
-                              ToolTipService.ToolTip="{x:Bind Shield, Mode=OneWay}"
-                              AutomationProperties.AccessibilityView="Raw" />
-                    <ContentControl Content="Hidden" Style="{StaticResource StandingChip}"
-                                    Visibility="{x:Bind IsHidden, Mode=OneWay}"
-                                    ToolTipService.ToolTip="{x:Bind Hidden, Mode=OneWay}"
-                                    AutomationProperties.Name="Hidden" />
-                    <ContentControl Content="{x:Bind Standing, Mode=OneWay}"
-                                    Style="{x:Bind StandingKind, Mode=OneWay, Converter={StaticResource StandingChipStyle}}"
-                                    ToolTipService.ToolTip="{x:Bind Reason, Mode=OneWay}"
-                                    AutomationProperties.Name="{x:Bind Standing, Mode=OneWay}" />
-                </StackPanel>
+                <Grid ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
 
-                <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{x:Bind Detail, Mode=OneWay}"
-                           Style="{StaticResource SecondaryText}" TextWrapping="NoWrap"
-                           TextTrimming="CharacterEllipsis" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xEA18;" FontSize="14" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                  Visibility="{x:Bind HasShield, Mode=OneWay}"
+                                  ToolTipService.ToolTip="{x:Bind Shield, Mode=OneWay}"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <ContentControl Content="Hidden" Style="{StaticResource StandingChip}"
+                                        Visibility="{x:Bind IsHidden, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind Hidden, Mode=OneWay}"
+                                        AutomationProperties.Name="Hidden" />
+                        <ContentControl Content="{x:Bind Standing, Mode=OneWay}"
+                                        Style="{x:Bind StandingKind, Mode=OneWay, Converter={StaticResource StandingChipStyle}}"
+                                        ToolTipService.ToolTip="{x:Bind Reason, Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind Standing, Mode=OneWay}" />
+                    </StackPanel>
 
-                <!-- The installer's own estimate, so it says so under the figure. -->
-                <StackPanel Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Center" MinWidth="72"
-                            Visibility="{x:Bind HasSize, Mode=OneWay}"
-                            ToolTipService.ToolTip="The size the program's installer recorded for it, as Windows Settings shows it.">
-                    <TextBlock Text="{x:Bind Size, Mode=OneWay}" Style="{StaticResource Figure}"
-                               HorizontalAlignment="Right" />
-                    <TextBlock Text="estimated" Style="{StaticResource FieldLabel}" HorizontalAlignment="Right"
-                               AutomationProperties.AccessibilityView="Raw" />
-                </StackPanel>
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{x:Bind Detail, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}" TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
+
+                <!-- One figure across both lines. It is the installer's own estimate, which the
+                     tooltip and the help text say. -->
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
+                           Text="{x:Bind Size, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="20"
+                           Visibility="{x:Bind HasSize, Mode=OneWay}"
+                           ToolTipService.ToolTip="The size the program's installer estimated for it, as Windows Settings shows it."
+                           AutomationProperties.AccessibilityView="Raw" />
             </Grid>
         </DataTemplate>
 
