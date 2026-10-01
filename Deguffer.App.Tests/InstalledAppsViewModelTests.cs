@@ -38,6 +38,8 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     private readonly List<ElevationRequest> _relaunches = [];
 
+    private readonly RunningActions _running = new();
+
     private readonly FakeUninstallLauncher _launcher = new();
 
     public InstalledAppsViewModelTests() =>
@@ -59,13 +61,15 @@ public sealed class InstalledAppsViewModelTests : IDisposable
                 backups,
                 () => _prompt,
                 _preferences,
-                isElevated: false),
+                isElevated: false,
+                _running),
             isElevated: false,
             request =>
             {
                 _relaunches.Add(request);
                 return relaunchStarts;
-            });
+            },
+            _running);
     }
 
     private UninstallKey Stale(string name) => _registry.With(UninstallScope.CurrentUser, name,
@@ -294,4 +298,89 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
         Assert.Equal(1, replaced);
     }
+
+    /// <summary>
+    /// Elevating ends this process, and a clean still running on the Storage page would end with
+    /// it, unverified and unreported. The button waits for it, and comes back when it ends.
+    /// </summary>
+    [Fact]
+    public void ElevatingWaitsForAnActionRunningOnAnotherPage()
+    {
+        var page = Page();
+        var raised = 0;
+        page.ElevateCommand.CanExecuteChanged += (_, _) => raised++;
+
+        var clean = _running.Begin(RunningAction.StorageClean);
+
+        Assert.False(page.ElevateCommand.CanExecute(null));
+
+        clean.Dispose();
+
+        Assert.True(page.ElevateCommand.CanExecute(null));
+        Assert.Equal(2, raised);
+    }
+
+    /// <summary>
+    /// Each action on this page is recorded as running until its report is up, so neither the
+    /// window nor an Elevate button ends the process under it.
+    /// </summary>
+    [Fact]
+    public void ARemovalIsRecordedAsRunningUntilItHasReported() => UiThread.Run(async () =>
+    {
+        Stale("Gone");
+        var page = Page();
+        await page.RefreshAsync();
+        page.Actions.BackUpFirst = false;
+        page.Actions.SelectStale([page.StaleRows[0].Entry]);
+        var seen = new List<IReadOnlyList<RunningAction>>();
+        _running.Changed += (_, _) => seen.Add(_running.Current);
+
+        await page.Actions.RemoveCommand.ExecuteAsync(null);
+
+        Assert.Equal([[RunningAction.EntryRemoval], []], seen);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success, page.Actions.ReportSeverity);
+    });
+
+    [Fact]
+    public void AnUninstallIsRecordedAsRunningWhileItsUninstallerRuns() => UiThread.Run(async () =>
+    {
+        var a = Installed("A");
+        IReadOnlyList<RunningAction> whileRunning = [];
+        _launcher.WhileRunning = _ =>
+        {
+            whileRunning = _running.Current;
+            _registry.Remove(a);
+        };
+        var page = Page();
+        await page.RefreshAsync();
+        page.Actions.SelectInstalled([.. page.InstalledRows.Select(r => r.Entry)]);
+
+        await page.Actions.UninstallCommand.ExecuteAsync(null);
+
+        Assert.Equal([RunningAction.Uninstall], whileRunning);
+        Assert.False(_running.Any);
+    });
+
+    [Fact]
+    public void ARestoreIsRecordedAsRunningUntilItHasReported() => UiThread.Run(async () =>
+    {
+        var key = new UninstallKey(UninstallScope.CurrentUser, "Tool");
+        IReadOnlyList<RunningAction> whileRestoring = [];
+        _runner.Replying(_ =>
+        {
+            whileRestoring = _running.Current;
+            _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"));
+            return null;
+        });
+        var file = Path.Combine(_temp.CreateDirectory("backups"), "tool.reg");
+        File.WriteAllLines(file, ["Windows Registry Editor Version 5.00", "", $"[{key.PhysicalPath}]", "\"DisplayName\"=\"Tool\""], System.Text.Encoding.Unicode);
+        var page = Page();
+        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true));
+
+        await page.Actions.RestoreCommand.ExecuteAsync(null);
+
+        Assert.Equal([RunningAction.BackupRestore], whileRestoring);
+        Assert.False(_running.Any);
+        Assert.Equal("Restored. The entry is back in the list.", page.Actions.Report);
+    });
 }

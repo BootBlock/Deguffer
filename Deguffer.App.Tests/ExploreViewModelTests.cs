@@ -57,6 +57,30 @@ public sealed class ExploreViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// Elevating ends this process, and a clean still running on the Storage page would end with
+    /// it, unverified and unreported. The button waits for it, and comes back when it ends. Scanning
+    /// does not end the process, so it is not held.
+    /// </summary>
+    [Fact]
+    public void ElevatingWaitsForAnActionRunningOnAnotherPage()
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Page();
+        var raised = 0;
+        page.ElevateAndRescanCommand.CanExecuteChanged += (_, _) => raised++;
+
+        var clean = _explore.Running.Begin(RunningAction.StorageClean);
+
+        Assert.False(page.ElevateAndRescanCommand.CanExecute(null));
+        Assert.True(page.ScanCommand.CanExecute(null));
+
+        clean.Dispose();
+
+        Assert.True(page.ElevateAndRescanCommand.CanExecute(null));
+        Assert.Equal(2, raised);
+    }
+
+    /// <summary>
     /// Where every volume is refused, the page opens on one and says why it will not scan it, rather
     /// than opening with a dead button and nothing said.
     /// </summary>

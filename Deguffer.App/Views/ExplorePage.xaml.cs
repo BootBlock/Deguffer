@@ -95,7 +95,8 @@ public sealed partial class ExplorePage : Page
             // exist before the first scan finishes.
             ItemGuide.ForThisMachine(),
             ElevatedRelaunch.IsElevated,
-            ElevatedRelaunch.TryRelaunch);
+            ElevatedRelaunch.TryRelaunch,
+            App.Running);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         ViewModel.ViewChanged += (_, _) =>

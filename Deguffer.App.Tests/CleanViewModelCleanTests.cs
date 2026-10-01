@@ -48,6 +48,33 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// A clean is recorded as running while the planner deletes, so neither the window nor another
+    /// page's Elevate button ends the process under it, and it is let go once the run has reported.
+    /// </summary>
+    [Fact]
+    public void ACleanIsRecordedAsRunningUntilItHasReported()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        cache.Steps = [page.Cache("taken", 1024)];
+        IReadOnlyList<RunningAction> whileDeleting = [];
+        var elevateWhileDeleting = true;
+        cache.AfterCleaning = () =>
+        {
+            whileDeleting = page.Running.Current;
+            elevateWhileDeleting = page.ViewModel.ElevateAndRescanCommand.CanExecute(null);
+        };
+        page.Scan();
+
+        page.Clean();
+
+        Assert.Equal([RunningAction.StorageClean], whileDeleting);
+        Assert.False(elevateWhileDeleting);
+        Assert.False(page.Running.Any);
+        Assert.True(page.ViewModel.HasRunResult);
+    }
+
+    /// <summary>
     /// A clean cancelled part-way still reports what it did and its §5.6 verdict, and plans again the
     /// rows it changed, so none of them goes on offering what has gone.
     /// </summary>

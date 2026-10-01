@@ -1,6 +1,7 @@
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 
@@ -59,6 +60,13 @@ public partial class App : Application
     /// </summary>
     public static KeepService Keeps { get; } =
         new(new KeepStore(UserEnvironment.Current));
+
+    /// <summary>
+    /// What is changing the machine, on every page. Shared because each page is kept alive between
+    /// visits, so an Elevate button on one page and the window's close button must both know about a
+    /// clean or a removal still running on another.
+    /// </summary>
+    public static RunningActions Running { get; } = new();
 
     /// <summary>
     /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Page"/> has no

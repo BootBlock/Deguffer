@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using Deguffer.Core.Execution;
 using Deguffer.Testing;
 using Microsoft.UI.Xaml.Controls;
 
@@ -177,6 +178,28 @@ public class CleanViewModelScanTests
         cache.Steps = [Rows.Folder("a", 10, requiresElevation: true)];
         unelevated.Scan();
         Assert.True(unelevated.ViewModel.CanElevate);
+    }
+
+    /// <summary>
+    /// Elevating ends this process, and a clean or a removal still running on another page would
+    /// end with it, unverified and unreported. The button waits for it, and comes back when it ends.
+    /// </summary>
+    [Fact]
+    public void ElevatingWaitsForAnActionRunningOnAnotherPage()
+    {
+        using var page = new StoragePage([new FakeCleanupProvider("cache")]);
+        var elevate = page.ViewModel.ElevateAndRescanCommand;
+        var raised = 0;
+        elevate.CanExecuteChanged += (_, _) => raised++;
+
+        var removal = page.Running.Begin(RunningAction.ExploreRemoval);
+
+        Assert.False(elevate.CanExecute(null));
+
+        removal.Dispose();
+
+        Assert.True(elevate.CanExecute(null));
+        Assert.Equal(2, raised);
     }
 
     /// <summary>

@@ -33,6 +33,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly bool _isElevated;
     private readonly SelectionService _selections;
     private readonly KeepService _keeps;
+    private readonly RunningActions _running;
     private readonly Func<IConfirmationPrompt> _prompt;
 
     /// <summary>The keep list the rows were last brought up to date with. See <see cref="ApplyKeepList"/>.</summary>
@@ -67,6 +68,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// What the user keeps, which every row is built against and which the rows' own item lists
     /// change.
     /// </param>
+    /// <param name="running">
+    /// What is changing the machine on every page. A clean is recorded in it while it runs, and the
+    /// page does not elevate while anything in it runs, here or on another page.
+    /// </param>
     /// <param name="prompt">
     /// Deferred rather than injected directly: a dialog needs the page's <c>XamlRoot</c>, which does
     /// not exist while the view-model is being constructed.
@@ -78,6 +83,7 @@ public sealed partial class CleanViewModel : ObservableObject
         bool isElevated,
         SelectionService selections,
         KeepService keeps,
+        RunningActions running,
         Func<IConfirmationPrompt> prompt)
     {
         _planner = planner;
@@ -86,6 +92,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _isElevated = isElevated;
         _selections = selections;
         _keeps = keeps;
+        _running = running;
         _prompt = prompt;
 
         // Capacity cannot change while the app is open, so it is read once; only the free figure
@@ -101,6 +108,10 @@ public sealed partial class CleanViewModel : ObservableObject
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
         CanElevate = ElevationOffer.ShouldOffer(isElevated);
+
+        // A clean or a removal on another page ends with this process as surely as one on this
+        // page, so the button follows every page's actions and not only this one's busy flag.
+        _running.Changed += (_, _) => ElevateAndRescanCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -493,6 +504,10 @@ public sealed partial class CleanViewModel : ObservableObject
 
         IsBusy = true;
 
+        // Held to the end of the method, so the window will not close and no page will elevate
+        // until this run has verified and reported, whichever way it ends.
+        using var running = _running.Begin(RunningAction.StorageClean);
+
         // A previous run's figures and its §5.6 verdict describe a machine state this run is about
         // to replace, exactly as a preview's do. Cleared here rather than when the new ones arrive,
         // because a run that fails, or is cancelled while its confirmations are collected, never
@@ -768,7 +783,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// and stands down. The new instance previews on launch: the user asked for a scan by pressing
     /// this, and landing them on an empty window to press Scan again would not be that.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanRun))]
+    [RelayCommand(CanExecute = nameof(CanElevateNow))]
     private void ElevateAndRescan()
     {
         if (!ElevatedRelaunch.TryRelaunch(ElevationRequest.Preview))
@@ -972,6 +987,12 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     private bool CanRun() => !IsBusy;
+
+    /// <summary>
+    /// Elevating ends this process, so it waits for this page's own work and for every page's
+    /// actions.
+    /// </summary>
+    private bool CanElevateNow() => !IsBusy && !_running.Any;
 
     /// <summary>
     /// What is left on the profile's volume now. Asked of the machine each time rather than

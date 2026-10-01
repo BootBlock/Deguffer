@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Scanning;
@@ -22,6 +23,7 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class ExploreSelection : ObservableObject
 {
     private readonly ExploreActions _actions;
+    private readonly RunningActions _running;
 
     /// <summary>
     /// What has gone since the scan. The list stops showing it, and <see cref="StaleNote"/> says
@@ -36,9 +38,11 @@ public sealed partial class ExploreSelection : ObservableObject
     private string _figures = string.Empty;
     private string? _note;
 
-    public ExploreSelection(ExploreActions actions)
+    /// <param name="running">What is changing the machine on every page, where a removal is recorded while it runs.</param>
+    public ExploreSelection(ExploreActions actions, RunningActions running)
     {
         _actions = actions;
+        _running = running;
 
         // Started here rather than on the first selection, because §5.2's probed half takes a moment
         // and the page has nothing else to do while it opens. Until it lands every path is refused
@@ -269,6 +273,10 @@ public sealed partial class ExploreSelection : ObservableObject
         }
 
         Working?.Invoke(this, true);
+
+        // Held until the report is recorded, so neither the window nor another page's Elevate
+        // button ends the process before the removal has verified and said what it did.
+        using var running = _running.Begin(RunningAction.ExploreRemoval);
 
         try
         {

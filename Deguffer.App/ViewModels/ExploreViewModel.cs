@@ -45,6 +45,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private readonly Func<ExploreRequest, bool> _relaunch;
 
+    /// <summary>What is changing the machine on every page, which the elevated relaunch waits for.</summary>
+    private readonly RunningActions _running;
+
     /// <summary>
     /// What a redraw puts in the list and the trail above it. Filled again per redraw and never
     /// replaced: a walked scan publishes a snapshot every few hundred milliseconds, and building two
@@ -101,6 +104,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
+    /// <param name="running">See <see cref="_running"/>. A removal on this page is recorded in it too.</param>
     public ExploreViewModel(
         IExploreScanner scanner,
         IVolumeInventory volumes,
@@ -108,7 +112,8 @@ public sealed partial class ExploreViewModel : ObservableObject
         ExploreActions actions,
         ItemGuide guide,
         bool isElevated,
-        Func<ExploreRequest, bool> relaunch)
+        Func<ExploreRequest, bool> relaunch,
+        RunningActions running)
     {
         _scanner = scanner;
         _volumes = volumes;
@@ -116,8 +121,12 @@ public sealed partial class ExploreViewModel : ObservableObject
         _guide = guide;
         _isElevated = isElevated;
         _relaunch = relaunch;
+        _running = running;
 
-        Selection = new ExploreSelection(actions);
+        Selection = new ExploreSelection(actions, running);
+
+        // A clean or a removal on another page ends with this process as surely as one here.
+        _running.Changed += (_, _) => ElevateAndRescanCommand.NotifyCanExecuteChanged();
 
         // A removal and a scan of the same drive have no business overlapping, so each stands the
         // other down through the one busy flag. One direction each, rather than a flag both write:
@@ -724,11 +733,11 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>What travels is what the page is pointed at now rather than what the last scan
     /// covered. The picker is on screen and <see cref="ScanCommand"/> beside it would use exactly
     /// these two values, so a second, hidden idea of the target is one the page could then
-    /// contradict — and it is why this shares that command's <c>CanExecute</c> rather than only
-    /// asking whether the page is busy. A relaunch with nothing to point at leaves the replacement
+    /// contradict — and it is why this asks that command's <c>CanExecute</c> rather than only
+    /// whether the page is busy. A relaunch with nothing to point at leaves the replacement
     /// waiting on a page the user did not ask to be on.</para>
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanScan))]
+    [RelayCommand(CanExecute = nameof(CanElevateNow))]
     private void ElevateAndRescan()
     {
         if (!_relaunch(new ExploreRequest(Target.Drive, Target.Folder)))
@@ -1058,6 +1067,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     private bool CanScan() => !IsBusy && Target.IsScannable(_volumes);
+
+    /// <summary>
+    /// What <see cref="ScanCommand"/> would scan, and nothing running on any page: elevating ends
+    /// this process, and a clean or a removal elsewhere would end with it.
+    /// </summary>
+    private bool CanElevateNow() => CanScan() && !_running.Any;
 
     /// <summary>
     /// State why the page will not scan what it is pointed at, and take the sentence back once it
