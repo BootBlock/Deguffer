@@ -257,8 +257,8 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     /// about.
     ///
     /// <para><b>The two cases that are not a cache are here because the planner never asks an absent
-    /// provider for a plan.</b> A <c>profiles.ini</c> that would not be read, and a profile kept
-    /// outside Firefox's folder, each have their own sentence in <see cref="BuildPlanAsync"/>, and
+    /// provider for a plan.</b> A <c>profiles.ini</c> that would not be read or that Windows would not
+    /// describe, and a profile kept outside Firefox's folder, each have their own sentence in <see cref="BuildPlanAsync"/>, and
     /// both sentences are unreachable if this answers false. The row then reads "Not installed"
     /// about a Firefox that is installed, which is a stronger untruth than the "Already clear" it
     /// would otherwise be. <see cref="DeclaredNames"/> covers the third case, a profile holding the
@@ -282,13 +282,21 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
         {
             switch (_discovery.Register)
             {
-                // Not "could not read": nothing established that the register is there.
+                // Not "could not read": nothing established that the register is there. A warning, as
+                // UnreadableRootPlan gives for any location Windows would not describe.
                 case MozillaRegisterReading.Unreached:
-                    return EmptyPlan(
-                        $"Windows would not say whether Firefox's list of profiles is at '{_discovery.ProfilesPath}', "
-                        + "so Deguffer could not work out which Firefox profiles exist. A link Windows will not "
-                        + "follow, a folder this account may not read and a drive that is not connected all do "
-                        + "that. Nothing was planned, and nothing was ruled out either.") with { HasUnreadableRoot = true };
+                    return UnreadableRootPlan(_discovery.ProfilesPath) with
+                    {
+                        Notes =
+                        [
+                            new PlanNote(
+                                PlanNoteSeverity.Warning,
+                                $"Windows would not say whether Firefox's list of profiles is at '{_discovery.ProfilesPath}', "
+                                + "so Deguffer could not work out which Firefox profiles exist. A link Windows will not "
+                                + "follow, a folder this account may not read and a drive that is not connected all do "
+                                + "that. Nothing was planned, and nothing was ruled out either."),
+                        ],
+                    };
 
                 case MozillaRegisterReading.Unreadable:
                     return EmptyPlan(

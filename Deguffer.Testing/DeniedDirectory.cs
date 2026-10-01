@@ -4,8 +4,8 @@ using System.Security.Principal;
 namespace Deguffer.Testing;
 
 /// <summary>
-/// A directory the current account may not read, in one of two ways, for the length of a
-/// <c>using</c> block.
+/// A directory the current account may not read, in one of two ways, or a file whose attributes it
+/// may not read, for the length of a <c>using</c> block.
 ///
 /// <para>Three rules in the suite are about what happens when the filesystem refuses — §5.3's
 /// "treat access denied as normal and skip silently", the reach an enumerating route does not have,
@@ -36,7 +36,9 @@ public sealed class DeniedDirectory : IDisposable
             () => Directory.EnumerateFileSystemEntries(directory).ToList());
     });
 
-    private DeniedDirectory(string directory, string parent) => Build(() =>
+    /// <param name="target">The directory or file whose attributes are refused.</param>
+    /// <param name="parent">The directory holding it, whose listing is refused.</param>
+    private DeniedDirectory(FileSystemInfo target, string parent) => Build(() =>
     {
         // Both ends, because either one alone leaves the attributes readable — measured rather than
         // assumed. NTFS answers GetFileAttributes out of the parent directory's own index whenever
@@ -44,9 +46,9 @@ public sealed class DeniedDirectory : IDisposable
         // nothing on its own; and denying the parent achieves nothing while the target itself will
         // answer. Denying FullControl on the target alone leaves it readable for the same reason.
         Deny(parent, FileSystemRights.ListDirectory);
-        Deny(directory, FileSystemRights.ReadAttributes);
+        Deny(target, FileSystemRights.ReadAttributes);
 
-        Assert.Throws<UnauthorizedAccessException>(() => File.GetAttributes(directory));
+        Assert.Throws<UnauthorizedAccessException>(() => File.GetAttributes(target.FullName));
     });
 
     /// <summary>
@@ -58,8 +60,10 @@ public sealed class DeniedDirectory : IDisposable
     /// the one it named is altered too, and has to own it.</para>
     /// </summary>
     public static DeniedDirectory WithUnreadableAttributes(string directory) =>
-        new(directory, Path.GetDirectoryName(directory.TrimEnd(Path.DirectorySeparatorChar))
-            ?? throw new ArgumentException("A volume root has no parent to deny.", nameof(directory)));
+        new(
+            new DirectoryInfo(directory),
+            Path.GetDirectoryName(directory.TrimEnd(Path.DirectorySeparatorChar))
+                ?? throw new ArgumentException("A volume root has no parent to deny.", nameof(directory)));
 
     /// <summary>
     /// Refuse the attribute read of the file at <paramref name="file"/>, which takes the same two
@@ -71,24 +75,9 @@ public sealed class DeniedDirectory : IDisposable
     /// file may still be listed. So a probe of a settings file or a marker needs the file itself
     /// refused.</para>
     /// </summary>
-    public static DeniedDirectory WithUnreadableFile(string file)
-    {
-        var denied = new DeniedDirectory();
-
-        denied.Build(() =>
-        {
-            denied.Deny(Path.GetDirectoryName(file)!, FileSystemRights.ListDirectory);
-            denied.Deny(new FileInfo(file), FileSystemRights.ReadAttributes);
-
-            Assert.Throws<UnauthorizedAccessException>(() => File.GetAttributes(file));
-        });
-
-        return denied;
-    }
-
-    private DeniedDirectory()
-    {
-    }
+    public static DeniedDirectory WithUnreadableFile(string file) =>
+        new(new FileInfo(file), Path.GetDirectoryName(file)
+            ?? throw new ArgumentException("A file has a directory holding it.", nameof(file)));
 
     public void Dispose()
     {

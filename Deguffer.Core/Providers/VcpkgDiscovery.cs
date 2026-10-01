@@ -33,9 +33,9 @@ namespace Deguffer.Core.Providers;
 /// keeps something out of a plan, because a refusal is not evidence that it is not one.
 /// </param>
 /// <param name="UnreadIntegrationFile">
-/// The integration file, where the search for the clone came to it and Windows would not let it be
-/// read, or would not say whether it is there. It may name a clone no other route reaches, so the
-/// plan says it could not be read rather than reading as though no clone was ever integrated.
+/// The integration file, where the search for the clone came to it and could not read it. It may name
+/// a clone no other route reaches, so the plan says so rather than reading as though no clone was
+/// ever integrated.
 /// </param>
 public sealed record VcpkgLocations(
     string? BinaryCache,
@@ -43,7 +43,7 @@ public sealed record VcpkgLocations(
     string? RelocatedDownloads,
     string? UnmarkedRoot = null,
     string? UnreachedRoot = null,
-    string? UnreadIntegrationFile = null)
+    UnreadFile? UnreadIntegrationFile = null)
 {
     /// <summary>
     /// Folders a variable moved <see cref="BinaryCache"/> or <see cref="RelocatedDownloads"/> to that
@@ -205,11 +205,11 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
     /// name under it and simply will not be there.</item>
     /// </list>
     /// </summary>
-    private (string? Root, string? Unmarked, string? Unreached, string? UnreadIntegrationFile) FindRoot()
+    private (string? Root, string? Unmarked, string? Unreached, UnreadFile? UnreadIntegrationFile) FindRoot()
     {
         string? unmarked = null;
         string? unreached = null;
-        string? unread = null;
+        UnreadFile? unread = null;
 
         foreach (var (candidate, unreadFile) in Candidates())
         {
@@ -251,7 +251,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
     /// Each route's clone, in the order <see cref="FindRoot"/> tries them, with the integration file
     /// where that route could not be read. Lazy, so a route after the clone is found is never taken.
     /// </summary>
-    private IEnumerable<(string? Candidate, string? UnreadFile)> Candidates()
+    private IEnumerable<(string? Candidate, UnreadFile? Unread)> Candidates()
     {
         yield return (FullyQualified(environment.GetEnvironmentVariable(RootVariable)), null);
         yield return ReadIntegrationFile();
@@ -281,10 +281,10 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
     }
 
     /// <summary>
-    /// The clone the integration file names, or the file itself as unread where Windows would not let
-    /// it be read or would not say whether it is there. Either way the next route is tried.
+    /// The clone the integration file names, or the file as unread where it could not be read or
+    /// Windows would not say whether it is there. Either way the next route is tried.
     /// </summary>
-    private (string? Candidate, string? UnreadFile) ReadIntegrationFile()
+    private (string? Candidate, UnreadFile? Unread) ReadIntegrationFile()
     {
         var file = Path.Combine(ProfileDirectories[0], IntegrationFile);
 
@@ -294,7 +294,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
                 return (null, null);
 
             case PathPresence.Refused:
-                return (null, file);
+                return (null, new UnreadFile(file, Unreached: true));
         }
 
         try
@@ -305,7 +305,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
         {
             // One route failing rather than an error: the next one is tried, and the plan says this
             // one could not be read.
-            return (null, file);
+            return (null, new UnreadFile(file, Unreached: false));
         }
     }
 

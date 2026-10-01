@@ -268,7 +268,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                 unreached.Add(new PlanNote(PlanNoteSeverity.Information, why));
             }
 
-            return UnreadableRootPlan(located.UnreachedRoot ?? located.UnreadIntegrationFile!) with { Notes = unreached };
+            return UnreadableRootPlan(located.UnreachedRoot ?? located.UnreadIntegrationFile!.Path) with { Notes = unreached };
         }
 
         var notes = new List<PlanNote>(scan.Notes);
@@ -349,11 +349,6 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         + "never removes, rather than a cache. A variable can say where a cache is. It cannot ask "
         + "for the directory holding the tool.";
 
-    /// <summary>
-    /// What the user is told when something named a clone that Windows would not describe. It does
-    /// not say the marker is missing, which nothing established, and it gives no advice to set a
-    /// variable, which may be exactly what named it.
-    /// </summary>
     /// <summary>The warnings for the clone and the integration file, where either could not be reached.</summary>
     private static IEnumerable<PlanNote> UnreachedNotes(VcpkgLocations located)
     {
@@ -368,16 +363,18 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         }
     }
 
-    /// <summary>
-    /// What the user is told when the integration file could not be read. It does not say the file is
-    /// there, because a refused probe did not establish that.
-    /// </summary>
-    private static PlanNote UnreadIntegrationFileNote(string file) => new(
+    /// <summary>What the user is told when the integration file could not be read.</summary>
+    private static PlanNote UnreadIntegrationFileNote(UnreadFile file) => new(
         PlanNoteSeverity.Warning,
-        $"Windows would not let Deguffer read '{file}', where vcpkg records the clone it integrated with "
-        + "Visual Studio, so that clone may not have been found. The buildtrees, downloads and packages "
-        + "directories of a clone that was not found were neither cleared nor ruled out.");
+        file.Opening("vcpkg's record of the clone it integrated with Visual Studio")
+        + ", so that clone may not have been found. The buildtrees, downloads and packages directories "
+        + "of a clone that was not found were neither cleared nor ruled out.");
 
+    /// <summary>
+    /// What the user is told when something named a clone that Windows would not describe. It does
+    /// not say the marker is missing, which nothing established, and it gives no advice to set a
+    /// variable, which may be exactly what named it.
+    /// </summary>
     private static PlanNote UnreachedRootNote(string unreached) => new(
         PlanNoteSeverity.Warning,
         $"Something on this machine names '{unreached}' as vcpkg's own directory, and Windows would not "

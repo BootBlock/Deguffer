@@ -54,8 +54,10 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
     /// gets the recognition rule alone, which is the same protection every other provider relies on.
     /// The candidates it would have asked about come back as
     /// <see cref="TrackedFileFindings.Unasked"/>, so that is said rather than silent. Git being
-    /// present, being asked, and not answering is a different thing entirely, and comes back as
-    /// <see cref="TrackedFileFindings.Unanswered"/> for the caller to decline.
+    /// present and not answering is a different thing entirely, and comes back as
+    /// <see cref="TrackedFileFindings.Unanswered"/> for the caller to decline. So does a candidate
+    /// whose repository Windows would not describe, because git could not be asked the right
+    /// question about it.
     /// </summary>
     public async Task<TrackedFileFindings> FindTrackedAsync(
         IReadOnlyList<string> candidates,

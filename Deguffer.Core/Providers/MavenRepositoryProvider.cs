@@ -146,26 +146,29 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
     /// <summary>What the user's <c>settings.xml</c> says about the local repository.</summary>
     /// <param name="LocalRepository">See <see cref="ResolveLocalRepository"/>.</param>
-    /// <param name="Unreached">
-    /// Windows would not say whether the file is there, so a repository it moves elsewhere was never
-    /// looked for. <paramref name="LocalRepository"/> is then the default.
+    /// <param name="Unread">
+    /// The file where it could not be read, or Windows would not say whether it is there, so a
+    /// repository it moves elsewhere was never looked for. <paramref name="LocalRepository"/> is then
+    /// the default.
     /// </param>
-    private sealed record UserSettings(string? LocalRepository, bool Unreached);
+    private sealed record UserSettings(string? LocalRepository, UnreadFile? Unread);
 
     private UserSettings ReadSettings()
     {
         switch (LongPath.ProbeFile(SettingsPath))
         {
             case PathPresence.Absent:
-                return new UserSettings(DefaultLocalRepository, Unreached: false);
+                return new UserSettings(DefaultLocalRepository, Unread: null);
 
             case PathPresence.Refused:
-                return new UserSettings(DefaultLocalRepository, Unreached: true);
+                return new UserSettings(DefaultLocalRepository, new UnreadFile(SettingsPath, Unreached: true));
         }
 
-        if (ReadConfiguredRepository() is not { } configured)
+        if (ReadConfiguredRepository(out var unreadable) is not { } configured)
         {
-            return new UserSettings(DefaultLocalRepository, Unreached: false);
+            return new UserSettings(
+                DefaultLocalRepository,
+                unreadable ? new UnreadFile(SettingsPath, Unreached: false) : null);
         }
 
         // Normalised rather than used as it arrived. A trailing separator would make the leaf name
@@ -174,7 +177,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         // report a correct run as a failure. A value ending in '..' is worse: LongPath.Extended
         // requires an already-resolved path, so the removal would land a directory higher than the
         // plan named.
-        return new UserSettings(LongPath.Configured(configured), Unreached: false);
+        return new UserSettings(LongPath.Configured(configured), Unread: null);
     }
 
     /// <summary>
@@ -261,7 +264,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(
-            (ResolveLocalRepository() is { } repository && LongPath.DirectoryMayExist(repository)) || Settings.Unreached);
+            (ResolveLocalRepository() is { } repository && LongPath.DirectoryMayExist(repository)) || Settings.Unread is not null);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -296,16 +299,16 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
         if (scan.FoundNothing)
         {
-            return Settings.Unreached
-                ? UnreadableRootPlan(SettingsPath) with { Notes = [SettingsUnreachedNote()] }
+            return Settings.Unread is { } unread
+                ? UnreadableRootPlan(SettingsPath) with { Notes = [UnreadSettingsNote(unread)] }
                 : EmptyPlan($"Maven has not downloaded anything on this machine ({repository} is absent).");
         }
 
         var notes = new List<PlanNote>(scan.Notes);
 
-        if (Settings.Unreached)
+        if (Settings.Unread is { } unreadSettings)
         {
-            notes.Add(SettingsUnreachedNote());
+            notes.Add(UnreadSettingsNote(unreadSettings));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
@@ -331,21 +334,18 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
-            HasUnreadableRoot = scan.CouldNotBeReached || Settings.Unreached,
+            HasUnreadableRoot = scan.CouldNotBeReached || Settings.Unread is not null,
         };
     }
 
     private string SettingsPath => Path.Combine(Home, "settings.xml");
 
-    /// <summary>
-    /// What the user is told where Windows would not describe the settings file. It does not say the
-    /// file could not be read, which asserts that it is there.
-    /// </summary>
-    private PlanNote SettingsUnreachedNote() => new(
+    /// <summary>What the user is told where the settings file could not be read.</summary>
+    private PlanNote UnreadSettingsNote(UnreadFile settings) => new(
         PlanNoteSeverity.Warning,
-        $"Windows would not say whether your Maven settings are at '{SettingsPath}', so Deguffer looked "
-        + $"only at the default local repository, {DefaultLocalRepository}. A local repository those "
-        + "settings move somewhere else was neither cleared nor ruled out.");
+        settings.Opening("your Maven settings file")
+        + $", so Deguffer looked only at the default local repository, {DefaultLocalRepository}. A local "
+        + "repository those settings move somewhere else was neither cleared nor ruled out.");
 
     /// <summary>
     /// Why the plan leaves a configured repository unexamined, or null where it may go on to look.
@@ -479,14 +479,14 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// than as an error: Maven itself would refuse to build, which the user will hear about from
     /// Maven, and the default location is the right thing for Deguffer to fall back on either way.
     ///
-    /// <para>Asked only of a file Windows says is there. One it will not describe is different:
+    /// <para>A file that would not be read is different, and <paramref name="unreadable"/> says so.
     /// Maven may read it where Deguffer cannot, so <see cref="ReadSettings"/> still examines the
-    /// default, and the plan says the settings were not reached.</para>
+    /// default, and the plan says the settings were not read.</para>
     /// </summary>
-    private string? ReadConfiguredRepository()
+    private string? ReadConfiguredRepository(out bool unreadable)
     {
         var configured = XmlFile
-            .TryLoad(SettingsPath)?
+            .TryLoad(SettingsPath, out unreadable)?
             .Root?
             .Elements()
             .FirstOrDefault(e => e.Name.LocalName == "localRepository")?

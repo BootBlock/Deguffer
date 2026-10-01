@@ -243,16 +243,21 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             : new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None);
 
         var provider = CreateProvider();
-        Assert.Equal(file, provider.Locate().UnreadIntegrationFile);
+        Assert.Equal(new UnreadFile(file, Unreached: refused), provider.Locate().UnreadIntegrationFile);
         Assert.True(await provider.IsPresentAsync());
 
         var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.HasUnreadableRoot);
+        // A refused probe did not establish that the file is there, so only a failed read says
+        // "could not read".
+        var opening = refused
+            ? $"Windows would not say whether vcpkg's record of the clone it integrated with Visual Studio is at '{file}'"
+            : $"Deguffer could not read vcpkg's record of the clone it integrated with Visual Studio in '{file}'";
+
         Assert.Contains(plan.Notes, n =>
-            n.Severity == PlanNoteSeverity.Warning
-            && n.Message.StartsWith($"Windows would not let Deguffer read '{file}'", StringComparison.Ordinal));
+            n.Severity == PlanNoteSeverity.Warning && n.Message.StartsWith(opening, StringComparison.Ordinal));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("cached nothing", StringComparison.Ordinal));
     }
 
