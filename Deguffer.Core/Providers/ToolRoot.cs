@@ -59,6 +59,19 @@ public sealed record ToolRoot(string Path, string Reason, Predicate<ToolRootChil
     }
 
     /// <summary>
+    /// A folder a tool's setting names but the provider declines to examine as the tool's own, such as
+    /// the profile or a drive root. The tool still writes its configuration there, so Explore refuses
+    /// those entries, and nothing else: everything beside them is the user's, and refusing it would
+    /// read the whole folder as the tool's.
+    /// </summary>
+    public static ToolRoot Sparing(string path, string reason, IEnumerable<string> configuration)
+    {
+        var names = configuration.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new ToolRoot(path, reason, child => !names.Contains(child.Name));
+    }
+
+    /// <summary>
     /// A root for <paramref name="top"/> and for every folder between it and each of
     /// <paramref name="folders"/>, each recognising only the next folder on the way. Explore decides by
     /// the innermost root that refuses, so without the levels between, the top would refuse the way

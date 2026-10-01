@@ -471,7 +471,7 @@ public sealed class CargoCacheProviderTests : IDisposable
     /// <summary>
     /// <c>registry</c> and <c>git</c> are names anything may use. The variable naming the profile would
     /// offer the user's own folder of that name and assert everything else in the profile as Cargo's
-    /// survivor, and it would declare the profile to Explore as Cargo's own folder.
+    /// survivor. Explore's side of the same decision is in <c>ExploreActionPolicyTests</c>.
     /// </summary>
     [Fact]
     public async Task WillNotTreatTheProfileAsCargosHome()
@@ -483,7 +483,6 @@ public sealed class CargoCacheProviderTests : IDisposable
 
         Assert.Null(provider.ResolveHome());
         Assert.False(await provider.IsPresentAsync());
-        Assert.DoesNotContain(provider.ToolRoots, root => LongPath.Contains(root.Path, _environment.UserProfile));
 
         var plan = await provider.PlanAsync();
 

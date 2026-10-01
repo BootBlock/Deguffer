@@ -36,17 +36,17 @@ internal static class ConfiguredFolder
 
         if (string.IsNullOrEmpty(value))
         {
-            return new Setting(null, defaultFolder, null);
+            return new Setting(null, null, defaultFolder, null);
         }
 
         if (LongPath.Configured(value) is not { } configured)
         {
-            return new Setting(value, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
+            return new Setting(value, null, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
         }
 
         return WhyNotOwned(configured, environment, machine, TempRoots.Resolve(environment, machine).AccountFolders) is { } declined
-            ? new Setting(value, null, declined)
-            : new Setting(value, configured, null);
+            ? new Setting(value, configured, null, declined)
+            : new Setting(value, configured, configured, null);
     }
 
     /// <summary>
@@ -76,7 +76,16 @@ internal static class ConfiguredFolder
     }
 
     /// <param name="Value">What the variable holds, trimmed, or null where it is not set.</param>
+    /// <param name="Named">The full path the variable names, or null where it names none.</param>
     /// <param name="Folder">The folder to examine as the tool's, or null where it is declined.</param>
     /// <param name="Declined">Why it is declined, as the end of a sentence, or null where it is not.</param>
-    internal readonly record struct Setting(string? Value, string? Folder, string? Declined);
+    internal readonly record struct Setting(string? Value, string? Named, string? Folder, string? Declined)
+    {
+        /// <summary>
+        /// The folder the variable names where it is declined, or null. The tool still writes its
+        /// configuration there whatever Deguffer makes of the rest, so a provider declares it with
+        /// <see cref="ToolRoot.Sparing"/>.
+        /// </summary>
+        public string? DeclinedFolder => Folder is null ? Named : null;
+    }
 }

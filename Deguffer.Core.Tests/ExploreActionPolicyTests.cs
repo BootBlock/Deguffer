@@ -1618,6 +1618,42 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A folder the variable names but Gradle's row declines, here a drive root, is still where Gradle
+    /// writes <c>gradle.properties</c>, so Explore refuses it there. Everything else on the drive is the
+    /// user's, and stays theirs to remove.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedGradleHomeStillHasItsConfigurationRefusedAndNothingElse()
+    {
+        _volumes.With(@"Q:\");
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"Q:\");
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
+
+        Assert.False(policy.MayRemove(@"Q:\gradle.properties").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\init.d\company.gradle").IsAllowed);
+        Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same for Cargo, with the variable naming the profile: the registry tokens and the binaries
+    /// <c>cargo install</c> put on PATH are refused there, and the user's own files beside them are not.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedCargoHomeStillHasItsTokensAndBinariesRefusedAndNothingElse()
+    {
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, _environment.UserProfile);
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system, _environment, _volumes, [new CargoCacheProvider(_environment, system: _system)]);
+
+        Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "credentials.toml")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "bin", "ripgrep.exe")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "git", "db")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(_environment.UserProfile, "notes.txt")).IsAllowed);
+    }
+
+    /// <summary>
     /// The other half of that wiring, and the whole of issue #130: a root a provider can only name once it
     /// has asked the machine is enforced exactly as a declared one is.
     ///

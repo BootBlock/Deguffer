@@ -470,8 +470,7 @@ public sealed class GradleCacheProviderTests : IDisposable
 
     /// <summary>
     /// <c>caches</c> and <c>wrapper</c> are names anything may use, so a drive root is never read as
-    /// Gradle's home, and is not declared to Explore as one: that would let Explore remove whatever is
-    /// called <c>caches</c> there.
+    /// Gradle's home. Explore's side of the same decision is in <c>ExploreActionPolicyTests</c>.
     /// </summary>
     [Fact]
     public async Task WillNotTreatADriveRootAsGradlesHome()
@@ -480,8 +479,8 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         var provider = CreateProvider();
 
+        Assert.Null(provider.ResolveHome());
         Assert.False(await provider.IsPresentAsync());
-        Assert.Equal([provider.DefaultHome], provider.ToolRoots.Select(root => root.Path));
 
         var plan = await provider.PlanAsync();
 
@@ -504,7 +503,6 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         Assert.Null(provider.ResolveHome());
         Assert.False(await provider.IsPresentAsync());
-        Assert.DoesNotContain(provider.ToolRoots, root => root.Path.Equals(documents, StringComparison.OrdinalIgnoreCase));
 
         var plan = await provider.PlanAsync();
 

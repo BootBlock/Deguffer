@@ -44,6 +44,21 @@ public sealed class GradleCacheProvider : CleanupProviderBase
         "This is Gradle's own folder. Deguffer removes the caches and wrapper distributions inside it "
         + "and nothing else, because the configuration beside them may hold signing keys and credentials.";
 
+    private const string DeclinedRootReason =
+        "GRADLE_USER_HOME names this folder, so Gradle keeps its configuration here, which may hold signing "
+        + "keys and credentials.";
+
+    /// <summary>
+    /// What Gradle keeps in its user home that nothing re-creates. §5.6 asserts each survived a run, and
+    /// Explore refuses each wherever the home is.
+    /// </summary>
+    private static readonly (string Name, string Reason)[] Configuration =
+    [
+        ("gradle.properties", "User configuration, which may hold signing keys and credentials."),
+        ("init.d", "User init scripts."),
+        ("gradle.encrypted.properties", "Encrypted user configuration."),
+    ];
+
     private readonly ISystemDirectories _system;
 
     public GradleCacheProvider(
@@ -103,17 +118,31 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// <summary>
     /// The home Gradle uses, and the default one as well where the variable moved it. A
     /// <c>.gradle</c> left behind in the profile still holds whatever <c>gradle.properties</c> was
-    /// written before the move, so Explore refuses it there exactly as it does in the home in use. A
-    /// home the variable names but this declines is not declared: declaring it would let Explore
-    /// remove whatever that folder holds called <c>caches</c> or <c>wrapper</c>.
+    /// written before the move, so Explore refuses it there exactly as it does in the home in use.
+    ///
+    /// <para>A home the variable names but this declines is still where Gradle writes its
+    /// configuration, so it is declared as well, refusing that configuration and nothing else. Refusing
+    /// everything but <c>caches</c> and <c>wrapper</c> there would read a whole drive or the user's
+    /// Documents as Gradle's.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots =>
-    [
-        .. new[] { ResolveHome(), DefaultHome }
-            .OfType<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(home => ToolRoot.Of(home, ToolRootReason, DisposableChildren)),
-    ];
+    public override IReadOnlyList<ToolRoot> ToolRoots
+    {
+        get
+        {
+            var setting = Resolve();
+
+            return
+            [
+                .. new[] { setting.Folder, DefaultHome }
+                    .OfType<string>()
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(home => ToolRoot.Of(home, ToolRootReason, DisposableChildren)),
+                .. setting.DeclinedFolder is { } declined
+                    ? [ToolRoot.Sparing(declined, DeclinedRootReason, Configuration.Select(file => file.Name))]
+                    : Array.Empty<ToolRoot>(),
+            ];
+        }
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveHome() is { } home && LongPath.DirectoryMayExist(home));
@@ -185,10 +214,10 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// </summary>
     private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(string home, LevelWalk walk) => Protect(
         walk,
-        (home, "The Gradle user home itself must survive — only its known-disposable children are removed."),
-        (Path.Combine(home, "gradle.properties"), "User configuration, which may hold signing keys and credentials."),
-        (Path.Combine(home, "init.d"), "User init scripts."),
-        (Path.Combine(home, "gradle.encrypted.properties"), "Encrypted user configuration."));
+        [
+            (home, "The Gradle user home itself must survive — only its known-disposable children are removed."),
+            .. Configuration.Select(file => (Path.Combine(home, file.Name), file.Reason)),
+        ]);
 
     private ConfiguredFolder.Setting Resolve() =>
         ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system);

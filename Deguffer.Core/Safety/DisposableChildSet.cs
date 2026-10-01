@@ -55,4 +55,11 @@ public sealed class DisposableChildSet
     /// </summary>
     public IEnumerable<string> DisposableNames =>
         _known.Values.Where(c => c.Tier.IsOfferable()).Select(c => c.Name);
+
+    /// <summary>
+    /// The children declared by name and kept: the tool's own things beside the cache that nothing
+    /// re-creates, such as the binaries a package manager installed.
+    /// </summary>
+    public IEnumerable<string> KeptNames =>
+        _known.Values.Where(c => !c.Tier.IsOfferable()).Select(c => c.Name);
 }
