@@ -265,8 +265,11 @@ Deguffer.App/          ← WinUI 3 shell, MVVM over Core
 
 **Provider model.** Each source implements a common contract. The block below is the original
 sketch, and [`ICleanupProvider`](../../Deguffer.Core/Providers/ICleanupProvider.cs) is the contract
-as built: it has no `EstimateBytesAsync`, because `CleanupPlan.EstimatedBytes` already carries that
-number, and its members take the parameters the safety model turned out to need.
+as built. The sketch is not its member list. The contract has no `EstimateBytesAsync`, because
+`CleanupPlan.EstimatedBytes` already carries that number. Its members take the parameters the safety
+model turned out to need, and it adds members the sketch lacked, among them the §5.2 tool-root
+declarations (`ToolRoots`, `DiscoverToolRootsAsync`) that Explore reads to refuse what a plan
+protects.
 
 ```csharp
 interface ICleanupProvider {
@@ -940,12 +943,13 @@ against writing and deletion until `reg.exe` has read it.
    the mapping to a real path lives in each folder's `workspace.json`. Worth confirming this is
    stable across editor versions before depending on it.
 
-   **Answered: not safely, as an identity.** The `workspace.json` schema is stable, but the mapping
+   **Answered: not safely, as an identity.** The `workspace.json` schema is stable enough, but the mapping
    is not one-to-one. A local workspace's id is `md5(fsPath + birth-time)`, so a re-created,
    restored or re-cloned folder mints a second storage directory with an identical `workspace.json`,
    and several child kinds carry no `workspace.json` at all. The mapping is only safe as a
    best-effort label on a storage folder: sizes summed over a group, deletion targeting the group,
-   and absent metadata classified Tier 4. The full answer is in
+   absent metadata classified Tier 4, and a missing target path never taken as licence to delete.
+   The full answer is in
    [after-the-scanner.md, item 5](after-the-scanner.md#5-raised-while-doing-items-2-and-3-not-yet-decided).
    Whether to offer `workspaceStorage` at all is decided under
    [#84](https://github.com/BootBlock/Deguffer/issues/84).
@@ -954,9 +958,10 @@ against writing and deletion until `reg.exe` has read it.
 4. **Undo.** Probably genuinely impossible for these sizes — Recycle Bin is not viable at 10 GB.
    If so, say so in the UI rather than implying reversibility.
 
-   **Answered: impossible at cache sizes, and kept where a removal is small.** A clean removes
-   files outright, and the confirmation says that it cannot be undone. Removal from Explore is the
-   exception §7.1 makes: one item a user picked out goes to the Recycle Bin by default.
+   **Answered: impossible for a clean, and kept for what a user picks out by hand.** A clean
+   removes files outright, and the confirmation says that it cannot be undone. Removal from Explore
+   is the exception §7.1 makes: what a user picked out goes to the Recycle Bin by default, whatever
+   its size, and an item the bin cannot take fails rather than being deleted outright.
 
 ---
 
