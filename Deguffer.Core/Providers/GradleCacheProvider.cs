@@ -98,7 +98,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// examined as Gradle's whatever the variable says: <c>caches</c> and <c>wrapper</c> are names
     /// anything may use. See <see cref="ConfiguredFolder"/>.
     /// </summary>
-    public string? ResolveHome() => Resolve().Home;
+    public string? ResolveHome() => Resolve().Folder;
 
     /// <summary>
     /// The home Gradle uses, and the default one as well where the variable moved it. A
@@ -122,7 +122,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     {
         var setting = Resolve();
 
-        if (setting.Home is not { } home)
+        if (setting.Folder is not { } home)
         {
             return EmptyPlan(
                 $"{HomeVariable} is set to '{setting.Value}', and Deguffer will not treat that as Gradle's "
@@ -131,7 +131,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
         if (NothingToPlanFor(
                 home,
-                $"Gradle is not installed for this user — no {home} directory.") is { } nothing)
+                $"Gradle has not run for this user — no {home} directory.") is { } nothing)
         {
             return nothing;
         }
@@ -190,27 +190,6 @@ public sealed class GradleCacheProvider : CleanupProviderBase
         (Path.Combine(home, "init.d"), "User init scripts."),
         (Path.Combine(home, "gradle.encrypted.properties"), "Encrypted user configuration."));
 
-    private GradleHomeSetting Resolve()
-    {
-        var value = Environment.GetEnvironmentVariable(HomeVariable)?.Trim();
-
-        if (string.IsNullOrEmpty(value))
-        {
-            return new GradleHomeSetting(null, DefaultHome, null);
-        }
-
-        if (LongPath.Configured(value) is not { } configured)
-        {
-            return new GradleHomeSetting(value, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
-        }
-
-        return ConfiguredFolder.WhyNotOwned(configured, Environment, _system, TempRoots.Resolve(Environment, _system).AccountFolders) is { } declined
-            ? new GradleHomeSetting(value, null, declined)
-            : new GradleHomeSetting(value, configured, null);
-    }
-
-    /// <param name="Value">What <see cref="HomeVariable"/> holds, or null where it is not set.</param>
-    /// <param name="Home">The user home to examine, or null where it is declined.</param>
-    /// <param name="Declined">Why it is declined, as the end of a sentence, or null where it is not.</param>
-    private readonly record struct GradleHomeSetting(string? Value, string? Home, string? Declined);
+    private ConfiguredFolder.Setting Resolve() =>
+        ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system);
 }

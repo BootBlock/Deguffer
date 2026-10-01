@@ -19,6 +19,37 @@ namespace Deguffer.Core.Providers;
 internal static class ConfiguredFolder
 {
     /// <summary>
+    /// The folder a tool keeps where <paramref name="variable"/> moves it, <paramref name="defaultFolder"/>
+    /// where it is not set, or the reason the value is declined.
+    ///
+    /// <para>A relative value is declined because the tool resolves it against the working directory of
+    /// whichever process reads it, which Deguffer does not share, so there is no correct reading of it.
+    /// A full path is declined where <see cref="WhyNotOwned"/> declines it.</para>
+    /// </summary>
+    public static Setting FromVariable(
+        string variable,
+        string defaultFolder,
+        IUserEnvironment environment,
+        ISystemDirectories machine)
+    {
+        var value = environment.GetEnvironmentVariable(variable)?.Trim();
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return new Setting(null, defaultFolder, null);
+        }
+
+        if (LongPath.Configured(value) is not { } configured)
+        {
+            return new Setting(value, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
+        }
+
+        return WhyNotOwned(configured, environment, machine, TempRoots.Resolve(environment, machine).AccountFolders) is { } declined
+            ? new Setting(value, null, declined)
+            : new Setting(value, configured, null);
+    }
+
+    /// <summary>
     /// Why <paramref name="configured"/> must not be examined as a tool's own folder, as the end of a
     /// sentence, or null where it may be.
     /// </summary>
@@ -43,4 +74,9 @@ internal static class ConfiguredFolder
             ? "it holds a temporary folder, where other rows remove things."
             : null;
     }
+
+    /// <param name="Value">What the variable holds, trimmed, or null where it is not set.</param>
+    /// <param name="Folder">The folder to examine as the tool's, or null where it is declined.</param>
+    /// <param name="Declined">Why it is declined, as the end of a sentence, or null where it is not.</param>
+    internal readonly record struct Setting(string? Value, string? Folder, string? Declined);
 }

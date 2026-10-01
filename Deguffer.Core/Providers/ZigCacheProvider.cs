@@ -150,7 +150,7 @@ public sealed class ZigCacheProvider : CleanupProviderBase
     /// folder or one Windows is built out of is not examined as Zig's, whatever the variable says: the
     /// names Zig uses here are too short to vouch for anything. See <see cref="ConfiguredFolder"/>.
     /// </summary>
-    public string? ResolveRoot() => Resolve().Root;
+    public string? ResolveRoot() => Resolve().Folder;
 
     /// <summary>
     /// The cache root. <see cref="Outputs"/> is refused here although the plan removes it, because the
@@ -181,7 +181,7 @@ public sealed class ZigCacheProvider : CleanupProviderBase
     {
         var setting = Resolve();
 
-        if (setting.Root is not { } root)
+        if (setting.Folder is not { } root)
         {
             return EmptyPlan(
                 $"{CacheVariable} is set to '{setting.Value}', and Deguffer will not treat that as Zig's cache: "
@@ -343,27 +343,6 @@ public sealed class ZigCacheProvider : CleanupProviderBase
         return targets;
     }
 
-    private ZigCacheSetting Resolve()
-    {
-        var value = Environment.GetEnvironmentVariable(CacheVariable)?.Trim();
-
-        if (string.IsNullOrEmpty(value))
-        {
-            return new ZigCacheSetting(null, DefaultRoot, null);
-        }
-
-        if (LongPath.Configured(value) is not { } configured)
-        {
-            return new ZigCacheSetting(value, null, "it is not a full path, so Deguffer cannot tell which directory it means.");
-        }
-
-        return ConfiguredFolder.WhyNotOwned(configured, Environment, _system, TempRoots.Resolve(Environment, _system).AccountFolders) is { } declined
-            ? new ZigCacheSetting(value, null, declined)
-            : new ZigCacheSetting(value, configured, null);
-    }
-
-    /// <param name="Value">What <see cref="CacheVariable"/> holds, or null where it is not set.</param>
-    /// <param name="Root">The cache folder to examine, or null where it is declined.</param>
-    /// <param name="Declined">Why it is declined, as the end of a sentence, or null where it is not.</param>
-    private readonly record struct ZigCacheSetting(string? Value, string? Root, string? Declined);
+    private ConfiguredFolder.Setting Resolve() =>
+        ConfiguredFolder.FromVariable(CacheVariable, DefaultRoot, Environment, _system);
 }
