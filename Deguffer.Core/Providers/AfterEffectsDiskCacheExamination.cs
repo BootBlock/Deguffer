@@ -166,7 +166,7 @@ internal sealed class AfterEffectsDiskCacheExamination
                 LongPath.Display(entry.FullName),
                 AfterEffectsDiskCacheLayout.IsAnyCacheName(entry.Name)
                     ? $"'{entry.Name}' is the disk cache of an After Effects on another computer, which may be using it, so it is left alone."
-                    : $"'{entry.Name}' sits beside After Effects' disk cache and is not part of it, so it is left alone.");
+                    : $"'{entry.Name}' is in the folder After Effects {Path.GetFileName(version)} keeps its disk cache in, and is not part of the cache, so it is left alone.");
         }
     }
 

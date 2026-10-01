@@ -180,7 +180,7 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
 
     /// <summary>
     /// The same once a run has removed this computer's cache: the next scan finds another computer's
-    /// alone, and it stays protected until After Effects here makes a cache of its own again.
+    /// alone, and it stays protected.
     /// </summary>
     [Fact]
     public async Task StillProtectsAnotherComputersCacheAfterThisComputersIsRemoved()
