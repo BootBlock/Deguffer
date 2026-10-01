@@ -910,7 +910,8 @@ each carrying the same cache directories under its own vendor name.
 Chromium writes a fixed set of directory names into whatever `userData` folder its host chose:
 `Cache\Cache_Data` (HTTP cache), `Code Cache` (compiled V8), `GPUCache`, `DawnGraphiteCache` and
 `DawnWebGPUCache` (pipeline blobs), and `Service Worker\CacheStorage`. All six are regenerated on
-demand.
+demand. (`Service Worker\CacheStorage` later moved to a Tier 2 row of its own, because what a site
+stored there for offline use is gone until the site is next online: see `docs/cache-locations.md`.)
 
 Scanning one level under `%APPDATA%` and `%LOCALAPPDATA%` for that signature found ten applications
 over 20 MB on the audited machine — a package manager's own UI at 867 MB, a chat client at 250 MB,

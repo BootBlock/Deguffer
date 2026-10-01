@@ -38,7 +38,7 @@ public sealed record ChromiumFolderWalk(IReadOnlyList<ChromiumFolder> Folders, b
 /// <item>A link. What it points at was never identified, and <see cref="BoundedFileWalk"/> holds
 /// that rule itself.</item>
 /// <item>A Chromium user-data folder, <c>EBWebView</c> or not. Its children are its own profiles and
-/// state, which <see cref="ChromiumCacheProvider"/> classifies as a whole, so everything in there it
+/// state, which <see cref="ChromiumUserDataProvider"/> classifies as a whole, so everything in there it
 /// does not recognise is Tier 4 (§5.2). Finding a second folder inside one would let a deletion
 /// reach into a child the first folder's rules declined. Edge keeps a WebView2 folder for its sign-in
 /// inside its own user data, and this is why it stays unreached. A marker Windows would not describe

@@ -6,10 +6,10 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A Chromium user-data folder is the most dangerous neighbourhood any provider works in: the ten
+/// A Chromium user-data folder is the most dangerous neighbourhood any provider works in: the nine
 /// disposable directories sit among sign-in tokens, saved passwords, drafts and offline data, in
 /// the same folder and in the same naming style. So these are mostly negative tests. The positive
-/// ones only establish that the ten are reached at all.
+/// ones only establish that the nine are reached at all.
 /// </summary>
 public sealed class ChromiumCacheProviderTests : IDisposable
 {
@@ -176,7 +176,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task PlansAllTenCacheNamesIncludingTheTwoThatAreGrandchildren()
+    public async Task PlansAllNineCacheNamesIncludingTheOneThatIsAGrandchild()
     {
         var app = CreateApplication("Chatter");
 
@@ -189,7 +189,6 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var graphiteDawn = CreateDirectory(Path.Combine(app, "GraphiteDawnCache"));
         var dawn = CreateDirectory(Path.Combine(app, "DawnCache"));
         var httpCache = CreateDirectory(Path.Combine(app, "Cache", "Cache_Data"));
-        var cacheStorage = CreateDirectory(Path.Combine(app, "Service Worker", "CacheStorage"));
 
         var provider = CreateProvider();
         Assert.True(await provider.IsPresentAsync());
@@ -197,7 +196,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
-            new[] { cacheStorage, codeCache, skiaShaders, angleShaders, graphite, webGpu, graphiteDawn, dawn, gpuCache, httpCache }
+            new[] { codeCache, skiaShaders, angleShaders, graphite, webGpu, graphiteDawn, dawn, gpuCache, httpCache }
                 .Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         Assert.True(plan.EstimatedBytes > 0);
@@ -224,10 +223,10 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.2. The user-data folder is a tool root in every sense that matters, and so are the two
-    /// containers this provider descends into: <c>Service Worker</c> holds registrations and scripts
-    /// beside the cached responses, and <c>Cache</c> is spared for the reason any unclassified
-    /// parent is — the rule takes the child it recognises, never the directory holding it.
+    /// §5.2. The user-data folder is a tool root in every sense that matters, and so is
+    /// <c>Cache</c>, the container this provider descends into: it is spared for the reason any
+    /// unclassified parent is — the rule takes the child it recognises, never the directory holding
+    /// it. <c>Service Worker</c> is spared whole, because this row does not descend into it.
     /// </summary>
     [Fact]
     public async Task NeverTargetsTheUserDataFolderOrTheContainersItDescendsInto()
@@ -251,7 +250,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.2's dangerous direction, and the whole reason this provider is an exact allow-list. Every
-    /// one of these sits in the same folder in the same naming style as the ten, three of them with
+    /// one of these sits in the same folder in the same naming style as the nine, three of them with
     /// the word "cache" in the name. The first six are user data or live state.
     /// <c>component_crx_cache</c> stages component updates rather than caching anything, and
     /// nothing has established what removing either <c>_crx_cache</c> directory costs.
@@ -291,38 +290,58 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The same rule one level down, inside the two directories this provider deliberately reaches
-    /// into. <c>ScriptCache</c> and <c>Database</c> are the real neighbours of <c>CacheStorage</c>,
-    /// observed in a live <c>Service Worker</c> directory. <c>Cache</c> was observed holding nothing
-    /// but <c>Cache_Data</c>, so the third subject is an invented name: what has to hold is that
-    /// anything appearing there in a future Chromium version is spared, and there is no way to test
-    /// that against a name that exists today.
+    /// The same rule one level down, inside the directory this provider deliberately reaches into.
+    /// <c>Cache</c> was observed holding nothing but <c>Cache_Data</c>, so the subject is an invented
+    /// name: what has to hold is that anything appearing there in a future Chromium version is
+    /// spared, and there is no way to test that against a name that exists today.
     /// </summary>
     [Fact]
     public async Task AnUnrecognisedChildInsideAContainerIsTier4AndSurvives()
     {
         var app = CreateApplication("Chatter");
         CreateDirectory(Path.Combine(app, "Cache", "Cache_Data"));
-        CreateDirectory(Path.Combine(app, "Service Worker", "CacheStorage"));
 
         var unexpected = CreateDirectory(Path.Combine(app, "Cache", "Something_New"));
-        var scripts = CreateDirectory(Path.Combine(app, "Service Worker", "ScriptCache"));
-        var database = CreateDirectory(Path.Combine(app, "Service Worker", "Database"));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        foreach (var spared in new[] { unexpected, scripts, database })
-        {
-            Assert.DoesNotContain(spared, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains(plan.ProtectedPaths, p =>
-                p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
-        }
+        Assert.DoesNotContain(unexpected, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(unexpected, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
 
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
-        Assert.All(new[] { unexpected, scripts, database }, path => Assert.True(Directory.Exists(path)));
+        Assert.True(Directory.Exists(unexpected));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// What a site's service worker stored for offline use is Tier 2, so this Tier 1 row must leave
+    /// it standing: removing it stops a web application working offline, and a pre-selected row
+    /// would do that to anyone who pressed Clean. The whole <c>Service Worker</c> directory is
+    /// asserted to survive (§5.6), because this row never classifies what is inside it.
+    /// </summary>
+    [Fact]
+    public async Task WhatServiceWorkersStoredForOfflineUseIsLeftStanding()
+    {
+        var app = CreateApplication("Browserish");
+        var gpuCache = CreateDirectory(Path.Combine(app, "GPUCache"));
+        var offline = CreateDirectory(Path.Combine(app, "Default", "Service Worker", "CacheStorage"));
+        var serviceWorker = Path.Combine(app, "Default", "Service Worker");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([gpuCache], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(serviceWorker, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(File.Exists(Path.Combine(offline, "entry.bin")), "offline storage was removed by the Tier 1 row.");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -476,7 +495,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
     /// <summary>
     /// §7 scopes the age column to per-workspace and per-project data. Each of these is one whole
-    /// cache for one profile, so a timestamp on it would be a number with nothing to mean — and ten
+    /// cache for one profile, so a timestamp on it would be a number with nothing to mean — and nine
     /// different dates for one application would invite the user to read a difference between them.
     /// </summary>
     [Fact]
@@ -610,7 +629,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Two of the ten sit inside a directory that is kept, so a user who sees that directory still
+    /// One of the nine sits inside a directory that is kept, so a user who sees that directory still
     /// standing has no way to tell the cache inside it went. The sentence is said only when it
     /// happened, so a plan that emptied no container must not carry it.
     /// </summary>
@@ -623,7 +642,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
-        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Service Worker", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("'Cache_Data'", StringComparison.Ordinal));
 
         var nested = CreateApplication("Nested");
         CreateDirectory(Path.Combine(nested, "Cache", "Cache_Data"));
@@ -633,7 +652,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         Assert.Contains(second.Notes, n =>
             n.Message.Contains("'Nested'", StringComparison.Ordinal) &&
-            n.Message.Contains("Service Worker", StringComparison.Ordinal));
+            n.Message.Contains("'Cache_Data'", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -692,15 +711,15 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The ten names, and only the ten. An eleventh appearing in the table without the reasoning
+    /// The nine names, and only the nine. A tenth appearing in the table without the reasoning
     /// that belongs to it is exactly how a signature stops being a signature.
     /// </summary>
     [Fact]
-    public void TheTableDeclaresTheTenChromiumCacheNamesAndNoOthers()
+    public void TheTableDeclaresTheNineChromiumCacheNamesAndNoOthers()
     {
         Assert.Equal(
             [
-                "CacheStorage", "Cache_Data", "Code Cache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
+                "Cache_Data", "Code Cache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
                 "GPUCache", "GrShaderCache", "GraphiteDawnCache", "ShaderCache",
             ],
             ChromiumCacheProvider.Levels
