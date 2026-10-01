@@ -33,7 +33,15 @@ namespace Deguffer.Core.Providers;
 /// only folders never sees a file, and one that declines links never offers one, so a file or a
 /// link carrying a recognised folder's name is something nobody classified, and Tier 4.</para>
 /// </param>
-public sealed record ToolRoot(string Path, string Reason, Predicate<ToolRootChild> Recognises)
+/// <param name="Claim">
+/// What the root says of what is inside it, which is how Explore words the refusal of an entry below
+/// a probed root. Every root claims the whole folder except one from <see cref="Sparing"/>.
+/// </param>
+public sealed record ToolRoot(
+    string Path,
+    string Reason,
+    Predicate<ToolRootChild> Recognises,
+    ToolRootClaim Claim = ToolRootClaim.WholeFolder)
 {
     /// <summary>
     /// The usual case: the provider already holds its rule as a child set, and its plan lists only
@@ -56,6 +64,24 @@ public sealed record ToolRoot(string Path, string Reason, Predicate<ToolRootChil
         ArgumentNullException.ThrowIfNull(names);
 
         return new ToolRoot(path, reason, child => child.Kind == ChildKind.Folder && names(child.Name));
+    }
+
+    /// <summary>
+    /// A folder a tool's setting names but the provider declines to examine as the tool's own, such as
+    /// the profile or a drive root. The tool still writes its configuration there, so Explore refuses
+    /// those entries, and nothing else: everything beside them is the user's, and refusing it would
+    /// read the whole folder as the tool's.
+    ///
+    /// <para>Declared only through <see cref="ICleanupProvider.DiscoverToolRootsAsync"/>, which only ever
+    /// adds a refusal. Declared roots at one folder are pooled, and a child any of them recognises is
+    /// allowed, so a root recognising nearly everything would lift every other declaration's refusals
+    /// there: two variables naming the same drive root would each open the other tool's credentials.</para>
+    /// </summary>
+    public static ToolRoot Sparing(string path, string reason, IEnumerable<string> configuration)
+    {
+        var names = configuration.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new ToolRoot(path, reason, child => !names.Contains(child.Name), ToolRootClaim.NamedEntries);
     }
 
     /// <summary>
@@ -89,4 +115,14 @@ public sealed record ToolRoot(string Path, string Reason, Predicate<ToolRootChil
 
         return next.Select(level => Folders(level.Key, reason, level.Value.Contains));
     }
+}
+
+/// <summary>What a <see cref="ToolRoot"/> says of the entries inside it.</summary>
+public enum ToolRootClaim
+{
+    /// <summary>The folder is the tool's, so its reason is true of everything inside it.</summary>
+    WholeFolder,
+
+    /// <summary>Only the entries the root refuses are the tool's. The rest are someone else's.</summary>
+    NamedEntries,
 }

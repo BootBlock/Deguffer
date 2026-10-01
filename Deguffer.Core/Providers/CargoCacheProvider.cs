@@ -129,17 +129,25 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         (".crates2.json", "Cargo's record of what 'cargo install' put in bin."),
     ];
 
+    private const string DeclinedRootReason =
+        "CARGO_HOME names this folder, so Cargo keeps its registry tokens, its configuration and what "
+        + "'cargo install' put on PATH here.";
+
+    private readonly ISystemDirectories _system;
+
     public CargoCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
     {
+        _system = system ?? SystemDirectories.Current;
     }
 
     public override string Id => "cargo";
@@ -175,42 +183,60 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     public string DefaultHome => Path.Combine(Environment.UserProfile, ".cargo");
 
     /// <summary>
-    /// The Cargo home, honouring <see cref="HomeVariable"/>. Null when that variable holds
-    /// something this cannot resolve: Cargo resolves a relative value against the invoking shell's
-    /// working directory, which Deguffer is not, so there is no correct interpretation available and
-    /// enumerating a directory nobody pointed at is exactly the guess §5.2 forbids.
+    /// The Cargo home, honouring <see cref="HomeVariable"/>, or null where that names nothing this can
+    /// examine as Cargo's: a relative value, which Cargo resolves against a working directory Deguffer
+    /// is not, or a folder <see cref="ConfiguredFolder"/> declines. <c>registry</c> and <c>git</c> are
+    /// names anything may use, and examining the profile or a drive root as Cargo's home would assert
+    /// everything there as Cargo's survivor.
     ///
     /// Normalised through <see cref="LongPath.Configured"/> rather than used as it arrived, so every
     /// path derived from it is canonical. A trailing separator would otherwise leave the home with no
     /// name of its own to put in a note, and a value spelled differently from what the enumeration
     /// returns would defeat the comparison that stops one directory being reported twice.
     /// </summary>
-    public string? ResolveHome() =>
-        Environment.GetEnvironmentVariable(HomeVariable) is { } configured && configured.Trim().Length > 0
-            ? LongPath.Configured(configured)
-            : DefaultHome;
+    public string? ResolveHome() => Resolve().Folder;
 
     /// <summary>
     /// One root per level, because that is how Cargo's own declaration is written: <c>registry</c>
     /// and <c>git</c> are Tier 4 containers at the home's level and classify their own children at
     /// theirs. Declaring only the home would refuse <c>registry\cache</c>, which Deguffer removes.
     ///
-    /// Empty where <see cref="HomeVariable"/> names something that is not a full path. There is no
-    /// directory to make a claim about, and guessing one is the §5.2 failure this whole declaration
-    /// exists to prevent.
+    /// <para>For the home Cargo uses, and the default one as well where the variable moved it: a
+    /// <c>.cargo</c> left behind in the profile still holds whatever <c>credentials.toml</c> was
+    /// written before the move. A home the variable names but this declines is declared in
+    /// <see cref="DiscoverToolRootsAsync"/>.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        ResolveHome() is { } home
-            ?
-            [
-                .. Levels.Select(level => ToolRoot.Of(
-                    level.Resolve(home),
-                    "This is inside Cargo's own folder. Deguffer removes the downloaded archives, "
-                    + "the sources unpacked from them and the git checkouts, and nothing else — the "
-                    + "registry index, the bare clones and the credentials beside them all stay.",
-                    level.Children)),
-            ]
-            : [];
+    [
+        .. new[] { ResolveHome(), DefaultHome }
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .SelectMany(home => Levels.Select(level => ToolRoot.Of(
+                level.Resolve(home),
+                "This is inside Cargo's own folder. Deguffer removes the downloaded archives, "
+                + "the sources unpacked from them and the git checkouts, and nothing else — the "
+                + "registry index, the bare clones and the credentials beside them all stay.",
+                level.Children))),
+    ];
+
+    /// <summary>
+    /// A home the variable names but this declines is still where Cargo writes its tokens and installs
+    /// its binaries, so Explore refuses those there and nothing else: refusing everything Cargo does not
+    /// recognise would read a whole drive or the profile as Cargo's. Declared here rather than in
+    /// <see cref="ToolRoots"/> because a declaration made here only ever adds a refusal. See
+    /// <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>(
+            Resolve().DeclinedFolder is { } declined
+                ?
+                [
+                    ToolRoot.Sparing(
+                        declined,
+                        DeclinedRootReason,
+                        [.. ProtectedFiles.Select(file => file.Name), .. Levels[0].Children.KeptNames]),
+                ]
+                : []);
 
     /// <summary>
     /// Presence is a cache actually on disk, never the home existing. Installing rustup creates
@@ -222,14 +248,16 @@ public sealed class CargoCacheProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (ResolveHome() is not { } home)
+        var setting = Resolve();
+
+        if (setting.Folder is not { } home)
         {
             return EmptyPlan(
-                $"{HomeVariable} is set to '{Environment.GetEnvironmentVariable(HomeVariable)?.Trim()}', which is not "
-                + "a full path. Deguffer cannot tell which directory that means, so it is leaving it alone.");
+                $"{HomeVariable} is set to '{setting.Value}', and Deguffer will not treat that as Cargo's "
+                + $"folder: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(home, $"Cargo is not installed for this user — no {home} directory.") is { } nothing)
+        if (NothingToPlanFor(home, $"Cargo has not run for this user — no {home} directory.") is { } nothing)
         {
             return nothing;
         }
@@ -424,4 +452,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         from level in Levels
         from name in level.Children.DisposableNames
         select Path.Combine(level.Resolve(home), name);
+
+    private ConfiguredFolder.Setting Resolve() =>
+        ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system);
 }

@@ -106,7 +106,7 @@ installed" cleanly on a machine without that toolchain.
 | NuGet package cache | Cleared with `dotnet nuget locals all --clear`, not by path |
 | npm package cache | Cleared with `npm cache clean --force` |
 | pnpm store | |
-| Gradle build cache | `caches` and `wrapper` only, never the `.gradle` root |
+| Gradle build cache | `caches` and `wrapper` only, never the Gradle user home itself: `.gradle`, or wherever `GRADLE_USER_HOME` points |
 | Cargo crate cache | |
 | Go build and module caches | |
 | Zig build cache | Never the packages Zig fetched. What it built goes only together with the records that point at it |
