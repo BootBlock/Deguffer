@@ -401,6 +401,10 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         // send the reader to different places.
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasUnreadableRoot);
+
+        // The root is both protected and declined, and the plan names it once, under the reason it
+        // was protected for.
+        Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(RoamingRoot, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>The same decline one level in, where only the shared folder was moved.</summary>
@@ -421,6 +425,11 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Assert.True(Directory.Exists(stranger));
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasUnreadableRoot);
+
+        // §5.6. Every other decline in the provider declares what it declines, and this one is no
+        // different for being the folder the others sit in.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(Common(RoamingRoot), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

@@ -103,6 +103,11 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(unknown, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.Notes, n => n.Message.Contains("daemon", StringComparison.Ordinal));
+
+        // §5.6. A sibling of a targeted cache is what an over-broad rule takes along, so the run
+        // has to prove it survived rather than only say it was left alone.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(unknown, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -176,8 +181,11 @@ public sealed class GradleCacheProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, "payload", 65536);
 
-        SymbolicLink.ToDirectory(Path.Combine(root, "caches"), outside);
-        SymbolicLink.ToDirectory(Path.Combine(root, "wrapper"), outside);
+        var caches = Path.Combine(root, "caches");
+        var wrapper = Path.Combine(root, "wrapper");
+
+        SymbolicLink.ToDirectory(caches, outside);
+        SymbolicLink.ToDirectory(wrapper, outside);
 
         var provider = CreateProvider();
 
@@ -189,6 +197,10 @@ public sealed class GradleCacheProviderTests : IDisposable
         Assert.True(Directory.Exists(stranger));
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasUnreadableRoot);
+
+        // §5.6. A declined link is a spared child like any other.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(caches, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(wrapper, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

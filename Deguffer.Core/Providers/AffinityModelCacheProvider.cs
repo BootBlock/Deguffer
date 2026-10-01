@@ -287,7 +287,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. found.Protect]),
+            ProtectedPaths = Protect([.. found.Protect.DistinctBy(p => p.Path, StringComparer.OrdinalIgnoreCase)]),
             Notes = found.Notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = found.Unreadable,
@@ -314,12 +314,16 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             tree.Root,
             "Affinity's own folder must survive — only downloaded models inside it are removed."));
 
+        // Declared as well as noted. Where the link is the profile root it is already protected
+        // above, and the plan keeps the first reason given for a path.
         if (tree.LinkedAway is { } linked)
         {
-            found.Decline(new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Leaving '{linked}' alone: it is a link to somewhere else, and Deguffer does not "
-                + "look through a link."));
+            found.Decline(
+                new PlanNote(
+                    PlanNoteSeverity.Information,
+                    $"Leaving '{linked}' alone: it is a link to somewhere else, and Deguffer does not "
+                    + "look through a link."),
+                (linked, CacheLevelWalk.LinkReason));
             return;
         }
 
@@ -350,7 +354,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
                     $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does "
                     + "not delete through a link."),
                 (LongPath.Display(link.FullName),
-                    "A link rather than a directory, so what it points at was never classified."));
+                    CacheLevelWalk.LinkReason));
         }
 
         foreach (var stranger in tree.Unrecognised)
@@ -430,7 +434,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
                         PlanNoteSeverity.Information,
                         $"Leaving Affinity {name}'s '{ModelCacheName}' alone: it is a link to "
                         + "somewhere else, and Deguffer does not delete through a link."),
-                    (path, "A link rather than a directory, so what it points at was never classified."));
+                    (path, CacheLevelWalk.LinkReason));
                 continue;
             }
 

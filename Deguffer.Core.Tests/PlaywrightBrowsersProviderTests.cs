@@ -89,7 +89,8 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         Directory.CreateDirectory(outside);
         File.WriteAllBytes(Path.Combine(outside, "chrome.exe"), new byte[65536]);
 
-        SymbolicLink.ToDirectory(Path.Combine(root, "chromium-1228"), outside);
+        var build = Path.Combine(root, "chromium-1228");
+        SymbolicLink.ToDirectory(build, outside);
 
         var provider = CreateProvider();
 
@@ -100,6 +101,9 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasUnreadableRoot);
+
+        // §5.6. A declined link is a spared child like any other.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(build, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -189,6 +193,10 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
             p => string.Equals(Path.GetFileName(p), name, StringComparison.Ordinal));
 
         Assert.Contains(plan.Notes, n => n.Message.Contains($"Leaving '{name}' alone", StringComparison.Ordinal));
+
+        // §5.6. It is a sibling of a targeted build, which is what an over-broad rule takes along.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            Path.GetFileName(p.Path) == name && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

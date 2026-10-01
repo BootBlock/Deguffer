@@ -318,6 +318,26 @@ public abstract class CleanupProviderBase : ICleanupProvider
             DirectoryContent.IsPresent(c.Path))),
     ];
 
+    /// <summary>
+    /// §5.6 for a plan built on <see cref="CacheLevelWalk"/>: the paths the provider names itself,
+    /// then every child the walk spared or declined.
+    ///
+    /// <para>The walk's own lists are the ones that must not be left out. A spared child is a sibling
+    /// of a targeted one under the same parent, so a plan that only notes it gives §5.6 nothing to
+    /// check when a later rule turns out too broad. The provider's own names come first so their
+    /// reasons win where a named path is also one the walk spared.</para>
+    /// </summary>
+    private protected static IReadOnlyList<ProtectedPath> Protect(
+        LevelWalk walk,
+        params (string Path, string Reason)[] named) =>
+        Protect(
+        [
+            .. named
+                .Concat(walk.Survivors)
+                .Concat(walk.Declined)
+                .DistinctBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase),
+        ]);
+
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
     protected PlanNote? BuildRunningProcessNote() =>
         RunningProcessNotice.For(Inspector, ConflictingProcessNames);

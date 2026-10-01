@@ -128,6 +128,11 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
 
         Assert.DoesNotContain(unknown, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.Notes, n => n.Message.Contains(name, StringComparison.Ordinal));
+
+        // §5.6, and the third case is the one a fixed list cannot reach: a child no release of the
+        // SDK had added when the list was written.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(unknown, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -198,8 +203,11 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, "payload", 65536);
 
-        SymbolicLink.ToDirectory(Path.Combine(root, ".analysis-driver"), outside);
-        SymbolicLink.ToDirectory(Path.Combine(root, ".pub-package-details-cache"), outside);
+        var driver = Path.Combine(root, ".analysis-driver");
+        var details = Path.Combine(root, ".pub-package-details-cache");
+
+        SymbolicLink.ToDirectory(driver, outside);
+        SymbolicLink.ToDirectory(details, outside);
 
         var provider = CreateProvider();
 
@@ -210,6 +218,10 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.WasNotExamined);
         Assert.False(plan.HasUnreadableRoot);
+
+        // §5.6. A declined link is a spared child like any other.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(driver, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(details, StringComparison.OrdinalIgnoreCase));
 
         // Executed, for the reason given on the test above: the emptiness assertion covers the
         // planner, and the run is what extends the check to the executor.
