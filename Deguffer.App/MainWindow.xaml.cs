@@ -3,6 +3,7 @@ using Deguffer.App.Views;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -12,6 +13,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly WindowBackdrop _backdrop;
     private readonly WindowSizing _sizing;
+    private readonly CloseGuard _closeGuard = new(App.Running);
 
     public MainWindow()
     {
@@ -27,6 +29,26 @@ public sealed partial class MainWindow : Window
 
         // Where the window ends up is the user's, so it outlives the session that produced it.
         Closed += (_, _) => _sizing.Remember();
+
+        // Closing the window ends the process, and with it any clean or removal still running on a
+        // page the user has left. That run's §5.6 verification and its report would go with it.
+        AppWindow.Closing += OnClosing;
+
+        // Queued rather than closed from inside the handler: it runs as an action ends, and the
+        // pages still to hear about that ending would be updating controls in a closed window. Asked
+        // again when it runs, because an action can begin in between, and then the close waits for
+        // that one too.
+        _closeGuard.ReadyToClose += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closeGuard.MayClose)
+            {
+                Close();
+            }
+            else
+            {
+                _closeGuard.CloseWhenIdle();
+            }
+        });
 
         ApplyPreferences();
         App.Preferences.Changed += (_, _) => ApplyPreferences();
@@ -99,6 +121,35 @@ public sealed partial class MainWindow : Window
         }
 
         _backdrop.IsRequested = preferences.BackdropEnabled;
+    }
+
+    private async void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_closeGuard.MayClose)
+        {
+            return;
+        }
+
+        // Before the first await: the close is decided when this handler returns, not when it ends.
+        args.Cancel = true;
+
+        var root = (FrameworkElement)Content;
+
+        switch (await ContentDialogClosePrompt.AskAsync(ClosePrompt.For(App.Running.Current), root.XamlRoot, root.ActualTheme))
+        {
+            case true:
+                _closeGuard.CloseWhenIdle();
+                break;
+
+            case false:
+                _closeGuard.KeepOpen();
+                break;
+
+            // Another dialog is open, so nothing was asked, and an earlier choice to close stands.
+            // The dialog on screen is the question to answer first.
+            case null:
+                break;
+        }
     }
 
     private void OnDestinationChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

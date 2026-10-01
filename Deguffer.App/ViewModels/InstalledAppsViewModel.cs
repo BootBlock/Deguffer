@@ -15,22 +15,29 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
 {
     private readonly Func<CancellationToken, InstalledAppsReading> _read;
     private readonly Func<ElevationRequest, bool> _relaunch;
+    private readonly RunningActions _running;
     private InstalledAppsReading _reading = new([], []);
     private CancellationTokenSource? _reads;
 
     /// <param name="read">Reads every entry. Run off the UI thread.</param>
     /// <param name="relaunch">Starts an elevated replacement, returning false where the user declined.</param>
+    /// <param name="running">What is changing the machine on every page, which the relaunch waits for.</param>
     public InstalledAppsViewModel(
         Func<CancellationToken, InstalledAppsReading> read,
         InstalledAppsActions actions,
         bool isElevated,
-        Func<ElevationRequest, bool> relaunch)
+        Func<ElevationRequest, bool> relaunch,
+        RunningActions running)
     {
         _read = read;
         _relaunch = relaunch;
+        _running = running;
         Actions = actions;
         Actions.EntriesChanged += (_, _) => _ = RefreshAsync();
         CanElevate = ElevationOffer.ShouldOffer(isElevated);
+
+        // An action on this page, or a clean or a removal on another, ends with this process.
+        _running.Changed += (_, _) => ElevateCommand.NotifyCanExecuteChanged();
     }
 
     public InstalledAppsActions Actions { get; }
@@ -104,7 +111,10 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanElevate))]
+    /// <summary>Elevating ends this process, so it waits for every action on every page.</summary>
+    private bool CanElevateNow() => CanElevate && _running.MayEndProcess;
+
+    [RelayCommand(CanExecute = nameof(CanElevateNow))]
     private void Elevate()
     {
         if (_relaunch(ElevationRequest.InstalledApps))

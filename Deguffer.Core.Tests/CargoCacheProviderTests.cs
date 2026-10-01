@@ -19,13 +19,18 @@ public sealed class CargoCacheProviderTests : IDisposable
 {
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
+    private readonly FakeSystemDirectories _system;
 
-    public CargoCacheProviderTests() => _environment = new FakeUserEnvironment(_temp.Path);
+    public CargoCacheProviderTests()
+    {
+        _environment = new FakeUserEnvironment(_temp.Path);
+        _system = new FakeSystemDirectories(Path.Combine(_temp.Path, "system"));
+    }
 
     public void Dispose() => _temp.Dispose();
 
     private CargoCacheProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system);
 
     private string Home => Path.Combine(_environment.UserProfile, ".cargo");
 
@@ -461,6 +466,56 @@ public sealed class CargoCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("not a full path", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <c>registry</c> and <c>git</c> are names anything may use. The variable naming the profile would
+    /// offer the user's own folder of that name and assert everything else in the profile as Cargo's
+    /// survivor. Explore's side of the same decision is in <c>ExploreActionPolicyTests</c>.
+    /// </summary>
+    [Fact]
+    public async Task WillNotTreatTheProfileAsCargosHome()
+    {
+        var theirs = Populate(Path.Combine(_environment.UserProfile, "registry", "cache"));
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, _environment.UserProfile);
+
+        var provider = CreateProvider();
+
+        Assert.Null(provider.ResolveHome());
+        Assert.False(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.DoesNotContain(theirs, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("will not treat that as Cargo's folder", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WillNotTreatADriveRootAsCargosHome()
+    {
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, @"Q:\");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("root of a drive", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A <c>.cargo</c> left in the profile after the variable moved the home still holds whatever
+    /// <c>credentials.toml</c> was written before the move, so Explore refuses it there too.
+    /// </summary>
+    [Fact]
+    public void DeclaresTheDefaultHomeAsWellAsTheMovedOne()
+    {
+        var moved = Path.Combine(_temp.Path, "elsewhere", ".cargo");
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, moved);
+
+        var roots = CreateProvider().ToolRoots.Select(root => root.Path).ToList();
+
+        Assert.Contains(moved, roots);
+        Assert.Contains(Home, roots);
     }
 
     [Fact]

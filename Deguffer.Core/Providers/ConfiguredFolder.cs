@@ -19,6 +19,37 @@ namespace Deguffer.Core.Providers;
 internal static class ConfiguredFolder
 {
     /// <summary>
+    /// The folder a tool keeps where <paramref name="variable"/> moves it, <paramref name="defaultFolder"/>
+    /// where it is not set, or the reason the value is declined.
+    ///
+    /// <para>A relative value is declined because the tool resolves it against the working directory of
+    /// whichever process reads it, which Deguffer does not share, so there is no correct reading of it.
+    /// A full path is declined where <see cref="WhyNotOwned"/> declines it.</para>
+    /// </summary>
+    public static Setting FromVariable(
+        string variable,
+        string defaultFolder,
+        IUserEnvironment environment,
+        ISystemDirectories machine)
+    {
+        var value = environment.GetEnvironmentVariable(variable)?.Trim();
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return new Setting(null, null, defaultFolder, null);
+        }
+
+        if (LongPath.Configured(value) is not { } configured)
+        {
+            return new Setting(value, null, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
+        }
+
+        return WhyNotOwned(configured, environment, machine, TempRoots.Resolve(environment, machine).AccountFolders) is { } declined
+            ? new Setting(value, configured, null, declined)
+            : new Setting(value, configured, configured, null);
+    }
+
+    /// <summary>
     /// Why <paramref name="configured"/> must not be examined as a tool's own folder, as the end of a
     /// sentence, or null where it may be.
     /// </summary>
@@ -42,5 +73,19 @@ internal static class ConfiguredFolder
             .Any(temp => temp.Length > 0 && LongPath.Contains(unaliased, LongPath.Unaliased(temp)))
             ? "it holds a temporary folder, where other rows remove things."
             : null;
+    }
+
+    /// <param name="Value">What the variable holds, trimmed, or null where it is not set.</param>
+    /// <param name="Named">The full path the variable names, or null where it names none.</param>
+    /// <param name="Folder">The folder to examine as the tool's, or null where it is declined.</param>
+    /// <param name="Declined">Why it is declined, as the end of a sentence, or null where it is not.</param>
+    internal readonly record struct Setting(string? Value, string? Named, string? Folder, string? Declined)
+    {
+        /// <summary>
+        /// The folder the variable names where it is declined, or null. The tool still writes its
+        /// configuration there whatever Deguffer makes of the rest, so a provider declares it with
+        /// <see cref="ToolRoot.Sparing"/>.
+        /// </summary>
+        public string? DeclinedFolder => Folder is null ? Named : null;
     }
 }

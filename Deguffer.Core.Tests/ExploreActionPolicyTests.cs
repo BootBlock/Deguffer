@@ -1598,13 +1598,98 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public async Task ThePolicyReadsSection52OutOfTheProvidersThemselves()
     {
-        var provider = new GradleCacheProvider(_environment);
+        var provider = new GradleCacheProvider(_environment, system: _system);
         var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
-        Assert.Equal(GradleRoot, provider.RootPath);
-        Assert.False(policy.MayRemove(provider.RootPath).IsAllowed);
-        Assert.False(policy.MayRemove(Path.Combine(provider.RootPath, "gradle.properties")).IsAllowed);
-        Assert.True(policy.MayRemove(Path.Combine(provider.RootPath, "caches")).IsAllowed);
+        Assert.Equal(GradleRoot, provider.ResolveHome());
+        Assert.False(policy.MayRemove(GradleRoot).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+    }
+
+    /// <summary>
+    /// <c>GRADLE_USER_HOME</c> moves the configuration with the caches, so the moved
+    /// <c>gradle.properties</c> is refused exactly as the default one is. The <c>.gradle</c> left in the
+    /// profile is still refused too: whatever was written there before the move is still there.
+    /// </summary>
+    [Fact]
+    public async Task AMovedGradleHomeIsRefusedAsTheDefaultOneIsAndTheDefaultStaysRefused()
+    {
+        const string moved = @"Q:\gradle";
+        _volumes.With(@"Q:\");
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, moved);
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
+
+        foreach (var home in (string[])[moved, GradleRoot])
+        {
+            Assert.False(policy.MayRemove(home).IsAllowed, home);
+            Assert.False(policy.MayRemove(Path.Combine(home, "gradle.properties")).IsAllowed, home);
+            Assert.True(policy.MayRemove(Path.Combine(home, "caches")).IsAllowed, home);
+        }
+    }
+
+    /// <summary>
+    /// A folder the variable names but Gradle's row declines, here a drive root, is still where Gradle
+    /// writes <c>gradle.properties</c>, so Explore refuses it there. Everything else on the drive is the
+    /// user's, and stays theirs to remove.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedGradleHomeStillHasItsConfigurationRefusedAndNothingElse()
+    {
+        _volumes.With(@"Q:\");
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"Q:\");
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
+
+        var properties = policy.MayRemove(@"Q:\gradle.properties");
+        Assert.False(properties.IsAllowed);
+        Assert.Contains("'gradle.properties' is the tool's", properties.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("refuses what is in there", properties.Reason, StringComparison.Ordinal);
+        Assert.False(policy.MayRemove(@"Q:\init.gradle.kts").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\init.d\company.gradle").IsAllowed);
+        Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same for Cargo, with the variable naming the profile: the registry tokens and the binaries
+    /// <c>cargo install</c> put on PATH are refused there, and the user's own files beside them are not.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedCargoHomeStillHasItsTokensAndBinariesRefusedAndNothingElse()
+    {
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, _environment.UserProfile);
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system, _environment, _volumes, [new CargoCacheProvider(_environment, system: _system)]);
+
+        Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "credentials.toml")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "bin", "ripgrep.exe")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(_environment.UserProfile, "git", "db")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(_environment.UserProfile, "notes.txt")).IsAllowed);
+    }
+
+    /// <summary>
+    /// Both variables naming one declined folder, as on a drive kept for development. Each declaration
+    /// recognises everything but its own tool's configuration, so pooled together each would open the
+    /// other's: Gradle's would allow Cargo's tokens, and Cargo's would allow <c>gradle.properties</c>.
+    /// </summary>
+    [Fact]
+    public async Task TwoToolsDeclinedAtOneFolderEachKeepTheirConfigurationRefused()
+    {
+        _volumes.With(@"Q:\");
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"Q:\");
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, @"Q:\");
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            _volumes,
+            [new GradleCacheProvider(_environment, system: _system), new CargoCacheProvider(_environment, system: _system)]);
+
+        Assert.False(policy.MayRemove(@"Q:\gradle.properties").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\credentials.toml").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\bin\ripgrep.exe").IsAllowed);
+        Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
     }
 
     /// <summary>

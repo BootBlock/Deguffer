@@ -34,6 +34,12 @@ internal static class ModalDialog
     private static bool _showing;
 
     /// <summary>
+    /// Whether a dialog is on screen, so a caller can tell a refusal from a dismissal: both report
+    /// <see cref="ContentDialogResult.None"/>.
+    /// </summary>
+    internal static bool IsShowing => _showing;
+
+    /// <summary>
     /// Show <paramref name="dialog"/> and report what the user chose, or report
     /// <see cref="ContentDialogResult.None"/> without showing anything if a dialog is already open.
     /// </summary>

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
+using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml.Controls;
@@ -33,11 +34,13 @@ public sealed partial class InstalledAppsActions : ObservableObject
     private readonly Func<IInstalledAppsConfirmation> _confirmation;
     private readonly PreferenceService _preferences;
     private readonly bool _isElevated;
+    private readonly RunningActions _running;
     private IReadOnlyList<InstalledEntry> _stale = [];
     private IReadOnlyList<InstalledEntry> _installed = [];
     private bool _anyUninstallable;
     private CancellationTokenSource? _watching;
 
+    /// <param name="running">What is changing the machine on every page, where each action is recorded while it runs.</param>
     public InstalledAppsActions(
         EntryRemover remover,
         BackupRestorer restorer,
@@ -45,7 +48,8 @@ public sealed partial class InstalledAppsActions : ObservableObject
         RegistryBackups backups,
         Func<IInstalledAppsConfirmation> confirmation,
         PreferenceService preferences,
-        bool isElevated)
+        bool isElevated,
+        RunningActions running)
     {
         _remover = remover;
         _restorer = restorer;
@@ -55,6 +59,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
         _confirmation = confirmation;
         _preferences = preferences;
         _isElevated = isElevated;
+        _running = running;
     }
 
     /// <summary>Raised after an action changed the entries, so the page reads them again.</summary>
@@ -162,6 +167,10 @@ public sealed partial class InstalledAppsActions : ObservableObject
 
         IsActing = true;
 
+        // Each action here is held in RunningActions until its report is on screen, so neither the
+        // window nor an Elevate button ends the process before it has said what it did.
+        using var running = _running.Begin(RunningAction.EntryRemoval);
+
         try
         {
             var report = await Task.Run(() => _remover.RemoveAsync(selection.Removable, backUp, _isElevated, CancellationToken.None));
@@ -203,6 +212,8 @@ public sealed partial class InstalledAppsActions : ObservableObject
         _watching = watching;
         IsActing = true;
         IsWatching = true;
+
+        using var running = _running.Begin(RunningAction.Uninstall);
 
         try
         {
@@ -259,6 +270,8 @@ public sealed partial class InstalledAppsActions : ObservableObject
         }
 
         IsActing = true;
+
+        using var running = _running.Begin(RunningAction.BackupRestore);
 
         try
         {

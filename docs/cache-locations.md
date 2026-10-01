@@ -193,7 +193,12 @@ That relationship is the whole design of what Deguffer removes.
 It removes the two derived directories and the archives: `registry\cache`, `registry\src` and
 `git\checkouts`. It resolves the home through `CARGO_HOME` before falling back to the default, and
 if that variable holds a relative path it offers nothing, because Cargo would resolve it against a
-working directory Deguffer is not. If the home turns out to be a link to somewhere else — a common
+working directory Deguffer is not. It also offers nothing if the variable names the root of a drive,
+your profile, one of your own folders such as Documents, or a folder that holds a temporary folder or
+a Windows folder: names such as `registry` and `git` are too common to prove that such a folder
+belongs to Cargo. Explore still refuses Cargo's configuration files, `bin`, `registry` and `git` in a
+folder Deguffer declines, because Cargo writes them there anyway. Where the variable moved the home,
+Explore still refuses the `credentials.toml` in the `.cargo` left in your profile. If the home turns out to be a link to somewhere else — a common
 way to move Cargo off the system drive — Deguffer says so and leaves it alone, because nothing on
 the far side of a link has been classified.
 
@@ -240,6 +245,62 @@ The uncomfortable half of the tier is the git clones, and the answer was to *not
 than to argue the tier. "Regenerable" is a claim about somebody else's server still being there,
 and for a git remote that claim is often false. Splitting the two halves is possible here because
 the split runs along a directory boundary, so it was split.
+
+---
+
+## Gradle build cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.gradle`, or wherever `GRADLE_USER_HOME` points |
+| **Method** | Delete `caches` and `wrapper` |
+| **Typical size** | About 7 GB on the machine the spec was written against |
+
+### What it is
+
+Gradle is the build tool behind Android and many Java and Kotlin projects. Every project on the
+machine shares one Gradle user home. It holds the dependencies Gradle downloaded and the outputs of
+tasks it already ran, in `caches`, and the Gradle distributions each project's wrapper pins, in
+`wrapper`. The same folder holds your Gradle configuration.
+
+### What Deguffer does
+
+It removes `caches` and `wrapper`, and never the folder that holds them. Gradle has no eviction
+command to call, so this is the path-based case.
+
+It resolves the home through `GRADLE_USER_HOME` before it falls back to the default, because
+developers set that variable to move the cache off the system drive. It offers nothing if the
+variable holds a relative path, because Gradle would resolve it against a working directory Deguffer
+is not. It also offers nothing if the variable names the root of a drive, your profile, one of your
+own folders such as Documents, or a folder that holds a temporary folder or a Windows folder. The
+names `caches` and `wrapper` are too common to prove that such a folder belongs to Gradle. If the
+home is a link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`gradle.properties`** can hold signing keys and repository credentials, and it sits in the same
+folder as the caches. Deguffer asserts that it survived the run, along with the init scripts
+Gradle runs before every build (**`init.d`**, **`init.gradle`** and **`init.gradle.kts`**),
+**`gradle.encrypted.properties`** and the home itself. Anything else in the home stays in Tier 4 and
+is reported as left alone.
+
+In Explore, Deguffer refuses everything in the home except `caches` and `wrapper`. Where
+`GRADLE_USER_HOME` moved the home, it refuses the same things in the `.gradle` left in your profile
+too, because a `gradle.properties` written before the move is still there. Where Deguffer declines
+the folder the variable names, Gradle still writes its configuration there, so Explore refuses
+that configuration in that folder and nothing else.
+
+### What it costs you
+
+The next build downloads its dependencies and the wrapper distribution again, and re-runs the tasks
+it can no longer find outputs for. That build is slower once. Nothing has to be re-configured.
+
+### Why Tier 1
+
+Everything removed comes back on its own the next time Gradle needs it, from the repositories and
+the distribution server a project already names.
 
 ---
 

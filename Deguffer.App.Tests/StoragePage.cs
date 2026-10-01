@@ -47,6 +47,7 @@ internal sealed class StoragePage : IDisposable
             isElevated,
             Selections,
             Keeps,
+            Running,
             () =>
             {
                 PromptsBuilt++;
@@ -65,6 +66,9 @@ internal sealed class StoragePage : IDisposable
     public KeepService Keeps { get; }
 
     public SelectionService Selections { get; }
+
+    /// <summary>What is running on every page, which a test can add to as another page would.</summary>
+    public RunningActions Running { get; } = new();
 
     public ScriptedPrompt Prompt { get; } = new();
 

@@ -45,6 +45,9 @@ internal sealed class ExploreFixture : IDisposable
     /// <summary>Every relaunch the page asked for, in order.</summary>
     public List<ExploreRequest> Relaunches { get; } = [];
 
+    /// <summary>What is running on every page, which a test can add to as another page would.</summary>
+    public RunningActions Running { get; } = new();
+
     /// <summary>Whether a relaunch the page asks for starts, which is the user accepting the UAC prompt.</summary>
     public bool RelaunchStarts { get; set; }
 
@@ -53,14 +56,15 @@ internal sealed class ExploreFixture : IDisposable
             Scanner,
             Volumes,
             Time,
-            new ExploreActions(Build, () => Prompt, Faults, new FakeRecycleBin()),
+            new ExploreActions(Build, () => Prompt, Faults, Running, new FakeRecycleBin()),
             Guide,
             isElevated,
             request =>
             {
                 Relaunches.Add(request);
                 return RelaunchStarts;
-            });
+            },
+            Running);
 
     /// <summary>A policy that refuses each of <paramref name="refusing"/>, and everything under it, with <paramref name="reason"/>.</summary>
     public ExploreActionPolicy Policy(string reason = "Kept by a test.", params string[] refusing) =>
