@@ -190,7 +190,8 @@ meaningfully larger piece of UI than anything the shell does today.
   way the map now shows it. Feeding the volume-wide dates back to the providers is the work that
   would close the question, and it needs the two pages to share a scan before it is worth doing.
 - **§8 question 4 — undo.** Still likely impossible at these sizes. If so, §7 should say so plainly
-  rather than implying reversibility.
+  rather than implying reversibility. ✅ **Answered** in §8 itself, in agreement with §7.1: a
+  clean's confirmation says it cannot be undone, and only a removal from Explore uses the Recycle Bin.
 
 ## 4b. Two providers beyond the audit — pip and Playwright ✅ done
 
@@ -309,7 +310,11 @@ process, which Deguffer is not, so there is no correct interpretation available.
   in Core rather than the shell — turns every deselected deletion into a protected path, so §5.6's
   negative covers the choice the user actually made. A shell that filtered the step list itself
   would drop that guarantee silently.
-- **Age comes from the provider at plan time, not from the scanner.** The MFT parser walks past
+- **Age comes from the provider at plan time, not from the scanner.** The lead still holds, and
+  the parser half below is **Done** (issue #8, in 53b6760): `MftRecordParser` decodes
+  `$STANDARD_INFORMATION`, and Explore dates every node from it on both scan routes. What stays
+  open is using those timestamps for a provider's subject, which item 4 records under §8 question 1.
+  The MFT parser walks past
   `$STANDARD_INFORMATION` without decoding it, and the fallback walk has no per-directory structure
   to hang a timestamp on — surfacing age there means giving the fallback a richer return shape.
   Neither was needed: the newest file inside a workspace directory is a better signal anyway, since
@@ -326,11 +331,15 @@ process, which Deguffer is not, so there is no correct interpretation available.
   `Progress<T>` callback has nowhere to surface. 263 Core tests passed throughout; it was only
   visible by running the app. Either the roll-up rules move to Core where the codebase already puts
   provable rules (`ElevationOffer`, `ConfirmationRequirement`), or the App gets a test project.
-- **Building `Deguffer.sln` and building `Deguffer.App.csproj` disagree about `!Distribution`.**
+- ~~**Building `Deguffer.sln` and building `Deguffer.App.csproj` disagree about `!Distribution`.**~~
+  **Done** (issue #4, in 88d1c13): `!Distribution` is kept to one architecture.
   A solution build leaves the published output throwing `BadImageFormatException` from the Windows
   App SDK initialiser on launch; rebuilding the App project alone fixes it. Worth settling, since
   the failure looks like an application bug and appears only when running the built app.
-- **Per-item selection is not yet exposed for a Tier 3 subject.** The mechanism is subject-agnostic,
+- ~~**Per-item selection is not yet exposed for a Tier 3 subject.**~~ **Done:**
+  `ClaudeCodeFileHistoryProvider` and `ClaudeCodeConversationProvider` are Tier 3 with per-item
+  steps. `workspaceStorage` still waits on the §8 q2 decision, which stays with issue #84.
+  The mechanism is subject-agnostic,
   so `workspaceStorage` needs the §8 q2 grouping decision rather than new UI — sizes summed over a
   group, deletion targeting the group, absent metadata classified Tier 4.
 

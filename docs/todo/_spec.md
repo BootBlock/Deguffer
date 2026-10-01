@@ -1,10 +1,11 @@
 # Deguffer — specification
 
 > **Status:** 🟢 ACTIVE — the founding specification and the source of truth for the safety model.
-> Implementation is underway: `Deguffer.Core` carries the safety model, the planner/executor, and
-> the three Tier 1 providers (NuGet, npm, Gradle); `Deguffer.App` carries the WinUI 3 shell and the
-> preview-first flow. This document describes the intended design in full, not the current state of
-> the code — where they differ, the spec is the target.
+> Implementation is underway: `Deguffer.Core` implements the safety model, the planner/executor and
+> the providers, `Deguffer.App` implements the WinUI 3 shell and the preview-first flow, and
+> [cache-locations.md](../cache-locations.md) is the catalogue of what the providers clean. This
+> document describes the intended design in full, not the current state of the code — where they
+> differ, the spec is the target.
 
 **Deguffer** is a small Windows utility — **C# 14 / .NET 10 / WinUI 3** — that finds and reclaims
 wasted disk space, with a safety model good enough to trust unattended. It recognises what specific
@@ -262,7 +263,10 @@ Deguffer.Core.Tests/   ← provider rules and tier classification
 Deguffer.App/          ← WinUI 3 shell, MVVM over Core
 ```
 
-**Provider model.** Each source implements a common contract:
+**Provider model.** Each source implements a common contract. The block below is the original
+sketch, and [`ICleanupProvider`](../../Deguffer.Core/Providers/ICleanupProvider.cs) is the contract
+as built: it has no `EstimateBytesAsync`, because `CleanupPlan.EstimatedBytes` already carries that
+number, and its members take the parameters the safety model turned out to need.
 
 ```csharp
 interface ICleanupProvider {
@@ -935,10 +939,24 @@ against writing and deletion until `reg.exe` has read it.
 2. **Per-workspace attribution for editor state.** `workspaceStorage` folders are opaque hashes;
    the mapping to a real path lives in each folder's `workspace.json`. Worth confirming this is
    stable across editor versions before depending on it.
+
+   **Answered: not safely, as an identity.** The `workspace.json` schema is stable, but the mapping
+   is not one-to-one. A local workspace's id is `md5(fsPath + birth-time)`, so a re-created,
+   restored or re-cloned folder mints a second storage directory with an identical `workspace.json`,
+   and several child kinds carry no `workspace.json` at all. The mapping is only safe as a
+   best-effort label on a storage folder: sizes summed over a group, deletion targeting the group,
+   and absent metadata classified Tier 4. The full answer is in
+   [after-the-scanner.md, item 5](after-the-scanner.md#5-raised-while-doing-items-2-and-3-not-yet-decided).
+   Whether to offer `workspaceStorage` at all is decided under
+   [#84](https://github.com/BootBlock/Deguffer/issues/84).
 3. **Should Tier 2 re-download estimates be measured or declared?** Showing "≈10 GB to restore"
    changes decisions, but measuring it accurately is hard.
 4. **Undo.** Probably genuinely impossible for these sizes — Recycle Bin is not viable at 10 GB.
    If so, say so in the UI rather than implying reversibility.
+
+   **Answered: impossible at cache sizes, and kept where a removal is small.** A clean removes
+   files outright, and the confirmation says that it cannot be undone. Removal from Explore is the
+   exception §7.1 makes: one item a user picked out goes to the Recycle Bin by default.
 
 ---
 

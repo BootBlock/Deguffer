@@ -5,7 +5,9 @@
 > user close what they do not need?" with *the picture, yes; the action, only in a narrow form; and
 > neither inside the product [_spec.md](_spec.md) describes today*. Adopting any of it starts with
 > §1 and §2 of the specification, not with code. Re-measure the figures before trusting them against
-> a very different machine or Windows build.
+> a very different machine or Windows build. On 2026-09-12 the investigation was adopted: the
+> specification now states the view in [_spec.md](_spec.md) §7.2 and §7.2.1, and
+> [done/memory-view-plan.md](done/memory-view-plan.md) records how both phases were built.
 
 Explore (§7.1) draws a drive as a picture sized by bytes. This asks whether the same picture could
 be drawn for physical memory, sized by what each process, service and part of Windows holds, so a
