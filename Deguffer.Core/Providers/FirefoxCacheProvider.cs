@@ -280,29 +280,23 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
         if (profiles.Count == 0)
         {
-            switch (_discovery.Register)
+            if (_discovery.Register is MozillaRegisterReading.Unreached or MozillaRegisterReading.Unreadable)
             {
-                // Not "could not read": nothing established that the register is there. A warning, as
-                // UnreadableRootPlan gives for any location Windows would not describe.
-                case MozillaRegisterReading.Unreached:
-                    return UnreadableRootPlan(_discovery.ProfilesPath) with
-                    {
-                        Notes =
-                        [
-                            new PlanNote(
-                                PlanNoteSeverity.Warning,
-                                $"Windows would not say whether Firefox's list of profiles is at '{_discovery.ProfilesPath}', "
-                                + "so Deguffer could not work out which Firefox profiles exist. A link Windows will not "
-                                + "follow, a folder this account may not read and a drive that is not connected all do "
-                                + "that. Nothing was planned, and nothing was ruled out either."),
-                        ],
-                    };
+                var register = new UnreadFile(
+                    _discovery.ProfilesPath,
+                    Unreached: _discovery.Register is MozillaRegisterReading.Unreached);
 
-                case MozillaRegisterReading.Unreadable:
-                    return EmptyPlan(
-                        $"Deguffer could not read '{_discovery.ProfilesPath}', so it could not work out "
-                        + "which Firefox profiles exist. Nothing was planned, and nothing was ruled out "
-                        + "either.") with { HasUnreadableRoot = true };
+                return UnreadableRootPlan(register.Path) with
+                {
+                    Notes =
+                    [
+                        new PlanNote(
+                            PlanNoteSeverity.Warning,
+                            register.Opening("Firefox's list of profiles")
+                            + ", so Deguffer could not work out which Firefox profiles exist. Nothing was "
+                            + "planned, and nothing was ruled out either."),
+                    ],
+                };
             }
 
             // Every profile there is sits outside Firefox's own folder. Saying "no profile" here

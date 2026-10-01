@@ -349,7 +349,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         + "never removes, rather than a cache. A variable can say where a cache is. It cannot ask "
         + "for the directory holding the tool.";
 
-    /// <summary>The warnings for the clone and the integration file, where either could not be reached.</summary>
+    /// <summary>The warnings for the clone and the integration file, where either could not be read.</summary>
     private static IEnumerable<PlanNote> UnreachedNotes(VcpkgLocations located)
     {
         if (located.UnreachedRoot is { } unreached)

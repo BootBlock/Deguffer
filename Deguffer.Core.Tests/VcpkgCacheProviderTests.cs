@@ -254,7 +254,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         // "could not read".
         var opening = refused
             ? $"Windows would not say whether vcpkg's record of the clone it integrated with Visual Studio is at '{file}'"
-            : $"Deguffer could not read vcpkg's record of the clone it integrated with Visual Studio in '{file}'";
+            : $"Deguffer could not read vcpkg's record of the clone it integrated with Visual Studio at '{file}'";
 
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning && n.Message.StartsWith(opening, StringComparison.Ordinal));

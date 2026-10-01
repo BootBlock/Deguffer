@@ -137,7 +137,8 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.Notes, note =>
-            note.Message.StartsWith($"Windows would not say whether Firefox's list of profiles is at '{RegisterPath}'", StringComparison.Ordinal));
+            note.Severity == PlanNoteSeverity.Warning
+            && note.Message.StartsWith($"Windows would not say whether Firefox's list of profiles is at '{RegisterPath}'", StringComparison.Ordinal));
     }
 
     /// <summary>A register that is there and will not be read is said to be unreadable, by name.</summary>
@@ -155,7 +156,8 @@ public sealed class FirefoxCacheProviderTests : IDisposable
 
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.Notes, note =>
-            note.Message.StartsWith($"Deguffer could not read '{RegisterPath}'", StringComparison.Ordinal));
+            note.Severity == PlanNoteSeverity.Warning
+            && note.Message.StartsWith($"Deguffer could not read Firefox's list of profiles at '{RegisterPath}'", StringComparison.Ordinal));
     }
 
     /// <summary>

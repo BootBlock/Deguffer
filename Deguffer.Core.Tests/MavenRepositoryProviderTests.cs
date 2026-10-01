@@ -148,7 +148,7 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
-            && n.Message.StartsWith($"Deguffer could not read your Maven settings file in '{settings}'", StringComparison.Ordinal));
+            && n.Message.StartsWith($"Deguffer could not read your Maven settings file at '{settings}'", StringComparison.Ordinal));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("has not downloaded anything", StringComparison.Ordinal));
     }
 

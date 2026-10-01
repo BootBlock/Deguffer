@@ -22,5 +22,5 @@ public sealed record UnreadFile(string Path, bool Unreached)
     /// </summary>
     public string Opening(string what) => Unreached
         ? $"Windows would not say whether {what} is at '{Path}'"
-        : $"Deguffer could not read {what} in '{Path}'";
+        : $"Deguffer could not read {what} at '{Path}'";
 }
