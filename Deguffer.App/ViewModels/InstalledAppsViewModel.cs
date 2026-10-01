@@ -121,6 +121,11 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
         Show(InstalledRows, lists.Installed);
     }
 
-    private static void Show(ObservableCollection<InstalledAppRow> rows, IReadOnlyList<InstalledEntry> entries) =>
-        LiveList.Show(rows, entries, row => row.Key, entry => entry.Key, entry => new InstalledAppRow(entry), (row, entry) => row.Show(entry));
+    private void Show(ObservableCollection<InstalledAppRow> rows, IReadOnlyList<InstalledEntry> entries) => LiveList.Show(
+        rows,
+        entries,
+        row => row.Key,
+        entry => entry.Key,
+        entry => new InstalledAppRow(entry, Actions.MarksFor(entry)),
+        (row, entry) => row.Show(entry, Actions.MarksFor(entry)));
 }

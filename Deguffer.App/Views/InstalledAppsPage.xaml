@@ -7,20 +7,55 @@
     Background="Transparent">
 
     <Page.Resources>
-        <!-- One row for both lists: the name, who and what it is, and the sentence saying why the
-             entry is in its list. §7.3 puts that sentence on every row, so it is written out rather
-             than kept for a tooltip. -->
+        <!-- One row for both lists, two lines high: the name with its badges, then who and what it
+             is, with the installer's size beside both. §7.3 puts the reason on every row: it is the
+             standing badge's tooltip, and the row's help text for a screen reader. -->
         <DataTemplate x:Key="EntryTemplate" x:DataType="vm:InstalledAppRow">
-            <StackPanel Padding="0,6" Spacing="2"
-                        AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
-                        AutomationProperties.HelpText="{x:Bind Reason, Mode=OneWay}">
+            <Grid Padding="0,8" ColumnSpacing="12" RowSpacing="2"
+                  ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto"
+                  AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                  AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}">
                 <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{x:Bind Detail, Mode=OneWay}" Style="{StaticResource SecondaryText}"
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xEA18;" FontSize="14" VerticalAlignment="Center"
+                              Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                              Visibility="{x:Bind HasShield, Mode=OneWay}"
+                              ToolTipService.ToolTip="{x:Bind Shield, Mode=OneWay}"
+                              AutomationProperties.AccessibilityView="Raw" />
+                    <ContentControl Content="Hidden" Style="{StaticResource StandingChip}"
+                                    Visibility="{x:Bind IsHidden, Mode=OneWay}"
+                                    ToolTipService.ToolTip="{x:Bind Hidden, Mode=OneWay}"
+                                    AutomationProperties.Name="Hidden" />
+                    <ContentControl Content="{x:Bind Standing, Mode=OneWay}"
+                                    Style="{x:Bind StandingKind, Mode=OneWay, Converter={StaticResource StandingChipStyle}}"
+                                    ToolTipService.ToolTip="{x:Bind Reason, Mode=OneWay}"
+                                    AutomationProperties.Name="{x:Bind Standing, Mode=OneWay}" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{x:Bind Detail, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}" TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{x:Bind Reason, Mode=OneWay}" Style="{StaticResource SecondaryText}"
-                           TextWrapping="Wrap" />
-            </StackPanel>
+
+                <!-- The installer's own estimate, so it says so under the figure. -->
+                <StackPanel Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Center" MinWidth="72"
+                            Visibility="{x:Bind HasSize, Mode=OneWay}"
+                            ToolTipService.ToolTip="The size the program's installer recorded for it, as Windows Settings shows it.">
+                    <TextBlock Text="{x:Bind Size, Mode=OneWay}" Style="{StaticResource Figure}"
+                               HorizontalAlignment="Right" />
+                    <TextBlock Text="estimated" Style="{StaticResource FieldLabel}" HorizontalAlignment="Right"
+                               AutomationProperties.AccessibilityView="Raw" />
+                </StackPanel>
+            </Grid>
         </DataTemplate>
+
+        <!-- A hairline under each row, as between findings, so neighbouring rows read apart. -->
+        <Style x:Key="EntryContainer" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+        </Style>
     </Page.Resources>
 
     <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*">
@@ -63,9 +98,10 @@
                  Message="{x:Bind ViewModel.Actions.Report, Mode=OneWay}"
                  CloseButtonClick="OnReportClosed">
             <InfoBar.ActionButton>
-                <Button Content="Stop watching"
+                <Button Content="Cancel"
                         Visibility="{x:Bind ViewModel.Actions.IsWatching, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.Actions.StopWatchingCommand}" />
+                        Command="{x:Bind ViewModel.Actions.StopWatchingCommand}"
+                        ToolTipService.ToolTip="Stop watching this uninstaller and start no more. The uninstaller itself keeps running." />
             </InfoBar.ActionButton>
         </InfoBar>
 
@@ -77,10 +113,11 @@
 
                     <ListView x:Name="StaleList" Grid.Row="1"
                               AutomationProperties.Name="Stale entries"
-                              SelectionMode="Extended"
+                              SelectionMode="Multiple"
                               SelectionChanged="OnStaleSelectionChanged"
                               ItemsSource="{x:Bind ViewModel.StaleRows}"
-                              ItemTemplate="{StaticResource EntryTemplate}" />
+                              ItemTemplate="{StaticResource EntryTemplate}"
+                              ItemContainerStyle="{StaticResource EntryContainer}" />
 
                     <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
                         <TextBlock Text="{x:Bind ViewModel.Actions.RemovalNote, Mode=OneWay}" TextWrapping="Wrap"
@@ -94,14 +131,15 @@
             <PivotItem Header="Installed programs">
                 <Grid RowSpacing="8" RowDefinitions="Auto,*,Auto">
                     <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
-                               Text="Programs that are still there, or that nothing proves gone. Uninstalling runs the program's own uninstaller." />
+                               Text="Programs that are still there, or that nothing proves gone. Uninstalling runs each checked program's own uninstaller, one at a time." />
 
                     <ListView x:Name="InstalledList" Grid.Row="1"
                               AutomationProperties.Name="Installed programs"
-                              SelectionMode="Single"
+                              SelectionMode="Multiple"
                               SelectionChanged="OnInstalledSelectionChanged"
                               ItemsSource="{x:Bind ViewModel.InstalledRows}"
-                              ItemTemplate="{StaticResource EntryTemplate}" />
+                              ItemTemplate="{StaticResource EntryTemplate}"
+                              ItemContainerStyle="{StaticResource EntryContainer}" />
 
                     <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
                         <TextBlock Text="{x:Bind ViewModel.Actions.UninstallNote, Mode=OneWay}" TextWrapping="Wrap"

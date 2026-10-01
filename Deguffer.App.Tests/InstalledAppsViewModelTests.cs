@@ -38,6 +38,8 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     private readonly List<ElevationRequest> _relaunches = [];
 
+    private readonly FakeUninstallLauncher _launcher = new();
+
     public InstalledAppsViewModelTests() =>
         _preferences = new PreferenceService(new PreferenceStore(new FakeUserEnvironment(_temp.Path)));
 
@@ -53,7 +55,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
             new InstalledAppsActions(
                 new EntryRemover(_registry, reader, backups),
                 new BackupRestorer(_registry, backups),
-                new ProgramUninstaller(reader, new FakeUninstallLauncher(), @"C:\Windows\System32\msiexec.exe"),
+                new ProgramUninstaller(reader, _launcher,@"C:\Windows\System32\msiexec.exe"),
                 backups,
                 () => _prompt,
                 _preferences,
@@ -191,6 +193,81 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         page.Actions.SelectStale([page.StaleRows[0].Entry]);
 
         Assert.Contains("administrator", page.Actions.RemovalNote, StringComparison.Ordinal);
+    });
+
+    [Fact]
+    public void RowsWearTheMarksCoreGivesThem() => UiThread.Run(async () =>
+    {
+        _registry.With(UninstallScope.Machine64, "Gone", ("DisplayName", "Gone"),
+            ("UninstallString", $"\"{Path.Combine(_temp.Path, "Gone", "unins000.exe")}\""));
+        _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"), ("EstimatedSize", 2048),
+            ("UninstallString", $"\"{StandingFile("Tool", "unins000.exe")}\""));
+        var page = Page();
+
+        await page.RefreshAsync();
+
+        var stale = Assert.Single(page.StaleRows);
+        Assert.True(stale.HasShield);
+        Assert.Equal("Gone", stale.Standing);
+        Assert.False(stale.HasSize);
+
+        var installed = Assert.Single(page.InstalledRows);
+        Assert.False(installed.HasShield);
+        Assert.Equal("2.0 MB", installed.Size);
+        Assert.Contains(installed.Reason, installed.Description, StringComparison.Ordinal);
+    });
+
+    [Fact]
+    public void CheckedProgramsAreUninstalledInTurnThenTheListIsReadAgain() => UiThread.Run(async () =>
+    {
+        var a = Installed("A");
+        var b = Installed("B");
+        _launcher.WhileRunning = launch => _registry.Remove(launch.FileName.Contains($"{Path.DirectorySeparatorChar}A{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ? a : b);
+        var page = Page();
+        await page.RefreshAsync();
+
+        page.Actions.SelectInstalled([.. page.InstalledRows.Select(r => r.Entry)]);
+        await page.Actions.UninstallCommand.ExecuteAsync(null);
+        await Eventually.HoldsAsync(() => page.InstalledRows.Count == 0, "the uninstalled programs leaving the list");
+
+        Assert.Equal(["Uninstall 2 programs?", "Uninstall 'B' next?"], _prompt.Prompts.Select(p => p.Title));
+        Assert.Equal(2, _launcher.Started.Count);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success, page.Actions.ReportSeverity);
+        Assert.False(page.Actions.IsWatching);
+    });
+
+    [Fact]
+    public void DecliningTheUninstallRunsNothing() => UiThread.Run(async () =>
+    {
+        Installed("A");
+        var page = Page();
+        await page.RefreshAsync();
+        _prompt.Answer = false;
+
+        page.Actions.SelectInstalled([page.InstalledRows[0].Entry]);
+        await page.Actions.UninstallCommand.ExecuteAsync(null);
+
+        Assert.Empty(_launcher.Started);
+        Assert.Equal("Nothing was run.", page.Actions.Report);
+    });
+
+    [Fact]
+    public void CancelStopsWatchingAndStartsNoMore() => UiThread.Run(async () =>
+    {
+        Installed("A");
+        Installed("B");
+        var page = Page();
+        await page.RefreshAsync();
+        _launcher.RunsUntilCancelled = true;
+        _launcher.WhileRunning = _ => page.Actions.StopWatchingCommand.Execute(null);
+
+        page.Actions.SelectInstalled([.. page.InstalledRows.Select(r => r.Entry)]);
+        await page.Actions.UninstallCommand.ExecuteAsync(null);
+
+        Assert.Single(_launcher.Started);
+        Assert.Contains("It may still be running.", page.Actions.Report, StringComparison.Ordinal);
+        Assert.Contains("'B' was not started", page.Actions.Report, StringComparison.Ordinal);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational, page.Actions.ReportSeverity);
     });
 
     [Fact]

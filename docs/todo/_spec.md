@@ -838,7 +838,12 @@ break something.
 - **Every row says why it is in its list**, in the words the evidence supports: "The uninstaller
   `C:\...\unins000.exe` and the install folder are both gone", or "Windows Installer does not know
   this product". An installed row whose presence nothing could prove says that instead, so the list
-  never implies a check it did not make.
+  never implies a check it did not make. The sentence is the tooltip of a badge beside the name
+  that names the standing in a word, and the row's help text for a screen reader, so a row stays
+  two lines high.
+- **An installed row shows the size its installer recorded** in `EstimatedSize`, as Windows
+  Settings does, and says it is an estimate. A stale row shows none: its program is proven gone, so
+  the figure describes nothing on the disk.
 
 **Removing a stale entry**
 
@@ -850,7 +855,7 @@ break something.
   immediately before deleting. An entry whose values changed, or which is no longer stale, is refused
   and says so.
 - **A machine-wide entry needs administrator rights**, which an unelevated Deguffer has not got
-  (§6.3). Its row says so, and the page offers to reopen Deguffer elevated on this page, as Storage
+  (§6.3). Its row wears a shield that says so, and the page offers to reopen Deguffer elevated on this page, as Storage
   and Explore do. An entry under `HKEY_CURRENT_USER` needs nothing.
 - **Only the entry's own key goes**, with the keys below it. The `Uninstall` key, every other entry,
   the Windows Installer registration and every file stay as they were.
@@ -879,7 +884,8 @@ against writing and deletion until `reg.exe` has read it.
 
 **Uninstalling an installed program**
 
-- **One program at a time, with its own uninstaller, shown to the user.** A Windows Installer product
+- **One program at a time, with its own uninstaller, shown to the user.** More than one may be
+  checked, and their uninstallers run in turn, never together. A Windows Installer product
   is removed by `msiexec.exe /x` with its product code rather than by the command its entry
   records, because `/I` opens a maintenance dialog and Windows itself drives such an entry through
   Windows Installer. Any other program's command runs as Windows would run it, through the shell, so
@@ -888,7 +894,15 @@ against writing and deletion until `reg.exe` has read it.
 - **Refused, with the reason on the row:** an entry that sets `NoRemove`, an entry with no
   uninstaller Deguffer can resolve, another account's program, and a program whose uninstaller
   Windows says is not there, which is stale rather than installed.
-- **Confirmed every time**, by a dialog that names the program and the command Deguffer will run.
+- **A machine-wide program wears a shield** while Deguffer is not elevated, because its uninstaller
+  will usually ask for administrator rights. A refused program wears none: elevating would not help.
+- **Confirmed every time**, by a dialog that names every program and the command Deguffer will run
+  for each.
+- **Asked again before each next uninstaller.** An exit does not mean an uninstaller has finished
+  (below), and two that overlap can each fail, so only the user can say the last one is done. After
+  each exit Deguffer asks, with what the list now says of that program, before it starts the next.
+  Cancel, there or while an uninstaller is watched, starts no more; it stops the wait, never the
+  uninstaller.
 - **Watched with no deadline, and reported without a claim.** Many uninstallers copy themselves
   elsewhere and exit at once, so the process exiting does not mean the program has gone. When it
   exits, Deguffer reads the entry again and reports what the registry now says: the entry is gone,
@@ -899,7 +913,8 @@ against writing and deletion until `reg.exe` has read it.
 
 - No file deletion, in any form, including an entry's `InstallLocation`.
 - No change to Windows Installer's own registration, and nothing in `Windows\Installer` (§9).
-- No silent or unattended uninstall, and no uninstall of more than one program per action.
+- No silent or unattended uninstall, and no uninstaller started without the user's word since the
+  last one exited.
 - No other account's hive, and no packaged application.
 - No removal of an entry the evidence did not prove stale, under any preference.
 

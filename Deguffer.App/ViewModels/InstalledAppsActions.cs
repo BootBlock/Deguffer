@@ -19,7 +19,7 @@ public sealed record BackupRow(RegistryBackupFile File, string Title, string Det
 
 /// <summary>
 /// What the Installed apps page does to what the user selected (§7.3): remove stale entries,
-/// uninstall one program, restore a backup. Every decision is Core's; this carries the selection
+/// uninstall programs one at a time, restore a backup. Every decision is Core's; this carries the selection
 /// to it, asks the user, runs the action off the UI thread and keeps the report on screen until it
 /// is dismissed.
 /// </summary>
@@ -28,13 +28,14 @@ public sealed partial class InstalledAppsActions : ObservableObject
     private readonly EntryRemover _remover;
     private readonly BackupRestorer _restorer;
     private readonly ProgramUninstaller _uninstaller;
+    private readonly UninstallQueue _queue;
     private readonly RegistryBackups _backups;
     private readonly Func<IInstalledAppsConfirmation> _confirmation;
     private readonly PreferenceService _preferences;
     private readonly bool _isElevated;
     private IReadOnlyList<InstalledEntry> _stale = [];
-    private InstalledEntry? _installed;
-    private UninstallLaunch? _launch;
+    private IReadOnlyList<InstalledEntry> _installed = [];
+    private bool _anyUninstallable;
     private CancellationTokenSource? _watching;
 
     public InstalledAppsActions(
@@ -49,6 +50,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
         _remover = remover;
         _restorer = restorer;
         _uninstaller = uninstaller;
+        _queue = new UninstallQueue(uninstaller, confirmation);
         _backups = backups;
         _confirmation = confirmation;
         _preferences = preferences;
@@ -82,7 +84,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
     [ObservableProperty]
     public partial string RemovalNote { get; private set; } = string.Empty;
 
-    /// <summary>Why the selected program cannot be uninstalled, or what will run.</summary>
+    /// <summary>What will run for the selected programs, and why any will be left.</summary>
     [ObservableProperty]
     public partial string UninstallNote { get; private set; } = string.Empty;
 
@@ -118,13 +120,17 @@ public sealed partial class InstalledAppsActions : ObservableObject
         RemoveCommand.NotifyCanExecuteChanged();
     }
 
-    public void SelectInstalled(InstalledEntry? selected)
+    public void SelectInstalled(IReadOnlyList<InstalledEntry> selected)
     {
         _installed = selected;
-        (var verdict, _launch, _) = selected is null ? (ActionVerdict.Refuse(string.Empty), null, null) : _uninstaller.Prepare(selected);
-        UninstallNote = verdict.Reason;
+        var selection = UninstallSelection.For(selected, _uninstaller.Judge);
+        _anyUninstallable = selection.Runnable.Count > 0;
+        UninstallNote = selection.Note;
         UninstallCommand.NotifyCanExecuteChanged();
     }
+
+    /// <summary>What <paramref name="entry"/>'s row shows beside its name.</summary>
+    public EntryMarks MarksFor(InstalledEntry entry) => EntryMarks.For(entry, _uninstaller.Judge(entry).Verdict, _isElevated);
 
     partial void OnSelectedBackupChanged(BackupRow? value) =>
         RestoreNote = value is null ? string.Empty : _restorer.MayRestore(value.File, _isElevated).Reason;
@@ -173,17 +179,21 @@ public sealed partial class InstalledAppsActions : ObservableObject
         EntriesChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private bool CanUninstall() => _launch is not null && !IsActing;
+    private bool CanUninstall() => _anyUninstallable && !IsActing;
 
     [RelayCommand(CanExecute = nameof(CanUninstall))]
     private async Task UninstallAsync()
     {
-        if (_installed is not { } chosen || _launch is not { } launch)
+        var chosen = _installed;
+        var selection = await Task.Run(() => UninstallSelection.For(chosen, _uninstaller.Prepare));
+
+        if (selection.Runnable.Count == 0)
         {
+            Show(selection.Note, InfoBarSeverity.Informational);
             return;
         }
 
-        if (!await _confirmation().AskAsync(InstalledAppsPrompt.ForUninstall(chosen, launch), CancellationToken.None))
+        if (!await _confirmation().AskAsync(InstalledAppsPrompt.ForUninstall(selection.Runnable), CancellationToken.None))
         {
             Show("Nothing was run.", InfoBarSeverity.Informational);
             return;
@@ -193,17 +203,16 @@ public sealed partial class InstalledAppsActions : ObservableObject
         _watching = watching;
         IsActing = true;
         IsWatching = true;
-        Show($"Waiting for the uninstaller of '{chosen.Name}' to finish…", InfoBarSeverity.Informational);
 
         try
         {
-            var report = await Task.Run(() => _uninstaller.UninstallAsync(chosen, launch, watching.Token));
+            var report = await _queue.RunAsync(selection.Runnable, new Progress<UninstallStep>(ShowWaiting), watching.Token);
 
-            Show(report.Summary, report.After is AfterUninstall.NotRun ? InfoBarSeverity.Warning : InfoBarSeverity.Success);
-        }
-        catch (OperationCanceledException) when (watching.IsCancellationRequested)
-        {
-            Show($"Deguffer stopped watching the uninstaller of '{chosen.Name}'. It may still be running.", InfoBarSeverity.Informational);
+            Show(
+                report.Summary,
+                report.Abandoned is not null ? InfoBarSeverity.Informational
+                    : report.IsComplete ? InfoBarSeverity.Success
+                    : InfoBarSeverity.Warning);
         }
         finally
         {
@@ -215,6 +224,13 @@ public sealed partial class InstalledAppsActions : ObservableObject
         EntriesChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    private void ShowWaiting(UninstallStep step) => Show(
+        step.Count == 1
+            ? $"Waiting for the uninstaller of '{step.Item.Entry.Name}' to finish…"
+            : $"Waiting for the uninstaller of '{step.Item.Entry.Name}' to finish ({step.Number} of {step.Count})…",
+        InfoBarSeverity.Informational);
+
+    /// <summary>Stop watching the uninstaller running, and start no more of the queue.</summary>
     [RelayCommand(CanExecute = nameof(IsWatching))]
     private void StopWatching() => _watching?.Cancel();
 

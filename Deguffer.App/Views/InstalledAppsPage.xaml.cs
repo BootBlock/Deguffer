@@ -70,7 +70,7 @@ public sealed partial class InstalledAppsPage : Page
         ViewModel.Actions.SelectStale([.. StaleList.SelectedItems.OfType<InstalledAppRow>().Select(r => r.Entry)]);
 
     private void OnInstalledSelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        ViewModel.Actions.SelectInstalled((InstalledList.SelectedItem as InstalledAppRow)?.Entry);
+        ViewModel.Actions.SelectInstalled([.. InstalledList.SelectedItems.OfType<InstalledAppRow>().Select(r => r.Entry)]);
 
     private void OnBackupSelectionChanged(object sender, SelectionChangedEventArgs e) =>
         ViewModel.Actions.SelectedBackup = BackupList.SelectedItem as BackupRow;

@@ -132,10 +132,10 @@ public sealed class ProgramUninstallerTests : IDisposable
     {
         var key = Installed("Tool");
         var chosen = Current(key);
-        var (_, launch, _) = Uninstaller.Prepare(chosen);
+        var prepared = Uninstaller.Prepare(chosen).Prepared!;
         _launcher.WhileRunning = _ => _registry.Remove(key);
 
-        var report = await Uninstaller.UninstallAsync(chosen, launch!, CancellationToken.None);
+        var report = await Uninstaller.UninstallAsync(prepared, CancellationToken.None);
 
         Assert.Equal(AfterUninstall.EntryGone, report.After);
         Assert.Single(_launcher.Started);
@@ -146,10 +146,10 @@ public sealed class ProgramUninstallerTests : IDisposable
     {
         var key = Installed("Tool");
         var chosen = Current(key);
-        var (_, launch, _) = Uninstaller.Prepare(chosen);
+        var prepared = Uninstaller.Prepare(chosen).Prepared!;
         _launcher.WhileRunning = l => _paths.Remove(l.FileName);
 
-        var report = await Uninstaller.UninstallAsync(chosen, launch!, CancellationToken.None);
+        var report = await Uninstaller.UninstallAsync(prepared, CancellationToken.None);
 
         Assert.Equal(AfterUninstall.NowStale, report.After);
         Assert.Contains("can now be removed", report.Summary, StringComparison.Ordinal);
@@ -160,9 +160,9 @@ public sealed class ProgramUninstallerTests : IDisposable
     {
         var key = Installed("Tool");
         var chosen = Current(key);
-        var (_, launch, _) = Uninstaller.Prepare(chosen);
+        var prepared = Uninstaller.Prepare(chosen).Prepared!;
 
-        var report = await Uninstaller.UninstallAsync(chosen, launch!, CancellationToken.None);
+        var report = await Uninstaller.UninstallAsync(prepared, CancellationToken.None);
 
         Assert.Equal(AfterUninstall.StillInstalled, report.After);
         Assert.Contains("finish after they exit", report.Summary, StringComparison.Ordinal);
@@ -174,10 +174,10 @@ public sealed class ProgramUninstallerTests : IDisposable
     {
         var key = Installed("Tool");
         var chosen = Current(key);
-        var (_, launch, _) = Uninstaller.Prepare(chosen);
+        var prepared = Uninstaller.Prepare(chosen).Prepared!;
         Installed("Tool", "/other");
 
-        var report = await Uninstaller.UninstallAsync(chosen, launch!, CancellationToken.None);
+        var report = await Uninstaller.UninstallAsync(prepared, CancellationToken.None);
 
         Assert.Equal(AfterUninstall.NotRun, report.After);
         Assert.Empty(_launcher.Started);
@@ -188,10 +188,10 @@ public sealed class ProgramUninstallerTests : IDisposable
     {
         var key = Installed("Tool");
         var chosen = Current(key);
-        var (_, launch, _) = Uninstaller.Prepare(chosen);
+        var prepared = Uninstaller.Prepare(chosen).Prepared!;
         _launcher.Outcome = new LaunchOutcome(false, "The administrator prompt was declined.");
 
-        var report = await Uninstaller.UninstallAsync(chosen, launch!, CancellationToken.None);
+        var report = await Uninstaller.UninstallAsync(prepared, CancellationToken.None);
 
         Assert.Equal(AfterUninstall.NotRun, report.After);
         Assert.Equal("The administrator prompt was declined.", report.Summary);
@@ -203,7 +203,7 @@ public sealed class ProgramUninstallerTests : IDisposable
         var key = Installed("Tool");
         var (_, launch) = Policy(key);
 
-        var prompt = InstalledAppsPrompt.ForUninstall(Current(key), launch!);
+        var prompt = InstalledAppsPrompt.ForUninstall([new PreparedUninstall(Current(key), launch!)]);
 
         Assert.Equal([launch!.Display], prompt.Items);
         Assert.Equal("Uninstall 'Tool'?", prompt.Title);

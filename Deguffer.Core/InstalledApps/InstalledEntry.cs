@@ -20,4 +20,17 @@ public sealed record InstalledEntry(
 
     /// <summary>Whether it belongs in the stale list rather than the installed one.</summary>
     public bool IsStale => Standing.IsStale;
+
+    /// <summary>
+    /// The size the installer recorded in <c>EstimatedSize</c>, in bytes, or null where it recorded
+    /// none or wrote it as something other than a number. Windows writes the value in kilobytes.
+    /// </summary>
+    public long? EstimatedBytes => Values.Number("EstimatedSize") switch
+    {
+        long kilobytes and > 0 and <= long.MaxValue / 1024 => kilobytes * 1024,
+
+        // A REG_DWORD past 2 TB reads back as a negative int, and Windows reads it unsigned.
+        long kilobytes and < 0 and >= int.MinValue => (uint)(int)kilobytes * 1024L,
+        _ => null,
+    };
 }
