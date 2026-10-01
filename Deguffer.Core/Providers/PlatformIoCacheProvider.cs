@@ -166,7 +166,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// </summary>
     private static IReadOnlyList<ToolRoot> Declare(string core) =>
     [
-        new ToolRoot(
+        ToolRoot.Folders(
             core,
             "This is PlatformIO's own folder. Deguffer clears the download cache inside it, and "
             + "removes an installed package only where PlatformIO itself reports that nothing needs "

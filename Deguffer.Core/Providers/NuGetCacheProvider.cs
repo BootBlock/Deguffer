@@ -76,14 +76,14 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        new ToolRoot(
+        ToolRoot.Folders(
             Path.Combine(Environment.UserProfile, ".nuget"),
             "This is NuGet's own folder. Deguffer clears the downloaded packages inside it and "
             + "nothing else, because the NuGet.Config beside them may hold credentials for your "
             + "private feeds.",
             static name => name.Equals("packages", StringComparison.OrdinalIgnoreCase)),
 
-        new ToolRoot(
+        ToolRoot.Folders(
             Path.Combine(Environment.LocalAppData, "NuGet"),
             "This is NuGet's own folder. Deguffer clears the HTTP and plugin caches inside it and "
             + "nothing else, because the credential-provider plugins beside them are not a cache.",

@@ -119,12 +119,12 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
-            .. examination.Catalogs.Select(catalog => new ToolRoot(
+            .. examination.Catalogs.Select(catalog => ToolRoot.Folders(
                 catalog,
                 "This is a Capture One catalog, holding its database and often your photographs. "
                 + "Deguffer removes only the Cache folder inside it.",
                 CaptureOneLayout.IsCache)),
-            .. examination.Sidecars.Select(sidecar => new ToolRoot(
+            .. examination.Sidecars.Select(sidecar => ToolRoot.Folders(
                 sidecar,
                 "This is Capture One's folder for the images beside it, holding your adjustments to them. "
                 + "Deguffer removes only the Cache folder inside it.",

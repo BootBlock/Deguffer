@@ -75,6 +75,42 @@ public sealed class RetroArchExploreTests : IDisposable
     }
 
     /// <summary>
+    /// Each folder is recognised by name and by the kind the row offered from it: databases as files,
+    /// shader sets as folders. An entry that took an offered name as the other kind, or as a link,
+    /// after the row looked is something the row never classified, and Explore refuses it.
+    /// </summary>
+    [Fact]
+    public async Task AnOfferedNameIsRefusedOnceItIsTheOtherKindOrALink()
+    {
+        _retroArch.Install().Declare();
+        var slang = _retroArch.ShaderSet("shaders_slang");
+        var glsl = _retroArch.ShaderSet("shaders_glsl");
+        var database = _retroArch.DatabaseFile("Atari - 2600");
+        var other = _retroArch.DatabaseFile("Atari - 7800");
+
+        var policy = await PolicyAsync();
+
+        Assert.True(policy.MayRemove(slang).IsAllowed);
+        Assert.True(policy.MayRemove(glsl).IsAllowed);
+        Assert.True(policy.MayRemove(database).IsAllowed);
+        Assert.True(policy.MayRemove(other).IsAllowed);
+
+        Directory.Delete(slang, recursive: true);
+        File.WriteAllBytes(slang, new byte[64]);
+        Directory.Delete(glsl, recursive: true);
+        SymbolicLink.ToDirectory(glsl, RetroArchFixture.Folder(Path.Combine(_temp.Path, "elsewhere", "shaders_glsl")));
+        File.Delete(database);
+        RetroArchFixture.Folder(database);
+        File.Delete(other);
+        SymbolicLink.ToFile(other, RetroArchFixture.WriteFile(Path.Combine(_temp.Path, "elsewhere", "Atari - 7800.rdb")));
+
+        Assert.False(policy.MayRemove(slang).IsAllowed);
+        Assert.False(policy.MayRemove(glsl).IsAllowed);
+        Assert.False(policy.MayRemove(database).IsAllowed);
+        Assert.False(policy.MayRemove(other).IsAllowed);
+    }
+
+    /// <summary>
     /// A folder the settings put outside the program is its own top, and the way down to it must not
     /// become a second root there that recognises nothing.
     /// </summary>

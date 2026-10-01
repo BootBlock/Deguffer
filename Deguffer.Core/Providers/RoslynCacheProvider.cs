@@ -106,7 +106,7 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        new ToolRoot(
+        ToolRoot.Folders(
             _cache,
             "This is where Roslyn keeps its solution indexes. Deguffer removes a program's whole set of "
             + "indexes from it once it recognises everything inside, and never the folder itself.",

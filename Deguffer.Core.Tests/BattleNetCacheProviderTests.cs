@@ -262,7 +262,7 @@ public sealed class BattleNetCacheProviderTests : IDisposable
 
         foreach (var name in new[] { "Cache", "Logs", "Account", "BrowserCaches", "CachedData.db" })
         {
-            Assert.Equal(root.Recognises(name), fromLogs.Recognises(name));
+            Assert.Equal(root.RecognisesFolder(name), fromLogs.RecognisesFolder(name));
         }
     }
 }

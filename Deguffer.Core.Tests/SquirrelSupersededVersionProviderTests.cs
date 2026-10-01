@@ -271,7 +271,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
 
         Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
         Assert.True(Directory.Exists(outside), $"{outside} was removed through the link");
-        Assert.False(provider.ToolRoots[0].Recognises("app-3.6.3"));
+        Assert.False(provider.ToolRoots[0].RecognisesFolder("app-3.6.3"));
     }
 
     /// <summary>
@@ -375,11 +375,11 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
         var declaration = Assert.Single(CreateProvider().ToolRoots);
 
         Assert.Equal(root, declaration.Path);
-        Assert.True(declaration.Recognises("app-3.6.3"));
-        Assert.False(declaration.Recognises("app-3.6.4"));
-        Assert.False(declaration.Recognises(SquirrelDiscovery.UpdaterName));
-        Assert.False(declaration.Recognises(SquirrelDiscovery.PackagesDirectoryName));
-        Assert.False(declaration.Recognises("app.ico"));
+        Assert.True(declaration.RecognisesFolder("app-3.6.3"));
+        Assert.False(declaration.RecognisesFolder("app-3.6.4"));
+        Assert.False(declaration.RecognisesFolder(SquirrelDiscovery.UpdaterName));
+        Assert.False(declaration.RecognisesFolder(SquirrelDiscovery.PackagesDirectoryName));
+        Assert.False(declaration.RecognisesFolder("app.ico"));
     }
 
     /// <summary>
@@ -422,7 +422,7 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
             new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.Contains(provider.ToolRoots, r =>
-            r.Path.Equals(running, StringComparison.OrdinalIgnoreCase) && r.Recognises("app-3.6.3"));
+            r.Path.Equals(running, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("app-3.6.3"));
         Assert.Contains(plan.ProtectedPaths, p => p.Path == superseded);
 
         var refusal = policy.MayRemove(superseded);

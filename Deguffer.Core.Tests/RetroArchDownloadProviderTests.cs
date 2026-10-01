@@ -318,7 +318,7 @@ public sealed class RetroArchDownloadProviderTests : IDisposable
 
         var roots = await provider.DiscoverToolRootsAsync();
         Assert.False(Assert.Single(roots, r => r.Path.Equals(_retroArch.Shaders, StringComparison.OrdinalIgnoreCase))
-            .Recognises("shaders_slang"));
+            .RecognisesFolder("shaders_slang"));
 
         await provider.ExecuteAsync(plan);
         Assert.True(Directory.Exists(slang));
@@ -358,17 +358,17 @@ public sealed class RetroArchDownloadProviderTests : IDisposable
         var roots = await CreateProvider().DiscoverToolRootsAsync();
 
         var program = roots.Where(r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase)).ToList();
-        Assert.Contains(program, r => r.Recognises("shaders"));
-        Assert.Contains(program, r => r.Recognises("database"));
-        Assert.DoesNotContain(program, r => r.Recognises("saves") || r.Recognises("system") || r.Recognises("retroarch.cfg"));
+        Assert.Contains(program, r => r.RecognisesFolder("shaders"));
+        Assert.Contains(program, r => r.RecognisesFolder("database"));
+        Assert.DoesNotContain(program, r => r.RecognisesFolder("saves") || r.RecognisesFolder("system") || r.RecognisesFolder("retroarch.cfg"));
 
         var shaders = roots.Where(r => r.Path.Equals(_retroArch.Shaders, StringComparison.OrdinalIgnoreCase)).ToList();
-        Assert.Contains(shaders, r => r.Recognises("shaders_slang"));
-        Assert.DoesNotContain(shaders, r => r.Recognises("my-crt.slangp") || r.Recognises("shaders_glsl"));
+        Assert.Contains(shaders, r => r.RecognisesFolder("shaders_slang"));
+        Assert.DoesNotContain(shaders, r => r.RecognisesFolder("my-crt.slangp") || r.RecognisesFolder("shaders_glsl"));
 
         var database = roots.Where(r => r.Path.Equals(Path.Combine(_retroArch.Program, "database"), StringComparison.OrdinalIgnoreCase)).ToList();
-        Assert.Contains(database, r => r.Recognises("rdb"));
-        Assert.DoesNotContain(database, r => r.Recognises("cursors"));
+        Assert.Contains(database, r => r.RecognisesFolder("rdb"));
+        Assert.DoesNotContain(database, r => r.RecognisesFolder("cursors"));
     }
 
     [Fact]

@@ -667,13 +667,13 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
         var roots = await CreateProvider().DiscoverToolRootsAsync();
 
         var catalogRoot = Assert.Single(roots, r => r.Path.Equals(catalog, StringComparison.OrdinalIgnoreCase));
-        Assert.True(catalogRoot.Recognises("Cache"));
-        Assert.False(catalogRoot.Recognises("Originals"));
-        Assert.False(catalogRoot.Recognises("Adjustments"));
+        Assert.True(catalogRoot.RecognisesFolder("Cache"));
+        Assert.False(catalogRoot.RecognisesFolder("Originals"));
+        Assert.False(catalogRoot.RecognisesFolder("Adjustments"));
 
         var sidecar = Assert.Single(roots, r => r.Path.Equals(Path.Combine(session, "Capture", "CaptureOne"), StringComparison.OrdinalIgnoreCase));
-        Assert.True(sidecar.Recognises("Cache"));
-        Assert.False(sidecar.Recognises("Settings166"));
+        Assert.True(sidecar.RecognisesFolder("Cache"));
+        Assert.False(sidecar.RecognisesFolder("Settings166"));
 
         Assert.DoesNotContain(roots, r => r.Path.Equals(session, StringComparison.OrdinalIgnoreCase));
     }

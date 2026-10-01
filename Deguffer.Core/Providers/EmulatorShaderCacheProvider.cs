@@ -153,7 +153,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             roots.AddRange(root.CacheFolders.Select(folder => new ToolRoot(
                 folder.Path,
                 $"This is {root.Layout.Name}'s cache folder. Deguffer removes only the shader caches in it.",
-                folder.Recognised.Contains)));
+                folder.Recognises)));
         }
 
         var declared = roots.Select(root => root.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);

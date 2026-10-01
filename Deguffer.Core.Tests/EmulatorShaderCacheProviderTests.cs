@@ -447,16 +447,16 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
         var roots = await CreateProvider().DiscoverToolRootsAsync();
 
         var root = Assert.Single(roots, r => r.Path.Equals(DolphinRoot, StringComparison.OrdinalIgnoreCase));
-        Assert.True(root.Recognises("Cache"));
-        Assert.False(root.Recognises("Shaders"));
-        Assert.False(root.Recognises("GC"));
+        Assert.True(root.RecognisesFolder("Cache"));
+        Assert.False(root.RecognisesFolder("Shaders"));
+        Assert.False(root.RecognisesFolder("GC"));
 
         var cache = Assert.Single(roots, r => r.Path.Equals(Path.Combine(DolphinRoot, "Cache"), StringComparison.OrdinalIgnoreCase));
-        Assert.True(cache.Recognises("Shaders"));
-        Assert.False(cache.Recognises("GameCovers"));
+        Assert.True(cache.RecognisesFolder("Shaders"));
+        Assert.False(cache.RecognisesFolder("GameCovers"));
 
         var userShaders = Assert.Single(roots, r => r.Path.Equals(Path.Combine(DolphinRoot, "Shaders"), StringComparison.OrdinalIgnoreCase));
-        Assert.False(userShaders.Recognises("anything"));
+        Assert.False(userShaders.RecognisesFolder("anything"));
     }
 
     /// <summary>§5.3: an emulator writes its cache while a game is played.</summary>
@@ -476,7 +476,7 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
 
         var roots = await provider.DiscoverToolRootsAsync();
         Assert.False(Assert.Single(roots, r => r.Path.Equals(Path.Combine(DolphinRoot, "Cache"), StringComparison.OrdinalIgnoreCase))
-            .Recognises("Shaders"));
+            .RecognisesFolder("Shaders"));
 
         var result = await provider.ExecuteAsync(plan);
 

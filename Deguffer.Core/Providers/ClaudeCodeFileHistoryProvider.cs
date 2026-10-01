@@ -255,14 +255,12 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
                     : [];
         }
 
-        var offered = new HashSet<string>(
-            survey.Snapshots.Targets.Select(target => target.Path),
-            StringComparer.OrdinalIgnoreCase);
+        var offered = new TargetedEntries(survey.Snapshots.Targets);
 
         return
         [
             new ToolRoot(survey.Home, HomeReason, static _ => false),
-            new ToolRoot(survey.Folder, FolderReason, name => offered.Contains(Path.Combine(survey.Folder, name))),
+            new ToolRoot(survey.Folder, FolderReason, child => offered.Recognises(survey.Folder, child)),
         ];
     }
 

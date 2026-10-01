@@ -403,6 +403,32 @@ public sealed class ClaudeCodeConversationProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A project folder recognises each entry the plan offered as the kind it offered: the
+    /// conversation as a file and the session's folder as a folder. Once either name stands for the
+    /// other kind, the entry is not what the plan classified, and Explore refuses it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAnOfferedNameOnceItIsTheOtherKind()
+    {
+        var (conversation, folder) = OldSession(SessionA);
+
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.True(policy.MayRemove(conversation).IsAllowed);
+        Assert.True(policy.MayRemove(folder).IsAllowed);
+
+        File.Delete(conversation);
+        Directory.CreateDirectory(conversation);
+        Directory.Delete(folder, recursive: true);
+        File.WriteAllBytes(folder, new byte[64]);
+
+        Assert.False(policy.MayRemove(conversation).IsAllowed);
+        Assert.False(policy.MayRemove(folder).IsAllowed);
+    }
+
+    /// <summary>
     /// A session folder whose conversation has gone is the leftovers row's to decide about, so this row
     /// neither offers nor asserts it: asserting it would read that row's removal as a failure of this one.
     /// </summary>

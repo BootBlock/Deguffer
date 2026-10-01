@@ -388,18 +388,18 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
         var roots = CreateProvider().ToolRoots;
 
         var nvidia = Assert.Single(roots, r => r.Path.Equals(DisplayDriver, StringComparison.OrdinalIgnoreCase));
-        Assert.True(nvidia.Recognises("546.33"));
-        Assert.False(nvidia.Recognises("notes"));
+        Assert.True(nvidia.RecognisesFolder("546.33"));
+        Assert.False(nvidia.RecognisesFolder("notes"));
 
         var downloader = Assert.Single(roots, r => r.Path.Equals(Downloader, StringComparison.OrdinalIgnoreCase));
-        Assert.True(downloader.Recognises("latest"));
-        Assert.False(downloader.Recognises("config"));
+        Assert.True(downloader.RecognisesFolder("latest"));
+        Assert.False(downloader.RecognisesFolder("config"));
 
         var amd = Assert.Single(roots, r => r.Path.Equals(Amd, StringComparison.OrdinalIgnoreCase));
-        Assert.True(amd.Recognises("AMD-Software-Installer"));
-        Assert.True(amd.Recognises("AMD_Software_Installer_22.10.3"));
-        Assert.False(amd.Recognises("Chipset_Software"));
-        Assert.False(amd.Recognises("Radeon Recordings"));
+        Assert.True(amd.RecognisesFolder("AMD-Software-Installer"));
+        Assert.True(amd.RecognisesFolder("AMD_Software_Installer_22.10.3"));
+        Assert.False(amd.RecognisesFolder("Chipset_Software"));
+        Assert.False(amd.RecognisesFolder("Radeon Recordings"));
 
         Assert.DoesNotContain(roots, r => r.Path.Equals(Drive, StringComparison.OrdinalIgnoreCase));
     }

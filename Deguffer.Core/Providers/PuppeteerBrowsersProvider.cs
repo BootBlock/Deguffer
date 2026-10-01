@@ -114,7 +114,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
                     + "browser folders inside it and nothing else, because the metadata beside the "
                     + "builds is how Puppeteer finds them.",
                     static _ => false),
-                .. PuppeteerCacheLayout.Browsers.Select(browser => new ToolRoot(
+                .. PuppeteerCacheLayout.Browsers.Select(browser => ToolRoot.Folders(
                     Path.Combine(root, browser),
                     $"This is where Puppeteer keeps the {browser} builds it downloaded. Deguffer removes "
                     + "whole builds from it, never the folder or the metadata beside them.",

@@ -951,7 +951,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         var declared = Assert.Single(roots, r => r.Path.Equals(root, StringComparison.OrdinalIgnoreCase));
         Assert.All(
             new[] { "installed", "buildtrees", "downloads", "packages" },
-            child => Assert.False(declared.Recognises(child), child));
+            child => Assert.False(declared.RecognisesFolder(child), child));
 
         var policy = await ExploreActionPolicy.ForAsync(
             new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [CreateProvider()]);

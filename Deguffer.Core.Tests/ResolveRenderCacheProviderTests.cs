@@ -159,7 +159,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Message.Contains("holds any render cache", StringComparison.Ordinal));
-        Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync(), r => r.Path.Equals(cache, StringComparison.OrdinalIgnoreCase)).Recognises("Exports"));
+        Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync(), r => r.Path.Equals(cache, StringComparison.OrdinalIgnoreCase)).RecognisesFolder("Exports"));
         Assert.True(File.Exists(unknown));
     }
 
@@ -182,7 +182,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(mixed, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.Notes, n => n.Message.Contains(mixed, StringComparison.Ordinal));
         Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync(), root => root.Path.Equals(cache, StringComparison.OrdinalIgnoreCase))
-            .Recognises("8b1f0c2a4e"));
+            .RecognisesFolder("8b1f0c2a4e"));
         Assert.True(File.Exists(edit));
     }
 
@@ -243,7 +243,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         foreach (var name in new[] { "ProjectBackup", "Capture", "Resolve Live", ".gallery", "ProxyMedia" })
         {
             var root = Assert.Single(roots, r => r.Path.Equals(Path.Combine(Drive, name), StringComparison.OrdinalIgnoreCase));
-            Assert.False(root.Recognises("anything"));
+            Assert.False(root.RecognisesFolder("anything"));
         }
 
         Assert.DoesNotContain(roots, r => r.Path.Equals(footage, StringComparison.OrdinalIgnoreCase));
@@ -265,9 +265,9 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
             await CreateProvider().DiscoverToolRootsAsync(),
             r => r.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
 
-        Assert.True(root.Recognises("8b1f0c2a4e"));
-        Assert.False(root.Recognises("OptimizedMedia"));
-        Assert.False(root.Recognises("Notes"));
+        Assert.True(root.RecognisesFolder("8b1f0c2a4e"));
+        Assert.False(root.RecognisesFolder("OptimizedMedia"));
+        Assert.False(root.RecognisesFolder("Notes"));
     }
 
     /// <summary>With no Media Storage location set, one report finds the cache in the Videos folder.</summary>
@@ -356,7 +356,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(cache, StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
         Assert.False(Assert.Single(await provider.DiscoverToolRootsAsync(), r => r.Path.Equals(cache, StringComparison.OrdinalIgnoreCase))
-            .Recognises("8b1f0c2a4e"));
+            .RecognisesFolder("8b1f0c2a4e"));
 
         Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
         Assert.True(Directory.Exists(project));

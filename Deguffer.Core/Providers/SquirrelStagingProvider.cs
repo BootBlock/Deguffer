@@ -486,7 +486,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
 
         if (_discovery.StagingRoot is { } staging)
         {
-            roots.Add(new ToolRoot(
+            roots.Add(ToolRoot.Folders(
                 staging,
                 "This is the folder the Squirrel updater unpacks installs and updates into, and "
                 + "every application on this machine that uses Squirrel shares it. Deguffer removes "

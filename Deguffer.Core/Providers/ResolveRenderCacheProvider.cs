@@ -120,7 +120,7 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
         [
             .. examination.Caches.Select(cache => running
                 ? new ToolRoot(cache.Path, HeldReason, static _ => false)
-                : new ToolRoot(
+                : ToolRoot.Folders(
                     cache.Path,
                     "This is DaVinci Resolve's cache folder, which also holds its optimised media. Deguffer "
                     + "removes only the project folders in it that hold render cache.",

@@ -63,6 +63,7 @@ public sealed class ExploreActionPolicy
     private readonly IReadOnlyList<ToolRoot> _probedRoots;
     private readonly HeldLocations _held;
     private readonly IVolumeInventory _volumes;
+    private readonly IFileSystem _fileSystem;
 
     /// <param name="regions">
     /// The structural table. Sorted here rather than trusted from the caller, because the
@@ -79,8 +80,9 @@ public sealed class ExploreActionPolicy
     /// quietly be asking about the developer's disks.
     /// </param>
     /// <param name="fileSystem">
-    /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk. Injected so a
-    /// test can see the form of the path it is asked about (§6.3), and what a probe that fails does.
+    /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk, and where
+    /// <see cref="ToolRootChildren"/> asks what a tool root's child is. Injected so a test can see
+    /// the form of the path each is asked about (§6.3), and what a probe that fails does.
     /// </param>
     /// <param name="probedRoots">
     /// What the providers declared once they had asked the machine, through
@@ -117,6 +119,8 @@ public sealed class ExploreActionPolicy
         _toolRoots = [.. toolRoots];
         _probedRoots = [.. probedRoots ?? []];
 
+        _fileSystem = fileSystem ?? WindowsFileSystem.Default;
+
         // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
         // takes it along as surely as one holding a tool's folder does. A permitting entry protects
         // nothing, and a root that will not resolve names nothing, for the reason given above.
@@ -129,7 +133,7 @@ public sealed class ExploreActionPolicy
                     .Where(root => root.Path is not null)
                     .Select(root => (root.Path!, root.Reason)),
             ],
-            fileSystem ?? WindowsFileSystem.Default);
+            _fileSystem);
 
         _volumes = volumes;
     }
@@ -238,21 +242,23 @@ public sealed class ExploreActionPolicy
             return mail;
         }
 
+        var children = new ToolRootChildren(_fileSystem);
+
         var verdict = _regions.FirstOrDefault(region => Covers(region, target)) is { Verdict.IsAllowed: false } refusing
             ? refusing.Verdict
-            : Below(_toolRoots, target);
+            : Below(_toolRoots, target, children);
 
         // A probed declaration is asked only about what everything above allows, so it can add a
         // refusal and never lift one. Its roots come from what a tool reports and what a setting
         // names, and pooled with the declared roots a Maven setting naming 'settings-security.xml'
         // made a root beside Maven's own that recognised the master-password file, and allowed it.
-        if (verdict.IsAllowed && ProbedRefusal(target) is { } probed)
+        if (verdict.IsAllowed && ProbedRefusal(target, children) is { } probed)
         {
             verdict = probed;
         }
 
-        // Last, and only of a path everything above allows, because it is the one question here that
-        // reads the disk.
+        // Last, and only of a path everything above allows, because it reads every location the
+        // path holds. The tool roots read one entry each, and only of a path inside one.
         return verdict.IsAllowed ? _held.Refusal(target) ?? verdict : verdict;
     }
 
@@ -355,7 +361,7 @@ public sealed class ExploreActionPolicy
     /// declaration at that depth is asked, and a child one of them recognises is allowed: each
     /// provider states what it knows, and none has to carry another's table.</para>
     /// </summary>
-    private static ExploreVerdict Below(IReadOnlyList<ToolRoot> roots, string target)
+    private static ExploreVerdict Below(IReadOnlyList<ToolRoot> roots, string target, ToolRootChildren children)
     {
         List<ToolRoot> innermost = [];
         var depth = -1;
@@ -385,7 +391,7 @@ public sealed class ExploreActionPolicy
 
         foreach (var owner in innermost)
         {
-            if (Refusal(owner, target) is not { } refused)
+            if (children.Refusal(owner, target) is not { } refused)
             {
                 // One declaration recognises this child, which settles it: a child is recognised
                 // however many other providers also own the directory holding it.
@@ -416,11 +422,11 @@ public sealed class ExploreActionPolicy
     ///
     /// <para><b>What is inside is refused with the root's own reason.</b> A probed root's reason is
     /// written about the whole folder — a program is using it, it holds the programs
-    /// <c>go install</c> put there — while the sentence <see cref="Refusal"/> gives an unrecognised
-    /// child speaks of configuration beside a cache. Said of a file in a folder a program is working
+    /// <c>go install</c> put there — while the sentence <see cref="ToolRootChildren.Refusal"/> gives
+    /// an unrecognised child speaks of configuration beside a cache. Said of a file in a folder a program is working
     /// in, that sentence is untrue, and the user reading it is deciding whether to wait.</para>
     /// </summary>
-    private ExploreVerdict? ProbedRefusal(string target)
+    private ExploreVerdict? ProbedRefusal(string target, ToolRootChildren children)
     {
         ExploreVerdict? refusal = null;
         var depth = -1;
@@ -430,7 +436,7 @@ public sealed class ExploreActionPolicy
             if (LongPath.Configured(root.Path) is not { } path
                 || path.Length <= depth
                 || !LongPath.Contains(path, target)
-                || Refusal(root, target) is not { } refused)
+                || children.Refusal(root, target) is not { } refused)
             {
                 continue;
             }
@@ -450,45 +456,4 @@ public sealed class ExploreActionPolicy
         region.Scope == RegionScope.PathAndBelow
             ? LongPath.Contains(region.Path, target)
             : target.Equals(region.Path, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// §5.2 for one tool root: the root is never a target, and below it the first segment decides.
-    ///
-    /// <para>The first segment and not the last, because that is the segment the provider
-    /// classified. <c>.gradle\caches\modules-2</c> is inside a recognised child and goes with it,
-    /// and <c>.gradle\init.d\anything</c> is inside an unrecognised one and does not — asking about
-    /// the leaf instead would refuse the first and allow the second, which is exactly backwards.</para>
-    /// </summary>
-    /// <param name="root">
-    /// The innermost root containing <paramref name="target"/>, already established by
-    /// <see cref="Below"/> — so this re-resolves the path rather than re-checking containment.
-    /// </param>
-    private static ExploreVerdict? Refusal(ToolRoot root, string target)
-    {
-        if (LongPath.Configured(root.Path) is not { } rootPath)
-        {
-            return null;
-        }
-
-        if (target.Equals(rootPath, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExploreVerdict.Refuse(root.Reason);
-        }
-
-        // Empty only if the remainder is separators alone, which Configured has already collapsed
-        // into the equality above. Read as a refusal rather than indexed blindly: this is the one
-        // predicate standing between a size picture and a tool's credentials.
-        if (target[rootPath.Length..].Split(Separators, StringSplitOptions.RemoveEmptyEntries)
-            is not [var child, ..])
-        {
-            return ExploreVerdict.Refuse(root.Reason);
-        }
-
-        return root.Recognises(child)
-            ? null
-            : ExploreVerdict.Refuse(
-                $"'{child}' is not something Deguffer recognises inside '{rootPath}'. Configuration "
-                + "and credentials sit beside a cache in a tool's own folder, so anything unrecognised "
-                + "there is left alone.");
-    }
 }

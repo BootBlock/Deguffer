@@ -585,9 +585,9 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         Assert.Equal([provider.Root, provider.Backends], provider.ToolRoots.Select(root => root.Path));
         Assert.All(provider.ToolRoots, root =>
         {
-            Assert.False(root.Recognises("models"));
-            Assert.False(root.Recognises($"{Cuda12}-2.45.0"));
-            Assert.False(root.Recognises("vendor"));
+            Assert.False(root.RecognisesFolder("models"));
+            Assert.False(root.RecognisesFolder($"{Cuda12}-2.45.0"));
+            Assert.False(root.RecognisesFolder("vendor"));
         });
     }
 }

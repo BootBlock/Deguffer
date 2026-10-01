@@ -319,7 +319,7 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
 
         var root = Assert.Single(roots);
         Assert.Equal(live, root.Path, StringComparer.OrdinalIgnoreCase);
-        Assert.False(root.Recognises("Default"));
+        Assert.False(root.RecognisesFolder("Default"));
     }
 
     /// <summary>
