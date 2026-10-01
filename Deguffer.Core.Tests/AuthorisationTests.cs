@@ -22,14 +22,18 @@ public sealed class AuthorisationTests
                 : [new DeleteDirectoryStep($@"C:\Users\testuser\AppData\Local\{id}", "Files") { Estimated = ScanSize.FromLengths(10) }],
         });
 
-    /// <summary>Answers every question put to it, and records each one.</summary>
-    private sealed class Asker(bool agree)
+    /// <summary>
+    /// Answers every question put to it, and records each one. Given <paramref name="cancelOnAsk"/>,
+    /// it also cancels the run as it answers: a user pressing Cancel with the first dialog closed.
+    /// </summary>
+    private sealed class Asker(bool agree, CancellationTokenSource? cancelOnAsk = null)
     {
         public List<ConfirmationRequirement> Asked { get; } = [];
 
         public Task<Confirmation?> AskAsync(ConfirmationRequirement requirement, CancellationToken ct)
         {
             Asked.Add(requirement);
+            cancelOnAsk?.Cancel();
 
             return Task.FromResult(agree ? new Confirmation(requirement.ProviderId, requirement.RequiredPhrase) : null);
         }
@@ -141,16 +145,23 @@ public sealed class AuthorisationTests
         Assert.Equal(1, result.Declined);
     }
 
+    /// <summary>
+    /// A run cancelled after its first answer asks nothing further. Cancelled from the first question
+    /// rather than before the call, because a token cancelled up front is caught by a check above the
+    /// loop just as well as by the one in it, and only the one in it stops the second question.
+    /// </summary>
     [Fact]
     public async Task ACancelledRunAsksNothingFurther()
     {
-        var asker = new Asker(agree: true);
-        using var cancelled = new CancellationTokenSource();
-        await cancelled.CancelAsync();
+        using var cancel = new CancellationTokenSource();
+        var asker = new Asker(agree: true, cancel);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Authorisation.CollectAsync(
-            [Selected("sdk", SafetyTier.RegenerableWithCost)], requireTypedPhrase: true, asker.AskAsync, cancelled.Token));
+            [Selected("sdk", SafetyTier.RegenerableWithCost), Selected("logs", SafetyTier.UserData)],
+            requireTypedPhrase: true,
+            asker.AskAsync,
+            cancel.Token));
 
-        Assert.Empty(asker.Asked);
+        Assert.Equal(["sdk"], asker.Asked.Select(r => r.ProviderId));
     }
 }

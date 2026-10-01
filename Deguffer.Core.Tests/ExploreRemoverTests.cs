@@ -208,6 +208,52 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A removal cancelled between items stops before the next one, says so, and still proves what
+    /// should have survived did (§5.6).
+    ///
+    /// <para>Cancelled as the first item goes, not before the call: the listing taken before anything
+    /// is deleted runs on a token that is already cancelled and throws first, so a test cancelling up
+    /// front never reaches the catch that turns a cancel into a verified report. The bin route is the
+    /// one where nothing but the check between items notices the cancel, because the shell is not
+    /// handed the token.</para>
+    /// </summary>
+    [Fact]
+    public async Task ARemovalCancelledBetweenItemsStopsAndStillVerifies()
+    {
+        var first = _temp.CreateFile(32, "profile", "Downloads", "first.bin");
+        var second = _temp.CreateFile(32, "profile", "Downloads", "second.bin");
+        var bystander = _temp.CreateFile(32, "profile", "Downloads", "keep.txt");
+
+        using var cts = new CancellationTokenSource();
+        var bin = new FakeRecycleBin(path =>
+        {
+            File.Delete(path);
+            cts.Cancel();
+            return new RecycleOutcome(Removed: true);
+        });
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(first, IsDirectory: false, Bytes: 32), new ExploreItem(second, IsDirectory: false, Bytes: 32)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin,
+            ct: cts.Token);
+
+        Assert.True(report.Cancelled);
+        Assert.StartsWith("Stopped part-way.", report.Summary);
+
+        Assert.Equal(first, Assert.Single(report.Removed).Path);
+        Assert.Equal([first], bin.Paths);
+        Assert.False(File.Exists(first));
+        Assert.True(File.Exists(second));
+        Assert.True(File.Exists(bystander));
+
+        // The item never reached is one of the things that had to survive, beside the bystander.
+        Assert.True(report.Verification.Passed);
+        Assert.Contains(report.Verification.Checks, c => c.Detail == "All 2 other item(s) are still there.");
+    }
+
+    /// <summary>
     /// A folder a program is working in keeps the item around it standing, and the sentence says so.
     /// Without it the item was "partly deleted" for no stated reason, and the reader had no way to know
     /// that closing a program would let the rest go.
