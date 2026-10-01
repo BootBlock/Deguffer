@@ -111,8 +111,8 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
     /// from <see cref="Editors"/>: a folder with no log in it yet still holds the whole
     /// <c>User</c> tree, and that is the reason this declaration exists.
     ///
-    /// <para>The same path is declared by <see cref="VsCodeCacheProvider"/> and by
-    /// <see cref="ChromiumCacheProvider"/> as well. §7.1 reads the union of every declaration
+    /// <para>The same path is declared by <see cref="VsCodeCacheProvider"/> and by both
+    /// <see cref="ChromiumUserDataProvider"/> rows as well. §7.1 reads the union of every declaration
     /// covering a path, so each provider states only the children it knows about.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>

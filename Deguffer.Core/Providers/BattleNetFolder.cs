@@ -66,7 +66,7 @@ public static class BattleNetFolder
             BrowserDirectory,
             SafetyTier.DoNotTouch,
             "The launcher's built-in browser. Your sign-in to it is in there, so the folder itself "
-            + "is never removed — only the caches inside it, on the Chromium application caches row."),
+            + "is never removed — only what the Chromium rows recognise inside it."),
     ]);
 
     /// <summary>

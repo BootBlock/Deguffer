@@ -51,9 +51,9 @@ public sealed record ChromiumUserData(
 /// its own (see <see cref="ChromiumUserDataWalk"/>), and at each place a <see cref="ChromiumHost"/>
 /// declares, where a browser or a launcher keeps its own.
 ///
-/// <para>Separate from <see cref="ChromiumCacheProvider"/> because the two answer different
-/// questions. This one answers "whose folder is this?", and the provider answers "what inside it
-/// may go". Keeping them apart is what stops the second question from being asked of a folder that
+/// <para>Separate from <see cref="ChromiumUserDataProvider"/> because the two answer different
+/// questions. This one answers "whose folder is this?", and each row answers "what inside it may
+/// go". Keeping them apart is what stops the second question from being asked of a folder that
 /// never passed the first, which is precisely the failure a coincidental <c>GPUCache</c> would
 /// cause.</para>
 ///
@@ -100,8 +100,22 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     /// which applications to look at, not classifying the children of a tool root, and a link to
     /// some unrelated application's data folder is not something a plan would ever have mentioned.
     /// What it points at was never identified, so it is not looked at.</para>
+    ///
+    /// <para>Memoised until <see cref="Invalidate"/> (G4). Two rows look inside the same folders,
+    /// and presence, planning and the §5.2 declarations of each ask this same question of the same
+    /// disk.</para>
     /// </summary>
-    public IReadOnlyList<ChromiumUserData> Discover(CancellationToken ct = default)
+    public IReadOnlyList<ChromiumUserData> Discover(CancellationToken ct = default) => _found ??= Walk(ct);
+
+    /// <summary>
+    /// Drop the memoised answer, so an application installed, or a browser profile added, while the
+    /// app was open is seen.
+    /// </summary>
+    public void Invalidate() => _found = null;
+
+    private IReadOnlyList<ChromiumUserData>? _found;
+
+    private List<ChromiumUserData> Walk(CancellationToken ct)
     {
         var found = new List<ChromiumUserData>();
 
@@ -208,14 +222,14 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     }
 
     /// <summary>
-    /// The application-data roots the last <see cref="Discover"/> was refused, so a caller can avoid
-    /// reporting "nothing found" as though the folders had been read. Empty on every ordinary
+    /// The application-data roots the walk behind <see cref="Discover"/> was refused, so a caller can
+    /// avoid reporting "nothing found" as though the folders had been read. Empty on every ordinary
     /// machine: both roots sit inside the user's own profile.
     /// </summary>
     public IReadOnlyList<string> UnreadableRoots { get; private set; } = [];
 
     /// <summary>
-    /// What stood between an application-data root and a declared host's folder in the last
+    /// What stood between an application-data root and a declared host's folder in the walk behind
     /// <see cref="Discover"/> — a link, or a segment Windows would not describe — so the host
     /// behind it was not looked inside. Empty on every ordinary machine.
     /// </summary>

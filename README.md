@@ -141,6 +141,7 @@ installed" cleanly on a machine without that toolchain.
 | --- | --- |
 | Maven local repository | |
 | Conda package cache | |
+| Chromium offline site storage | What sites' service workers stored so they work offline, in the same browsers and applications as the Chromium caches row; a web application that worked offline does not do so again until it is next opened online |
 | vcpkg build caches | |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages nothing still needs |
 | Affinity machine-learning models | The `modelcache` beside your asset library, never the version folder holding both |

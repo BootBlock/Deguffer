@@ -806,7 +806,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// <summary>
     /// The same rule over the folder with the most to lose. A Chromium user-data folder keeps the
     /// sign-in cookies, the saved passwords and the saved payment cards directly beside the caches,
-    /// and repeats the whole layout inside every profile.
+    /// and repeats the whole layout inside every profile. Two rows declare it, one for the engine's
+    /// caches and one for the service workers' offline storage, and each recognises only its own.
     /// </summary>
     [Theory]
     [InlineData("", false)]                             // the user-data folder itself
@@ -820,6 +821,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(@"Default\GPUCache", true)]
     [InlineData(@"Default\Cache\Cache_Data", true)]
     [InlineData(@"Default\Cache", false)]               // the container, which stays
+    [InlineData(@"Default\Service Worker", false)]       // the registrations, which stay
+    [InlineData(@"Default\Service Worker\Database", false)]
     [InlineData(@"Default\Service Worker\CacheStorage", true)]
     public void AChromiumProfileIsClassifiedLevelByLevel(string relative, bool allowed)
     {
@@ -827,7 +830,13 @@ public sealed class ExploreActionPolicyTests : IDisposable
         _temp.CreateFile(1, "profile", "AppData", "Local", "TestBrowser", "Local State");
         _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default");
 
-        var policy = new ExploreActionPolicy([], new ChromiumCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
+        var policy = new ExploreActionPolicy(
+            [],
+            [
+                .. new ChromiumCacheProvider(_environment).ToolRoots,
+                .. new ChromiumServiceWorkerStorageProvider(_environment).ToolRoots,
+            ],
+            new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
@@ -975,9 +984,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// One folder, three owners. A VS Code user-data folder holds Chromium's ten engine caches, the
-    /// editor's own caches, and the editor's logs, and each set is declared by the provider that
-    /// knows it.
+    /// One folder, four owners. A VS Code user-data folder holds Chromium's nine engine caches, the
+    /// sites' offline storage, the editor's own caches, and the editor's logs, and each set is
+    /// declared by the provider that knows it.
     ///
     /// <para>The innermost containing declaration used to be a single root, so whichever provider
     /// happened to be constructed first answered for the whole folder and every child the other two
@@ -992,7 +1001,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("CachedProfilesData", true)]    // the editor's cache
     [InlineData("logs", true)]                  // the editor's records
     [InlineData("Crashpad", true)]              // the editor's records
-    [InlineData("User", false)]                 // recognised by none of the three
+    [InlineData(@"Service Worker\CacheStorage", true)] // the sites' offline storage
+    [InlineData("Service Worker", false)]       // the registrations, which stay
+    [InlineData("User", false)]                 // recognised by none of the four
     [InlineData("Local State", false)]
     public void EveryProviderOwningOneFolderAnswersForItsOwnChildren(string child, bool allowed)
     {
@@ -1002,6 +1013,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
             [],
             [
                 .. new ChromiumCacheProvider(_environment).ToolRoots,
+                .. new ChromiumServiceWorkerStorageProvider(_environment).ToolRoots,
                 .. new VsCodeCacheProvider(_environment).ToolRoots,
                 .. new VsCodeLogProvider(_environment).ToolRoots,
             ], new FakeVolumeInventory());

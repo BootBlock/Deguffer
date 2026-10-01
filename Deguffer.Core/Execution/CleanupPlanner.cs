@@ -21,7 +21,7 @@ public sealed class CleanupPlanner
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, Maven, vcpkg, pnpm,
     /// conda, Playwright, Puppeteer, the browser profiles test runners leave in the temporary folders, the GPU
-    /// shader caches, the Chromium application caches, the Firefox
+    /// shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
     /// web caches and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the media cache Adobe's video and audio applications share, the Squirrel updater's staging and the builds it superseded, the Dart analysis
@@ -144,6 +144,11 @@ public sealed class CleanupPlanner
         // and the cleanup and the reset ask it the same question.
         var componentStore = new ComponentStoreAnalysis(SystemDirectories.Current, ProcessRunner.Default);
 
+        // One walk for the two rows inside every Chromium user-data folder, on the same reasoning: each
+        // lists every directory below both application-data roots to find the folders, and the folders
+        // are the same for both.
+        var chromium = new ChromiumUserDataDiscovery(environment);
+
         return
         [
             nuget,
@@ -164,7 +169,8 @@ public sealed class CleanupPlanner
             new MavenRepositoryProvider(environment),
             new VcpkgCacheProvider(environment),
             new GpuShaderCacheProvider(environment),
-            new ChromiumCacheProvider(environment, liveTrees: liveTrees),
+            new ChromiumCacheProvider(environment, liveTrees: liveTrees, discovery: chromium),
+            new ChromiumServiceWorkerStorageProvider(environment, liveTrees: liveTrees, discovery: chromium),
             new VsCodeCacheProvider(environment),
             new FirefoxCacheProvider(environment),
             new EpicLauncherWebCacheProvider(environment),
