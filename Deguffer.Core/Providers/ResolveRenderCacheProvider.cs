@@ -186,8 +186,7 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
             ProtectedPaths = Protect(
             [
                 .. held.Select(path => (Path: path, Reason: HeldReason))
-                    .Concat(examination.Survivors)
-                    .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase),
+                    .Concat(examination.Survivors),
             ]),
             Notes = notes,
             Fallback = measured.Fallback,

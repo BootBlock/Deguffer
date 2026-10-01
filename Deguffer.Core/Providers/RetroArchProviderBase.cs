@@ -308,8 +308,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
                 .. reading.Folders
                     .Where(_ => held)
                     .Select(folder => (folder.Path, Reason: HeldReason))
-                    .Concat(reading.Survivors)
-                    .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase),
+                    .Concat(reading.Survivors),
             ]),
             Notes = notes,
             Fallback = measured.Fallback,

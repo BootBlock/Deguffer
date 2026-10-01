@@ -225,8 +225,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             [
                 .. Protect([
                     .. snapshots.Survivors
-                        .Prepend((Path: survey.Home, Reason: HomeReason))
-                        .DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase),
+                        .Prepend((Path: survey.Home, Reason: HomeReason)),
                 ]),
 
                 // Measured during planning, so each was there when the plan was made: the claim

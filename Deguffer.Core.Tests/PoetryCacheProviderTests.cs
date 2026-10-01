@@ -199,6 +199,10 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.DoesNotContain(unknown, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("something-poetry-added-later", StringComparison.Ordinal));
+
+        // §5.6. It is a sibling of artifacts, which is what an over-broad rule takes along.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(unknown, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -397,6 +401,10 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
             && n.Message.Contains("virtual environments inside it", StringComparison.Ordinal));
+
+        // §5.6. Withheld from the plan is spared, and spared is proved.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(artifacts, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -448,6 +456,10 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps.OfType<DeleteDirectoryStep>());
         Assert.Contains(plan.Notes, n =>
             n.Message.Contains("delete through a link", StringComparison.Ordinal));
+
+        // §5.6. A declined link is a spared child like any other.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(Path.Combine(CacheRoot, "artifacts"), StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

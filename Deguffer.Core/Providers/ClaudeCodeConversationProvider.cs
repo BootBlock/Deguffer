@@ -200,8 +200,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
                     .. found.Survivors
                         .Prepend((Path: Path.Combine(home, ".credentials.json"), Reason: CredentialsReason))
                         .Prepend((Path: folder, Reason: ProjectsReason))
-                        .Prepend((Path: home, Reason: HomeReason))
-                        .DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase),
+                        .Prepend((Path: home, Reason: HomeReason)),
                 ]),
 
                 // Measured during planning, so each was there when the plan was made: the claim

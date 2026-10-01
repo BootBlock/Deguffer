@@ -153,6 +153,31 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         Assert.Equal(4096, size.Logical);
     }
 
+    /// <summary>
+    /// A scan cancelled once its walk is under way stops at the next level rather than finishing it.
+    /// Cancelled from the first level's report for the reason
+    /// <see cref="ParallelEnumerationScannerTests.StopsWhenCancelledPartWay"/> gives: a token
+    /// cancelled before the call never lets the walk start, so it proves nothing about the walk.
+    /// </summary>
+    [Fact]
+    public async Task StopsWhenCancelledPartWay()
+    {
+        _temp.CreateFile(64, "store", "l1", "l2", "l3", "l4", "l5", "l6", "file.bin");
+
+        using var cancel = new CancellationTokenSource();
+        var levels = 0;
+        var progress = new CallbackProgress<ScanSize>(_ =>
+        {
+            levels++;
+            cancel.Cancel();
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await HardLinkAwareScanner.Default.MeasureAsync(Path.Combine(_temp.Path, "store"), MinimumAge.Off, progress, cancel.Token));
+
+        Assert.Equal(1, levels);
+    }
+
     [Fact]
     public async Task AnAbsentPathMeasuresZero()
     {

@@ -56,17 +56,24 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     protected override IReadOnlyList<string> ConflictingProcessNames => ["devenv", "MSBuild", "VBCSCompiler"];
 
     /// <summary>
-    /// The two caches NuGet keeps under <c>%LOCALAPPDATA%\NuGet</c>. Its credential-provider
-    /// plugins sit in the same directory and are not a cache, so anything absent here is Tier 4 by
-    /// construction.
+    /// The two caches NuGet keeps under <c>%LOCALAPPDATA%\NuGet</c>: the HTTP cache, and the cache
+    /// of what each plugin said it can do. Anything else there is not a cache NuGet's command
+    /// clears, so it is Tier 4 by construction.
     /// </summary>
     private static readonly FrozenSet<string> LocalCacheNames =
         FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "v3-cache", "plugins-cache");
 
+    /// <summary>The one cache NuGet keeps under <c>.nuget</c>.</summary>
+    private static readonly FrozenSet<string> ProfileCacheNames =
+        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "packages");
+
+    private const string NotACacheReason =
+        "Not one of NuGet's caches, so NuGet's own command leaves it alone.";
+
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside. Both folders mix cache with configuration:
-    /// <c>NuGet.Config</c> sits in <c>.nuget</c> beside the packages folder, and the
-    /// credential-provider plugins sit under <c>%LOCALAPPDATA%\NuGet</c> beside the two HTTP caches.
+    /// §5.2 as §7.1 needs it read from outside. <c>.nuget</c> mixes cache with configuration:
+    /// <c>NuGet.Config</c> and the credential-provider plugins under <c>plugins</c> sit beside the
+    /// packages folder. <c>%LOCALAPPDATA%\NuGet</c> holds two caches, and nothing else in it is one.
     ///
     /// <para>The locations <c>dotnet nuget locals --list</c> reports are deliberately absent, here
     /// and from <see cref="DiscoverToolRootsAsync"/>. Each is a cache the plan clears, and the plan
@@ -80,13 +87,13 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             Path.Combine(Environment.UserProfile, ".nuget"),
             "This is NuGet's own folder. Deguffer clears the downloaded packages inside it and "
             + "nothing else, because the NuGet.Config beside them may hold credentials for your "
-            + "private feeds.",
-            static name => name.Equals("packages", StringComparison.OrdinalIgnoreCase)),
+            + "private feeds, and the plugins beside them sign in to those feeds.",
+            ProfileCacheNames.Contains),
 
         ToolRoot.Folders(
             Path.Combine(Environment.LocalAppData, "NuGet"),
             "This is NuGet's own folder. Deguffer clears the HTTP and plugin caches inside it and "
-            + "nothing else, because the credential-provider plugins beside them are not a cache.",
+            + "nothing else, because nothing else in it is one of NuGet's caches.",
             LocalCacheNames.Contains),
 
         new ToolRoot(
@@ -205,7 +212,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
                     MeasuredPaths = present,
                 },
             ],
-            ProtectedPaths = BuildProtectedPaths(),
+            ProtectedPaths = BuildProtectedPaths(locals),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = found.CouldNotBeReached,
@@ -215,14 +222,57 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// <summary>
     /// §5.2 and §5.6. NuGet.Config's location cannot be assumed — on the audited machine it lived
     /// under <c>%APPDATA%\NuGet</c> rather than beside the packages folder — so probe both.
+    ///
+    /// <para>Both folders NuGet's command clears inside are named, and so is every child of them
+    /// that is not one of its caches. Each is a sibling of a cache the command empties, which is
+    /// exactly where an over-broad rule takes one with the other.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
-        (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
-            "User NuGet configuration, which may hold private feed credentials."),
-        (Path.Combine(Environment.UserProfile, ".nuget", "NuGet.Config"),
-            "The alternative NuGet.Config location — §5.2 says probe both."),
-        (Path.Combine(Environment.UserProfile, ".nuget"),
-            "The .nuget root itself must survive; only its cache contents are cleared."));
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(IReadOnlyList<string> locals)
+    {
+        var profile = Path.Combine(Environment.UserProfile, ".nuget");
+        var local = Path.Combine(Environment.LocalAppData, "NuGet");
+
+        return Protect(
+        [
+            (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
+                "User NuGet configuration, which may hold private feed credentials."),
+            (Path.Combine(profile, "NuGet.Config"),
+                "The alternative NuGet.Config location — §5.2 says probe both."),
+            (profile,
+                "The .nuget root itself must survive; only its cache contents are cleared."),
+            (Path.Combine(profile, "plugins"),
+                "The credential-provider plugins NuGet runs to sign in to private feeds."),
+            (local,
+                "NuGet's folder in your local profile must survive; only the caches inside it are cleared."),
+            .. Spared(profile, ProfileCacheNames, locals),
+            .. Spared(local, LocalCacheNames, locals),
+        ]);
+    }
+
+    /// <summary>
+    /// The children of <paramref name="root"/> that NuGet's command leaves standing: every one not
+    /// named in <paramref name="caches"/>, links included.
+    ///
+    /// <para>A child holding a location NuGet reported is left out. NuGet's settings can move a
+    /// cache into any folder, and the command then empties it, so asserting that the folder holding
+    /// it is unchanged would fail a successful run. Both sides are unaliased, because NuGet reports
+    /// a location the way its own process sees it, which can be the 8.3 short form.</para>
+    /// </summary>
+    private static IEnumerable<(string Path, string Reason)> Spared(
+        string root,
+        FrozenSet<string> caches,
+        IReadOnlyList<string> locals)
+    {
+        var scan = ChildDirectories.Under(root);
+        var reported = locals.Select(local => LongPath.Unaliased(local)).ToList();
+
+        return scan.Directories
+            .Select(child => (child.Name, Path: LongPath.Display(child.FullName), Reason: NotACacheReason))
+            .Concat(scan.Links.Select(link => (link.Name, Path: LongPath.Display(link.FullName), Reason: CacheLevelWalk.LinkReason)))
+            .Where(child => !caches.Contains(child.Name)
+                && !reported.Any(cache => LongPath.Contains(LongPath.Unaliased(child.Path), cache)))
+            .Select(child => (child.Path, child.Reason));
+    }
 
     /// <summary>
     /// Ask NuGet where its caches are. Output lines look like

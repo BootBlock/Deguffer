@@ -87,32 +87,14 @@ public static partial class ClaudeCodeHome
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(system);
 
-        if (ConfiguredValue(environment) is not { } configured)
-        {
-            return (Path.Combine(environment.UserProfile, DefaultDirectoryName), null);
-        }
+        var setting = ConfiguredFolder.FromVariable(
+            ConfigDirectoryVariable, Path.Combine(environment.UserProfile, DefaultDirectoryName), environment, system);
 
-        if (LongPath.Configured(configured) is not { } folder)
-        {
-            return (null, $"{ConfigDirectoryVariable} is set to '{configured}', which is not a full path. "
-                + "Deguffer cannot tell which folder that means.");
-        }
-
-        return ConfiguredFolder.WhyNotOwned(folder, environment, system, TempRoots.Resolve(environment, system).AccountFolders)
-            is { } declined
-                ? (null, $"{ConfigDirectoryVariable} is set to '{configured}', and Deguffer will not treat that as "
-                    + $"Claude Code's folder: {declined}")
-                : (folder, null);
+        return setting.Folder is { } home
+            ? (home, null)
+            : (null, $"{ConfigDirectoryVariable} is set to '{setting.Value}', and Deguffer will not treat that as "
+                + $"Claude Code's folder: {setting.Declined}");
     }
-
-    /// <summary>
-    /// What <see cref="ConfigDirectoryVariable"/> holds, trimmed, or null where it is unset. Named as it
-    /// was set in the sentence about one Deguffer could not use.
-    /// </summary>
-    private static string? ConfiguredValue(IUserEnvironment environment) =>
-        environment.GetEnvironmentVariable(ConfigDirectoryVariable)?.Trim() is { Length: > 0 } value
-            ? value
-            : null;
 
     /// <summary>
     /// The first place on the way down from the folder to <paramref name="folder"/> inside it that stops a

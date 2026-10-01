@@ -147,20 +147,32 @@ public class ParallelEnumerationScannerTests
         Assert.Equal(6000, progress.Reports[^1].Logical);
     }
 
+    /// <summary>
+    /// A scan cancelled once its walk is under way stops at the next level rather than finishing it.
+    ///
+    /// <para>Cancelled from the first level's report, not before the call: <c>Task.Run</c> given a
+    /// token that is already cancelled never runs the walk at all, so a test cancelling up front
+    /// stays green with every check inside the walk deleted. The tree is a chain seven levels deep,
+    /// so a walk that ignored the cancel would report six more levels and return a total.</para>
+    /// </summary>
     [Fact]
-    public async Task StopsWhenCancelled()
+    public async Task StopsWhenCancelledPartWay()
     {
         using var temp = new TempDirectory();
-        for (var i = 0; i < 200; i++)
-        {
-            temp.CreateFile(64, "cache", $"dir{i}", "file.bin");
-        }
+        temp.CreateFile(64, "cache", "l1", "l2", "l3", "l4", "l5", "l6", "file.bin");
 
-        using var cancelled = new CancellationTokenSource();
-        await cancelled.CancelAsync();
+        using var cancel = new CancellationTokenSource();
+        var levels = 0;
+        var progress = new CallbackProgress<ScanSize>(_ =>
+        {
+            levels++;
+            cancel.Cancel();
+        });
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress: null, cancelled.Token));
+            async () => await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress, cancel.Token));
+
+        Assert.Equal(1, levels);
     }
 
     /// <summary>

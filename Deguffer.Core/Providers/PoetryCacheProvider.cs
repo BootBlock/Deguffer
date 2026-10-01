@@ -78,6 +78,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             + "one is a full dependency install rather than a cache, so none of them is ever removed."),
     ]);
 
+    private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, DisposableChildren)];
+
     /// <summary>No paths measured, for the routes that produce no command step at all.</summary>
     private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, [], []);
 
@@ -235,9 +237,9 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             return nothing;
         }
 
-        // The enumeration below never classifies the directory it is handed. A junctioned cache
-        // directory would hand back the far side's ordinary children, which would be targeted while
-        // every survivor named here resolved through the same link and passed.
+        // A junctioned cache directory is declined whole. The walk below would decline it too, but
+        // this says so about the whole directory in one sentence, and makes no claim about
+        // environments that only resolve through the link.
         if (LongPath.IsReparsePoint(cacheRoot))
         {
             return UnexaminedPlan(
@@ -264,7 +266,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 + $"environments as {LongPath.Display(environments)}."),
         };
 
-        var (targets, scan, childDeclined) = CollectTargets(cacheRoot, environments, notes, ct);
+        var (targets, walk, withheld) = CollectTargets(cacheRoot, environments, notes, ct);
         var (deletions, deleted) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         var (commands, cleared, commandDeclined, repositoriesUnreachable) = await PlanRepositoryClearsAsync(
@@ -279,7 +281,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         // not be listed, a child reached through a link, a recognised child holding the environments,
         // or a repository cache Poetry would not name. A Tier 4 child is deliberately not one of
         // these: nothing was withheld from the user when the only thing there was never disposable.
-        var declined = scan.Unreadable || scan.Links.Count > 0 || childDeclined || commandDeclined;
+        var declined = walk.Unreadable || walk.Declined.Count > 0 || withheld.Count > 0 || commandDeclined;
 
         if (offersNothing && !declined)
         {
@@ -317,10 +319,10 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             // §5.1's route first: where Poetry can evict its own cache, that is what the user is
             // offered, and the path-based step is the one child no Poetry command reaches.
             Steps = [.. commands, .. deletions],
-            ProtectedPaths = BuildProtectedPaths(cacheRoot, environments),
+            ProtectedPaths = BuildProtectedPaths(cacheRoot, environments, walk, withheld),
             Notes = notes,
             Fallback = fallback,
-            HasUnreadableRoot = scan.Unreadable || repositoriesUnreachable,
+            HasUnreadableRoot = walk.Unreadable || repositoriesUnreachable,
 
             // A cache Deguffer declined is present, measures nothing here, and holds everything.
             // Rendering that as "Already clear" would disagree with the folder the user can see —
@@ -341,22 +343,34 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// Poetry starts creating new ones at the new location and leaves the old tree exactly where it
     /// was, so a list built only from the current setting would produce no evidence at all about the
     /// environments a machine that has moved the setting is still carrying. In the default layout
-    /// the two are one path, which costs a duplicated check and nothing else.</para>
+    /// the two are one path, and it is checked once.</para>
     ///
     /// <para>The repository caches are deliberately not protected. Poetry's own command removes each
     /// one rather than emptying it, and recreates it on next use, so asserting their survival would
     /// fail verification on a successful run.</para>
+    ///
+    /// <para>Every other child of the cache directory the walk spared or declined is named too. Each
+    /// is a sibling of <c>artifacts</c>, which is exactly where an over-broad rule takes one with the
+    /// other.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string cacheRoot, string environments) => Protect(
-        (cacheRoot, "Poetry's cache directory must survive — only the caches within it are cleared."),
-        (environments, "Every virtual environment Poetry has created. Each is a full install, not a cache."),
-        (Path.Combine(cacheRoot, "virtualenvs"), "Virtual environments left where Poetry creates them by default, which moving virtualenvs.path does not relocate."),
-        (Path.Combine(cacheRoot, "cache"), "The directory holding the repository caches; only the caches inside it are cleared."),
-        (Path.Combine(cacheRoot, "cache", "repositories"), "The directory holding one cache per repository; only the caches inside it are cleared."),
-        (LocalRoot, "Poetry's folder in your profile, which is what contains the cache."),
-        (RoamingRoot, "Your Poetry configuration, which may hold credentials for private package repositories."),
-        (Path.Combine(RoamingRoot, "auth.toml"), "Stored credentials for private package repositories."),
-        (Path.Combine(RoamingRoot, "config.toml"), "Your Poetry configuration."));
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        string cacheRoot,
+        string environments,
+        LevelWalk walk,
+        IReadOnlyList<(string Path, string Reason)> withheld) => Protect(
+        walk,
+        [
+            (cacheRoot, "Poetry's cache directory must survive — only the caches within it are cleared."),
+            (environments, "Every virtual environment Poetry has created. Each is a full install, not a cache."),
+            (Path.Combine(cacheRoot, "virtualenvs"), "Virtual environments left where Poetry creates them by default, which moving virtualenvs.path does not relocate."),
+            (Path.Combine(cacheRoot, "cache"), "The directory holding the repository caches; only the caches inside it are cleared."),
+            (Path.Combine(cacheRoot, "cache", "repositories"), "The directory holding one cache per repository; only the caches inside it are cleared."),
+            (LocalRoot, "Poetry's folder in your profile, which is what contains the cache."),
+            (RoamingRoot, "Your Poetry configuration, which may hold credentials for private package repositories."),
+            (Path.Combine(RoamingRoot, "auth.toml"), "Stored credentials for private package repositories."),
+            (Path.Combine(RoamingRoot, "config.toml"), "Your Poetry configuration."),
+            .. withheld,
+        ]);
 
     /// <summary>
     /// The recognised children of the cache directory that Deguffer removes itself, with everything
@@ -366,73 +380,50 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// are cleared by Poetry's own command, and §5.1 leaves that route in charge of them, so
     /// deleting the directory holding them would be Deguffer doing by path what the tool was about
     /// to do properly.</para>
+    ///
+    /// <para><c>Withheld</c> is a recognised child that holds the configured environments. It is
+    /// spared as surely as a Tier 4 child, so §5.6 names it alongside the walk's own survivors.</para>
     /// </summary>
-    private (IReadOnlyList<DeletionTarget> Targets, ChildDirectoryScan Scan, bool Declined) CollectTargets(
+    private static (IReadOnlyList<DeletionTarget> Targets, LevelWalk Walk, IReadOnlyList<(string Path, string Reason)> Withheld)
+        CollectTargets(
         string cacheRoot,
         string environments,
         List<PlanNote> notes,
         CancellationToken ct)
     {
-        var scan = ChildDirectories.Under(cacheRoot);
+        var walk = CacheLevelWalk.Under(Levels, cacheRoot, ct);
+
+        notes.AddRange(walk.Notes);
+        notes.AddRange(walk.Survivors.Select(CacheLevelWalk.SparedNote));
+
         var targets = new List<DeletionTarget>();
-        var declined = false;
+        var withheld = new List<(string Path, string Reason)>();
 
-        // A listing right is separate from the traverse right that found the directory, so a refusal
-        // would otherwise leave a plan with no steps and nothing said — which the shell renders as
-        // "Already clear", a claim about a folder nobody read.
-        if (scan.Unreadable)
+        // Poetry nests an artefact under four levels of its URL hash before it reaches a file, so the
+        // top level moves only when a hash prefix is first seen. A cache filled every day would
+        // report as years old, which is backwards for the one thing an age is read for — so these
+        // targets carry no age, as the walk leaves them. See DeclaredLocation.ReportsAge for the same
+        // call on Maven.
+        foreach (var target in walk.Targets)
         {
-            notes.Add(UnreadableRoot.Note(cacheRoot));
-        }
-
-        notes.AddRange(scan.Links.Select(link => new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Leaving '{link.Name}' alone: it is a link to somewhere else, and Deguffer does not "
-            + "delete through a link.")));
-
-        foreach (var child in scan.Directories)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var classification = DisposableChildren.Classify(child.Name);
-
-            if (!classification.Tier.IsOfferable())
-            {
-                notes.Add(new PlanNote(
-                    PlanNoteSeverity.Information,
-                    $"Leaving '{child.Name}' alone: {classification.Reason}"));
-                continue;
-            }
-
-            // Enumeration runs in extended form; a plan always holds display paths.
-            var path = LongPath.Display(child.FullName);
-
-            // The same §5.2 check the whole-root case above makes, one level in. A virtualenvs.path
-            // configured inside a recognised child would otherwise be deleted by a step that named
-            // a cache.
-            if (LongPath.Contains(path, environments))
+            // The same §5.2 check the whole-root case makes, one level in. A virtualenvs.path
+            // configured inside a recognised child would otherwise be deleted by a step that named a
+            // cache.
+            if (LongPath.Contains(target.Path, environments))
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Warning,
-                    $"Leaving '{child.Name}' alone: Poetry keeps its virtual environments inside it, "
-                    + "and those are never removed."));
+                    $"Leaving '{Path.GetFileName(target.Path)}' alone: Poetry keeps its virtual "
+                    + "environments inside it, and those are never removed."));
 
-                declined = true;
+                withheld.Add((target.Path, "Holds Poetry's virtual environments, which are never removed."));
                 continue;
             }
 
-            targets.Add(new DeletionTarget(
-                path,
-                classification.Reason,
-
-                // Poetry nests an artefact under four levels of its URL hash before it reaches a
-                // file, so the top level moves only when a hash prefix is first seen. A cache filled
-                // every day would report as years old, which is backwards for the one thing an age
-                // is read for — see DeclaredLocation.ReportsAge for the same call on Maven.
-                LastWritten: null));
+            targets.Add(target);
         }
 
-        return (targets, scan, declined);
+        return (targets, walk, withheld);
     }
 
     /// <summary>

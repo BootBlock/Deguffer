@@ -462,7 +462,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             ProtectedPaths = Protect(
-                [.. survivors.Concat(declined).DistinctBy(s => s.Path, StringComparer.OrdinalIgnoreCase)]),
+                [.. survivors.Concat(declined)]),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
