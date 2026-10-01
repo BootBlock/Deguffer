@@ -4,9 +4,10 @@ namespace Deguffer.Core.Providers;
 
 /// <param name="Tracked">Candidates git reported as holding tracked files.</param>
 /// <param name="Unanswered">
-/// Candidates git was asked about and did not answer for. Distinct from <see cref="Tracked"/>
-/// because nothing was learned about them either way, and distinct from an empty result because
-/// the question was put and failed rather than never being asked at all.
+/// Candidates git was asked about and did not answer for, and candidates whose repository could not
+/// be found because Windows would not say whether a <c>.git</c> above them is there. Distinct from
+/// <see cref="Tracked"/> because nothing was learned about them either way, and distinct from an
+/// empty result because the question could not be answered rather than never being needed.
 /// </param>
 /// <param name="Unasked">
 /// Candidates inside a repository that git was never asked about, because git could not be found.
@@ -67,9 +68,10 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
         var unasked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var git = candidates.Count == 0 ? null : environment.FindExecutable("git");
         var roots = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var refused = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var repository in candidates.GroupBy(
-                     candidate => FindRepositoryRoot(candidate, roots),
+                     candidate => FindRepositoryRoot(candidate, roots, refused),
                      StringComparer.OrdinalIgnoreCase))
         {
             // Before the null-key test, not after it: grouping is lazy, so FindRepositoryRoot's walk
@@ -89,6 +91,15 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
             if (git is null)
             {
                 unasked.UnionWith(repository);
+                continue;
+            }
+
+            // A .git Windows would not describe may be this candidate's repository, so whatever an
+            // outer repository says about it, or no repository at all, would be an answer about the
+            // wrong question. It is declined as a question that could not be put.
+            if (refused.Contains(root))
+            {
+                unanswered.UnionWith(repository);
                 continue;
             }
 
@@ -198,12 +209,19 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
     /// the whole point of grouping is to avoid a process per directory. <c>.git</c> is matched as
     /// either a directory or a file, because a worktree and a submodule both record it as a file.
     ///
+    /// <para>The walk stops at a <c>.git</c> Windows would not describe, and adds the directory
+    /// holding it to <paramref name="refused"/>. Walking past it would find an outer repository, or
+    /// none, and answer "nothing tracked" for a candidate that repository does not hold.</para>
+    ///
     /// Every directory the walk passes is remembered in <paramref name="known"/> with the answer it
     /// led to, because sibling projects share almost all of their ancestors, and without it each
     /// candidate would probe the same directories again. The answer for a directory is the nearest
     /// repository at or above it, so it holds for every candidate beneath that directory.
     /// </summary>
-    private static string? FindRepositoryRoot(string candidate, Dictionary<string, string?> known)
+    private static string? FindRepositoryRoot(
+        string candidate,
+        Dictionary<string, string?> known,
+        HashSet<string> refused)
     {
         var visited = new List<string>();
         string? root = null;
@@ -220,7 +238,14 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
             visited.Add(directory);
             var git = Path.Combine(directory, ".git");
 
-            if (LongPath.DirectoryExists(git) || LongPath.FileExists(git))
+            var presence = LongPath.ProbeEntry(git);
+
+            if (presence is PathPresence.Refused)
+            {
+                refused.Add(directory);
+            }
+
+            if (presence is not PathPresence.Absent)
             {
                 root = directory;
                 break;

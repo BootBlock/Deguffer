@@ -269,7 +269,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
         var profiles = Profiles(ct);
 
         return Task.FromResult(
-            _discovery.ProfilesUnreadable
+            _discovery.Register is MozillaRegisterReading.Unreached or MozillaRegisterReading.Unreadable
             || _discovery.ProfilesElsewhere.Count > 0
             || profiles.Any(profile => HasDeclaredContent(profile, ct)));
     }
@@ -280,12 +280,21 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
         if (profiles.Count == 0)
         {
-            if (_discovery.ProfilesUnreadable)
+            switch (_discovery.Register)
             {
-                return EmptyPlan(
-                    $"Deguffer could not read '{_discovery.ProfilesPath}', so it could not work out "
-                    + "which Firefox profiles exist. Nothing was planned, and nothing was ruled out "
-                    + "either.") with { HasUnreadableRoot = true };
+                // Not "could not read": nothing established that the register is there.
+                case MozillaRegisterReading.Unreached:
+                    return EmptyPlan(
+                        $"Windows would not say whether Firefox's list of profiles is at '{_discovery.ProfilesPath}', "
+                        + "so Deguffer could not work out which Firefox profiles exist. A link Windows will not "
+                        + "follow, a folder this account may not read and a drive that is not connected all do "
+                        + "that. Nothing was planned, and nothing was ruled out either.") with { HasUnreadableRoot = true };
+
+                case MozillaRegisterReading.Unreadable:
+                    return EmptyPlan(
+                        $"Deguffer could not read '{_discovery.ProfilesPath}', so it could not work out "
+                        + "which Firefox profiles exist. Nothing was planned, and nothing was ruled out "
+                        + "either.") with { HasUnreadableRoot = true };
             }
 
             // Every profile there is sits outside Firefox's own folder. Saying "no profile" here

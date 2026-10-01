@@ -174,6 +174,26 @@ public sealed class SpotifySettingsTests : IDisposable
         Assert.False(settings.IsSettled);
     }
 
+    /// <summary>
+    /// A file in a folder Windows will not describe is not known to be absent, so it never settles
+    /// where the storage is. Read as absent, it said "nothing moved".
+    /// </summary>
+    [Fact]
+    public void AFileWindowsWillNotDescribeIsUnreached()
+    {
+        var folder = _temp.CreateDirectory("settings");
+        var path = Path.Combine(folder, "prefs");
+        File.WriteAllText(path, "storage.location=\"D:\\\\Spotify\"\n");
+
+        using var denied = DeniedDirectory.WithUnreadableFile(path);
+
+        var settings = SpotifySettings.Read(path);
+
+        Assert.Equal(SpotifySettingsReading.Unreached, settings.Reading);
+        Assert.False(settings.IsSettled);
+        Assert.Empty(settings.Locations);
+    }
+
     [Fact]
     public void ALockedFileIsUnreadable()
     {

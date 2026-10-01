@@ -121,6 +121,73 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A runtimes folder Windows will not describe may hold superseded runtimes, so the row is shown
+    /// and its plan says the folder could not be reached. Read as absent, the row said LM Studio is
+    /// not installed and the plan's sentence was never read.
+    /// </summary>
+    [Fact]
+    public async Task IsPresentWhereWindowsWillNotDescribeTheRuntimesFolder()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(Backends);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Empty(_runner.Invocations);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"Windows would not say what is at '{Backends}'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A runtimes folder that will not be listed leaves §5.6 nothing to assert beside a runtime it
+    /// removes, so nothing is offered, and the row is shown so the user is told why.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingFromARuntimesFolderThatWillNotBeListed()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+
+        using var denied = new DeniedDirectory(Backends);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Empty(_runner.Invocations);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"Deguffer could not list '{Backends}'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A command-line tool Windows will not describe is not said to be missing, which nothing
+    /// established, and nothing is asked of it.
+    /// </summary>
+    [Fact]
+    public async Task ACommandLineToolWindowsWillNotDescribeIsNotSaidToBeMissing()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+
+        using var denied = DeniedDirectory.WithUnreadableFile(Path.Combine(Root, "bin", "lms.exe"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(_runner.Invocations);
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, note => note.Message.StartsWith("Windows would not say whether LM Studio's command-line tool", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, note => note.Message.Contains("tool is not at", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// <c>lms</c> starts LM Studio when it finds it closed, so with LM Studio closed nothing is asked of
     /// it, and the row does not claim to be clear about runtimes nobody listed.
     /// </summary>

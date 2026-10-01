@@ -117,6 +117,48 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A register Windows will not describe may name profiles with caches in them, so the row is
+    /// shown and its plan says so. Read as absent, the row said Firefox is not installed. The sentence
+    /// must not say the register could not be read, because nothing established that it is there.
+    /// </summary>
+    [Fact]
+    public async Task IsPresentWhereWindowsWillNotDescribeTheProfileRegister()
+    {
+        var profile = AddProfile();
+        CreateDirectory(Path.Combine(profile.Local, "cache2"));
+
+        using var denied = DeniedDirectory.WithUnreadableFile(RegisterPath);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, note =>
+            note.Message.StartsWith($"Windows would not say whether Firefox's list of profiles is at '{RegisterPath}'", StringComparison.Ordinal));
+    }
+
+    /// <summary>A register that is there and will not be read is said to be unreadable, by name.</summary>
+    [Fact]
+    public async Task IsPresentWhereTheProfileRegisterCannotBeRead()
+    {
+        AddProfile();
+
+        using var held = new FileStream(RegisterPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, note =>
+            note.Message.StartsWith($"Deguffer could not read '{RegisterPath}'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The Unreal lesson the Chromium provider records: a profile existing is not evidence that a
     /// cache inside it does. Firefox writes the roaming half on first run and the local half only
     /// once it has something to put there.

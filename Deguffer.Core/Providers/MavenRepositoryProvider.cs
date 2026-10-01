@@ -68,7 +68,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
     private readonly ISystemDirectories _system;
 
-    private string? _localRepository;
+    private UserSettings? _settings;
 
     private (string Repository, string? Why)? _vetted;
 
@@ -136,16 +136,36 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// name, which is the one the user configured, so the failure is a smaller reclaim rather than
     /// a wrong target.</para>
     /// </summary>
-    public string? ResolveLocalRepository()
+    public string? ResolveLocalRepository() => Settings.LocalRepository;
+
+    /// <summary>
+    /// What the user's <c>settings.xml</c> says, read once for the pass. Memoised whole, so a
+    /// repository that cannot be resolved is not read again by every caller that asks.
+    /// </summary>
+    private UserSettings Settings => _settings ??= ReadSettings();
+
+    /// <summary>What the user's <c>settings.xml</c> says about the local repository.</summary>
+    /// <param name="LocalRepository">See <see cref="ResolveLocalRepository"/>.</param>
+    /// <param name="Unreached">
+    /// Windows would not say whether the file is there, so a repository it moves elsewhere was never
+    /// looked for. <paramref name="LocalRepository"/> is then the default.
+    /// </param>
+    private sealed record UserSettings(string? LocalRepository, bool Unreached);
+
+    private UserSettings ReadSettings()
     {
-        if (_localRepository is not null)
+        switch (LongPath.ProbeFile(SettingsPath))
         {
-            return _localRepository;
+            case PathPresence.Absent:
+                return new UserSettings(DefaultLocalRepository, Unreached: false);
+
+            case PathPresence.Refused:
+                return new UserSettings(DefaultLocalRepository, Unreached: true);
         }
 
         if (ReadConfiguredRepository() is not { } configured)
         {
-            return _localRepository = DefaultLocalRepository;
+            return new UserSettings(DefaultLocalRepository, Unreached: false);
         }
 
         // Normalised rather than used as it arrived. A trailing separator would make the leaf name
@@ -154,7 +174,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         // report a correct run as a failure. A value ending in '..' is worse: LongPath.Extended
         // requires an already-resolved path, so the removal would land a directory higher than the
         // plan named.
-        return _localRepository = LongPath.Configured(configured);
+        return new UserSettings(LongPath.Configured(configured), Unreached: false);
     }
 
     /// <summary>
@@ -164,16 +184,11 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _localRepository = null;
+        _settings = null;
         _vetted = null;
         base.InvalidateCaches();
     }
 
-    /// <summary>
-    /// Presence is the repository being on disk rather than <c>mvn</c> being on <c>PATH</c>: an IDE
-    /// ships its own Maven and fills this directory without ever putting the command anywhere
-    /// Deguffer would find it.
-    /// </summary>
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. The trap is the whole reason this provider names the
     /// one directory it removes rather than listing the root: <c>settings.xml</c> holds server
@@ -236,8 +251,17 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         return Task.FromResult(declared);
     }
 
+    /// <summary>
+    /// Presence is the repository being on disk rather than <c>mvn</c> being on <c>PATH</c>: an IDE
+    /// ships its own Maven and fills this directory without ever putting the command anywhere
+    /// Deguffer would find it.
+    ///
+    /// <para>Present as well where Windows would not describe the settings file, because the plan is
+    /// the only place the user is told that a repository it moves was not looked for.</para>
+    /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ResolveLocalRepository() is { } repository && LongPath.DirectoryMayExist(repository));
+        Task.FromResult(
+            (ResolveLocalRepository() is { } repository && LongPath.DirectoryMayExist(repository)) || Settings.Unreached);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -272,10 +296,17 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
         if (scan.FoundNothing)
         {
-            return EmptyPlan($"Maven has not downloaded anything on this machine ({repository} is absent).");
+            return Settings.Unreached
+                ? UnreadableRootPlan(SettingsPath) with { Notes = [SettingsUnreachedNote()] }
+                : EmptyPlan($"Maven has not downloaded anything on this machine ({repository} is absent).");
         }
 
         var notes = new List<PlanNote>(scan.Notes);
+
+        if (Settings.Unreached)
+        {
+            notes.Add(SettingsUnreachedNote());
+        }
 
         var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
 
@@ -300,9 +331,21 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
-            HasUnreadableRoot = scan.CouldNotBeReached,
+            HasUnreadableRoot = scan.CouldNotBeReached || Settings.Unreached,
         };
     }
+
+    private string SettingsPath => Path.Combine(Home, "settings.xml");
+
+    /// <summary>
+    /// What the user is told where Windows would not describe the settings file. It does not say the
+    /// file could not be read, which asserts that it is there.
+    /// </summary>
+    private PlanNote SettingsUnreachedNote() => new(
+        PlanNoteSeverity.Warning,
+        $"Windows would not say whether your Maven settings are at '{SettingsPath}', so Deguffer looked "
+        + $"only at the default local repository, {DefaultLocalRepository}. A local repository those "
+        + "settings move somewhere else was neither cleared nor ruled out.");
 
     /// <summary>
     /// Why the plan leaves a configured repository unexamined, or null where it may go on to look.
@@ -432,22 +475,18 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// The <c>localRepository</c> element of the user's settings file, or null if there is not one.
     ///
     /// Matched on the local name, because Maven's own schema puts the file in a namespace and a
-    /// great many real settings files omit it. An unreadable or malformed file is treated as no
-    /// override rather than as an error: Maven itself would refuse to build, which the user will
-    /// hear about from Maven, and the default location is the right thing for Deguffer to fall back
-    /// on either way.
+    /// great many real settings files omit it. A malformed file is treated as no override rather
+    /// than as an error: Maven itself would refuse to build, which the user will hear about from
+    /// Maven, and the default location is the right thing for Deguffer to fall back on either way.
+    ///
+    /// <para>Asked only of a file Windows says is there. One it will not describe is different:
+    /// Maven may read it where Deguffer cannot, so <see cref="ReadSettings"/> still examines the
+    /// default, and the plan says the settings were not reached.</para>
     /// </summary>
     private string? ReadConfiguredRepository()
     {
-        var settings = Path.Combine(Home, "settings.xml");
-
-        if (!LongPath.FileExists(settings))
-        {
-            return null;
-        }
-
         var configured = XmlFile
-            .TryLoad(settings)?
+            .TryLoad(SettingsPath)?
             .Root?
             .Elements()
             .FirstOrDefault(e => e.Name.LocalName == "localRepository")?

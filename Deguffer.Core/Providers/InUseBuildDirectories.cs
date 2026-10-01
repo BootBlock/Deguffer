@@ -28,6 +28,10 @@ namespace Deguffer.Core.Providers;
 /// and the plan offers that build output. Declaring it here would refuse what the Storage page
 /// allows.</para>
 ///
+/// <para><b>A candidate Windows would not describe is declared as well.</b> It can be neither
+/// recognised nor checked for use, and a program is working beside it, so Explore refuses it rather
+/// than allowing what nothing could judge. See <see cref="PathPresence"/>.</para>
+///
 /// <para><b>What this does not find.</b> A directory whose only evidence is a lock file held open by
 /// a program that neither runs from inside the directory nor works under its project — a Unity
 /// editor holding <c>UnityLockfile</c> with its working directory elsewhere — is live to the plan
@@ -100,6 +104,7 @@ internal static class InUseBuildDirectories
         }
 
         var recognised = new List<RecognisedBuildDirectory>();
+        var unreached = new List<string>();
 
         foreach (var candidate in candidates)
         {
@@ -110,16 +115,33 @@ internal static class InUseBuildDirectories
             // there. The recogniser refuses a link at the directory or at its project, as it does for
             // the plan. A link further up is followed here where the plan's walk stops at it, which
             // refuses a directory the plan never reaches rather than allowing one it holds back.
-            if (LongPath.DirectoryExists(candidate) && recognise(candidate) is { } project)
+            switch (LongPath.ProbeDirectory(candidate))
             {
-                recognised.Add(new RecognisedBuildDirectory(candidate, project));
+                // Neither recognised nor ruled out, and a program is working beside it, so whether it
+                // is in use is a question nothing could answer. Read as absent, Explore allowed it.
+                case PathPresence.Refused:
+                    unreached.Add(candidate);
+                    break;
+
+                case PathPresence.Present when recognise(candidate) is { } project:
+                    recognised.Add(new RecognisedBuildDirectory(candidate, project));
+                    break;
             }
         }
 
         var live = LiveTreeVeto.Apply(inspector, recognised, question, questions, ct);
 
-        return [.. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false))];
+        return
+        [
+            .. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false)),
+            .. unreached.Select(candidate => new ToolRoot(candidate, UnreachedReason, static _ => false)),
+        ];
     }
+
+    /// <summary>Why Explore refuses a candidate Windows would not describe.</summary>
+    private const string UnreachedReason =
+        "Windows would not say what is here, so Deguffer could not tell whether the program running "
+        + "beside it is using it. It can go once Windows will describe it, or once that program has closed.";
 
     /// <summary>
     /// Every directory called one of <paramref name="names"/> whose parent lies on the way down from

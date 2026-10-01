@@ -19,7 +19,7 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class DeniedDirectory : IDisposable
 {
-    private readonly List<(DirectoryInfo Directory, FileSystemAccessRule Rule)> _applied = [];
+    private readonly List<(FileSystemInfo Entry, FileSystemAccessRule Rule)> _applied = [];
 
     /// <summary>
     /// Refuse the right to <em>list</em> <paramref name="directory"/>, and nothing else.
@@ -61,20 +61,51 @@ public sealed class DeniedDirectory : IDisposable
         new(directory, Path.GetDirectoryName(directory.TrimEnd(Path.DirectorySeparatorChar))
             ?? throw new ArgumentException("A volume root has no parent to deny.", nameof(directory)));
 
+    /// <summary>
+    /// Refuse the attribute read of the file at <paramref name="file"/>, which takes the same two
+    /// rules as <see cref="WithUnreadableAttributes"/>: one on the file and one on the directory
+    /// holding it.
+    ///
+    /// <para>A file inside a directory refused by <see cref="WithUnreadableAttributes"/> still
+    /// answers, because every account may bypass traverse checking and the directory holding the
+    /// file may still be listed. So a probe of a settings file or a marker needs the file itself
+    /// refused.</para>
+    /// </summary>
+    public static DeniedDirectory WithUnreadableFile(string file)
+    {
+        var denied = new DeniedDirectory();
+
+        denied.Build(() =>
+        {
+            denied.Deny(Path.GetDirectoryName(file)!, FileSystemRights.ListDirectory);
+            denied.Deny(new FileInfo(file), FileSystemRights.ReadAttributes);
+
+            Assert.Throws<UnauthorizedAccessException>(() => File.GetAttributes(file));
+        });
+
+        return denied;
+    }
+
+    private DeniedDirectory()
+    {
+    }
+
     public void Dispose()
     {
         // Reversed, so a parent whose own rule is still in place is not needed to reach a child.
         _applied.Reverse();
 
-        foreach (var (directory, rule) in _applied)
+        foreach (var (entry, rule) in _applied)
         {
-            Apply(directory, security => security.RemoveAccessRule(rule));
+            Apply(entry, security => security.RemoveAccessRule(rule));
         }
 
         _applied.Clear();
     }
 
-    private void Deny(string directory, FileSystemRights rights)
+    private void Deny(string directory, FileSystemRights rights) => Deny(new DirectoryInfo(directory), rights);
+
+    private void Deny(FileSystemInfo entry, FileSystemRights rights)
     {
         var rule = new FileSystemAccessRule(
             WindowsIdentity.GetCurrent().User!,
@@ -83,9 +114,8 @@ public sealed class DeniedDirectory : IDisposable
             PropagationFlags.None,
             AccessControlType.Deny);
 
-        var info = new DirectoryInfo(directory);
-        Apply(info, security => security.AddAccessRule(rule));
-        _applied.Add((info, rule));
+        Apply(entry, security => security.AddAccessRule(rule));
+        _applied.Add((entry, rule));
     }
 
     /// <summary>
@@ -117,10 +147,21 @@ public sealed class DeniedDirectory : IDisposable
         }
     }
 
-    private static void Apply(DirectoryInfo info, Action<DirectorySecurity> change)
+    private static void Apply(FileSystemInfo entry, Action<FileSystemSecurity> change)
     {
-        var security = info.GetAccessControl(AccessControlSections.Access);
-        change(security);
-        info.SetAccessControl(security);
+        switch (entry)
+        {
+            case DirectoryInfo directory:
+                var directorySecurity = directory.GetAccessControl(AccessControlSections.Access);
+                change(directorySecurity);
+                directory.SetAccessControl(directorySecurity);
+                break;
+
+            case FileInfo file:
+                var fileSecurity = file.GetAccessControl(AccessControlSections.Access);
+                change(fileSecurity);
+                file.SetAccessControl(fileSecurity);
+                break;
+        }
     }
 }

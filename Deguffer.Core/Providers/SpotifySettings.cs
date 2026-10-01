@@ -19,6 +19,13 @@ public enum SpotifySettingsReading
     Unreadable,
 
     /// <summary>
+    /// Windows would not say whether the file is there. Never <see cref="Absent"/>: a settings
+    /// folder this account may not read, or one behind a link Windows declines to follow, may hold
+    /// a file that moved the storage. See <see cref="PathPresence.Refused"/>.
+    /// </summary>
+    Unreached,
+
+    /// <summary>
     /// The file was read, and it is not UTF-8 text or a storage location in it is not a path
     /// Deguffer can place.
     /// </summary>
@@ -51,7 +58,7 @@ public enum SpotifySettingsReading
 /// <param name="Reading">How much of it could be read.</param>
 /// <param name="Locations">
 /// Every storage location it names that could be placed, once each and normalised. Empty where the
-/// file is absent, unreadable or not UTF-8 text.
+/// file is absent, unreached, unreadable or not UTF-8 text.
 /// </param>
 public sealed record SpotifySettings(
     string File,
@@ -81,9 +88,13 @@ public sealed record SpotifySettings(
 
     public static SpotifySettings Read(string file)
     {
-        if (!LongPath.FileExists(file))
+        switch (LongPath.ProbeFile(file))
         {
-            return new SpotifySettings(file, SpotifySettingsReading.Absent, []);
+            case PathPresence.Absent:
+                return new SpotifySettings(file, SpotifySettingsReading.Absent, []);
+
+            case PathPresence.Refused:
+                return new SpotifySettings(file, SpotifySettingsReading.Unreached, []);
         }
 
         if (BoundedFile.Read(file, MaximumBytes) is not { } content)

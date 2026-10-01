@@ -21,6 +21,26 @@ namespace Deguffer.Core.Providers;
 /// </param>
 public sealed record MozillaProfile(string Name, string RoamingPath, string LocalPath);
 
+/// <summary>What a read of a Mozilla application's <c>profiles.ini</c> learned.</summary>
+public enum MozillaRegisterReading
+{
+    /// <summary>There is no register, so the application has no profiles in this account.</summary>
+    Absent,
+
+    /// <summary>The register was read.</summary>
+    Read,
+
+    /// <summary>
+    /// Windows would not say whether the register is there. Never <see cref="Absent"/>: a folder this
+    /// account may not read, or one behind a link Windows declines to follow, may hold it. See
+    /// <see cref="PathPresence.Refused"/>.
+    /// </summary>
+    Unreached,
+
+    /// <summary>The register is there and could not be read.</summary>
+    Unreadable,
+}
+
 /// <summary>
 /// Reads a Mozilla application's <c>profiles.ini</c> and resolves each profile's two halves.
 ///
@@ -68,14 +88,15 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
     public string ProfilesPath => Path.Combine(RoamingRoot, ProfilesFile);
 
     /// <summary>
-    /// True where <c>profiles.ini</c> is on disk but would not be read, so the last
-    /// <see cref="Discover"/> found no profiles without having established that there are none.
+    /// What the last <see cref="Discover"/> learned of <c>profiles.ini</c>. Where it is
+    /// <see cref="MozillaRegisterReading.Unreached"/> or <see cref="MozillaRegisterReading.Unreadable"/>,
+    /// no profiles were found without anything having established that there are none.
     ///
     /// Distinguished for the reason <see cref="ChromiumUserDataDiscovery.UnreadableRoots"/> is: a
     /// provider reporting "Firefox is not installed" about a file it was refused has stated
     /// something nobody checked.
     /// </summary>
-    public bool ProfilesUnreadable { get; private set; }
+    public MozillaRegisterReading Register { get; private set; }
 
     /// <summary>
     /// Profiles whose <c>profiles.ini</c> entry is an absolute path rather than a relative one, so
@@ -100,19 +121,26 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
     /// </summary>
     public IReadOnlyList<MozillaProfile> Discover(CancellationToken ct = default)
     {
-        ProfilesUnreadable = false;
         ProfilesElsewhere = [];
 
-        if (!LongPath.FileExists(ProfilesPath))
+        switch (LongPath.ProbeFile(ProfilesPath))
         {
-            return [];
+            case PathPresence.Absent:
+                Register = MozillaRegisterReading.Absent;
+                return [];
+
+            case PathPresence.Refused:
+                Register = MozillaRegisterReading.Unreached;
+                return [];
         }
 
         if (ReadRegister() is not { } lines)
         {
-            ProfilesUnreadable = true;
+            Register = MozillaRegisterReading.Unreadable;
             return [];
         }
+
+        Register = MozillaRegisterReading.Read;
 
         var found = new List<MozillaProfile>();
         var elsewhere = new List<string>();
@@ -228,7 +256,7 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
             // A file the account may not read is §5.3's ordinary case rather than an error. It is
-            // reported through ProfilesUnreadable rather than swallowed.
+            // reported through Register rather than swallowed.
             return null;
         }
     }

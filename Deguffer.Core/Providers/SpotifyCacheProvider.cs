@@ -165,7 +165,8 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             .Where(withholding => withholding.Presence is not PathPresence.Absent)
             .ToList();
 
-        var unreached = scan.CouldNotBeReached;
+        var unreached = scan.CouldNotBeReached
+            || storage.Installs.Any(install => install.Settings.Reading is SpotifySettingsReading.Unreached);
 
         var owesASentence = withheld.Count > 0 || storage.Unsettled is not null || storage.Moved.Count > 0;
 
@@ -264,10 +265,16 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     private static PlanNote Information(string message) => new(PlanNoteSeverity.Information, message);
 
     private static string UnsettledSentence(SpotifySettings settings, bool withheldACache) =>
-        (settings.Reading == SpotifySettingsReading.Unreadable
-            ? $"Deguffer could not read Spotify's settings in '{settings.File}'"
-            : $"Deguffer could not make sense of Spotify's settings in '{settings.File}'")
-        + ", so it cannot tell where Spotify keeps the music and podcasts you downloaded."
+        // An unreached file is not known to exist, so its sentence must not say "could not read", which
+        // asserts that it does. See UnreadableRoot.
+        settings.Reading switch
+        {
+            SpotifySettingsReading.Unreached =>
+                $"Windows would not say whether Spotify keeps its settings in '{settings.File}'",
+            SpotifySettingsReading.Unreadable => $"Deguffer could not read Spotify's settings in '{settings.File}'",
+            _ => $"Deguffer could not make sense of Spotify's settings in '{settings.File}'",
+        }
+        + ", so Deguffer cannot tell where Spotify keeps the music and podcasts you downloaded."
         + (withheldACache
             ? " Deguffer left Spotify's streaming cache alone in case they are in it."
             : " Anything Spotify keeps somewhere else was neither cleared nor ruled out.");

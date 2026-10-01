@@ -240,7 +240,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(
-            DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryMayExist) || Locate().UnreachedRoot is not null);
+            DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryMayExist)
+            || Locate() is { UnreachedRoot: not null } or { UnreadIntegrationFile: not null });
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -254,20 +255,20 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                 : located.UnmarkedRoot is { } nothingFound ? UnmarkedRootSentence(nothingFound)
                 : null;
 
-            if (located.UnreachedRoot is not { } unreached)
+            if (located is { UnreachedRoot: null, UnreadIntegrationFile: null })
             {
                 return EmptyPlan(why ?? "vcpkg has cached nothing on this machine.");
             }
 
             // Never "cached nothing": the clone may hold the most of anything vcpkg keeps.
-            var unreadable = UnreadableRootPlan(unreached);
+            var unreached = UnreachedNotes(located).ToList();
 
-            return why is null
-                ? unreadable with { Notes = [UnreachedRootNote(unreached)] }
-                : unreadable with
-                {
-                    Notes = [UnreachedRootNote(unreached), new PlanNote(PlanNoteSeverity.Information, why)],
-                };
+            if (why is not null)
+            {
+                unreached.Add(new PlanNote(PlanNoteSeverity.Information, why));
+            }
+
+            return UnreadableRootPlan(located.UnreachedRoot ?? located.UnreadIntegrationFile!) with { Notes = unreached };
         }
 
         var notes = new List<PlanNote>(scan.Notes);
@@ -288,12 +289,9 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                 notes.Add(new PlanNote(PlanNoteSeverity.Information, UnmarkedRootSentence(declined)));
             }
 
-            if (located.UnreachedRoot is { } unreached)
-            {
-                notes.Add(UnreachedRootNote(unreached));
-            }
+            notes.AddRange(UnreachedNotes(located));
 
-            if (located.UnmarkedRoot is null && located.UnreachedRoot is null)
+            if (located is { UnmarkedRoot: null, UnreachedRoot: null, UnreadIntegrationFile: null })
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
@@ -334,7 +332,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,
-            HasUnreadableRoot = scan.CouldNotBeReached || located.UnreachedRoot is not null,
+            HasUnreadableRoot = scan.CouldNotBeReached
+                || located is { UnreachedRoot: not null } or { UnreadIntegrationFile: not null },
         };
     }
 
@@ -355,6 +354,30 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// not say the marker is missing, which nothing established, and it gives no advice to set a
     /// variable, which may be exactly what named it.
     /// </summary>
+    /// <summary>The warnings for the clone and the integration file, where either could not be reached.</summary>
+    private static IEnumerable<PlanNote> UnreachedNotes(VcpkgLocations located)
+    {
+        if (located.UnreachedRoot is { } unreached)
+        {
+            yield return UnreachedRootNote(unreached);
+        }
+
+        if (located.UnreadIntegrationFile is { } file)
+        {
+            yield return UnreadIntegrationFileNote(file);
+        }
+    }
+
+    /// <summary>
+    /// What the user is told when the integration file could not be read. It does not say the file is
+    /// there, because a refused probe did not establish that.
+    /// </summary>
+    private static PlanNote UnreadIntegrationFileNote(string file) => new(
+        PlanNoteSeverity.Warning,
+        $"Windows would not let Deguffer read '{file}', where vcpkg records the clone it integrated with "
+        + "Visual Studio, so that clone may not have been found. The buildtrees, downloads and packages "
+        + "directories of a clone that was not found were neither cleared nor ruled out.");
+
     private static PlanNote UnreachedRootNote(string unreached) => new(
         PlanNoteSeverity.Warning,
         $"Something on this machine names '{unreached}' as vcpkg's own directory, and Windows would not "

@@ -85,6 +85,34 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             && p.PresenceBefore is PathPresence.Refused);
     }
 
+    /// <summary>
+    /// The other edition's settings file may be in a folder Windows will not describe, and it may move
+    /// the storage into this edition's cache. Read as absent, that file counted as settled, and the
+    /// installer's <c>Data</c> was offered with whatever the Store edition keeps there. The sentence
+    /// must not say the file could not be read, because nothing established that it is there.
+    /// </summary>
+    [Fact]
+    public async Task ASettingsFolderWindowsWillNotDescribeWithholdsEveryCache()
+    {
+        var cache = Populate(Path.Combine(LocalFolder, "Data"));
+        var settings = WriteSettings(StoreSettingsFolder, $"storage.location={Quoted(LocalFolder)}");
+
+        using var denied = DeniedDirectory.WithUnreadableFile(settings);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        AssertNothingIsOffered(provider, plan);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains($"Windows would not say whether Spotify keeps its settings in '{Path.Combine(StoreSettingsFolder, "prefs")}'", StringComparison.Ordinal)
+            && n.Message.Contains("left Spotify's streaming cache alone", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("could not read Spotify's settings", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task ReportsNotPresentOnAMachineWithNoSpotify()
     {
