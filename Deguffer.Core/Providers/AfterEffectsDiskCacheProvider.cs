@@ -210,6 +210,13 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
             keep,
             ct).ConfigureAwait(false);
 
+        // A held cache is never a survivor otherwise, so the two sets cannot name one path twice.
+        var protectedPaths = Protect(
+        [
+            .. held.Select(cache => (Path: cache.Path, Reason: HeldReason)),
+            .. examination.Survivors,
+        ]);
+
         if (steps.Count == 0
             && held.Count == 0
             && examination.Declined.Count == 0
@@ -217,9 +224,12 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
             && !examination.Unreadable
             && settings.IsComplete)
         {
+            // Another computer's cache, and the folders it is in, are still named when this
+            // computer's is gone, as they are after a clean.
             return EmptyPlan(settings.Folders.Count == 0
                 ? "After Effects' preferences name no disk cache folder."
-                : "No folder After Effects' preferences name holds a disk cache for this computer.");
+                : "No folder After Effects' preferences name holds a disk cache for this computer.")
+                with { ProtectedPaths = protectedPaths };
         }
 
         if (measured.Note is { } scanNote)
@@ -234,12 +244,7 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            // A held cache is never a survivor otherwise, so the two sets cannot name one path twice.
-            ProtectedPaths = Protect(
-            [
-                .. held.Select(cache => (Path: cache.Path, Reason: HeldReason)),
-                .. examination.Survivors,
-            ]),
+            ProtectedPaths = protectedPaths,
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while After Effects runs, one behind a link, and one in a folder the

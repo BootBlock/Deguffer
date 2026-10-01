@@ -3100,9 +3100,10 @@ After Effects left there.
 
 The chosen folder is often one you keep other things in, so it is yours, and nothing in it is
 reached except what After Effects made. **The `Adobe\After Effects` folder inside it, each version's
-folder, and everything beside each cache are named, checked after the run, and refused in
-Explore.** Inside a temporary folder, the Temporary files row's own rules apply to everything except
-the cache, so nothing there is named or checked by this row.
+folder, and everything in it but this computer's cache are named, checked after the run, and
+refused in Explore, whether or not this computer's cache is there.** Inside a temporary folder, the
+Temporary files row's own rules apply to everything except the cache, so nothing there is named or
+checked by this row.
 
 Your projects, your media and After Effects' auto-save folder, which holds the only copy of unsaved
 work, are never inside the cache folder, which is the only thing removed.
