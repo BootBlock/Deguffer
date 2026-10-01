@@ -8,11 +8,17 @@ namespace Deguffer.App.Shell;
 internal static class ContentDialogClosePrompt
 {
     /// <summary>
-    /// True where the user chose to close once the run is over, and false where they chose to keep
-    /// the window open, dismissed the dialog, or another dialog was already on screen.
+    /// True where the user chose to close once the run is over, false where they chose to keep the
+    /// window open or dismissed the dialog, and null where another dialog was already on screen and
+    /// nothing was asked.
     /// </summary>
-    public static async Task<bool> AskAsync(ClosePrompt prompt, XamlRoot xamlRoot, ElementTheme theme)
+    public static async Task<bool?> AskAsync(ClosePrompt prompt, XamlRoot xamlRoot, ElementTheme theme)
     {
+        if (ModalDialog.IsShowing)
+        {
+            return null;
+        }
+
         var dialog = new ContentDialog
         {
             XamlRoot = xamlRoot,

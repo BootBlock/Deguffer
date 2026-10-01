@@ -112,7 +112,7 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
     }
 
     /// <summary>Elevating ends this process, so it waits for every action on every page.</summary>
-    private bool CanElevateNow() => CanElevate && !_running.Any;
+    private bool CanElevateNow() => CanElevate && _running.MayEndProcess;
 
     [RelayCommand(CanExecute = nameof(CanElevateNow))]
     private void Elevate()

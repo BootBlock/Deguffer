@@ -48,8 +48,9 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
-    /// A clean is recorded as running while the planner deletes, so neither the window nor another
-    /// page's Elevate button ends the process under it, and it is let go once the run has reported.
+    /// A clean is recorded as running while the planner deletes and while its §5.6 verdict is
+    /// recorded, so neither the window nor another page's Elevate button ends the process under it,
+    /// and it is let go once the run has reported.
     /// </summary>
     [Fact]
     public void ACleanIsRecordedAsRunningUntilItHasReported()
@@ -65,13 +66,43 @@ public class CleanViewModelCleanTests
             elevateWhileDeleting = page.ViewModel.ElevateAndRescanCommand.CanExecute(null);
         };
         page.Scan();
+        var mayEndAsTheVerdictLands = new List<bool>();
+        page.ViewModel.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(page.ViewModel.RunStatement) && page.ViewModel.RunStatement.Length > 0)
+            {
+                mayEndAsTheVerdictLands.Add(page.Running.MayEndProcess);
+            }
+        };
 
         page.Clean();
 
         Assert.Equal([RunningAction.StorageClean], whileDeleting);
         Assert.False(elevateWhileDeleting);
-        Assert.False(page.Running.Any);
+        Assert.Equal([false], mayEndAsTheVerdictLands);
+        Assert.True(page.Running.MayEndProcess);
         Assert.True(page.ViewModel.HasRunResult);
+    }
+
+    /// <summary>
+    /// While §7's confirmation is open nothing has been removed, so the clean is not yet recorded
+    /// as running, and a window closed over the dialog goes without being held.
+    /// </summary>
+    [Fact]
+    public void ACleanIsNotRecordedAsRunningWhileItsConfirmationIsOpen()
+    {
+        var sdk = new FakeCleanupProvider("sdk", SafetyTier.RegenerableWithCost);
+        using var page = new StoragePage([sdk]);
+        sdk.Steps = [page.Cache("sdk", 4096)];
+        page.Scan();
+        page.Row("sdk").IsSelected = true;
+        var mayEndWhileAsking = new List<bool>();
+        page.Prompt.WhileAsking = () => mayEndWhileAsking.Add(page.Running.MayEndProcess);
+
+        page.Clean();
+
+        Assert.Equal([true], mayEndWhileAsking);
+        Assert.Single(sdk.Executed);
     }
 
     /// <summary>

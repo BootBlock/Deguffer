@@ -1,5 +1,4 @@
 using Deguffer.App.ViewModels;
-using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Scanning;
@@ -228,32 +227,6 @@ public sealed class ExploreSelectionTests : IDisposable
     });
 
     /// <summary>
-    /// A removal is recorded as running from the press to its report, so neither the window nor
-    /// another page's Elevate button ends the process under it.
-    /// </summary>
-    [Fact]
-    public void ARemovalIsRecordedAsRunningUntilItHasReported() => UiThread.Run(async () =>
-    {
-        var (tree, folder, _) = Scanned();
-        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
-        var selection = Selection(tree);
-        var reported = new List<string>();
-        selection.Reported += (_, sentence) => reported.Add(sentence);
-
-        selection.Select([folder]);
-        var removing = selection.DeleteCommand.ExecuteAsync(null);
-
-        Assert.Equal([RunningAction.ExploreRemoval], _explore.Running.Current);
-
-        answer.SetResult(true);
-        await removing;
-
-        Assert.False(_explore.Running.Any);
-        Assert.Single(reported);
-    });
-
-    /// <summary>
     /// Picking something else while a removal runs neither puts it in the record nor loses it. The
     /// record is of what was acted on, and the new pick is the user's, so it stays picked.
     /// </summary>
@@ -302,8 +275,7 @@ public sealed class ExploreSelectionTests : IDisposable
     private ExploreSelection Selection(ExploreTree tree)
     {
         var selection = new ExploreSelection(
-            new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, new FakeRecycleBin()),
-            _explore.Running);
+            new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, _explore.Running, new FakeRecycleBin()));
 
         selection.Show(tree);
 

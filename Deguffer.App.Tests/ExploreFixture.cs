@@ -56,7 +56,7 @@ internal sealed class ExploreFixture : IDisposable
             Scanner,
             Volumes,
             Time,
-            new ExploreActions(Build, () => Prompt, Faults, new FakeRecycleBin()),
+            new ExploreActions(Build, () => Prompt, Faults, Running, new FakeRecycleBin()),
             Guide,
             isElevated,
             request =>

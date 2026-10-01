@@ -6,13 +6,15 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para>A close is held while anything in <see cref="RunningActions"/> runs, because ending the
 /// process there loses the run's §5.6 verification and its report. The user is asked, and may
-/// choose to have Deguffer close itself once the run is over. That choice stands until they make
-/// the other one: a second press of the close button asks again, and keeping the window open
-/// withdraws it.</para>
+/// choose to have Deguffer close itself once the run is over. That choice is spent by the close it
+/// asked for, and keeping the window open on a later press withdraws it before then.</para>
 /// </summary>
 public sealed class CloseGuard
 {
     private readonly RunningActions _running;
+
+    /// <summary>Whether the user has asked for the window to close once nothing is running.</summary>
+    private bool _closesWhenIdle;
 
     public CloseGuard(RunningActions running)
     {
@@ -26,11 +28,8 @@ public sealed class CloseGuard
     /// </summary>
     public event EventHandler? ReadyToClose;
 
-    /// <summary>Whether the window closes by itself once nothing is running.</summary>
-    public bool ClosesWhenIdle { get; private set; }
-
     /// <summary>Whether a close may go ahead without asking, because nothing is running.</summary>
-    public bool MayClose => !_running.Any;
+    public bool MayClose => _running.MayEndProcess;
 
     /// <summary>
     /// The user chose to close once what is running has finished. Where it finished while they were
@@ -38,21 +37,21 @@ public sealed class CloseGuard
     /// </summary>
     public void CloseWhenIdle()
     {
-        ClosesWhenIdle = true;
+        _closesWhenIdle = true;
         CloseIfWaitingAndIdle();
     }
 
     /// <summary>The user chose to keep the window open, which withdraws an earlier choice to close.</summary>
-    public void KeepOpen() => ClosesWhenIdle = false;
+    public void KeepOpen() => _closesWhenIdle = false;
 
     private void CloseIfWaitingAndIdle()
     {
-        if (!ClosesWhenIdle || _running.Any)
+        if (!_closesWhenIdle || !_running.MayEndProcess)
         {
             return;
         }
 
-        ClosesWhenIdle = false;
+        _closesWhenIdle = false;
         ReadyToClose?.Invoke(this, EventArgs.Empty);
     }
 }

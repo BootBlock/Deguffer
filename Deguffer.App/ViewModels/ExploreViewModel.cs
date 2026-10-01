@@ -104,7 +104,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
-    /// <param name="running">See <see cref="_running"/>. A removal on this page is recorded in it too.</param>
+    /// <param name="running">See <see cref="_running"/>.</param>
     public ExploreViewModel(
         IExploreScanner scanner,
         IVolumeInventory volumes,
@@ -123,7 +123,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         _relaunch = relaunch;
         _running = running;
 
-        Selection = new ExploreSelection(actions, running);
+        Selection = new ExploreSelection(actions);
 
         // A clean or a removal on another page ends with this process as surely as one here.
         _running.Changed += (_, _) => ElevateAndRescanCommand.NotifyCanExecuteChanged();
@@ -1072,7 +1072,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// What <see cref="ScanCommand"/> would scan, and nothing running on any page: elevating ends
     /// this process, and a clean or a removal elsewhere would end with it.
     /// </summary>
-    private bool CanElevateNow() => CanScan() && !_running.Any;
+    private bool CanElevateNow() => CanScan() && _running.MayEndProcess;
 
     /// <summary>
     /// State why the page will not scan what it is pointed at, and take the sentence back once it

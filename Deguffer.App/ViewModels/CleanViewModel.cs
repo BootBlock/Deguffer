@@ -504,10 +504,6 @@ public sealed partial class CleanViewModel : ObservableObject
 
         IsBusy = true;
 
-        // Held to the end of the method, so the window will not close and no page will elevate
-        // until this run has verified and reported, whichever way it ends.
-        using var running = _running.Begin(RunningAction.StorageClean);
-
         // A previous run's figures and its §5.6 verdict describe a machine state this run is about
         // to replace, exactly as a preview's do. Cleared here rather than when the new ones arrive,
         // because a run that fails, or is cancelled while its confirmations are collected, never
@@ -547,6 +543,11 @@ public sealed partial class CleanViewModel : ObservableObject
                     InfoBarSeverity.Warning);
                 return;
             }
+
+            // From the last confirmation to the report, so the window will not close and no page will
+            // elevate under the run. Not before the confirmations: until they are answered nothing
+            // has changed, and a window closed over one of those dialogs loses nothing.
+            using var running = _running.Begin(RunningAction.StorageClean);
 
             // Every row this run will not clean still owes it the proof that its kept items and its
             // Outlook data files are standing afterwards (§5.6), and the planner runs that proof after
@@ -992,7 +993,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Elevating ends this process, so it waits for this page's own work and for every page's
     /// actions.
     /// </summary>
-    private bool CanElevateNow() => !IsBusy && !_running.Any;
+    private bool CanElevateNow() => !IsBusy && _running.MayEndProcess;
 
     /// <summary>
     /// What is left on the profile's volume now. Asked of the machine each time rather than

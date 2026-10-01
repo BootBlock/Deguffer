@@ -1,4 +1,5 @@
 using Deguffer.Core.Diagnostics;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -20,6 +21,8 @@ public sealed class ExploreActionsTests : IDisposable
 
     private readonly TempDirectory _temp = new();
     private readonly CrashLog _faults;
+    private readonly RunningActions _running = new();
+    private FakeRecycleBin _recycleBin = new();
 
     public ExploreActionsTests() => _faults = new CrashLog(new FakeUserEnvironment(_temp.Path));
 
@@ -268,6 +271,37 @@ public sealed class ExploreActionsTests : IDisposable
     }
 
     /// <summary>
+    /// A removal is recorded as running from its confirmation until its §5.6 verification has
+    /// reported, so neither the window nor an Elevate button ends the process under it. Not while
+    /// the question is open: nothing has changed then, and a window closed over it loses nothing.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalIsRecordedAsRunningFromItsConfirmationToItsReport()
+    {
+        var file = _temp.CreateFile(8, "a.bin");
+        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        IReadOnlyList<RunningAction> whileRemoving = [];
+        _recycleBin = new FakeRecycleBin(path =>
+        {
+            whileRemoving = _running.Current;
+            File.Delete(path);
+            return new RecycleOutcome(Removed: true);
+        });
+        var actions = Actions(_ => Task.FromResult(Policy()), new FakeExploreConfirmation(answer.Task));
+
+        var removing = actions.RemoveAsync([Item(file)], ExploreRemovalMode.RecycleBin);
+
+        Assert.True(_running.MayEndProcess);
+
+        answer.SetResult(true);
+        var report = await removing;
+
+        Assert.Equal([RunningAction.ExploreRemoval], whileRemoving);
+        Assert.True(_running.MayEndProcess);
+        Assert.Single(report!.Removed);
+    }
+
+    /// <summary>
     /// Run <paramref name="body"/> with no synchronisation context, so Ready is raised inline as the
     /// build completes rather than posted to the test runner's own context and heard later, on
     /// another thread, after the assertions have run.
@@ -289,7 +323,7 @@ public sealed class ExploreActionsTests : IDisposable
 
     private ExploreActions Actions(
         Func<CancellationToken, Task<ExploreActionPolicy>> build, FakeExploreConfirmation? prompt = null) =>
-        new(build, () => prompt ?? new FakeExploreConfirmation(answer: false), _faults, new FakeRecycleBin());
+        new(build, () => prompt ?? new FakeExploreConfirmation(answer: false), _faults, _running, _recycleBin);
 
     private static ExploreActionPolicy Policy(string? refusing = null) =>
         new(

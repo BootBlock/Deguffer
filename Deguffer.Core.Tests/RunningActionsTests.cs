@@ -14,7 +14,7 @@ public sealed class RunningActionsTests
     {
         var running = new RunningActions();
 
-        Assert.False(running.Any);
+        Assert.True(running.MayEndProcess);
         Assert.Empty(running.Current);
     }
 
@@ -25,12 +25,12 @@ public sealed class RunningActionsTests
 
         var clean = running.Begin(RunningAction.StorageClean);
 
-        Assert.True(running.Any);
+        Assert.False(running.MayEndProcess);
         Assert.Equal([RunningAction.StorageClean], running.Current);
 
         clean.Dispose();
 
-        Assert.False(running.Any);
+        Assert.True(running.MayEndProcess);
     }
 
     /// <summary>One page's action ending says nothing about another page's, which is still running.</summary>
@@ -44,7 +44,7 @@ public sealed class RunningActionsTests
 
         clean.Dispose();
 
-        Assert.True(running.Any);
+        Assert.False(running.MayEndProcess);
         Assert.Equal([RunningAction.ExploreRemoval], running.Current);
     }
 
@@ -80,7 +80,7 @@ public sealed class RunningActionsTests
         first.Dispose();
         first.Dispose();
 
-        Assert.True(running.Any);
+        Assert.False(running.MayEndProcess);
     }
 
     [Fact]
@@ -88,11 +88,11 @@ public sealed class RunningActionsTests
     {
         var running = new RunningActions();
         var seen = new List<bool>();
-        running.Changed += (_, _) => seen.Add(running.Any);
+        running.Changed += (_, _) => seen.Add(running.MayEndProcess);
 
         running.Begin(RunningAction.BackupRestore).Dispose();
 
-        Assert.Equal([true, false], seen);
+        Assert.Equal([false, true], seen);
     }
 
     /// <summary>The list handed out is a copy, so a dialog reading it is not changed under it by a run ending.</summary>

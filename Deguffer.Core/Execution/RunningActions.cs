@@ -39,8 +39,11 @@ public sealed class RunningActions
     /// <summary>Raised after an action begins or ends.</summary>
     public event EventHandler? Changed;
 
-    /// <summary>Whether anything is running, which is when the process must not be ended.</summary>
-    public bool Any => _running.Count > 0;
+    /// <summary>
+    /// Whether the process may end now, by closing the window or by elevating: only while nothing
+    /// is running. Both ways read this one answer, so neither can come to disagree with the other.
+    /// </summary>
+    public bool MayEndProcess => _running.Count == 0;
 
     /// <summary>What is running, oldest first.</summary>
     public IReadOnlyList<RunningAction> Current => [.. _running];

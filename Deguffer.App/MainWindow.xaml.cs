@@ -35,8 +35,20 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing += OnClosing;
 
         // Queued rather than closed from inside the handler: it runs as an action ends, and the
-        // pages still to hear about that ending would be updating controls in a closed window.
-        _closeGuard.ReadyToClose += (_, _) => DispatcherQueue.TryEnqueue(Close);
+        // pages still to hear about that ending would be updating controls in a closed window. Asked
+        // again when it runs, because an action can begin in between, and then the close waits for
+        // that one too.
+        _closeGuard.ReadyToClose += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closeGuard.MayClose)
+            {
+                Close();
+            }
+            else
+            {
+                _closeGuard.CloseWhenIdle();
+            }
+        });
 
         ApplyPreferences();
         App.Preferences.Changed += (_, _) => ApplyPreferences();
@@ -123,13 +135,20 @@ public sealed partial class MainWindow : Window
 
         var root = (FrameworkElement)Content;
 
-        if (await ContentDialogClosePrompt.AskAsync(ClosePrompt.For(App.Running.Current), root.XamlRoot, root.ActualTheme))
+        switch (await ContentDialogClosePrompt.AskAsync(ClosePrompt.For(App.Running.Current), root.XamlRoot, root.ActualTheme))
         {
-            _closeGuard.CloseWhenIdle();
-        }
-        else
-        {
-            _closeGuard.KeepOpen();
+            case true:
+                _closeGuard.CloseWhenIdle();
+                break;
+
+            case false:
+                _closeGuard.KeepOpen();
+                break;
+
+            // Another dialog is open, so nothing was asked, and an earlier choice to close stands.
+            // The dialog on screen is the question to answer first.
+            case null:
+                break;
         }
     }
 

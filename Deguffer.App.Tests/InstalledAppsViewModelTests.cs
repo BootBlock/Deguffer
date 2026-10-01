@@ -334,10 +334,19 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         page.Actions.SelectStale([page.StaleRows[0].Entry]);
         var seen = new List<IReadOnlyList<RunningAction>>();
         _running.Changed += (_, _) => seen.Add(_running.Current);
+        var mayEndAsReported = new List<bool>();
+        page.Actions.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(page.Actions.Report))
+            {
+                mayEndAsReported.Add(_running.MayEndProcess);
+            }
+        };
 
         await page.Actions.RemoveCommand.ExecuteAsync(null);
 
         Assert.Equal([[RunningAction.EntryRemoval], []], seen);
+        Assert.Equal([false], mayEndAsReported);
         Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success, page.Actions.ReportSeverity);
     });
 
@@ -358,7 +367,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         await page.Actions.UninstallCommand.ExecuteAsync(null);
 
         Assert.Equal([RunningAction.Uninstall], whileRunning);
-        Assert.False(_running.Any);
+        Assert.True(_running.MayEndProcess);
     });
 
     [Fact]
@@ -380,7 +389,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         await page.Actions.RestoreCommand.ExecuteAsync(null);
 
         Assert.Equal([RunningAction.BackupRestore], whileRestoring);
-        Assert.False(_running.Any);
+        Assert.True(_running.MayEndProcess);
         Assert.Equal("Restored. The entry is back in the list.", page.Actions.Report);
     });
 }

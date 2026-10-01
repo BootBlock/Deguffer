@@ -87,7 +87,6 @@ public sealed class CloseGuardTests
         clean.Dispose();
 
         Assert.Equal(0, closes);
-        Assert.False(guard.ClosesWhenIdle);
     }
 
     /// <summary>

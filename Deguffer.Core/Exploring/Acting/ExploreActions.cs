@@ -48,6 +48,7 @@ public sealed class ExploreActions
     private readonly Func<CancellationToken, Task<ExploreActionPolicy>> _build;
     private readonly Func<IExploreConfirmationPrompt> _prompt;
     private readonly CrashLog _faults;
+    private readonly RunningActions _running;
     private readonly IRecycleBin? _recycleBin;
 
     private Task<ExploreActionPolicy>? _policy;
@@ -62,16 +63,22 @@ public sealed class ExploreActions
     /// own log is rooted in the real <c>%LOCALAPPDATA%</c>, and a test of a failed build would
     /// otherwise write into the developer's profile.
     /// </param>
+    /// <param name="running">
+    /// What is changing the machine on every page. A removal is recorded in it from the moment it is
+    /// confirmed until its §5.6 verification has reported, so nothing ends the process under it.
+    /// </param>
     /// <param name="recycleBin">Handed to <see cref="ExploreRemover"/>; the shell's own bin where null.</param>
     public ExploreActions(
         Func<CancellationToken, Task<ExploreActionPolicy>> build,
         Func<IExploreConfirmationPrompt> prompt,
         CrashLog faults,
+        RunningActions running,
         IRecycleBin? recycleBin = null)
     {
         _build = build;
         _prompt = prompt;
         _faults = faults;
+        _running = running;
         _recycleBin = recycleBin;
     }
 
@@ -97,7 +104,8 @@ public sealed class ExploreActions
     /// The shared instances are not cleared instead, because that would change what a Storage pass
     /// already under way sees.</para>
     /// </summary>
-    public static ExploreActions ForThisMachine(Func<IExploreConfirmationPrompt> prompt, CrashLog faults) =>
+    public static ExploreActions ForThisMachine(
+        Func<IExploreConfirmationPrompt> prompt, CrashLog faults, RunningActions running) =>
         new(
             ct =>
             {
@@ -110,7 +118,8 @@ public sealed class ExploreActions
                     SystemDirectories.Current, environment, VolumeInventory.Current, providers, ct);
             },
             prompt,
-            faults);
+            faults,
+            running);
 
     /// <summary>
     /// Start building the policy, unless one is built or on its way. Called once, when the page is
@@ -200,6 +209,10 @@ public sealed class ExploreActions
         {
             return null;
         }
+
+        // After the question rather than before it: until it is answered nothing has changed, and a
+        // window closed over the dialog loses nothing.
+        using var running = _running.Begin(RunningAction.ExploreRemoval);
 
         // Everything goes back in, refusals included: the remover partitions again and reports what
         // it would not take, so the user is told about each one rather than seeing it silently
