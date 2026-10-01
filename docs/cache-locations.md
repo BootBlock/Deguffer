@@ -196,8 +196,9 @@ if that variable holds a relative path it offers nothing, because Cargo would re
 working directory Deguffer is not. It also offers nothing if the variable names the root of a drive,
 your profile, one of your own folders such as Documents, or a folder that holds a temporary folder or
 a Windows folder: names such as `registry` and `git` are too common to prove that such a folder
-belongs to Cargo. Where the variable moved the home, Explore still refuses the `credentials.toml`
-in the `.cargo` left in your profile. If the home turns out to be a link to somewhere else — a common
+belongs to Cargo. Explore still refuses Cargo's configuration files, `bin`, `registry` and `git` in a
+folder Deguffer declines, because Cargo writes them there anyway. Where the variable moved the home,
+Explore still refuses the `credentials.toml` in the `.cargo` left in your profile. If the home turns out to be a link to somewhere else — a common
 way to move Cargo off the system drive — Deguffer says so and leaves it alone, because nothing on
 the far side of a link has been classified.
 
@@ -286,7 +287,9 @@ is reported as left alone.
 
 In Explore, Deguffer refuses everything in the home except `caches` and `wrapper`. Where
 `GRADLE_USER_HOME` moved the home, it refuses the same things in the `.gradle` left in your profile
-too, because a `gradle.properties` written before the move is still there.
+too, because a `gradle.properties` written before the move is still there. Where Deguffer declines
+the folder the variable names, Gradle still writes its configuration there, so Explore refuses
+`gradle.properties`, `init.d` and `gradle.encrypted.properties` in that folder and nothing else.
 
 ### What it costs you
 
