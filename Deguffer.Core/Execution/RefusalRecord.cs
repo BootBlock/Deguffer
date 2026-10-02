@@ -199,9 +199,11 @@ public sealed class RefusalRecord
             {
                 // A location that has gone since is never planned again, so nothing would ever clear
                 // its entry. Dropped on the way in, so the file cannot accumulate every project a
-                // machine has had — and a key that is not a path at all is dropped with it.
+                // machine has had — and a key that is not a path at all is dropped with it. Only
+                // absence drops one: a location Windows will not describe now may still be there, and
+                // dropping it would let the next save erase what the preview needs to warn about.
                 if (LongPath.Configured(path) is not { } key
-                    || !(LongPath.DirectoryExists(key) || LongPath.FileExists(key)))
+                    || LongPath.ProbeEntry(key) is PathPresence.Absent)
                 {
                     continue;
                 }

@@ -397,6 +397,98 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.True(report.Verification.Passed);
     }
 
+    /// <summary>
+    /// A store Windows will not describe after the removal is a check that could not be made.
+    /// Reading it as missing claimed a deletion that did not happen, where the store is still there.
+    /// </summary>
+    [Fact]
+    public async Task AStoreWindowsWillNotDescribeAfterwardsIsNotReportedMissing()
+    {
+        var folder = _temp.CreateDirectory("profile", "Downloads", "old mail");
+        var store = _temp.CreateFile(64, "profile", "Downloads", "old mail", "2014", "archive.pst");
+        _temp.CreateFile(32, "profile", "Downloads", "old mail", "notes.txt");
+        var downloads = Path.GetDirectoryName(folder)!;
+
+        DeniedDirectory? denied = null;
+
+        // The second listing of Downloads is the check that follows the removal, which is the
+        // moment Windows has to stop describing the store.
+        var listings = 0;
+        var fs = new ListingHook(WindowsFileSystem.Default, downloads, () =>
+        {
+            if (++listings == 2)
+            {
+                denied = DeniedDirectory.WithUnreadableFile(store);
+            }
+        });
+
+        try
+        {
+            var report = await ExploreRemover.RemoveAsync(
+                [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
+                ExploreRemovalMode.Permanent,
+                _policy,
+                fileSystem: fs);
+
+            Assert.NotNull(denied);
+            var check = Assert.Single(report.Verification.Checks, check =>
+                check.Subject.Equals(store, StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(VerificationOutcome.Unverified, check.Outcome);
+            Assert.StartsWith("NOT CHECKED", check.Detail, StringComparison.Ordinal);
+            Assert.Empty(report.Verification.Failures);
+            Assert.False(report.Verification.Passed);
+
+            // The status line is all the user sees, and "0 of N did not pass" reads as a pass.
+            Assert.Contains("1 of 3 check(s) on what should have survived could not be made", report.Summary, StringComparison.Ordinal);
+            Assert.DoesNotContain("did not pass", report.Summary, StringComparison.Ordinal);
+        }
+        finally
+        {
+            denied?.Dispose();
+        }
+
+        Assert.True(LongPath.FileExists(store));
+    }
+
+    /// <summary>
+    /// The same for the folder an item was taken out of: refused afterwards, it is not checked, and
+    /// it is not reported as missing.
+    /// </summary>
+    [Fact]
+    public async Task AFolderWindowsWillNotDescribeAfterwardsIsNotReportedMissing()
+    {
+        var target = _temp.CreateFile(8, "profile", "Downloads", "big.bin");
+        var parent = Path.GetDirectoryName(target)!;
+
+        DeniedDirectory? denied = null;
+        var bin = new FakeRecycleBin(path =>
+        {
+            File.Delete(path);
+            denied = DeniedDirectory.WithUnreadableAttributes(parent);
+
+            return new RecycleOutcome(Removed: true);
+        });
+
+        try
+        {
+            var report = await ExploreRemover.RemoveAsync(
+                [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+                ExploreRemovalMode.RecycleBin,
+                _policy,
+                bin);
+
+            var check = Assert.Single(report.Verification.Checks, check =>
+                check.Reason.StartsWith("The folder the item was taken out of", StringComparison.Ordinal));
+            Assert.Equal(VerificationOutcome.Unverified, check.Outcome);
+            Assert.DoesNotContain(report.Verification.Checks, c => c.Detail.StartsWith("MISSING", StringComparison.Ordinal));
+            Assert.Contains("could not be made", report.Summary, StringComparison.Ordinal);
+        }
+        finally
+        {
+            denied?.Dispose();
+        }
+    }
+
     /// <summary>The over-reach direction: a folder holding only a name that resembles a store is recycled as usual.</summary>
     [Fact]
     public async Task MovesAFolderHoldingOnlyALookalikeToTheRecycleBin()
@@ -724,5 +816,41 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.Equal(ordinary, Assert.Single(report.Removed).Path);
         Assert.False(LongPath.DirectoryExists(ordinary));
         Assert.True(report.Verification.Passed, report.Summary);
+    }
+
+    /// <summary>The real filesystem, calling <paramref name="listed"/> each time one directory is listed.</summary>
+    private sealed class ListingHook(IFileSystem inner, string directory, Action listed) : IFileSystem
+    {
+        public bool DirectoryExists(string path) => inner.DirectoryExists(path);
+
+        public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
+
+        public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+
+        public IReadOnlyList<FileSystemEntry> EnumerateEntries(string path)
+        {
+            if (LongPath.Display(path).Equals(directory, StringComparison.OrdinalIgnoreCase))
+            {
+                listed();
+            }
+
+            return inner.EnumerateEntries(path);
+        }
+
+        public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
+
+        public long? TryGetNewestFileTime(string path) => inner.TryGetNewestFileTime(path);
+
+        public void DeleteFile(string path) => inner.DeleteFile(path);
+
+        public RefusalReason? ProbeRemoval(string path) => inner.ProbeRemoval(path);
+
+        public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
+
+        public void ClearAttributes(string path) => inner.ClearAttributes(path);
+
+        public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
+
+        public bool MayExist(string path) => inner.MayExist(path);
     }
 }

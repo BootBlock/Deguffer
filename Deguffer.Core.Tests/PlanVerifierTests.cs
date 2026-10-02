@@ -149,6 +149,31 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
+    /// A marker Windows will not describe may be there, and then the folder goes at its owner's next
+    /// start. Reading it as unmarked passed a folder nobody saw kept, so it is a check that could not
+    /// be made, and the folder's own survival does not pass it.
+    /// </summary>
+    [Fact]
+    public void ASurvivorWhoseMarkerWindowsWillNotDescribeIsUnverified()
+    {
+        var survivor = _temp.CreateDirectory("runtimes", "kept");
+        var marker = _temp.CreateFile(6, "runtimes", "kept", ".delete");
+        var plan = Plan(
+            [new DeleteDirectoryStep(_temp.CreateDirectory("runtimes", "old"), "Old runtime")],
+            new ProtectedPath(survivor, "It must survive.", PathPresence.Present, Marker: ".delete"));
+
+        using var denied = DeniedDirectory.WithUnreadableFile(marker);
+
+        var verification = PlanVerifier.Verify(plan);
+        var check = Assert.Single(verification.Checks);
+
+        Assert.Equal(VerificationOutcome.Unverified, check.Outcome);
+        Assert.Contains("would not say whether it holds .delete", check.Detail, StringComparison.Ordinal);
+        Assert.Equal(survivor, Assert.Single(verification.Unverified).Subject);
+        Assert.False(verification.Passed);
+    }
+
+    /// <summary>
     /// A refusal afterwards hides nothing the removal itself recorded. Deguffer's own deletion went
     /// inside the survivor, which is the alarm whatever Windows will now say about it.
     /// </summary>

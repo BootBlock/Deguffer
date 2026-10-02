@@ -102,7 +102,9 @@ public interface IUserEnvironment
     string MachineName { get; }
 
     /// <summary>
-    /// Resolve an executable on <c>PATH</c>, or null if it is not installed.
+    /// Resolve an executable on <c>PATH</c>, or null if it is not installed. A file Windows will not
+    /// describe is returned as found where it is the first match, so a caller may be handed a path
+    /// it then cannot run.
     ///
     /// <para>The <c>PATH</c> searched is the one this process started with, extended by the one the
     /// machine has now. A directory it gained since start-up is searched; a directory it had at
@@ -415,13 +417,25 @@ public sealed partial class UserEnvironment : IUserEnvironment
         return block.Resolved.GetOrAdd(command, name => Locate(block, name));
     }
 
+    /// <summary>
+    /// The first candidate on <c>PATH</c> that is there or that Windows will not describe.
+    ///
+    /// <para><b>A refused candidate stops the search.</b> It may be the executable the shell would
+    /// run, so searching on can return a same-named one further along that is not, and finding no
+    /// other reports an installed tool as missing. Returned as found, a refused one reaches the
+    /// provider as a tool that fails to run, which it reports as it reports any failed run.</para>
+    ///
+    /// <para><b>Not where the directory refuses.</b> Every name in a directory Windows will not
+    /// describe reads as refused, so stopping there would name a file nobody saw for every command.
+    /// See <see cref="LongPath.FileMayExistInDescribedDirectory"/>.</para>
+    /// </summary>
     private static string? Locate(EnvironmentBlock block, string command)
     {
         foreach (var directory in block.PathDirectories)
         {
             foreach (var candidate in Candidates(directory, command, block.PathExtensions))
             {
-                if (LongPath.FileExists(candidate))
+                if (LongPath.FileMayExistInDescribedDirectory(candidate))
                 {
                     return candidate;
                 }

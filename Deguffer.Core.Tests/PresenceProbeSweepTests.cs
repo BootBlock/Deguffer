@@ -33,22 +33,19 @@ public sealed partial class PresenceProbeSweepTests
     /// profile's local half, Steam's shader container and Capture One's volume root.</item>
     /// <item>A refusal costs a recomputation: Deguffer's own scan estimate and refusal record
     /// files.</item>
-    /// <item>Read a refusal as absence and are not yet fixed: #244.</item>
+    /// <item>Read a refusal as absence and are not yet fixed, because the consumer has no state for
+    /// "could not tell": #245.</item>
     /// </list>
     /// </summary>
     private static readonly SortedDictionary<string, int> Allowed = new(StringComparer.Ordinal)
     {
-        ["Deguffer.Core/Execution/PlanExecutor.cs"] = 1, // #244
-        ["Deguffer.Core/Execution/PlanVerifier.cs"] = 1, // #244
-        ["Deguffer.Core/Execution/RefusalRecord.cs"] = 3, // one is its own file; two are #244
-        ["Deguffer.Core/Exploring/Acting/ExploreRemover.cs"] = 2, // #244
+        ["Deguffer.Core/Execution/RefusalRecord.cs"] = 1,
         ["Deguffer.Core/Providers/CaptureOneExamination.cs"] = 1,
         ["Deguffer.Core/Providers/ChromiumUserDataDiscovery.cs"] = 2,
         ["Deguffer.Core/Providers/ClaudeCodeConversationProvider.cs"] = 1,
         ["Deguffer.Core/Providers/ClaudeCodeDerivedStateProvider.cs"] = 1,
         ["Deguffer.Core/Providers/ClaudeCodeFileHistoryProvider.cs"] = 1,
         ["Deguffer.Core/Providers/ClaudeCodeMcpLogProvider.cs"] = 1,
-        ["Deguffer.Core/Providers/CondaCacheProvider.cs"] = 2, // #244
         ["Deguffer.Core/Providers/EpicLauncherSaved.cs"] = 1,
         ["Deguffer.Core/Providers/FirefoxCacheProvider.cs"] = 1,
         ["Deguffer.Core/Providers/JellyfinServerLayout.cs"] = 2,
@@ -60,11 +57,9 @@ public sealed partial class PresenceProbeSweepTests
         ["Deguffer.Core/Providers/VsCodeUserDataDiscovery.cs"] = 2,
         ["Deguffer.Core/Safety/BuildDirectorySignature.cs"] = 2,
         ["Deguffer.Core/Safety/DotNetIntermediateSignature.cs"] = 3,
-        ["Deguffer.Core/Safety/IUserEnvironment.cs"] = 1, // #244
-        ["Deguffer.Core/Safety/IVolumeInventory.cs"] = 1, // #244
-        ["Deguffer.Core/Safety/LiveTreeInspector.cs"] = 1, // #244
-        ["Deguffer.Core/Scanning/HardLinkAwareScanner.cs"] = 2, // #244
-        ["Deguffer.Core/Scanning/ParallelEnumerationScanner.cs"] = 1, // #244
+        ["Deguffer.Core/Safety/IVolumeInventory.cs"] = 1, // #245
+        ["Deguffer.Core/Scanning/HardLinkAwareScanner.cs"] = 2, // #245
+        ["Deguffer.Core/Scanning/ParallelEnumerationScanner.cs"] = 1, // #245
         ["Deguffer.Core/Scanning/ScanEstimateCache.cs"] = 1,
     };
 

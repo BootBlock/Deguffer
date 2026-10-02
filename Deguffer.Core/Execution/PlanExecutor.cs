@@ -381,6 +381,15 @@ public sealed class PlanExecutor(
                         Refusals.None,
                         $"{scheduled.Remover} reported success, but it neither removed {LongPath.Display(item)} "
                         + "nor marked it for removal, so nothing will happen to it.");
+
+                case Marking.Unseen:
+                    return new StepOutcome(
+                        step.Description,
+                        Succeeded: false,
+                        BytesReclaimed: 0,
+                        Refusals.None,
+                        $"{scheduled.Remover} reported success, but Windows would not say whether it marked "
+                        + $"{LongPath.Display(item)} for removal, so nothing shows whether it will be removed.");
             }
 
             // Removed: the tool took the item at once after all, which the measurement below reports.
@@ -452,9 +461,15 @@ public sealed class PlanExecutor(
                 return Marking.Removed;
             }
 
-            if (LongPath.FileExists(marker))
+            switch (LongPath.ProbeFile(marker))
             {
-                return Marking.Marked;
+                case PathPresence.Present:
+                    return Marking.Marked;
+
+                // Not polled further: waiting does not make Windows describe it, and reaching the
+                // deadline would say the tool did nothing, which nobody saw.
+                case PathPresence.Refused:
+                    return Marking.Unseen;
             }
 
             if (_time.GetUtcNow() >= deadline)
@@ -868,5 +883,8 @@ public sealed class PlanExecutor(
         Marked,
         Removed,
         Neither,
+
+        /// <summary>Windows would not describe the marker, so whether the tool wrote it is unknown.</summary>
+        Unseen,
     }
 }

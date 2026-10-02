@@ -128,14 +128,29 @@ public static class PlanVerifier
                     + "could not take everything it tried to.");
             }
 
-            if (protectedPath.Marker is { } marker && LongPath.FileExists(Path.Combine(protectedPath.Path, marker)))
+            if (protectedPath.Marker is { } marker)
             {
-                return new VerificationCheck(
-                    protectedPath.Path,
-                    protectedPath.Reason,
-                    VerificationOutcome.Failed,
-                    $"MARKED — the folder is still here, but it now holds {marker}, so the program that owns "
-                    + "it will delete it the next time it starts. Delete that file to keep the folder.");
+                switch (LongPath.ProbeFile(Path.Combine(protectedPath.Path, marker)))
+                {
+                    case PathPresence.Present:
+                        return new VerificationCheck(
+                            protectedPath.Path,
+                            protectedPath.Reason,
+                            VerificationOutcome.Failed,
+                            $"MARKED — the folder is still here, but it now holds {marker}, so the program that owns "
+                            + "it will delete it the next time it starts. Delete that file to keep the folder.");
+
+                    // A refused marker may be there, and the folder then goes at the owner's next
+                    // start. Reading it as unmarked would pass a folder nobody saw kept.
+                    case PathPresence.Refused:
+                        return new VerificationCheck(
+                            protectedPath.Path,
+                            protectedPath.Reason,
+                            VerificationOutcome.Unverified,
+                            $"NOT CHECKED — the folder is still here, but Windows would not say whether it holds "
+                            + $"{marker}, so nothing shows whether the program that owns it will delete it the "
+                            + "next time it starts.");
+                }
             }
 
             return WasEmptied(protectedPath, reach)

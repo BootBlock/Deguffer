@@ -349,6 +349,24 @@ public static partial class LongPath
     public static bool FileMayExist(string path) => ProbeFile(path) is not PathPresence.Absent;
 
     /// <summary>
+    /// Whether a file may be at <paramref name="path"/>, counting a refusal only where the directory
+    /// holding it is described.
+    ///
+    /// <para><b>For a search that tries one name in several places.</b> Every name probed through a
+    /// directory link Windows declines to follow reads as refused, whether or not a file has it, so
+    /// <see cref="FileMayExist"/> would match the first name tried there and the search would stop on
+    /// a file nobody saw. A refusal from a directory that is itself described belongs to the file,
+    /// and that file may be the one searched for.</para>
+    /// </summary>
+    public static bool FileMayExistInDescribedDirectory(string path) => ProbeFile(path) switch
+    {
+        PathPresence.Present => true,
+        PathPresence.Refused => Path.GetDirectoryName(path) is { } directory
+            && ProbeDirectory(directory) is PathPresence.Present,
+        _ => false,
+    };
+
+    /// <summary>
     /// Whether the directory exists, tolerating paths beyond MAX_PATH. A path Windows would not
     /// describe answers false, which is what <see cref="Directory.Exists"/> has always done here —
     /// so a caller that cares asks <see cref="ProbeDirectory"/> instead of this.

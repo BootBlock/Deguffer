@@ -58,7 +58,12 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
                 }
             }
 
-            var locks = ExistingLockFiles(candidate);
+            var locks = ExistingLockFiles(candidate, out var anyRefused);
+
+            if (anyRefused)
+            {
+                complete = false;
+            }
 
             if (locks.Count > 0)
             {
@@ -273,9 +278,15 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     ///
     /// <b>Presence alone is not the test.</b> A lock file left behind by a crashed editor is still
     /// on disk, so it is whether something holds it <em>open</em> that answers the question.
+    ///
+    /// <para><b>A lock file Windows will not describe sets <paramref name="anyRefused"/>.</b> It may
+    /// be there and held, so dropping it as absent would pass a project open in its editor as
+    /// dormant. The caller reports the answer incomplete instead.</para>
     /// </summary>
-    private static IReadOnlyList<string> ExistingLockFiles(LiveTreeQuery candidate)
+    private static IReadOnlyList<string> ExistingLockFiles(LiveTreeQuery candidate, out bool anyRefused)
     {
+        anyRefused = false;
+
         if (candidate.LockFileNames.Count == 0)
         {
             return [];
@@ -287,9 +298,15 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         {
             var path = Path.Combine(candidate.Directory, name);
 
-            if (LongPath.FileExists(path))
+            switch (LongPath.ProbeFile(path))
             {
-                present.Add(path);
+                case PathPresence.Present:
+                    present.Add(path);
+                    break;
+
+                case PathPresence.Refused:
+                    anyRefused = true;
+                    break;
             }
         }
 

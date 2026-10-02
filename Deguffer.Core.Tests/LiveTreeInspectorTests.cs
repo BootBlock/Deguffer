@@ -208,6 +208,27 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// A lock file Windows will not describe may be there and held, so dropping it as absent would
+    /// pass a project open in its editor as dormant. The answer is incomplete instead, which the plan
+    /// states as a check that could not run.
+    /// </summary>
+    [Fact]
+    public void ALockFileWindowsWillNotDescribeIsAnUnansweredQuestion()
+    {
+        var project = _temp.CreateDirectory("unity");
+        var library = _temp.CreateDirectory("unity", "Library");
+        var lockFile = Path.Combine(library, "UnityLockfile");
+        File.WriteAllText(lockFile, string.Empty);
+
+        using var denied = DeniedDirectory.WithUnreadableFile(lockFile);
+
+        var findings = new LiveTreeInspector().FindLive(
+            [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
+
+        Assert.False(findings.Complete);
+    }
+
+    /// <summary>
     /// A declared lock-file name that turns out to be a directory is never handed to the Restart
     /// Manager, which refuses a directory outright with an access-denied result. Passing one would
     /// turn an ordinary project into "Deguffer could not check whether this is in use" — a warning

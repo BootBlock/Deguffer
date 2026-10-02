@@ -426,6 +426,66 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A marker Windows will not describe may be there, so the step neither claims the space as
+    /// scheduled nor says LM Studio did nothing. It says what could not be seen.
+    /// </summary>
+    [Fact]
+    public async Task SaysSoWhenWindowsWillNotDescribeTheMarker()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+
+        DeniedDirectory? denied = null;
+        _runner.Replying(arguments =>
+        {
+            if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var marker = Path.Combine(Folder($"{Cuda12}@2.45.0"), LmStudioRuntimeProvider.Marker);
+            File.WriteAllText(marker, "marked");
+            denied = DeniedDirectory.WithUnreadableFile(marker);
+
+            return new CommandOutcome(0, $"Removed {Cuda12}@2.45.0\n", string.Empty);
+        });
+
+        var clock = new ManualTimeProvider();
+        var provider = CreateProvider(clock);
+        var plan = await provider.PlanAsync();
+
+        try
+        {
+            var running = provider.ExecuteAsync(plan);
+
+            // Moved on as FailsTheStepWhenLmStudioNeverMarksTheRuntime moves it, so a run that polled a
+            // refusal to the deadline fails here rather than waiting out the real limit.
+            var patience = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+
+            while (!running.IsCompleted && DateTime.UtcNow < patience)
+            {
+                if (clock.Waiting > 0)
+                {
+                    clock.Advance(TimeSpan.FromSeconds(1));
+                }
+                else
+                {
+                    await Task.Delay(10);
+                }
+            }
+
+            var outcome = Assert.Single((await running.WaitAsync(TimeSpan.FromSeconds(1))).Steps);
+            Assert.False(outcome.Succeeded);
+            Assert.Equal(0, outcome.BytesScheduled);
+            Assert.Contains("Windows would not say whether it marked", outcome.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            denied?.Dispose();
+        }
+    }
+
+    /// <summary>
     /// The plan was made while LM Studio ran, and the user can close it while the preview is on
     /// screen. <c>lms</c> would then start it, so the command does not run.
     /// </summary>
