@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -78,7 +79,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         }
 
         File.WriteAllText(
-            Path.Combine(packages, SquirrelPackages.IndexName),
+            Path.Combine(packages, SquirrelReleaseIndex.FileName),
             string.Join("\n", indexed.Select(f => $"{new string('A', 40)} {f} 2048")));
 
         return packages;
@@ -240,6 +241,89 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An update that stopped while it unpacked, with its package downloaded. Taking the unfinished
+    /// build as the installed one makes that package look spent — neither newer than the build nor
+    /// named by an index the updater had not yet rewritten — so the package the update is applied
+    /// from was offered beside a genuinely spent one.
+    /// </summary>
+    [Fact]
+    public async Task AnUnfinishedUpdateLeavesEveryPackageAlone()
+    {
+        var root = CreateApplication("Chatterbox", "1.5.0", "2.0.0");
+        File.WriteAllText(Path.Combine(root, "app-2.0.0", SquirrelDiscovery.UnfinishedMarkerName), string.Empty);
+
+        var packages = CreatePackages(
+            root,
+            ["Chatterbox-1.5.0-full.nupkg"],
+            "Chatterbox-1.5.0-full.nupkg",
+            "Chatterbox-2.0.0-full.nupkg",
+            "Chatterbox-1.0.0-full.nupkg");
+
+        string[] files =
+        [
+            Path.Combine(packages, "Chatterbox-2.0.0-full.nupkg"),
+            Path.Combine(packages, "Chatterbox-1.5.0-full.nupkg"),
+            Path.Combine(packages, "Chatterbox-1.0.0-full.nupkg"),
+            Path.Combine(packages, SquirrelReleaseIndex.FileName),
+        ];
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("which build is installed", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == packages && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.All(files, f => Assert.True(File.Exists(f), $"{f} was removed"));
+        Assert.All(
+            new[] { "app-1.5.0", "app-2.0.0" }.Select(b => Path.Combine(root, b)),
+            b => Assert.True(Directory.Exists(b), $"{b} was removed"));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// An index Windows would not describe is not known to be there, so the sentence about it may not
+    /// say it was read and failed — and nothing in the folder is offered, as for any index not read.
+    /// </summary>
+    [Fact]
+    public async Task AnIndexWindowsWillNotDescribeIsNamedAndLeavesEveryPackageAlone()
+    {
+        var root = CreateApplication("Chatterbox", "1.0.9254");
+        var packages = CreatePackages(
+            root,
+            ["Chatterbox-1.0.9254-full.nupkg"],
+            "Chatterbox-1.0.9254-full.nupkg",
+            "Chatterbox-1.0.9007-full.nupkg");
+
+        var index = Path.Combine(packages, SquirrelReleaseIndex.FileName);
+        var spent = Path.Combine(packages, "Chatterbox-1.0.9007-full.nupkg");
+
+        var provider = CreateProvider();
+        CleanupPlan plan;
+
+        using (DeniedDirectory.WithUnreadableFile(index))
+        {
+            plan = await provider.PlanAsync();
+        }
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith(
+            $"Windows would not say whether Chatterbox's record of the packages it still needs is at '{index}'",
+            StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("could not read the record", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(File.Exists(spent), $"{spent} was removed");
+    }
+
+    /// <summary>
     /// Without the index there is no way to tell a spent package from the one the next update is
     /// built against, so nothing in the folder is offered — and the row must not read "Already
     /// clear" about a folder Deguffer declined to classify.
@@ -258,7 +342,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
 
         if (contents is not null)
         {
-            File.WriteAllText(Path.Combine(packages, SquirrelPackages.IndexName), contents);
+            File.WriteAllText(Path.Combine(packages, SquirrelReleaseIndex.FileName), contents);
         }
 
         var provider = CreateProvider();
@@ -313,7 +397,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
             Path.Combine(StagingRoot, "SquirrelSetup.log"),
             Path.Combine(StagingRoot, "setup.json"),
             Path.Combine(root, SquirrelDiscovery.UpdaterName),
-            Path.Combine(packages, SquirrelPackages.IndexName),
+            Path.Combine(packages, SquirrelReleaseIndex.FileName),
             Path.Combine(packages, ".betaId"),
             Path.Combine(packages, "Chatterbox-1.0.9254-full.nupkg"),
         ];

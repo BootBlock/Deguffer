@@ -3,68 +3,6 @@ using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
-/// <summary>One installed version of a Squirrel application, as it appears on disk.</summary>
-/// <param name="Path">The directory, in display form.</param>
-/// <param name="Name">Its own name, <c>app-3.6.4</c>, which is what the user sees in the folder.</param>
-/// <param name="Number">
-/// The version parsed out of that name. Squirrel resolves which build to launch by ordering these
-/// same names, so ordering them is reading the application's own rule rather than inventing one.
-/// </param>
-/// <param name="IsLink">
-/// Whether this is a junction or a symbolic link rather than a directory.
-///
-/// <para>Such a build is counted when the versions are ordered and never removed, and it needs both
-/// halves. Dropping it from the ordering is how the newest build gets named superseded. Removing it
-/// takes a link whose far side nobody classified — and the figure beside it was measured
-/// <em>through</em> the link, so the row would promise the far side's size and reclaim none of
-/// it.</para>
-/// </param>
-public sealed record SquirrelVersionDirectory(string Path, string Name, Version Number, bool IsLink);
-
-/// <summary>
-/// One Squirrel-installed application under <c>%LOCALAPPDATA%</c>, and the version directories in
-/// it.
-/// </summary>
-/// <param name="Name">
-/// The folder's own name, which is the application's: Squirrel installs into a directory named for
-/// the package, so this is the only label available and the one the user will recognise.
-/// </param>
-/// <param name="Root">The application folder itself, in display form. Never a target.</param>
-/// <param name="Versions">
-/// The version directories whose version could be read, oldest first.
-/// </param>
-/// <param name="UnreadableVersionNames">
-/// Children named like a version directory whose version could not be read — a pre-release build
-/// such as <c>app-2.0.0-beta1</c>. Kept rather than dropped because their presence is what makes
-/// <see cref="Superseded"/> empty: see the property for why that has to fail closed.
-/// </param>
-public sealed record SquirrelInstallation(
-    string Name,
-    string Root,
-    IReadOnlyList<SquirrelVersionDirectory> Versions,
-    IReadOnlyList<string> UnreadableVersionNames)
-{
-    /// <summary>
-    /// The newest installed version, which is the one the application launches, or null where the
-    /// set could not be ordered.
-    /// </summary>
-    public SquirrelVersionDirectory? Current =>
-        UnreadableVersionNames.Count > 0 ? null : Versions.LastOrDefault();
-
-    /// <summary>
-    /// The versions an update left behind, which is every one that is not <see cref="Current"/>.
-    ///
-    /// <para><b>Empty as soon as one version directory could not be read, and that is the whole
-    /// safety property here.</b> A pre-release version orders below its own release under one
-    /// reading and above it under another, so an installation holding <c>app-1.2.3</c> beside
-    /// <c>app-1.3.0-beta1</c> has no answer this can give. Ordering the readable ones and calling
-    /// the highest of them current would then name the <em>running</em> build superseded, and
-    /// removing it leaves the user without the application.</para>
-    /// </summary>
-    public IReadOnlyList<SquirrelVersionDirectory> Superseded =>
-        Current is { } current ? [.. Versions.Where(v => v != current)] : [];
-}
-
 /// <summary>
 /// What one look at <c>%LOCALAPPDATA%</c> found, with what it could not read carried beside it.
 ///
@@ -125,6 +63,12 @@ public sealed partial class SquirrelDiscovery
 
     /// <summary>The folder each application keeps its downloaded update packages in.</summary>
     public const string PackagesDirectoryName = "packages";
+
+    /// <summary>
+    /// The file the updater writes into a build before it unpacks it and removes once it has
+    /// finished. The stub in the application's folder never starts a build that holds one.
+    /// </summary>
+    public const string UnfinishedMarkerName = ".not-finished";
 
     /// <summary>
     /// An installed version directory: the literal prefix Squirrel writes, and a version that can be
@@ -206,7 +150,8 @@ public sealed partial class SquirrelDiscovery
     /// The sweep. One child-directory listing of <c>%LOCALAPPDATA%</c>, then one file-existence
     /// check per child, and only a child that passes it is enumerated at all — the order is the
     /// performance design (G4), because that root holds hundreds of directories on an ordinary
-    /// machine.
+    /// machine. An application found that way costs one more probe per build and one read of its
+    /// index, which is what <see cref="SquirrelInstallation.Doubt"/> is decided from.
     ///
     /// <para>A link one level under <c>%LOCALAPPDATA%</c> is neither followed nor reported, on
     /// <see cref="ChromiumUserDataDiscovery"/>'s reasoning: this walk is choosing which applications
@@ -265,8 +210,14 @@ public sealed partial class SquirrelDiscovery
                 if (VersionDirectory().Match(candidate.Name) is { Success: true } match
                     && Version.TryParse(match.Groups["version"].ValueSpan, out var number))
                 {
+                    var path = LongPath.Display(candidate.FullName);
+
                     versions.Add(new SquirrelVersionDirectory(
-                        LongPath.Display(candidate.FullName), candidate.Name, number, isLink));
+                        path,
+                        candidate.Name,
+                        number,
+                        isLink,
+                        LongPath.ProbeEntry(Path.Combine(path, UnfinishedMarkerName))));
                 }
                 else if (NamedLikeAVersion().IsMatch(candidate.Name))
                 {
@@ -284,7 +235,12 @@ public sealed partial class SquirrelDiscovery
 
             versions.Sort((a, b) => a.Number.CompareTo(b.Number));
 
-            found.Add(new SquirrelInstallation(child.Name, root, versions, unreadable));
+            found.Add(new SquirrelInstallation(
+                child.Name,
+                root,
+                versions,
+                unreadable,
+                SquirrelReleaseIndex.Read(Path.Combine(root, PackagesDirectoryName))));
         }
 
         return new SquirrelSweep(found, ApplicationDataUnreadable: false, refused);

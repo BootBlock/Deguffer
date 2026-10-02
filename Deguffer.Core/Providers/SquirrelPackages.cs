@@ -1,9 +1,32 @@
-using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
+
+/// <summary>
+/// What every application's packages folder came to, in the four lists a plan is built from.
+///
+/// <para>The same shape <see cref="DeclaredLocationScan"/> carries, and for the same reason: a
+/// provider adds this to whatever its other locations produced and hands the result to
+/// <see cref="Execution.CleanupPlan"/>.</para>
+/// </summary>
+/// <param name="Targets">The spent packages, ready to be measured.</param>
+/// <param name="Protected">What §5.6 asserts survived, with the reason the user is shown.</param>
+/// <param name="Notes">What the user is told, including anything left alone and why.</param>
+/// <param name="Declined">
+/// How many folders were passed over for a reason of Deguffer's own — a link, an index it could not
+/// read, an installation it could not order. Counted because a plan with no steps and a decline must
+/// not be rendered as "Already clear".
+/// </param>
+/// <param name="Unreadable">Whether a folder refused to be listed, so its content is unknown.</param>
+internal sealed record SquirrelPackageScan(
+    IReadOnlyList<DeletionTarget> Targets,
+    IReadOnlyList<(string Path, string Reason)> Protected,
+    IReadOnlyList<PlanNote> Notes,
+    int Declined,
+    bool Unreadable);
 
 /// <summary>What one application's <c>packages</c> folder turned out to hold.</summary>
 /// <param name="Superseded">
@@ -33,39 +56,11 @@ namespace Deguffer.Core.Providers;
 /// The folder would not be listed, so the two lists above describe nothing. A caller must not read
 /// that as "there is nothing in there".
 /// </param>
-/// <param name="IndexUnreadable">
-/// <c>RELEASES</c> is missing, unreadable, or holds a line this could not parse — so nothing in the
-/// folder is offered. See <see cref="SquirrelPackages"/> for why that is the only safe answer.
-/// </param>
-/// <summary>
-/// What every application's packages folder came to, in the four lists a plan is built from.
-///
-/// <para>The same shape <see cref="DeclaredLocationScan"/> carries, and for the same reason: a
-/// provider adds this to whatever its other locations produced and hands the result to
-/// <see cref="Execution.CleanupPlan"/>.</para>
-/// </summary>
-/// <param name="Targets">The spent packages, ready to be measured.</param>
-/// <param name="Protected">What §5.6 asserts survived, with the reason the user is shown.</param>
-/// <param name="Notes">What the user is told, including anything left alone and why.</param>
-/// <param name="Declined">
-/// How many folders were passed over for a reason of Deguffer's own — a link, an index it could not
-/// read, an installation it could not order. Counted because a plan with no steps and a decline must
-/// not be rendered as "Already clear".
-/// </param>
-/// <param name="Unreadable">Whether a folder refused to be listed, so its content is unknown.</param>
-internal sealed record SquirrelPackageScan(
-    IReadOnlyList<DeletionTarget> Targets,
-    IReadOnlyList<(string Path, string Reason)> Protected,
-    IReadOnlyList<PlanNote> Notes,
-    int Declined,
-    bool Unreadable);
-
 internal readonly record struct SquirrelPackageReading(
     IReadOnlyList<(string Path, DateTime? LastWritten)> Superseded,
     IReadOnlyList<(string Path, string Reason)> StillNeeded,
     IReadOnlyList<string> Declined,
-    bool DirectoryUnreadable,
-    bool IndexUnreadable);
+    bool DirectoryUnreadable);
 
 /// <summary>
 /// Squirrel's own record of which update packages it still needs, read rather than guessed at.
@@ -74,7 +69,9 @@ internal readonly record struct SquirrelPackageReading(
 /// <c>packages\RELEASES</c> is read with an unguarded <c>File.ReadAllText</c> by
 /// <c>Update.exe --processStart</c>, which is the shortcut style Squirrel's own install
 /// documentation gives and which several shipped applications use — so a missing index does not
-/// degrade, it throws, and the shortcut stops launching the application. <c>.betaId</c> beside it
+/// degrade, it throws, and the shortcut stops launching the application. The index is read once, by
+/// <see cref="SquirrelDiscovery"/>, because which build that shortcut starts is decided from it
+/// too. <c>.betaId</c> beside it
 /// is the identifier that decides whether this machine gets a staged release early. Both are
 /// configuration living next to a cache, which is §5.2 exactly.</para>
 ///
@@ -95,9 +92,6 @@ internal readonly record struct SquirrelPackageReading(
 /// </summary>
 internal static partial class SquirrelPackages
 {
-    /// <summary>Squirrel's index of the packages it holds, inside the folder that holds them.</summary>
-    public const string IndexName = "RELEASES";
-
     /// <summary>
     /// The identifier deciding whether this machine gets an application's staged releases early. It
     /// sits in the packages folder and is not a package, which is half of why the folder is never
@@ -113,22 +107,10 @@ internal static partial class SquirrelPackages
         + "was supposed to remove it after the update that replaced it.";
 
     /// <summary>
-    /// One line of that index: a SHA-1, the file name, and the size. Squirrel's own parser, with the
-    /// same shape and the same strictness — a line that does not match makes Squirrel throw, and it
-    /// makes this report the index unreadable.
-    /// </summary>
-    [GeneratedRegex(@"\A([0-9a-fA-F]{40})\s+(\S+)\s+([0-9]+)\s*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex IndexEntry();
-
-    /// <summary>A comment, which Squirrel strips before it parses a line.</summary>
-    [GeneratedRegex(@"\s*#.*\z", RegexOptions.CultureInvariant)]
-    private static partial Regex Comment();
-
-    /// <summary>
     /// The version in a package file name: <c>GitHubDesktop-3.6.4-delta.nupkg</c>. Numeric only, on
     /// <see cref="SquirrelDiscovery"/>'s reasoning — a pre-release version cannot be ordered against
-    /// a release without choosing a reading, and the comparison here decides whether a file is a
-    /// download in progress.
+    /// a release without choosing a reading, and the comparisons it feeds decide whether a file is a
+    /// download in progress and which build a shortcut starts.
     /// </summary>
     [GeneratedRegex(
         @"\A.+-(?<version>[0-9]+(?:\.[0-9]+){1,3})(?:-full|-delta)?\.nupkg\z",
@@ -148,12 +130,31 @@ internal static partial class SquirrelPackages
         + "through downloading.";
 
     /// <summary>
-    /// The characters Windows will not accept in a file name, as the set the index check tests
-    /// against. <see cref="Path.GetInvalidFileNameChars"/> clones its array on every call so a
-    /// caller cannot mutate it, and the check runs once per line of the index (G5).
+    /// The version in the package file name <paramref name="fileName"/>, both as a number to order by
+    /// and as the text the updater names its build folder with.
+    ///
+    /// <para>TryParse rather than Parse, for the reason <see cref="SquirrelDiscovery"/> gives: the
+    /// pattern bounds a version's shape and not its magnitude, so <c>App-9999999999.0.nupkg</c>
+    /// matches and then overflows — and an exception here takes down the whole planning pass. Every
+    /// caller treats a name nobody could read as a reason to leave things alone.</para>
     /// </summary>
-    private static readonly SearchValues<char> InvalidInFileName =
-        SearchValues.Create(Path.GetInvalidFileNameChars());
+    public static bool TryReadVersion(
+        string fileName,
+        [NotNullWhen(true)] out Version? number,
+        [NotNullWhen(true)] out string? text)
+    {
+        text = null;
+
+        if (PackageFile().Match(fileName) is not { Success: true } match
+            || !Version.TryParse(match.Groups["version"].ValueSpan, out number))
+        {
+            number = null;
+            return false;
+        }
+
+        text = match.Groups["version"].Value;
+        return true;
+    }
 
     /// <summary>
     /// Every application's packages folder, and everything beside them that §5.6 must assert
@@ -228,13 +229,36 @@ internal static partial class SquirrelPackages
                 $"The folder {installation.Name} keeps its update packages in must survive — only "
                 + "the packages it no longer refers to are removed."));
             survivors.Add((
-                Path.Combine(packages, IndexName),
-                $"{installation.Name}'s own record of the packages it holds. Its shortcut reads this "
-                + "file to work out which version to start."));
+                Path.Combine(packages, SquirrelReleaseIndex.FileName),
+                $"{installation.Name}'s own record of the packages it holds. A shortcut that starts it "
+                + "through its updater reads this file to work out which version to start."));
             survivors.Add((
                 Path.Combine(packages, StagedIdentifierName),
                 $"The identifier that decides whether this computer gets {installation.Name}'s "
                 + "staged releases early."));
+
+            // Without the index there is no way to tell a spent package from the base the next
+            // delta update is applied to. Asked before the ordering, because an index that would
+            // not be read also leaves the builds unordered, and the sentence owed here is about the
+            // record rather than about the builds. One Windows would not describe is not known to
+            // be there, so it is named on its own rather than counted among the unread.
+            if (installation.Index.State is SquirrelIndexState.Unreached)
+            {
+                notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    new UnreadFile(Path.Combine(packages, SquirrelReleaseIndex.FileName), Unreached: true)
+                        .Opening($"{installation.Name}'s record of the packages it still needs")
+                    + $", so the update packages of {installation.Name} are left alone."));
+                declined++;
+                continue;
+            }
+
+            if (installation.Index.State is not SquirrelIndexState.Read)
+            {
+                indexesUnread++;
+                declined++;
+                continue;
+            }
 
             // An installation nobody could order is settled here rather than inside the reading,
             // because the reason belongs to this level. Deciding whether a package is spent means
@@ -249,7 +273,7 @@ internal static partial class SquirrelPackages
                 continue;
             }
 
-            var reading = Read(packages, current.Number, ct);
+            var reading = Read(packages, installation.Index.Names, current.Number, ct);
 
             survivors.AddRange(reading.StillNeeded);
 
@@ -257,13 +281,6 @@ internal static partial class SquirrelPackages
             {
                 notes.Add(UnreadableRoot.Note(packages));
                 unreadable = true;
-                continue;
-            }
-
-            if (reading.IndexUnreadable)
-            {
-                indexesUnread++;
-                declined++;
                 continue;
             }
 
@@ -313,6 +330,7 @@ internal static partial class SquirrelPackages
     /// Read <paramref name="packagesDirectory"/> against its own index.
     /// </summary>
     /// <param name="packagesDirectory">The folder, which the caller has established is not a link.</param>
+    /// <param name="named">The file names the index refers to, from an index that was read.</param>
     /// <param name="installed">
     /// The newest installed version, which nothing newer than may be offered.
     ///
@@ -322,18 +340,12 @@ internal static partial class SquirrelPackages
     /// record it had read perfectly well. The caller owns that case, because the caller is what
     /// knows why.</para>
     /// </param>
-    public static SquirrelPackageReading Read(
+    private static SquirrelPackageReading Read(
         string packagesDirectory,
+        IReadOnlySet<string> named,
         Version installed,
-        CancellationToken ct = default)
+        CancellationToken ct)
     {
-        var named = NamedByIndex(packagesDirectory);
-
-        if (named is null)
-        {
-            return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false, IndexUnreadable: true);
-        }
-
         var files = new List<FileInfo>();
 
         using (var listing = new DirectoryListing<FileInfo>(
@@ -352,12 +364,12 @@ internal static partial class SquirrelPackages
                 case PathPresence.Absent:
                     // Not there is a complete answer: a folder that does not exist holds no packages.
                     // The caller checked existence, so this is the folder having gone since.
-                    return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false, IndexUnreadable: false);
+                    return new SquirrelPackageReading([], [], [], DirectoryUnreadable: false);
 
                 case PathPresence.Refused:
                     // Nothing rather than a partial view, on ChildDirectories' reasoning: half a
                     // listing invites a plan that describes a folder nobody fully read.
-                    return new SquirrelPackageReading([], [], [], DirectoryUnreadable: true, IndexUnreadable: false);
+                    return new SquirrelPackageReading([], [], [], DirectoryUnreadable: true);
             }
         }
 
@@ -389,12 +401,7 @@ internal static partial class SquirrelPackages
                 continue;
             }
 
-            // TryParse rather than Parse, for the reason SquirrelDiscovery gives: the pattern bounds
-            // a version's shape and not its magnitude, so App-9999999999.0.nupkg matches and then
-            // overflows — and an exception here takes down the whole planning pass. A name nobody
-            // could read is already a case this keeps, so failing into it fails closed.
-            if (PackageFile().Match(file.Name) is not { Success: true } match
-                || !Version.TryParse(match.Groups["version"].ValueSpan, out var version))
+            if (!TryReadVersion(file.Name, out var version, out _))
             {
                 kept.Add((path, UnreadableNameReason));
                 continue;
@@ -412,65 +419,6 @@ internal static partial class SquirrelPackages
         }
 
         return new SquirrelPackageReading(
-            superseded, kept, declined, DirectoryUnreadable: false, IndexUnreadable: false);
-    }
-
-    /// <summary>
-    /// The file names Squirrel's index still refers to, or null where the index could not be read.
-    ///
-    /// <para>Null and an empty set are different answers and must stay so. An index naming nothing
-    /// would make every package in the folder removable, which is exactly what an unreadable index
-    /// must not be allowed to mean.</para>
-    /// </summary>
-    private static HashSet<string>? NamedByIndex(string packagesDirectory)
-    {
-        string text;
-
-        try
-        {
-            // The same encoding Squirrel reads it with, so the byte-order mark a real RELEASES
-            // carries is stripped here exactly as it is there.
-            text = File.ReadAllText(
-                LongPath.Extended(Path.Combine(packagesDirectory, IndexName)), System.Text.Encoding.UTF8);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            // Missing, held open, or on a path this account may not read. All three mean the same
-            // thing: nothing established which packages are still needed.
-            return null;
-        }
-
-        var named = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var line in text.Split('\n'))
-        {
-            var entry = Comment().Replace(line, string.Empty).Trim();
-
-            if (entry.Length == 0)
-            {
-                continue;
-            }
-
-            if (IndexEntry().Match(entry) is not { Success: true } match)
-            {
-                // Squirrel throws on a line it cannot parse, so a file with one in it is not an
-                // index either of us can act on.
-                return null;
-            }
-
-            var name = match.Groups[2].Value;
-
-            // A local index holds bare file names. Squirrel's own parser also accepts an absolute
-            // HTTP URL, which belongs to a remote feed rather than to this folder — meeting one
-            // here means the file is not what it was taken for, so nothing in the folder is offered.
-            if (name.AsSpan().IndexOfAny(InvalidInFileName) >= 0)
-            {
-                return null;
-            }
-
-            named.Add(name);
-        }
-
-        return named;
+            superseded, kept, declined, DirectoryUnreadable: false);
     }
 }
