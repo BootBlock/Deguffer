@@ -126,6 +126,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     private readonly ClaudeCodeProjectsDiscovery _projects;
     private readonly ClaudeCodeSessionRegistry _sessions;
     private readonly ISystemDirectories _system;
+    private readonly RowDeclarations _declarations;
 
     private Survey? _survey;
     private IReadOnlyList<ToolRoot>? _toolRoots;
@@ -143,6 +144,10 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
     /// be or hold. The machine's own by default.
     /// </param>
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child another row removes from a folder this row
+    /// walks is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     public ClaudeCodeDerivedStateProvider(
         IUserEnvironment? environment = null,
         ClaudeCodeSessionRegistry? sessions = null,
@@ -150,7 +155,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ClaudeCodeProjectsDiscovery? projects = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -158,6 +164,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             scanner ?? DirectoryScanner.Default)
     {
         _system = system ?? SystemDirectories.Current;
+        _declarations = declarations ?? new RowDeclarations();
         _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment, _system);
         _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system);
     }
@@ -325,7 +332,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             yield return (LongPath.Display(file.FullName), NamedFiles.GetValueOrDefault(file.Name, RootFileReason));
         }
 
-        foreach (var survivor in survey.Root.Survivors.Concat(survey.Root.Declined))
+        foreach (var survivor in survey.Root.Survivors(_declarations).Concat(survey.Root.Declined))
         {
             yield return survivor;
         }

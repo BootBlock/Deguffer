@@ -62,13 +62,19 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     ];
 
     private readonly ISystemDirectories _system;
+    private readonly RowDeclarations _declarations;
 
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child another row removes from a folder this row
+    /// walks is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     public GradleCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -76,6 +82,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             scanner ?? DirectoryScanner.Default)
     {
         _system = system ?? SystemDirectories.Current;
+        _declarations = declarations ?? new RowDeclarations();
     }
 
     public override string Id => "gradle";
@@ -177,7 +184,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
         var walk = CacheLevelWalk.Under(Levels, home, ct);
 
-        List<PlanNote> notes = [.. walk.Notes, .. walk.Survivors.Select(CacheLevelWalk.SparedNote)];
+        List<PlanNote> notes = [.. walk.Notes, .. walk.Survivors(_declarations).Select(CacheLevelWalk.SparedNote)];
 
         var (steps, measured) = await PlanDeletionsAsync(walk.Targets, keep, ct).ConfigureAwait(false);
 
@@ -212,8 +219,9 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// the walk spared or declined is named as well: <c>jdks</c>, <c>native</c> and <c>daemon</c> are
     /// siblings of the two targets, which is exactly where an over-broad rule takes one with the other.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(string home, LevelWalk walk) => Protect(
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string home, LevelWalk walk) => Protect(
         walk,
+        _declarations,
         [
             (home, "The Gradle user home itself must survive — only its known-disposable children are removed."),
             .. Configuration.Select(file => (Path.Combine(home, file.Name), file.Reason)),

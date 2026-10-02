@@ -115,21 +115,30 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     private static readonly DisposableChildSet WebStorageChildren = new([]);
 
     private readonly VsCodeUserDataDiscovery _discovery;
+    private readonly RowDeclarations _declarations;
     private IReadOnlyList<Editor>? _installed;
     private IReadOnlyList<Editor>? _withCaches;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child another row removes from a folder this row
+    /// walks is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     public VsCodeCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new VsCodeUserDataDiscovery(Environment);
+    {
+        _discovery = new VsCodeUserDataDiscovery(Environment);
+        _declarations = declarations ?? new RowDeclarations();
+    }
 
     public override string Id => "vscode-cache";
 
@@ -283,13 +292,14 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
             }
 
             var walk = CacheLevelWalk.Under(LevelsOf(editor), folder, ct);
+            var spares = walk.Survivors(_declarations);
 
             targets.AddRange(walk.Targets.Select(target => target with { Group = editor.UserData.Name }));
             declined.AddRange(walk.Declined);
-            survivors.AddRange(walk.Survivors);
+            survivors.AddRange(spares);
             notes.AddRange(walk.Notes);
 
-            spared += walk.Spared;
+            spared += spares.Count;
             unreadable |= walk.Unreadable;
 
             // One note per editor rather than one per spared child. A user-data folder holds dozens

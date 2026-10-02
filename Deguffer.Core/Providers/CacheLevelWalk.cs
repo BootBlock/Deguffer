@@ -44,7 +44,6 @@ public static class CacheLevelWalk
         var survivors = new List<(string Path, string Reason)>();
         var notes = new List<PlanNote>();
 
-        var spared = 0;
         var emptiedAContainer = false;
         var unreadable = false;
 
@@ -113,12 +112,11 @@ public static class CacheLevelWalk
                 else
                 {
                     survivors.Add((path, classification.Reason));
-                    spared++;
                 }
             }
         }
 
-        return new LevelWalk(targets, declined, survivors, notes, spared, emptiedAContainer, unreadable);
+        return new LevelWalk(targets, declined, survivors, notes, emptiedAContainer, unreadable);
 
         void Decline(string path)
         {
@@ -158,14 +156,11 @@ public static class CacheLevelWalk
 /// notes: a declined link is a spared sibling of a targeted directory, which is the case §5.6's
 /// negative exists to cover.
 /// </param>
-/// <param name="Survivors">Every child classified Tier 4, with the reason the user is shown.</param>
-/// <param name="Notes">What the walk has to say: a link it declined, a directory it could not list.</param>
-/// <param name="Spared">
-/// How many children were spared. Counted here rather than from the length of
-/// <paramref name="Survivors"/>, which a caller also fills with the root, its parent and named
-/// files — a total including those would tell the user that items were left alone in a folder that
-/// may not hold them.
+/// <param name="Unrecognised">
+/// Every child classified Tier 4, with the reason the user is shown. Not yet what a plan asserts:
+/// <see cref="Survivors"/> is.
 /// </param>
+/// <param name="Notes">What the walk has to say: a link it declined, a directory it could not list.</param>
 /// <param name="EmptiedAContainer">
 /// Whether a target came from inside a level below the root. Such a directory is kept, so without
 /// this the user sees it still standing and cannot tell that the cache inside it went.
@@ -182,8 +177,24 @@ public static class CacheLevelWalk
 public readonly record struct LevelWalk(
     IReadOnlyList<DeletionTarget> Targets,
     IReadOnlyList<(string Path, string Reason)> Declined,
-    IReadOnlyList<(string Path, string Reason)> Survivors,
+    IReadOnlyList<(string Path, string Reason)> Unrecognised,
     IReadOnlyList<PlanNote> Notes,
-    int Spared,
     bool EmptiedAContainer,
-    bool Unreadable);
+    bool Unreadable)
+{
+    /// <summary>
+    /// The children this walk spared that no row offers, which are what a plan asserts survived and
+    /// what it counts as left alone. A child another row offers is that row's to take. See
+    /// <see cref="RowDeclarations"/>.
+    ///
+    /// <para>Asked while the plan is built, never during the walk. A row may declare what its own
+    /// walk found, as Claude Code's leftovers row does, so reading every row's declarations from
+    /// inside a walk would ask that row for a declaration it is still building.</para>
+    /// </summary>
+    public IReadOnlyList<(string Path, string Reason)> Survivors(RowDeclarations declarations)
+    {
+        ArgumentNullException.ThrowIfNull(declarations);
+
+        return [.. Unrecognised.Where(child => !declarations.OfferedByARow(child.Path))];
+    }
+}

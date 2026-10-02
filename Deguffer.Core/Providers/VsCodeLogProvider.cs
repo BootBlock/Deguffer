@@ -57,20 +57,29 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
     ]);
 
     private readonly VsCodeUserDataDiscovery _discovery;
+    private readonly RowDeclarations _declarations;
     private IReadOnlyList<VsCodeUserData>? _editors;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child another row removes from a folder this row
+    /// walks is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     public VsCodeLogProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default)
-        => _discovery = new VsCodeUserDataDiscovery(Environment);
+    {
+        _discovery = new VsCodeUserDataDiscovery(Environment);
+        _declarations = declarations ?? new RowDeclarations();
+    }
 
     public override string Id => "vscode-logs";
 
@@ -181,20 +190,21 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
                 .Select(n => (Path.Combine(editor.Path, n.RelativePath), n.Reason)));
 
             var walk = CacheLevelWalk.Under([new CacheLevel(string.Empty, FolderChildren)], editor.Path, ct);
+            var spares = walk.Survivors(_declarations);
 
             targets.AddRange(walk.Targets.Select(target => target with { Group = editor.Name }));
             declined.AddRange(walk.Declined);
-            survivors.AddRange(walk.Survivors);
+            survivors.AddRange(spares);
             notes.AddRange(walk.Notes);
 
             unreadable |= walk.Unreadable;
 
-            if (walk.Spared > 0)
+            if (spares.Count > 0)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In '{editor.Name}', {walk.Spared} other "
-                    + $"{(walk.Spared == 1 ? "item is" : "items are")} left alone beside the logs. "
+                    $"In '{editor.Name}', {spares.Count} other "
+                    + $"{(spares.Count == 1 ? "item is" : "items are")} left alone beside the logs. "
                     + "The editor's caches are offered separately, and your settings, workspace state "
                     + "and local file history are never offered at all."));
             }

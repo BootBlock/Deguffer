@@ -84,18 +84,27 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, [], []);
 
     private readonly PoetryDiscovery _discovery;
+    private readonly RowDeclarations _declarations;
 
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child another row removes from a folder this row
+    /// walks is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     public PoetryCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default) =>
+            scanner ?? DirectoryScanner.Default)
+    {
         _discovery = new PoetryDiscovery(Runner);
+        _declarations = declarations ?? new RowDeclarations();
+    }
 
     public override string Id => "poetry";
 
@@ -359,6 +368,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         LevelWalk walk,
         IReadOnlyList<(string Path, string Reason)> withheld) => Protect(
         walk,
+        _declarations,
         [
             (cacheRoot, "Poetry's cache directory must survive — only the caches within it are cleared."),
             (environments, "Every virtual environment Poetry has created. Each is a full install, not a cache."),
@@ -384,7 +394,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <para><c>Withheld</c> is a recognised child that holds the configured environments. It is
     /// spared as surely as a Tier 4 child, so §5.6 names it alongside the walk's own survivors.</para>
     /// </summary>
-    private static (IReadOnlyList<DeletionTarget> Targets, LevelWalk Walk, IReadOnlyList<(string Path, string Reason)> Withheld)
+    private (IReadOnlyList<DeletionTarget> Targets, LevelWalk Walk, IReadOnlyList<(string Path, string Reason)> Withheld)
         CollectTargets(
         string cacheRoot,
         string environments,
@@ -394,7 +404,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         var walk = CacheLevelWalk.Under(Levels, cacheRoot, ct);
 
         notes.AddRange(walk.Notes);
-        notes.AddRange(walk.Survivors.Select(CacheLevelWalk.SparedNote));
+        notes.AddRange(walk.Survivors(_declarations).Select(CacheLevelWalk.SparedNote));
 
         var targets = new List<DeletionTarget>();
         var withheld = new List<(string Path, string Reason)>();

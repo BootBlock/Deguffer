@@ -81,21 +81,13 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         ("Web Data", "Saved addresses and payment cards."),
     ];
 
-    /// <summary>
-    /// The table of every row built on this class, so each can tell what its sibling removes.
-    /// Pinned by a test to name every subclass. A row outside this class that removes something in
-    /// the same folders, such as the VS Code editor's, is not in it, and its removals are still
-    /// asserted against.
-    /// </summary>
-    internal static readonly IReadOnlyList<IReadOnlyList<CacheLevel>> Family =
-        [ChromiumCacheProvider.Levels, ChromiumServiceWorkerStorageProvider.Levels];
-
     /// <summary>Why a folder a running program is using is asserted to survive whole.</summary>
     private const string InUseReason =
         "A running program is using this folder, so nothing inside it is removed.";
 
     private readonly ChromiumUserDataDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
+    private readonly RowDeclarations _declarations;
     private IReadOnlyList<ChromiumUserData>? _applications;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
@@ -103,13 +95,18 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// Shared between the rows that look inside the same folders, so one planning pass walks both
     /// application-data roots once. A row built without one finds the folders for itself.
     /// </param>
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child the other Chromium row or a VS Code row
+    /// removes from the same folder is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     protected ChromiumUserDataProvider(
         IUserEnvironment? environment,
         IProcessRunner? runner,
         IProcessInspector? inspector,
         IDirectoryScanner? scanner,
         ILiveTreeInspector? liveTrees,
-        ChromiumUserDataDiscovery? discovery)
+        ChromiumUserDataDiscovery? discovery,
+        RowDeclarations? declarations)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -118,6 +115,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     {
         _discovery = discovery ?? new ChromiumUserDataDiscovery(Environment);
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
+        _declarations = declarations ?? new RowDeclarations();
     }
 
     public sealed override StepGrain Grain => StepGrain.Parts;
@@ -301,7 +299,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 }
 
                 var walk = CacheLevelWalk.Under(CacheLevels, profile, ct);
-                var spares = walk.Survivors.Where(s => !IsSiblingRowsToRemove(profile, s.Path)).ToList();
+                var spares = walk.Survivors(_declarations);
 
                 // Listed under the application and the profile, because those are what a reader
                 // knows: nobody chooses between 'Code Cache' folders by name.
@@ -393,26 +391,6 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
             WasNotExamined = targets.Count == 0 && (declined.Count > 0 || live.Live.Count > 0),
         };
     }
-
-    /// <summary>
-    /// Whether <paramref name="path"/>, a child this row's walk spared under <paramref name="profile"/>,
-    /// is one the other Chromium row removes.
-    ///
-    /// <para><b>An entry a sibling row removes is left out of this row's survivors, and it is not
-    /// counted as left alone.</b> It is that row's to take, so a run with both rows ticked removes it
-    /// legitimately, and asserting it here would report every such run as a §5.6 failure. Decided from
-    /// the sibling's declared table, never from what a run happens to target: a sibling rule that
-    /// reached a name its table does not offer is still caught here. The temporary-folder row leaves
-    /// out what a tenant row owns on the same reasoning.</para>
-    /// </summary>
-    private bool IsSiblingRowsToRemove(string profile, string path) =>
-        Family
-            .Where(table => !ReferenceEquals(table, CacheLevels))
-            .SelectMany(table => table)
-            .Any(level =>
-                Path.GetDirectoryName(path) is { } parent
-                && parent.Equals(level.Resolve(profile), StringComparison.OrdinalIgnoreCase)
-                && level.Children.IsDisposable(Path.GetFileName(path)));
 
     /// <summary>
     /// Whether any name this row offers is on disk for this application, by probing the table rather
