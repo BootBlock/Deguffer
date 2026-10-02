@@ -505,7 +505,9 @@ public sealed class ChromiumWebView2Tests : IDisposable
             result.Steps,
             step => step.Message == "Nothing was removed: Deguffer could not tell whether a running program is using this.");
         Assert.True(File.Exists(Path.Combine(userData, "Local State")));
-        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.Contains(result.Verification!.Checks, c =>
+            c.Subject.Equals(cache, StringComparison.OrdinalIgnoreCase) && c.Outcome == VerificationOutcome.Survived);
+        Assert.True(result.Verification.Passed, result.Verification.Summary);
     }
 
     /// <summary>

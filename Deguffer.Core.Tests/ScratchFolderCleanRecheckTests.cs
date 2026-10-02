@@ -15,6 +15,10 @@ namespace Deguffer.Core.Tests;
 /// presses, and then cleans. Everything runs against an invented profile and Windows directory
 /// through <see cref="FakeUserEnvironment"/>, <see cref="FakeSystemDirectories"/> and
 /// <see cref="FakeLiveTreeInspector"/>.</para>
+///
+/// <para>The rest have the inspector stop answering in full between the two presses, or answer in
+/// part at both. A clean that cannot read what the preview read leaves the entries standing, and one
+/// that reads what the preview read removes them as planned.</para>
 /// </summary>
 public sealed class ScratchFolderCleanRecheckTests : IDisposable
 {
@@ -163,7 +167,7 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
         var provider = TemporaryFilesRow();
         var plan = await provider.PlanAsync();
 
-        Assert.Contains(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+        Assert.Empty(Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp).Spared);
 
         _liveTrees.CannotTellFromNow();
 
@@ -174,7 +178,15 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
         Assert.Contains(
             result.Steps,
             step => step.Message == "Nothing was removed: Deguffer could not tell whether a running program is using this.");
-        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+
+        // Twice: once as the folder the plan empties in place, and once as the step the clean held back.
+        var checks = result.Verification!.Checks
+            .Where(c => c.Subject.Equals(UserTemp, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.Equal(2, checks.Count);
+        Assert.All(checks, check => Assert.Equal(VerificationOutcome.Survived, check.Outcome));
+        Assert.True(result.Verification.Passed, result.Verification.Summary);
     }
 
     /// <summary>
@@ -225,6 +237,29 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
             result.Steps,
             step => step.Message == "Nothing was removed: Deguffer could not tell whether a running program is using this.");
         AssertProvedStanding(result, profile);
+    }
+
+    /// <summary>
+    /// The same for a profile the plan offered on a partial answer, which the same answer at the clean
+    /// does not refuse. The temporary folder holding it survives.
+    /// </summary>
+    [Fact]
+    public async Task AProfileOfferedOnAPartialAnswerIsRemovedOnTheSameAnswer()
+    {
+        var profile = AbandonedProfile("playwright_chromiumdev_profile-a1B2c3");
+
+        _liveTrees.CannotTellFromNow();
+
+        var provider = TestProfilesRow();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(profile, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(profile), "a profile the preview offered on a partial answer was kept on the same answer");
+        Assert.True(Directory.Exists(UserTemp), "the temporary folder holding a removed profile was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     private static void AssertProvedStanding(CleanupResult result, string path)

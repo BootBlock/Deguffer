@@ -17,6 +17,10 @@ namespace Deguffer.Core.Tests;
 /// §5.6 proves it survived, and the one beside it that nothing took up is still removed. Everything
 /// runs against an invented tree through <see cref="FakeUserEnvironment"/> and
 /// <see cref="FakeLiveTreeInspector"/>.</para>
+///
+/// <para>The rest have the inspector stop answering in full between the two presses, or answer in
+/// part at both. A clean that cannot read what the preview read leaves the directory standing, and
+/// one that reads what the preview read removes it as planned.</para>
 /// </summary>
 public sealed class LiveTreeCleanRecheckTests : IDisposable
 {

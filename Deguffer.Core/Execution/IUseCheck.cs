@@ -32,9 +32,10 @@ public interface IUseCheck
     ///
     /// <para>Where the question cannot be asked in full now and the plan's answer was whole, the answer
     /// names the step's own path with that reason: a question that could not be asked is not a clear
-    /// answer, and the step was offered on one that could. Each check remembers which answer its plan
-    /// had, because only the check can. Where the plan's answer was partial too, it offered the step on
-    /// that answer and said so in a note, and the step runs as planned.</para>
+    /// answer, and the step was offered on one that could. A check whose question can come back partial
+    /// remembers which answer its plan had, because only the check can. Where the plan's answer was
+    /// partial too, it offered the step on that answer and said so in a note, and the step runs as
+    /// planned.</para>
     /// </summary>
     IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct);
 }
