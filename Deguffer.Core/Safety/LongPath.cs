@@ -15,10 +15,16 @@ public static partial class LongPath
 {
     private const string DevicePrefix = @"\\?\";
     private const string UncDevicePrefix = @"\\?\UNC\";
+    private const string ObjectManagerPrefix = @"\??\";
 
     /// <summary>
     /// A path with any 8.3 alias in it expanded to the name the filesystem stores, in display form.
-    /// Null in, null out, and unchanged for a path carrying no alias or one that no longer resolves.
+    /// Null in, null out, and only put in display form for a path carrying no alias or one that no
+    /// longer resolves.
+    ///
+    /// <para>Display form on every answer, because the other side of each comparison is in it. A
+    /// program may name its directory <c>\\?\C:\build</c> or <c>\\.\C:\build</c>, and handed back as
+    /// it arrived, that compared as though it were outside <c>C:\build</c>.</para>
     ///
     /// <para><b>This is a safety seam, not tidiness.</b> Whether a directory is in use is decided by
     /// asking whether a path a program holds sits inside it, and that test is a string comparison. A
@@ -40,21 +46,28 @@ public static partial class LongPath
     [return: NotNullIfNotNull(nameof(path))]
     public static string? Unaliased(string? path)
     {
-        if (path is null || !path.Contains('~', StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(path))
         {
             return path;
         }
 
         try
         {
-            var extended = Extended(path);
+            var shown = Display(path);
+
+            if (!shown.Contains('~', StringComparison.Ordinal))
+            {
+                return shown;
+            }
+
+            var extended = Extended(shown);
             var length = GetLongPathName(extended, null, 0);
 
             if (length == 0)
             {
                 // The path has gone, or this account may not resolve it. The short form is then the
                 // best answer available, and it is the one that was already being used.
-                return path;
+                return shown;
             }
 
             var buffer = new char[length];
@@ -65,7 +78,7 @@ public static partial class LongPath
             // changed between the two calls, and the original is the honest answer to both.
             return written > 0 && written < length
                 ? Display(new string(buffer, 0, (int)written))
-                : path;
+                : shown;
         }
         catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
         {
@@ -87,9 +100,11 @@ public static partial class LongPath
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        if (path.StartsWith(DevicePrefix, StringComparison.Ordinal))
+        var device = DeviceForm(path);
+
+        if (device.StartsWith(DevicePrefix, StringComparison.Ordinal))
         {
-            return path;
+            return device;
         }
 
         var full = Path.GetFullPath(path);
@@ -172,7 +187,8 @@ public static partial class LongPath
     }
 
     /// <summary>
-    /// Strip the extended-length prefix, for display and comparison.
+    /// Strip the extended-length prefix, for display and comparison. Any other device-namespace
+    /// spelling is first read as the <c>\\?\</c> form it names (see <see cref="DeviceForm"/>).
     ///
     /// <para><b>Only where what is left is still a path.</b> The prefix comes off
     /// <c>\\?\C:\cache</c> and <c>\\?\UNC\server\share</c> because <c>C:\cache</c> and
@@ -193,9 +209,15 @@ public static partial class LongPath
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        path = DeviceForm(path);
+
         if (path.StartsWith(UncDevicePrefix, StringComparison.Ordinal))
         {
-            return @"\\" + path[UncDevicePrefix.Length..];
+            // A share whose server is named "." or "?" would read back as a device path, which is a
+            // different location from the one this names, so it keeps its prefix.
+            var share = @"\\" + path[UncDevicePrefix.Length..];
+
+            return IsDeviceSpelling(share) ? path : share;
         }
 
         if (!path.StartsWith(DevicePrefix, StringComparison.Ordinal))
@@ -207,6 +229,57 @@ public static partial class LongPath
 
         return Path.IsPathFullyQualified(stripped) ? stripped : path;
     }
+
+    /// <summary>
+    /// Any spelling of a device-namespace path in the one form <c>\\?\</c> spells it, and anything
+    /// else unchanged, so the callers above classify a single shape rather than four.
+    ///
+    /// <para><b>Windows reads each of these as a path, and so does
+    /// <see cref="Path.IsPathFullyQualified(string)"/></b>, so a configured value can arrive in any of
+    /// them. Classified as they arrived, <c>\\.\C:\cache</c> starts with two separators and became
+    /// <c>\\?\UNC\.\C:\cache</c>, a share named <c>.</c> that is never there, and
+    /// <c>//?/C:/cache</c> came back from <see cref="Configured"/> still prefixed, so comparing it
+    /// with a display-form path matched nothing. The first reported a cache that was there as "not
+    /// installed". The second walked past a caller's check that a configured folder does not hold a
+    /// temporary folder, where other rows remove things.</para>
+    ///
+    /// <para><c>\\.\</c>, and <c>\\?\</c> spelled with any forward slash, are normalised by Win32
+    /// before they are opened, and <see cref="Path.GetFullPath(string)"/> applies that same
+    /// normalisation, so the result names what Windows would have opened. Neither form can resolve
+    /// against a working directory, which is what makes the call safe here. <c>\??\</c> is the
+    /// object manager's own prefix, which Win32 passes through as literally as <c>\\?\</c>, so it is
+    /// renamed and nothing else.</para>
+    /// </summary>
+    private static string DeviceForm(string path)
+    {
+        if (path.StartsWith(DevicePrefix, StringComparison.Ordinal))
+        {
+            return path;
+        }
+
+        if (path.StartsWith(ObjectManagerPrefix, StringComparison.Ordinal))
+        {
+            return DevicePrefix + path[ObjectManagerPrefix.Length..];
+        }
+
+        return IsDeviceSpelling(path)
+            ? DevicePrefix + Path.GetFullPath(path)[DevicePrefix.Length..]
+            : path;
+    }
+
+    /// <summary>
+    /// Whether Win32 reads <paramref name="path"/> as a device path: two separators, <c>.</c> or
+    /// <c>?</c>, and a separator, in any mix of slashes. The same test .NET applies.
+    /// </summary>
+    private static bool IsDeviceSpelling(string path) =>
+        path.Length >= DevicePrefix.Length
+        && IsSeparator(path[0])
+        && IsSeparator(path[1])
+        && path[2] is '.' or '?'
+        && IsSeparator(path[3]);
+
+    private static bool IsSeparator(char c) =>
+        c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar;
 
     /// <summary>
     /// What Windows says is at <paramref name="path"/>, keeping "nothing is there" apart from

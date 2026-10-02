@@ -564,6 +564,30 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// A path named in a device spelling is compared as the folder it names. A program may be handed
+    /// <c>\\?\</c> or <c>\\.\</c> to reach past <c>MAX_PATH</c>, and read as it arrived, that path was
+    /// outside every display-form folder, so the veto missed an entry somebody was using.
+    ///
+    /// <para><c>\\.\</c> discriminates on every machine. <c>\\?\</c> discriminates only where the
+    /// temporary folder carries no 8.3 alias, because a path with one was already put in display
+    /// form when its alias was expanded.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\?\")]
+    [InlineData(@"\\.\")]
+    public void NamesTheChildAProgramWasStartedWithInADeviceSpelling(string prefix)
+    {
+        var scratch = _temp.CreateDirectory("Temp");
+        var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-g7H8i9");
+
+        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={prefix}{profile}");
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The other side of the same comparison: a scratch folder asked about in its 8.3 form still
     /// finds the child a program named in full, and names it under the folder as it was asked. A
     /// temporary folder named in short form by a setting is where the question arrives like this.

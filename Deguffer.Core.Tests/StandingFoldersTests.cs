@@ -91,6 +91,23 @@ public sealed class StandingFoldersTests : IDisposable
         Assert.NotNull(WhyNotTaken(LongPath.Extended(downloads) + Path.DirectorySeparatorChar));
     }
 
+    /// <summary>
+    /// A path may name the folder in any device-namespace spelling Windows accepts. Before they were
+    /// read as the folder they name, <c>//?/</c>, <c>\\.\</c> and <c>\??\</c> compared equal to
+    /// nothing here, and <see cref="LongPath.Configured"/> handed <c>//?/</c> on still prefixed, so
+    /// any comparison made without <see cref="LongPath.Display"/> missed it.
+    /// </summary>
+    [Fact]
+    public void RecognisesTheFolderInEveryDeviceSpelling()
+    {
+        var downloads = Path.Combine(_environment.UserProfile, "Downloads");
+
+        Assert.NotNull(WhyNotTaken(@"\\.\" + downloads));
+        Assert.NotNull(WhyNotTaken(@"\??\" + downloads));
+        Assert.NotNull(WhyNotTaken("//?/" + downloads.Replace('\\', '/')));
+        Assert.Equal(downloads, LongPath.Configured("//?/" + downloads.Replace('\\', '/')));
+    }
+
     [Fact]
     public void RefusesADriveRoot()
     {

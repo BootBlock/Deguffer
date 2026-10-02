@@ -165,13 +165,13 @@ public sealed class WindowsServicing : IWindowsServicing
     /// <summary>
     /// The paths in one pending-operations value: pairs of source and destination, each in the NT form
     /// <c>\??\C:\...</c>, a destination prefixed <c>!</c> to replace an existing file, and an empty
-    /// destination for a delete.
+    /// destination for a delete. <see cref="LongPath.Display"/> reads the NT form, including the
+    /// <c>\??\UNC\</c> form of a share.
     /// </summary>
     internal static IEnumerable<string> Operations(object? value) =>
         (value as string[] ?? [])
             .Select(entry => entry.TrimStart('!'))
             .Where(entry => entry.Length > 0)
-            .Select(entry => entry.StartsWith(@"\??\", StringComparison.Ordinal) ? entry[4..] : entry)
             .Where(Path.IsPathFullyQualified)
             .Select(LongPath.Display);
 }

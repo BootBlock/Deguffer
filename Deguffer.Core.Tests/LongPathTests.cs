@@ -75,6 +75,64 @@ public class LongPathTests
     }
 
     /// <summary>
+    /// Every spelling Windows accepts for a device-namespace path comes out in the one form the
+    /// rest of the code classifies, and <see cref="LongPath.Display"/>, <see cref="LongPath.Configured"/>
+    /// and <see cref="LongPath.Extended"/> agree on it.
+    ///
+    /// <para><see cref="Path.IsPathFullyQualified(string)"/> accepts all of these, so a configured
+    /// value can arrive as any of them. Classified as they arrived, <c>\\.\C:\</c> and <c>\??\C:\</c>
+    /// became <c>\\?\UNC\.\C:\</c> and <c>\\?\\??\C:\</c>, which name nothing, and <c>//?/C:/</c>
+    /// left <see cref="LongPath.Configured"/> still prefixed, so no display-form comparison matched
+    /// it.</para>
+    ///
+    /// <para><c>\\.\C:</c> with no separator is the volume itself rather than its top folder, and a
+    /// share whose server is <c>.</c> would read back as a device path, so both keep the prefix. The
+    /// volume GUID is invented.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\.\C:\Windows", @"C:\Windows", @"\\?\C:\Windows")]
+    [InlineData(@"//?/C:/Windows", @"C:\Windows", @"\\?\C:\Windows")]
+    [InlineData(@"\\?/C:/Windows", @"C:\Windows", @"\\?\C:\Windows")]
+    [InlineData(@"//./C:/Windows", @"C:\Windows", @"\\?\C:\Windows")]
+    [InlineData(@"\??\C:\Windows", @"C:\Windows", @"\\?\C:\Windows")]
+    [InlineData(@"\\.\C:\Windows\..\Temp", @"C:\Temp", @"\\?\C:\Temp")]
+    [InlineData(@"\\.\C:\", @"C:\", @"\\?\C:\")]
+    [InlineData(@"\\.\UNC\server\share\cache", @"\\server\share\cache", @"\\?\UNC\server\share\cache")]
+    [InlineData(@"\??\UNC\server\share\cache", @"\\server\share\cache", @"\\?\UNC\server\share\cache")]
+    [InlineData(@"//?/UNC/server/share/cache", @"\\server\share\cache", @"\\?\UNC\server\share\cache")]
+    [InlineData(
+        @"\\.\Volume{11111111-2222-3333-4444-555555555555}\FileHistory",
+        @"\\?\Volume{11111111-2222-3333-4444-555555555555}\FileHistory",
+        @"\\?\Volume{11111111-2222-3333-4444-555555555555}\FileHistory")]
+    [InlineData(@"\\.\C:", @"\\?\C:", @"\\?\C:")]
+    [InlineData(@"\\?\UNC\.\C:\Windows", @"\\?\UNC\.\C:\Windows", @"\\?\UNC\.\C:\Windows")]
+    public void ReadsEveryDeviceSpellingAsTheLocationWindowsOpens(
+        string spelled, string display, string extended)
+    {
+        Assert.Equal(display, LongPath.Display(spelled));
+        Assert.Equal(extended, LongPath.Extended(spelled));
+        Assert.Equal(Path.TrimEndingDirectorySeparator(display), LongPath.Configured(spelled));
+
+        // The three agree, so a path that has been through one can go through another unmoved.
+        Assert.Equal(extended, LongPath.Extended(display));
+        Assert.Equal(display, LongPath.Display(extended));
+    }
+
+    /// <summary>
+    /// <see cref="LongPath.Unaliased"/> answers in display form whether or not the path carries an
+    /// alias, because the in-use check compares what it returns with display-form folders. The
+    /// paths are invented and carry no <c>~</c>, so nothing is asked of the disk.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\?\D:\build", @"D:\build")]
+    [InlineData(@"\\.\D:\build", @"D:\build")]
+    [InlineData(@"\??\D:\build", @"D:\build")]
+    [InlineData(@"\\?\UNC\server\share\build", @"\\server\share\build")]
+    [InlineData(@"D:\build", @"D:\build")]
+    public void AnswersInDisplayFormForAPathWithNoAlias(string held, string expected) =>
+        Assert.Equal(expected, LongPath.Unaliased(held));
+
+    /// <summary>
     /// The assumption every other long-path test in this suite rests on, made falsifiable.
     ///
     /// <para>.NET prepends <c>\\?\</c> itself to any path of 260 characters or more before it calls
