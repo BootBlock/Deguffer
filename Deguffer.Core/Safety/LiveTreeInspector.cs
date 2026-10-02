@@ -27,7 +27,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
         var table = Snapshot(ct);
         var live = new List<LiveTree>();
-        var complete = table.CurrentDirectoriesReadable;
+        var complete = table.ImagePathsReadable && table.CurrentDirectoriesReadable;
 
         foreach (var candidate in candidates)
         {
@@ -113,7 +113,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             Record(holders, process.CurrentDirectory, $"{process.Name} is working in it");
         }
 
-        return Findings(holders, table.CurrentDirectoriesReadable);
+        return Findings(holders, table.ImagePathsReadable && table.CurrentDirectoriesReadable);
     }
 
     /// <summary>

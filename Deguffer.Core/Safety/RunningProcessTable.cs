@@ -6,7 +6,9 @@ namespace Deguffer.Core.Safety;
 /// shared host that executable is not even the application's.
 /// </param>
 /// <param name="Name">The process name, for telling the user what to close.</param>
-/// <param name="ImagePath">Where its executable lives, or null where that could not be read.</param>
+/// <param name="ImagePath">
+/// Where its executable lives, or null where that could not be read or put in a form that compares.
+/// </param>
 /// <param name="CurrentDirectory">Its working directory, or null where that could not be read.</param>
 /// <param name="PathArguments">
 /// The full paths it was started with as arguments, empty where it was given none or its command
@@ -24,6 +26,11 @@ internal sealed record RunningProcess(
     IReadOnlyList<string> PathArguments);
 
 /// <param name="Processes">Every process this account was allowed to look at.</param>
+/// <param name="ImagePathsReadable">
+/// Whether every executable path that was read could be put in a form that compares. False means
+/// one could not, so its <see cref="RunningProcess.ImagePath"/> is null although the program runs
+/// from somewhere, and a null image path is not evidence that nothing runs from a directory.
+/// </param>
 /// <param name="CurrentDirectoriesReadable">
 /// Whether every working directory that was read can be trusted. False means the layout self-check
 /// failed, so every <see cref="RunningProcess.CurrentDirectory"/> is null because nothing could be
@@ -39,6 +46,7 @@ internal sealed record RunningProcess(
 /// </param>
 internal sealed record ProcessTable(
     IReadOnlyList<RunningProcess> Processes,
+    bool ImagePathsReadable,
     bool CurrentDirectoriesReadable,
     bool CommandLinesReadable);
 
@@ -80,8 +88,16 @@ internal static class RunningProcessTable
         var readable = LayoutIsSound(calls);
         var verified = readable;
         var commandLines = CommandLinesAreReadable(calls);
+        var imagesWhole = true;
         var argumentsWhole = true;
         var processes = new List<RunningProcess>();
+
+        // One program is many processes started with the same paths, and a path carrying an alias
+        // costs a walk up the disk to put in canonical form, so each spelling is put in it once.
+        var known = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+        string? Canonical(string path) =>
+            known.TryGetValue(path, out var canonical) ? canonical : known[path] = LongPath.Canonical(path);
 
         foreach (var (id, name) in calls.List())
         {
@@ -100,7 +116,9 @@ internal static class RunningProcessTable
                 ? ProcessWorkingDirectory.Of(memory)
                 : WorkingDirectoryRead.Unread;
 
-            var working = directory.Directory is { } read ? LongPath.Canonical(read) : null;
+            var working = directory.Directory is { } read ? Canonical(read) : null;
+            var imageRead = process.ImagePath();
+            var image = imageRead is { } path ? Canonical(path) : null;
 
             // Only this process's directory is in doubt, so the others are still read.
             if (directory.LayoutUnverified || (directory.Directory is not null && working is null))
@@ -108,17 +126,22 @@ internal static class RunningProcessTable
                 verified = false;
             }
 
+            if (imageRead is not null && image is null)
+            {
+                imagesWhole = false;
+            }
+
             processes.Add(new RunningProcess(
                 id,
                 name,
-                process.ImagePath() is { } image ? LongPath.Canonical(image) : null,
+                image,
                 working,
                 commandLines && process.CommandLine() is { } line
-                    ? CanonicalArguments(line, ref argumentsWhole)
+                    ? CanonicalArguments(line, Canonical, ref argumentsWhole)
                     : []));
         }
 
-        return new ProcessTable(processes, verified, commandLines && argumentsWhole);
+        return new ProcessTable(processes, imagesWhole, verified, commandLines && argumentsWhole);
     }
 
     /// <summary>
@@ -126,13 +149,16 @@ internal static class RunningProcessTable
     /// compares as that folder. One that cannot be made canonical clears <paramref name="whole"/>
     /// rather than being compared as it arrived, where it would match nothing and read as unused.
     /// </summary>
-    private static IReadOnlyList<string> CanonicalArguments(string line, ref bool whole)
+    private static IReadOnlyList<string> CanonicalArguments(
+        string line,
+        Func<string, string?> canonicalOf,
+        ref bool whole)
     {
         var paths = new List<string>();
 
         foreach (var argument in CommandLinePaths.Of(line))
         {
-            if (LongPath.Canonical(argument) is { } canonical)
+            if (canonicalOf(argument) is { } canonical)
             {
                 paths.Add(canonical);
             }

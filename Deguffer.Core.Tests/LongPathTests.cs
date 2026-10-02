@@ -165,8 +165,8 @@ public class LongPathTests
     /// spelled. A program started with a log it has not written yet names a path whose last
     /// segment is missing, and <c>GetLongPathName</c> refuses the whole of such a path.
     ///
-    /// <para>The expected form is the folder's own, which exists and so was expanded before this
-    /// change too. <b>This proves nothing on a volume with 8.3 name creation disabled</b>, where the
+    /// <para>The expected form is the folder's own, which exists and so expands whole.
+    /// <b>This proves nothing on a volume with 8.3 name creation disabled</b>, where the
     /// fixture falls back to the ordinary path.</para>
     /// </summary>
     [Fact]
@@ -217,14 +217,25 @@ public class LongPathTests
     public void HasNoCanonicalFormForAnAliasWindowsWouldNotDescribe()
     {
         using var temp = new TempDirectory();
-        var hidden = temp.CreateDirectory("Locked", "run~1");
+        temp.CreateDirectory("Locked", "run~1");
         var named = Path.Combine(temp.Path, "Locked", ".", "run~1", "out.log");
 
         using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
 
         Assert.Null(LongPath.Canonical(named));
-        Assert.Equal(Path.Combine(hidden, "out.log"), LongPath.Unaliased(named));
+        Assert.Equal(Path.GetFullPath(named), LongPath.Unaliased(named));
     }
+
+    /// <summary>
+    /// A share that cannot be reached says nothing about what is on it, so a segment there that
+    /// carries a <c>~</c> may be an alias, and the path has no canonical form. The presence probe
+    /// reads the same answer, <c>ERROR_BAD_NETPATH</c>, as nothing being there, which is right for
+    /// it and would hand the alias back as canonical here. The server name is reserved, so it is
+    /// never reached.
+    /// </summary>
+    [Fact]
+    public void HasNoCanonicalFormForAnAliasOnAShareThatCannotBeReached() =>
+        Assert.Null(LongPath.Canonical(@"\\server.test\share\LONGPR~1\run-1"));
 
     /// <summary>
     /// The assumption every other long-path test in this suite rests on, made falsifiable.

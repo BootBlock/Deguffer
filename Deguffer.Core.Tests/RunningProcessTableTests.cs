@@ -181,6 +181,27 @@ public class RunningProcessTableTests
     }
 
     /// <summary>
+    /// An executable whose path cannot be made canonical turns the findings incomplete, so a
+    /// program that may be running from inside a build directory is not taken as no program.
+    /// </summary>
+    [Fact]
+    public void AnExecutableThatCannotBeMadeCanonicalTurnsTheFindingsIncomplete()
+    {
+        using var temp = new TempDirectory();
+        var hidden = temp.CreateDirectory("Locked", "run~1");
+        var calls = new FakeProcessTableCalls()
+            .With(FakeProcessTableCalls.Own)
+            .With(new FakeListedProcess { Id = 4327, Name = "app", ImagePath = Path.Combine(hidden, "app.exe") });
+
+        using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
+
+        var inspector = new LiveTreeInspector(calls);
+
+        Assert.False(inspector.FindLive([new LiveTreeQuery(hidden, hidden)]).Complete);
+        Assert.False(inspector.FindOccupiedDirectories().Complete);
+    }
+
+    /// <summary>
     /// A scratch folder that cannot be made canonical is still compared, and the answer says it may
     /// have missed a program using one of its entries.
     /// </summary>

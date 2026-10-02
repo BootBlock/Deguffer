@@ -649,8 +649,8 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// <summary>
     /// A file named in 8.3 form before it exists is compared as the folder it will be written in. A
     /// program is routinely started with a log it has not opened yet, and <c>GetLongPathName</c>
-    /// refuses a path whose last segment is missing, so the alias used to stay and the entry holding
-    /// the log read as unused until the file appeared.
+    /// refuses a path whose last segment is missing. Kept in its short form, the path is outside the
+    /// scratch folder, and the entry holding the log reads as unused until the file appears.
     ///
     /// <para>What discriminates is <c>Assert.Single</c>, as above. <b>This proves nothing on a
     /// volume with 8.3 name creation disabled</b>, where the fixture falls back to the ordinary
