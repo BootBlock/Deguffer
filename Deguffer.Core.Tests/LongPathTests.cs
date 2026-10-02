@@ -133,6 +133,111 @@ public class LongPathTests
         Assert.Equal(expected, LongPath.Unaliased(held));
 
     /// <summary>
+    /// <see cref="LongPath.Canonical"/> reads every spelling Windows opens as one folder as that
+    /// folder: either separator, a <c>.</c> or <c>..</c>, and the device prefix, alone or together.
+    /// The paths are invented and carry no <c>~</c>, so nothing is asked of the disk.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:/Users/testuser/AppData/Local/Temp/profile-1")]
+    [InlineData(@"C:\Users\testuser\AppData\Local\Temp\x\..\profile-1")]
+    [InlineData(@"C:\Users\testuser\AppData\Local\Temp\.\profile-1")]
+    [InlineData(@"\\?\C:\Users\testuser\AppData\Local\Temp\profile-1")]
+    [InlineData(@"\\?\C:\Users\testuser\AppData\Local\Temp\x\..\profile-1")]
+    [InlineData(@"//?/C:/Users/testuser/AppData/Local/Temp/profile-1")]
+    public void ReadsEverySpellingOfAFolderAsThatFolder(string spelled)
+    {
+        const string Folder = @"C:\Users\testuser\AppData\Local\Temp\profile-1";
+
+        Assert.Equal(Folder, LongPath.Canonical(spelled));
+        Assert.Equal(Folder, LongPath.Unaliased(spelled));
+    }
+
+    /// <summary>
+    /// A path that is not fully qualified has no canonical form, because finding one would resolve
+    /// it against a working directory nobody named.
+    /// </summary>
+    [Fact]
+    public void HasNoCanonicalFormForAPathThatIsNotFullyQualified() =>
+        Assert.Null(LongPath.Canonical(@"Temp\profile-1"));
+
+    /// <summary>
+    /// An alias is expanded on the part of the path that exists, and what follows it is kept as
+    /// spelled. A program started with a log it has not written yet names a path whose last
+    /// segment is missing, and <c>GetLongPathName</c> refuses the whole of such a path.
+    ///
+    /// <para>The expected form is the folder's own, which exists and so expands whole.
+    /// <b>This proves nothing on a volume with 8.3 name creation disabled</b>, where the
+    /// fixture falls back to the ordinary path.</para>
+    /// </summary>
+    [Fact]
+    public void ExpandsAnAliasAboveASegmentThatDoesNotExistYet()
+    {
+        using var temp = new TempDirectory();
+        var run = temp.CreateDirectory("Run-Folder-Long");
+        var asNamed = ShortPath.Of(run) ?? run;
+
+        Assert.DoesNotContain("~", LongPath.Unaliased(run), StringComparison.Ordinal);
+        Assert.Equal(
+            Path.Combine(LongPath.Unaliased(run), "logs", "out.log"),
+            LongPath.Canonical(Path.Combine(asNamed, "logs", "out.log")),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The same for a path through a volume's GUID name, which is where the walk up the path does
+    /// the expanding. <see cref="Path.GetFullPath(string)"/> expands the aliases in the part of a
+    /// drive-letter path that exists, as an undocumented part of its work, and the test above
+    /// cannot tell the two apart. It leaves a path that keeps its device prefix alone.
+    ///
+    /// <para><b>This proves nothing on a volume with 8.3 name creation disabled</b>, where the
+    /// fixture falls back to the ordinary path.</para>
+    /// </summary>
+    [Fact]
+    public void ExpandsAnAliasAboveAMissingSegmentThroughAVolumeName()
+    {
+        using var temp = new TempDirectory();
+        var run = temp.CreateDirectory("Run-Folder-Long");
+        var asNamed = ShortPath.Of(run) ?? run;
+        var mount = VolumeCalls.MountPointOf(run)!;
+        var volume = VolumeCalls.Names().First(name =>
+            VolumeCalls.MountPointsOf(name).Contains(mount, StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal(
+            Path.Combine(volume + LongPath.Unaliased(run)[mount.Length..], "logs", "out.log"),
+            LongPath.Canonical(Path.Combine(volume + asNamed[mount.Length..], "logs", "out.log")),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A segment carrying a <c>~</c> that Windows would not describe has no canonical form, because
+    /// it may be an alias for anything. <see cref="LongPath.Unaliased"/>, which has no way to say
+    /// so, gives back the spelling it was handed in full form.
+    /// </summary>
+    [Fact]
+    public void HasNoCanonicalFormForAnAliasWindowsWouldNotDescribe()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateDirectory("Locked", "run~1");
+        var named = Path.Combine(temp.Path, "Locked", ".", "run~1", "out.log");
+
+        using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
+
+        Assert.Null(LongPath.Canonical(named));
+        Assert.Equal(Path.GetFullPath(named), LongPath.Unaliased(named));
+    }
+
+    /// <summary>
+    /// A share that cannot be reached says nothing about what is on it, so a segment there that
+    /// carries a <c>~</c> may be an alias, and the path has no canonical form. The presence probe
+    /// reads the same answer, <c>ERROR_BAD_NETPATH</c>, as nothing being there, which is right for
+    /// it and would hand the alias back as canonical here. The server name is reserved, so it is
+    /// never reached.
+    /// </summary>
+    [Fact]
+    public void HasNoCanonicalFormForAnAliasOnAShareThatCannotBeReached() =>
+        Assert.Null(LongPath.Canonical(@"\\server.test\share\LONGPR~1\run-1"));
+
+    /// <summary>
     /// The assumption every other long-path test in this suite rests on, made falsifiable.
     ///
     /// <para>.NET prepends <c>\\?\</c> itself to any path of 260 characters or more before it calls

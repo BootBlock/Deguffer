@@ -609,6 +609,71 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// A path written with forward slashes, or through a <c>..</c>, is compared as the folder it
+    /// names. Windows opens both as that folder, and compared as they arrived, neither started with
+    /// the scratch folder's own path, so the veto missed an entry somebody was using.
+    ///
+    /// <para>What discriminates is <c>Assert.Single</c>: the helper never becomes visible without
+    /// the canonical form, and the test fails before it asks. The <c>..</c> climbs in from above the
+    /// scratch folder, because one below it already started with the folder's path.</para>
+    /// </summary>
+    [Fact]
+    public void NamesTheChildAProgramWasStartedWithInForwardSlashes() =>
+        NamesTheProfileSpelledAs((_, profile) =>
+            profile.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+    /// <inheritdoc cref="NamesTheChildAProgramWasStartedWithInForwardSlashes"/>
+    [Fact]
+    public void NamesTheChildAProgramWasStartedWithThroughAParent() =>
+        NamesTheProfileSpelledAs((scratch, profile) =>
+            Path.Combine(Path.GetDirectoryName(scratch)!, "elsewhere", "..", "Temp", Path.GetFileName(profile)));
+
+    private void NamesTheProfileSpelledAs(Func<string, string, string> spell)
+    {
+        var scratch = _temp.CreateDirectory("Temp");
+        var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-j1K2l3");
+        _temp.CreateDirectory("elsewhere");
+
+        var spelled = spell(scratch, profile);
+
+        Assert.NotEqual(profile, spelled);
+
+        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={spelled}");
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.True(findings.Complete);
+        Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A file named in 8.3 form before it exists is compared as the folder it will be written in. A
+    /// program is routinely started with a log it has not opened yet, and <c>GetLongPathName</c>
+    /// refuses a path whose last segment is missing. Kept in its short form, the path is outside the
+    /// scratch folder, and the entry holding the log reads as unused until the file appears.
+    ///
+    /// <para>What discriminates is <c>Assert.Single</c>, as above. <b>This proves nothing on a
+    /// volume with 8.3 name creation disabled</b>, where the fixture falls back to the ordinary
+    /// path.</para>
+    /// </summary>
+    [Fact]
+    public void NamesTheChildHoldingAShortFormFileNotYetWritten()
+    {
+        var scratch = _temp.CreateDirectory("Temporary Folder");
+        var run = _temp.CreateDirectory("Temporary Folder", "Run-Folder-Long");
+        var asNamed = ShortPath.Of(run) ?? run;
+        var log = Path.Combine(asNamed, "out.log");
+
+        Assert.False(File.Exists(log));
+
+        using var program = StartLaunchedWith(scratch, run, $"--log-file={log}");
+
+        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+
+        Assert.Equal(run, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The other side of the same comparison: a scratch folder asked about in its 8.3 form still
     /// finds the child a program named in full, and names it under the folder as it was asked. A
     /// temporary folder named in short form by a setting is where the question arrives like this.

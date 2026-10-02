@@ -27,7 +27,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
         var table = Snapshot(ct);
         var live = new List<LiveTree>();
-        var complete = table.CurrentDirectoriesReadable;
+        var complete = table.ImagePathsReadable && table.CurrentDirectoriesReadable;
 
         foreach (var candidate in candidates)
         {
@@ -113,7 +113,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             Record(holders, process.CurrentDirectory, $"{process.Name} is working in it");
         }
 
-        return Findings(holders, table.CurrentDirectoriesReadable);
+        return Findings(holders, table.ImagePathsReadable && table.CurrentDirectoriesReadable);
     }
 
     /// <summary>
@@ -130,9 +130,12 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             return LiveTreeFindings.Nothing;
         }
 
-        // Each folder as asked, for naming its children, and without any 8.3 alias, for comparing
-        // them: every path read from the process table has had its alias expanded already.
-        var folders = directories.Select(asked => (Asked: asked, Compared: LongPath.Unaliased(asked))).ToList();
+        // Each folder as asked, for naming its children, and canonical, for comparing them: every
+        // path read from the process table is canonical already. A folder that cannot be made so is
+        // still compared as well as it can be, and the answer says it may have missed something.
+        var canonical = directories.Select(asked => (Asked: asked, Compared: LongPath.Canonical(asked))).ToList();
+        var foldersWhole = canonical.TrueForAll(folder => folder.Compared is not null);
+        var folders = canonical.ConvertAll(folder => (folder.Asked, folder.Compared ?? LongPath.Unaliased(folder.Asked)));
         var occupied = FindOccupiedDirectories(ct);
         var table = Snapshot(ct);
 
@@ -163,7 +166,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             }
         }
 
-        return Findings(holders, occupied.Complete && table.CommandLinesReadable);
+        return Findings(holders, occupied.Complete && table.CommandLinesReadable && foldersWhole);
     }
 
     /// <summary>
