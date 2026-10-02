@@ -17,14 +17,7 @@ public sealed partial class AboutPage : Page
 
     public AboutPage() => InitializeComponent();
 
-    /// <summary>
-    /// The informational version carries a <c>+sha</c> suffix from the build; the commit is not
-    /// what someone reading an about box wants, so only the version itself is shown.
-    /// </summary>
-    public string Version { get; } =
-        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion.Split('+')[0]
-        ?? string.Empty;
+    public string Version => AppVersion.Current;
 
     /// <summary>
     /// The date the build stamped into the assembly, in the reader's own culture. Nothing in the

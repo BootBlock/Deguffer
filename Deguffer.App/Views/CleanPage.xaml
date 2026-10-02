@@ -460,6 +460,21 @@
                                 </ItemsRepeater.ItemTemplate>
                             </ItemsRepeater>
                         </ScrollViewer>
+
+                        <!-- The run written out for a GitHub issue. The sentence above can ask the
+                             user to report a fault, and copying the paths above by hand loses which
+                             row each belonged to, what each step did and the build it came from. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
+                                             Content="Copy diagnostic information"
+                                             Padding="0"
+                                             AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
+                                             Click="OnCopyRunDiagnostics" />
+                            <TextBlock x:Name="CopyRunDiagnosticsResult"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryText}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
             </Border>

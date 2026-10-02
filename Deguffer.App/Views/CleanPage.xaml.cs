@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
@@ -9,6 +10,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace Deguffer.App.Views;
 
@@ -36,7 +38,8 @@ public sealed partial class CleanPage : Page
             App.Selections,
             App.Keeps,
             App.Running,
-            () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme));
+            () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme),
+            AppVersion.Current);
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         InitializeComponent();
 
@@ -254,6 +257,37 @@ public sealed partial class CleanPage : Page
         if (e.PropertyName == nameof(CleanViewModel.ShownItems))
         {
             ShowItemsOrRows();
+        }
+
+        // A new run's card must not say an earlier run's report was copied.
+        if (e.PropertyName == nameof(CleanViewModel.RunStatement))
+        {
+            CopyRunDiagnosticsResult.Text = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Put the last run's report on the clipboard, and say on the card whether it went.
+    ///
+    /// <para>Flushed, so the report is still there to paste after Deguffer closes, which is when a
+    /// user filing an issue is most likely to paste it.</para>
+    /// </summary>
+    private void OnCopyRunDiagnostics(object sender, RoutedEventArgs e)
+    {
+        var package = new DataPackage();
+        package.SetText(ViewModel.RunDiagnostics);
+
+        try
+        {
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+            CopyRunDiagnosticsResult.Text = "Copied. Paste it into a GitHub issue.";
+        }
+        catch (COMException)
+        {
+            // Another program has the clipboard open, which Windows reports this way. It lets go
+            // within moments, so the answer is to try again rather than to give up.
+            CopyRunDiagnosticsResult.Text = "Another program is using the clipboard. Try again.";
         }
     }
 
