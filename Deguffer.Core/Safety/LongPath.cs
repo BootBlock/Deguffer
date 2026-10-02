@@ -75,7 +75,9 @@ public static partial class LongPath
     /// program is routinely started with a file it has not written yet, such as a log. Asked of the
     /// whole path, <c>C:\Users\LONGPR~1\...\run-1\out.log</c> kept its alias until the log appeared.
     /// What lies below the part that exists cannot be an alias, because an alias names something on
-    /// the disk, so it is kept as it was spelled.</para>
+    /// the disk, so it is kept as it was spelled. <see cref="Path.GetFullPath(string)"/> already does
+    /// this for a drive-letter path, undocumented, and leaves a path with a device prefix alone, so
+    /// the walk up is what covers a volume's GUID name and what finds a part Windows refused.</para>
     ///
     /// <para><b>Null is "cannot say", never a guess.</b> A path that is not fully qualified would
     /// have to be resolved against a working directory nobody named, and a part that carries a

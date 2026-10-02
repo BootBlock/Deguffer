@@ -184,6 +184,31 @@ public class LongPathTests
     }
 
     /// <summary>
+    /// The same for a path through a volume's GUID name, which is where the walk up the path does
+    /// the expanding. <see cref="Path.GetFullPath(string)"/> expands the aliases in the part of a
+    /// drive-letter path that exists, as an undocumented part of its work, and the test above
+    /// cannot tell the two apart. It leaves a path that keeps its device prefix alone.
+    ///
+    /// <para><b>This proves nothing on a volume with 8.3 name creation disabled</b>, where the
+    /// fixture falls back to the ordinary path.</para>
+    /// </summary>
+    [Fact]
+    public void ExpandsAnAliasAboveAMissingSegmentThroughAVolumeName()
+    {
+        using var temp = new TempDirectory();
+        var run = temp.CreateDirectory("Run-Folder-Long");
+        var asNamed = ShortPath.Of(run) ?? run;
+        var mount = VolumeCalls.MountPointOf(run)!;
+        var volume = VolumeCalls.Names().First(name =>
+            VolumeCalls.MountPointsOf(name).Contains(mount, StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal(
+            Path.Combine(volume + LongPath.Unaliased(run)[mount.Length..], "logs", "out.log"),
+            LongPath.Canonical(Path.Combine(volume + asNamed[mount.Length..], "logs", "out.log")),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// A segment carrying a <c>~</c> that Windows would not describe has no canonical form, because
     /// it may be an alias for anything. <see cref="LongPath.Unaliased"/>, which has no way to say
     /// so, gives back the spelling it was handed in full form.

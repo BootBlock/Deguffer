@@ -614,7 +614,8 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// the scratch folder's own path, so the veto missed an entry somebody was using.
     ///
     /// <para>What discriminates is <c>Assert.Single</c>: the helper never becomes visible without
-    /// the canonical form, and the test fails before it asks.</para>
+    /// the canonical form, and the test fails before it asks. The <c>..</c> climbs in from above the
+    /// scratch folder, because one below it already started with the folder's path.</para>
     /// </summary>
     [Fact]
     public void NamesTheChildAProgramWasStartedWithInForwardSlashes() =>
@@ -625,13 +626,13 @@ public sealed class LiveTreeInspectorTests : IDisposable
     [Fact]
     public void NamesTheChildAProgramWasStartedWithThroughAParent() =>
         NamesTheProfileSpelledAs((scratch, profile) =>
-            Path.Combine(scratch, "elsewhere", "..", Path.GetFileName(profile)));
+            Path.Combine(Path.GetDirectoryName(scratch)!, "elsewhere", "..", "Temp", Path.GetFileName(profile)));
 
     private void NamesTheProfileSpelledAs(Func<string, string, string> spell)
     {
         var scratch = _temp.CreateDirectory("Temp");
         var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-j1K2l3");
-        _temp.CreateDirectory("Temp", "elsewhere");
+        _temp.CreateDirectory("elsewhere");
 
         var spelled = spell(scratch, profile);
 
