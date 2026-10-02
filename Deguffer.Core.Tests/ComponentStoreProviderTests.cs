@@ -48,6 +48,9 @@ public sealed class ComponentStoreProviderTests : IDisposable
     private ComponentStoreResetBaseProvider Reset(ComponentStoreAnalysis? analysis = null) =>
         new(_environment, _runner, FakeProcessInspector.NothingRunning, _system, _servicing, analysis);
 
+    /// <summary>DISM, where the providers must run it: the fake answers no other program.</summary>
+    private string Dism => NativeSystemTool.In(_system, "Dism.exe");
+
     private static bool IsAnalysis(string arguments) =>
         arguments.Contains("/AnalyzeComponentStore", StringComparison.Ordinal);
 
@@ -72,7 +75,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     {
         var next = 0;
 
-        _runner.Replying(arguments =>
+        _runner.Replying(Dism, arguments =>
         {
             if (IsAnalysis(arguments))
             {
@@ -110,6 +113,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
         var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
         Assert.Equal(_system.WindowsDirectory, Path.GetDirectoryName(Path.GetDirectoryName(step.FileName)));
         Assert.Equal("Dism.exe", Path.GetFileName(step.FileName));
+        Assert.Equal(Dism, step.FileName);
         Assert.Equal("/Online /English /Cleanup-Image /StartComponentCleanup", step.Arguments);
         Assert.Equal(3 * Gigabyte, step.EstimatedBytes);
         Assert.True(step.Estimated.IsCeiling);
@@ -140,6 +144,8 @@ public sealed class ComponentStoreProviderTests : IDisposable
 
         Assert.DoesNotContain("/ResetBase", cleanup.Arguments, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("/Online /English /Cleanup-Image /StartComponentCleanup /ResetBase", reset.Arguments);
+        Assert.Equal(Dism, cleanup.FileName);
+        Assert.Equal(Dism, reset.FileName);
         Assert.Equal(SafetyTier.UserData, resetPlan.Tier);
         Assert.NotEqual(Cleanup().Id, Reset().Id);
     }
@@ -206,6 +212,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     public async Task AnAccountDismRefusesIsNotExaminedAndIsToldToElevate()
     {
         _runner.Responding(
+            Dism,
             "/AnalyzeComponentStore",
             "\r\nError: 740\r\n\r\nElevated permissions are required to run DISM.\r\nUse an elevated command prompt to complete these tasks.\r\n",
             ComponentStoreAnalysis.ElevationRequired);
@@ -223,7 +230,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     [InlineData(0, "Component Store (WinSxS) information:\r\n", "did not include every figure")]
     public async Task AnAnalysisWindowsDidNotCompleteOffersNothingAndIsNotClear(int exitCode, string output, string reason)
     {
-        _runner.Responding("/AnalyzeComponentStore", output, exitCode);
+        _runner.Responding(Dism, "/AnalyzeComponentStore", output, exitCode);
 
         var plan = await Cleanup().PlanAsync();
 
@@ -237,7 +244,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     [Fact]
     public async Task AStoreWindowsDoesNotRecommendCleaningIsClear()
     {
-        _runner.Responding("/AnalyzeComponentStore", Report(21 * Gigabyte, recommended: false));
+        _runner.Responding(Dism, "/AnalyzeComponentStore", Report(21 * Gigabyte, recommended: false));
 
         var plan = await Cleanup().PlanAsync();
 
@@ -298,7 +305,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     public async Task AnUpdateThatStartsDuringTheAnalysisBeforeTheCommandHoldsTheCleanup()
     {
         var analyses = 0;
-        _runner.Replying(arguments =>
+        _runner.Replying(Dism, arguments =>
         {
             if (!IsAnalysis(arguments))
             {
@@ -381,7 +388,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     public async Task ARunWindowsWouldNotMeasureBeforehandCountsNothing()
     {
         var analyses = 0;
-        _runner.Replying(arguments => IsAnalysis(arguments)
+        _runner.Replying(Dism, arguments => IsAnalysis(arguments)
             ? ++analyses == 2
                 ? new CommandOutcome(unchecked((int)0x800F0806), "Error: 0x800f0806", string.Empty)
                 : new CommandOutcome(0, Report(21 * Gigabyte - analyses * Gigabyte), string.Empty)

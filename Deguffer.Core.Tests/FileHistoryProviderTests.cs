@@ -36,6 +36,9 @@ public sealed class FileHistoryProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>Where the fake environment puts Windows' File History command.</summary>
+    private string Manager => _environment.FindExecutable("FhManagew")!;
+
     private FileHistoryProvider CreateProvider(AppPreferences? preferences = null) => new(
         _environment,
         _runner,
@@ -162,6 +165,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+        Assert.Equal(Manager, step.FileName);
         Assert.Equal("-cleanup 365 -quiet", step.Arguments);
         Assert.Empty(plan.TargetedPaths);
     }
@@ -238,6 +242,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
         var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
+        Assert.Equal(Manager, step.FileName);
         Assert.Equal(4096 + 8192, step.MeasuredBefore!.Value.Reclaimable);
     }
 
@@ -294,6 +299,7 @@ public sealed class FileHistoryProviderTests : IDisposable
 
         var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
+        Assert.Equal(Manager, step.FileName);
         Assert.Equal("-cleanup 30 -quiet", step.Arguments);
         Assert.Equal(2048, plan.EstimatedBytes);
     }
@@ -317,6 +323,7 @@ public sealed class FileHistoryProviderTests : IDisposable
 
         var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
+        Assert.Equal(Manager, step.FileName);
         Assert.Equal("-cleanup 1 -quiet", step.Arguments);
     }
 
@@ -335,6 +342,7 @@ public sealed class FileHistoryProviderTests : IDisposable
 
         var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
+        Assert.Equal(Manager, step.FileName);
         Assert.Equal($"-cleanup {FileHistoryProvider.MaximumRetentionDays} -quiet", step.Arguments);
     }
 
@@ -389,7 +397,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         var drive = CreateConfiguredDrive();
         var theirs = CreateAnotherAccountsHistory(drive);
 
-        _runner.Replying(_ =>
+        _runner.Replying(Manager, _ =>
         {
             Directory.Delete(theirs, recursive: true);
             return new CommandOutcome(0, string.Empty, string.Empty);
@@ -420,7 +428,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         var theirs = CreateAnotherAccountsHistory(drive);
         var theirData = Path.Combine(theirs, AnotherMachine, "Data");
 
-        _runner.Replying(_ =>
+        _runner.Replying(Manager, _ =>
         {
             File.Delete(Path.Combine(theirData, "theirs.docx"));
             return new CommandOutcome(0, string.Empty, string.Empty);
@@ -449,7 +457,7 @@ public sealed class FileHistoryProviderTests : IDisposable
         var drive = CreateConfiguredDrive();
         var history = CreateHistory(drive);
 
-        _runner.Replying(_ =>
+        _runner.Replying(Manager, _ =>
         {
             foreach (var version in Directory.EnumerateFiles(history, "*", SearchOption.AllDirectories).ToList())
             {

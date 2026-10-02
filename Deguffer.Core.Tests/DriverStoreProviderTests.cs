@@ -85,9 +85,12 @@ public sealed class DriverStoreProviderTests : IDisposable
         return new DiskCleanupOutcome(Ran: true);
     });
 
-    /// <summary><c>pnputil</c>, removing the folder of each package it is named and <paramref name="alsoRemoving"/>.</summary>
-    private static FakeProcessRunner PnpUtil(IReadOnlyList<DriverPackage> packages, params string[] alsoRemoving) =>
-        new FakeProcessRunner().Replying(arguments =>
+    /// <summary>
+    /// <c>pnputil</c>, removing the folder of each package it is named and <paramref name="alsoRemoving"/>.
+    /// It answers only where Windows keeps it, so a step that named any other program fails.
+    /// </summary>
+    private FakeProcessRunner PnpUtil(IReadOnlyList<DriverPackage> packages, params string[] alsoRemoving) =>
+        new FakeProcessRunner().Replying(DriverStore.PnpUtil(_system), arguments =>
         {
             var named = packages.Single(p => arguments.EndsWith(p.PublishedName, StringComparison.OrdinalIgnoreCase));
             Directory.Delete(LongPath.Extended(named.Folder!), recursive: true);

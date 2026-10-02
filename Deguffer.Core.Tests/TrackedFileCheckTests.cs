@@ -24,7 +24,7 @@ public sealed class TrackedFileCheckTests : IDisposable
 
     public TrackedFileCheckTests()
     {
-        _environment = new FakeUserEnvironment(_temp.Path);
+        _environment = new FakeUserEnvironment(_temp.Path).WithExecutable("git");
         _repository = _temp.CreateDirectory("repo");
         Directory.CreateDirectory(Path.Combine(_repository, ".git"));
     }
@@ -41,8 +41,13 @@ public sealed class TrackedFileCheckTests : IDisposable
             Path.Combine(_repository, "services", $"Service{i:D4}".PadRight(60, 'x'), "src", "obj")),
     ];
 
-    private TrackedFileCheck Create(FakeProcessRunner runner) =>
-        new(_environment.WithExecutable("git"), runner);
+    private TrackedFileCheck Create(FakeProcessRunner runner) => new(_environment, runner);
+
+    /// <summary>Git, where the environment says it is: the fake answers no other program.</summary>
+    private string Git => _environment.FindExecutable("git")!;
+
+    /// <summary>Git answering every listing with no tracked file.</summary>
+    private FakeProcessRunner GitListingNothing() => new FakeProcessRunner().Responding(Git, "ls-files", string.Empty);
 
     /// <summary>
     /// The command is split, and the answer is the union of every part. A tracked file reported by
@@ -59,7 +64,7 @@ public sealed class TrackedFileCheckTests : IDisposable
 
         // Each invocation answers only for what it was actually asked about, so a result attributed
         // to a batch that was never sent cannot pass this by accident.
-        var runner = new FakeProcessRunner().Replying(arguments =>
+        var runner = new FakeProcessRunner().Replying(Git, arguments =>
         {
             var listed = new[] { first, last }
                 .Where(c => arguments.Contains(Pathspec(c), StringComparison.OrdinalIgnoreCase))
@@ -83,7 +88,7 @@ public sealed class TrackedFileCheckTests : IDisposable
     public async Task NeitherDropsNorRepeatsACandidateAcrossTheSplit()
     {
         var candidates = Candidates(900);
-        var runner = new FakeProcessRunner();
+        var runner = GitListingNothing();
 
         await Create(runner).FindTrackedAsync(candidates);
 
@@ -105,7 +110,7 @@ public sealed class TrackedFileCheckTests : IDisposable
     [Fact]
     public async Task KeepsEveryInvocationInsideTheCommandLineLimit()
     {
-        var runner = new FakeProcessRunner();
+        var runner = GitListingNothing();
 
         await Create(runner).FindTrackedAsync(Candidates(2000));
 
@@ -129,7 +134,7 @@ public sealed class TrackedFileCheckTests : IDisposable
         var candidates = Candidates(900);
         var refused = candidates[^1];
 
-        var runner = new FakeProcessRunner().Replying(arguments =>
+        var runner = new FakeProcessRunner().Replying(Git, arguments =>
             arguments.Contains(Pathspec(refused), StringComparison.OrdinalIgnoreCase)
                 ? new CommandOutcome(128, string.Empty, "fatal: index file corrupt")
                 : null);
@@ -201,7 +206,7 @@ public sealed class TrackedFileCheckTests : IDisposable
         var innerFirst = Path.Combine(inner, "src", "A", "obj");
         var outer = Path.Combine(_repository, "external", "B", "obj");
         var innerSecond = Path.Combine(inner, "src", "C", "obj");
-        var runner = new FakeProcessRunner();
+        var runner = GitListingNothing();
 
         await Create(runner).FindTrackedAsync([innerFirst, outer, innerSecond]);
 
@@ -229,7 +234,7 @@ public sealed class TrackedFileCheckTests : IDisposable
         var innerGit = Directory.CreateDirectory(Path.Combine(inner, ".git")).FullName;
         var underInner = Path.Combine(inner, "src", "A", "obj");
         var outer = Path.Combine(_repository, "external", "B", "obj");
-        var runner = new FakeProcessRunner();
+        var runner = GitListingNothing();
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(innerGit);
 
@@ -246,7 +251,7 @@ public sealed class TrackedFileCheckTests : IDisposable
     [Fact]
     public async Task ReportsNothingUnaskedWhenGitIsInstalled()
     {
-        var findings = await Create(new FakeProcessRunner()).FindTrackedAsync(Candidates(50));
+        var findings = await Create(GitListingNothing()).FindTrackedAsync(Candidates(50));
 
         Assert.Empty(findings.Unasked);
     }
@@ -258,7 +263,7 @@ public sealed class TrackedFileCheckTests : IDisposable
     [Fact]
     public async Task StillCostsOneInvocationForAnOrdinaryRepository()
     {
-        var runner = new FakeProcessRunner();
+        var runner = GitListingNothing();
 
         await Create(runner).FindTrackedAsync(Candidates(50));
 

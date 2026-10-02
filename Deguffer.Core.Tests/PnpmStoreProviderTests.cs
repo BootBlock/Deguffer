@@ -27,8 +27,11 @@ public sealed class PnpmStoreProviderTests : IDisposable
 
     private string Store => Path.Combine(Home, "store", "v10");
 
+    /// <summary>The pnpm the fake environment resolves, so a test names the program a step must run.</summary>
+    private string Pnpm => _environment.FindExecutable("pnpm")!;
+
     private FakeProcessRunner Reporting(string store) =>
-        new FakeProcessRunner().Responding("store path", store + "\r\n");
+        new FakeProcessRunner().Responding(Pnpm, "store path", store + "\r\n");
 
     private PnpmStoreProvider CreateProvider(FakeProcessRunner? runner = null) =>
         new(_environment, runner ?? Reporting(Store), FakeProcessInspector.NothingRunning);
@@ -74,6 +77,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Pnpm, step.FileName);
         Assert.Equal("store prune", step.Arguments);
         Assert.Equal([Store], step.MeasuredPaths);
         Assert.Empty(plan.TargetedPaths);
@@ -118,7 +122,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
     {
         foreach (var answer in new[] { "", "not-a-path", "relative\\store" })
         {
-            var provider = CreateProvider(new FakeProcessRunner().Responding("store path", answer));
+            var provider = CreateProvider(new FakeProcessRunner().Responding(Pnpm, "store path", answer));
 
             // pnpm is on the machine, so the row is present with nothing to reclaim — and the
             // store behind it, wherever it is, would be reported as "Already clear".
@@ -143,7 +147,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
     [Fact]
     public async Task OffersNothingForAStoreAtAVolumeRoot()
     {
-        var plan = await CreateProvider(new FakeProcessRunner().Responding("store path", @"C:\")).PlanAsync();
+        var plan = await CreateProvider(new FakeProcessRunner().Responding(Pnpm, "store path", @"C:\")).PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.True(plan.WasNotExamined);

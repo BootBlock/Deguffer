@@ -30,8 +30,12 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private string PowerShellHome =>
-        Path.Combine(_system.WindowsDirectory, "System32", "WindowsPowerShell", "v1.0");
+    /// <summary>
+    /// Windows PowerShell, where Windows put it, written out rather than read from the provider so a
+    /// provider that ran another host is caught: the fake answers no other program.
+    /// </summary>
+    private string PowerShell =>
+        Path.Combine(_system.WindowsDirectory, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 
     private DeliveryOptimizationProvider CreateProvider() => new(
         _environment,
@@ -47,8 +51,8 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
 
     /// <summary>Windows reporting <paramref name="bytes"/> in the cache, and clearing it successfully.</summary>
     private void ReportCache(long bytes) => _runner
-        .Responding("Get-DeliveryOptimizationPerfSnap", bytes.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\r\n")
-        .Responding("Delete-DeliveryOptimizationCache", "Deleting...\r\nSuccessfully deleted Delivery Optimization cache\r\n");
+        .Responding(PowerShell, "Get-DeliveryOptimizationPerfSnap", bytes.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\r\n")
+        .Responding(PowerShell, "Delete-DeliveryOptimizationCache", "Deleting...\r\nSuccessfully deleted Delivery Optimization cache\r\n");
 
     /// <summary>
     /// Windows' update folder as it is on a real machine: the update history, the updates waiting to
@@ -89,7 +93,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
-        Assert.Equal(Path.Combine(PowerShellHome, "powershell.exe"), step.FileName);
+        Assert.Equal(PowerShell, step.FileName);
         Assert.Contains("Delete-DeliveryOptimizationCache -Force", step.Arguments);
         Assert.Equal(CacheBytes, step.EstimatedBytes);
         Assert.False(step.Estimated.IsApproximate);
@@ -149,7 +153,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     public async Task AQueryWindowsDidNotAnswerOffersNothingAndIsNotClear(int exitCode, string output)
     {
         InstallModule();
-        _runner.Responding("Get-DeliveryOptimizationPerfSnap", output, exitCode);
+        _runner.Responding(PowerShell, "Get-DeliveryOptimizationPerfSnap", output, exitCode);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -178,7 +182,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         const long remaining = 1L * 1024 * 1024 * 1024;
         var cleared = false;
 
-        _runner.Replying(arguments =>
+        _runner.Replying(PowerShell, arguments =>
         {
             if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
             {
@@ -209,7 +213,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
 
         var asked = 0;
 
-        _runner.Replying(arguments =>
+        _runner.Replying(PowerShell, arguments =>
             arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal)
                 ? new CommandOutcome(0, "Successfully deleted Delivery Optimization cache", string.Empty)
                 : ++asked == 1
@@ -232,7 +236,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     public async Task AFailedClearReportsWindowsReasonRatherThanItsProgressLine()
     {
         InstallModule();
-        _runner.Replying(arguments =>
+        _runner.Replying(PowerShell, arguments =>
             arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal)
                 ? new CommandOutcome(1, "Deleting...\r\n", "File is not initialized. Please try again later.\r\n")
                 : new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty));
@@ -286,7 +290,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
             "DeliveryOptimization");
         var cached = _temp.CreateFile(4096, Path.GetRelativePath(_temp.Path, folder), "Cache", "payload");
 
-        _runner.Replying(arguments =>
+        _runner.Replying(PowerShell, arguments =>
         {
             if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
             {
@@ -350,7 +354,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         InstallModule();
         var (_, dataStore, _) = CreateSoftwareDistribution();
 
-        _runner.Replying(arguments =>
+        _runner.Replying(PowerShell, arguments =>
         {
             if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
             {

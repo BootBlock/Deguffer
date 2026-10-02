@@ -14,6 +14,8 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed partial class EntryRemoverTests : IDisposable
 {
+    private const string RegExe = @"C:\Windows\System32\reg.exe";
+
     private readonly TempDirectory _temp = new();
 
     private readonly FakeUninstallRegistry _registry = new();
@@ -36,10 +38,10 @@ public sealed partial class EntryRemoverTests : IDisposable
 
     public EntryRemoverTests()
     {
-        _backups = new RegistryBackups(_runner, Path.Combine(_temp.Path, "backups"), @"C:\Windows\System32\reg.exe", TimeProvider.System);
+        _backups = new RegistryBackups(_runner, Path.Combine(_temp.Path, "backups"), RegExe, TimeProvider.System);
 
         // reg.exe, as far as a removal can see it: a file appears where it was told to write one.
-        _runner.Replying(arguments =>
+        _runner.Replying(RegExe, arguments =>
         {
             if (ExportTarget().Match(arguments) is { Success: true } target)
             {
@@ -99,7 +101,7 @@ public sealed partial class EntryRemoverTests : IDisposable
     public async Task AnEntryWhoseBackupFailsIsNotRemoved()
     {
         var gone = Stale(UninstallScope.CurrentUser, "Gone");
-        _runner.Replying(_ => new CommandOutcome(1, string.Empty, "ERROR: Access is denied."));
+        _runner.Replying(RegExe, _ => new CommandOutcome(1, string.Empty, "ERROR: Access is denied."));
 
         var report = await Remove(backUp: true, isElevated: false, gone);
 
@@ -113,7 +115,7 @@ public sealed partial class EntryRemoverTests : IDisposable
     public async Task ABackupThatWroteNoFileIsAFailedBackup()
     {
         var gone = Stale(UninstallScope.CurrentUser, "Gone");
-        _runner.Replying(_ => new CommandOutcome(0, string.Empty, string.Empty));
+        _runner.Replying(RegExe, _ => new CommandOutcome(0, string.Empty, string.Empty));
 
         var report = await Remove(backUp: true, isElevated: false, gone);
 

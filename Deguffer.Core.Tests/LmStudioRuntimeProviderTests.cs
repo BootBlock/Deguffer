@@ -31,6 +31,9 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
 
     private string Backends => Path.Combine(Root, "extensions", "backends");
 
+    /// <summary>LM Studio's <c>lms</c>, where the provider must run it: the fake answers no other program.</summary>
+    private string Lms => Path.Combine(Root, "bin", "lms.exe");
+
     private LmStudioRuntimeProvider CreateProvider(TimeProvider? time = null) =>
         new(_environment, _runner, _inspector, time: time);
 
@@ -66,12 +69,13 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
             $"{runtime,-50}{(runtime == selected ? "   ✓    " : "        ")}    GGUF    \r\n"));
 
         return _runner.Responding(
+            Lms,
             "runtime ls",
             "LLM ENGINE                                        SELECTED    MODEL FORMAT\r\n" + rows);
     }
 
     /// <summary>LM Studio answering a remove as it does on Windows: by marking the folder, and nothing else.</summary>
-    private FakeProcessRunner MarkingOnRemove() => _runner.Replying(arguments =>
+    private FakeProcessRunner MarkingOnRemove() => _runner.Replying(Lms, arguments =>
     {
         if (!arguments.StartsWith("runtime remove --yes ", StringComparison.Ordinal))
         {
@@ -235,7 +239,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         Assert.Equal(
             [$"runtime remove --yes {Cuda12}@2.44.0", $"runtime remove --yes {Vulkan}@2.13.0"],
             steps.Select(step => step.Arguments));
-        Assert.All(steps, step => Assert.Equal(Path.Combine(Root, "bin", "lms.exe"), step.FileName));
+        Assert.All(steps, step => Assert.Equal(Lms, step.FileName));
 
         var older = steps[0];
         Assert.Equal(Folder($"{Cuda12}@2.44.0"), older.Removes);
@@ -294,7 +298,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
     public async Task OffersNothingWhenTheListingCannotBeRead(int exitCode, string output)
     {
         Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
-        _runner.Responding("runtime ls", output, exitCode);
+        _runner.Responding(Lms, "runtime ls", output, exitCode);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -395,7 +399,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
     {
         Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
         Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
-        _runner.Responding("runtime remove", $"Removed {Cuda12}@2.45.0\n");
+        _runner.Responding(Lms, "runtime remove", $"Removed {Cuda12}@2.45.0\n");
 
         var clock = new ManualTimeProvider();
         var provider = CreateProvider(clock);
@@ -436,7 +440,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
 
         DeniedDirectory? denied = null;
-        _runner.Replying(arguments =>
+        _runner.Replying(Lms, arguments =>
         {
             if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
             {
@@ -518,7 +522,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
     {
         Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
         Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
-        _runner.Replying(arguments =>
+        _runner.Replying(Lms, arguments =>
         {
             if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
             {
@@ -550,7 +554,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
     {
         Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
         Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
-        _runner.Replying(arguments =>
+        _runner.Replying(Lms, arguments =>
         {
             if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
             {
@@ -580,7 +584,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
     {
         Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0", $"{Cuda12}@2.44.0");
         Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0", $"{Cuda12}@2.44.0");
-        _runner.Replying(arguments =>
+        _runner.Replying(Lms, arguments =>
         {
             if (!arguments.StartsWith("runtime remove", StringComparison.Ordinal))
             {

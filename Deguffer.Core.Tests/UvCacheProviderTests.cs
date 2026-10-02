@@ -19,8 +19,15 @@ public sealed class UvCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>The uv the fake environment resolves, so a test names the program a step must run.</summary>
+    private string Uv => _environment.FindExecutable("uv")!;
+
     private UvCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
         new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+    /// <summary>uv answering its cache query with nothing, so the documented default location stands.</summary>
+    private FakeProcessRunner UvAnsweringNothing() =>
+        new FakeProcessRunner().Responding(Uv, "cache dir", string.Empty);
 
     /// <summary>Create uv's state directory with a populated cache, and return the cache path.</summary>
     private string CreateCache(long bytes = 4096)
@@ -51,7 +58,7 @@ public sealed class UvCacheProviderTests : IDisposable
         Directory.CreateDirectory(elsewhere);
         File.WriteAllBytes(Path.Combine(elsewhere, "payload.bin"), new byte[2048]);
 
-        var runner = new FakeProcessRunner().Responding("cache dir", elsewhere);
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", elsewhere);
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(runner.Invocations, i => i.Arguments.Contains("cache dir", StringComparison.Ordinal));
@@ -64,7 +71,7 @@ public sealed class UvCacheProviderTests : IDisposable
         _environment.WithExecutable("uv");
         CreateCache();
 
-        var runner = new FakeProcessRunner();
+        var runner = UvAnsweringNothing();
         await CreateProvider(runner).PlanAsync();
 
         // Without this, uv emits ANSI escapes around the path and they land inside it.
@@ -78,7 +85,7 @@ public sealed class UvCacheProviderTests : IDisposable
         _environment.WithExecutable("uv");
         var cache = CreateCache();
 
-        var runner = new FakeProcessRunner().Responding("cache dir", string.Empty, exitCode: 1);
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", string.Empty, exitCode: 1);
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
@@ -90,11 +97,12 @@ public sealed class UvCacheProviderTests : IDisposable
         _environment.WithExecutable("uv");
         CreateCache();
 
-        var plan = await CreateProvider().PlanAsync();
+        var plan = await CreateProvider(UvAnsweringNothing()).PlanAsync();
 
         // §5.1: nothing is targeted for deletion; the tool is asked to evict.
         Assert.Empty(plan.TargetedPaths);
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Uv, step.FileName);
         Assert.Contains("cache clean", step.Arguments, StringComparison.Ordinal);
     }
 
@@ -104,9 +112,10 @@ public sealed class UvCacheProviderTests : IDisposable
         _environment.WithExecutable("uv");
         CreateCache();
 
-        var plan = await CreateProvider().PlanAsync();
+        var plan = await CreateProvider(UvAnsweringNothing()).PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Uv, step.FileName);
         Assert.DoesNotContain("--force", step.Arguments, StringComparison.Ordinal);
     }
 
@@ -115,7 +124,7 @@ public sealed class UvCacheProviderTests : IDisposable
     {
         _environment.WithExecutable("uv");
         CreateCache();
-        var provider = CreateProvider();
+        var provider = CreateProvider(UvAnsweringNothing());
 
         var tools = Path.Combine(provider.StateRoot, "tools");
         Directory.CreateDirectory(tools);
@@ -144,7 +153,7 @@ public sealed class UvCacheProviderTests : IDisposable
         _environment.WithExecutable("uv");
         var cache = CreateCache();
 
-        var plan = await CreateProvider().PlanAsync();
+        var plan = await CreateProvider(UvAnsweringNothing()).PlanAsync();
 
         // 'uv cache clean' deletes the cache root rather than emptying it, and recreates it on next
         // use. Protecting it would fail verification on a successful run.
@@ -158,7 +167,7 @@ public sealed class UvCacheProviderTests : IDisposable
         _environment.WithExecutable("uv");
         CreateCache();
 
-        var provider = CreateProvider();
+        var provider = CreateProvider(UvAnsweringNothing());
         var plan = await provider.PlanAsync();
 
         // Simulate the over-broad rule §5.6 exists to catch: clearing the cache took uv with it.
@@ -181,14 +190,14 @@ public sealed class UvCacheProviderTests : IDisposable
         Directory.CreateDirectory(moved);
         File.WriteAllBytes(Path.Combine(moved, "payload.bin"), new byte[2048]);
 
-        var runner = new FakeProcessRunner().Responding("cache dir", first);
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", first);
         var provider = CreateProvider(runner);
 
         var before = await provider.PlanAsync();
         Assert.Contains(before.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
 
         // UV_CACHE_DIR moved between scans; the planner invalidates before replanning.
-        runner.Responding("cache dir", moved);
+        runner.Responding(Uv, "cache dir", moved);
         provider.InvalidateCaches();
 
         var after = await provider.PlanAsync();
@@ -204,7 +213,7 @@ public sealed class UvCacheProviderTests : IDisposable
         CreateCache();
 
         var provider = new UvCacheProvider(
-            _environment, new FakeProcessRunner(), new FakeProcessInspector("uv"));
+            _environment, UvAnsweringNothing(), new FakeProcessInspector("uv"));
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
@@ -215,7 +224,7 @@ public sealed class UvCacheProviderTests : IDisposable
     {
         _environment.WithExecutable("uv");
 
-        var plan = await CreateProvider().PlanAsync();
+        var plan = await CreateProvider(UvAnsweringNothing()).PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("does not exist yet", StringComparison.Ordinal));

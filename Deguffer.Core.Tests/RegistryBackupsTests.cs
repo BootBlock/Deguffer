@@ -66,7 +66,8 @@ public sealed class RegistryBackupsTests : IDisposable
     [Fact]
     public async Task AKeyNameWithAQuotationMarkIsRefusedWithoutRunningAnything()
     {
-        var runner = new FakeProcessRunner();
+        // reg.exe answers, so an export that ran anyway fails the assertion rather than the fake.
+        var runner = new FakeProcessRunner().Responding(RegExe, "export", string.Empty);
         var backups = new RegistryBackups(runner, Folder, RegExe, TimeProvider.System);
 
         var exported = await backups.ExportAsync(new UninstallKey(UninstallScope.CurrentUser, "Odd\"Name"), CancellationToken.None);
@@ -91,7 +92,7 @@ public sealed class RegistryBackupsTests : IDisposable
         var runner = new FakeProcessRunner();
         var backups = new RegistryBackups(runner, Folder, RegExe, TimeProvider.System);
         var attempts = new List<string>();
-        runner.Replying(arguments =>
+        runner.Replying(RegExe, arguments =>
         {
             var copy = arguments.Split('"')[1];
             attempts.Add(Refused(() => File.WriteAllText(copy, "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Other]")) ? "write refused" : "write allowed");
@@ -124,7 +125,7 @@ public sealed class RegistryBackupsTests : IDisposable
     {
         var runner = new FakeProcessRunner();
         var backups = new RegistryBackups(runner, Folder, RegExe, new ManualTimeProvider());
-        runner.Replying(arguments =>
+        runner.Replying(RegExe, arguments =>
         {
             File.WriteAllText(arguments.Split('"')[3], "x", Encoding.Unicode);
             return null;

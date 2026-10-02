@@ -19,6 +19,9 @@ public sealed class PipCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>The pip the fake environment resolves, so a test names the program a step must run.</summary>
+    private string Pip => _environment.FindExecutable("pip")!;
+
     private PipCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
         new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
 
@@ -48,10 +51,16 @@ public sealed class PipCacheProviderTests : IDisposable
     public async Task FindsPipUnderItsPip3Spelling()
     {
         _environment.WithExecutable("pip3");
+        var pip3 = _environment.FindExecutable("pip3")!;
         CreateCache();
 
         Assert.True(await CreateProvider().IsPresentAsync());
-        Assert.False((await CreateProvider().PlanAsync()).IsEmpty);
+
+        var runner = new FakeProcessRunner().Responding(pip3, "cache dir", string.Empty);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.False(plan.IsEmpty);
+        Assert.Equal(pip3, Assert.Single(plan.Steps.OfType<RunCommandStep>()).FileName);
     }
 
     [Fact]
@@ -62,7 +71,7 @@ public sealed class PipCacheProviderTests : IDisposable
         Directory.CreateDirectory(elsewhere);
         File.WriteAllBytes(Path.Combine(elsewhere, "payload.bin"), new byte[2048]);
 
-        var runner = new FakeProcessRunner().Responding("cache dir", elsewhere);
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", elsewhere);
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(runner.Invocations, i => i.Arguments.Contains("cache dir", StringComparison.Ordinal));
@@ -75,7 +84,7 @@ public sealed class PipCacheProviderTests : IDisposable
         _environment.WithExecutable("pip");
         CreateCache();
 
-        var runner = new FakeProcessRunner();
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
         await CreateProvider(runner).PlanAsync();
 
         // Without this, pip emits ANSI escapes that would land inside the parsed path.
@@ -89,7 +98,7 @@ public sealed class PipCacheProviderTests : IDisposable
         _environment.WithExecutable("pip");
         var cache = CreateCache();
 
-        var runner = new FakeProcessRunner().Responding("cache dir", string.Empty, exitCode: 1);
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty, exitCode: 1);
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
@@ -101,11 +110,13 @@ public sealed class PipCacheProviderTests : IDisposable
         _environment.WithExecutable("pip");
         CreateCache();
 
-        var plan = await CreateProvider().PlanAsync();
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
+        var plan = await CreateProvider(runner).PlanAsync();
 
         // §5.1: nothing is targeted for deletion; the tool is asked to purge.
         Assert.Empty(plan.TargetedPaths);
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Pip, step.FileName);
         Assert.Contains("cache purge", step.Arguments, StringComparison.Ordinal);
     }
 
@@ -124,7 +135,8 @@ public sealed class PipCacheProviderTests : IDisposable
         var config = Path.Combine(pipRoot, "pip.ini");
         File.WriteAllText(config, "[global]\nindex-url = https://example.test/simple\n");
 
-        var plan = await CreateProvider().PlanAsync();
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
+        var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.DoesNotContain(pipRoot, plan.TargetedPaths);
         Assert.DoesNotContain(config, plan.TargetedPaths);
@@ -137,7 +149,8 @@ public sealed class PipCacheProviderTests : IDisposable
     {
         _environment.WithExecutable("pip");
 
-        var plan = await CreateProvider().PlanAsync();
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
+        var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.True(plan.IsEmpty);
     }
@@ -182,7 +195,7 @@ public sealed class PipCacheProviderTests : IDisposable
         Directory.CreateDirectory(LongPath.Extended(cache));
         File.WriteAllBytes(LongPath.Extended(Path.Combine(cache, "payload.bin")), new byte[4096]);
 
-        var runner = new FakeProcessRunner().Responding("cache dir", cache);
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", cache);
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
