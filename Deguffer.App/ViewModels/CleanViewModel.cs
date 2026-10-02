@@ -79,6 +79,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Deferred rather than injected directly: a dialog needs the page's <c>XamlRoot</c>, which does
     /// not exist while the view-model is being constructed.
     /// </param>
+    /// <param name="appVersion">Deguffer's own version, which a run's diagnostic report names.</param>
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,

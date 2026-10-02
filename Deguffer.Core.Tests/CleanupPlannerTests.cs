@@ -125,11 +125,34 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
-    /// The case above is evidence only if it can fail. A survivor that is gone by the time the run
-    /// verifies is reported, not passed over.
+    /// The case above is evidence only if it can fail. A survivor an earlier plan in the run took is
+    /// reported as the failure it is, not passed over.
     /// </summary>
     [Fact]
     public async Task AStepFreePlanStillFailsVerificationWhenItsSurvivorIsGone()
+    {
+        using var temp = new TempDirectory();
+        var withheld = Directory.CreateDirectory(Path.Combine(temp.Path, "withheld")).FullName;
+
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("taker", bytes: 1_000, onExecute: () => Directory.Delete(withheld)),
+            new StubProvider("withheld", bytes: 0, protects: withheld),
+        ]);
+        var findings = await planner.PlanAllAsync();
+
+        var result = (await planner.ExecuteAsync(findings)).Single(r => r.ProviderId == "withheld");
+
+        Assert.False(result.Verification!.Passed);
+        Assert.Equal(withheld, Assert.Single(result.Verification.Failures).Subject);
+    }
+
+    /// <summary>
+    /// The same survivor gone before the run removed anything was taken by nothing in the run, and is
+    /// reported as that rather than passed over.
+    /// </summary>
+    [Fact]
+    public async Task AStepFreePlanReportsASurvivorGoneBeforeTheRunAsRemovedFromOutside()
     {
         using var temp = new TempDirectory();
         var withheld = Directory.CreateDirectory(Path.Combine(temp.Path, "withheld")).FullName;
@@ -142,7 +165,8 @@ public sealed class CleanupPlannerTests
         var result = Assert.Single(await planner.ExecuteAsync(findings));
 
         Assert.False(result.Verification!.Passed);
-        Assert.Equal(withheld, Assert.Single(result.Verification.Failures).Subject);
+        Assert.Empty(result.Verification.Failures);
+        Assert.Equal(withheld, Assert.Single(result.Verification.RemovedFromOutside).Subject);
     }
 
     /// <summary>
@@ -807,7 +831,8 @@ public sealed class CleanupPlannerTests
         string? deletes = null,
         string? protects = null,
         bool protectsByRule = false,
-        IReadOnlyList<string>? leavesStanding = null) : ICleanupProvider
+        IReadOnlyList<string>? leavesStanding = null,
+        Action? onExecute = null) : ICleanupProvider
     {
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
@@ -893,6 +918,10 @@ public sealed class CleanupPlannerTests
             ReachHandedOver = runReach;
             ResidueHandedOver = residue;
             journal?.Add($"execute:{id}");
+
+            // Stands in for what a plan's own removal does to the disk, for a test of what a later plan
+            // in the run finds.
+            onExecute?.Invoke();
 
             // Stands in for what a real removal records about the folders it could not take.
             if (deletes is not null && leavesStanding is not null)

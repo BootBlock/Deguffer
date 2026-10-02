@@ -63,25 +63,17 @@ public static class DirectoryRemover
     {
         if (ct.IsCancellationRequested)
         {
-            return NothingDone(bounds);
+            return NothingDone;
         }
 
         var extended = LongPath.Extended(path);
-
-        // Asked before anything is touched, so an entry the walk below cannot meet is still one this
-        // removal can account for. See RemovalOutcome.LeftAlone. Answered by Windows rather than by
-        // comparing spellings, because a spelling that failed to match is exactly how a spared entry
-        // would be taken. What it cannot see is an entry that reappears between this and the walk
-        // under a spelling the bounds fail to match, which takes two faults at once.
-        IReadOnlyList<string> absentAtStart =
-            [.. bounds.Spared.Where(spared => fs.ProbeEntry(LongPath.Extended(spared)) is PathPresence.Absent)];
 
         switch (fs.ProbeDirectory(extended))
         {
             case PathPresence.Absent:
                 // A caller keeping the root is asking about a directory that is meant to still be
                 // there, so its absence is not the success it is for a deletion.
-                return new RemovalOutcome(0, Refusals.None, RootRemoved: !bounds.KeepRoot) { LeftAlone = bounds.Spared };
+                return new RemovalOutcome(0, Refusals.None, RootRemoved: !bounds.KeepRoot);
 
             // Windows would not say whether the directory is there, which the two-state question
             // this replaced answered as "gone" — so a removal that reached nothing at all reported
@@ -98,7 +90,6 @@ public static class DirectoryRemover
                 return new RemovalOutcome(0, Refusals.None, RootRemoved: false)
                 {
                     LeftStanding = bounds.KeepRoot ? [] : [LongPath.Display(extended)],
-                    LeftAlone = bounds.Spared,
                 };
         }
 
@@ -125,7 +116,7 @@ public static class DirectoryRemover
             {
                 progress?.Report(1.0);
 
-                return new RemovalOutcome(0, Refusals.None, RootRemoved: false, Kept: 1) { LeftAlone = bounds.Spared };
+                return new RemovalOutcome(0, Refusals.None, RootRemoved: false, Kept: 1);
             }
 
             var linkStayed = !bounds.KeepRoot && TryDeleteDirectory(extended, fs) is not null;
@@ -143,7 +134,6 @@ public static class DirectoryRemover
                 EntriesRemoved: linkRemoved && !bounds.KeepRoot ? 1 : 0)
             {
                 LeftStanding = linkStayed ? [LongPath.Display(extended)] : [],
-                LeftAlone = bounds.KeepRoot ? bounds.Spared : absentAtStart,
             };
         }
 
@@ -158,7 +148,7 @@ public static class DirectoryRemover
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return NothingDone(bounds);
+            return NothingDone;
         }
 
         var leftStanding = new List<string>();
@@ -291,14 +281,13 @@ public static class DirectoryRemover
             LeftStanding = [.. leftStanding.Select(LongPath.Display)],
             RefusedFolders = refusedFolders,
             MailStores = [.. inventory.MailStores.Select(LongPath.Display)],
-            LeftAlone = [.. absentAtStart, .. inventory.Spared.Select(LongPath.Display)],
+            LeftAlone = [.. inventory.Spared.Select(LongPath.Display)],
             Interrupted = interrupted,
         };
     }
 
-    /// <summary>A removal stopped before it deleted anything, which left every spared entry alone.</summary>
-    private static RemovalOutcome NothingDone(RemovalBounds bounds) =>
-        new(0, Refusals.None, RootRemoved: false) { Interrupted = true, LeftAlone = bounds.Spared };
+    /// <summary>A removal stopped before it deleted anything.</summary>
+    private static RemovalOutcome NothingDone => new(0, Refusals.None, RootRemoved: false) { Interrupted = true };
 
     /// <summary>
     /// The entry directly inside <paramref name="root"/> that <paramref name="path"/> is at or

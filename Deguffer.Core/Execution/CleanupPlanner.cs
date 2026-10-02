@@ -423,12 +423,6 @@ public sealed class CleanupPlanner
         // proceeds.
         var reach = RunReach.Of([.. plans.Select(p => p.Plan)]);
 
-        // What the run's removals leave standing, written by each plan as it executes and read by
-        // every verification after it. One record for the whole run, for the reason the reach is one
-        // value: a folder one provider's removal went into may be a folder another provider promised
-        // to leave. See RunResidue.
-        var residue = new RunResidue();
-
         // §7's extra confirmation for anything above Tier 1, for every plan before the first deletion.
         // The requirement is derived here rather than trusted from the caller: a shell that forgot to
         // ask, or asked for the wrong subject, must fail closed rather than delete. Asked inside the
@@ -447,6 +441,14 @@ public sealed class CleanupPlanner
                 throw new ConfirmationRequiredException(requirement);
             }
         }
+
+        // What the run's removals leave standing and leave alone, written by each plan as it executes
+        // and read by every verification after it. One record for the whole run, for the reason the
+        // reach is one value: a folder one provider's removal went into may be a folder another
+        // provider promised to leave. Begun here, after the last check that can refuse the run and
+        // before its first removal, because what it finds already gone is gone by no removal of this
+        // run. See RunResidue.
+        var residue = RunResidue.Before([.. plans.Select(p => p.Plan)]);
 
         var weights = Weigh([.. plans.Select(p => p.Plan)]);
         var total = weights.Sum();

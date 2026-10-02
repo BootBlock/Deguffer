@@ -212,10 +212,10 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
-    /// A removal names a spared entry as left alone only where it can show it: the walk met the entry
-    /// and held it back, or Windows said it was not there before anything was touched. One the walk
-    /// never met, that is still somewhere, is not named, because a spelling the walk failed to match
-    /// is exactly how a spared entry would be taken.
+    /// A removal names a spared entry as left alone only where its walk met the entry standing and
+    /// held it back. One already gone is not named, because an earlier removal may have taken it, and
+    /// one the walk never met that is still somewhere is not named either, because a spelling the walk
+    /// failed to match is exactly how a spared entry would be taken.
     /// </summary>
     [Fact]
     public async Task NamesASparedEntryLeftAloneOnlyWhereItCanShowIt()
@@ -230,7 +230,7 @@ public sealed class DirectoryRemoverTests : IDisposable
             root, MinimumAge.Off, progress: null, default, fileSystem: null,
             new RemovalBounds(KeepRoot: true, [met, gone, elsewhere]));
 
-        Assert.Equal([gone, met], outcome.LeftAlone.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal([met], outcome.LeftAlone);
         Assert.Equal(1, outcome.Spared);
     }
 

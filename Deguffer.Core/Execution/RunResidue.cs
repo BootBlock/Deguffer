@@ -3,8 +3,8 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// What one run's own removals tried to take and left standing, and which spared entries they left
-/// alone, gathered as the run goes.
+/// What one run's own removals tried to take and left standing, which spared entries they left
+/// alone, and which protected paths had already gone before the first of them.
 ///
 /// <para><b>§5.6 needs it because a refusal is evidence in itself.</b> Windows will not remove a
 /// folder a program is working in, and removal goes deepest first, so a removal that reaches into a
@@ -49,8 +49,56 @@ public sealed class RunResidue
     /// </summary>
     private readonly Dictionary<string, HashSet<string>> _byRoot = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The spared entries each removal root left alone, both in the one form compared here.</summary>
-    private readonly Dictionary<string, HashSet<string>> _leftAloneByRoot = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// The spared entries each removal left alone, one set per removal and kept per root, all in the
+    /// one form compared here.
+    ///
+    /// <para>One set per removal rather than one per root, because two removals of one folder answer
+    /// separately. Merged, a removal that found an entry already gone, because an earlier removal of
+    /// the same folder took it, would vouch for the removal that did.</para>
+    /// </summary>
+    private readonly Dictionary<string, List<HashSet<string>>> _leftAloneByRoot = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The protected paths already gone before the run removed anything, in the one form compared here.</summary>
+    private readonly HashSet<string> _goneBefore = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A record for a run about to carry out <paramref name="plans"/>, holding each protected path
+    /// that was there when the plan was made and is already gone. Taken before the run's first
+    /// removal, so nothing in the run can have taken one of them, under any spelling a step used.
+    ///
+    /// <para><b>Why a path can be gone before anything is removed.</b> A plan is made when the user
+    /// previews and carried out when they clean, and the program a spared entry was spared for often
+    /// removes that entry itself when it finishes. Its folder is one the run empties around it, so the
+    /// folder still stands, and that is the shape an over-broad removal leaves. Only the moment the
+    /// path went tells the two apart, and before the first removal is the one moment that needs no
+    /// comparison of paths to be trusted.</para>
+    ///
+    /// <para>Only a path Windows says is not there counts. One it would not describe proves
+    /// nothing. What this cannot see is a path that reappears during the run and that a removal then
+    /// takes, which would need the path's owner to put it back and a rule to over-reach at once.</para>
+    /// </summary>
+    public static RunResidue Before(IReadOnlyList<CleanupPlan> plans)
+    {
+        ArgumentNullException.ThrowIfNull(plans);
+
+        var residue = new RunResidue();
+
+        foreach (var path in plans.SelectMany(plan => plan.ProtectedPaths)
+                     .Where(path => path.PresenceBefore is PathPresence.Present)
+                     .Select(path => path.Path))
+        {
+            if (LongPath.ProbeEntry(path) is PathPresence.Absent)
+            {
+                residue._goneBefore.Add(Normalised(path));
+            }
+        }
+
+        return residue;
+    }
+
+    /// <summary>Whether <paramref name="path"/> was protected, and already gone before the run removed anything.</summary>
+    public bool GoneBeforeTheRun(string path) => _goneBefore.Contains(Normalised(path));
 
     /// <param name="root">The path the removal was handed, as its step named it.</param>
     /// <param name="leftStanding">
@@ -88,45 +136,44 @@ public sealed class RunResidue
     }
 
     /// <param name="root">The path the removal was handed, as its step named it.</param>
-    /// <param name="leftAlone">What that removal can show it never acted on: <see cref="RemovalOutcome.LeftAlone"/>.</param>
+    /// <param name="leftAlone">
+    /// What that removal can show it never acted on: <see cref="RemovalOutcome.LeftAlone"/>. Recorded
+    /// when it is empty too, because an empty record is a removal that vouches for nothing, and it
+    /// must stop any other removal of the same folder vouching on its behalf.
+    /// </param>
     public void RecordLeftAlone(string root, IReadOnlyList<string> leftAlone)
     {
         ArgumentNullException.ThrowIfNull(leftAlone);
 
-        if (leftAlone.Count == 0)
-        {
-            return;
-        }
-
         var top = Normalised(root);
 
-        if (!_leftAloneByRoot.TryGetValue(top, out var entries))
+        if (!_leftAloneByRoot.TryGetValue(top, out var removals))
         {
-            entries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            _leftAloneByRoot[top] = entries;
+            removals = [];
+            _leftAloneByRoot[top] = removals;
         }
 
-        entries.UnionWith(leftAlone.Select(Normalised));
+        removals.Add(new HashSet<string>(leftAlone.Select(Normalised), StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// Whether the removal handed <paramref name="root"/> left <paramref name="path"/> alone: it, or
-    /// an entry holding it, is one that removal can show it never acted on.
+    /// Whether every removal handed <paramref name="root"/> left <paramref name="path"/> alone: it,
+    /// or an entry holding it, is one each of them can show it never acted on.
     ///
     /// <para>An entry holding it counts, because a removal that never entered a folder took nothing
-    /// inside it. A removal that is not recorded answers false, so a removal this run has not made
+    /// inside it. A root no removal has recorded answers false, so a removal this run has not made
     /// yet is never read as one that left anything alone.</para>
     /// </summary>
     public bool LeftAlone(string root, string path)
     {
-        if (!_leftAloneByRoot.TryGetValue(Normalised(root), out var entries))
+        if (!_leftAloneByRoot.TryGetValue(Normalised(root), out var removals))
         {
             return false;
         }
 
         var key = Normalised(path);
 
-        return entries.Any(entry => LongPath.Contains(entry, key));
+        return removals.TrueForAll(entries => entries.Any(entry => LongPath.Contains(entry, key)));
     }
 
     /// <summary>

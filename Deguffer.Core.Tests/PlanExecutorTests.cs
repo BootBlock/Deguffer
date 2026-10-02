@@ -960,8 +960,8 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
-    /// The same, with the program finished before the clear reached the folder. The walk cannot meet
-    /// an entry that is not there, so what Windows said before the removal began is the evidence.
+    /// The same, with the program finished before the clean began. The walk cannot meet an entry that
+    /// is not there, so what the run found before it removed anything is the evidence.
     /// </summary>
     [Fact]
     public async Task ASparedEntryGoneBeforeTheClearBeganWasRemovedFromOutside()
@@ -995,6 +995,34 @@ public sealed class PlanExecutorTests : IDisposable
             .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: default);
 
         Assert.False(Directory.Exists(live), "the fixture's over-reach did not take the entry");
+        Assert.Equal(VerificationOutcome.Failed, Assert.Single(result.Verification!.Checks).Outcome);
+    }
+
+    /// <summary>
+    /// The over-reach no comparison of paths can see, which must still be the alarm. An earlier plan in
+    /// the run deletes the spared entry through a junction to its folder, so no target holds it as
+    /// text, and the clear then finds it already gone. Only an entry the clear met, or one gone before
+    /// the run removed anything, may be read as something else's doing, and this is neither.
+    /// </summary>
+    [Fact]
+    public async Task ASparedEntryAnEarlierPlanTookThroughALinkStillFailsVerification()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "kitprobe");
+        _temp.CreateFile(1024, "scratch", "kitprobe", "closeup.py");
+        var alias = Path.Combine(_temp.Path, "alias");
+        DirectoryLink.Create(DirectoryLinkKind.Junction, alias, scratch);
+
+        var overReach = PlanDeleting(new DeleteDirectoryStep(Path.Combine(alias, "kitprobe"), "A cache"));
+        var clear = ClearSparing(scratch, live, spared: true);
+        var reach = RunReach.Of([overReach, clear]);
+        var residue = RunResidue.Before([overReach, clear]);
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+
+        await executor.ExecuteAsync(overReach, reach, residue, progress: null, ct: default);
+        var result = await executor.ExecuteAsync(clear, reach, residue, progress: null, ct: default);
+
+        Assert.False(Directory.Exists(live), "the fixture's link did not take the entry");
         Assert.Equal(VerificationOutcome.Failed, Assert.Single(result.Verification!.Checks).Outcome);
     }
 

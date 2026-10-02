@@ -55,17 +55,6 @@ public interface IFileSystem
     PathPresence ProbeDirectory(string path);
 
     /// <summary>
-    /// What Windows says is at <paramref name="path"/>, a file or a directory, on the terms
-    /// <see cref="ProbeDirectory"/> gives.
-    ///
-    /// <para>Asked of an entry a removal must leave alone, before the removal begins. An entry that is
-    /// not there then is one the removal cannot take, and §5.6 reads that from the answer rather than
-    /// from a comparison of path spellings, which is the thing that would have to fail for the
-    /// removal to take it.</para>
-    /// </summary>
-    PathPresence ProbeEntry(string path);
-
-    /// <summary>
     /// Whether <paramref name="path"/> is a junction or symbolic link.
     ///
     /// Asked of the removal root, which is the one entry no enumeration ever classifies: every
@@ -166,8 +155,6 @@ public sealed class WindowsFileSystem : IFileSystem
     public bool DirectoryExists(string path) => Directory.Exists(path);
 
     public PathPresence ProbeDirectory(string path) => LongPath.ProbeDirectory(path);
-
-    public PathPresence ProbeEntry(string path) => LongPath.ProbeEntry(path);
 
     public bool IsReparsePoint(string path) => LongPath.IsReparsePoint(path);
 

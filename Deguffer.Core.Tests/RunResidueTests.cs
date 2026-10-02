@@ -28,6 +28,21 @@ public sealed class RunResidueTests
         Assert.False(residue.LeftAlone(@"C:\Users\testuser\AppData\Local", $@"{Scratch}\kitprobe"));
     }
 
+    /// <summary>
+    /// Two removals of one folder answer separately. A later one that found an entry already gone,
+    /// because the earlier one took it, records it as left alone, and that must not vouch for the
+    /// earlier one, which recorded nothing.
+    /// </summary>
+    [Fact]
+    public void EveryRemovalOfAFolderHasToHaveLeftTheEntryAlone()
+    {
+        var residue = new RunResidue();
+        residue.RecordLeftAlone(Scratch, []);
+        residue.RecordLeftAlone(Scratch, [$@"{Scratch}\kitprobe"]);
+
+        Assert.False(residue.LeftAlone(Scratch, $@"{Scratch}\kitprobe"));
+    }
+
     [Fact]
     public void EveryFolderBetweenWhatStayedAndTheRootWasEntered()
     {

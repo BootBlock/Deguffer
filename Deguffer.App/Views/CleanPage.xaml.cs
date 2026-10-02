@@ -272,6 +272,9 @@ public sealed partial class CleanPage : Page
     /// <para>Flushed, so the report is still there to paste after Deguffer closes, which is when a
     /// user filing an issue is most likely to paste it.</para>
     /// </summary>
+    /// <summary>CLIPBRD_E_CANT_OPEN: Windows' answer while another program holds the clipboard open.</summary>
+    private const int ClipboardCannotOpen = unchecked((int)0x800401D0);
+
     private void OnCopyRunDiagnostics(object sender, RoutedEventArgs e)
     {
         var package = new DataPackage();
@@ -283,10 +286,10 @@ public sealed partial class CleanPage : Page
             Clipboard.Flush();
             CopyRunDiagnosticsResult.Text = "Copied. Paste it into a GitHub issue.";
         }
-        catch (COMException)
+        catch (COMException ex) when (ex.HResult == ClipboardCannotOpen)
         {
-            // Another program has the clipboard open, which Windows reports this way. It lets go
-            // within moments, so the answer is to try again rather than to give up.
+            // Another program has the clipboard open. It lets go within moments, so the answer is to
+            // try again rather than to give up.
             CopyRunDiagnosticsResult.Text = "Another program is using the clipboard. Try again.";
         }
     }

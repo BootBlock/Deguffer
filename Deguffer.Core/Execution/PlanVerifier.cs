@@ -16,8 +16,8 @@ public static class PlanVerifier
     /// means this plan is the whole run, which is true of a provider verified on its own.
     /// </param>
     /// <param name="residue">
-    /// What the run's removals have left standing so far. Null means nothing was removed, which is
-    /// true of a verification with no execution behind it.
+    /// What the run's removals have left standing so far, and which spared entries they left alone.
+    /// Null means nothing was removed, which is true of a verification with no execution behind it.
     /// </param>
     /// <param name="cloud">
     /// What describes the files a <see cref="ReleaseLocalCopiesStep"/> named. Asked only of a plan that
@@ -162,6 +162,17 @@ public static class PlanVerifier
                     + "No step in this run named anything inside it.")
                 : new VerificationCheck(
                     protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
+        }
+
+        if (residue?.GoneBeforeTheRun(protectedPath.Path) == true)
+        {
+            return new VerificationCheck(
+                protectedPath.Path,
+                protectedPath.Reason,
+                VerificationOutcome.RemovedFromOutside,
+                "GONE — but it had already gone before this clean removed anything, so something else "
+                + "on the machine removed it after the scan ran. A program that was using it may have "
+                + "removed it when it finished.");
         }
 
         if (WasBeyondThisRunsReach(protectedPath.Path, reach))
@@ -310,7 +321,8 @@ public static class PlanVerifier
     /// a run is many plans and another provider's deletion is not a stranger's.</para>
     ///
     /// <para>A missing path whose folder is still standing is what an over-broad rule looks like
-    /// from here, so it stays a failure whatever else is true.</para>
+    /// from here, so this answers false for it. Only the run's own record can say otherwise: see
+    /// <see cref="RunResidue.GoneBeforeTheRun"/> and <see cref="WasLeftAloneByEveryRemovalReachingIt"/>.</para>
     ///
     /// <para><b>What it cannot see.</b> The comparison is textual, and
     /// <see cref="LongPath.Extended"/> resolves no links, so a step whose <em>ancestry</em> passes
@@ -356,11 +368,17 @@ public static class PlanVerifier
     /// there.</para>
     ///
     /// <para><b>The evidence is the removal's own, and it is positive.</b> Each removal records the
-    /// spared entries it held back and those Windows said were not there before it began. A path
-    /// counts only where every target holding it is a removal that recorded it, so a step that names
-    /// the path itself, a removal not yet made, and a spelling the walk failed to match all leave the
-    /// alarm in place. An unbounded reach does as well, because a tool's own command may have taken it
-    /// whatever Deguffer's removal did.</para>
+    /// spared entries its walk met standing and held back, so nothing in the run had taken them by
+    /// then. A path counts only where every target holding it is a removal that recorded it, so a step
+    /// that names the path itself, a removal not yet made, and a spelling the walk failed to match all
+    /// leave the alarm in place. An unbounded reach does as well, because a tool's own command may
+    /// have taken it whatever Deguffer's removal did. An entry gone before the walk reached it is not
+    /// evidence here, because an earlier removal may have taken it through a link: see
+    /// <see cref="RunResidue.GoneBeforeTheRun"/> for the one moment that question can be answered.</para>
+    ///
+    /// <para><b>What it cannot see</b> is the blind spot <see cref="WasBeyondThisRunsReach"/>
+    /// records: a later removal in the same plan that reaches the entry through a junction in its
+    /// root's ancestry is not among the targets that hold it, so it is not asked.</para>
     /// </summary>
     private static bool WasLeftAloneByEveryRemovalReachingIt(string path, RunReach reach, RunResidue? residue)
     {

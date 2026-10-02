@@ -31,13 +31,6 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
         return IsRefused(path) ? PathPresence.Refused : inner.ProbeDirectory(path);
     }
 
-    public PathPresence ProbeEntry(string path)
-    {
-        Probed.Add(path);
-
-        return IsRefused(path) ? PathPresence.Refused : inner.ProbeEntry(path);
-    }
-
     /// <summary>
     /// True for the refused directory, because that is what <see cref="LongPath.IsReparsePoint"/>
     /// answers for a path it could not read: it fails closed. Delegating instead would answer false
