@@ -15,8 +15,19 @@ namespace Deguffer.Core.Execution;
 public sealed class CleanupPlanner
 {
     private readonly IReadOnlyList<ICleanupProvider> _providers;
+    private readonly RowDeclarations? _declarations;
 
-    public CleanupPlanner(IEnumerable<ICleanupProvider> providers) => _providers = [.. providers];
+    /// <param name="declarations">
+    /// The declarations the rows that walk a folder consult, admitted here so that they name every row
+    /// in this planner and no other, and dropped at the start of every planning pass alongside the
+    /// rows' own caches. See <see cref="RowDeclarations"/>.
+    /// </param>
+    public CleanupPlanner(IEnumerable<ICleanupProvider> providers, RowDeclarations? declarations = null)
+    {
+        _providers = [.. providers];
+        _declarations = declarations;
+        _declarations?.Admit(_providers);
+    }
 
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, Maven, vcpkg, pnpm,
@@ -102,6 +113,10 @@ public sealed class CleanupPlanner
         // file, and a copy installed through Steam is found through the discovery above.
         var retroArch = new RetroArchDiscovery(environment, steam);
 
+        // What every row declares it removes, read as one by each row that walks a folder another row
+        // may also walk, so neither asserts that the other's removals survive.
+        var declarations = new RowDeclarations();
+
         return new CleanupPlanner(
         [
             new DotNetObjProvider(roots, sourceTrees, liveTrees, environment),
@@ -112,8 +127,17 @@ public sealed class CleanupPlanner
             new NodeModulesProvider(roots, sourceTrees, liveTrees, environment),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment),
             .. CacheProviders(
-                environment, squirrel, steam, retroArch, claudeSessions, claudeProjects, liveTrees, preferences ?? DefaultPreferences.Instance),
-        ]);
+                environment,
+                squirrel,
+                steam,
+                retroArch,
+                claudeSessions,
+                claudeProjects,
+                liveTrees,
+                preferences ?? DefaultPreferences.Instance,
+                declarations),
+        ],
+        declarations);
     }
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
@@ -124,7 +148,8 @@ public sealed class CleanupPlanner
         ClaudeCodeSessionRegistry claudeSessions,
         ClaudeCodeProjectsDiscovery claudeProjects,
         ILiveTreeInspector liveTrees,
-        ICurrentPreferences preferences)
+        ICurrentPreferences preferences,
+        RowDeclarations declarations)
     {
         // Every row that offers an entry of a temporary folder under the name of the tool that wrote
         // it, built first so the "Temporary files" row can leave those entries to them.
@@ -152,16 +177,16 @@ public sealed class CleanupPlanner
         return
         [
             nuget,
-            new GradleCacheProvider(environment),
+            new GradleCacheProvider(environment, declarations: declarations),
             new NpmCacheProvider(environment),
             new PnpmStoreProvider(environment),
             new VsCodeCppToolsCacheProvider(environment),
-            new DartAnalysisServerProvider(environment),
+            new DartAnalysisServerProvider(environment, declarations: declarations),
             new RoslynCacheProvider(environment),
             toolCaches,
             new UvCacheProvider(environment),
             new PipCacheProvider(environment),
-            new PoetryCacheProvider(environment),
+            new PoetryCacheProvider(environment, declarations: declarations),
             new CondaCacheProvider(environment),
             new CargoCacheProvider(environment),
             new GoCacheProvider(environment),
@@ -169,11 +194,12 @@ public sealed class CleanupPlanner
             new MavenRepositoryProvider(environment),
             new VcpkgCacheProvider(environment),
             new GpuShaderCacheProvider(environment),
-            new ChromiumCacheProvider(environment, liveTrees: liveTrees, discovery: chromium),
-            new ChromiumServiceWorkerStorageProvider(environment, liveTrees: liveTrees, discovery: chromium),
-            new VsCodeCacheProvider(environment),
+            new ChromiumCacheProvider(environment, liveTrees: liveTrees, discovery: chromium, declarations: declarations),
+            new ChromiumServiceWorkerStorageProvider(
+                environment, liveTrees: liveTrees, discovery: chromium, declarations: declarations),
+            new VsCodeCacheProvider(environment, declarations: declarations),
             new FirefoxCacheProvider(environment),
-            new EpicLauncherWebCacheProvider(environment),
+            new EpicLauncherWebCacheProvider(environment, declarations: declarations),
             new EpicLauncherContentCacheProvider(environment),
             new BattleNetCacheProvider(environment),
             new SteamCacheProvider(environment, discovery: steam),
@@ -202,7 +228,8 @@ public sealed class CleanupPlanner
             new AzureFunctionsToolsProvider(environment),
             new GraphicsDriverInstallerProvider(environment, liveTrees: liveTrees),
             new AutodeskInstallerProvider(environment, liveTrees: liveTrees),
-            new ClaudeCodeDerivedStateProvider(environment, projects: claudeProjects, sessions: claudeSessions),
+            new ClaudeCodeDerivedStateProvider(
+                environment, projects: claudeProjects, sessions: claudeSessions, declarations: declarations),
             new RecycleBinProvider(ShellRecycleBinEmptier.Default, environment, preferences: preferences),
             new FileHistoryProvider(environment, preferences: preferences),
             new CloudLocalCopiesProvider(CloudFiles.Default, environment),
@@ -222,7 +249,7 @@ public sealed class CleanupPlanner
             new WindowsServicingLogProvider(handlers, environment),
             new EpicLauncherLogProvider(environment),
             new BattleNetLogProvider(environment),
-            new VsCodeLogProvider(environment),
+            new VsCodeLogProvider(environment, declarations: declarations),
             new ClaudeCodeMcpLogProvider(environment),
             toolLogs,
             new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions),
@@ -231,6 +258,9 @@ public sealed class CleanupPlanner
     }
 
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
+
+    /// <summary>The declarations this planner admitted, so a test can hold every row that walks a folder to them.</summary>
+    internal RowDeclarations? Declarations => _declarations;
 
     /// <summary>
     /// Preview every provider, largest first (§7: group by cause, sort by size).
@@ -280,6 +310,8 @@ public sealed class CleanupPlanner
         {
             provider.InvalidateCaches();
         }
+
+        _declarations?.Invalidate();
 
         var findings = new List<Finding>(providers.Count);
 

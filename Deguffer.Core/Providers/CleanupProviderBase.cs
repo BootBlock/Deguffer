@@ -326,7 +326,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     /// <summary>
     /// §5.6 for a plan built on <see cref="CacheLevelWalk"/>: the paths the provider names itself,
-    /// then every child the walk spared or declined.
+    /// then <paramref name="spared"/>, which is <see cref="LevelWalk.Survivors"/> as the plan read it,
+    /// and every child the walk declined.
     ///
     /// <para>The walk's own lists are the ones that must not be left out. A spared child is a sibling
     /// of a targeted one under the same parent, so a plan that only notes it gives §5.6 nothing to
@@ -334,8 +335,9 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     private protected static IReadOnlyList<ProtectedPath> Protect(
         LevelWalk walk,
+        IReadOnlyList<(string Path, string Reason)> spared,
         params (string Path, string Reason)[] named) =>
-        Protect([.. named, .. walk.Survivors, .. walk.Declined]);
+        Protect([.. named, .. spared, .. walk.Declined]);
 
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
     protected PlanNote? BuildRunningProcessNote() =>

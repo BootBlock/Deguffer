@@ -116,8 +116,9 @@ public sealed class ChromiumCacheProvider : ChromiumUserDataProvider
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ILiveTreeInspector? liveTrees = null,
-        ChromiumUserDataDiscovery? discovery = null)
-        : base(environment, runner, inspector, scanner, liveTrees, discovery)
+        ChromiumUserDataDiscovery? discovery = null,
+        RowDeclarations? declarations = null)
+        : base(environment, runner, inspector, scanner, liveTrees, discovery, declarations)
     {
     }
 

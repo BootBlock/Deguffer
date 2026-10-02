@@ -41,12 +41,18 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
     private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, DisposableChildren)];
 
     private readonly string _root;
+    private readonly RowDeclarations _declarations;
 
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child another row removes from a folder this row
+    /// walks is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     public DartAnalysisServerProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -54,6 +60,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             scanner ?? DirectoryScanner.Default)
     {
         _root = Path.Combine(Environment.LocalAppData, ".dartServer");
+        _declarations = declarations ?? new RowDeclarations();
     }
 
     public override string Id => "dart-analysis-server";
@@ -125,7 +132,9 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
 
         var walk = CacheLevelWalk.Under(Levels, _root, ct);
 
-        List<PlanNote> notes = [.. walk.Notes, .. walk.Survivors.Select(CacheLevelWalk.SparedNote)];
+        var spared = walk.Survivors(_declarations, ct);
+
+        List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
 
         var (steps, measured) = await PlanDeletionsAsync(walk.Targets, keep, ct).ConfigureAwait(false);
 
@@ -146,7 +155,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(walk),
+            ProtectedPaths = BuildProtectedPaths(walk, spared),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,
@@ -160,8 +169,11 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
     /// indistinguishable in shape from them, and so exactly what an over-broad rule takes along.
     /// Every other child the walk spared or declined is named for the same reason.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(LevelWalk walk) => Protect(
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        LevelWalk walk,
+        IReadOnlyList<(string Path, string Reason)> spared) => Protect(
         walk,
+        spared,
         (_root, "The .dartServer root itself must survive — only its known-disposable children are removed."),
         (Path.Combine(_root, ".prompts"), "The user's answers to the analysis server's prompts — a preference, not a cache."),
         (Path.Combine(_root, ".plugin_manager"), "State for the analyzer plugins the server loads."),

@@ -20,13 +20,17 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private ChromiumServiceWorkerStorageProvider CreateProvider(ChromiumUserDataDiscovery? discovery = null) =>
+    private ChromiumServiceWorkerStorageProvider CreateProvider(
+        ChromiumUserDataDiscovery? discovery = null,
+        RowDeclarations? declarations = null) =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning,
-            liveTrees: FakeLiveTreeInspector.NothingLive, discovery: discovery);
+            liveTrees: FakeLiveTreeInspector.NothingLive, discovery: discovery, declarations: declarations);
 
-    private ChromiumCacheProvider CreateCacheProvider(ChromiumUserDataDiscovery? discovery = null) =>
+    private ChromiumCacheProvider CreateCacheProvider(
+        ChromiumUserDataDiscovery? discovery = null,
+        RowDeclarations? declarations = null) =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning,
-            liveTrees: FakeLiveTreeInspector.NothingLive, discovery: discovery);
+            liveTrees: FakeLiveTreeInspector.NothingLive, discovery: discovery, declarations: declarations);
 
     /// <summary>A folder holding Chromium's <c>Local State</c> marker, which identifies it.</summary>
     private string CreateApplication(string name)
@@ -116,8 +120,9 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
     /// Chromium version writes beside them, and the site data and credentials belong to no row. Every
     /// one of them is asserted to survive, not merely left out of the plan.
     ///
-    /// <para>The engine's caches are the other row's to take, so this row neither asserts them nor
-    /// counts them as left alone, and still leaves them standing when it is cleaned on its own.</para>
+    /// <para>The engine's caches are the other row's to take, so where the planner admits both rows
+    /// this row neither asserts them nor counts them as left alone, and still leaves them standing when
+    /// it is cleaned on its own.</para>
     /// </summary>
     [Fact]
     public async Task EverythingBesideTheOfflineStorageIsAssertedToSurviveIt()
@@ -146,7 +151,9 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
 
         var engineCache = CreateDirectory(Path.Combine(profile, "GPUCache"));
 
-        var provider = CreateProvider();
+        var declarations = new RowDeclarations();
+        var provider = CreateProvider(declarations: declarations);
+        declarations.Admit([provider, CreateCacheProvider()]);
         var plan = await provider.PlanAsync();
 
         Assert.Equal([storage], plan.TargetedPaths);
@@ -230,7 +237,10 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
         var database = CreateDirectory(Path.Combine(app, "Default", "Service Worker", "Database"));
 
         var discovery = new ChromiumUserDataDiscovery(_environment);
-        var planner = new CleanupPlanner([CreateCacheProvider(discovery), CreateProvider(discovery)]);
+        var declarations = new RowDeclarations();
+        var planner = new CleanupPlanner(
+            [CreateCacheProvider(discovery, declarations), CreateProvider(discovery, declarations)],
+            declarations);
         var findings = await planner.PlanAllAsync();
 
         var results = await planner.ExecuteAsync(
@@ -293,24 +303,6 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
         Assert.Equal(
             ["CacheStorage"],
             ChromiumServiceWorkerStorageProvider.Levels.SelectMany(l => l.Children.DisposableNames));
-    }
-
-    /// <summary>
-    /// Each row leaves out of its survivors what a sibling's table offers, and it learns the
-    /// siblings from one list. A row built on the same class and missing from that list would have
-    /// every removal it makes reported by the others as a §5.6 failure whenever both are ticked.
-    /// </summary>
-    [Fact]
-    public void EveryChromiumRowIsInTheFamilyItsSiblingsConsult()
-    {
-        var rows = typeof(ChromiumUserDataProvider).Assembly.GetTypes()
-            .Where(t => t is { IsAbstract: false } && t.IsSubclassOf(typeof(ChromiumUserDataProvider)))
-            .Select(t => (IReadOnlyList<CacheLevel>)t.GetField("Levels")!.GetValue(null)!)
-            .ToList();
-
-        Assert.NotEmpty(rows);
-        Assert.Equal(rows.Count, ChromiumUserDataProvider.Family.Count);
-        Assert.All(rows, levels => Assert.Contains(ChromiumUserDataProvider.Family, f => ReferenceEquals(f, levels)));
     }
 
     /// <summary>

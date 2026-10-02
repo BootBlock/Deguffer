@@ -1145,6 +1145,12 @@ Nothing outside the recognised names is ever a candidate, whatever it is called 
 partition that is not the one cache it recognises. Deguffer asserts afterwards that each of the
 directories above survived.
 
+The folder holds Chromium's `Local State` as well, so the [Chromium rows](#chromium-application-caches)
+reach it too, and the [log row](#vs-code-editor-logs-and-crash-reports) works in the same folder.
+Each row leaves what another row removes there, such as `Code Cache` or `logs`, out of what it
+reports as left alone and out of what it asserts, because a clean with both rows ticked removes it.
+Anything no row removes is asserted by every row that reaches the folder.
+
 Deguffer also refuses to delete through a link. If you have redirected one of these caches to
 another drive with a junction, it removes nothing there and tells you why.
 
@@ -1195,8 +1201,10 @@ editor starts.
 ### What is protected
 
 The same `User` tree as above, named the same way and asserted to survive in the same way. The
-editor's **caches** are protected here too: they are offered separately, under Tier 1, because a
-Tier 3 confirmation is not the one you should be giving to delete a regenerable cache.
+editor's **caches** are left in place here: they are offered separately, under Tier 1, because a
+Tier 3 confirmation is not the one you should be giving to delete a regenerable cache. Because they
+belong to that row, and to the Chromium rows for the engine's caches, this row does not report them
+as left alone or assert that they survived. A clean with both rows ticked removes them.
 
 ### What it costs you
 

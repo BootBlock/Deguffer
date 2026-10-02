@@ -397,6 +397,48 @@ public sealed class CleanupPlannerTests
         Assert.All(temporary.Tenants, t => Assert.Contains(t, tenants));
     }
 
+    /// <summary>
+    /// A row that walks a folder leaves out of its survivors what another row's table offers there,
+    /// and it learns the other rows from the declarations the planner admitted. A row holding a set of
+    /// its own would assert every other row's removals in a folder they share, and report each run
+    /// that ticked both as a §5.6 failure.
+    /// </summary>
+    [Fact]
+    public void EveryRowThatConsultsDeclarationsConsultsThePlannersOwn()
+    {
+        var planner = CleanupPlanner.CreateDefault();
+        var declarations = planner.Declarations;
+
+        Assert.NotNull(declarations);
+
+        var consulting = planner.Providers
+            .Select(provider => (provider, Held: HeldDeclarations(provider)))
+            .Where(row => row.Held is not null)
+            .ToList();
+
+        Assert.True(consulting.Count >= 8, $"only {consulting.Count} rows consult declarations");
+        Assert.All(consulting, row => Assert.True(
+            ReferenceEquals(declarations, row.Held),
+            $"'{row.provider.Id}' consults declarations the planner did not admit."));
+
+        static RowDeclarations? HeldDeclarations(ICleanupProvider provider)
+        {
+            for (var type = provider.GetType(); type is not null; type = type.BaseType)
+            {
+                var field = type
+                    .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .FirstOrDefault(f => f.FieldType == typeof(RowDeclarations));
+
+                if (field is not null)
+                {
+                    return (RowDeclarations?)field.GetValue(provider);
+                }
+            }
+
+            return null;
+        }
+    }
+
     [Fact]
     public void TheDefaultSetIsTheVerifiedSourcesAndEveryTierAboveOneIsNamed()
     {

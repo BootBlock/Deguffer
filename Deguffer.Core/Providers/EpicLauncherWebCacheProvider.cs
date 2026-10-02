@@ -122,21 +122,26 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         ("Web Data", "Any address and payment card the store's browser saved."),
     ];
 
+    private readonly RowDeclarations _declarations;
     private WebCacheScan? _scan;
     private IReadOnlyList<ToolRoot>? _toolRoots;
 
+    /// <param name="declarations">
+    /// What every row in the planner offers, so a child another row removes from a folder this row
+    /// walks is not asserted here. See <see cref="RowDeclarations"/>.
+    /// </param>
     public EpicLauncherWebCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
-    {
-    }
+            scanner ?? DirectoryScanner.Default) =>
+        _declarations = declarations ?? new RowDeclarations();
 
     public override string Id => "epic-launcher-webcache";
 
@@ -309,13 +314,14 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                 file => (Path.Combine(cache, file.Name), file.Reason)));
 
             var walk = CacheLevelWalk.Under(Levels, cache, ct);
+            var spares = walk.Survivors(_declarations, ct);
 
             targets.AddRange(walk.Targets);
             declined.AddRange(walk.Declined);
-            survivors.AddRange(walk.Survivors);
+            survivors.AddRange(spares);
             notes.AddRange(walk.Notes);
 
-            spared += walk.Spared;
+            spared += spares.Count;
             emptiedAContainer |= walk.EmptiedAContainer;
             unreadable |= walk.Unreadable;
         }
