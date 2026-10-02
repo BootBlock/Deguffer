@@ -152,13 +152,14 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
     /// <summary>
     /// The Direct3D cache is reached by name, so it is the one target no enumeration filtered. A
-    /// junction there is the §5.2 failure in its worst form: the plan names a path inside the
+    /// link there is the §5.2 failure in its worst form: the plan names a path inside the
     /// profile and the deletion lands wherever the link points, which the §5.6 negative — written
     /// against paths inside the profile — cannot detect. Redirecting a shader cache to another
     /// volume this way is common.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedDirect3DCacheIsNeverATargetAndIsNotDeletedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedDirect3DCacheIsNeverATargetAndIsNotDeletedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "precious");
         Directory.CreateDirectory(outside);
@@ -166,7 +167,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         File.WriteAllBytes(bystander, new byte[4096]);
 
         var link = Path.Combine(_environment.LocalAppData, "D3DSCache");
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -181,19 +182,20 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned vendor root is enumerated straight through if nobody checks, and every survivor
+    /// A linked vendor root is enumerated straight through if nobody checks, and every survivor
     /// named for that root resolves through the link and passes. The root is reached by name, so it
     /// needs the same check the Direct3D cache gets.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedVendorRootIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedVendorRootIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         Directory.CreateDirectory(Path.Combine(outside, "DXCache"));
         File.WriteAllBytes(Path.Combine(outside, "DXCache", "pipeline.bin"), new byte[4096]);
 
         var link = Path.Combine(_environment.LocalAppData, "NVIDIA");
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -210,16 +212,17 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(outside, "DXCache", "pipeline.bin")),
-            "planning looked through a junctioned vendor root and deleted the far side");
+            "planning looked through a linked vendor root and deleted the far side");
     }
 
     /// <summary>
-    /// A junctioned cache is a child the user can see, so a plan that neither offers it nor mentions
+    /// A linked cache is a child the user can see, so a plan that neither offers it nor mentions
     /// it disagrees with the folder. Silently dropping it also made the empty-plan message lie:
     /// presence resolves through a link, so the provider would report no cache while one existed.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedVendorChildIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedVendorChildIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         Directory.CreateDirectory(outside);
@@ -227,7 +230,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "NVIDIA"));
         var link = Path.Combine(_environment.LocalAppData, "NVIDIA", "DXCache");
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = CreateProvider();
 
@@ -246,7 +249,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(outside, "pipeline.bin")),
-            "a junctioned cache was deleted through");
+            "a linked cache was deleted through");
     }
 
     /// <summary>

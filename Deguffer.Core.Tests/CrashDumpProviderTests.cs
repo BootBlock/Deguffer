@@ -273,17 +273,18 @@ public sealed class CrashDumpProviderTests : IDisposable
 
     /// <summary>
     /// A declared path reached by name has none of the protection an enumeration gives away, and
-    /// this is the case the GPU shader caches met first: a junctioned target is enumerated through,
+    /// this is the case the GPU shader caches met first: a linked target is enumerated through,
     /// the far side is deleted, and every survivor the plan names resolves through the link and
     /// passes.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedTargetIsNamedRatherThanFollowed()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedTargetIsNamedRatherThanFollowed(DirectoryLinkKind kind)
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"), name: "irreplaceable.bin");
         var bystander = Path.Combine(outside, "irreplaceable.bin");
 
-        SymbolicLink.ToDirectory(Path.Combine(Windows, "Minidump"), outside);
+        DirectoryLink.Create(kind, Path.Combine(Windows, "Minidump"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -296,22 +297,23 @@ public sealed class CrashDumpProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(bystander), "a junctioned target was deleted through");
+        Assert.True(File.Exists(bystander), "a linked target was deleted through");
     }
 
     /// <summary>
     /// The same rule at a level the declaration only passes through. <c>ReportArchive</c> sits three
     /// directories below <c>%PROGRAMDATA%</c>, so a check on the final path alone would walk straight
-    /// through a junctioned <c>Microsoft</c> and delete in a tree the plan never named.
+    /// through a linked <c>Microsoft</c> and delete in a tree the plan never named.
     /// </summary>
-    [Fact]
-    public async Task AJunctionOnTheWayDownToANestedTargetIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkOnTheWayDownToANestedTargetIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var archive = Populate(Path.Combine(outside, "Windows", "WER", "ReportArchive"), name: "report.wer");
         var bystander = Path.Combine(archive, "report.wer");
 
-        SymbolicLink.ToDirectory(Path.Combine(ProgramData, "Microsoft"), outside);
+        DirectoryLink.Create(kind, Path.Combine(ProgramData, "Microsoft"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -325,7 +327,7 @@ public sealed class CrashDumpProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(bystander), "planning looked through a junctioned parent");
+        Assert.True(File.Exists(bystander), "planning looked through a linked parent");
     }
 
     /// <summary>§5.6 has to fail loudly, or it is decoration.</summary>

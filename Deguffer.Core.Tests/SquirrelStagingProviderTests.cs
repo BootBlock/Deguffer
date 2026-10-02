@@ -589,11 +589,12 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     /// The staging folder moved onto another drive with a link. Nothing is removed through it, and
     /// the row says so rather than reading as clear.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedStagingFolderIsLeftAloneAndReported()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedStagingFolderIsLeftAloneAndReported(DirectoryLinkKind kind)
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "tempa"));
-        SymbolicLink.ToDirectory(StagingRoot, Path.Combine(_temp.Path, "elsewhere"));
+        DirectoryLink.Create(kind, StagingRoot, Path.Combine(_temp.Path, "elsewhere"));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

@@ -284,13 +284,14 @@ public sealed class PlexTranscodeProviderTests : IDisposable
     }
 
     /// <summary>A declared path reached by name has none of the protection an enumeration gives.</summary>
-    [Fact]
-    public async Task AJunctionedSessionsFolderIsNamedRatherThanFollowed()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedSessionsFolderIsNamedRatherThanFollowed(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var irreplaceable = Write(Path.Combine(outside, "irreplaceable.mkv"), Old);
         Directory.CreateDirectory(Path.GetDirectoryName(Sessions)!);
-        SymbolicLink.ToDirectory(Sessions, outside);
+        DirectoryLink.Create(kind, Sessions, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -300,7 +301,7 @@ public sealed class PlexTranscodeProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(irreplaceable), "a junctioned Sessions folder was deleted through.");
+        Assert.True(File.Exists(irreplaceable), "a linked Sessions folder was deleted through.");
     }
 
     /// <summary>§5.3, named by the transcoder's own process.</summary>

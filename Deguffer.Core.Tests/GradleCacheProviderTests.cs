@@ -150,7 +150,7 @@ public sealed class GradleCacheProviderTests : IDisposable
 
     /// <summary>
     /// Moving <c>.gradle</c> onto another drive with a junction is common, and the enumeration
-    /// never classifies the directory it is handed — so a junctioned root would hand back the far
+    /// never classifies the directory it is handed — so a linked root would hand back the far
     /// side's ordinary children, target the recognised ones, and pass every §5.6 assertion, because
     /// each survivor named here resolves through the same link.
     ///
@@ -158,12 +158,13 @@ public sealed class GradleCacheProviderTests : IDisposable
     /// follows the link, so the row is present with nothing to reclaim, and the caches on the far
     /// side are routinely the largest thing Deguffer would have found on the machine.</para>
     /// </summary>
-    [Fact]
-    public async Task DeclinesARootThatIsItselfALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesARootThatIsItselfALink(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, "caches", 4096);
-        SymbolicLink.ToDirectory(Path.Combine(_environment.UserProfile, ".gradle"), outside);
+        DirectoryLink.Create(kind, Path.Combine(_environment.UserProfile, ".gradle"), outside);
 
         var provider = CreateProvider();
 
@@ -187,8 +188,9 @@ public sealed class GradleCacheProviderTests : IDisposable
     /// moving the rest of <c>.gradle</c>, and the plan it produces is present, empty and about
     /// nothing that was looked at.
     /// </summary>
-    [Fact]
-    public async Task ARootWhoseEveryRecognisedChildIsALinkIsNotCalledClear()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ARootWhoseEveryRecognisedChildIsALinkIsNotCalledClear(DirectoryLinkKind kind)
     {
         var root = CreateGradleHome();
 
@@ -198,8 +200,8 @@ public sealed class GradleCacheProviderTests : IDisposable
         var caches = Path.Combine(root, "caches");
         var wrapper = Path.Combine(root, "wrapper");
 
-        SymbolicLink.ToDirectory(caches, outside);
-        SymbolicLink.ToDirectory(wrapper, outside);
+        DirectoryLink.Create(kind, caches, outside);
+        DirectoryLink.Create(kind, wrapper, outside);
 
         var provider = CreateProvider();
 

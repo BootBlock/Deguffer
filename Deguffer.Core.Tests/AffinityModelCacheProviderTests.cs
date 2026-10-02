@@ -376,8 +376,9 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
     /// pass every §5.6 assertion named for this root, because each survivor resolves through the same
     /// link.
     /// </summary>
-    [Fact]
-    public async Task DeclinesAProfileRootThatIsItselfALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesAProfileRootThatIsItselfALink(DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("elsewhere");
         var stranger = Path.Combine(
@@ -385,7 +386,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Directory.CreateDirectory(stranger);
         File.WriteAllBytes(Path.Combine(stranger, "model.onnx"), new byte[65536]);
 
-        SymbolicLink.ToDirectory(RoamingRoot, outside);
+        DirectoryLink.Create(kind, RoamingRoot, outside);
 
         var provider = CreateProvider();
 
@@ -434,12 +435,13 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A model cache relocated by junction. Deleting through it would reach a tree nobody classified,
+    /// A model cache relocated by a link. Deleting through it would reach a tree nobody classified,
     /// and the folder it left behind measures nothing while saying nothing about what is on the far
     /// side.
     /// </summary>
-    [Fact]
-    public async Task DeclinesAModelCacheThatIsALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesAModelCacheThatIsALink(DirectoryLinkKind kind)
     {
         CreateVersion(RoamingRoot, "3.0", withModels: false);
         CreateWhatSitsBesideTheModels(RoamingRoot, "3.0");
@@ -447,7 +449,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         var outside = _temp.CreateDirectory("elsewhere");
         File.WriteAllBytes(Path.Combine(outside, "model.onnx"), new byte[65536]);
 
-        SymbolicLink.ToDirectory(ModelCache(RoamingRoot, "3.0"), outside);
+        DirectoryLink.Create(kind, ModelCache(RoamingRoot, "3.0"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -511,12 +513,13 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A version folder relocated by junction. It must never reach the version list: looking inside it
+    /// A version folder relocated by a link. It must never reach the version list: looking inside it
     /// would classify a tree Deguffer never saw, and every §5.6 assertion named for this root would
     /// then resolve through the same link and pass.
     /// </summary>
-    [Fact]
-    public async Task DeclinesAVersionFolderThatIsALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesAVersionFolderThatIsALink(DirectoryLinkKind kind)
     {
         Directory.CreateDirectory(Common(RoamingRoot));
 
@@ -525,7 +528,7 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Directory.CreateDirectory(stranger);
         File.WriteAllBytes(Path.Combine(stranger, "model.onnx"), new byte[65536]);
 
-        SymbolicLink.ToDirectory(Version(RoamingRoot, "3.0"), outside);
+        DirectoryLink.Create(kind, Version(RoamingRoot, "3.0"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 

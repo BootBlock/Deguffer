@@ -177,17 +177,18 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
 
     /// <summary>
     /// <c>Service Worker</c> is reached by name rather than by an enumeration that filters links, so
-    /// without the check a junctioned one puts the deletion of <c>CacheStorage</c> wherever the link
+    /// without the check a linked one puts the deletion of <c>CacheStorage</c> wherever the link
     /// points, while every survivor named inside the profile resolves through it and passes.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedServiceWorkerDirectoryIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedServiceWorkerDirectoryIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "CacheStorage"));
 
         var app = CreateApplication("Chatter");
-        SymbolicLink.ToDirectory(Path.Combine(app, "Service Worker"), outside);
+        DirectoryLink.Create(kind, Path.Combine(app, "Service Worker"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -201,7 +202,7 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "planning looked through a junctioned 'Service Worker' and deleted the far side.");
+            "planning looked through a linked 'Service Worker' and deleted the far side.");
     }
 
     /// <summary>

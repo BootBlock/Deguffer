@@ -63,11 +63,12 @@ public sealed class DirectoryContentTests : IDisposable
     /// <para>That the link is not <em>followed</em> is not observable through a boolean once the link
     /// itself counts, so this test does not claim it.</para>
     /// </summary>
-    [Fact]
-    public void ALinkIsContentWhateverItPointsAt()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void ALinkIsContentWhateverItPointsAt(DirectoryLinkKind kind)
     {
         var holder = _temp.CreateDirectory("holder");
-        SymbolicLink.ToDirectory(Path.Combine(holder, "link"), _temp.CreateDirectory("outside-empty"));
+        DirectoryLink.Create(kind, Path.Combine(holder, "link"), _temp.CreateDirectory("outside-empty"));
 
         Assert.True(DirectoryContent.IsPresent(holder));
     }

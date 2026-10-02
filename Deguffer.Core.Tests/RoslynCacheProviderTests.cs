@@ -357,14 +357,15 @@ public sealed class RoslynCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Either folder this provider owns may be a junction onto another drive. Nothing is looked at through
+    /// Either folder this provider owns may be a link onto another drive. Nothing is looked at through
     /// it, and the far side is laid out as the folder it stands in for, so a provider that did look would
     /// find a recognised set there.
     /// </summary>
+    public static IEnumerable<object[]> LinkedOwnedFolders => DirectoryLink.Across("Roslyn", @"Roslyn\Cache");
+
     [Theory]
-    [InlineData("Roslyn")]
-    [InlineData(@"Roslyn\Cache")]
-    public async Task AFolderThisProviderOwnsThatIsALinkIsNotLookedThrough(string level)
+    [MemberData(nameof(LinkedOwnedFolders))]
+    public async Task AFolderThisProviderOwnsThatIsALinkIsNotLookedThrough(string level, DirectoryLinkKind kind)
     {
         var elsewhere = Path.Combine(_temp.Path, "elsewhere");
         var farCache = level == "Roslyn" ? Path.Combine(elsewhere, "Cache") : elsewhere;
@@ -372,7 +373,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
 
         var link = Path.Combine(VisualStudio, level);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        SymbolicLink.ToDirectory(link, elsewhere);
+        DirectoryLink.Create(kind, link, elsewhere);
 
         var plan = await CreateProvider().PlanAsync();
 

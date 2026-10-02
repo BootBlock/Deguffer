@@ -113,14 +113,15 @@ public sealed class BattleNetLogProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
-    /// <summary>A junctioned log folder is named and never deleted through.</summary>
-    [Fact]
-    public async Task AJunctionedLogFolderIsNamedRatherThanFollowed()
+    /// <summary>A linked log folder is named and never deleted through.</summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedLogFolderIsNamedRatherThanFollowed(DirectoryLinkKind kind)
     {
         var outside = BattleNetFixture.Populate(Path.Combine(_temp.Path, "elsewhere"), "irreplaceable.log");
 
         Directory.CreateDirectory(_battleNet.Launcher);
-        SymbolicLink.ToDirectory(_battleNet.Logs, outside);
+        DirectoryLink.Create(kind, _battleNet.Logs, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -130,7 +131,7 @@ public sealed class BattleNetLogProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(Path.Combine(outside, "irreplaceable.log")), "a junctioned log folder was deleted through.");
+        Assert.True(File.Exists(Path.Combine(outside, "irreplaceable.log")), "a linked log folder was deleted through.");
     }
 
     /// <summary>§5.3: the running launcher holds the log it is writing open.</summary>

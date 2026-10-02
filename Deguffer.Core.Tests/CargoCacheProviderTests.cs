@@ -246,19 +246,20 @@ public sealed class CargoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned container hands back the far side's ordinary directories, and a recognised name
+    /// A linked container hands back the far side's ordinary directories, and a recognised name
     /// among them would be targeted while every survivor named for this home resolves through the
     /// link and passes — §5.6's negative made vacuous. So the level itself is checked, not only its
     /// children.
     /// </summary>
-    [Fact]
-    public async Task DeclinesAContainerThatIsItselfALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesAContainerThatIsItselfALink(DirectoryLinkKind kind)
     {
         Populate(Path.Combine(Home, "registry", "cache"));
 
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = Populate(Path.Combine(outside, "checkouts"));
-        SymbolicLink.ToDirectory(Path.Combine(Home, "git"), outside);
+        DirectoryLink.Create(kind, Path.Combine(Home, "git"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -273,17 +274,18 @@ public sealed class CargoCacheProviderTests : IDisposable
 
     /// <summary>
     /// The same decline with nothing else to offer, which is the state the shell gets wrong. The
-    /// probe resolves <c>git\checkouts</c> through the junction, so the row is present, and every
+    /// probe resolves <c>git\checkouts</c> through the link, so the row is present, and every
     /// candidate this home had was declined — a figure of zero that excludes the whole of it.
     /// </summary>
-    [Fact]
-    public async Task ADeclinedContainerWithNothingElseToOfferIsNotCalledClear()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ADeclinedContainerWithNothingElseToOfferIsNotCalledClear(DirectoryLinkKind kind)
     {
         Directory.CreateDirectory(Home);
 
         var outside = Path.Combine(_temp.Path, "elsewhere");
         Populate(Path.Combine(outside, "checkouts"));
-        SymbolicLink.ToDirectory(Path.Combine(Home, "git"), outside);
+        DirectoryLink.Create(kind, Path.Combine(Home, "git"), outside);
 
         var provider = CreateProvider();
 

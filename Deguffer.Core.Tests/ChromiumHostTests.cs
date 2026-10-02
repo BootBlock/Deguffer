@@ -575,12 +575,13 @@ public sealed class ChromiumHostTests : IDisposable
     }
 
     /// <summary>
-    /// The same rule one level up. <c>BrowserCaches</c> is joined from constants, so a junction
+    /// The same rule one level up. <c>BrowserCaches</c> is joined from constants, so a link
     /// there would otherwise put every deletion on the far side. The link is named, and nothing
     /// behind it is touched.
     /// </summary>
-    [Fact]
-    public async Task ALinkedBattleNetBrowserFolderIsNamedAndNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedBattleNetBrowserFolderIsNamedAndNeverLookedThrough(DirectoryLinkKind kind)
     {
         var battleNet = new BattleNetFixture(_environment.LocalAppData);
         Directory.CreateDirectory(battleNet.Launcher);
@@ -592,7 +593,7 @@ public sealed class ChromiumHostTests : IDisposable
         File.WriteAllText(Path.Combine(partition, BattleNetFixture.Marker), "{}");
         var bystander = BattleNetFixture.Populate(Path.Combine(partition, "GPUCache"));
 
-        SymbolicLink.ToDirectory(battleNet.BrowserCaches, outside);
+        DirectoryLink.Create(kind, battleNet.BrowserCaches, outside);
 
         var provider = CreateProvider();
 

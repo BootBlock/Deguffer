@@ -329,13 +329,14 @@ public sealed class SteamCacheProviderTests : IDisposable
     /// A cache moved onto another drive with a link. Deguffer removes nothing through it and says
     /// so, rather than deleting the far side of a redirection nobody classified.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheIsLeftAloneAndReported()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheIsLeftAloneAndReported(DirectoryLinkKind kind)
     {
         var install = RegisterInstall();
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
         Directory.CreateDirectory(Path.Combine(install, "appcache"));
-        SymbolicLink.ToDirectory(Path.Combine(install, "appcache", "httpcache"), outside);
+        DirectoryLink.Create(kind, Path.Combine(install, "appcache", "httpcache"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -355,13 +356,14 @@ public sealed class SteamCacheProviderTests : IDisposable
     /// inside it is removed, which is the one case where "we did not recognise that" would be an
     /// actively false thing to say — so it carries its own reason and is asserted individually.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedAppCacheContainerIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedAppCacheContainerIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var install = RegisterInstall();
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere", "httpcache"));
-        SymbolicLink.ToDirectory(
-            Path.Combine(install, "appcache"), Path.Combine(_temp.Path, "elsewhere"));
+        DirectoryLink.Create(
+            kind, Path.Combine(install, "appcache"), Path.Combine(_temp.Path, "elsewhere"));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

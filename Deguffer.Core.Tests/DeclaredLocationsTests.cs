@@ -57,17 +57,18 @@ public sealed class DeclaredLocationsTests : IDisposable
     /// A relative path written with a forward slash. Windows accepts both separators and
     /// <see cref="Path.Combine"/> resolves either, so a declaration written as <c>Logs/CBS</c> works
     /// — and splitting on the backslash alone would see one segment, skip the ancestor walk
-    /// entirely, and step straight through a junctioned <c>Logs</c> into a tree nobody classified.
+    /// entirely, and step straight through a linked <c>Logs</c> into a tree nobody classified.
     /// That is the §5.2 failure this walk exists to prevent, arriving through a typing convention.
     /// </summary>
-    [Fact]
-    public void AForwardSlashInADeclarationStillWalksTheAncestors()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void AForwardSlashInADeclarationStillWalksTheAncestors(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("root");
         var outside = _temp.CreateDirectory("elsewhere", "CBS");
         File.WriteAllBytes(Path.Combine(outside, "irreplaceable.log"), new byte[4096]);
 
-        SymbolicLink.ToDirectory(Path.Combine(root, "Logs"), Path.Combine(_temp.Path, "elsewhere"));
+        DirectoryLink.Create(kind, Path.Combine(root, "Logs"), Path.Combine(_temp.Path, "elsewhere"));
 
         var scan = DeclaredLocations.Examine(
             [Root(root, new DeclaredLocation("Logs/CBS", "Servicing logs."))]);
@@ -78,17 +79,18 @@ public sealed class DeclaredLocationsTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned container shared by two declarations is declined once. Each declaration walks
+    /// A linked container shared by two declarations is declined once. Each declaration walks
     /// the whole chain down from the root, so the container is met once per declaration, and one
     /// folder described twice reads to the user as two folders.
     /// </summary>
-    [Fact]
-    public void AContainerSharedByTwoDeclarationsIsDeclinedOnce()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void AContainerSharedByTwoDeclarationsIsDeclinedOnce(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("root");
 
-        SymbolicLink.ToDirectory(
-            Path.Combine(root, "Logs"), _temp.CreateDirectory("elsewhere"));
+        DirectoryLink.Create(
+            kind, Path.Combine(root, "Logs"), _temp.CreateDirectory("elsewhere"));
 
         var scan = DeclaredLocations.Examine(
         [

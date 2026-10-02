@@ -322,20 +322,22 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
     /// <summary>
     /// The path down to <c>Saved</c> is built from <c>%LOCALAPPDATA%</c> plus two constants rather
     /// than enumerated, so nothing on the way down has been through a filter that separates links
-    /// out. A junction at any segment redirects the deletion while every §5.6 survivor named below
+    /// out. A link at any segment redirects the deletion while every §5.6 survivor named below
     /// resolves through the same link and passes — the vacuous negative.
     /// </summary>
+    public static IEnumerable<object[]> LinkedSegmentsToTheSavedFolder =>
+        DirectoryLink.Across("EpicGamesLauncher", @"EpicGamesLauncher\Saved");
+
     [Theory]
-    [InlineData("EpicGamesLauncher")]
-    [InlineData(@"EpicGamesLauncher\Saved")]
-    public async Task AJunctionAnywhereOnThePathToTheSavedFolderIsNeverLookedThrough(string relative)
+    [MemberData(nameof(LinkedSegmentsToTheSavedFolder))]
+    public async Task ALinkAnywhereOnThePathToTheSavedFolderIsNeverLookedThrough(string relative, DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "webcache_4430", "Cache"));
 
         var link = Path.Combine(_environment.LocalAppData, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = CreateProvider();
 
@@ -357,17 +359,18 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned web cache folder is a child the user can see, so a plan that neither offers it
+    /// A linked web cache folder is a child the user can see, so a plan that neither offers it
     /// nor mentions it disagrees with the folder.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedWebCacheFolderIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedWebCacheFolderIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere", "Cache"));
 
         Directory.CreateDirectory(Saved);
-        SymbolicLink.ToDirectory(
-            Path.Combine(Saved, "webcache_4430"), Path.GetDirectoryName(outside)!);
+        DirectoryLink.Create(
+            kind, Path.Combine(Saved, "webcache_4430"), Path.GetDirectoryName(outside)!);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -382,7 +385,7 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(outside, "entry.bin")),
-            "a junctioned web cache folder was deleted through.");
+            "a linked web cache folder was deleted through.");
     }
 
     /// <summary>
@@ -390,14 +393,15 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
     /// today, and that is the point: a safety property riding on a filter nobody named holds only
     /// for as long as every target happens to arrive the same way.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheInsideAWebCacheFolderIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheInsideAWebCacheFolderIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var fixture = AddWebCache();
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         Directory.Delete(Path.Combine(fixture.Root, "Cache"), recursive: true);
-        SymbolicLink.ToDirectory(Path.Combine(fixture.Root, "Cache"), outside);
+        DirectoryLink.Create(kind, Path.Combine(fixture.Root, "Cache"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -412,18 +416,19 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(outside, "entry.bin")),
-            "a junctioned cache was deleted through.");
+            "a linked cache was deleted through.");
     }
 
     /// <summary>
     /// The other half of the link rule, and the half a test over a cache child cannot reach. A
     /// <em>level's own directory</em> is reached by name, so <c>DirectoryExists</c> answers through
-    /// the junction and the walk would list the far side's ordinary directories — where a recognised
+    /// the link and the walk would list the far side's ordinary directories — where a recognised
     /// name would be targeted while every §5.6 survivor named for this folder resolved through the
     /// same link and passed.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedContainerIsNeverListedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedContainerIsNeverListedThrough(DirectoryLinkKind kind)
     {
         var fixture = AddWebCache();
 
@@ -431,7 +436,7 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
         var bystander = CreateDirectory(Path.Combine(outside, "CacheStorage"));
 
         Directory.Delete(fixture.ServiceWorker, recursive: true);
-        SymbolicLink.ToDirectory(fixture.ServiceWorker, outside);
+        DirectoryLink.Create(kind, fixture.ServiceWorker, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -450,7 +455,7 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "planning listed through a junctioned container and deleted the far side.");
+            "planning listed through a linked container and deleted the far side.");
     }
 
     /// <summary>

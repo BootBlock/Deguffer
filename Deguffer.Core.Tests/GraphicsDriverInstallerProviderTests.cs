@@ -301,16 +301,17 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned <c>C:\NVIDIA</c> hands the listing the far side's folders, and a check on
+    /// A linked <c>C:\NVIDIA</c> hands the listing the far side's folders, and a check on
     /// <c>DisplayDriver</c> alone would never see it. The walk down names it and goes no further.
     /// </summary>
-    [Fact]
-    public async Task AJunctionOnTheWayDownIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkOnTheWayDownIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = Populate(Path.Combine(outside, "DisplayDriver", "546.33"), "irreplaceable.bin");
 
-        SymbolicLink.ToDirectory(Path.Combine(Drive, "NVIDIA"), outside);
+        DirectoryLink.Create(kind, Path.Combine(Drive, "NVIDIA"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -322,7 +323,7 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(Path.Combine(bystander, "irreplaceable.bin")), "planning looked through a junctioned parent");
+        Assert.True(File.Exists(Path.Combine(bystander, "irreplaceable.bin")), "planning looked through a linked parent");
     }
 
     /// <summary>

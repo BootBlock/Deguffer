@@ -259,17 +259,18 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
 
     /// <summary>
     /// A declared path reached by name has none of the protection an enumeration gives away. A
-    /// junctioned cache is enumerated through, the far side is deleted, and every survivor the plan
+    /// linked cache is enumerated through, the far side is deleted, and every survivor the plan
     /// names resolves through the link and passes — the vacuous negative.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheIsNamedRatherThanFollowed()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheIsNamedRatherThanFollowed(DirectoryLinkKind kind)
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"), name: "irreplaceable.bin");
         var bystander = Path.Combine(outside, "irreplaceable.bin");
 
         Directory.CreateDirectory(DataFolder);
-        SymbolicLink.ToDirectory(ContentCache, outside);
+        DirectoryLink.Create(kind, ContentCache, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -282,7 +283,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(bystander), "a junctioned target was deleted through");
+        Assert.True(File.Exists(bystander), "a linked target was deleted through");
     }
 
     /// <summary>
@@ -291,15 +292,16 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
     /// another drive with a junction is a thing people do — after which a check on the final path
     /// alone would delete in a tree the plan never named.
     /// </summary>
-    [Fact]
-    public async Task AJunctionOnTheWayDownToTheCacheIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkOnTheWayDownToTheCacheIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var cache = Populate(Path.Combine(outside, "Data", "ContentCache"));
         var bystander = Path.Combine(cache, "artwork.jpg");
 
         Directory.CreateDirectory(EpicRoot);
-        SymbolicLink.ToDirectory(LauncherRoot, outside);
+        DirectoryLink.Create(kind, LauncherRoot, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -313,7 +315,7 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(bystander), "planning looked through a junctioned parent");
+        Assert.True(File.Exists(bystander), "planning looked through a linked parent");
     }
 
     /// <summary>

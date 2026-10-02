@@ -202,16 +202,17 @@ public sealed class VsCodeLogProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned <c>logs</c> is a child the user can see, so it is named rather than dropped —
+    /// A linked <c>logs</c> is a child the user can see, so it is named rather than dropped —
     /// and never followed, because what it points at was never classified.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedRecordDirectoryIsNamedRatherThanDeletedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedRecordDirectoryIsNamedRatherThanDeletedThrough(DirectoryLinkKind kind)
     {
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         var editor = CreateEditor();
-        SymbolicLink.ToDirectory(Path.Combine(editor, "logs"), outside);
+        DirectoryLink.Create(kind, Path.Combine(editor, "logs"), outside);
 
         var provider = CreateProvider();
 
@@ -228,7 +229,7 @@ public sealed class VsCodeLogProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(
-            File.Exists(Path.Combine(outside, "entry.bin")), "a junctioned log folder was deleted through.");
+            File.Exists(Path.Combine(outside, "entry.bin")), "a linked log folder was deleted through.");
     }
 
     /// <summary>

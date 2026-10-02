@@ -465,16 +465,17 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Assert.Null(Assert.Single(plan.Steps).LastWritten);
     }
 
-    [Fact]
-    public async Task DeclinesARepositoryThatIsALinkToSomewhereElse()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesARepositoryThatIsALinkToSomewhereElse(DirectoryLinkKind kind)
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
         Directory.CreateDirectory(Home);
-        SymbolicLink.ToDirectory(DefaultRepository, outside);
+        DirectoryLink.Create(kind, DefaultRepository, outside);
 
         var provider = CreateProvider();
 
-        // The probe follows the junction, so the row is present with nothing to reclaim. The whole
+        // The probe follows the link, so the row is present with nothing to reclaim. The whole
         // repository sits on the far side, and "Already clear" about it is the claim
         // CleanupPlan.WasNotExamined exists to stop.
         Assert.True(await provider.IsPresentAsync());

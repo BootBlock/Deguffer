@@ -239,12 +239,13 @@ public sealed class RecycleBinProviderTests : IDisposable
 
     /// <summary>
     /// A bin root is reached by name rather than through an enumeration, so it is the one place a
-    /// junction is still walked through. The far side hands back ordinary directories, one of which
+    /// link is still walked through. The far side hands back ordinary directories, one of which
     /// could carry this user's identifier — and every survivor named for that volume resolves
     /// through the link and passes, which is the vacuous negative the shader caches met first.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedBinRootIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedBinRootIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var volume = CreateVolume("D");
         var outside = Path.Combine(_temp.Path, "elsewhere");
@@ -252,7 +253,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         var bystander = Path.Combine(outside, Sid, "irreplaceable.bin");
         File.WriteAllBytes(bystander, new byte[4096]);
 
-        SymbolicLink.ToDirectory(Path.Combine(volume, BinName), outside);
+        DirectoryLink.Create(kind, Path.Combine(volume, BinName), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -265,15 +266,16 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(bystander), "planning looked through a junctioned bin root");
+        Assert.True(File.Exists(bystander), "planning looked through a linked bin root");
     }
 
     /// <summary>
     /// A link inside the bin root is a child the user can see, so a plan that neither offers it nor
     /// mentions it disagrees with the folder. It is never followed.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedBinIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedBinIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var volume = CreateVolume("D");
         var outside = Path.Combine(_temp.Path, "elsewhere");
@@ -281,7 +283,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(outside, "deleted.bin"), new byte[4096]);
 
         Directory.CreateDirectory(Path.Combine(volume, BinName));
-        SymbolicLink.ToDirectory(Path.Combine(volume, BinName, Sid), outside);
+        DirectoryLink.Create(kind, Path.Combine(volume, BinName, Sid), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -295,7 +297,7 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(Path.Combine(outside, "deleted.bin")), "a junctioned bin was deleted through");
+        Assert.True(File.Exists(Path.Combine(outside, "deleted.bin")), "a linked bin was deleted through");
     }
 
     /// <summary>

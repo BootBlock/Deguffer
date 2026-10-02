@@ -250,17 +250,18 @@ public sealed class TempToolCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junction on the way down to a tool's folder is declined like one at the top: the sessions on
+    /// A link on the way down to a tool's folder is declined like one at the top: the sessions on
     /// its far side were never classified, and the far side may be anywhere. Said once, however many
     /// of the tool's places lie behind it.
     /// </summary>
-    [Fact]
-    public async Task NeverFollowsALinkOnTheWayDownToAToolsFolder()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task NeverFollowsALinkOnTheWayDownToAToolsFolder(DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("elsewhere");
         var kept = _temp.CreateFile(4096, "elsewhere", "AnalyzerAssemblyLoader", Session, "Analyzer.dll");
         var link = Path.Combine(UserTemp, "Roslyn");
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

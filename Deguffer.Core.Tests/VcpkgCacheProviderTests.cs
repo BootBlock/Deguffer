@@ -773,8 +773,9 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     /// a scratch drive by junction looks like. The probe resolves through the links, so the row is
     /// present, measures zero, and its figure covers none of the subject.
     /// </summary>
-    [Fact]
-    public async Task ACloneWhoseEveryDeclaredDirectoryIsALinkIsNotCalledClear()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ACloneWhoseEveryDeclaredDirectoryIsALinkIsNotCalledClear(DirectoryLinkKind kind)
     {
         var root = CreateClone();
 
@@ -783,7 +784,7 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         foreach (var name in new[] { "buildtrees", "downloads", "packages" })
         {
             Directory.Delete(Path.Combine(root, name), recursive: true);
-            SymbolicLink.ToDirectory(Path.Combine(root, name), outside);
+            DirectoryLink.Create(kind, Path.Combine(root, name), outside);
         }
 
         _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root);

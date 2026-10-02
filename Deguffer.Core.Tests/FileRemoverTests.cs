@@ -64,6 +64,30 @@ public sealed class FileRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A folder link sitting where a file was declared. It goes to the deletion as a link, Windows
+    /// refuses to delete a folder link as a file, and so it stays, with nothing on its far side
+    /// touched or counted. A junction is the kind a user makes without privilege.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task AFolderLinkWearingTheFileNameIsLeftWithItsFarSideUntouched(DirectoryLinkKind kind)
+    {
+        var target = _temp.CreateDirectory("precious");
+        var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
+        var link = Path.Combine(_temp.CreateDirectory("dumps"), "MEMORY.DMP");
+
+        DirectoryLink.Create(kind, link, target);
+
+        var outcome = await FileRemover.RemoveAsync(link);
+
+        Assert.False(outcome.Removed);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.False(outcome.Refused.IsEmpty, "a folder link was taken for a folder rather than met as a link");
+        Assert.True(LongPath.IsReparsePoint(link), "a folder link was removed by a file step");
+        Assert.True(File.Exists(bystander), "a file was deleted through a link");
+    }
+
+    /// <summary>
     /// A link is removed as a link, so what it stands for is untouched — and the size reported is
     /// zero rather than the target's, because nothing on the far side was reclaimed.
     /// </summary>

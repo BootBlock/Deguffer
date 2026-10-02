@@ -15,14 +15,15 @@ public sealed class DerivedPathTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    [Fact]
-    public void FindsALinkPartWayDownRatherThanOnlyAtTheTarget()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void FindsALinkPartWayDownRatherThanOnlyAtTheTarget(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("root");
         _temp.CreateDirectory("elsewhere", "Cache");
 
         var logs = Path.Combine(root, "Logs");
-        SymbolicLink.ToDirectory(logs, Path.Combine(_temp.Path, "elsewhere"));
+        DirectoryLink.Create(kind, logs, Path.Combine(_temp.Path, "elsewhere"));
 
         Assert.Equal(
             new DerivedPathObstacle(logs, IsLink: true),

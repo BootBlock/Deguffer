@@ -129,14 +129,15 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>A link inside the tree is removed as a link: one entry, and its far side untouched.</summary>
-    [Fact]
-    public async Task ALinkRemovedIsOneEntryAndItsFarSideIsUntouched()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkRemovedIsOneEntryAndItsFarSideIsUntouched(DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("elsewhere");
         var bystander = _temp.CreateFile(10, "elsewhere", "bystander.bin");
 
         var root = _temp.CreateDirectory("cache");
-        SymbolicLink.ToDirectory(Path.Combine(root, "linked"), outside);
+        DirectoryLink.Create(kind, Path.Combine(root, "linked"), outside);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
@@ -144,14 +145,15 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.True(File.Exists(bystander), "the removal followed a link");
     }
 
-    [Fact]
-    public async Task ARootThatIsALinkIsOneEntryAndItsFarSideIsUntouched()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ARootThatIsALinkIsOneEntryAndItsFarSideIsUntouched(DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("elsewhere");
         var bystander = _temp.CreateFile(10, "elsewhere", "bystander.bin");
 
         var root = Path.Combine(_temp.Path, "cache");
-        SymbolicLink.ToDirectory(root, outside);
+        DirectoryLink.Create(kind, root, outside);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
@@ -411,15 +413,16 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// the far side, which nothing in this removal has classified, and the answer would then decide
     /// the fate of a path in a tree nobody looked at.
     /// </summary>
-    [Fact]
-    public async Task RemovesAReadOnlyLinkWithoutAskingWhatIsOnTheFarSideOfIt()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task RemovesAReadOnlyLinkWithoutAskingWhatIsOnTheFarSideOfIt(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("cache");
         var outside = _temp.CreateDirectory("precious");
         var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
 
         var link = Path.Combine(root, "link");
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
         File.SetAttributes(link, File.GetAttributes(link) | FileAttributes.ReadOnly);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
@@ -506,49 +509,51 @@ public sealed class DirectoryRemoverTests : IDisposable
 
     /// <summary>
     /// The same rule applied to the root itself, which is the one entry no enumeration classifies.
-    /// <see cref="DeletesAJunctionWithoutFollowingItIntoTheTargetTree"/> covers a junction found
-    /// below the root; a junction handed in *as* the root took the other branch, where enumerating
-    /// it transparently returns the link target's ordinary children and deletes them.
+    /// <see cref="DeletesALinkWithoutFollowingItIntoTheTargetTree"/> covers a link found below the
+    /// root; a link handed in *as* the root took the other branch, where enumerating it
+    /// transparently returns the link target's ordinary children and deletes them.
     /// </summary>
-    [Fact]
-    public async Task RemovesAJunctionGivenAsTheRootWithoutEmptyingWhatItPointsAt()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task RemovesALinkGivenAsTheRootWithoutEmptyingWhatItPointsAt(DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("precious");
         var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
 
-        var junction = Path.Combine(_temp.Path, "cache");
-        SymbolicLink.ToDirectory(junction, outside);
+        var link = Path.Combine(_temp.Path, "cache");
+        DirectoryLink.Create(kind, link, outside);
 
-        var outcome = await DirectoryRemover.RemoveAsync(junction);
+        var outcome = await DirectoryRemover.RemoveAsync(link);
 
         Assert.True(outcome.RootRemoved);
-        Assert.False(Directory.Exists(junction));
+        Assert.False(Directory.Exists(link));
 
-        Assert.True(Directory.Exists(outside), "removal followed the junction it was handed");
+        Assert.True(Directory.Exists(outside), "removal followed the link it was handed");
         Assert.True(File.Exists(bystander), "a file outside the target tree was destroyed");
 
         // The linked-to content was never ours to count.
         Assert.Equal(0, outcome.BytesReclaimed);
     }
 
-    [Fact]
-    public async Task DeletesAJunctionWithoutFollowingItIntoTheTargetTree()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeletesALinkWithoutFollowingItIntoTheTargetTree(DirectoryLinkKind kind)
     {
         // The highest-consequence branch in the codebase: if this regresses, deleting a cache
-        // escapes through a junction and destroys whatever it points at.
+        // escapes through a link and destroys whatever it points at.
         var root = _temp.CreateDirectory("cache");
         var outside = _temp.CreateDirectory("precious");
         var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
 
-        var junction = Path.Combine(root, "link");
-        SymbolicLink.ToDirectory(junction, outside);
+        var link = Path.Combine(root, "link");
+        DirectoryLink.Create(kind, link, outside);
 
         var outcome = await DirectoryRemover.RemoveAsync(root);
 
         Assert.True(outcome.RootRemoved);
-        Assert.False(Directory.Exists(junction));
+        Assert.False(Directory.Exists(link));
 
-        Assert.True(Directory.Exists(outside), "deletion followed the junction out of the target tree");
+        Assert.True(Directory.Exists(outside), "deletion followed the link out of the target tree");
         Assert.True(File.Exists(bystander), "a file outside the target tree was destroyed");
 
         // The linked-to content was never ours to count.
@@ -877,14 +882,15 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// A spared entry is spared whatever it turns out to be, links included. Removing the link is
     /// still taking the scratch directory away from whatever was handed it.
     /// </summary>
-    [Fact]
-    public async Task LeavesASparedEntryThatTurnedOutToBeALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task LeavesASparedEntryThatTurnedOutToBeALink(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("scratch");
         var target = _temp.CreateDirectory("elsewhere");
         var link = Path.Combine(root, "session");
 
-        SymbolicLink.ToDirectory(link, target);
+        DirectoryLink.Create(kind, link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(
             root, bounds: new RemovalBounds(KeepRoot: true, [link]));
@@ -894,21 +900,22 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
-    /// A temporary folder that is itself a junction is left entirely alone, rather than having the
+    /// A temporary folder that is itself a link is left entirely alone, rather than having the
     /// link removed as an ordinary removal would.
     ///
     /// Removing it would destroy the very path the caller said must survive, and following it would
     /// empty a tree nobody classified — the vacuous §5.6 negative, since every survivor named for
     /// that root resolves through the link.
     /// </summary>
-    [Fact]
-    public async Task RemovesNothingWhenTheRootIsALinkAndTheBoundsSayToKeepIt()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task RemovesNothingWhenTheRootIsALinkAndTheBoundsSayToKeepIt(DirectoryLinkKind kind)
     {
         var target = _temp.CreateDirectory("elsewhere");
         _temp.CreateFile(2048, "elsewhere", "payload.bin");
 
         var link = Path.Combine(_temp.Path, "scratch");
-        SymbolicLink.ToDirectory(link, target);
+        DirectoryLink.Create(kind, link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(
             link, bounds: new RemovalBounds(KeepRoot: true, []));
@@ -935,17 +942,18 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// current time and its timestamps cannot be moved back through
     /// <see cref="TempDirectory.Age"/> — Windows refuses to open a directory link for a
     /// write-attributes handle — so "an old link still goes" is left to
-    /// <see cref="DeletesAJunctionWithoutFollowingItIntoTheTargetTree"/>, which removes one under
+    /// <see cref="DeletesALinkWithoutFollowingItIntoTheTargetTree"/>, which removes one under
     /// no guard at all.</para>
-    [Fact]
-    public async Task LeavesALinkTheGuardProtects()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task LeavesALinkTheGuardProtects(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("scratch");
         var target = _temp.CreateDirectory("elsewhere");
         _temp.CreateFile(2048, "elsewhere", "payload.bin");
 
         var link = Path.Combine(root, "just-made");
-        SymbolicLink.ToDirectory(link, target);
+        DirectoryLink.Create(kind, link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(
             root, MinimumAge.WithinHours(8, DateTime.UtcNow), bounds: new RemovalBounds(KeepRoot: true, []));
@@ -968,14 +976,15 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// promising nothing touched in the last eight hours would be, and the outcome reported success
     /// because a link's length is zero.</para>
     /// </summary>
-    [Fact]
-    public async Task LeavesARootThatIsALinkTheGuardProtects()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task LeavesARootThatIsALinkTheGuardProtects(DirectoryLinkKind kind)
     {
         var target = _temp.CreateDirectory("elsewhere");
         _temp.CreateFile(2048, "elsewhere", "payload.bin");
 
         var link = Path.Combine(_temp.Path, "relocated-cache");
-        SymbolicLink.ToDirectory(link, target);
+        DirectoryLink.Create(kind, link, target);
 
         var outcome = await DirectoryRemover.RemoveAsync(link, MinimumAge.WithinHours(8, DateTime.UtcNow));
 

@@ -386,12 +386,13 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junction at a level the declaration only passes through. <c>Logs</c> is a container for two
-    /// targets, so a check on the final path alone would walk straight through a junctioned one and
+    /// A link at a level the declaration only passes through. <c>Logs</c> is a container for two
+    /// targets, so a check on the final path alone would walk straight through a linked one and
     /// delete in a tree the plan never named.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedContainerIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedContainerIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         Directory.CreateDirectory(Path.Combine(outside, "CBS"));
@@ -399,7 +400,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         var bystander = Path.Combine(outside, "CBS", "irreplaceable.log");
         File.WriteAllBytes(bystander, new byte[4096]);
 
-        SymbolicLink.ToDirectory(Path.Combine(Windows, "Logs"), outside);
+        DirectoryLink.Create(kind, Path.Combine(Windows, "Logs"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -421,7 +422,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(bystander), "planning looked through a junctioned container");
+        Assert.True(File.Exists(bystander), "planning looked through a linked container");
     }
 
     /// <summary>

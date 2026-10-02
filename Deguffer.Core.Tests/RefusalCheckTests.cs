@@ -251,20 +251,47 @@ public sealed class RefusalCheckTests : IDisposable
     /// A step root that has become a link is removed as a link, or left alone, and never entered. So
     /// nothing on its far side is anything the removal would attempt, and nothing there is opened.
     /// </summary>
-    [Fact]
-    public void OpensNothingBeneathAStepRootThatIsALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void OpensNothingBeneathAStepRootThatIsALink(DirectoryLinkKind kind)
     {
         var elsewhere = _temp.CreateDirectory("elsewhere");
         _temp.CreateFile(4096, "elsewhere", "profile", "Cookies");
 
         var root = Path.Combine(_temp.Path, "temp");
-        SymbolicLink.ToDirectory(root, elsewhere);
+        DirectoryLink.Create(kind, root, elsewhere);
 
         var throughLink = Path.Combine(root, "profile", "Cookies");
         var recorder = new RecordingFileSystem(Refusing((throughLink, RefusalReason.Denied)));
 
         var finding = RefusalCheck.Of(
             new ClearDirectoryStep(root, "Scratch"), [Path.Combine(root, "profile")], MinimumAge.Off, recorder, default);
+
+        Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(finding.Undescribed);
+        Assert.Empty(recorder.Probed);
+    }
+
+    /// <summary>
+    /// A recorded place that has become a link is the same one level down: the removal would take the
+    /// link and nothing behind it, so nothing on its far side is opened or counted.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void OpensNothingBeneathARecordedPlaceThatIsALink(DirectoryLinkKind kind)
+    {
+        var step = _temp.CreateDirectory("temp");
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        _temp.CreateFile(4096, "elsewhere", "Default", "Cookies");
+
+        var profile = Path.Combine(step, "profile");
+        DirectoryLink.Create(kind, profile, elsewhere);
+
+        var throughLink = Path.Combine(profile, "Default", "Cookies");
+        var recorder = new RecordingFileSystem(Refusing((throughLink, RefusalReason.Denied)));
+
+        var finding = RefusalCheck.Of(
+            new ClearDirectoryStep(step, "Scratch"), [profile], MinimumAge.Off, recorder, default);
 
         Assert.True(finding.Refused.IsEmpty);
         Assert.Empty(finding.Undescribed);

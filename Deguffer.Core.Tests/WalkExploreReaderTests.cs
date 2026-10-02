@@ -104,23 +104,24 @@ public sealed class WalkExploreReaderTests : IDisposable
     }
 
     /// <summary>
-    /// A junction is shown and holds nothing. Its target keeps its own place in the tree, so
-    /// counting through one would report the same bytes twice and draw a subtree the walk never
-    /// classified — while hiding it altogether makes a directory the user can plainly see in
-    /// Explorer vanish from the picture.
+    /// A directory link of either kind is shown and holds nothing. Its target keeps its own place in
+    /// the tree, so counting through one would report the same bytes twice and draw a subtree the
+    /// walk never classified — while hiding it altogether makes a directory the user can plainly see
+    /// in Explorer vanish from the picture.
     ///
     /// <para>Both of those are asserted, because each alone passes for the wrong reason: a reader
     /// that dropped links entirely would satisfy "nothing appears twice", and one that followed them
     /// would satisfy "the link is present".</para>
     /// </summary>
-    [Fact]
-    public void ShowsAJunctionAsAnEmptyLinkAndNeverCountsItsTargetTwice()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void ShowsALinkAsEmptyAndNeverCountsItsTargetTwice(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("cache");
         var real = _temp.CreateDirectory("cache", "content-v2");
         _temp.CreateFile(2048, "cache", "content-v2", "inside.bin");
 
-        SymbolicLink.ToDirectory(Path.Combine(root, "shortcut"), real);
+        DirectoryLink.Create(kind, Path.Combine(root, "shortcut"), real);
 
         var tree = WalkExploreReader.Read(root, onLevel: null, default);
         var byPath = ByPath(tree);
@@ -244,13 +245,14 @@ public sealed class WalkExploreReaderTests : IDisposable
     }
 
     /// <summary>
-    /// A junction is dated by its own entry rather than by whatever it points at, for the same
+    /// A link is dated by its own entry rather than by whatever it points at, for the same
     /// reason it is sized at zero: the target holds its own place in this tree and carries its own
     /// dates there. Dating it from the target would report one instant twice and say nothing about
     /// the link itself.
     /// </summary>
-    [Fact]
-    public void DatesALinkByItsOwnEntryRatherThanItsTarget()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void DatesALinkByItsOwnEntryRatherThanItsTarget(DirectoryLinkKind kind)
     {
         var made = new DateTime(2020, 7, 7, 11, 0, 0, DateTimeKind.Utc);
 
@@ -259,7 +261,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         _temp.CreateFile(2048, "elsewhere", "big.bin");
 
         var link = Path.Combine(root, "shortcut");
-        SymbolicLink.ToDirectory(link, target);
+        DirectoryLink.Create(kind, link, target);
         Directory.SetCreationTimeUtc(link, made);
 
         var tree = WalkExploreReader.Read(root, onLevel: null, default);
