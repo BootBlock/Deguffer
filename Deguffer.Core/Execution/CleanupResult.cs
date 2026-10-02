@@ -165,7 +165,8 @@ public enum VerificationOutcome
     Entered,
 
     /// <summary>
-    /// Windows would not describe it after the run, so nothing establishes whether it survived. Not
+    /// Windows would not describe it after the run, or would not describe the marker that says its
+    /// owner will delete it, so nothing establishes whether it survived. Not
     /// a pass, because a check that could not be made is not one that held, and not a failure,
     /// because the ordinary cause is a directory link Windows declines to follow, which a run meets
     /// every time and which says nothing about what the run did. See

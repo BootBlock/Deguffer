@@ -52,8 +52,8 @@ public sealed record LiveTree(string Directory, IReadOnlyList<string> Holders);
 
 /// <param name="Live">Every candidate found to be in use.</param>
 /// <param name="Complete">
-/// False when one of the mechanisms could not run at all — the Restart Manager refused the query, or
-/// the process table could not be read — or when a 32-bit process's working directory could not be
+/// False when one of the mechanisms could not run at all — the Restart Manager refused the query,
+/// Windows would not describe a declared lock file, or the process table could not be read — or when a 32-bit process's working directory could not be
 /// shown to be the one it keeps current, and was left out rather than reported stale. Absence from
 /// <see cref="Live"/> is then not evidence of dormancy.
 ///

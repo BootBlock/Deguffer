@@ -411,7 +411,7 @@ public sealed class ExploreRemoverTests : IDisposable
 
         DeniedDirectory? denied = null;
 
-        // The second listing of the folder is the check that follows the removal, which is the
+        // The second listing of Downloads is the check that follows the removal, which is the
         // moment Windows has to stop describing the store.
         var listings = 0;
         var fs = new ListingHook(WindowsFileSystem.Default, downloads, () =>
@@ -437,6 +437,10 @@ public sealed class ExploreRemoverTests : IDisposable
             Assert.StartsWith("NOT CHECKED", check.Detail, StringComparison.Ordinal);
             Assert.Empty(report.Verification.Failures);
             Assert.False(report.Verification.Passed);
+
+            // The status line is all the user sees, and "0 of N did not pass" reads as a pass.
+            Assert.Contains("1 of 3 check(s) on what should have survived could not be made", report.Summary, StringComparison.Ordinal);
+            Assert.DoesNotContain("did not pass", report.Summary, StringComparison.Ordinal);
         }
         finally
         {
@@ -477,6 +481,7 @@ public sealed class ExploreRemoverTests : IDisposable
                 check.Reason.StartsWith("The folder the item was taken out of", StringComparison.Ordinal));
             Assert.Equal(VerificationOutcome.Unverified, check.Outcome);
             Assert.DoesNotContain(report.Verification.Checks, c => c.Detail.StartsWith("MISSING", StringComparison.Ordinal));
+            Assert.Contains("could not be made", report.Summary, StringComparison.Ordinal);
         }
         finally
         {

@@ -163,6 +163,37 @@ public sealed class UserEnvironmentTests : IDisposable
     }
 
     /// <summary>
+    /// A refusal from a directory Windows will not describe is not evidence about any one name in it.
+    /// Behind a directory link Windows declines to follow, every name reads as refused, so stopping
+    /// there would answer every command with a file nobody saw and shadow the real tool further
+    /// along.
+    /// </summary>
+    [Fact]
+    public void ARefusalInADirectoryWindowsWillNotDescribeDoesNotStopThePathSearch()
+    {
+        var first = _temp.CreateDirectory("first-bin");
+        var second = _temp.CreateDirectory("second-bin");
+        var refused = Path.Combine(first, "deguffer-fixture-tool.exe");
+        var installed = Path.Combine(second, "deguffer-fixture-tool.exe");
+        File.WriteAllBytes(refused, new byte[64]);
+        File.WriteAllBytes(installed, new byte[64]);
+
+        var environment = new UserEnvironment(
+            () => Expandable(("PATHEXT", ".EXE")),
+            () => Expandable(("Path", $"{first};{second}")),
+            EnvironmentBlock.Startup(Values(), Expandable(), Expandable()));
+
+        using var file = DeniedDirectory.WithUnreadableFile(refused);
+        using var directory = DeniedDirectory.WithUnreadableAttributes(first);
+
+        // The shape under test, asserted rather than assumed: neither the name nor its directory answers.
+        Assert.Equal(PathPresence.Refused, LongPath.ProbeFile(refused));
+        Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(first));
+
+        Assert.Equal(installed, environment.FindExecutable("deguffer-fixture-tool"), StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The same route for a variable rather than a command, which is how several tools relocate a
     /// cache — and the case §5.2 cares about, because a provider told the old location measures and
     /// offers to empty a directory the tool has stopped using.

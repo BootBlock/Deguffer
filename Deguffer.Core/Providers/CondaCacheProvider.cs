@@ -312,7 +312,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     /// locations for the current user and for all users.
     ///
     /// <para>A candidate Windows will not describe is taken as found. Reading it as absent hid the
-    /// row and told the plan conda is not installed, and running it then reports the refusal.</para>
+    /// row and told the plan conda is not installed. Running it then fails, and the plan says conda
+    /// did not describe its caches.</para>
     /// </summary>
     private string? FindConda()
     {
@@ -324,8 +325,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         var configured = LongPath.Configured(Environment.GetEnvironmentVariable("CONDA_EXE"));
 
         return _conda = Environment.FindExecutable("conda")
-            ?? (configured is not null && LongPath.FileMayExist(configured) ? configured : null)
-            ?? DefaultInstallations().FirstOrDefault(LongPath.FileMayExist);
+            ?? (configured is not null && LongPath.FileMayExistInDescribedDirectory(configured) ? configured : null)
+            ?? DefaultInstallations().FirstOrDefault(LongPath.FileMayExistInDescribedDirectory);
     }
 
     private IEnumerable<string> DefaultInstallations()
