@@ -78,6 +78,64 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     }
 
     /// <summary>
+    /// A preview that read every program, followed by a clean that cannot: the process table, or the
+    /// Restart Manager asked about a lock file, does not answer. The directory was offered on an answer
+    /// the clean no longer has, so it stays, and the step says why.
+    /// </summary>
+    [Theory]
+    [InlineData(Toolchain.Unity)]
+    [InlineData(Toolchain.Cargo)]
+    [InlineData(Toolchain.Node)]
+    [InlineData(Toolchain.Python)]
+    [InlineData(Toolchain.UnrealIntermediate)]
+    [InlineData(Toolchain.UnrealDerivedData)]
+    public async Task ABuildDirectoryIsLeftAloneWhenTheCleanCannotReadWhatThePreviewRead(Toolchain toolchain)
+    {
+        var root = ApproveRoot();
+        var directory = CreateRecognised(toolchain, Path.Combine(root, "Game"));
+
+        var provider = ProviderFor(toolchain);
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, directory);
+
+        _liveTrees.CannotTellFromNow();
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(directory), "a build directory was removed on an answer the preview never gave");
+        Assert.Contains(
+            result.Steps,
+            step => step.Message == "Nothing was removed: Deguffer could not tell whether a running program is using this.");
+        AssertProvedStanding(result, directory);
+    }
+
+    /// <summary>
+    /// A plan made on a partial answer offered the directory and said so in a note. The same answer at
+    /// the clean is no new reason to refuse it, and the project around it survives.
+    /// </summary>
+    [Fact]
+    public async Task ABuildDirectoryOfferedOnAPartialAnswerIsRemovedOnTheSameAnswer()
+    {
+        var root = ApproveRoot();
+        var project = Path.Combine(root, "Game");
+        var directory = CreateRecognised(Toolchain.Unity, project);
+
+        _liveTrees.CannotTellFromNow();
+
+        var provider = ProviderFor(Toolchain.Unity);
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, directory);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(directory), "a build directory the preview offered on a partial answer was kept on the same answer");
+        Assert.True(Directory.Exists(project), "the project around a removed build directory was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// The veto's other evidence, read afresh: a program started from inside the build directory after
     /// the preview, such as a binary run out of <c>target\debug</c> or an environment's interpreter.
     /// </summary>

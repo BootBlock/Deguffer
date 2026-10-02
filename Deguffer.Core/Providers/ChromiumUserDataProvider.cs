@@ -269,7 +269,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 continue;
             }
 
-            var stillUnused = new ChromiumFolderInUse(_liveTrees, application.Path);
+            var stillUnused = new ChromiumFolderInUse(_liveTrees, application.Path, live.Complete);
 
             if (application.ProfilesIncomplete)
             {

@@ -92,7 +92,6 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     public const int MaximumStaleDays = 365;
 
     private readonly ILiveTreeInspector _liveTrees;
-    private readonly LiveChildrenCheck _stillUnused;
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
     private readonly IReadOnlyList<ITemporaryFolderTenant> _tenants;
@@ -120,7 +119,6 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
-        _stillUnused = new LiveChildrenCheck(_liveTrees);
         _preferences = preferences ?? DefaultPreferences.Instance;
         _tenants = tenants ?? [];
     }
@@ -313,9 +311,10 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         var live = _liveTrees.FindLiveChildren(folders, ct);
         var owned = await OwnedElsewhereAsync(folders, ct).ConfigureAwait(false);
         // The live entries above are the preview's. Each folder carries the same question to the
-        // clean, which spares whatever a program has taken up since.
+        // clean, which spares whatever a program has taken up since, and whether this answer was whole.
+        var stillUnused = new LiveChildrenCheck(_liveTrees, live.Complete);
         var (planned, measured) = await PlanDeletionsAsync(
-            [.. scan.Targets.Select(target => target with { UseCheck = _stillUnused })],
+            [.. scan.Targets.Select(target => target with { UseCheck = stillUnused })],
             effective,
             ct).ConfigureAwait(false);
         var (steps, spared) = await SpareAsync(planned, live, owned, effective, ct).ConfigureAwait(false);

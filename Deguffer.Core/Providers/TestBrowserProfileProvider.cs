@@ -75,7 +75,6 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     };
 
     private readonly ILiveTreeInspector _liveTrees;
-    private readonly LiveChildrenCheck _stillUnused;
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
     private IReadOnlyList<FolderScan>? _scans;
@@ -96,7 +95,6 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
-        _stillUnused = new LiveChildrenCheck(_liveTrees);
         _preferences = preferences ?? DefaultPreferences.Instance;
     }
 
@@ -214,6 +212,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
         }
 
         var live = FindLive(profiles, ct);
+        var stillUnused = new LiveChildrenCheck(_liveTrees, live.Complete);
         var targets = new List<DeletionTarget>();
 
         foreach (var profile in profiles)
@@ -246,7 +245,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
 
                 // Asked of the profile's folder, as FindLive asked it, because a browser a test starts
                 // while the preview is on screen names its profile only on its command line.
-                UseCheck: _stillUnused));
+                UseCheck: stillUnused));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, effective, ct).ConfigureAwait(false);

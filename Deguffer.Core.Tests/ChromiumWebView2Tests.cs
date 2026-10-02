@@ -481,6 +481,56 @@ public sealed class ChromiumWebView2Tests : IDisposable
     }
 
     /// <summary>
+    /// A preview that read every program's command line, followed by a clean that cannot. The cache
+    /// was offered on an answer the clean no longer has, so it stays, and the step says why.
+    /// </summary>
+    [Fact]
+    public async Task TheCleanLeavesACacheWhenItCannotReadWhatThePreviewRead()
+    {
+        var userData = CreateWebView2(Path.Combine(_environment.LocalAppData, "Vendor"));
+        var cache = CreateDirectory(Path.Combine(userData, "Default", "Code Cache"));
+
+        var liveTrees = FakeLiveTreeInspector.NothingLive;
+        var provider = CreateProvider(liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        liveTrees.CannotTellFromNow();
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(cache), "the clean removed a cache on an answer the preview never gave.");
+        Assert.Contains(
+            result.Steps,
+            step => step.Message == "Nothing was removed: Deguffer could not tell whether a running program is using this.");
+        Assert.True(File.Exists(Path.Combine(userData, "Local State")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A plan made on a partial answer offered the cache and said so in a note. The same answer at the
+    /// clean is no new reason to refuse it.
+    /// </summary>
+    [Fact]
+    public async Task TheCleanRemovesACacheOfferedOnTheSamePartialAnswer()
+    {
+        var userData = CreateWebView2(Path.Combine(_environment.LocalAppData, "Vendor"));
+        var cache = CreateDirectory(Path.Combine(userData, "Default", "Code Cache"));
+
+        var provider = CreateProvider(FakeLiveTreeInspector.CannotTell);
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(cache), "a cache the preview offered on a partial answer was kept on the same answer.");
+        Assert.True(File.Exists(Path.Combine(userData, "Local State")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// A planning pass must see the machine as it is now, so dropping this provider's caches drops
     /// the process table its veto reads as well.
     /// </summary>

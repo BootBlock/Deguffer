@@ -14,7 +14,8 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Asked of the machine at the moment of the call.</b> An implementation reads afresh rather
 /// than from anything a planning pass memoised, because a remembered "nothing is using it" ages in
 /// exactly the direction this exists to stop. It answers by the same rules the plan was built on, so
-/// a step is held back at the clean for no reason it would not have been left out at the preview.</para>
+/// a step is held back at the clean for no reason it would not have been left out at the preview,
+/// save one: the clean could not ask what the preview could.</para>
 ///
 /// <para>Implemented by each provider whose offer rests on such evidence, so the run holds no
 /// knowledge of any tool: it knows only that a step may be held, and what to do with the answer.</para>
@@ -29,9 +30,11 @@ public interface IUseCheck
     /// entry where the step empties a folder in place, and holds the whole step back otherwise,
     /// because a tree something is working in cannot be removed around it.</para>
     ///
-    /// <para>Where the rules could not be applied and the plan would have refused, the answer names
-    /// the step's own path with that reason: a question that could not be asked is not a clear
-    /// answer.</para>
+    /// <para>Where the question cannot be asked in full now and the plan's answer was whole, the answer
+    /// names the step's own path with that reason: a question that could not be asked is not a clear
+    /// answer, and the step was offered on one that could. Each check remembers which answer its plan
+    /// had, because only the check can. Where the plan's answer was partial too, it offered the step on
+    /// that answer and said so in a note, and the step runs as planned.</para>
     /// </summary>
     IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct);
 }

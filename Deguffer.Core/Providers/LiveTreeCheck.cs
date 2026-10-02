@@ -13,10 +13,9 @@ namespace Deguffer.Core.Providers;
 /// removed under a live editor or a build in flight breaks the work in progress, which is why the
 /// veto refuses rather than warns, and a refusal made at the preview says nothing about the clean.</para>
 ///
-/// <para>An answer that could not be had in full is read as the plan read it. Where the plan offered
-/// the directory on the same partial answer and said so in a note, the step runs: holding it back
-/// here would refuse at the clean what the preview offered, for no new reason. Where the plan held
-/// every directory back on it instead, <c>unknown</c> says why, and the step is held back too.</para>
+/// <para>An answer that could not be had in full holds the step back where the plan's was whole, and
+/// lets it run where the plan offered it on the same partial answer. See
+/// <see cref="LiveTreeVeto.AtClean"/>.</para>
 ///
 /// <para>The directory asked about need not be the step's. A superseded Squirrel build is held by the
 /// application running from the build beside it, so the veto asks about the installation, and what it
@@ -30,15 +29,12 @@ namespace Deguffer.Core.Providers;
 /// while a program is in it and only for the projects the solution names now, and Visual Studio
 /// opened after the preview, or a project added to its solution since, is the one this is for.
 /// </param>
-/// <param name="unknown">
-/// Why the step is held back where the inspector could not tell, as an <see cref="InUseNow.Reason"/>,
-/// for a plan that refused on that answer. Null for one that offered on it.
-/// </param>
+/// <param name="planComplete">Whether the veto's answer the plan offered the directory on was whole.</param>
 internal sealed class LiveTreeCheck(
     ILiveTreeInspector inspector,
     RecognisedBuildDirectory directory,
     Func<CancellationToken, LiveTreeQuestion> questions,
-    string? unknown = null) : IUseCheck
+    bool planComplete) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
@@ -56,8 +52,6 @@ internal sealed class LiveTreeCheck(
                 .Select(tree => new InUseNow(step.Path, string.Join("; ", tree.Holders))),
         ];
 
-        return live.Count == 0 && !findings.Complete && unknown is not null
-            ? [new InUseNow(step.Path, unknown)]
-            : live;
+        return LiveTreeVeto.AtClean(step, live, findings.Complete, planComplete);
     }
 }

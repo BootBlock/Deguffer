@@ -19,10 +19,11 @@ namespace Deguffer.Core.Providers;
 /// application running from its own install folder, is not seen, and its caches are offered as they
 /// were before, under the running-process warning.</para>
 ///
-/// <para>A check that could not read every program's command line lets the step run, because the plan
-/// offered it on the same partial answer and said so in a note.</para>
+/// <para>A check that could not read every program's command line holds the step back where the plan's
+/// answer was whole. See <see cref="LiveTreeVeto.AtClean"/>.</para>
 /// </summary>
-internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string userData) : IUseCheck
+/// <param name="planComplete">Whether the answer the plan offered the folder's caches on was whole.</param>
+internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string userData, bool planComplete) : IUseCheck
 {
     /// <summary>Which of <paramref name="folders"/> a running program is using.</summary>
     public static LiveTreeFindings Find(
@@ -52,10 +53,13 @@ internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string u
         // The inspector keeps one process table for a planning pass. That table is the preview's.
         inspector.Invalidate();
 
-        return
+        var findings = Find(inspector, [userData], ct);
+
+        IReadOnlyList<InUseNow> inUse =
         [
-            .. Find(inspector, [userData], ct).Live
-                .Select(live => new InUseNow(step.Path, string.Join("; ", live.Holders))),
+            .. findings.Live.Select(live => new InUseNow(step.Path, string.Join("; ", live.Holders))),
         ];
+
+        return LiveTreeVeto.AtClean(step, inUse, findings.Complete, planComplete);
     }
 }

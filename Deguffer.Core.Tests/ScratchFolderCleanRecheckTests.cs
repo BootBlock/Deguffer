@@ -149,6 +149,84 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
         AssertProvedStanding(result, live);
     }
 
+    /// <summary>
+    /// A preview that read every program, followed by a clean that cannot. No entry can be spared on
+    /// an answer that names none, so the folder is left as it was, and the step says why. The age floor
+    /// alone is not enough, because the user can set it to nothing.
+    /// </summary>
+    [Fact]
+    public async Task AFolderIsLeftAloneWhenTheCleanCannotReadWhatThePreviewRead()
+    {
+        var abandonedFile = Abandoned(1024, "abandoned.tmp");
+        var abandonedFolder = Abandoned(2048, "old-build", "obj.tmp");
+
+        var provider = TemporaryFilesRow();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        _liveTrees.CannotTellFromNow();
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(abandonedFile), "a temporary folder was emptied on an answer the preview never gave");
+        Assert.True(File.Exists(abandonedFolder), "a temporary folder was emptied on an answer the preview never gave");
+        Assert.Contains(
+            result.Steps,
+            step => step.Message == "Nothing was removed: Deguffer could not tell whether a running program is using this.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A plan made on a partial answer offered the folder's entries and said so in a note. The same
+    /// answer at the clean is no new reason to refuse them.
+    /// </summary>
+    [Fact]
+    public async Task AFolderOfferedOnAPartialAnswerIsEmptiedOnTheSameAnswer()
+    {
+        var abandonedFile = Abandoned(1024, "abandoned.tmp");
+
+        _liveTrees.CannotTellFromNow();
+
+        var provider = TemporaryFilesRow();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(abandonedFile), "an entry the preview offered on a partial answer was kept on the same answer");
+        Assert.True(Directory.Exists(UserTemp), "the temporary folder itself was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The same for a test browser's profile, which is removed on its own rather than spared inside a
+    /// folder emptied in place.
+    /// </summary>
+    [Fact]
+    public async Task AProfileIsNotRemovedWhenTheCleanCannotReadWhatThePreviewRead()
+    {
+        var profile = AbandonedProfile("playwright_chromiumdev_profile-a1B2c3");
+
+        var provider = TestProfilesRow();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(profile, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+
+        _liveTrees.CannotTellFromNow();
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(
+            File.Exists(Path.Combine(profile, "Default", "Preferences")),
+            "a profile was removed on an answer the preview never gave");
+        Assert.Contains(
+            result.Steps,
+            step => step.Message == "Nothing was removed: Deguffer could not tell whether a running program is using this.");
+        AssertProvedStanding(result, profile);
+    }
+
     private static void AssertProvedStanding(CleanupResult result, string path)
     {
         var check = Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(path, StringComparison.OrdinalIgnoreCase));
