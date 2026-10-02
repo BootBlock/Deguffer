@@ -115,12 +115,19 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
 
     /// <summary>
     /// §5.2 as §7.1 reads it: each version's folder recognises only this computer's cache, and while
-    /// After Effects runs, nothing. Every other path the plan names as protected is refused outright.
+    /// After Effects runs, nothing. <c>Adobe\After Effects</c> recognises only the version folders that
+    /// hold this computer's cache, because Explore allows a path only where every root containing it
+    /// does, and each of those folders has a root of its own that decides what in it may go. Every
+    /// other path the plan names as protected is refused outright.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var examination = Examine(ct);
         var running = AfterEffectsIsRunning();
+        var wayDown = examination.Caches.ToLookup(
+            cache => cache.Versions,
+            cache => Path.GetFileName(cache.VersionFolder),
+            StringComparer.OrdinalIgnoreCase);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
@@ -133,7 +140,10 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
                     name => name.Equals(examination.CacheName, StringComparison.OrdinalIgnoreCase))),
             .. examination.Survivors
                 .Where(survivor => !examination.Caches.Any(cache => cache.VersionFolder.Equals(survivor.Path, StringComparison.OrdinalIgnoreCase)))
-                .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)),
+                .Select(survivor => ToolRoot.Folders(
+                    survivor.Path,
+                    survivor.Reason,
+                    name => wayDown[survivor.Path].Contains(name, StringComparer.OrdinalIgnoreCase))),
         ]);
     }
 

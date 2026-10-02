@@ -6,7 +6,11 @@ namespace Deguffer.Core.Providers;
 /// <summary>One version's disk cache a plan may offer.</summary>
 /// <param name="Path">The cache folder, named for this computer.</param>
 /// <param name="VersionFolder">The version's folder it is in, which must survive.</param>
-internal sealed record AfterEffectsDiskCache(string Path, string VersionFolder);
+/// <param name="Versions">
+/// The folder holding one folder per version, <c>Adobe\After Effects</c>, spelled as it is named
+/// among the survivors.
+/// </param>
+internal sealed record AfterEffectsDiskCache(string Path, string VersionFolder, string Versions);
 
 /// <summary>
 /// What one look below every folder After Effects was told to cache in found: this computer's cache
@@ -121,7 +125,7 @@ internal sealed class AfterEffectsDiskCacheExamination
         foreach (var version in children.Directories)
         {
             ct.ThrowIfCancellationRequested();
-            CollectVersion(LongPath.Display(version.FullName));
+            CollectVersion(versions, LongPath.Display(version.FullName));
         }
     }
 
@@ -130,7 +134,7 @@ internal sealed class AfterEffectsDiskCacheExamination
     /// whether or not it is. Another computer's cache is most often found alone, on a shared drive or
     /// after this computer's was removed, and that is when it most needs protecting.
     /// </summary>
-    private void CollectVersion(string version)
+    private void CollectVersion(string versions, string version)
     {
         if (FolderEntries.Of(version) is not { } entries)
         {
@@ -156,7 +160,7 @@ internal sealed class AfterEffectsDiskCacheExamination
             }
             else
             {
-                Caches.Add(new AfterEffectsDiskCache(path, version));
+                Caches.Add(new AfterEffectsDiskCache(path, version, versions));
             }
         }
 
