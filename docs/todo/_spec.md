@@ -563,7 +563,9 @@ refuse. **There is one verb here, and it does not grow a second.**
 - **It goes to every window that qualifies, in the order Windows enumerates them.** Closing one
   window of a program that has several does not close the program, and a program with three
   documents open asks about each in its own words. The count is named in the confirmation, so three
-  dialogs are not a surprise.
+  dialogs are not a surprise. The confirmation's windows are also the limit: the second reading can
+  remove a window that no longer qualifies, never add one the program opened while the dialog was
+  up, and where none of the confirmed windows is left, nothing is sent.
 - **Nothing is sent twice, and nothing is chased.** One pass, no retry, no escalation, and no
   attention paid to a window the program opens afterwards. A program still running when the watch
   ends is reported as still running, and the user may pick it again.

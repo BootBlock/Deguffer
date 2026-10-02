@@ -268,7 +268,7 @@ public sealed partial class MemorySelection : ObservableObject
             });
 
             var attempt = await _actions.CloseAsync(
-                target, verdict.Windows.Count, pick.PickedFrom.Services.Listing, watching, watch.Token);
+                target, verdict.Windows, pick.PickedFrom.Services.Listing, watching, watch.Token);
 
             // A report the user took down while the close went on stays down: putting the answer back
             // would undo the dismissal.
