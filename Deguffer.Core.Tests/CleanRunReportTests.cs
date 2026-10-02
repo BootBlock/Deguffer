@@ -38,8 +38,9 @@ public sealed class CleanRunReportTests : IDisposable
     /// <summary>
     /// Every spelling a clean's paths carry the account in, in each place a report holds a path: in
     /// backticks, at the end of a line, and quoted inside a tool's message with more text after it.
-    /// What a rule must not touch is here too: a profile Windows itself names, a folder that only
-    /// starts with the account's name, and a source folder called <c>Users</c>.
+    /// What a rule must not touch is here too: a profile Windows itself names, a folder whose name
+    /// only starts with the account's, and a source folder called <c>Users</c>. A hyphen does not
+    /// join words, so a folder named after the account and a tool loses the account's half.
     /// </summary>
     [Theory]
     [InlineData(@"{profile}\AppData\Local\Temp\kitprobe", @"%USERPROFILE%\AppData\Local\Temp\kitprobe")]
@@ -57,7 +58,8 @@ public sealed class CleanRunReportTests : IDisposable
     [InlineData(@"\\TESTMACHINE.corp.example\share\obj", @"\\<machine>\share\obj")]
     [InlineData(@"D:\Joe Smith\Videos\CacheClip", @"<personal folder>\CacheClip")]
     [InlineData(@"C:\Users\Public\Documents\obj", @"C:\Users\Public\Documents\obj")]
-    [InlineData(@"D:\testuser-tools\obj", @"D:\testuser-tools\obj")]
+    [InlineData(@"D:\testuser-tools\obj", @"D:\<user>-tools\obj")]
+    [InlineData(@"D:\testusers\obj", @"D:\testusers\obj")]
     [InlineData(@"D:\src\Users\UserController.cs", @"D:\src\Users\UserController.cs")]
     public void LeavesNoAccountOrMachineNameInAPath(string path, string expected)
     {
@@ -96,12 +98,23 @@ public sealed class CleanRunReportTests : IDisposable
     [InlineData(@"Deleted {profile}\Contoso\Finance - Documents\x", @"Deleted %USERPROFILE%\<organisation>\Finance - Documents\x")]
     [InlineData(@"Kept C:\Users\Public because it is shared", @"Kept C:\Users\Public because it is shared")]
     [InlineData(@"Deleted D:\dev\cache — Process ID: 4", @"Deleted D:\dev\cache — Process ID: 4")]
+    [InlineData(@"Owner: TESTDOMAIN\testuser; UPN testuser@testdomain.example", @"Owner: <domain>\<user>; UPN <user>@<domain>.example")]
+    [InlineData(@"Skipped C:\Users\O'Brien\AppData\x", @"Skipped C:\Users\<user>\AppData\x")]
+    [InlineData(@"npm ERR! path /mnt/c/Users/alice/AppData", @"npm ERR! path /mnt/c/Users/<user>/AppData")]
+    [InlineData(@"Open \Device\HarddiskVolume3\Users\alice\AppData", @"Open \Device\HarddiskVolume3\Users\<user>\AppData")]
+    [InlineData(@"Failed \\TESTMACHINE\c$\Users\alice\AppData", @"Failed \\<machine>\c$\Users\<user>\AppData")]
+    [InlineData(@"Removed testuser-cache and testuser_backup", @"Removed <user>-cache and <user>_backup")]
+    [InlineData(@"Synced Fabrikam - Documents", @"Synced <organisation> - Documents")]
+    [InlineData(@"Your personal data was kept", @"Your personal data was kept")]
     public void LeavesNoNameInAMessage(string message, string expected)
     {
         var environment = new FakeUserEnvironment(_temp.Path)
             .WithPersonalFolderAt(@"E:\Joe Smith\Documents")
             .WithPersonalFolderAt(@"D:\");
-        environment.WithPersonalFolderAt(Path.Combine(environment.UserProfile, "OneDrive - Contoso"));
+        environment
+            .WithPersonalFolderAt(Path.Combine(environment.UserProfile, "OneDrive - Contoso"))
+            .WithPersonalFolderAt(Path.Combine(environment.UserProfile, "OneDrive - Personal"))
+            .WithPersonalFolderAt(Path.Combine(environment.UserProfile, "OneDrive - Fabrikam", "Documents"));
 
         var report = CleanRunReport.Describe(
             [Failed(@"C:\Temp\x", "Clear", message.Replace("{profile}", environment.UserProfile, StringComparison.Ordinal))],
@@ -109,6 +122,22 @@ public sealed class CleanRunReportTests : IDisposable
             environment);
 
         Assert.Contains($"- Done: Clear — {expected}{Environment.NewLine}", report, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What one rule writes, no later rule reads. An organisation that happens to be called
+    /// <c>User</c> would otherwise turn the <c>&lt;user&gt;</c> another account's profile became into
+    /// <c>&lt;&lt;organisation&gt;&gt;</c>.
+    /// </summary>
+    [Fact]
+    public void LeavesAReplacementAloneWhateverANameIsCalled()
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        environment.WithPersonalFolderAt(Path.Combine(environment.UserProfile, "OneDrive - User"));
+
+        var report = CleanRunReport.Describe([Failed(@"C:\Temp\x", "Clear", @"Skipped C:\Users\alice\x")], Origin, environment);
+
+        Assert.Contains($@"- Done: Clear — Skipped C:\Users\<user>\x{Environment.NewLine}", report, StringComparison.Ordinal);
     }
 
     /// <summary>

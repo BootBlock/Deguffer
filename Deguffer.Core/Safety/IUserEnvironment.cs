@@ -102,6 +102,15 @@ public interface IUserEnvironment
     string MachineName { get; }
 
     /// <summary>
+    /// The domain this account belongs to — the <c>DOMAIN</c> half of <c>DOMAIN\UserName</c> — which
+    /// is the machine's own name for a local account.
+    ///
+    /// <para>Exists so a diagnostic report can leave it out. A work account's domain names the
+    /// employer, and Windows writes it into owner and process messages a report quotes.</para>
+    /// </summary>
+    string DomainName { get; }
+
+    /// <summary>
     /// Resolve an executable on <c>PATH</c>, or null if it is not installed. A file Windows will not
     /// describe is returned as found where it is the first match, so a caller may be handed a path
     /// it then cannot run.
@@ -304,6 +313,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
     public string UserName { get; } = Environment.UserName;
 
     public string MachineName { get; } = Environment.MachineName;
+
+    public string DomainName { get; } = Environment.UserDomainName;
 
     public void Invalidate() => _block = null;
 

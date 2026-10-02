@@ -179,6 +179,8 @@ public class CrashLogTests
 
         public string MachineName => string.Empty;
 
+        public string DomainName => string.Empty;
+
         public string? FindExecutable(string command) => null;
 
         public string? GetEnvironmentVariable(string name) => null;
