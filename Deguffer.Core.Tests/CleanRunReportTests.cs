@@ -79,6 +79,39 @@ public sealed class CleanRunReportTests : IDisposable
     }
 
     /// <summary>
+    /// The names, wherever a tool's message puts them: an account written as <c>MACHINE\user</c>
+    /// outside any path, a path followed by prose or punctuation, a share in an extended or
+    /// forward-slash form, and a work OneDrive's organisation outside its folder. What a rule must not
+    /// eat is here too: the sentence after a profile Windows itself names, and a drive that is only a
+    /// personal folder's root.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Access is denied for TESTMACHINE\testuser (owner testuser).", @"Access is denied for <machine>\<user> (owner <user>).")]
+    [InlineData(@"Failed \\?\UNC\TESTMACHINE.corp.example\share\x", @"Failed \\?\UNC\<machine>\share\x")]
+    [InlineData(@"Failed //TESTMACHINE.corp.example/share/x", @"Failed //<machine>/share/x")]
+    [InlineData(@"Could not find {profile}.", @"Could not find %USERPROFILE%.")]
+    [InlineData(@"In {profile}, 3 files locked", @"In %USERPROFILE%, 3 files locked")]
+    [InlineData(@"Could not find E:\Joe Smith\Documents.", @"Could not find <personal folder>.")]
+    [InlineData(@"OneDrive - Contoso is syncing", @"OneDrive - <organisation> is syncing")]
+    [InlineData(@"Deleted {profile}\Contoso\Finance - Documents\x", @"Deleted %USERPROFILE%\<organisation>\Finance - Documents\x")]
+    [InlineData(@"Kept C:\Users\Public because it is shared", @"Kept C:\Users\Public because it is shared")]
+    [InlineData(@"Deleted D:\dev\cache — Process ID: 4", @"Deleted D:\dev\cache — Process ID: 4")]
+    public void LeavesNoNameInAMessage(string message, string expected)
+    {
+        var environment = new FakeUserEnvironment(_temp.Path)
+            .WithPersonalFolderAt(@"E:\Joe Smith\Documents")
+            .WithPersonalFolderAt(@"D:\");
+        environment.WithPersonalFolderAt(Path.Combine(environment.UserProfile, "OneDrive - Contoso"));
+
+        var report = CleanRunReport.Describe(
+            [Failed(@"C:\Temp\x", "Clear", message.Replace("{profile}", environment.UserProfile, StringComparison.Ordinal))],
+            Origin,
+            environment);
+
+        Assert.Contains($"- Done: Clear — {expected}{Environment.NewLine}", report, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The profile ends where a folder name ends. A neighbouring profile whose name only starts with
     /// this one's is another account's, and reading it as this one's would both mislabel it and leave
     /// the rest of its name in the report.

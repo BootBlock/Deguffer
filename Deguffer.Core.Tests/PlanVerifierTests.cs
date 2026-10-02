@@ -599,24 +599,6 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
-    /// A protected path already gone before the run removed anything was taken by nothing in the run,
-    /// even a step that names it. Gone after that moment, the same step is the first suspect.
-    /// </summary>
-    [Fact]
-    public void APathGoneBeforeTheRunRemovedAnythingWasRemovedFromOutside()
-    {
-        var live = _temp.CreateDirectory("scratch", "kitprobe");
-        var plan = Plan([new DeleteDirectoryStep(live, "A cache")], Protect(live));
-        var presentAtStart = RunResidue.Before([plan]);
-
-        Directory.Delete(live);
-        var goneAtStart = RunResidue.Before([plan]);
-
-        Assert.Equal(VerificationOutcome.Failed, PlanVerifier.Verify(plan, runReach: null, presentAtStart).Checks.Single().Outcome);
-        Assert.Equal(VerificationOutcome.RemovedFromOutside, PlanVerifier.Verify(plan, runReach: null, goneAtStart).Checks.Single().Outcome);
-    }
-
-    /// <summary>
     /// One removal leaving an entry alone does not answer for another that reached it: a step that
     /// names the entry itself keeps the alarm, and so does a tool's own command, whose reach nobody
     /// can state.

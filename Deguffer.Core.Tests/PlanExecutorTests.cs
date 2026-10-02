@@ -960,11 +960,12 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
-    /// The same, with the program finished before the clean began. The walk cannot meet an entry that
-    /// is not there, so what the run found before it removed anything is the evidence.
+    /// The same, with the program finished before the clear reached the folder, which stays the alarm.
+    /// The walk cannot meet an entry that is not there, and its absence shows only that this clear did
+    /// not take it: an earlier removal may have. See PlanVerifier.
     /// </summary>
     [Fact]
-    public async Task ASparedEntryGoneBeforeTheClearBeganWasRemovedFromOutside()
+    public async Task ASparedEntryGoneBeforeTheClearBeganStillFailsVerification()
     {
         var scratch = _temp.CreateDirectory("scratch");
         var live = _temp.CreateDirectory("scratch", "kitprobe");
@@ -976,7 +977,7 @@ public sealed class PlanExecutorTests : IDisposable
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: default);
 
-        Assert.Equal(VerificationOutcome.RemovedFromOutside, Assert.Single(result.Verification!.Checks).Outcome);
+        Assert.Equal(VerificationOutcome.Failed, Assert.Single(result.Verification!.Checks).Outcome);
     }
 
     /// <summary>
@@ -1016,7 +1017,7 @@ public sealed class PlanExecutorTests : IDisposable
         var overReach = PlanDeleting(new DeleteDirectoryStep(Path.Combine(alias, "kitprobe"), "A cache"));
         var clear = ClearSparing(scratch, live, spared: true);
         var reach = RunReach.Of([overReach, clear]);
-        var residue = RunResidue.Before([overReach, clear]);
+        var residue = new RunResidue();
         var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
 
         await executor.ExecuteAsync(overReach, reach, residue, progress: null, ct: default);

@@ -148,28 +148,6 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
-    /// The same survivor gone before the run removed anything was taken by nothing in the run, and is
-    /// reported as that rather than passed over.
-    /// </summary>
-    [Fact]
-    public async Task AStepFreePlanReportsASurvivorGoneBeforeTheRunAsRemovedFromOutside()
-    {
-        using var temp = new TempDirectory();
-        var withheld = Directory.CreateDirectory(Path.Combine(temp.Path, "withheld")).FullName;
-
-        var planner = new CleanupPlanner([new StubProvider("withheld", bytes: 0, protects: withheld)]);
-        var findings = await planner.PlanAllAsync();
-
-        Directory.Delete(withheld);
-
-        var result = Assert.Single(await planner.ExecuteAsync(findings));
-
-        Assert.False(result.Verification!.Passed);
-        Assert.Empty(result.Verification.Failures);
-        Assert.Equal(withheld, Assert.Single(result.Verification.RemovedFromOutside).Subject);
-    }
-
-    /// <summary>
     /// A protected path that was not there when the plan was made proves nothing by being absent
     /// afterwards, so a plan holding only those has nothing to prove and stays out of the run.
     /// </summary>

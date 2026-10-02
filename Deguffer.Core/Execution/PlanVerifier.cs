@@ -164,17 +164,6 @@ public static class PlanVerifier
                     protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
         }
 
-        if (residue?.GoneBeforeTheRun(protectedPath.Path) == true)
-        {
-            return new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.RemovedFromOutside,
-                "GONE — but it had already gone before this clean removed anything, so something else "
-                + "on the machine removed it after the scan ran. A program that was using it may have "
-                + "removed it when it finished.");
-        }
-
         if (WasBeyondThisRunsReach(protectedPath.Path, reach))
         {
             return new VerificationCheck(
@@ -322,7 +311,7 @@ public static class PlanVerifier
     ///
     /// <para>A missing path whose folder is still standing is what an over-broad rule looks like
     /// from here, so this answers false for it. Only the run's own record can say otherwise: see
-    /// <see cref="RunResidue.GoneBeforeTheRun"/> and <see cref="WasLeftAloneByEveryRemovalReachingIt"/>.</para>
+    /// <see cref="WasLeftAloneByEveryRemovalReachingIt"/>.</para>
     ///
     /// <para><b>What it cannot see.</b> The comparison is textual, and
     /// <see cref="LongPath.Extended"/> resolves no links, so a step whose <em>ancestry</em> passes
@@ -372,9 +361,14 @@ public static class PlanVerifier
     /// then. A path counts only where every target holding it is a removal that recorded it, so a step
     /// that names the path itself, a removal not yet made, and a spelling the walk failed to match all
     /// leave the alarm in place. An unbounded reach does as well, because a tool's own command may
-    /// have taken it whatever Deguffer's removal did. An entry gone before the walk reached it is not
-    /// evidence here, because an earlier removal may have taken it through a link: see
-    /// <see cref="RunResidue.GoneBeforeTheRun"/> for the one moment that question can be answered.</para>
+    /// have taken it whatever Deguffer's removal did.</para>
+    ///
+    /// <para><b>An entry gone before the walk reached it stays the alarm.</b> Its absence shows only
+    /// that this removal did not take it. An earlier removal in the run may have, through a link no
+    /// comparison of paths can see, and so may a removal Deguffer made after the preview in an earlier
+    /// clean or on another page. Telling those apart from a program that removed its own entry needs a
+    /// record of every removal since the plan was measured, which nothing keeps, and the cost of
+    /// reading it the other way is a hidden over-reach.</para>
     ///
     /// <para><b>What it cannot see</b> is the blind spot <see cref="WasBeyondThisRunsReach"/>
     /// records: a later removal in the same plan that reaches the entry through a junction in its

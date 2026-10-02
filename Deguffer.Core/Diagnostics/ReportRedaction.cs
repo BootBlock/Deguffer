@@ -6,12 +6,19 @@ namespace Deguffer.Core.Diagnostics;
 /// <summary>
 /// Takes the account's and the machine's names out of text that is meant to be posted in public.
 ///
-/// <para><b>Each rule says where a name ends, and that is the hard half.</b> A report holds paths in
-/// backticks, in step descriptions and inside messages a tool wrote, so a path may be followed by a
-/// separator, a quote, a full stop, a space or the end of a line. A rule that ends a name too early
-/// leaves the rest of it in the report, and one that ends it too late erases the diagnosis beside
-/// it. Where the two conflict, a profile folder's name is ended late, because a surname left in a
-/// public issue cannot be taken back and a line lost from a report can be asked for.</para>
+/// <para><b>Driven by the names this machine knows, not by where a path seems to end.</b> A report
+/// holds paths in backticks, in step descriptions and inside messages a tool wrote, followed by
+/// anything at all, and Windows writes accounts as <c>MACHINE\user</c> outside any path. A rule that
+/// guesses where a name ends from what surrounds it either leaves a surname behind or erases the
+/// sentence beside it. So the profile folder's name, the account, the machine and each work
+/// OneDrive's organisation are matched as whole words wherever they appear, and the paths that hold
+/// them are matched as they are known.</para>
+///
+/// <para><b>Patterns remain only for names nothing here can know</b>: another account's profile
+/// under a drive's <c>Users</c>, this one's in its short 8.3 spelling, and a work OneDrive this
+/// account does not sync. Each ends at a separator, a quote or the end of a line, so a surname is
+/// never left behind. What that costs is the rest of a sentence that names a bare profile folder
+/// with no separator after it, which is rare and loses only words.</para>
 ///
 /// <para><b>What it cannot see</b> is a name the account gave a folder of its own, such as a
 /// project named after a client. The report asks the reader to look before they post for that
@@ -19,17 +26,13 @@ namespace Deguffer.Core.Diagnostics;
 /// </summary>
 internal sealed partial class ReportRedaction
 {
-    /// <summary>
-    /// Where a folder name that may hold spaces ends: a separator, a backtick, a quote, the
-    /// " — " a report puts between a step and its message, or the end of a line.
-    /// </summary>
-    private const string FolderEnd = @"(?=[\\/`'""]|\s—|[\r\n]|$)";
+    /// <summary>Where a word may not continue: a letter, a digit, an underscore or a hyphen.</summary>
+    private const string WordChar = @"[\p{L}\p{N}_-]";
 
-    /// <summary>A folder name that may hold spaces, taken as short as <see cref="FolderEnd"/> allows.</summary>
-    private const string FolderName = @"[^\\/`'""\r\n]+?";
+    /// <summary>An unknown folder name, up to the first separator, backtick, quote or line end.</summary>
+    private const string UnknownName = @"[^\\/`'""\r\n]+";
 
-    /// <summary>Where a known name ends: anything that cannot continue a folder name.</summary>
-    private const string NameEnd = @"(?=[\\/`'""\s.,:;)\]]|$)";
+    private const string OrganisationToken = "<organisation>";
 
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
@@ -38,37 +41,47 @@ internal sealed partial class ReportRedaction
     public ReportRedaction(IUserEnvironment environment)
     {
         var profile = Path.TrimEndingDirectorySeparator(environment.UserProfile);
-
-        // Longest first, so a folder inside another is replaced before the one holding it. A personal
-        // folder inside the profile needs no rule of its own: the profile's covers it, and keeps the
-        // part of its path that says which folder it was.
-        var moved = environment.PersonalFolders
-            .Select(Path.TrimEndingDirectorySeparator)
-            .Where(folder => folder.Length > 0 && !LongPath.Contains(profile, folder))
-            .OrderByDescending(folder => folder.Length);
-
         var rules = new List<(Regex, string)>();
 
-        rules.AddRange(moved.Select(folder => (Literal(folder), "<personal folder>")));
+        // A personal folder Windows or OneDrive moved out of the profile, longest first so one inside
+        // another goes first. A drive's root, or a folder holding the profile, names no one's files
+        // and would swallow every path on the drive.
+        rules.AddRange(environment.PersonalFolders
+            .Select(Path.TrimEndingDirectorySeparator)
+            .Where(folder => folder.Length > 0
+                && !string.Equals(Path.GetPathRoot(folder), folder, StringComparison.OrdinalIgnoreCase)
+                && !LongPath.Contains(folder, profile)
+                && !LongPath.Contains(profile, folder))
+            .OrderByDescending(folder => folder.Length)
+            .Select(folder => (Literal(folder), "<personal folder>")));
 
         if (profile.Length > 0)
         {
             rules.Add((Literal(profile), "%USERPROFILE%"));
         }
 
-        rules.Add((Organisation(), "${lead}<organisation>"));
+        foreach (var organisation in Organisations(environment.PersonalFolders))
+        {
+            rules.Add((Word(organisation), OrganisationToken));
+        }
+
+        rules.Add((UnknownOrganisation(), "${lead}" + OrganisationToken));
         rules.Add((OtherProfile(), "${root}<user>"));
 
         if (environment.MachineName.Length > 0)
         {
-            // A share named by the machine's full name carries its domain as well.
-            rules.Add((new Regex($@"(?<=\\\\){Regex.Escape(environment.MachineName)}(?:\.[^\\/\s`'""]+)?", Options), "<machine>"));
-            rules.Add((Segment(environment.MachineName), "<machine>"));
+            // With its domain, which a share named by the machine's full name carries.
+            rules.Add((Word(environment.MachineName, @"(?:\.[\p{L}\p{N}-]+)*"), "<machine>"));
         }
 
-        if (environment.UserName.Length > 0)
+        // The profile folder's own name as well as the account's: the two differ on an account renamed
+        // after it was made, and either is the person's name.
+        foreach (var name in new[] { Path.GetFileName(profile), environment.UserName }
+                     .Where(name => !string.IsNullOrEmpty(name))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderByDescending(name => name.Length))
         {
-            rules.Add((Segment(environment.UserName), "<user>"));
+            rules.Add((Word(name), "<user>"));
         }
 
         _rules = rules;
@@ -78,31 +91,47 @@ internal sealed partial class ReportRedaction
         _rules.Aggregate(text, (current, rule) => rule.Pattern.Replace(current, rule.Replacement));
 
     /// <summary>
-    /// <paramref name="path"/> in either separator, as tools print both, and ended where a folder name
-    /// ends, so a profile <c>C:\Users\bob</c> does not match inside <c>C:\Users\bobby</c>.
+    /// The organisations this account's work OneDrive folders are named after, as in
+    /// <c>OneDrive - Contoso</c>. OneDrive names each SharePoint library it syncs after the same
+    /// organisation, so the name is matched wherever it appears rather than only after the prefix.
+    /// </summary>
+    private static IEnumerable<string> Organisations(IReadOnlyList<string> personalFolders) =>
+        personalFolders
+            .Select(folder => Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)))
+            .Where(name => name.StartsWith("OneDrive - ", StringComparison.OrdinalIgnoreCase))
+            .Select(name => name["OneDrive - ".Length..].Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(name => name.Length);
+
+    /// <summary>
+    /// <paramref name="path"/> in either separator, as tools print both, and only where the path ends
+    /// at the end of a name: <c>C:\Users\bob</c> is not matched inside <c>C:\Users\bobby</c>.
     /// </summary>
     private static Regex Literal(string path) =>
         new(
-            string.Join(@"[\\/]+", path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries).Select(Regex.Escape))
-            + FolderEnd,
+            $"(?<!{WordChar})"
+            + string.Join(@"[\\/]+", path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries).Select(Regex.Escape))
+            + $"(?!{WordChar})",
             Options);
 
-    /// <summary><paramref name="name"/> wherever it is a whole path segment, and nowhere else.</summary>
-    private static Regex Segment(string name) => new($@"(?<=[\\/]){Regex.Escape(name)}{NameEnd}", Options);
+    /// <summary><paramref name="name"/> as a whole word, followed by <paramref name="suffix"/> where there is one.</summary>
+    private static Regex Word(string name, string suffix = "") =>
+        new($"(?<!{WordChar}){Regex.Escape(name)}{suffix}(?!{WordChar})", Options);
 
     /// <summary>
-    /// A profile folder under a drive's <c>Users</c>: another account's, or this one's in a spelling
-    /// the literal rule did not match, such as its short 8.3 name. Anchored at the drive, so a source
-    /// folder named <c>Users</c> is not read as one. The profiles Windows itself names are no one's,
-    /// and saying which one a path was in is part of the diagnosis.
+    /// A profile folder under a drive's <c>Users</c> that no rule above named: another account's, or
+    /// this one's in its short 8.3 spelling. Anchored at the drive, so a source folder named
+    /// <c>Users</c> is not read as one. The profiles Windows itself names are no one's, and saying
+    /// which one a path was in is part of the diagnosis.
     /// </summary>
     [GeneratedRegex(
-        @"(?<root>[A-Za-z]:[\\/]+Users[\\/]+)(?!(?:Public|Default|Default User|All Users)" + FolderEnd + ")"
-            + FolderName + FolderEnd,
+        @"(?<root>[A-Za-z]:[\\/]+Users[\\/]+)(?!(?:<user>|%USERPROFILE%|Public|Default|Default User|All Users)(?!" + WordChar + "))"
+            + UnknownName,
         Options)]
     private static partial Regex OtherProfile();
 
-    /// <summary>The organisation a work OneDrive folder is named after, as in <c>OneDrive - Contoso</c>.</summary>
-    [GeneratedRegex(@"(?<lead>[\\/]OneDrive - )" + FolderName + FolderEnd, Options)]
-    private static partial Regex Organisation();
+    /// <summary>The organisation of a work OneDrive this account does not sync, which none of the names above holds.</summary>
+    [GeneratedRegex(@"(?<lead>OneDrive - )(?!" + OrganisationToken + ")" + UnknownName, Options)]
+    private static partial Regex UnknownOrganisation();
 }
