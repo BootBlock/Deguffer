@@ -423,10 +423,10 @@ public sealed class CleanupPlanner
         // proceeds.
         var reach = RunReach.Of([.. plans.Select(p => p.Plan)]);
 
-        // What the run's removals leave standing, written by each plan as it executes and read by
-        // every verification after it. One record for the whole run, for the reason the reach is one
-        // value: a folder one provider's removal went into may be a folder another provider promised
-        // to leave. See RunResidue.
+        // What the run's removals leave standing and leave alone, written by each plan as it executes
+        // and read by every verification after it. One record for the whole run, for the reason the
+        // reach is one value: a folder one provider's removal went into may be a folder another
+        // provider promised to leave. See RunResidue.
         var residue = new RunResidue();
 
         // §7's extra confirmation for anything above Tier 1, for every plan before the first deletion.

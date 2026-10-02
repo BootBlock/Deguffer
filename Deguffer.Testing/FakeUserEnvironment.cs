@@ -107,6 +107,11 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 
     public string MachineName { get; } = Machine;
 
+    /// <summary>A recognisably invented domain, on the terms <see cref="Account"/> gives.</summary>
+    public const string Domain = "TESTDOMAIN";
+
+    public string DomainName { get; } = Domain;
+
     /// <summary>
     /// Pretend the account is unidentifiable, which is how a provider that keys on the SID is shown
     /// to fail closed. Set before the provider is constructed: providers read the identity once,

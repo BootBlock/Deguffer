@@ -56,6 +56,21 @@ public sealed record RemovalOutcome(
     public IReadOnlyList<string> LeftStanding { get; init; } = [];
 
     /// <summary>
+    /// Each spared entry the walk met and held back, in display form.
+    ///
+    /// <para>The evidence §5.6 reads through <see cref="RunResidue"/> when a spared entry has gone. A
+    /// program working in a scratch folder often removes it when it finishes, and without this
+    /// nothing could tell that from a removal that failed to spare it.</para>
+    ///
+    /// <para><b>Only what the walk met, because only that shows no removal took it.</b> The walk met
+    /// the entry standing, so nothing in the run had taken it by then, under any spelling. An entry
+    /// already gone shows only that this removal did not take it, and an earlier one may have, through
+    /// a link no comparison of paths can see. And the walk names an entry only where it matched one it
+    /// must leave, so a spelling that failed to match is never recorded.</para>
+    /// </summary>
+    public IReadOnlyList<string> LeftAlone { get; init; } = [];
+
+    /// <summary>
     /// The Outlook mail stores this removal found and left where they were, in display form, because
     /// Deguffer never removes one (see <see cref="Safety.MailStore"/>). The folders holding them are
     /// in <see cref="LeftStanding"/> for the reason any folder holding something is.

@@ -476,6 +476,36 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// The link on the result card copies the run Core wrote out, with the paths the card names, and
+    /// the next preview takes it away with the figures it describes.
+    /// </summary>
+    [Fact]
+    public void TheRunsDiagnosticReportDescribesTheRunOnTheCard()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        var tree = page.Cache("tree", 1024);
+        var inside = Path.Combine(tree.Path, "entry.bin");
+        cache.Steps = [tree];
+        cache.ProtectedPaths = [new ProtectedPath(inside, "Must survive.", PathPresence.Present)];
+        cache.AfterCleaning = () => (cache.Steps, cache.ProtectedPaths) = ([], []);
+        page.Scan();
+
+        page.Clean();
+
+        var report = page.ViewModel.RunDiagnostics;
+
+        Assert.Contains("- Deguffer: 0.0.0-test", report, StringComparison.Ordinal);
+        Assert.Contains($"- Outcome: {page.ViewModel.RunStatement}", report, StringComparison.Ordinal);
+        Assert.Contains("- Failed: `%USERPROFILE%", report, StringComparison.Ordinal);
+        Assert.DoesNotContain(page.Environment.UserProfile, report, StringComparison.OrdinalIgnoreCase);
+
+        page.Scan();
+
+        Assert.Empty(page.ViewModel.RunDiagnostics);
+    }
+
+    /// <summary>
     /// A run whose checks all passed yields the bar to the fresh scan's sentence, which then follows
     /// the ticking as it did before the run.
     /// </summary>

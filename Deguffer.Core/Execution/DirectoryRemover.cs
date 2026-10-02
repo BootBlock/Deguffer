@@ -274,13 +274,14 @@ public static class DirectoryRemover
             refused.Total,
             RootRemoved: !bounds.KeepRoot && fs.ProbeDirectory(extended) is PathPresence.Absent,
             inventory.Kept,
-            inventory.Spared,
+            inventory.Spared.Count,
             Interlocked.Read(ref removed))
         {
             RefusedAt = [.. refusedAt.Keys.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase)],
             LeftStanding = [.. leftStanding.Select(LongPath.Display)],
             RefusedFolders = refusedFolders,
             MailStores = [.. inventory.MailStores.Select(LongPath.Display)],
+            LeftAlone = [.. inventory.Spared.Select(LongPath.Display)],
             Interrupted = interrupted,
         };
     }

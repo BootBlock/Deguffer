@@ -7,7 +7,10 @@ namespace Deguffer.Core.Execution;
 /// <param name="Files">Every file the guard and the bounds leave to the removal, with its length.</param>
 /// <param name="Links">Junctions and symbolic links, which are removed as links and never followed.</param>
 /// <param name="Kept">Files and links the guard on recently changed files held back.</param>
-/// <param name="Spared">Entries the bounds held back, which the walk did not descend into.</param>
+/// <param name="Spared">
+/// Each entry the bounds held back, in the extended form the walk met it in. The walk did not descend
+/// into one, so nothing in the removal acts on it: see <see cref="RemovalOutcome.LeftAlone"/>.
+/// </param>
 /// <param name="MailStores">
 /// Outlook mail stores the walk met, in the extended form it met them in. Never among
 /// <paramref name="Files"/>, so nothing hands one to a delete. See <see cref="MailStore"/>.
@@ -17,7 +20,7 @@ internal sealed record RemovalInventory(
     IReadOnlyList<(string Path, long Length)> Files,
     IReadOnlyList<FileSystemEntry> Links,
     int Kept,
-    int Spared,
+    IReadOnlyList<string> Spared,
     IReadOnlyList<string> MailStores);
 
 /// <summary>
@@ -49,19 +52,21 @@ internal static class RemovalWalk
         var files = new List<(string, long)>();
         var links = new List<FileSystemEntry>();
         var mailStores = new List<string>();
+        var spared = new List<string>();
 
-        var (kept, spared) = Visit(extendedRoot, keep, bounds, directories, files, links, mailStores, fs, ct);
+        var kept = Visit(extendedRoot, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
 
         return new RemovalInventory(directories, files, links, kept, spared, mailStores);
     }
 
-    private static (int Kept, int Spared) Visit(
+    private static int Visit(
         string extendedDirectory,
         MinimumAge keep,
         RemovalBounds bounds,
         List<string> directories,
         List<(string, long)> files,
         List<FileSystemEntry> links,
+        List<string> spared,
         List<string> mailStores,
         IFileSystem fs,
         CancellationToken ct)
@@ -77,11 +82,10 @@ internal static class RemovalWalk
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
             // Unreadable directory: nothing to gather, and §5.3 says skip rather than fail.
-            return (0, 0);
+            return 0;
         }
 
         var kept = 0;
-        var spared = 0;
 
         foreach (var entry in entries)
         {
@@ -90,7 +94,7 @@ internal static class RemovalWalk
             // still that program's, and removing the link is still taking it away.
             if (bounds.SparedPaths.Contains(entry.FullName))
             {
-                spared++;
+                spared.Add(entry.FullName);
                 continue;
             }
 
@@ -136,9 +140,7 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
-                var below = Visit(entry.FullName, keep, bounds, directories, files, links, mailStores, fs, ct);
-                kept += below.Kept;
-                spared += below.Spared;
+                kept += Visit(entry.FullName, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
             }
             else if (keep.Protects(entry.NewestFileTime))
             {
@@ -150,6 +152,6 @@ internal static class RemovalWalk
             }
         }
 
-        return (kept, spared);
+        return kept;
     }
 }

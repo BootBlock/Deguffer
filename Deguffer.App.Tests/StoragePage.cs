@@ -52,7 +52,8 @@ internal sealed class StoragePage : IDisposable
             {
                 PromptsBuilt++;
                 return Prompt;
-            });
+            },
+            appVersion: "0.0.0-test");
     }
 
     public CleanViewModel ViewModel { get; }

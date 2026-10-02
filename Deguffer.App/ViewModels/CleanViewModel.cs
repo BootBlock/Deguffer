@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -35,6 +37,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly KeepService _keeps;
     private readonly RunningActions _running;
     private readonly Func<IConfirmationPrompt> _prompt;
+    private readonly ReportOrigin _origin;
 
     /// <summary>The keep list the rows were last brought up to date with. See <see cref="ApplyKeepList"/>.</summary>
     private KeepList? _appliedKeepList;
@@ -76,6 +79,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Deferred rather than injected directly: a dialog needs the page's <c>XamlRoot</c>, which does
     /// not exist while the view-model is being constructed.
     /// </param>
+    /// <param name="appVersion">Deguffer's own version, which a run's diagnostic report names.</param>
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,
@@ -84,7 +88,8 @@ public sealed partial class CleanViewModel : ObservableObject
         SelectionService selections,
         KeepService keeps,
         RunningActions running,
-        Func<IConfirmationPrompt> prompt)
+        Func<IConfirmationPrompt> prompt,
+        string appVersion)
     {
         _planner = planner;
         _environment = environment;
@@ -94,6 +99,10 @@ public sealed partial class CleanViewModel : ObservableObject
         _keeps = keeps;
         _running = running;
         _prompt = prompt;
+        _origin = new ReportOrigin(
+            appVersion,
+            $"{RuntimeInformation.OSDescription} ({RuntimeInformation.ProcessArchitecture})",
+            isElevated);
 
         // Capacity cannot change while the app is open, so it is read once; only the free figure
         // is re-read after a run.
@@ -399,6 +408,12 @@ public sealed partial class CleanViewModel : ObservableObject
     public string FreeSpaceNowLabel => FreeSpaceNow is { } value ? FreeSpace.Format(value) : "—";
 
     public bool HasRunResult => !string.IsNullOrEmpty(RemovedLabel);
+
+    /// <summary>
+    /// The last run written out for a GitHub issue, which the result card's link copies. Empty
+    /// where no run's figures are on screen. See <see cref="CleanRunReport"/>.
+    /// </summary>
+    public string RunDiagnostics { get; private set; } = string.Empty;
 
     /// <summary>
     /// Whether to show the empty state instead of the list. On launch the list is a large blank
@@ -873,6 +888,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         var outcome = RunOutcome.For(results);
         RunStatement = outcome.Statement;
+        RunDiagnostics = CleanRunReport.Describe(results, _origin, _environment);
         RunVerificationFailed = outcome.VerificationFailed;
 
         // Written over rather than emptied and filled, so a second run that meets the same checks
@@ -981,6 +997,7 @@ public sealed partial class CleanViewModel : ObservableObject
         ScheduledLabel = string.Empty;
         OnPropertyChanged(nameof(HasScheduled));
         RunStatement = string.Empty;
+        RunDiagnostics = string.Empty;
         RunVerificationFailed = false;
         RunVerificationNotes.Clear();
         OnPropertyChanged(nameof(HasRunVerificationNotes));

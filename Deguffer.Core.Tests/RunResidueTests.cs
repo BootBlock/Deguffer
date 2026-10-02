@@ -10,6 +10,39 @@ public sealed class RunResidueTests
 {
     private const string Scratch = @"C:\Users\testuser\AppData\Local\Temp";
 
+    /// <summary>
+    /// What a removal left alone is asked of that removal alone, and covers what is inside the entry
+    /// as well as the entry. A removal that never entered a folder took nothing inside it.
+    /// </summary>
+    [Fact]
+    public void WhatARemovalLeftAloneIsAnsweredForThatRemovalOnly()
+    {
+        var residue = new RunResidue();
+        residue.RecordLeftAlone(Scratch, [$@"{Scratch}\kitprobe"]);
+        residue.RecordLeftAlone(@"C:\Users\testuser\AppData\Local", [@"C:\Users\testuser\AppData\Local\Other"]);
+
+        Assert.True(residue.LeftAlone(Scratch, $@"{Scratch}\kitprobe"));
+        Assert.True(residue.LeftAlone($@"\\?\{Scratch}\", $@"{Scratch}\KITPROBE\closeup.py"));
+        Assert.False(residue.LeftAlone(Scratch, $@"{Scratch}\other"));
+        Assert.False(residue.LeftAlone(Scratch, Scratch));
+        Assert.False(residue.LeftAlone(@"C:\Users\testuser\AppData\Local", $@"{Scratch}\kitprobe"));
+    }
+
+    /// <summary>
+    /// Two removals of one folder answer separately. A later one that found an entry already gone,
+    /// because the earlier one took it, records it as left alone, and that must not vouch for the
+    /// earlier one, which recorded nothing.
+    /// </summary>
+    [Fact]
+    public void EveryRemovalOfAFolderHasToHaveLeftTheEntryAlone()
+    {
+        var residue = new RunResidue();
+        residue.RecordLeftAlone(Scratch, []);
+        residue.RecordLeftAlone(Scratch, [$@"{Scratch}\kitprobe"]);
+
+        Assert.False(residue.LeftAlone(Scratch, $@"{Scratch}\kitprobe"));
+    }
+
     [Fact]
     public void EveryFolderBetweenWhatStayedAndTheRootWasEntered()
     {

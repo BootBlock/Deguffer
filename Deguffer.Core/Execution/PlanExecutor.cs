@@ -86,8 +86,8 @@ public sealed class PlanExecutor(
     /// folder something outside Deguffer deleted. Null means this plan is the whole run.
     /// </param>
     /// <param name="residue">
-    /// What the run's removals have left standing, which each removal here adds to and §5.6 then
-    /// reads — see <see cref="RunResidue"/>. Null means this plan is the whole run, and it is given a
+    /// What the run's removals have left standing and left alone, which each removal here adds to
+    /// and §5.6 then reads — see <see cref="RunResidue"/>. Null means this plan is the whole run, and it is given a
     /// record of its own.
     /// </param>
     /// <param name="ct">
@@ -110,7 +110,7 @@ public sealed class PlanExecutor(
                 $"The executor for '{plan.ProviderId}' was given no way to carry out a {unroutable.GetType().Name}.");
         }
 
-        var leftStanding = residue ?? new RunResidue();
+        var runResidue = residue ?? new RunResidue();
         var stopwatch = Stopwatch.StartNew();
         var outcomes = new List<StepOutcome>(plan.Steps.Count);
         var heldAtClean = new List<ProtectedPath>();
@@ -142,7 +142,7 @@ public sealed class PlanExecutor(
 
             try
             {
-                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, leftStanding, stepProgress, ct)
+                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, runResidue, stepProgress, ct)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -191,7 +191,7 @@ public sealed class PlanExecutor(
             Verification = PlanVerifier.Verify(
                 heldAtClean.Count == 0 ? plan : plan with { ProtectedPaths = [.. plan.ProtectedPaths, .. heldAtClean] },
                 runReach,
-                leftStanding,
+                runResidue,
                 CancellationToken.None,
                 _cloud),
         };
@@ -205,7 +205,7 @@ public sealed class PlanExecutor(
         CleanupPlan plan,
         CleanupStep step,
         List<ProtectedPath> heldAtClean,
-        RunResidue leftStanding,
+        RunResidue runResidue,
         IProgress<double>? progress,
         CancellationToken ct)
     {
@@ -237,8 +237,8 @@ public sealed class PlanExecutor(
         return step switch
         {
             RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
-            ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, leftStanding, progress, ct).ConfigureAwait(false),
-            DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, leftStanding, progress, ct).ConfigureAwait(false),
+            ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
+            DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
             DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, progress, ct).ConfigureAwait(false),
             EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, progress, ct).ConfigureAwait(false),
             DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, progress, ct).ConfigureAwait(false),
@@ -602,7 +602,7 @@ public sealed class PlanExecutor(
     private async Task<StepOutcome> DeleteAsync(
         DeleteDirectoryStep step,
         MinimumAge keep,
-        RunResidue leftStanding,
+        RunResidue runResidue,
         IProgress<double>? progress,
         CancellationToken ct)
     {
@@ -631,7 +631,7 @@ public sealed class PlanExecutor(
 
         // The index first, and the directory it indexes only once all of it is gone. See
         // DeleteDirectoryStep.IndexedBy.
-        var index = await IndexRemoval.RemoveAsync(step, keep, refusals, leftStanding, ct).ConfigureAwait(false);
+        var index = await IndexRemoval.RemoveAsync(step, keep, refusals, runResidue, ct).ConfigureAwait(false);
 
         if (!index.Complete)
         {
@@ -641,7 +641,7 @@ public sealed class PlanExecutor(
         var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
-        leftStanding.Record(step.Path, removal.LeftStanding);
+        runResidue.Record(step.Path, removal.LeftStanding);
 
         // The index went with it, so what the step reports is both. Nothing is added where there is none.
         // A removal stopped part-way adds its index too, because the index went before it began.
@@ -723,7 +723,7 @@ public sealed class PlanExecutor(
     private async Task<StepOutcome> ClearAsync(
         ClearDirectoryStep step,
         MinimumAge keep,
-        RunResidue leftStanding,
+        RunResidue runResidue,
         IProgress<double>? progress,
         CancellationToken ct)
     {
@@ -736,7 +736,8 @@ public sealed class PlanExecutor(
             new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere)).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
-        leftStanding.Record(step.Path, removal.LeftStanding);
+        runResidue.Record(step.Path, removal.LeftStanding);
+        runResidue.RecordLeftAlone(step.Path, removal.LeftAlone);
 
         // A folder Windows refused is a refusal as much as a file is. Without it, a clear whose only
         // outcome was a folder a program is working in would pass as a folder that held nothing.

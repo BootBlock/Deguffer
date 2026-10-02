@@ -212,6 +212,29 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A removal names a spared entry as left alone only where its walk met the entry standing and
+    /// held it back. One already gone is not named, because an earlier removal may have taken it, and
+    /// one the walk never met that is still somewhere is not named either, because a spelling the walk
+    /// failed to match is exactly how a spared entry would be taken.
+    /// </summary>
+    [Fact]
+    public async Task NamesASparedEntryLeftAloneOnlyWhereItCanShowIt()
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var met = _temp.CreateDirectory("scratch", "kitprobe");
+        _temp.CreateFile(1024, "scratch", "kitprobe", "closeup.py");
+        var gone = Path.Combine(root, "finished");
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, MinimumAge.Off, progress: null, default, fileSystem: null,
+            new RemovalBounds(KeepRoot: true, [met, gone, elsewhere]));
+
+        Assert.Equal([met], outcome.LeftAlone);
+        Assert.Equal(1, outcome.Spared);
+    }
+
+    /// <summary>
     /// A folder still holding a refused file stays too, and is recorded as standing, but Windows did not
     /// refuse the folder. The file is already counted where it was refused, and counting the folders
     /// above it as well would tell the reader one open file kept a chain of folders.

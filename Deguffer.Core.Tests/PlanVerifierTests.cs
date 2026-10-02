@@ -579,6 +579,47 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
+    /// A spared entry gone from a folder the run cleared around it, where the clear recorded leaving
+    /// it alone: something else removed it. Without the record it is the alarm, because the folder
+    /// holding it is standing and the run was working inside it.
+    /// </summary>
+    [Fact]
+    public void ASparedEntryTheClearLeftAloneThatWentWasRemovedFromOutside()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = Path.Combine(scratch, "kitprobe");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] }], Protect(live));
+
+        Assert.Equal(VerificationOutcome.Failed, PlanVerifier.Verify(plan, runReach: null, new RunResidue()).Checks.Single().Outcome);
+
+        var residue = new RunResidue();
+        residue.RecordLeftAlone(scratch, [live]);
+
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, PlanVerifier.Verify(plan, runReach: null, residue).Checks.Single().Outcome);
+    }
+
+    /// <summary>
+    /// One removal leaving an entry alone does not answer for another that reached it: a step that
+    /// names the entry itself keeps the alarm, and so does a tool's own command, whose reach nobody
+    /// can state.
+    /// </summary>
+    [Fact]
+    public void ARemovalThatLeftAnEntryAloneDoesNotAnswerForAnotherThatReachedIt()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = Path.Combine(scratch, "kitprobe");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] }], Protect(live));
+        var residue = new RunResidue();
+        residue.RecordLeftAlone(scratch, [live]);
+
+        var named = new RunReach([scratch, live], [], Unbounded: false);
+        var unbounded = new RunReach([scratch], [], Unbounded: true);
+
+        Assert.Equal(VerificationOutcome.Failed, PlanVerifier.Verify(plan, named, residue).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Failed, PlanVerifier.Verify(plan, unbounded, residue).Checks.Single().Outcome);
+    }
+
+    /// <summary>
     /// The partial over-reach no question about content can see: one file the removal was refused,
     /// still sitting in the protected folder. The folder is exactly as present as a survivor.
     /// </summary>
