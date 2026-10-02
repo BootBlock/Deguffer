@@ -5,43 +5,55 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// The web cache the Steam client's embedded browser writes (472 MB in <c>htmlcache</c> alone on the
-/// machine this was measured on, out of 513 MB for Steam's whole folder in the profile).
+/// The Steam client's own HTTP cache, in <c>appcache\httpcache</c> under the install directory.
 ///
-/// <para><b>Steam is two directories, and only one of them is in the profile.</b> The client renders
-/// its store, library and overlay in an embedded Chromium, and keeps that browser's cache under
-/// <c>%LOCALAPPDATA%\Steam</c> rather than beside the program. A second cache — the client's own
-/// HTTP cache — sits in <c>appcache</c> under the install directory, which is not under the profile
-/// at all and moves with whichever drive the user gave their game library. So the install directory
-/// is <em>found</em> rather than assumed, and <see cref="SteamDiscovery"/> is what finds it.</para>
+/// <para><b>The embedded browser's folder is not this row's, and it is never removed whole.</b> The
+/// client renders its store, library and overlay in an embedded Chromium whose folder is
+/// <c>%LOCALAPPDATA%\Steam\htmlcache</c>. Despite its name, that folder is a browser user-data folder:
+/// on the measured machine it held <c>Local State</c> and a <c>Default</c> profile with
+/// <c>Login Data</c>, <c>Web Data</c> and <c>Network\Cookies</c> beside the caches. Removing it
+/// whole signs the user out of the client's store and community pages. So it follows the rule
+/// <see cref="EpicLauncherWebCacheProvider"/> and <see cref="BattleNetFolder"/> state for the same
+/// kind of folder: <see cref="ChromiumHost"/> declares it, so
+/// <see cref="ChromiumCacheProvider"/> takes the caches inside it (120 MB of the 129 MB measured) and
+/// asserts the credential files survived, and the folder is Tier 4 here.</para>
+///
+/// <para><b>The install directory is not under the profile.</b> It moves with whichever drive the
+/// user gave their game library, so it is <em>found</em> rather than assumed, and
+/// <see cref="SteamDiscovery"/> is what finds it.</para>
 ///
 /// <para><b>The install directory is where §5.2 earns its keep, and the stakes are unusually
 /// plain.</b> The same folder holds <c>steamapps</c>, which is every installed game and the
 /// in-progress half of any download, and <c>userdata</c>, which is per-account settings, cloud saves
-/// and screenshots. Nothing under either is ever reached: this provider names two paths outright and
-/// enumerates neither root, so there is no enumeration through which an unnamed sibling could be
+/// and screenshots. Nothing under either is ever reached: this provider names one path outright and
+/// never enumerates the root, so there is no enumeration through which an unnamed sibling could be
 /// found. <see cref="DeclaredLocations"/> carries the naming, and the names that must survive are
 /// declared beside the ones that may go, so a run produces evidence that a rule reaching into
 /// Steam's folder did not reach the games.</para>
 ///
-/// <para><b>Two things next to the caches are recognised and then deliberately not offered.</b>
-/// <c>widevine</c> is a content-decryption module Steam downloaded rather than a cache.
-/// <c>cefdata</c> is the embedded browser's working data, and what removing it costs was never
-/// established. Each is declared at Tier 4 rather than merely omitted, so the refusal carries its own
+/// <para><b>Three things in the profile folder are recognised and then deliberately not offered.</b>
+/// <c>htmlcache</c> is the embedded browser's folder, as above. <c>widevine</c> is a
+/// content-decryption module Steam downloaded rather than a cache. <c>cefdata</c> is the embedded
+/// browser's working data, and what removing it costs was never established. Each is declared at
+/// Tier 4 in <see cref="ToolRoots"/> rather than merely omitted, so the refusal carries its own
 /// sentence instead of the generic "not recognised" one. <c>appcache\librarycache</c> is the
 /// library artwork, which <see cref="SteamLibraryArtworkProvider"/> offers game by game, so here it
 /// is only a neighbour that must survive. <c>appcache</c> also keeps Steam's own application and package indexes as files
 /// beside <c>httpcache</c>, and those are named too: child classification enumerates directories, so
 /// a file in a container is never seen and never asserted unless the provider names it.</para>
 ///
-/// <para><b>§5.1 does not apply.</b> Steam ships no command-line switch that evicts either cache.
-/// The client is reported to offer the same thing as a button under Settings, Web Browser, and that
-/// report was not verified against a running client — but a button inside a running application is
-/// not a route Deguffer can take either way, so path deletion is the only available method.</para>
+/// <para><b>§5.1 does not apply.</b> Steam ships no command-line switch that evicts the cache.
+/// The client's Settings, Downloads, Clear Download Cache is reported to clear <c>appcache</c>, and
+/// that report was not verified against a running client — but a button inside a running
+/// application is not a route Deguffer can take either way, so path deletion is the only available
+/// method.</para>
 /// </summary>
 public sealed class SteamCacheProvider : CleanupProviderBase
 {
-    /// <summary>The embedded browser's cache, under Steam's folder in the profile.</summary>
+    /// <summary>
+    /// The embedded browser's user-data folder, under Steam's folder in the profile. Never a target
+    /// of this row: <see cref="ChromiumHost"/> declares it for the Chromium rows.
+    /// </summary>
     private const string HtmlCacheName = "htmlcache";
 
     /// <summary>Steam's own cache container in the install directory. A container, never a target.</summary>
@@ -50,17 +62,9 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     /// <summary>The client's HTTP cache, inside <see cref="AppCacheDirectory"/>.</summary>
     private const string HttpCacheName = "httpcache";
 
-    private const string HtmlCacheReason =
-        "Store, library and community pages the Steam client saved so it would not fetch the same "
-        + "thing twice. It downloads them again when they are next shown.";
-
     private const string HttpCacheReason =
         "The Steam client's own HTTP cache, kept beside the program. The client refills it from "
         + "Valve's servers as it needs to.";
-
-    private const string LocalRootReason =
-        "This is Steam's own folder in your profile. Deguffer removes the browser cache inside it "
-        + "and nothing else.";
 
     private readonly SteamDiscovery _discovery;
     private IReadOnlyList<DeclaredRoot>? _roots;
@@ -81,38 +85,37 @@ public sealed class SteamCacheProvider : CleanupProviderBase
 
     public override string Id => "steam";
 
-    public override string Name => "Steam web cache";
+    public override string Name => "Steam HTTP cache";
 
     public override SafetyTier Tier => SafetyTier.RegenerableCache;
 
     public override StepGrain Grain => StepGrain.Parts;
 
     public override string WhatHappensOnNextUse =>
-        "The Steam client fetches store, library and community pages from the network instead of "
-        + "from disk for a while, so they draw more slowly the first time. It may ask you to sign "
-        + "in again to the pages it shows inside the client. Your installed games, any download in "
-        + "progress, your cloud saves and your settings are untouched.";
+        "The Steam client fetches what it had cached from Valve's servers again as it needs it, so "
+        + "some of what it shows loads more slowly the first time. Your installed games, any "
+        + "download in progress, your cloud saves, your settings and your sign-in are untouched.";
 
     public override ProviderDescription Description { get; } = new()
     {
         Application = "the Steam client",
         Publisher = "Valve",
-        Purpose = "Steam draws its store, library and overlay in a browser built into the client, "
-            + "and that browser saves what it downloads. The cache lives in your profile rather "
-            + "than with the program, and the client keeps a second one of its own beside the "
-            + "program.",
-        Recommendation = "Deguffer removes the two caches by name and nothing else. It never goes "
+        Purpose = "The Steam client keeps an HTTP cache of its own beside the program, in the "
+            + "folder Steam is installed in. The browser built into the client keeps its caches "
+            + "in your profile, beside your sign-in to the store, and the Chromium application "
+            + "caches row removes those.",
+        Recommendation = "Deguffer removes the one cache by name and nothing else. It never goes "
             + "near your installed games, a download in progress, your Workshop content or your "
             + "cloud saves, and it asks Windows where Steam is rather than assuming.",
     };
 
     /// <summary>
-    /// What this provider names, root by root. Exposed so tests can assert that neither Steam
-    /// directory is a target and that the games are asserted rather than merely omitted.
+    /// What this provider names. Exposed so tests can assert that the install directory is never a
+    /// target and that the games are asserted rather than merely omitted.
     /// </summary>
     public IReadOnlyList<DeclaredRoot> Roots => _roots ??= Declare();
 
-    /// <summary>§5.3. The client and its browser process hold both caches open while Steam runs.</summary>
+    /// <summary>§5.3. The client holds its cache open while Steam runs.</summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => SteamDiscovery.ProcessNames;
 
     /// <summary>
@@ -158,7 +161,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
         {
             if (unreached is null)
             {
-                return EmptyPlan("The Steam client is keeping no web cache on this machine.");
+                return EmptyPlan("The Steam client is keeping no HTTP cache beside the program.");
             }
 
             return refusedInstall is null
@@ -214,14 +217,15 @@ public sealed class SteamCacheProvider : CleanupProviderBase
         _discovery.UnreachedInstallNote("the cache Steam keeps beside the program");
 
     /// <summary>
-    /// The two locations, and everything beside them that §5.6 must assert survived.
+    /// The one location, and everything beside it that §5.6 must assert survived. None where the
+    /// install was not found: Steam's folder in the profile holds nothing this row removes.
     ///
     /// <para><c>steamapps</c> is named four times over — itself, the games under it, the Workshop
     /// content and the in-progress half of a download — because an assertion that the folder
     /// survived would pass with every game inside it gone. It is the same reason Firefox names
     /// <c>logins.json</c> rather than the profile that holds it.</para>
     ///
-    /// <para><b>Neither root needs administrator rights.</b> Steam's installer grants this account
+    /// <para><b>The root needs no administrator rights.</b> Steam's installer grants this account
     /// write access to the install directory so the client can update itself, which is why a
     /// declaration that is otherwise true of anything under Program Files is false here. It was
     /// reasoned from how Steam updates rather than measured, and the cost of being wrong is an
@@ -229,24 +233,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     /// </summary>
     private IReadOnlyList<DeclaredRoot> Declare()
     {
-        var roots = new List<DeclaredRoot>
-        {
-            new(
-                _discovery.LocalRoot,
-                LocalRootReason,
-                RequiresElevation: false,
-                [new DeclaredLocation(HtmlCacheName, HtmlCacheReason)],
-                [
-                    ("cefdata", "The embedded browser's working data. It sits beside the cache and "
-                        + "nobody has established what removing it costs."),
-                    ("widevine", "The content-decryption module Steam downloaded so protected video "
-                        + "will play. It is downloaded software rather than a cache."),
-                    // A file, and the NVIDIA 'accounts' lesson: a child set classifies directories,
-                    // so a file in a root a provider reaches into is never asserted unless it is
-                    // named. Found by looking at a real Steam folder rather than by reasoning.
-                    ("local.vdf", "The Steam client's settings for this computer."),
-                ]),
-        };
+        var roots = new List<DeclaredRoot>();
 
         if (_discovery.Install.Root is { } install)
         {
@@ -283,12 +270,21 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     {
         var roots = new List<ToolRoot>
         {
+            // It offers nothing, and is still declared: without it, Explore would let the user take
+            // the browser folder, and the sign-in inside it, whole.
             ToolRoot.Of(
                 _discovery.LocalRoot,
-                LocalRootReason,
+                "This is Steam's own folder in your profile. The client's settings for this computer "
+                + "and its built-in browser, with your sign-in to the store, are in it. Deguffer "
+                + "removes only the caches the Chromium rows recognise inside that browser's folder.",
                 new DisposableChildSet(
                 [
-                    new ChildClassification(HtmlCacheName, SafetyTier.RegenerableCache, HtmlCacheReason),
+                    new ChildClassification(
+                        HtmlCacheName,
+                        SafetyTier.DoNotTouch,
+                        "The client's built-in browser. Your sign-in to the store and community pages "
+                        + "is in there, so the folder itself is never removed — only what the "
+                        + "Chromium rows recognise inside it."),
                     new ChildClassification(
                         "cefdata",
                         SafetyTier.DoNotTouch,

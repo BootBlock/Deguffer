@@ -274,7 +274,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.6's negative: Steam's index, the folder, the web cache beside it, Steam's other indexes, the
+    /// §5.6's negative: Steam's index, the folder, the HTTP cache beside it, Steam's other indexes, the
     /// games, the download in progress, the accounts and Steam's configuration all survive a run that
     /// removed every game's artwork. Each is asserted by name, not by an assertion on a folder above it.
     /// </summary>
@@ -298,7 +298,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
             Populate(Path.Combine(install, "steamapps", "downloading", "440")),
             Populate(Path.Combine(install, "userdata", "12345", "config", "grid")),
             Populate(Path.Combine(install, "config")),
-            // Not this row's to protect, since the web cache row may take it in the same run, but this
+            // Not this row's to protect, since the Steam HTTP cache row may take it in the same run, but this
             // row must not take it either.
             Populate(Path.Combine(install, "appcache", "httpcache")),
             Container,
@@ -434,7 +434,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
 
     /// <summary>
     /// §7.1: Explore reads the same rule. Inside the install directory, with both Steam rows'
-    /// declarations, only a game's artwork and the web cache can go. The folder, Steam's index and
+    /// declarations, only a game's artwork and the HTTP cache can go. The folder, Steam's index and
     /// anything unrecognised are refused, and so is a child whose name passes and whose kind does not:
     /// a file named as a game, a folder named as a picture, and a game's folder that is a link.
     /// </summary>
@@ -451,7 +451,7 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
     [InlineData(@"appcache\librarycache\570_header.jpg", false)]    // a folder named as a picture
     [InlineData(@"appcache\librarycache\730", false)]               // a game's folder that is a link
     [InlineData(@"appcache\librarycache\730\header.jpg", false)]
-    [InlineData(@"appcache\httpcache", true)]                       // the web cache row's
+    [InlineData(@"appcache\httpcache", true)]                       // the HTTP cache row's
     [InlineData("steamapps", false)]
     public void ExploreOffersOnlyAGamesArtworkInsideTheFolder(string relative, bool allowed)
     {

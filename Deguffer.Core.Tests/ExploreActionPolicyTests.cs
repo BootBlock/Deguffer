@@ -1065,25 +1065,60 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// Steam's folder in the profile. <c>cefdata</c> and <c>widevine</c> are declared and refused
-    /// rather than merely absent from the allow-list, because each has a specific reason it is not
-    /// on offer and the generic "not recognised" sentence would be a weaker thing to tell somebody.
+    /// Steam's folder in the profile, read with the Chromium row's declarations as Explore reads
+    /// them. <c>htmlcache</c> is the embedded browser's user-data folder, with the client's sign-in
+    /// in it, so it is refused whole and only the engine's caches inside it are offered.
+    /// <c>cefdata</c> and <c>widevine</c> are declared and refused rather than merely absent from the
+    /// allow-list, because each has a specific reason it is not on offer and the generic "not
+    /// recognised" sentence would be a weaker thing to tell somebody.
     /// </summary>
     [Theory]
-    [InlineData("", false)]                     // Steam's own folder
-    [InlineData("htmlcache", true)]             // the cache Deguffer removes
-    [InlineData(@"htmlcache\Cache", true)]      // and everything under it
-    [InlineData("cefdata", false)]              // recognised, and deliberately not offered
-    [InlineData("widevine", false)]             // downloaded software rather than a cache
-    [InlineData("logs", false)]                 // unrecognised, so left alone
-    public void SteamsProfileFolderOffersOnlyTheBrowserCache(string relative, bool allowed)
+    [InlineData("", false)]                                         // Steam's own folder
+    [InlineData("htmlcache", false)]                                // the browser, sign-in and all
+    [InlineData(@"htmlcache\Default", false)]                       // its profile
+    [InlineData(@"htmlcache\Default\Login Data", false)]
+    [InlineData(@"htmlcache\Default\Local Storage", false)]
+    [InlineData(@"htmlcache\Default\Code Cache", true)]             // the engine's caches inside it
+    [InlineData(@"htmlcache\Default\Cache\Cache_Data", true)]
+    [InlineData(@"htmlcache\GrShaderCache", true)]
+    [InlineData("cefdata", false)]                                  // recognised, and deliberately not offered
+    [InlineData("widevine", false)]                                 // downloaded software rather than a cache
+    [InlineData("logs", false)]                                     // unrecognised, so left alone
+    public void SteamsProfileFolderOffersOnlyTheCachesInsideItsBrowser(string relative, bool allowed)
     {
         var root = Path.Combine(_environment.LocalAppData, "Steam");
-        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
+        var browser = Directory.CreateDirectory(Path.Combine(root, "htmlcache", "Default")).Parent!.FullName;
+        File.WriteAllText(Path.Combine(browser, "Local State"), "{}");
+
+        var policy = new ExploreActionPolicy(
+            [],
+            [
+                .. new SteamCacheProvider(_environment).ToolRoots,
+                .. new ChromiumCacheProvider(_environment).ToolRoots,
+            ],
+            new FakeVolumeInventory());
 
         Assert.Equal(
             allowed,
             policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The refusal of <c>htmlcache</c> is Steam's own, not borrowed from the Chromium row. A folder
+    /// without <c>Local State</c> is one no Chromium row identifies or declares, and the sign-in may
+    /// still be in it, so Steam's declaration alone must refuse it and everything under it.
+    /// </summary>
+    [Theory]
+    [InlineData("htmlcache")]
+    [InlineData(@"htmlcache\Default")]
+    public void SteamRefusesItsBrowserFolderWhereNoChromiumRowDeclaresIt(string relative)
+    {
+        var root = Path.Combine(_environment.LocalAppData, "Steam");
+        Directory.CreateDirectory(Path.Combine(root, "htmlcache", "Default"));
+
+        var policy = new ExploreActionPolicy([], new SteamCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
+
+        Assert.False(policy.MayRemove(Path.Combine(root, relative)).IsAllowed);
     }
 
     /// <summary>
@@ -1430,7 +1465,6 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("gpu-shader-cache", "DXCache")]
     [InlineData("epic-launcher-webcache", "Logs")]
     [InlineData("epic-launcher-logs", "Crashes")]
-    [InlineData("steam", "htmlcache")]
     [InlineData("spotify", "Data")]
     public void EveryDeclaredRootRefusesAFileOrALinkWithARecognisedName(string providerId, string relative)
     {

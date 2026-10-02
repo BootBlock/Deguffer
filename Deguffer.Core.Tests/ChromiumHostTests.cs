@@ -142,6 +142,88 @@ public sealed class ChromiumHostTests : IDisposable
     }
 
     /// <summary>
+    /// The Steam client's <c>htmlcache</c>, in the layout measured on a real installation: a whole
+    /// browser user-data folder, with the client's sign-in to its store pages beside the caches. The
+    /// caches go, at both levels, and the credential files, the folder and Steam's own folder around
+    /// it all stay.
+    /// </summary>
+    [Fact]
+    public async Task ReachesSteamsBrowserAndLeavesItsSignInStanding()
+    {
+        var steam = Path.Combine(_environment.LocalAppData, "Steam");
+        var userData = CreateUserData(Path.Combine(steam, "htmlcache"));
+        var profile = Path.Combine(userData, "Default");
+
+        string[] caches =
+        [
+            CreateDirectory(Path.Combine(profile, "Cache", "Cache_Data")),
+            CreateDirectory(Path.Combine(profile, "Code Cache")),
+            CreateDirectory(Path.Combine(profile, "GPUCache")),
+            CreateDirectory(Path.Combine(profile, "DawnGraphiteCache")),
+            CreateDirectory(Path.Combine(profile, "DawnWebGPUCache")),
+            CreateDirectory(Path.Combine(userData, "GrShaderCache")),
+            CreateDirectory(Path.Combine(userData, "ShaderCache")),
+            CreateDirectory(Path.Combine(userData, "GraphiteDawnCache")),
+        ];
+
+        string[] directories =
+        [
+            steam, userData, profile, Path.Combine(profile, "Cache"),
+            CreateDirectory(Path.Combine(profile, "Local Storage")),
+            CreateDirectory(Path.Combine(profile, "Session Storage")),
+            CreateDirectory(Path.Combine(profile, "WebStorage")),
+            CreateDirectory(Path.Combine(userData, "extensions_crx_cache")),
+            CreateDirectory(Path.Combine(steam, "cefdata")),
+            CreateDirectory(Path.Combine(steam, "widevine")),
+        ];
+
+        // The files the issue named, each asserted by §5.6 because no directory rule would see one.
+        string[] credentials =
+        [
+            Path.Combine(userData, "Local State"),
+            Path.Combine(profile, "Login Data"),
+            Path.Combine(profile, "Web Data"),
+            Path.Combine(profile, "Network", "Cookies"),
+        ];
+
+        foreach (var file in credentials.Skip(1))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllBytes(file, new byte[128]);
+        }
+
+        var localSettings = Path.Combine(steam, "local.vdf");
+        File.WriteAllBytes(localSettings, new byte[128]);
+
+        var provider = CreateProvider();
+
+        var application = Assert.Single(provider.Applications());
+        Assert.Equal("Steam", application.Name);
+        Assert.Equal("steamwebhelper", application.ProcessName);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            caches.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.TargetedPaths, p => p.Equals(userData, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var spared in credentials.Append(userData).Append(profile))
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(spared, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.All(caches, cache => Assert.False(Directory.Exists(cache), $"{cache} survived."));
+        Assert.All(directories, path => Assert.True(Directory.Exists(path), $"{path} was removed alongside the caches."));
+        Assert.All(credentials.Append(localSettings), path => Assert.True(File.Exists(path), $"{path} was removed alongside the caches."));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// A declared path is joined from constants, so nothing enumerated it and nothing filtered its
     /// links out. A vendor directory moved to another drive with a link is the case: without a
     /// check on every segment, the far side is deleted and every §5.6 survivor resolves through the

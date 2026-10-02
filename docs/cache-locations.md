@@ -835,7 +835,7 @@ measured in seconds and there is no path by which anything is lost.
 
 | | |
 | --- | --- |
-| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, any WebView2 user-data folder (`EBWebView`) up to six levels under them, each Chromium-based browser's own user-data folder, and the Battle.net launcher's built-in browser |
+| **Location** | Any Chromium user-data folder one level under `%APPDATA%` or `%LOCALAPPDATA%`, any WebView2 user-data folder (`EBWebView`) up to six levels under them, each Chromium-based browser's own user-data folder, and the Steam client's and the Battle.net launcher's built-in browsers |
 | **Method** | Delete the nine cache directories Chromium writes, per profile |
 | **Typical size** | Tens of MB per application. 0.8 GB across ten applications was measured on one workstation, and a single heavily used chat client is reported at 2 to 5 GB. One browser's `Code Cache` alone came to 194 MB on the same workstation |
 
@@ -884,6 +884,12 @@ names itself (`common` on the machine this was measured on, 220 MB), rather than
 launcher's own cache and logs beside that folder are two rows of their own:
 [Battle.net launcher cache](#battlenet-launcher-cache) and
 [Battle.net launcher logs](#battlenet-launcher-logs).
+
+The Steam client is on the list too. Its built-in browser keeps a browser's whole folder, profile
+and sign-in included, at `%LOCALAPPDATA%\Steam\htmlcache`, a level below Steam's own folder, so
+the caches sit in `Default` and in the folder itself (120 MB of 129 MB on the machine this was
+measured on). Steam's own cache beside the program is a row of its own:
+[Steam HTTP cache](#steam-http-cache).
 
 Many Windows applications show web content through Microsoft's WebView2, which is the Edge engine
 embedded in another program: Teams, Outlook, OneDrive, Visual Studio, the Windows widgets and
@@ -1835,25 +1841,31 @@ unchanged.
 
 ---
 
-## Steam web cache
+## Steam HTTP cache
 
-| **Location** | `%LOCALAPPDATA%\Steam\htmlcache`, and `appcache\httpcache` under wherever Steam is installed |
-| **Method** | Delete the two named caches |
-| **Typical size** | 472 MB in `htmlcache` on the machine this was measured on, out of 513 MB for Steam's whole folder in the profile |
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `appcache\httpcache` under wherever Steam is installed |
+| **Method** | Delete the named cache |
+| **Typical size** | 0.8 MB on the machine this was measured on |
 
 ### What it is
 
-The Steam client draws its store, its library and the in-game overlay in a browser built into the
-client, and that browser saves what it downloads. Steam splits the result across **two** directories,
-and only one of them is in your profile:
+The Steam client keeps an HTTP cache of its own beside the program, in `appcache\httpcache` under
+the install directory. The install directory is not under your profile. It moves with whichever
+drive you gave your game library, and the same folder holds every game you have installed.
 
-| Where | What is in it |
-| --- | --- |
-| `%LOCALAPPDATA%\Steam\htmlcache` | The embedded browser's cache — store, library and community pages |
-| `<Steam install>\appcache\httpcache` | The client's own HTTP cache, kept beside the program |
-
-The install directory is not under your profile. It moves with whichever drive you gave your game
-library, and the same folder holds every game you have installed.
+**The built-in browser's folder is not this row's.** The client draws its store, its library and the
+in-game overlay in a browser built into the client, and keeps that browser's folder in your profile,
+at `%LOCALAPPDATA%\Steam\htmlcache`. Despite its name, that folder is not only a cache. It is a whole
+browser's folder: on the machine this was measured on it held 129 MB, with your sign-in to the
+store and community pages (`Login Data`, `Web Data` and the cookies) beside the caches. Deguffer
+never removes it whole. The [Chromium application caches](#chromium-application-caches) row removes
+the browser's caches from inside it (120 MB of the 129 MB) and leaves your sign-in, the same way it
+treats the Battle.net launcher's browser. The Epic Games launcher's browser follows the same rule
+on its own row.
 
 ### What Deguffer does
 
@@ -1861,19 +1873,18 @@ library, and the same folder holds every game you have installed.
 it starts, and Deguffer reads that record. It then treats the directory as an install only if the
 Steam program is actually sitting in it — a record pointing somewhere Steam is not gets a sentence in
 the plan, not a deletion. If nothing on the machine says where Steam is, the plan says that too, and
-that cache is neither cleared nor ruled out. It is never guessed at.
+the cache is neither cleared nor ruled out. It is never guessed at.
 
-**Neither folder is ever listed.** Deguffer names the two caches outright and looks at nothing else,
-so there is no route by which something beside them could be found and classified. Each cache is its
-own step, so you can clear one and leave the other.
+**The folder is never listed.** Deguffer names the cache outright and looks at nothing else, so
+there is no route by which something beside it could be found and classified.
 
-Steam has no command that clears either cache from outside the running client, so these are deleted
+Steam has no command that clears the cache from outside the running client, so it is deleted
 directly rather than by asking the tool.
 
 ### What is protected
 
-**Everything else in both folders**, and the things that matter most are asserted by name rather than
-covered by an assertion on the folder above them:
+**Everything else in the install directory**, and the things that matter most are asserted by name
+rather than covered by an assertion on the folder above them:
 
 | Neighbour | What it really is |
 | --- | --- |
@@ -1884,33 +1895,34 @@ covered by an assertion on the folder above them:
 | `userdata` | Your Steam settings, cloud saves and screenshots, per account |
 | `config` | Steam's own configuration, including who is signed in on this computer |
 | `appcache\appinfo.vdf`, `appcache\packageinfo.vdf` | Steam's own indexes, sitting in the same folder as the cache |
-| `local.vdf` | The Steam client's settings for this computer, sitting in the same folder as the browser cache |
 
-Two things are recognised and then deliberately left alone. `widevine` is a content-decryption
-module Steam downloaded so protected video will play, which is downloaded software rather than a
-cache. `cefdata` is the embedded browser's working data, and nobody has established what removing it
-costs. `appcache\librarycache`, the artwork Steam downloaded for your library, is not part of this
-row either: it has a row of its own, [Steam library artwork](#steam-library-artwork).
+`appcache\librarycache`, the artwork Steam downloaded for your library, is not part of this row: it
+has a row of its own, [Steam library artwork](#steam-library-artwork).
 
-Deguffer also refuses to delete through a link. If you have moved either cache onto another drive
-with a junction, it removes nothing there and tells you why.
+In Steam's folder in your profile, Explore refuses `htmlcache` whole and offers only the
+caches the Chromium rows recognise inside it. Two other things there are recognised and then
+deliberately left alone. `widevine` is a content-decryption module Steam downloaded so protected
+video will play, which is downloaded software rather than a cache. `cefdata` is the embedded
+browser's working data, and nobody has established what removing it costs.
+
+Deguffer also refuses to delete through a link. If you have moved the cache onto another drive with
+a junction, it removes nothing there and tells you why.
 
 ### What it costs you
 
-The client fetches store, library and community pages from the network instead of from disk for a
-while, so they draw more slowly the first time. It may ask you to sign in again to the pages it shows
-inside the client.
+The client fetches what it had cached from Valve's servers again as it needs it, so some of what it
+shows loads more slowly the first time.
 
-**Your installed games, any download in progress, your Workshop content, your cloud saves and your
-settings are untouched.**
+**Your installed games, any download in progress, your Workshop content, your cloud saves, your
+settings and your sign-in are untouched.**
 
-Close Steam first if you can. A running client keeps both caches open, and anything held open is left
+Close Steam first if you can. A running client keeps the cache open, and anything held open is left
 in place rather than removed.
 
 ### Why Tier 1
 
-Both are copies of pages and files Valve's servers still have. The client downloads what it needs
-again the next time it needs it, and nothing that only exists on your disk is in either of them.
+It is a copy of what Valve's servers still have. The client downloads what it needs again the next
+time it needs it, and nothing that only exists on your disk is in it.
 
 ### The shader cache is a separate row
 

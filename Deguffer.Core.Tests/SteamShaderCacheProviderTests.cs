@@ -454,7 +454,7 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.3: the client downloads and processes these caches while it runs, so a plan made with Steam
-    /// open says so. Both of its processes count, as they do for the web cache.
+    /// open says so. Both of its processes count, as they do for the HTTP cache.
     /// </summary>
     [Theory]
     [InlineData("steam")]
