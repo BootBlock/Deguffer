@@ -15,7 +15,8 @@ public sealed class WindowsServicingTests
     /// <summary>
     /// <c>PendingFileRenameOperations</c> holds pairs in the NT form, a replacement's destination is
     /// marked <c>!</c>, and a delete has an empty destination. Each path comes back once, in display
-    /// form, and the empty entries are not paths at all.
+    /// form, and the empty entries are not paths at all. A share is <c>\??\UNC\server\share</c> in
+    /// the NT form, and dropping only the <c>\??\</c> would leave a path that is not fully qualified.
     /// </summary>
     [Fact]
     public void ReadsThePathsARestartWillMoveInDisplayForm()
@@ -24,10 +25,16 @@ public sealed class WindowsServicingTests
         [
             @"\??\C:\$WinREAgent\Scratch\update.wim", string.Empty,
             @"\??\C:\Windows\System32\driver.sys.new", @"!\??\C:\Windows\System32\driver.sys",
+            @"\??\UNC\server\share\cache\a.bin", string.Empty,
         ];
 
         Assert.Equal(
-            [@"C:\$WinREAgent\Scratch\update.wim", @"C:\Windows\System32\driver.sys.new", @"C:\Windows\System32\driver.sys"],
+            [
+                @"C:\$WinREAgent\Scratch\update.wim",
+                @"C:\Windows\System32\driver.sys.new",
+                @"C:\Windows\System32\driver.sys",
+                @"\\server\share\cache\a.bin",
+            ],
             WindowsServicing.Operations(value));
     }
 
