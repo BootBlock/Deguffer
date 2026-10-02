@@ -17,6 +17,11 @@ namespace Deguffer.Core.Memory.Acting;
 /// <para><b>Every window is checked again immediately before its own message.</b> A window handle is
 /// recycled as an identifier is, so a window that has passed to another process receives nothing.</para>
 ///
+/// <para><b>Only the windows the user confirmed are asked.</b> The second survey can only take a
+/// window away: one that no longer qualifies receives nothing, and one the program opened after the
+/// confirmation was never counted in it, so it receives nothing either. Otherwise the dialog could
+/// name one window and the close post to four.</para>
+///
 /// <para><b>One pass, no retry, no escalation.</b> Nothing is sent twice, no attention is paid to a
 /// window the program opens afterwards, and a program still running when the watch ends is reported
 /// as still running. There is nothing stronger to offer, and no preference adds one.</para>
@@ -82,6 +87,10 @@ public sealed class ProcessCloser
     /// The process the user picked, as the snapshot they picked it from describes it. It is identified
     /// by identifier and creation time, and a machine that has moved on refuses rather than acts.
     /// </param>
+    /// <param name="confirmed">
+    /// The windows the confirmation counted. Nothing outside them is posted to, whatever the second
+    /// survey finds.
+    /// </param>
     /// <param name="watching">
     /// Given the report the moment the last message is posted, so a page can say what was asked while
     /// the program is still deciding. What the watch came to is what this returns.
@@ -92,10 +101,12 @@ public sealed class ProcessCloser
     /// </param>
     public async Task<CloseAttempt> CloseAsync(
         ProcessMemory target,
+        IReadOnlyList<ProcessWindow> confirmed,
         IProgress<CloseReport>? watching = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(confirmed);
 
         // The read the action is judged against: the commit charge before, the processes that must
         // survive, and the target's descendants. Taken here rather than reused from the page, because
@@ -142,9 +153,22 @@ public sealed class ProcessCloser
                 return new CloseAttempt(verdict, Report: null);
             }
 
+            var asked = Confirmed(verdict.Windows, confirmed);
+
+            if (asked.Count == 0)
+            {
+                // Every window the user agreed to have asked has closed or stopped qualifying, and any
+                // the program has open now were never put to them. Nothing was sent.
+                return new CloseAttempt(
+                    MemoryVerdict.Refuse(
+                        "None of the windows Deguffer said it would ask can still be asked, so it "
+                        + "sent nothing at all. Pick the program again to see what it has open now."),
+                    Report: null);
+            }
+
             // Posted the moment the verdict allows it, with nothing in between. Whatever else this
             // action has to do, none of it belongs between deciding and sending.
-            var (sent, moved) = Post(verdict.Windows, target);
+            var (sent, moved) = Post(asked, target);
 
             if (sent.Count == 0)
             {
@@ -187,6 +211,21 @@ public sealed class ProcessCloser
                     ? CloseReport.Closed(target, sent.Count, read.System, after?.System, verification, moved)
                     : CloseReport.StillRunning(target, sent.Count, read.System, verification, moved));
         }
+    }
+
+    /// <summary>
+    /// The windows that qualify now and were also counted in the confirmation, in the order Windows
+    /// enumerated them now.
+    ///
+    /// <para>Compared by handle and class together: a handle Windows recycled for a window of another
+    /// kind is not the window the user was told about.</para>
+    /// </summary>
+    private static IReadOnlyList<ProcessWindow> Confirmed(
+        IReadOnlyList<ProcessWindow> qualifying, IReadOnlyList<ProcessWindow> confirmed)
+    {
+        var counted = confirmed.ToHashSet();
+
+        return [.. qualifying.Where(counted.Contains)];
     }
 
     private static Answer Missing(OpenOutcome outcome) =>

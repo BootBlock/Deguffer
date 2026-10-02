@@ -380,6 +380,34 @@ public sealed class MemorySelectionTests : IDisposable
         Assert.Empty(_machine.Windows.Posted);
     });
 
+    /// <summary>
+    /// The program opened a second window between the pick and the press. The dialog names the one
+    /// window the pick found, and that one window is all the close asks.
+    /// </summary>
+    [Fact]
+    public void AWindowOpenedAfterThePickIsNeitherCountedNorAsked() => UiThread.Run(async () =>
+    {
+        var prompt = new ScriptedMemoryPrompt(answer: true);
+        var selection = Selection(prompt);
+        selection.Select(TargetNode);
+        await Eventually.HoldsAsync(() => selection.Note == MemoryVerdict.Allow([]).Reason, "the answer landed");
+
+        _machine.Windows.With(new FakeWindow { Handle = 0x0012, ProcessId = MemoryCloseMachine.TargetId });
+
+        var closing = selection.CloseCommand.ExecuteAsync(null);
+        await Eventually.HoldsAsync(() => selection.Report.IsWatching, "the watch was reported");
+        await _machine.Clock.WhenWaitingAsync(Patience);
+
+        // The dialog and the close agree: one window named, one window asked.
+        var shown = Assert.IsType<MemoryClosePrompt>(prompt.Last);
+        Assert.Contains("asks its window to close", shown.Consequence, StringComparison.Ordinal);
+        Assert.Single(_machine.Windows.Posted);
+
+        _machine.Target.Exited = true;
+        _machine.Clock.Advance(ProcessCloser.WatchCadence);
+        await closing;
+    });
+
     /// <summary>What the page reads to put the highlight back: every change of pick names the node.</summary>
     [Fact]
     public void EveryPickSaysWhichNodeIsSelected()

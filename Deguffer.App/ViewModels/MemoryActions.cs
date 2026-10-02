@@ -64,7 +64,10 @@ public sealed class MemoryActions
     /// Ask the user, then ask the program. Null when the user declined, which is a decision rather
     /// than a failure.
     /// </summary>
-    /// <param name="windows">How many of the target's windows the verdict found, for the dialog to name.</param>
+    /// <param name="windows">
+    /// The target's windows the verdict found. The dialog names how many, and the close posts to none
+    /// outside them, so the two cannot disagree.
+    /// </param>
     /// <param name="listing">
     /// How much of the service list the reading obtained, for the dialog to say what the refusal of a
     /// service host could not reach (§7.2.1).
@@ -73,14 +76,14 @@ public sealed class MemoryActions
     /// <param name="ct">Ends the watch. The messages are already posted, and a close cannot be called off.</param>
     public async Task<CloseAttempt?> CloseAsync(
         ProcessMemory target,
-        int windows,
+        IReadOnlyList<ProcessWindow> windows,
         ServiceListing listing,
         IProgress<CloseReport> watching,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
 
-        var prompt = MemoryClosePrompt.For(target, windows, listing);
+        var prompt = MemoryClosePrompt.For(target, windows.Count, listing);
 
         // Asked before anything is opened, and never after: a dialog the user says yes to is the
         // whole of the authority this action has.
@@ -89,6 +92,6 @@ public sealed class MemoryActions
             return null;
         }
 
-        return await _closer.CloseAsync(target, watching, ct).ConfigureAwait(true);
+        return await _closer.CloseAsync(target, windows, watching, ct).ConfigureAwait(true);
     }
 }

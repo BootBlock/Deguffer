@@ -34,6 +34,9 @@ public sealed class ProcessCloserTests
     private const long TargetCreated = 5;
     private const long ChildCreated = 6;
 
+    /// <summary>The confirmation most tests make: the target's one window.</summary>
+    private static readonly IReadOnlyList<ProcessWindow> OneWindow = Confirmed(TargetWindow);
+
     /// <summary>The machine as the close is asked for: a desktop, Deguffer, a host, and the target.</summary>
     private static MemorySnapshot Before() =>
         new MemorySnapshotBuilder()
@@ -103,6 +106,10 @@ public sealed class ProcessCloserTests
         FakeProcessCalls processes, FakeWindowCalls windows, IMemorySource memory, TimeProvider? time = null) =>
         Closer(processes, windows, memory, time, ShellOwner.Is(Shell));
 
+    /// <summary>The windows the confirmation counted, as the policy describes a window of <see cref="Window"/>'s.</summary>
+    private static IReadOnlyList<ProcessWindow> Confirmed(params nint[] handles) =>
+        [.. handles.Select(handle => new ProcessWindow(handle, "AnApplicationWindow"))];
+
     /// <summary>
     /// A running program, asked to close, that exits while Deguffer watches.
     ///
@@ -111,9 +118,13 @@ public sealed class ProcessCloserTests
     /// does — after the messages are posted, at a moment nothing here decides in advance.</para>
     /// </summary>
     private static async Task<CloseAttempt> ClosedWhileWatchedAsync(
-        ProcessCloser closer, ProcessMemory target, FakeProcess process, ManualTimeProvider clock)
+        ProcessCloser closer,
+        ProcessMemory target,
+        FakeProcess process,
+        ManualTimeProvider clock,
+        IReadOnlyList<ProcessWindow>? confirmed = null)
     {
-        var closing = closer.CloseAsync(target);
+        var closing = closer.CloseAsync(target, confirmed ?? OneWindow);
 
         await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
 
@@ -172,7 +183,7 @@ public sealed class ProcessCloserTests
 
         // A refusal returns rather than going on to watch anything, so this needs no clock. The
         // wait is what says so: a close that reached the watch would hold here instead.
-        var attempt = await closer.CloseAsync(Target(before)).WaitAsync(TimeSpan.FromSeconds(10));
+        var attempt = await closer.CloseAsync(Target(before), OneWindow).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.False(attempt.Verdict.IsAllowed);
         Assert.Null(attempt.Report);
@@ -194,7 +205,8 @@ public sealed class ProcessCloserTests
         var clock = new ManualTimeProvider();
         var closer = Closer(Processes(target), windows, new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
 
-        var attempt = await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
+        var attempt = await ClosedWhileWatchedAsync(
+            closer, Target(before), target, clock, Confirmed(TargetWindow, SecondWindow));
 
         Assert.Equal(TargetWindow, Assert.Single(windows.Posted));
 
@@ -221,12 +233,78 @@ public sealed class ProcessCloserTests
 
         // Bounded for the reason the creation-time test is: a close that reached the watch would
         // hold here for ever, and a hang is not a failure anybody can read.
-        var attempt = await closer.CloseAsync(Target(before)).WaitAsync(TimeSpan.FromSeconds(10));
+        var attempt = await closer.CloseAsync(Target(before), OneWindow).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Empty(windows.Posted);
         Assert.Null(attempt.Report);
         Assert.False(attempt.Verdict.IsAllowed);
         Assert.Contains("belong to another program", attempt.Verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The confirmation named one window, and the program opened another while the dialog was up.
+    /// The second survey finds both, and only the one the user was told about is asked: a dialog
+    /// that said one must not be followed by two save prompts.
+    /// </summary>
+    [Fact]
+    public async Task AWindowOpenedAfterTheConfirmationIsNotAsked()
+    {
+        var before = Before();
+        var windows = Desktop(Window(), Window(SecondWindow));
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var clock = new ManualTimeProvider();
+        var closer = Closer(Processes(target), windows, new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
+
+        var attempt = await ClosedWhileWatchedAsync(closer, Target(before), target, clock, OneWindow);
+
+        Assert.Equal(TargetWindow, Assert.Single(windows.Posted));
+
+        var report = Assert.IsType<CloseReport>(attempt.Report);
+
+        Assert.Equal(1, report.Windows);
+        Assert.Equal(0, report.Moved);
+        Assert.DoesNotContain(
+            report.Verification.Checks, c => c.Subject.Contains("0x12", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Every window the user agreed to have asked has gone, and the program has another open now. That
+    /// one was never put to the user, so nothing is sent and the user is told to pick again.
+    /// </summary>
+    [Fact]
+    public async Task AProgramWhoseConfirmedWindowsHaveAllClosedIsRefused()
+    {
+        var before = Before();
+        var windows = Desktop(Window(SecondWindow));
+        var closer = Closer(Processes(), windows, new QueuedMemorySource(before, After(Shell, Compositor, Own)));
+
+        // Bounded for the reason the creation-time test is: a close that reached the watch would
+        // hold here for ever.
+        var attempt = await closer.CloseAsync(Target(before), OneWindow).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Empty(windows.Posted);
+        Assert.Null(attempt.Report);
+        Assert.False(attempt.Verdict.IsAllowed);
+        Assert.Contains("None of the windows Deguffer said it would ask", attempt.Verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Windows recycled the confirmed window's handle for a window of another kind, still the target's.
+    /// It is not the window the user was told about, so it is not asked.
+    /// </summary>
+    [Fact]
+    public async Task AConfirmedHandleNowNamingAnotherKindOfWindowIsNotAsked()
+    {
+        var before = Before();
+        var windows = Desktop(new FakeWindow { Handle = TargetWindow, ProcessId = TargetId, ClassName = "AnotherWindow" });
+        var closer = Closer(Processes(), windows, new QueuedMemorySource(before, After(Shell, Compositor, Own)));
+
+        var attempt = await closer.CloseAsync(Target(before), OneWindow).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Empty(windows.Posted);
+        Assert.Null(attempt.Report);
+        Assert.False(attempt.Verdict.IsAllowed);
+        Assert.Contains("None of the windows Deguffer said it would ask", attempt.Verdict.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -263,7 +341,7 @@ public sealed class ProcessCloserTests
         var closer = Closer(
             Processes(target), Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
 
-        var closing = closer.CloseAsync(Target(before));
+        var closing = closer.CloseAsync(Target(before), OneWindow);
 
         await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
         Assert.False(closing.IsCompleted);
@@ -294,7 +372,7 @@ public sealed class ProcessCloserTests
             new QueuedMemorySource(before, After(Shell, Compositor, Own, TargetId, Child, Host)));
 
         // The user dismisses the result the moment it appears, which is one of §7.2.1's three ends.
-        var attempt = await closer.CloseAsync(Target(before), new CallbackProgress<CloseReport>(_ => stop.Cancel()), stop.Token);
+        var attempt = await closer.CloseAsync(Target(before), OneWindow, new CallbackProgress<CloseReport>(_ => stop.Cancel()), stop.Token);
 
         var report = Assert.IsType<CloseReport>(attempt.Report);
 
@@ -340,7 +418,7 @@ public sealed class ProcessCloserTests
         var closer = Closer(
             Processes(target), Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
 
-        var closing = closer.CloseAsync(Target(before));
+        var closing = closer.CloseAsync(Target(before), OneWindow);
 
         for (var hour = 0; hour < 48; hour++)
         {
@@ -372,7 +450,7 @@ public sealed class ProcessCloserTests
             Processes(target), Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
 
         var held = false;
-        var closing = closer.CloseAsync(Target(before), new CallbackProgress<CloseReport>(_ => held = !target.Disposed));
+        var closing = closer.CloseAsync(Target(before), OneWindow, new CallbackProgress<CloseReport>(_ => held = !target.Disposed));
 
         await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
         target.Exited = true;
@@ -402,7 +480,7 @@ public sealed class ProcessCloserTests
         var windows = Desktop(Window());
         var closer = Closer(processes, windows, new QueuedMemorySource(degraded));
 
-        var attempt = await closer.CloseAsync(Target(before)).WaitAsync(TimeSpan.FromSeconds(10));
+        var attempt = await closer.CloseAsync(Target(before), OneWindow).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.False(attempt.Verdict.IsAllowed);
         Assert.Null(attempt.Report);
@@ -426,7 +504,7 @@ public sealed class ProcessCloserTests
         var memory = new QueuedMemorySource(before) { RefusesFrom = 2 };
         var closer = Closer(Processes(target), windows, memory, clock);
 
-        var closing = closer.CloseAsync(Target(before));
+        var closing = closer.CloseAsync(Target(before), OneWindow);
 
         await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
         target.Exited = true;
@@ -461,7 +539,8 @@ public sealed class ProcessCloserTests
         var closer = Closer(
             Processes(target), windows, new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
 
-        var attempt = await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
+        var attempt = await ClosedWhileWatchedAsync(
+            closer, Target(before), target, clock, Confirmed(TargetWindow, SecondWindow));
 
         Assert.Equal(TargetWindow, Assert.Single(windows.Posted));
         Assert.Equal(1, Assert.IsType<CloseReport>(attempt.Report).Moved);
@@ -513,7 +592,7 @@ public sealed class ProcessCloserTests
             new QueuedMemorySource(before, After(Shell, Compositor, Own, TargetId, Child, Host)));
 
         var attempt = await closer
-            .CloseAsync(Target(before), watching: null, stop.Token)
+            .CloseAsync(Target(before), OneWindow, watching: null, stop.Token)
             .WaitAsync(TimeSpan.FromSeconds(10));
 
         var report = Assert.IsType<CloseReport>(attempt.Report);
