@@ -164,14 +164,24 @@ public static class PlanVerifier
                     protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
         }
 
-        return WasBeyondThisRunsReach(protectedPath.Path, reach)
-            ? new VerificationCheck(
+        if (WasBeyondThisRunsReach(protectedPath.Path, reach))
+        {
+            return new VerificationCheck(
                 protectedPath.Path,
                 protectedPath.Reason,
                 VerificationOutcome.RemovedFromOutside,
                 "GONE — and so is the folder that held it, which no step in this run named or "
                 + "deleted anything inside. Something else on the machine removed it after the "
-                + "scan ran.")
+                + "scan ran.");
+        }
+
+        return WasLeftAloneByEveryRemovalReachingIt(protectedPath.Path, reach, residue)
+            ? new VerificationCheck(
+                protectedPath.Path,
+                protectedPath.Reason,
+                VerificationOutcome.RemovedFromOutside,
+                "GONE — but this clean left it alone, so something else on the machine removed it "
+                + "after the scan ran. A program that was using it may have removed it when it finished.")
             : new VerificationCheck(
                 protectedPath.Path,
                 protectedPath.Reason,
@@ -332,6 +342,36 @@ public static class PlanVerifier
         return Path.GetDirectoryName(Display(path)) is { Length: > 0 } parent
             && LongPath.ProbeDirectory(parent) is PathPresence.Absent
             && !HoldsAnyOf(parent, reach.TargetedPaths);
+    }
+
+    /// <summary>
+    /// Whether a missing path sits inside what this run removed, and every removal that reached it
+    /// can show it never acted on it.
+    ///
+    /// <para><b>The case <see cref="WasBeyondThisRunsReach"/> cannot see.</b> An entry a running
+    /// program was using is spared from a scratch folder the run empties, so the folder holding it is
+    /// both targeted and still standing. A program that removes its own scratch folder when it
+    /// finishes, which build tools and render scripts routinely do, then leaves exactly the shape an
+    /// over-broad removal leaves, and the alarm asked the user to report a fault that was not
+    /// there.</para>
+    ///
+    /// <para><b>The evidence is the removal's own, and it is positive.</b> Each removal records the
+    /// spared entries it held back and those Windows said were not there before it began. A path
+    /// counts only where every target holding it is a removal that recorded it, so a step that names
+    /// the path itself, a removal not yet made, and a spelling the walk failed to match all leave the
+    /// alarm in place. An unbounded reach does as well, because a tool's own command may have taken it
+    /// whatever Deguffer's removal did.</para>
+    /// </summary>
+    private static bool WasLeftAloneByEveryRemovalReachingIt(string path, RunReach reach, RunResidue? residue)
+    {
+        if (residue is null || reach.Unbounded)
+        {
+            return false;
+        }
+
+        var holding = reach.TargetedPaths.Where(target => LongPath.Contains(Display(target), Display(path))).ToList();
+
+        return holding.Count > 0 && holding.TrueForAll(target => residue.LeftAlone(target, path));
     }
 
     /// <summary>

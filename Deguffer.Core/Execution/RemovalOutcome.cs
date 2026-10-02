@@ -56,6 +56,20 @@ public sealed record RemovalOutcome(
     public IReadOnlyList<string> LeftStanding { get; init; } = [];
 
     /// <summary>
+    /// Each spared entry this removal can show it never acted on, in display form: one the walk met
+    /// and held back, one that was not there when the removal began, and every one where the removal
+    /// took nothing at all.
+    ///
+    /// <para>The evidence §5.6 reads through <see cref="RunResidue"/> when a spared entry has gone. A
+    /// program working in a scratch folder often removes it when it finishes, and without this
+    /// nothing could tell that from a removal that failed to spare it. A spared entry missing here
+    /// is one the removal may have taken, which keeps the alarm: the walk names an entry only where
+    /// it matched one it must leave, so a spelling that failed to match is never recorded as left
+    /// alone.</para>
+    /// </summary>
+    public IReadOnlyList<string> LeftAlone { get; init; } = [];
+
+    /// <summary>
     /// The Outlook mail stores this removal found and left where they were, in display form, because
     /// Deguffer never removes one (see <see cref="Safety.MailStore"/>). The folders holding them are
     /// in <see cref="LeftStanding"/> for the reason any folder holding something is.

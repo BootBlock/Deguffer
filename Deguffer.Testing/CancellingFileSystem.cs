@@ -20,6 +20,8 @@ public sealed class CancellingFileSystem(
 
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
+    public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
+
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
     public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory)

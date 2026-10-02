@@ -10,6 +10,24 @@ public sealed class RunResidueTests
 {
     private const string Scratch = @"C:\Users\testuser\AppData\Local\Temp";
 
+    /// <summary>
+    /// What a removal left alone is asked of that removal alone, and covers what is inside the entry
+    /// as well as the entry. A removal that never entered a folder took nothing inside it.
+    /// </summary>
+    [Fact]
+    public void WhatARemovalLeftAloneIsAnsweredForThatRemovalOnly()
+    {
+        var residue = new RunResidue();
+        residue.RecordLeftAlone(Scratch, [$@"{Scratch}\kitprobe"]);
+        residue.RecordLeftAlone(@"C:\Users\testuser\AppData\Local", [@"C:\Users\testuser\AppData\Local\Other"]);
+
+        Assert.True(residue.LeftAlone(Scratch, $@"{Scratch}\kitprobe"));
+        Assert.True(residue.LeftAlone($@"\\?\{Scratch}\", $@"{Scratch}\KITPROBE\closeup.py"));
+        Assert.False(residue.LeftAlone(Scratch, $@"{Scratch}\other"));
+        Assert.False(residue.LeftAlone(Scratch, Scratch));
+        Assert.False(residue.LeftAlone(@"C:\Users\testuser\AppData\Local", $@"{Scratch}\kitprobe"));
+    }
+
     [Fact]
     public void EveryFolderBetweenWhatStayedAndTheRootWasEntered()
     {

@@ -410,8 +410,8 @@ public sealed class RunOutcomeTests
 
     /// <summary>
     /// Written out in both grammatical forms rather than with the "(s)" the counts elsewhere use:
-    /// this clause has to agree in "it" and "them" as well, and "1 protected path(s) … the folders
-    /// holding them" is a sentence only a machine writes. Driving the window is what catches it.
+    /// this clause has to agree in "it" and "them" as well, and "1 protected path(s) … nothing took
+    /// them" is a sentence only a machine writes. Driving the window is what catches it.
     /// </summary>
     [Fact]
     public void ReadsAsEnglishForOnePathAsWellAsForSeveral()
@@ -419,13 +419,13 @@ public sealed class RunOutcomeTests
         var one = RunOutcome.For([OutsideRemovals("npm", 1)]).Statement;
 
         Assert.Contains("One protected path for npm went missing", one, StringComparison.Ordinal);
-        Assert.Contains("the folder holding it", one, StringComparison.Ordinal);
+        Assert.Contains("nothing in this run took it.", one, StringComparison.Ordinal);
         Assert.DoesNotContain("(s)", one, StringComparison.Ordinal);
 
         var several = RunOutcome.For([OutsideRemovals("npm", 2)]).Statement;
 
         Assert.Contains("2 protected paths for npm went missing", several, StringComparison.Ordinal);
-        Assert.Contains("the folders holding them", several, StringComparison.Ordinal);
+        Assert.Contains("nothing in this run took them.", several, StringComparison.Ordinal);
     }
 
     /// <summary>One provider's result carrying <paramref name="count"/> paths taken from outside.</summary>

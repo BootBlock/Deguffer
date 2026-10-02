@@ -928,6 +928,87 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// The report this was found by. A program a scratch entry was spared for removed that entry itself
+    /// when it finished, while the clean ran, and the folder holding it was still standing, so the run
+    /// was told a protected path had not survived and asked to report it. The clear met the entry and
+    /// held it back, and that is the evidence.
+    /// </summary>
+    [Fact]
+    public async Task ASparedEntryItsProgramRemovedDuringTheCleanWasRemovedFromOutside()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "kitprobe");
+        _temp.CreateFile(1024, "scratch", "kitprobe", "closeup.py");
+        _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+        var plan = ClearSparing(scratch, live, spared: true);
+        var residue = new RunResidue();
+
+        await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, residue, progress: null, ct: default);
+
+        Assert.True(Directory.Exists(live), "the clear took an entry it was told to spare");
+
+        // The program finishing, after the removal and before the check.
+        Directory.Delete(live, recursive: true);
+
+        var verification = PlanVerifier.Verify(plan, runReach: null, residue);
+        var check = Assert.Single(verification.Checks);
+
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, check.Outcome);
+        Assert.Contains("this clean left it alone", check.Detail, StringComparison.Ordinal);
+        Assert.Empty(verification.Failures);
+    }
+
+    /// <summary>
+    /// The same, with the program finished before the clear reached the folder. The walk cannot meet
+    /// an entry that is not there, so what Windows said before the removal began is the evidence.
+    /// </summary>
+    [Fact]
+    public async Task ASparedEntryGoneBeforeTheClearBeganWasRemovedFromOutside()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "kitprobe");
+        _temp.CreateFile(1024, "scratch", "abandoned.tmp");
+        var plan = ClearSparing(scratch, live, spared: true);
+
+        Directory.Delete(live, recursive: true);
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: default);
+
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, Assert.Single(result.Verification!.Checks).Outcome);
+    }
+
+    /// <summary>
+    /// The negative: a clear that took the entry it should have spared is still the alarm. The plan
+    /// protects the entry and leaves it out of the step's spared entries, which is the over-reach.
+    /// </summary>
+    [Fact]
+    public async Task AClearThatTookAnEntryItShouldHaveSparedStillFailsVerification()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "kitprobe");
+        _temp.CreateFile(1024, "scratch", "kitprobe", "closeup.py");
+        var plan = ClearSparing(scratch, live, spared: false);
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, residue: null, progress: null, ct: default);
+
+        Assert.False(Directory.Exists(live), "the fixture's over-reach did not take the entry");
+        Assert.Equal(VerificationOutcome.Failed, Assert.Single(result.Verification!.Checks).Outcome);
+    }
+
+    /// <summary>A clear of <paramref name="scratch"/> protecting <paramref name="live"/>, and sparing it where asked.</summary>
+    private static CleanupPlan ClearSparing(string scratch, string live, bool spared) =>
+        PlanDeleting(new ClearDirectoryStep(scratch, "Scratch files") { Spared = spared ? [live] : [] }) with
+        {
+            ProtectedPaths =
+            [
+                new ProtectedPath(live, "Left alone because blender was started with it.", PresenceBefore: PathPresence.Present),
+            ],
+        };
+
+    /// <summary>
     /// A clear that left a folder a program is working in says so, rather than "Cleared." about a
     /// folder still holding it. The reader answers it by closing that program, which is why the reason
     /// is named.

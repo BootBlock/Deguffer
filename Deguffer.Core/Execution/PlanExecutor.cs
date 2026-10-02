@@ -737,6 +737,7 @@ public sealed class PlanExecutor(
 
         refusals.Record(step.Path, removal);
         leftStanding.Record(step.Path, removal.LeftStanding);
+        leftStanding.RecordLeftAlone(step.Path, removal.LeftAlone);
 
         // A folder Windows refused is a refusal as much as a file is. Without it, a clear whose only
         // outcome was a folder a program is working in would pass as a folder that held nothing.

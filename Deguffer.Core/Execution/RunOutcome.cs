@@ -98,17 +98,20 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
             // sentence that reads correctly only on a machine with more than one of something is
             // what driving the real window is for. The "(s)" shorthand the counts below use does
             // not stretch to a clause that also has to agree in "it" and "them".
+            //
+            // Nothing about the folder holding the path, and nothing about when it went. A path whose
+            // folder went too, and one a running program removed from a folder the run emptied around
+            // it, are both this verdict, and the second can go while the clean runs. See PlanVerifier.
             var went = count == 1
-                ? $"One protected path for {Names(outside)} went missing between the scan and "
-                  + "the clean, along with the folder holding it"
-                : $"{count} protected paths for {Names(outside)} went missing between the scan "
-                  + "and the clean, along with the folders holding them";
+                ? $"One protected path for {Names(outside)} went missing after the scan, and "
+                  + "nothing in this run took it"
+                : $"{count} protected paths for {Names(outside)} went missing after the scan, and "
+                  + "nothing in this run took them";
 
             // What the run left behind stays on this one, because it is not an alarm and because
             // both facts explain the same thing: why the figures are not what the preview implied.
             return new RunOutcome(
-                $"{did} {went} — which no step in this run named. Scan again to see the "
-                + "machine as it is now."
+                $"{did} {went}. Scan again to see the machine as it is now."
                 + NotChecked(results)
                 + LeftBehind(results),
                 RunVerdict.RemovedFromOutside,
