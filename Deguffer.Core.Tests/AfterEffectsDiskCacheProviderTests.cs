@@ -289,21 +289,57 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
         Assert.False(root.RecognisesFolder(CacheName));
     }
 
-    /// <summary>§7.1: Explore may remove this computer's cache from a version's folder and nothing else there.</summary>
+    /// <summary>
+    /// §7.1, asked of the policy rather than of each root: Explore may remove this computer's cache
+    /// from a version's folder, and nothing else from <c>Adobe\After Effects</c> down. Every root that
+    /// contains a path must allow it, so <c>Adobe\After Effects</c> has to recognise the way down.
+    /// </summary>
     [Fact]
-    public async Task ExploreRecognisesOnlyThisComputersCache()
+    public async Task ExploreRemovesOnlyThisComputersCache()
     {
         Preferences(Version, Chosen);
         var cache = Cache(Chosen, Version, CacheName);
         var otherComputer = Cache(Chosen, Version, AfterEffectsDiskCacheLayout.CacheName("RENDERNODE"));
+        var beside = WriteFile(Path.Combine(Path.GetDirectoryName(cache)!, "notes.txt"));
+        var otherVersion = Cache(Chosen, "23.0", AfterEffectsDiskCacheLayout.CacheName("RENDERNODE"));
+        var versions = AfterEffectsDiskCacheLayout.VersionsUnder(Chosen);
 
         var roots = await CreateProvider().DiscoverToolRootsAsync();
+        var policy = new ExploreActionPolicy([], [], new FakeVolumeInventory(), probedRoots: roots);
 
-        var version = Assert.Single(roots, r => r.Path == Path.GetDirectoryName(cache));
-        Assert.True(version.RecognisesFolder(CacheName));
-        Assert.False(version.RecognisesFolder(Path.GetFileName(otherComputer)));
-        Assert.Contains(roots, r => r.Path == AfterEffectsDiskCacheLayout.VersionsUnder(Chosen) && !r.RecognisesFolder(Version));
+        Assert.True(policy.MayRemove(cache).IsAllowed, policy.MayRemove(cache).Reason);
+        Assert.True(policy.MayRemove(Path.Combine(cache, "0a")).IsAllowed);
+
+        foreach (var refused in new[]
+        {
+            versions,
+            Path.GetDirectoryName(cache)!,
+            otherComputer,
+            Path.Combine(otherComputer, "0a"),
+            beside,
+            Path.Combine(versions, "unrecognised.txt"),
+            Path.GetDirectoryName(otherVersion)!,
+            otherVersion,
+        })
+        {
+            Assert.False(policy.MayRemove(refused).IsAllowed, $"Explore would remove '{refused}'");
+        }
+
         Assert.DoesNotContain(roots, r => r.Path == Chosen);
+    }
+
+    /// <summary>§5.3 in Explore: while After Effects runs, this computer's cache is refused with the reason.</summary>
+    [Fact]
+    public async Task ExploreRefusesTheCacheWhileAfterEffectsRuns()
+    {
+        Preferences(Version, Chosen);
+        var cache = Cache(Chosen, Version, CacheName);
+
+        var roots = await CreateProvider(new FakeProcessInspector().WithRunning("AfterFX")).DiscoverToolRootsAsync();
+        var verdict = new ExploreActionPolicy([], [], new FakeVolumeInventory(), probedRoots: roots).MayRemove(cache);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains("After Effects is running", verdict.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>§5.3 at the clean: After Effects started after the preview, so the cache is asked about again and kept.</summary>
