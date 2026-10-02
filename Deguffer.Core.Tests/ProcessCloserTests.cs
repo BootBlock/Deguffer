@@ -302,7 +302,9 @@ public sealed class ProcessCloserTests
         var attempt = await closer.CloseAsync(Target(before), OneWindow).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Empty(windows.Posted);
+        Assert.Null(attempt.Report);
         Assert.False(attempt.Verdict.IsAllowed);
+        Assert.Contains("None of the windows Deguffer said it would ask", attempt.Verdict.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -161,8 +161,8 @@ public sealed class ProcessCloser
                 // the program has open now were never put to them. Nothing was sent.
                 return new CloseAttempt(
                     MemoryVerdict.Refuse(
-                        "None of the windows Deguffer said it would ask is still open, so it sent "
-                        + "nothing at all. Pick the program again to see what it has open now."),
+                        "None of the windows Deguffer said it would ask can still be asked, so it "
+                        + "sent nothing at all. Pick the program again to see what it has open now."),
                     Report: null);
             }
 

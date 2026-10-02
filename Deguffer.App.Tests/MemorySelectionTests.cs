@@ -398,7 +398,9 @@ public sealed class MemorySelectionTests : IDisposable
         await Eventually.HoldsAsync(() => selection.Report.IsWatching, "the watch was reported");
         await _machine.Clock.WhenWaitingAsync(Patience);
 
-        Assert.Contains("asks its window to close", prompt.Last!.Consequence, StringComparison.Ordinal);
+        // The dialog and the close agree: one window named, one window asked.
+        var shown = Assert.IsType<MemoryClosePrompt>(prompt.Last);
+        Assert.Contains("asks its window to close", shown.Consequence, StringComparison.Ordinal);
         Assert.Single(_machine.Windows.Posted);
 
         _machine.Target.Exited = true;
