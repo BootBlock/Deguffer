@@ -12,6 +12,10 @@ namespace Deguffer.Core.Safety;
 /// The full paths it was started with as arguments, empty where it was given none or its command
 /// line could not be read. See <see cref="CommandLinePaths"/> for which arguments count.
 /// </param>
+/// <remarks>
+/// Every path here is in <see cref="LongPath.Canonical"/> form, so a caller compares them as they
+/// stand. One that could not be put in it is left out, and the table says so.
+/// </remarks>
 internal sealed record RunningProcess(
     int Id,
     string Name,
@@ -21,15 +25,17 @@ internal sealed record RunningProcess(
 
 /// <param name="Processes">Every process this account was allowed to look at.</param>
 /// <param name="CurrentDirectoriesReadable">
-/// Whether every working directory that was read can be trusted. False means either the layout
-/// self-check failed, so every <see cref="RunningProcess.CurrentDirectory"/> is null because nothing
-/// could be read, or a 32-bit process's block could not be checked, so its directory is null
-/// although it has one. Either way a null directory is not evidence that nothing is working there.
+/// Whether every working directory that was read can be trusted. False means the layout self-check
+/// failed, so every <see cref="RunningProcess.CurrentDirectory"/> is null because nothing could be
+/// read, or a 32-bit process's block could not be checked, or a directory that was read could not
+/// be put in a form that compares. In the last two its directory is null although it has one.
+/// Either way a null directory is not evidence that nothing is working there.
 /// </param>
 /// <param name="CommandLinesReadable">
-/// Whether command lines could be read at all. False means this process could not read its own, so
-/// every <see cref="RunningProcess.PathArguments"/> is empty because nothing could be read rather
-/// than because no process was started with a path.
+/// Whether every path a process was started with is in <see cref="RunningProcess.PathArguments"/>.
+/// False means this process could not read its own command line, so every list is empty because
+/// nothing could be read, or a path in one could not be put in a form that compares and was left
+/// out. Either way an empty list is not evidence that no process was started with a path.
 /// </param>
 internal sealed record ProcessTable(
     IReadOnlyList<RunningProcess> Processes,
@@ -74,6 +80,7 @@ internal static class RunningProcessTable
         var readable = LayoutIsSound(calls);
         var verified = readable;
         var commandLines = CommandLinesAreReadable(calls);
+        var argumentsWhole = true;
         var processes = new List<RunningProcess>();
 
         foreach (var (id, name) in calls.List())
@@ -93,8 +100,10 @@ internal static class RunningProcessTable
                 ? ProcessWorkingDirectory.Of(memory)
                 : WorkingDirectoryRead.Unread;
 
+            var working = directory.Directory is { } read ? LongPath.Canonical(read) : null;
+
             // Only this process's directory is in doubt, so the others are still read.
-            if (directory.LayoutUnverified)
+            if (directory.LayoutUnverified || (directory.Directory is not null && working is null))
             {
                 verified = false;
             }
@@ -102,14 +111,38 @@ internal static class RunningProcessTable
             processes.Add(new RunningProcess(
                 id,
                 name,
-                LongPath.Unaliased(process.ImagePath()),
-                LongPath.Unaliased(directory.Directory),
+                process.ImagePath() is { } image ? LongPath.Canonical(image) : null,
+                working,
                 commandLines && process.CommandLine() is { } line
-                    ? [.. CommandLinePaths.Of(line).Select(path => LongPath.Unaliased(path))]
+                    ? CanonicalArguments(line, ref argumentsWhole)
                     : []));
         }
 
-        return new ProcessTable(processes, verified, commandLines);
+        return new ProcessTable(processes, verified, commandLines && argumentsWhole);
+    }
+
+    /// <summary>
+    /// The paths <paramref name="line"/> names, each canonical, so that every spelling of one folder
+    /// compares as that folder. One that cannot be made canonical clears <paramref name="whole"/>
+    /// rather than being compared as it arrived, where it would match nothing and read as unused.
+    /// </summary>
+    private static IReadOnlyList<string> CanonicalArguments(string line, ref bool whole)
+    {
+        var paths = new List<string>();
+
+        foreach (var argument in CommandLinePaths.Of(line))
+        {
+            if (LongPath.Canonical(argument) is { } canonical)
+            {
+                paths.Add(canonical);
+            }
+            else
+            {
+                whole = false;
+            }
+        }
+
+        return paths;
     }
 
     /// <summary>

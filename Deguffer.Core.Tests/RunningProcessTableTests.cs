@@ -128,6 +128,76 @@ public class RunningProcessTableTests
         Assert.False(findings.IsLive(Build.Directory));
     }
 
+    /// <summary>
+    /// A path a program was started with that cannot be made canonical is left out and says so,
+    /// rather than being compared as it arrived. A segment that carries a <c>~</c> inside a folder
+    /// Windows will not list may be an alias for the very entry being asked about, and read raw it
+    /// would match nothing, which is the answer that lets the entry be removed.
+    ///
+    /// <para>The <c>~</c> is part of a real name rather than an 8.3 alias, so this discriminates on
+    /// a volume with short names disabled too: the refusal is what is under test.</para>
+    /// </summary>
+    [Fact]
+    public void AnArgumentThatCannotBeMadeCanonicalTurnsTheChildFindingsIncomplete()
+    {
+        using var temp = new TempDirectory();
+        var scratch = temp.CreateDirectory("Temp");
+        var hidden = temp.CreateDirectory("Temp", "Locked", "run~1");
+        var calls = new FakeProcessTableCalls()
+            .With(FakeProcessTableCalls.Own)
+            .With(new FakeListedProcess
+            {
+                Id = 4326,
+                Name = "runner",
+                CommandLine = $"runner.exe --log-file={Path.Combine(hidden, "out.log")}",
+            });
+
+        using var denied = new DeniedDirectory(Path.Combine(scratch, "Locked"));
+
+        var findings = new LiveTreeInspector(calls).FindLiveChildren([scratch]);
+
+        Assert.False(findings.Complete);
+    }
+
+    /// <summary>
+    /// The same refusal in a working directory turns the working-directory findings incomplete, so
+    /// a directory nothing could be compared against is not taken as nobody working there.
+    /// </summary>
+    [Fact]
+    public void AWorkingDirectoryThatCannotBeMadeCanonicalTurnsTheFindingsIncomplete()
+    {
+        using var temp = new TempDirectory();
+        var hidden = temp.CreateDirectory("Locked", "run~1");
+        var calls = new FakeProcessTableCalls()
+            .With(FakeProcessTableCalls.Own)
+            .With(Shell(FakeProcessMemory.Native(hidden + @"\", ShellLine)));
+
+        using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
+
+        var findings = new LiveTreeInspector(calls).FindOccupiedDirectories();
+
+        Assert.False(findings.Complete);
+        Assert.Empty(findings.Live);
+    }
+
+    /// <summary>
+    /// A scratch folder that cannot be made canonical is still compared, and the answer says it may
+    /// have missed a program using one of its entries.
+    /// </summary>
+    [Fact]
+    public void AFolderAskedAboutThatCannotBeMadeCanonicalTurnsTheChildFindingsIncomplete()
+    {
+        using var temp = new TempDirectory();
+        var hidden = temp.CreateDirectory("Locked", "temp~1");
+        var calls = new FakeProcessTableCalls().With(FakeProcessTableCalls.Own);
+
+        using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
+
+        var findings = new LiveTreeInspector(calls).FindLiveChildren([hidden]);
+
+        Assert.False(findings.Complete);
+    }
+
     private static FakeListedProcess Shell(FakeProcessMemory memory) => new()
     {
         Id = 4321,
