@@ -139,6 +139,30 @@ public sealed class UserEnvironmentTests : IDisposable
     }
 
     /// <summary>
+    /// A candidate Windows will not describe stops the search. It may be the executable the shell
+    /// would run, so the same-named one further along <c>PATH</c> is not an answer, and nothing
+    /// further along would report an installed tool as missing.
+    /// </summary>
+    [Fact]
+    public void ACandidateWindowsWillNotDescribeStopsThePathSearch()
+    {
+        var first = _temp.CreateDirectory("first-bin");
+        var second = _temp.CreateDirectory("second-bin");
+        var refused = Path.Combine(first, "deguffer-fixture-tool.exe");
+        File.WriteAllBytes(refused, new byte[64]);
+        File.WriteAllBytes(Path.Combine(second, "deguffer-fixture-tool.exe"), new byte[64]);
+
+        var environment = new UserEnvironment(
+            () => Expandable(("PATHEXT", ".EXE")),
+            () => Expandable(("Path", $"{first};{second}")),
+            EnvironmentBlock.Startup(Values(), Expandable(), Expandable()));
+
+        using var denied = DeniedDirectory.WithUnreadableFile(refused);
+
+        Assert.Equal(refused, environment.FindExecutable("deguffer-fixture-tool"), StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The same route for a variable rather than a command, which is how several tools relocate a
     /// cache — and the case §5.2 cares about, because a provider told the old location measures and
     /// offers to empty a directory the tool has stopped using.

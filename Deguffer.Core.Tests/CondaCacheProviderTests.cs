@@ -358,6 +358,46 @@ public sealed class CondaCacheProviderTests : IDisposable
         Assert.False((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>
+    /// A <c>conda.exe</c> Windows will not describe may be there, so it is found rather than read as
+    /// absent. The absent reading hid the row and told the plan conda is not installed.
+    /// </summary>
+    [Fact]
+    public async Task FindsCondaThroughCondaExeWhereWindowsWillNotDescribeIt()
+    {
+        var exe = Path.Combine(_temp.Path, "elsewhere", "Scripts", "conda.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(exe)!);
+        File.WriteAllBytes(exe, []);
+
+        var environment = new FakeUserEnvironment(_temp.Path).WithEnvironmentVariable("CONDA_EXE", exe);
+        Populate(Path.Combine(environment.UserProfile, "miniconda3", "pkgs"));
+        var runner = Reporting();
+
+        var provider = new CondaCacheProvider(
+            environment, runner, FakeProcessInspector.NothingRunning, systemDirectories: _system);
+
+        using var denied = DeniedDirectory.WithUnreadableFile(exe);
+
+        Assert.True(await provider.IsPresentAsync());
+        Assert.False((await provider.PlanAsync()).IsEmpty);
+    }
+
+    [Fact]
+    public async Task FindsCondaAtItsDocumentedInstallLocationWhereWindowsWillNotDescribeIt()
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        var exe = Path.Combine(environment.UserProfile, "anaconda3", "Scripts", "conda.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(exe)!);
+        File.WriteAllBytes(exe, []);
+
+        var provider = new CondaCacheProvider(
+            environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, systemDirectories: _system);
+
+        using var denied = DeniedDirectory.WithUnreadableFile(exe);
+
+        Assert.True(await provider.IsPresentAsync());
+    }
+
     [Fact]
     public async Task FindsCondaAtItsDocumentedInstallLocation()
     {

@@ -415,13 +415,21 @@ public sealed partial class UserEnvironment : IUserEnvironment
         return block.Resolved.GetOrAdd(command, name => Locate(block, name));
     }
 
+    /// <summary>
+    /// The first candidate on <c>PATH</c> that is there or that Windows will not describe.
+    ///
+    /// <para><b>A refused candidate stops the search.</b> It may be the executable the shell would
+    /// run, so searching on can return a same-named one further along that is not, and finding no
+    /// other reports an installed tool as missing. Returned as found, a refused one reaches the
+    /// provider as a tool it then fails to run, which the plan reports.</para>
+    /// </summary>
     private static string? Locate(EnvironmentBlock block, string command)
     {
         foreach (var directory in block.PathDirectories)
         {
             foreach (var candidate in Candidates(directory, command, block.PathExtensions))
             {
-                if (LongPath.FileExists(candidate))
+                if (LongPath.ProbeFile(candidate) is not PathPresence.Absent)
                 {
                     return candidate;
                 }

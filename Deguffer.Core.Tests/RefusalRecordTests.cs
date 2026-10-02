@@ -130,6 +130,32 @@ public sealed class RefusalRecordTests : IDisposable
     }
 
     /// <summary>
+    /// A location Windows will not describe when the record loads may still be there. Dropped as
+    /// gone, its entry was erased by the next save, and the preview after that offered again what
+    /// Windows refuses.
+    /// </summary>
+    [Fact]
+    public void KeepsALocationWindowsWillNotDescribeThroughTheNextSave()
+    {
+        var step = _temp.CreateDirectory("share", "obj");
+        var place = Path.Combine(step, "Debug");
+        var other = _temp.CreateDirectory("elsewhere", "obj");
+
+        RefusalRecord.For(_environment).Replace(step, [place]);
+
+        using (DeniedDirectory.WithUnreadableAttributes(step))
+        {
+            var reloaded = new RefusalRecord(_environment);
+
+            Assert.Equal([place], reloaded.At(step));
+
+            reloaded.Replace(other, [Path.Combine(other, "Debug")]);
+        }
+
+        Assert.Equal([place], new RefusalRecord(_environment).At(step));
+    }
+
+    /// <summary>
     /// Every provider records into the one file, and two instances over it would each save their own
     /// view and discard the other's. One profile is one record; another profile is another.
     /// </summary>

@@ -428,17 +428,15 @@ public static class ExploreRemover
 
         foreach (var (parent, names) in before)
         {
-            var survives = LongPath.DirectoryExists(parent);
-
             // No outcome here is ever VerificationOutcome.RemovedFromOutside, and that is a property
             // of this flow rather than an omission: the "before" listing is taken immediately before
             // the removal, so there is no preview sitting on screen for the machine to change under.
             // What PlanVerifier has to disentangle cannot arise.
-            checks.Add(new VerificationCheck(
+            checks.Add(Survival(
                 parent,
                 "The folder the item was taken out of must survive.",
-                survives ? VerificationOutcome.Survived : VerificationOutcome.Failed,
-                survives ? "Still present." : "MISSING — it was there before the removal."));
+                LongPath.ProbeDirectory(parent),
+                "MISSING — it was there before the removal."));
 
             // A listing that never happened is recorded as a failure rather than as a pass. §5.6
             // is what turns "I think it worked" into evidence, and filing a non-assertion as
@@ -459,17 +457,33 @@ public static class ExploreRemover
         // check above is about them, and a removal that took one would otherwise pass.
         foreach (var store in outcomes.SelectMany(o => o.MailStores))
         {
-            var stayed = LongPath.FileExists(store);
-
-            checks.Add(new VerificationCheck(
+            checks.Add(Survival(
                 store,
                 "An Outlook data file inside the removed item must survive.",
-                stayed ? VerificationOutcome.Survived : VerificationOutcome.Failed,
-                stayed ? "Still present." : "MISSING — it was left out of the removal and is gone."));
+                LongPath.ProbeFile(store),
+                "MISSING — it was left out of the removal and is gone."));
         }
 
         return new VerificationResult { Checks = checks };
     }
+
+    /// <summary>
+    /// One path's survival. A path Windows will not describe afterwards is a check that could not be
+    /// made, as <see cref="PlanVerifier"/> reports it: reading it as missing claims a deletion nobody
+    /// saw, and reading it as a survivor claims what nobody saw either.
+    /// </summary>
+    private static VerificationCheck Survival(string path, string reason, PathPresence after, string missing) =>
+        after switch
+        {
+            PathPresence.Present => new VerificationCheck(path, reason, VerificationOutcome.Survived, "Still present."),
+            PathPresence.Refused => new VerificationCheck(
+                path,
+                reason,
+                VerificationOutcome.Unverified,
+                "NOT CHECKED — it was there before the removal, and Windows would not describe it "
+                + "afterwards, so nothing shows whether it survived."),
+            _ => new VerificationCheck(path, reason, VerificationOutcome.Failed, missing),
+        };
 
     private static VerificationCheck SiblingsSurvived(
         string parent,

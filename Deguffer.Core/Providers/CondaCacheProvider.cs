@@ -310,6 +310,9 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     /// there by default. In order: <c>PATH</c>; <c>CONDA_EXE</c>, which conda's own shell
     /// integration sets and a user can set globally; then the vendors' documented default install
     /// locations for the current user and for all users.
+    ///
+    /// <para>A candidate Windows will not describe is taken as found. Reading it as absent hid the
+    /// row and told the plan conda is not installed, and running it then reports the refusal.</para>
     /// </summary>
     private string? FindConda()
     {
@@ -321,8 +324,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         var configured = LongPath.Configured(Environment.GetEnvironmentVariable("CONDA_EXE"));
 
         return _conda = Environment.FindExecutable("conda")
-            ?? (configured is not null && LongPath.FileExists(configured) ? configured : null)
-            ?? DefaultInstallations().FirstOrDefault(LongPath.FileExists);
+            ?? (configured is not null && LongPath.FileMayExist(configured) ? configured : null)
+            ?? DefaultInstallations().FirstOrDefault(LongPath.FileMayExist);
     }
 
     private IEnumerable<string> DefaultInstallations()
