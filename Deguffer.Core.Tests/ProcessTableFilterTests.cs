@@ -20,7 +20,7 @@ namespace Deguffer.Core.Tests;
 public class ProcessTableFilterTests
 {
     private static ProcessTable TableOf(params RunningProcess[] processes) =>
-        new(processes, CurrentDirectoriesReadable: true, CommandLinesReadable: true);
+        new(processes, ImagePathsReadable: true, CurrentDirectoriesReadable: true, CommandLinesReadable: true);
 
     /// <summary>
     /// The running process this test is part of is left out, which is the whole point of the filter.
@@ -94,12 +94,14 @@ public class ProcessTableFilterTests
                 new RunningProcess(Environment.ProcessId, "self", Environment.ProcessPath, null, []),
                 new RunningProcess(4321, "devenv", @"C:\Program Files\editor\devenv.exe", @"C:\Users\testuser\src\app", []),
             ],
+            ImagePathsReadable: false,
             CurrentDirectoriesReadable: false,
             CommandLinesReadable: false);
 
         var filtered = LiveTreeInspector.Filtered(table);
 
         Assert.Equal("devenv", Assert.Single(filtered.Processes).Name);
+        Assert.False(filtered.ImagePathsReadable);
         Assert.False(filtered.CurrentDirectoriesReadable);
         Assert.False(filtered.CommandLinesReadable);
     }

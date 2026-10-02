@@ -54,7 +54,9 @@ public sealed record LiveTree(string Directory, IReadOnlyList<string> Holders);
 /// <param name="Complete">
 /// False when one of the mechanisms could not run at all — the Restart Manager refused the query,
 /// Windows would not describe a declared lock file, or the process table could not be read — or when a 32-bit process's working directory could not be
-/// shown to be the one it keeps current, and was left out rather than reported stale. Absence from
+/// shown to be the one it keeps current, and was left out rather than reported stale, or when a
+/// path read from a process could not be put in a form that compares, and was left out rather than
+/// compared as it arrived. Absence from
 /// <see cref="Live"/> is then not evidence of dormancy.
 ///
 /// The distinction is the whole point. "Nothing is using this" and "we could not tell" lead to
@@ -135,7 +137,8 @@ public interface ILiveTreeInspector
     ///
     /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories could not be
     /// read, and the list then holds executables' folders alone, or where one 32-bit process's could
-    /// not be checked, and the list then lacks that one. The same limits apply as to
+    /// not be checked, or one executable's or working directory's path could not be put in a form
+    /// that compares, and the list then lacks that one. The same limits apply as to
     /// <see cref="FindLive"/>: every entry is positive evidence, and an elevated program or one
     /// belonging to another account cannot be inspected at all.</para>
     /// </summary>
@@ -168,14 +171,17 @@ public interface ILiveTreeInspector
     /// evidence that its build output is in use, which is why <see cref="FindLive"/> and
     /// <see cref="FindOccupiedDirectories"/> do not read it.</para>
     ///
-    /// <para>An 8.3 alias on either side is expanded before anything is compared, because a program
-    /// builds its paths from <c>%TEMP%</c>, which Windows sets to the short form on a profile whose
-    /// folder name is longer than eight characters. Each child is named under its folder as the
-    /// folder was asked.</para>
+    /// <para>Both sides are put in <see cref="LongPath.Canonical"/> form before anything is
+    /// compared, so forward slashes, a <c>..</c>, a device prefix and an 8.3 alias all read as the
+    /// folder Windows would open. The alias is the common one, because a program builds its paths
+    /// from <c>%TEMP%</c>, which Windows sets to the short form on a profile whose folder name is
+    /// longer than eight characters. Each child is named under its folder as the folder was
+    /// asked.</para>
     ///
     /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories or command
-    /// lines could not be read at all, or where one 32-bit process's working directory could not be
-    /// checked. The same limits apply as to <see cref="FindLive"/>: every
+    /// lines could not be read at all, where one 32-bit process's working directory could not be
+    /// checked, or where a path a program holds, or one of <paramref name="directories"/>, could
+    /// not be put in canonical form. The same limits apply as to <see cref="FindLive"/>: every
     /// signal is positive evidence, and an elevated program or one belonging to another account
     /// cannot be inspected at all.</para>
     /// </summary>

@@ -1,6 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
-
 namespace Deguffer.Core.Safety;
 
 /// <summary>
@@ -16,80 +13,6 @@ public static partial class LongPath
     private const string DevicePrefix = @"\\?\";
     private const string UncDevicePrefix = @"\\?\UNC\";
     private const string ObjectManagerPrefix = @"\??\";
-
-    /// <summary>
-    /// A path with any 8.3 alias in it expanded to the name the filesystem stores, in display form.
-    /// Null in, null out, and only put in display form for a path carrying no alias or one that no
-    /// longer resolves.
-    ///
-    /// <para>Display form on every answer, because the other side of each comparison is in it. A
-    /// program may name its directory <c>\\?\C:\build</c> or <c>\\.\C:\build</c>, and handed back as
-    /// it arrived, that compared as though it were outside <c>C:\build</c>.</para>
-    ///
-    /// <para><b>This is a safety seam, not tidiness.</b> Whether a directory is in use is decided by
-    /// asking whether a path a program holds sits inside it, and that test is a string comparison. A
-    /// process working in <c>C:\Users\LONGPR~1\AppData\Local\Temp\build-123</c> is inside
-    /// <c>C:\Users\LongProfileName\AppData\Local\Temp</c> and compares as though it were not, so the
-    /// veto silently misses it — in the direction that deletes a directory somebody is working
-    /// in.</para>
-    ///
-    /// <para><b>Observed rather than anticipated, and <c>%TEMP%</c> is where it bites.</b> Windows
-    /// sets the per-user <c>TEMP</c> variable to the short form on a profile whose folder name
-    /// exceeds eight characters, so a program that resolves its scratch folder from the environment
-    /// — which is most of them — reports short paths. Both sides of a comparison go through this, so
-    /// a short form on either side cannot make one folder look like two.</para>
-    ///
-    /// <para>The call is skipped unless the path carries a <c>~</c>, which every 8.3 segment does.
-    /// Callers apply it to every process on the machine (G4), and casing alone changes no comparison
-    /// here — every one of them is ordinal-ignore-case.</para>
-    /// </summary>
-    [return: NotNullIfNotNull(nameof(path))]
-    public static string? Unaliased(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return path;
-        }
-
-        try
-        {
-            var shown = Display(path);
-
-            if (!shown.Contains('~', StringComparison.Ordinal))
-            {
-                return shown;
-            }
-
-            var extended = Extended(shown);
-            var length = GetLongPathName(extended, null, 0);
-
-            if (length == 0)
-            {
-                // The path has gone, or this account may not resolve it. The short form is then the
-                // best answer available, and it is the one that was already being used.
-                return shown;
-            }
-
-            var buffer = new char[length];
-            var written = GetLongPathName(extended, buffer, length);
-
-            // The first call sizes the buffer including the terminator, so a successful second call
-            // writes strictly fewer characters than that. Anything else is a failure, or a path that
-            // changed between the two calls, and the original is the honest answer to both.
-            return written > 0 && written < length
-                ? Display(new string(buffer, 0, (int)written))
-                : shown;
-        }
-        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
-        {
-            // Not a path Windows will accept, which is a misread rather than a directory. Handing it
-            // back unchanged leaves it matching nothing, exactly as it did before.
-            return path;
-        }
-    }
-
-    [LibraryImport("kernel32.dll", EntryPoint = "GetLongPathNameW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    private static partial uint GetLongPathName(string path, [Out] char[]? buffer, uint length);
 
     /// <summary>
     /// Return <paramref name="path"/> in extended-length form. Requires a rooted, already
