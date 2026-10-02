@@ -118,9 +118,9 @@ installed" cleanly on a machine without that toolchain.
 | Roslyn solution index cache | One dated row per set of indexes, so the sets a program left behind when it moved folder can go; never the rest of Visual Studio's folder |
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
-| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the Battle.net launcher's built-in browser, and every application that embeds the same engine, WebView2 applications included |
+| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the Steam client's and the Battle.net launcher's built-in browsers, and every application that embeds the same engine, WebView2 applications included. Never their sign-ins, saved passwords or payment cards |
 | Firefox caches | |
-| Steam web cache | |
+| Steam HTTP cache | The client's own cache beside the program; never your games, your cloud saves, or the sign-in kept by its built-in browser |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |
 | Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue beside it, or the downloads folder |
 | Jellyfin transcoder files | Only a folder Jellyfin's own marker shows is Jellyfin's; never anything written in the last 24 hours |

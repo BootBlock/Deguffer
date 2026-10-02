@@ -47,6 +47,12 @@ public sealed record ChromiumHost(
     /// <c>Local State</c>. Its <c>Cache</c> and <c>Logs</c> are the launcher's own, not the
     /// engine's, and are <see cref="BattleNetCacheProvider"/>'s and
     /// <see cref="BattleNetLogProvider"/>'s.</para>
+    ///
+    /// <para>The Steam client calls its engine's folder <c>htmlcache</c>, but the measured folder is
+    /// a whole browser user-data folder rather than a cache: <c>Local State</c> at the top, and a
+    /// <c>Default</c> profile holding <c>Login Data</c>, <c>Web Data</c> and
+    /// <c>Network\Cookies</c> beside the caches. So it is a browser row here, and
+    /// <see cref="SteamCacheProvider"/> refuses the folder whole.</para>
     /// </summary>
     public static readonly IReadOnlyList<ChromiumHost> Declared =
     [
@@ -66,6 +72,7 @@ public sealed record ChromiumHost(
         new("Vivaldi", ProfileArea.LocalAppData, @"Vivaldi\User Data", "vivaldi"),
         new("Opera", ProfileArea.RoamingAppData, @"Opera Software\Opera Stable", "opera"),
         new("Opera GX", ProfileArea.RoamingAppData, @"Opera Software\Opera GX Stable", "opera"),
+        new("Steam", ProfileArea.LocalAppData, @"Steam\htmlcache", "steamwebhelper"),
         new("Battle.net", ProfileArea.LocalAppData, @"Battle.net\BrowserCaches", "Battle.net")
         {
             Layout = ChromiumLayout.EmbeddedFramework,

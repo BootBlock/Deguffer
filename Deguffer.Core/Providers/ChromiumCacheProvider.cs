@@ -138,7 +138,7 @@ public sealed class ChromiumCacheProvider : ChromiumUserDataProvider
         Application = "Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and "
             + "the desktop applications that embed the same engine: chat clients, editors and "
             + "other Electron apps, the applications that show web content through Microsoft's "
-            + "WebView2, and the Battle.net launcher",
+            + "WebView2, the Steam client and the Battle.net launcher",
         Publisher = "each application's own vendor; the cache format belongs to the Chromium "
             + "project",
         Purpose = "A Chromium browser caches web content, compiled scripts and GPU shaders under its "

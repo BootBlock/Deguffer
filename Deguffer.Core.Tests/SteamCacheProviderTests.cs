@@ -74,29 +74,34 @@ public sealed class SteamCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The profile cache alone, on a machine whose registry says nothing. The install is not guessed
-    /// at, and the plan says so instead of quietly reporting a smaller number.
+    /// The embedded browser's folder, on a machine whose registry says nothing. It is a browser
+    /// user-data folder with the client's sign-in in it, so this row never takes it, whole or in
+    /// part, and the install is not guessed at: the plan says so rather than reporting the row clear.
     /// </summary>
     [Fact]
-    public async Task PlansTheProfileCacheAndSaysTheInstallWasNeverFound()
+    public async Task NeverTargetsTheBrowserFolderAndSaysTheInstallWasNeverFound()
     {
-        var htmlCache = Populate(Path.Combine(LocalRoot, "htmlcache"));
+        Populate(Path.Combine(LocalRoot, "htmlcache", "Default", "Code Cache"));
 
         var provider = CreateProvider();
         Assert.True(await provider.IsPresentAsync());
 
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(htmlCache, Assert.Single(plan.TargetedPaths));
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not work out where Steam is installed", StringComparison.Ordinal));
     }
 
-    /// <summary>Both caches, once Steam's own record has been read and the client found beside it.</summary>
+    /// <summary>
+    /// The HTTP cache alone, once Steam's own record has been read and the client found beside it,
+    /// with the browser's folder on disk as well.
+    /// </summary>
     [Fact]
-    public async Task PlansBothCachesWhenSteamsOwnRecordNamesTheInstall()
+    public async Task PlansOnlyTheHttpCacheWhenSteamsOwnRecordNamesTheInstall()
     {
         var install = RegisterInstall();
-        var htmlCache = Populate(Path.Combine(LocalRoot, "htmlcache"));
+        Populate(Path.Combine(LocalRoot, "htmlcache"));
         var httpCache = Populate(Path.Combine(install, "appcache", "httpcache"));
 
         var provider = CreateProvider();
@@ -104,9 +109,7 @@ public sealed class SteamCacheProviderTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(
-            new[] { htmlCache, httpCache }.Order(StringComparer.OrdinalIgnoreCase),
-            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(httpCache, Assert.Single(plan.TargetedPaths));
 
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
         Assert.DoesNotContain(
@@ -116,21 +119,45 @@ public sealed class SteamCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.6's negative, and the one that matters most here: the games, the half-finished download,
-    /// the cloud saves and Steam's own configuration all survive a run that removed both caches, and
-    /// each is asserted by name rather than covered by an assertion on the folder above it.
+    /// the cloud saves and Steam's own configuration all survive a run that removed the cache, and
+    /// each is asserted by name rather than covered by an assertion on the folder above it. Steam's
+    /// folder in the profile, the browser's sign-in included, is checked on disk: this row no longer
+    /// reaches into it, so its plan has nothing to say about it.
     /// </summary>
     [Fact]
     public async Task TheGamesTheDownloadAndTheCloudSavesAllSurvive()
     {
         var install = RegisterInstall();
-        Populate(Path.Combine(LocalRoot, "htmlcache"));
         Populate(Path.Combine(install, "appcache", "httpcache"));
 
-        string[] mustSurvive =
+        string[] profileDirectories =
         [
             LocalRoot,
             Path.Combine(LocalRoot, "cefdata"),
             Path.Combine(LocalRoot, "widevine"),
+            Path.Combine(LocalRoot, "htmlcache"),
+            Path.Combine(LocalRoot, "htmlcache", "Default", "Code Cache"),
+        ];
+
+        string[] profileFiles =
+        [
+            Path.Combine(LocalRoot, "local.vdf"),
+            Path.Combine(LocalRoot, "htmlcache", "Local State"),
+            Path.Combine(LocalRoot, "htmlcache", "Default", "Login Data"),
+        ];
+
+        foreach (var directory in profileDirectories)
+        {
+            Populate(directory);
+        }
+
+        foreach (var file in profileFiles)
+        {
+            File.WriteAllBytes(file, new byte[128]);
+        }
+
+        string[] mustSurvive =
+        [
             install,
             Path.Combine(install, "appcache"),
             Path.Combine(install, "appcache", "librarycache"),
@@ -151,7 +178,6 @@ public sealed class SteamCacheProviderTests : IDisposable
         // asserted because the provider names them — the NVIDIA 'accounts' lesson.
         string[] files =
         [
-            Path.Combine(LocalRoot, "local.vdf"),
             Path.Combine(install, "appcache", "appinfo.vdf"),
             Path.Combine(install, "appcache", "packageinfo.vdf"),
         ];
@@ -174,8 +200,9 @@ public sealed class SteamCacheProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
-        Assert.All(mustSurvive, d => Assert.True(Directory.Exists(d), $"{d} was removed"));
-        Assert.All(files, f => Assert.True(File.Exists(f), $"{f} was removed"));
+        Assert.All(mustSurvive.Concat(profileDirectories), d => Assert.True(Directory.Exists(d), $"{d} was removed"));
+        Assert.All(files.Concat(profileFiles), f => Assert.True(File.Exists(f), $"{f} was removed"));
+        Assert.DoesNotContain(plan.TargetedPaths, p => p.StartsWith(LocalRoot, StringComparison.OrdinalIgnoreCase));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -293,7 +320,7 @@ public sealed class SteamCacheProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
-        Assert.True(plan.HasUnreadableRoot);
+        Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not work out where Steam is installed", StringComparison.Ordinal));
     }
 
@@ -304,9 +331,10 @@ public sealed class SteamCacheProviderTests : IDisposable
     [Fact]
     public async Task AJunctionedCacheIsLeftAloneAndReported()
     {
+        var install = RegisterInstall();
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
-        Directory.CreateDirectory(LocalRoot);
-        SymbolicLink.ToDirectory(Path.Combine(LocalRoot, "htmlcache"), outside);
+        Directory.CreateDirectory(Path.Combine(install, "appcache"));
+        SymbolicLink.ToDirectory(Path.Combine(install, "appcache", "httpcache"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -351,8 +379,8 @@ public sealed class SteamCacheProviderTests : IDisposable
     [Fact]
     public async Task TheRegistryIsReadOncePerPassAndAgainAfterInvalidation()
     {
-        RegisterInstall();
-        Populate(Path.Combine(LocalRoot, "htmlcache"));
+        var install = RegisterInstall();
+        Populate(Path.Combine(install, "appcache", "httpcache"));
 
         var provider = CreateProvider();
 
@@ -369,28 +397,36 @@ public sealed class SteamCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The whole table, read back. Two roots and exactly two paths under them, so adding a third
-    /// location — <c>steamapps</c> is the one that would matter — fails here rather than in a
-    /// deletion.
+    /// The whole table, read back. One root and exactly one path under it, so adding a second
+    /// location — <c>steamapps</c> is the one that would matter, and <c>htmlcache</c> the one that
+    /// was there — fails here rather than in a deletion.
     ///
     /// <para>Read from the declaration rather than from a plan, so it holds on a machine with no
     /// cache on disk at all, where a plan-based assertion would pass with nothing in it.</para>
     /// </summary>
     [Fact]
-    public void TheDeclarationNamesTheTwoCachesAndNothingElse()
+    public void TheDeclarationNamesTheHttpCacheAndNothingElse()
     {
         var install = RegisterInstall();
         var provider = CreateProvider();
 
-        Assert.Equal(new[] { LocalRoot, install }, provider.Roots.Select(r => r.Path));
+        Assert.Equal(new[] { install }, provider.Roots.Select(r => r.Path));
 
         Assert.Equal(
-            new[]
-            {
-                Path.Combine(LocalRoot, "htmlcache"),
-                Path.Combine(install, "appcache", "httpcache"),
-            },
+            new[] { Path.Combine(install, "appcache", "httpcache") },
             provider.Roots.SelectMany(
                 root => root.Locations.Select(l => Path.Combine(root.Path, l.RelativePath))));
+    }
+
+    /// <summary>
+    /// Without an install there is nothing for this row to name, however much is in Steam's folder
+    /// in the profile.
+    /// </summary>
+    [Fact]
+    public void WithoutAnInstallTheDeclarationNamesNothing()
+    {
+        Populate(Path.Combine(LocalRoot, "htmlcache"));
+
+        Assert.Empty(CreateProvider().Roots);
     }
 }

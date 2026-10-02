@@ -90,7 +90,7 @@ public sealed class ChromiumServiceWorkerStorageProvider : ChromiumUserDataProvi
         Application = "Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and "
             + "the desktop applications that embed the same engine: chat clients, editors and "
             + "other Electron apps, the applications that show web content through Microsoft's "
-            + "WebView2, and the Battle.net launcher",
+            + "WebView2, the Steam client and the Battle.net launcher",
         Publisher = "each application's own vendor; the storage format belongs to the Chromium "
             + "project",
         Purpose = "A site can install a service worker, a script the browser keeps for it, "
