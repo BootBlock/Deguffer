@@ -431,4 +431,273 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
 
         Assert.True(policy.MayRemove(Path.Combine(idle, "app-1.0")).IsAllowed);
     }
+
+    /// <summary>
+    /// An index in Squirrel's own format naming <paramref name="packages"/>, which is what a shortcut
+    /// that runs <c>Update.exe --processStart</c> reads to choose a build.
+    /// </summary>
+    private static string WriteIndex(string root, params string[] packages)
+    {
+        var index = Path.Combine(root, SquirrelDiscovery.PackagesDirectoryName, SquirrelReleaseIndex.FileName);
+
+        File.WriteAllText(index, string.Join("\n", packages.Select(p => $"{new string('A', 40)} {p} 2048")));
+
+        return index;
+    }
+
+    /// <summary>
+    /// Every build an installation holds, asserted to survive a run of <paramref name="plan"/>, with
+    /// the run's own §5.6 verification passing.
+    /// </summary>
+    private static async Task AssertEveryBuildSurvives(
+        SquirrelSupersededVersionProvider provider, CleanupPlan plan, params string[] builds)
+    {
+        foreach (var build in builds)
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(build, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.All(builds, b => Assert.True(Directory.Exists(b), $"{b} was removed"));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// An update that stopped while it unpacked: the updater writes its marker into the new build
+    /// first, so the stub never starts it, and the index still names the build before it. Ordering by
+    /// version alone calls the unfinished build current and offers the one both launch paths start.
+    /// A marker in an older build is what a later update leaves when its clean-up fails, and the
+    /// stub will not start that build either. The stub skips a build on any entry by the marker's
+    /// name, so a directory counts as well as a file.
+    /// </summary>
+    [Theory]
+    [InlineData("2.0.0", false)]
+    [InlineData("1.5.0", false)]
+    [InlineData("2.0.0", true)]
+    public async Task AnUnfinishedUpdateLeavesEveryBuildAlone(string unfinished, bool directory)
+    {
+        var root = CreateApplication("Chatterbox", "1.5.0", "2.0.0");
+        WriteIndex(root, "Chatterbox-1.5.0-full.nupkg");
+        var marker = Path.Combine(root, "app-" + unfinished, SquirrelDiscovery.UnfinishedMarkerName);
+
+        if (directory)
+        {
+            Directory.CreateDirectory(marker);
+        }
+        else
+        {
+            File.WriteAllText(marker, string.Empty);
+        }
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("stopped before it finished", StringComparison.Ordinal));
+        Assert.False(Assert.Single(provider.ToolRoots).RecognisesFolder("app-1.5.0"));
+
+        await AssertEveryBuildSurvives(
+            provider, plan, Path.Combine(root, "app-1.5.0"), Path.Combine(root, "app-2.0.0"));
+    }
+
+    /// <summary>
+    /// A marker Windows would not describe is not a marker that is absent: the build may be one the
+    /// stub refuses to start, so nothing about the order is known.
+    /// </summary>
+    [Fact]
+    public async Task AMarkerWindowsWillNotDescribeLeavesEveryBuildAlone()
+    {
+        var root = CreateApplication("Chatterbox", "1.5.0", "2.0.0");
+        var marker = Path.Combine(root, "app-2.0.0", SquirrelDiscovery.UnfinishedMarkerName);
+        File.WriteAllText(marker, string.Empty);
+
+        var provider = CreateProvider();
+        CleanupPlan plan;
+
+        using (DeniedDirectory.WithUnreadableFile(marker))
+        {
+            plan = await provider.PlanAsync();
+        }
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("would not say whether its last update finished", StringComparison.Ordinal));
+
+        await AssertEveryBuildSurvives(
+            provider, plan, Path.Combine(root, "app-1.5.0"), Path.Combine(root, "app-2.0.0"));
+    }
+
+    /// <summary>
+    /// The narrower window: the new build finished unpacking, and the update stopped before the index
+    /// was rewritten. The stub starts the new build, but <c>Update.exe --processStart</c> starts the
+    /// newest one the index names that is on disk — so the older build is the one those shortcuts
+    /// start. An index that names nothing on disk leads those shortcuts nowhere, which is no answer
+    /// either.
+    /// </summary>
+    [Theory]
+    [InlineData("Chatterbox-1.5.0-full.nupkg")]
+    [InlineData("Chatterbox-1.5.0-full.nupkg", "Chatterbox-2.1.0-full.nupkg")]
+    [InlineData("Chatterbox-0.9.0-full.nupkg")]
+    public async Task AnIndexThatDoesNotLeadToTheNewestBuildLeavesEveryBuildAlone(params string[] indexed)
+    {
+        var root = CreateApplication("Chatterbox", "1.5.0", "2.0.0");
+        WriteIndex(root, indexed);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("does not lead to the newest one", StringComparison.Ordinal));
+
+        await AssertEveryBuildSurvives(
+            provider, plan, Path.Combine(root, "app-1.5.0"), Path.Combine(root, "app-2.0.0"));
+    }
+
+    /// <summary>
+    /// The control for the theory above, so it cannot pass by refusing every index: an index that
+    /// leads to the newest build, by Squirrel's own rule, leaves the older build offered. That rule
+    /// skips an entry with no folder, and falls back to the folder named for the first three
+    /// components of a version, which is how the updater reaches builds an older Squirrel installed.
+    /// </summary>
+    [Theory]
+    [InlineData("Chatterbox-2.0.0-full.nupkg")]
+    [InlineData("Chatterbox-1.5.0-full.nupkg", "Chatterbox-2.0.0-delta.nupkg", "Chatterbox-2.0.0-full.nupkg")]
+    [InlineData("Chatterbox-2.0.0-full.nupkg", "Chatterbox-2.1.0-full.nupkg")]
+    [InlineData("Chatterbox-2.0-full.nupkg")]
+    public async Task AnIndexThatLeadsToTheNewestBuildLeavesTheOlderOneOffered(params string[] indexed)
+    {
+        var root = CreateApplication("Chatterbox", "1.5.0", "2.0.0");
+        var newest = Path.Combine(root, "app-2.0.0");
+        WriteIndex(root, indexed);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(Path.Combine(root, "app-1.5.0"), Assert.Single(plan.TargetedPaths));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == newest && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(Directory.Exists(newest), $"{newest} was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A pre-release in the index. Squirrel orders it by a rule Deguffer does not reproduce, so even
+    /// an index that would otherwise lead to the newest build is not taken as an answer — and the
+    /// sentence says that, rather than suggesting an update stopped.
+    /// </summary>
+    [Fact]
+    public async Task AnIndexNamingAVersionItCannotOrderLeavesEveryBuildAlone()
+    {
+        var root = CreateApplication("Chatterbox", "1.5.0", "2.0.0");
+        WriteIndex(root, "Chatterbox-2.0.0-full.nupkg", "Chatterbox-2.1.0-beta1-full.nupkg");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("names a version Deguffer cannot order", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("may not have finished", StringComparison.Ordinal));
+
+        await AssertEveryBuildSurvives(
+            provider, plan, Path.Combine(root, "app-1.5.0"), Path.Combine(root, "app-2.0.0"));
+    }
+
+    /// <summary>
+    /// Two builds named alike but for case, which only a case-sensitive folder can hold. Which of them
+    /// either launch path reaches by name is not knowable, so the installation has no current build —
+    /// and asking the index about it must not throw out of the planning pass. Built directly, because
+    /// a test must not change a folder's case sensitivity on the machine running it.
+    /// </summary>
+    [Fact]
+    public void BuildsNamedAlikeButForCaseHaveNoCurrentBuild()
+    {
+        var root = Path.Combine(_environment.LocalAppData, "Chatterbox");
+
+        SquirrelVersionDirectory Build(string name, string version) =>
+            new(Path.Combine(root, name), name, Version.Parse(version), IsLink: false, PathPresence.Absent);
+
+        var installation = new SquirrelInstallation(
+            "Chatterbox",
+            root,
+            [Build("app-1.5.0", "1.5.0"), Build("APP-2.0.0", "2.0.0"), Build("app-2.0.0", "2.0.0")],
+            [],
+            new SquirrelReleaseIndex(
+                SquirrelIndexState.Read,
+                new HashSet<string>(["Chatterbox-2.0.0-full.nupkg"], StringComparer.OrdinalIgnoreCase)));
+
+        Assert.Equal(SquirrelOrderDoubt.AmbiguousBuilds, installation.Doubt);
+        Assert.Null(installation.Current);
+        Assert.Empty(installation.Superseded);
+    }
+
+    /// <summary>
+    /// An application holding one build has nothing to offer whatever state it is in, so a doubt
+    /// about it is not news: the row reads as examined, with the one-build sentence, rather than
+    /// claiming something was left alone.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ADoubtAboutAnApplicationHoldingOneBuildWithholdsNothing(bool marker)
+    {
+        var root = CreateApplication("Chatterbox", "2.0.0");
+
+        if (marker)
+        {
+            File.WriteAllText(Path.Combine(root, "app-2.0.0", SquirrelDiscovery.UnfinishedMarkerName), string.Empty);
+        }
+        else
+        {
+            WriteIndex(root, "Chatterbox-0.9.0-full.nupkg");
+        }
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.False(plan.WasNotExamined);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Left every version", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("one build and no more", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An index that is there and cannot be read, or that Windows would not describe, could name the
+    /// older build, so the order is unknown. Each says which of the two it was, and names the file.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "Deguffer could not read Chatterbox's record of which build to start at '")]
+    [InlineData(true, "Windows would not say whether Chatterbox's record of which build to start is at '")]
+    public async Task AnIndexThatCannotBeReadLeavesEveryBuildAlone(bool unreached, string sentence)
+    {
+        var root = CreateApplication("Chatterbox", "1.5.0", "2.0.0");
+        var index = WriteIndex(root, "Chatterbox-2.0.0-full.nupkg");
+
+        if (!unreached)
+        {
+            File.WriteAllText(index, "this is not a release index");
+        }
+
+        var provider = CreateProvider();
+        CleanupPlan plan;
+
+        using (unreached ? DeniedDirectory.WithUnreadableFile(index) : null)
+        {
+            plan = await provider.PlanAsync();
+        }
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith(sentence + index + "'", StringComparison.Ordinal));
+
+        await AssertEveryBuildSurvives(
+            provider, plan, Path.Combine(root, "app-1.5.0"), Path.Combine(root, "app-2.0.0"));
+    }
 }

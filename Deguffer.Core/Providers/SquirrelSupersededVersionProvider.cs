@@ -18,10 +18,15 @@ namespace Deguffer.Core.Providers;
 /// plainly that going back to a previous version is not supported, and there is no code that
 /// does it.</para>
 ///
-/// <para><b>Nothing points into one after an update.</b> The shim in the application's own folder
-/// picks the highest version at launch, every time — no path is recorded anywhere. The updater is a
-/// copy in that folder rather than in a version directory. A shortcut targets the shim, and the
-/// pinned ones are re-pointed at the new version while the update runs.</para>
+/// <para><b>Nothing points into one after an update.</b> An application starts one of two ways,
+/// and both choose a build at launch rather than following a recorded path. The stub in the
+/// application's own folder picks the highest version whose unpacking finished. A shortcut that runs
+/// <c>Update.exe --processStart</c> picks the highest version the packages index names whose
+/// folder is on disk, and the updater rewrites that index after every update. The two agree once an update has finished, and
+/// an installation where they may not is offered nothing: see
+/// <see cref="SquirrelInstallation.Doubt"/>. The updater is a copy in the application's folder
+/// rather than in a version directory, and the pinned shortcuts are re-pointed at the new version
+/// while the update runs.</para>
 ///
 /// <para><b>Tier 2 rather than Tier 1, and the price is named rather than waved away.</b> A cache
 /// refills itself; a build does not, and there is no supported way to get an old one back. Squirrel
@@ -72,9 +77,10 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     public override StepGrain Grain => StepGrain.Items;
 
     public override string WhatHappensOnNextUse =>
-        "Every application still starts, and starts the version you are using now — its shortcut "
-        + "picks the newest build in the folder each time. What you give up is the build it "
-        + "replaced: there is no supported way back to it, and its own tidy-up step, which the "
+        "Every application still starts, and starts the version you are using now — however its "
+        + "shortcut starts it, it picks the newest finished build in the folder each time, and an "
+        + "application whose last update did not finish is left alone. What you give up is the build "
+        + "it replaced: there is no supported way back to it, and its own tidy-up step, which the "
         + "updater would have run at the next update, does not run. Your settings, your sign-ins "
         + "and anything the application saved are somewhere else entirely and are untouched.";
 
@@ -84,7 +90,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             + "large family of desktop applications is built on",
         Publisher = "the Squirrel project, and whoever publishes each application using it",
         Purpose = "A Squirrel application installs each version into a folder of its own and "
-            + "launches whichever is newest. When it updates, it deletes the older builds — but "
+            + "launches the newest one it finished installing. When it updates, it deletes the older builds — but "
             + "never the one it has just replaced, so a full second copy of the application sits "
             + "beside the one you use until the update after next.",
         Recommendation = "The application does not use these and cannot go back to them, and its "
@@ -215,19 +221,42 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
 
         var installations = sweep.Installations;
 
-        var unordered = installations.Where(i => i.UnreadableVersionNames.Count > 0).ToList();
+        // Only an installation holding more than one build is withheld by a doubt. One build is
+        // nothing to offer whatever its state, and a sentence about leaving it alone would mark the
+        // row unexamined on a machine where it was examined in full.
+        var unordered = installations
+            .Where(i => i.Doubt is not SquirrelOrderDoubt.None
+                && i.Versions.Count + i.UnreadableVersionNames.Count > 1)
+            .ToList();
 
-        if (unordered.Count > 0)
+        // Said out loud rather than left as a smaller number. Every version of such an application
+        // is left alone, including ones that really are superseded, and a plan that was quiet about
+        // it would disagree with a folder the user can see two builds in. One sentence per reason,
+        // because the reason is what the user can act on — except an index that was not read, whose
+        // sentence names the file, on UnreadFile's rule that the two ways of not reading it may not
+        // share one.
+        foreach (var installation in unordered.Where(i => i.Doubt is SquirrelOrderDoubt.IndexUnreached
+            or SquirrelOrderDoubt.IndexUnreadable))
         {
-            // Said out loud rather than left as a smaller number. Every version of such an
-            // application is left alone, including ones that really are superseded, and a plan that
-            // was quiet about it would disagree with a folder the user can see two builds in.
+            var index = new UnreadFile(
+                Path.Combine(installation.Root, SquirrelDiscovery.PackagesDirectoryName, SquirrelReleaseIndex.FileName),
+                Unreached: installation.Doubt is SquirrelOrderDoubt.IndexUnreached);
+
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left every version of {Join([.. unordered.Select(i => i.Name)])} alone: "
-                + (unordered.Count == 1 ? "it has" : "they have")
-                + " a build whose version number Deguffer could not read, so it cannot tell which "
-                + "one is in use."));
+                $"{index.Opening($"{installation.Name}'s record of which build to start")}, so every "
+                + $"version of {installation.Name} is left alone: Deguffer cannot tell which one is in use."));
+        }
+
+        foreach (var doubt in unordered
+            .Where(i => i.Doubt is not (SquirrelOrderDoubt.IndexUnreached or SquirrelOrderDoubt.IndexUnreadable))
+            .GroupBy(i => i.Doubt))
+        {
+            var names = doubt.Select(i => i.Name).ToList();
+
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                $"Left every version of {Join(names)} alone: {WhyUnordered(doubt.Key, names.Count == 1)}"));
         }
 
         // One candidate per installation, not one per version directory. The question that decides
@@ -414,6 +443,46 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             $"Deguffer could not read a version number out of '{name}', so it cannot tell whether "
             + "this build is the one in use.")));
     }
+
+    /// <summary>
+    /// The rest of the sentence about installations left alone for <paramref name="doubt"/>, after
+    /// "Left every version of ... alone:".
+    /// </summary>
+    private static string WhyUnordered(SquirrelOrderDoubt doubt, bool one) => doubt switch
+    {
+        SquirrelOrderDoubt.UnreadableVersion => one
+            ? "it has a build whose version number Deguffer could not read, so it cannot tell which "
+              + "one is in use."
+            : "they have a build whose version number Deguffer could not read, so it cannot tell "
+              + "which one is in use.",
+        SquirrelOrderDoubt.AmbiguousBuilds => one
+            ? "it has two builds whose folder names differ only in case, so Deguffer cannot tell "
+              + "which one is in use."
+            : "they each have two builds whose folder names differ only in case, so Deguffer cannot "
+              + "tell which ones are in use.",
+        SquirrelOrderDoubt.UnfinishedUpdate => one
+            ? "an update to it stopped before it finished, so the newest build in its folder may not "
+              + "be the one it starts."
+            : "updates to them stopped before they finished, so the newest build in each folder may "
+              + "not be the one that application starts.",
+        SquirrelOrderDoubt.UnfinishedUnknown => one
+            ? "Windows would not say whether its last update finished, so Deguffer cannot tell which "
+              + "build it starts."
+            : "Windows would not say whether their last updates finished, so Deguffer cannot tell "
+              + "which builds they start.",
+        SquirrelOrderDoubt.IndexBehind => one
+            ? "its record of which build to start does not lead to the newest one, so its last "
+              + "update may not have finished."
+            : "their records of which build to start do not lead to the newest ones, so their last "
+              + "updates may not have finished.",
+        SquirrelOrderDoubt.IndexUnorderable => one
+            ? "its record of which build to start names a version Deguffer cannot order, so it "
+              + "cannot tell which one is in use."
+            : "their records of which build to start name a version Deguffer cannot order, so it "
+              + "cannot tell which ones are in use.",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(doubt), doubt, "Ordered installations and unread indexes have sentences of their own."),
+    };
 
     /// <summary>
     /// Application names for a sentence, in the form a reader expects rather than comma-separated

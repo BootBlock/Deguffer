@@ -496,8 +496,9 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
 
         roots.AddRange(_discovery.Look().Installations.Select(installation => ToolRoot.Of(
             Path.Combine(installation.Root, SquirrelDiscovery.PackagesDirectoryName),
-            $"This is where {installation.Name} keeps the packages it updates itself from, and its "
-            + "shortcut reads the index in here to work out which version to start. Spent packages "
+            $"This is where {installation.Name} keeps the packages it updates itself from, and a "
+            + "shortcut that starts it through its updater reads the index in here to work out which "
+            + "version to start. Spent packages "
             + "are removed from the Storage page, where Deguffer knows which of them the "
             + "application has stopped referring to.",
             new DisposableChildSet([]))));

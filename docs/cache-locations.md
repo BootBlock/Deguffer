@@ -3325,8 +3325,10 @@ an install that starts after the scan keeps the directory it is running from.
 
 **In a `packages` folder it reads the application's own index.** `RELEASES` lists the packages the
 application still needs. Deguffer removes package files that index has stopped naming, and nothing
-else. If the index is missing or will not parse, nothing in that folder is offered at all — without
-it there is no way to tell a spent package from the one the next update is built against.
+else. If the index is missing, will not parse, or Windows will not say whether it is there, nothing
+in that folder is offered at all — without it there is no way to tell a spent package from the one
+the next update is built against. The same holds while an update is unfinished, because a spent
+package is only spent by comparison with the build that is installed.
 
 **A package for a build newer than the one installed is never removed, even when the index does not
 name it.** Squirrel writes a downloaded update into that folder *before* it rewrites the index, so an
@@ -3341,7 +3343,7 @@ are deleted directly rather than by asking the tool.
 | Neighbour | What it really is |
 | --- | --- |
 | `SquirrelTemp` itself, and the setup logs in it | The shared folder, which stays, and the record of past installs |
-| `packages\RELEASES` | The application's index of its own packages. **Its shortcut reads this file to decide which build to start**, and reads it without error handling — so removing it stops the application launching |
+| `packages\RELEASES` | The application's index of its own packages. **A shortcut that starts the application through its updater reads this file to decide which build to start**, and reads it without error handling — so removing it stops the application launching |
 | `packages\.betaId` | The identifier deciding whether this computer gets that application's staged releases early |
 | The package the index still names | The base the next update is applied as a patch against |
 | A package for a newer build | Possibly an update part-way through downloading |
@@ -3473,7 +3475,8 @@ Anthropic's diagnostics, not your data.
 ### What it is
 
 A Squirrel application installs each version into a folder of its own — `app-3.6.3`, then `app-3.6.4`
-beside it — and launches whichever is newest. Updating does not replace a folder; it adds one.
+beside it — and launches the newest one it finished installing. Updating does not replace a folder;
+it adds one.
 
 Squirrel does delete the old ones, but it deliberately keeps two. Its clean-up excludes both the
 build it has just installed and the one that build replaced, so after an update a **full second copy
@@ -3481,8 +3484,25 @@ of the application** sits beside the one you use, until the update after next re
 
 ### What Deguffer does
 
-It offers every build except the newest, on the same rule the application's own shortcut uses to
-decide which to launch: the highest version number wins.
+It offers every build except the newest, which is the one the application starts. A Squirrel
+application starts in one of two ways, and both choose at launch:
+
+- **The small program in the application's own folder** starts the highest version, skipping any
+  folder that holds a `.not-finished` file. The updater writes that file into a new build before it
+  unpacks it, and removes it after.
+- **`Update.exe --processStart`**, which many shortcuts use, starts the highest version that
+  `packages\RELEASES` names and that is on disk. The updater rewrites that file only after it has
+  unpacked a new build.
+
+Once an update has finished, both start the newest build.
+
+**If an update did not finish, that application gives up nothing at all.** An update stopped by a
+crash, a power cut or a full disk leaves a newest folder that neither way starts, and the build they
+do start is the one an ordering by version alone would call superseded. So Deguffer offers nothing
+from an application where any version folder holds `.not-finished`, where `RELEASES` does not lead
+to the newest folder, or where it cannot read `RELEASES` or Windows will not say whether either file
+is there. A missing `RELEASES` does not hold anything back: the updater's shortcut then starts
+nothing, whatever is removed.
 
 **If any version folder carries a number Deguffer cannot order, that application gives up nothing at
 all.** A pre-release version such as `2.0.0-beta1` sorts below its own release under one reading and
@@ -3503,6 +3523,7 @@ keeps its old builds.
 | `Update.exe` | The updater, and the program many of these applications' shortcuts actually run |
 | `packages` | The packages the application updates itself from, and its index of them |
 | A version folder whose number could not be read | Deguffer cannot tell whether it is the one in use |
+| Every version folder of an application whose last update did not finish | The newest folder may not be the one the application starts |
 | The application's own folder | Never a target |
 
 Your settings, your sign-ins and anything an application saved live somewhere else entirely — a
