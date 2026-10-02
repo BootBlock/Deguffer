@@ -133,16 +133,17 @@ public sealed class BattleNetCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A declared path reached by name has none of the protection an enumeration gives. A junctioned
+    /// A declared path reached by name has none of the protection an enumeration gives. A linked
     /// cache would be deleted through while every survivor resolved through the same link and passed.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheIsNamedRatherThanFollowed()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheIsNamedRatherThanFollowed(DirectoryLinkKind kind)
     {
         var outside = BattleNetFixture.Populate(Path.Combine(_temp.Path, "elsewhere"), "irreplaceable.bin");
 
         Directory.CreateDirectory(_battleNet.Launcher);
-        SymbolicLink.ToDirectory(_battleNet.Cache, outside);
+        DirectoryLink.Create(kind, _battleNet.Cache, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -153,17 +154,18 @@ public sealed class BattleNetCacheProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(Path.Combine(outside, "irreplaceable.bin")), "a junctioned cache was deleted through.");
+        Assert.True(File.Exists(Path.Combine(outside, "irreplaceable.bin")), "a linked cache was deleted through.");
     }
 
     /// <summary>The same rule one level up, where the launcher's whole folder has been moved.</summary>
-    [Fact]
-    public async Task AJunctionedLauncherFolderIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedLauncherFolderIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var cache = BattleNetFixture.Populate(Path.Combine(outside, "Cache", "0a"), "0a000000000000000000000000000001");
 
-        SymbolicLink.ToDirectory(_battleNet.Launcher, outside);
+        DirectoryLink.Create(kind, _battleNet.Launcher, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -173,7 +175,7 @@ public sealed class BattleNetCacheProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(Directory.Exists(cache), "planning looked through a junctioned launcher folder.");
+        Assert.True(Directory.Exists(cache), "planning looked through a linked launcher folder.");
     }
 
     /// <summary>§5.3, named by the launcher's own process.</summary>

@@ -356,8 +356,9 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
     /// the ones whose names look like versions, and pass every §5.6 assertion, because each survivor
     /// named here resolves through the same link.
     /// </summary>
-    [Fact]
-    public async Task DeclinesTheToolingFolderWhenItIsItselfALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesTheToolingFolderWhenItIsItselfALink(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = Path.Combine(outside, AzureFunctionsToolsProvider.ReleasesName, "4.18.1");
@@ -365,7 +366,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(stranger, "payload.bin"), new byte[4096]);
 
         Directory.CreateDirectory(_environment.LocalAppData);
-        SymbolicLink.ToDirectory(Root, outside);
+        DirectoryLink.Create(kind, Root, outside);
 
         var provider = CreateProvider();
 
@@ -404,11 +405,12 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
     }
 
     /// <summary>
-    /// One release relocated by junction leaves a folder that is present, measures zero, and says
+    /// One release relocated by a link leaves a folder that is present, measures zero, and says
     /// nothing about the hundreds of megabytes on the far side.
     /// </summary>
-    [Fact]
-    public async Task AReleasesFolderWhoseEveryChildIsALinkIsNotCalledClear()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task AReleasesFolderWhoseEveryChildIsALinkIsNotCalledClear(DirectoryLinkKind kind)
     {
         CreateReleases();
 
@@ -416,7 +418,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         Directory.CreateDirectory(outside);
         File.WriteAllBytes(Path.Combine(outside, "func.exe"), new byte[65536]);
 
-        SymbolicLink.ToDirectory(Path.Combine(Releases, "4.18.1"), outside);
+        DirectoryLink.Create(kind, Path.Combine(Releases, "4.18.1"), outside);
 
         var provider = CreateProvider();
 

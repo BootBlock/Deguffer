@@ -153,7 +153,7 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
     /// <summary>
     /// Redirecting the store onto another drive with a junction is how a developer keeps 3 GB off a
     /// small system disk, and the enumeration never classifies the directory it is handed — so a
-    /// junctioned root would hand back the far side's ordinary children, target the recognised ones,
+    /// linked root would hand back the far side's ordinary children, target the recognised ones,
     /// and pass every §5.6 assertion, because each survivor named here resolves through the same
     /// link.
     ///
@@ -165,12 +165,13 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
     /// this test used to do, proved nothing at all: planning removes nothing whatever the
     /// classification decided.</para>
     /// </summary>
-    [Fact]
-    public async Task DeclinesARootThatIsItselfALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesARootThatIsItselfALink(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = CreateAt(outside, ".analysis-driver", 4096);
-        SymbolicLink.ToDirectory(Path.Combine(_environment.LocalAppData, ".dartServer"), outside);
+        DirectoryLink.Create(kind, Path.Combine(_environment.LocalAppData, ".dartServer"), outside);
 
         var provider = CreateProvider();
 

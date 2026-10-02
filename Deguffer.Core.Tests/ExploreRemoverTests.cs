@@ -512,14 +512,15 @@ public sealed class ExploreRemoverTests : IDisposable
     /// side does not stop it — and looking for one there would walk a tree nobody picked. The bin here
     /// only records, so the fixture cannot touch the far side whatever the shell would do.
     /// </summary>
-    [Fact]
-    public async Task MovesALinkToAFolderHoldingAStoreToTheRecycleBinAsTheLinkItIs()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task MovesALinkToAFolderHoldingAStoreToTheRecycleBinAsTheLinkItIs(DirectoryLinkKind kind)
     {
         var target = _temp.CreateDirectory("elsewhere", "mail");
         var store = _temp.CreateFile(64, "elsewhere", "mail", "archive.pst");
         var link = Path.Combine(_temp.CreateDirectory("profile", "Downloads"), "mail shortcut");
 
-        SymbolicLink.ToDirectory(link, target);
+        DirectoryLink.Create(kind, link, target);
 
         var bin = new FakeRecycleBin(_ => new RecycleOutcome(Removed: true));
 

@@ -242,20 +242,22 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
     /// <summary>
     /// The path down to <c>Saved</c> is built from <c>%LOCALAPPDATA%</c> plus two constants rather
     /// than enumerated, so nothing on the way down has been through a filter that separates links
-    /// out. A junction at any segment redirects the deletion while every §5.6 survivor named below
+    /// out. A link at any segment redirects the deletion while every §5.6 survivor named below
     /// resolves through the same link and passes.
     /// </summary>
+    public static IEnumerable<object[]> LinkedSegmentsToTheLauncherFolder =>
+        DirectoryLink.Across("EpicGamesLauncher", @"EpicGamesLauncher\Saved");
+
     [Theory]
-    [InlineData("EpicGamesLauncher")]
-    [InlineData(@"EpicGamesLauncher\Saved")]
-    public async Task AJunctionAnywhereOnThePathToTheLauncherFolderIsNeverLookedThrough(string relative)
+    [MemberData(nameof(LinkedSegmentsToTheLauncherFolder))]
+    public async Task ALinkAnywhereOnThePathToTheLauncherFolderIsNeverLookedThrough(string relative, DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "Logs"));
 
         var link = Path.Combine(_environment.LocalAppData, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = CreateProvider();
 
@@ -275,17 +277,18 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned log folder is a child the user can see, so a plan that neither offers it nor
+    /// A linked log folder is a child the user can see, so a plan that neither offers it nor
     /// mentions it disagrees with the folder. Dropping it silently would also make the row read as
     /// clear, since presence resolves through the link.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedLogFolderIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedLogFolderIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         Directory.CreateDirectory(Saved);
-        SymbolicLink.ToDirectory(Path.Combine(Saved, "Logs"), outside);
+        DirectoryLink.Create(kind, Path.Combine(Saved, "Logs"), outside);
 
         var provider = CreateProvider();
 
@@ -303,7 +306,7 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(outside, "entry.bin")),
-            "a junctioned log folder was deleted through.");
+            "a linked log folder was deleted through.");
     }
 
     /// <summary>

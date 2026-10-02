@@ -1439,6 +1439,27 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(provider.ToolRoots[0].Path, sibling)).IsAllowed);
     }
 
+    public static IEnumerable<object[]> RecognisedNamesByLinkKind => DirectoryLink.Across(
+    [
+        ["gradle", "caches"],
+        ["cargo", @"registry\cache"],
+        ["nuget", "packages"],
+        ["maven", "repository"],
+        ["platformio", ".cache"],
+        ["uv", "cache"],
+        ["pip", "Cache"],
+        ["poetry", "artifacts"],
+        ["go", @"pkg\mod"],
+        ["zig", "h"],
+        ["vscode-cpptools", "ipch"],
+        ["dart-analysis-server", ".analysis-driver"],
+        ["playwright", "chromium-1091"],
+        ["gpu-shader-cache", "DXCache"],
+        ["epic-launcher-webcache", "Logs"],
+        ["epic-launcher-logs", "Crashes"],
+        ["spotify", "Data"],
+    ]);
+
     /// <summary>
     /// The same declarations, read for what a recognised name is on disk (§7.1). Each plan lists only
     /// folders, or declines links, so a file or a link that carries a name the provider recognises is
@@ -1449,24 +1470,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// the provider never recognised would make every refusal below pass for the wrong reason.</para>
     /// </summary>
     [Theory]
-    [InlineData("gradle", "caches")]
-    [InlineData("cargo", @"registry\cache")]
-    [InlineData("nuget", "packages")]
-    [InlineData("maven", "repository")]
-    [InlineData("platformio", ".cache")]
-    [InlineData("uv", "cache")]
-    [InlineData("pip", "Cache")]
-    [InlineData("poetry", "artifacts")]
-    [InlineData("go", @"pkg\mod")]
-    [InlineData("zig", "h")]
-    [InlineData("vscode-cpptools", "ipch")]
-    [InlineData("dart-analysis-server", ".analysis-driver")]
-    [InlineData("playwright", "chromium-1091")]
-    [InlineData("gpu-shader-cache", "DXCache")]
-    [InlineData("epic-launcher-webcache", "Logs")]
-    [InlineData("epic-launcher-logs", "Crashes")]
-    [InlineData("spotify", "Data")]
-    public void EveryDeclaredRootRefusesAFileOrALinkWithARecognisedName(string providerId, string relative)
+    [MemberData(nameof(RecognisedNamesByLinkKind))]
+    public void EveryDeclaredRootRefusesAFileOrALinkWithARecognisedName(string providerId, string relative, DirectoryLinkKind kind)
     {
         var provider = Providers().Single(p => p.Id == providerId);
         var entry = Path.Combine(provider.ToolRoots[0].Path, relative);
@@ -1481,7 +1486,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         Assert.False(policy.MayRemove(entry).IsAllowed);
 
         File.Delete(entry);
-        SymbolicLink.ToDirectory(entry, _temp.CreateDirectory("elsewhere", providerId));
+        DirectoryLink.Create(kind, entry, _temp.CreateDirectory("elsewhere", providerId));
 
         Assert.False(policy.MayRemove(entry).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(entry, "data.bin")).IsAllowed);
@@ -1987,14 +1992,15 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// The browser caches are judged level by level, so the kind is asked at each level: a file named
     /// as the profile's GPU cache and a link named as the cache inside <c>Cache</c> are both refused.
     /// </summary>
-    [Fact]
-    public void AChromiumProfileRefusesAFileOrALinkNamedAsACache()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void AChromiumProfileRefusesAFileOrALinkNamedAsACache(DirectoryLinkKind kind)
     {
         var browser = _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser");
         _temp.CreateFile(1, "profile", "AppData", "Local", "TestBrowser", "Local State");
         var gpuCache = _temp.CreateFile(64, "profile", "AppData", "Local", "TestBrowser", "Default", "GPUCache");
         var cacheData = Path.Combine(_temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default", "Cache"), "Cache_Data");
-        SymbolicLink.ToDirectory(cacheData, _temp.CreateDirectory("elsewhere", "Cache_Data"));
+        DirectoryLink.Create(kind, cacheData, _temp.CreateDirectory("elsewhere", "Cache_Data"));
         _temp.CreateDirectory("profile", "AppData", "Local", "TestBrowser", "Default", "Code Cache");
 
         var policy = new ExploreActionPolicy([], new ChromiumCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
@@ -2005,8 +2011,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>The same for a Firefox profile's local half.</summary>
-    [Fact]
-    public void AFirefoxProfileRefusesAFileOrALinkNamedAsACache()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void AFirefoxProfileRefusesAFileOrALinkNamedAsACache(DirectoryLinkKind kind)
     {
         RegisterFirefoxProfile();
 
@@ -2014,7 +2021,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var local = Assert.Single(provider.Profiles()).LocalPath;
         Directory.CreateDirectory(Path.Combine(local, "startupCache"));
         File.WriteAllBytes(Path.Combine(local, "cache2"), new byte[64]);
-        SymbolicLink.ToDirectory(Path.Combine(local, "thumbnails"), _temp.CreateDirectory("elsewhere", "thumbnails"));
+        DirectoryLink.Create(kind, Path.Combine(local, "thumbnails"), _temp.CreateDirectory("elsewhere", "thumbnails"));
 
         var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
 

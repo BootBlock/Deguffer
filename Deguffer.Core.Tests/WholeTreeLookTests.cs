@@ -47,14 +47,15 @@ public sealed class WholeTreeLookTests : IDisposable
     /// here removes the link and nothing behind it — so a store behind a link is not this removal's
     /// to answer for, and reading it would walk a tree nobody named.
     /// </summary>
-    [Fact]
-    public void NeverFollowsALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void NeverFollowsALink(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("cache");
         var elsewhere = _temp.CreateDirectory("elsewhere");
         _temp.CreateFile(16, "elsewhere", "archive.pst");
 
-        SymbolicLink.ToDirectory(Path.Combine(root, "linked"), elsewhere);
+        DirectoryLink.Create(kind, Path.Combine(root, "linked"), elsewhere);
 
         Assert.Empty(Stores(root));
     }

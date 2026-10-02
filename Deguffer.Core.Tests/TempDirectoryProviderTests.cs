@@ -782,18 +782,19 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A temporary folder that is itself a junction is declined rather than followed. Deleting
+    /// A temporary folder that is itself a link is declined rather than followed. Deleting
     /// through it would empty a tree nobody classified, and every survivor named for that root
     /// resolves through the link — so the §5.6 negative would pass over the wreckage.
     /// </summary>
-    [Fact]
-    public async Task DeclinesATemporaryFolderThatTurnedOutToBeALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesATemporaryFolderThatTurnedOutToBeALink(DirectoryLinkKind kind)
     {
         var outside = _temp.CreateDirectory("elsewhere");
         Abandoned(4096, "elsewhere", "payload.bin");
 
         var linked = Path.Combine(_temp.CreateDirectory("linked"), "Temp");
-        SymbolicLink.ToDirectory(linked, outside);
+        DirectoryLink.Create(kind, linked, outside);
         _environment.WithEnvironmentVariable("TEMP", linked);
 
         var plan = await CreateProvider().PlanAsync();

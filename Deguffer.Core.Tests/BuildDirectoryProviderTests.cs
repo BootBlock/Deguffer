@@ -860,18 +860,19 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junction is refused. A recognised marker behind a link would let a deletion leave the
+    /// A link of either kind is refused. A recognised marker behind a link would let a deletion leave the
     /// directory that was examined and land in whatever the link points at.
     /// </summary>
-    [Fact]
-    public void AJunctionedBuildDirectoryIsNotRecognised()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void ALinkedBuildDirectoryIsNotRecognised(DirectoryLinkKind kind)
     {
         var project = _temp.CreateDirectory("crate");
         var real = BuildDirectoryFixture.CreateCargoProject(_temp.CreateDirectory("real"));
         var link = Path.Combine(project, "target");
 
         File.WriteAllText(Path.Combine(project, "Cargo.toml"), "[package]");
-        SymbolicLink.ToDirectory(link, real);
+        DirectoryLink.Create(kind, link, real);
 
         Assert.Null(BuildDirectorySignature.TryRecognise(
             new BuildDirectoryKind

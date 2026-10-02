@@ -215,16 +215,17 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned <c>C:\Autodesk</c> hands the listing the far side's folders. The walk names it
+    /// A linked <c>C:\Autodesk</c> hands the listing the far side's folders. The walk names it
     /// and goes no further.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedFolderIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedFolderIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = Populate(Path.Combine(outside, "AutoCAD_2024_English_Win_64bit_dlm"), "irreplaceable.bin");
 
-        SymbolicLink.ToDirectory(Autodesk, outside);
+        DirectoryLink.Create(kind, Autodesk, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -236,7 +237,7 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(File.Exists(Path.Combine(bystander, "irreplaceable.bin")), "planning looked through a junctioned folder");
+        Assert.True(File.Exists(Path.Combine(bystander, "irreplaceable.bin")), "planning looked through a linked folder");
     }
 
     /// <summary>A payload that is a link is left alone, and its far side survives.</summary>

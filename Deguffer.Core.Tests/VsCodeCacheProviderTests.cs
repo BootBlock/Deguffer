@@ -372,20 +372,21 @@ public sealed class VsCodeCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned <c>WebStorage</c> is the worst case this provider has. The partitions inside it
+    /// A linked <c>WebStorage</c> is the worst case this provider has. The partitions inside it
     /// are reached by enumerating a directory named from a constant, so without the check the
     /// deletion lands wherever the link points, while every §5.6 survivor named inside the folder
     /// resolves through it and passes.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedWebStorageIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedWebStorageIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "42", "CacheStorage"));
 
         var editor = CreateEditor();
         CreateDirectory(Path.Combine(editor, "CachedData"));
-        SymbolicLink.ToDirectory(Path.Combine(editor, "WebStorage"), outside);
+        DirectoryLink.Create(kind, Path.Combine(editor, "WebStorage"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -397,7 +398,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
             plan.TargetedPaths,
             StringComparer.OrdinalIgnoreCase);
 
-        // Said once, not once per route. A junctioned WebStorage is met as a link child of the
+        // Said once, not once per route. A linked WebStorage is met as a link child of the
         // folder and as a directory the partition scan refuses to enter.
         Assert.Single(plan.Notes, n =>
             n.Message.Contains("WebStorage", StringComparison.Ordinal) &&
@@ -407,15 +408,16 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "planning looked through a junctioned WebStorage and deleted the far side.");
+            "planning looked through a linked WebStorage and deleted the far side.");
     }
 
     /// <summary>
     /// The same rule one level down. A partition is reached by enumerating <c>WebStorage</c>, so the
     /// link filtering there is what keeps a redirected partition out of the plan.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedPartitionIsNeverEntered()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedPartitionIsNeverEntered(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "CacheStorage"));
@@ -423,7 +425,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         var editor = CreateEditor();
         CreateDirectory(Path.Combine(editor, "CachedData"));
         Directory.CreateDirectory(Path.Combine(editor, "WebStorage"));
-        SymbolicLink.ToDirectory(Path.Combine(editor, "WebStorage", "42"), outside);
+        DirectoryLink.Create(kind, Path.Combine(editor, "WebStorage", "42"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -440,24 +442,25 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "a junctioned webview partition was entered and the far side deleted.");
+            "a linked webview partition was entered and the far side deleted.");
     }
 
     /// <summary>
-    /// The discovery walk is the only thing standing between a junctioned user-data folder and a
+    /// The discovery walk is the only thing standing between a linked user-data folder and a
     /// deletion on the far side of it. A cache reached through such a folder is a real directory, so
     /// every later reparse check answers false and every §5.6 survivor resolves through the link and
     /// passes.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedUserDataFolderIsNeverIdentified()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedUserDataFolderIsNeverIdentified(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "CachedData"));
         File.WriteAllText(Path.Combine(outside, "Local State"), "{}");
         CreateFile(Path.Combine(outside, "User", "globalStorage", "state.vscdb"));
 
-        SymbolicLink.ToDirectory(Path.Combine(_environment.RoamingAppData, "Code"), outside);
+        DirectoryLink.Create(kind, Path.Combine(_environment.RoamingAppData, "Code"), outside);
 
         var provider = CreateProvider();
 
@@ -472,21 +475,22 @@ public sealed class VsCodeCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "discovery looked through a junctioned user-data folder and deleted the far side.");
+            "discovery looked through a linked user-data folder and deleted the far side.");
     }
 
     /// <summary>
-    /// A junctioned cache is a child the user can see, so a plan that neither offers it nor mentions
+    /// A linked cache is a child the user can see, so a plan that neither offers it nor mentions
     /// it disagrees with the folder. Dropping it silently would also make the empty-plan message
     /// lie, since presence resolves through the link.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         var editor = CreateEditor();
-        SymbolicLink.ToDirectory(Path.Combine(editor, "CachedData"), outside);
+        DirectoryLink.Create(kind, Path.Combine(editor, "CachedData"), outside);
 
         var provider = CreateProvider();
 
@@ -507,7 +511,7 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(
-            File.Exists(Path.Combine(outside, "entry.bin")), "a junctioned cache was deleted through.");
+            File.Exists(Path.Combine(outside, "entry.bin")), "a linked cache was deleted through.");
     }
 
     /// <summary>

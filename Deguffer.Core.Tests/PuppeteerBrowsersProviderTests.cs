@@ -241,11 +241,12 @@ public sealed class PuppeteerBrowsersProviderTests : IDisposable
 
     /// <summary>
     /// The root is reached by name from a variable, and the enumeration below it never classifies the
-    /// directory it is handed, so a junctioned root would hand back the far side's folders and pass
+    /// directory it is handed, so a linked root would hand back the far side's folders and pass
     /// every §5.6 assertion through the same link.
     /// </summary>
-    [Fact]
-    public async Task DeclinesARootThatIsItselfALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesARootThatIsItselfALink(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = Path.Combine(outside, "chrome", "win64-127.0.6533.88");
@@ -253,7 +254,7 @@ public sealed class PuppeteerBrowsersProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(stranger, "chrome.exe"), new byte[4096]);
 
         var linked = Path.Combine(_temp.Path, "linked-browsers");
-        SymbolicLink.ToDirectory(linked, outside);
+        DirectoryLink.Create(kind, linked, outside);
         _environment.WithEnvironmentVariable(PuppeteerBrowsersProvider.LocationVariable, linked);
 
         var plan = await CreateProvider().PlanAsync();

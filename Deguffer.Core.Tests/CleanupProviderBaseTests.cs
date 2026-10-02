@@ -12,8 +12,8 @@ namespace Deguffer.Core.Tests;
 /// Child enumeration used to be copied into each provider that classifies children, and the
 /// reparse-point skip inside it — the difference between deleting a cache and deleting whatever a
 /// junction points at — was carried by every copy and tested by none.
-/// <see cref="DirectoryRemoverTests.DeletesAJunctionWithoutFollowingItIntoTheTargetTree"/> covers
-/// the removal end. This covers the planning end, where a junction wearing a recognised name must
+/// <see cref="DirectoryRemoverTests.DeletesALinkWithoutFollowingItIntoTheTargetTree"/> covers
+/// the removal end. This covers the planning end, where a link wearing a recognised name must
 /// never become a target in the first place.
 /// </summary>
 public sealed class CleanupProviderBaseTests : IDisposable
@@ -25,8 +25,9 @@ public sealed class CleanupProviderBaseTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    [Fact]
-    public async Task AJunctionWearingARecognisedNameIsNeverATarget()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkWearingARecognisedNameIsNeverATarget(DirectoryLinkKind kind)
     {
         var root = Path.Combine(_environment.UserProfile, ".gradle");
         Directory.CreateDirectory(root);
@@ -38,8 +39,8 @@ public sealed class CleanupProviderBaseTests : IDisposable
 
         // "caches" is a name the provider recognises. The reparse point is the only thing standing
         // between this plan and a deletion that escapes the profile entirely.
-        var junction = Path.Combine(root, "caches");
-        SymbolicLink.ToDirectory(junction, outside);
+        var link = Path.Combine(root, "caches");
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
         var plan = await provider.PlanAsync();
@@ -48,7 +49,7 @@ public sealed class CleanupProviderBaseTests : IDisposable
 
         await provider.ExecuteAsync(plan);
 
-        Assert.True(Directory.Exists(outside), "planning followed a junction out of the tool root");
+        Assert.True(Directory.Exists(outside), "planning followed a link out of the tool root");
         Assert.True(File.Exists(bystander), "a file outside the tool root was destroyed");
 
         // Skipping it silently would leave a plan that disagrees with the folder the user can see:

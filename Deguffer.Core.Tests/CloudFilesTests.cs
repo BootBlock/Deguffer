@@ -126,6 +126,26 @@ public sealed class CloudFilesTests : IDisposable
         Assert.All(listed.Values, entry => Assert.False(entry.IsOtherLink));
     }
 
+    /// <summary>
+    /// A placeholder is a reparse point too, so the listing reads the tag to tell one from a link. A
+    /// link of either kind is reported as a link and never as a placeholder, which is what keeps the
+    /// walk from going through it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void TellsALinkFromAPlaceholderByTheListingAlone(DirectoryLinkKind kind)
+    {
+        var folder = _root.Folder("Folder");
+        var link = _root.At("Linked");
+        DirectoryLink.Create(kind, link, _temp.CreateDirectory("Elsewhere"));
+
+        _root.Disconnect();
+        var listed = _cloud.List(_root.Path, CancellationToken.None).ToDictionary(e => e.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.True(listed[link] is { IsOtherLink: true, IsPlaceholder: false, IsDirectory: true });
+        Assert.True(listed[folder] is { IsOtherLink: false, IsPlaceholder: true });
+    }
+
     [Fact]
     public void DescribesEachPlaceholderState()
     {
@@ -254,12 +274,13 @@ public sealed class CloudFilesTests : IDisposable
     /// A folder above the file turned into a link since the preview: the name the plan holds now leads
     /// to a different placeholder, and that one is left as it is however eligible it looks.
     /// </summary>
-    [Fact]
-    public void ReleaseLeavesAFileReachedThroughALinkAboveIt()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void ReleaseLeavesAFileReachedThroughALinkAboveIt(DirectoryLinkKind kind)
     {
         _root.Folder("Real");
         var real = _root.LocalCopy(Path.Combine("Real", "file.bin"), Megabyte);
-        SymbolicLink.ToDirectory(_root.At("Linked"), _root.At("Real"));
+        DirectoryLink.Create(kind, _root.At("Linked"), _root.At("Real"));
         var named = _root.At("Linked", "file.bin");
         _root.Disconnect();
 

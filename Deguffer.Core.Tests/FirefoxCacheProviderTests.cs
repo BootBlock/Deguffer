@@ -541,17 +541,20 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
     }
 
+    public static IEnumerable<object[]> SegmentsOnTheWayToTheCache => DirectoryLink.Across(
+        "Mozilla",
+        @"Mozilla\Firefox",
+        @"Mozilla\Firefox\Profiles\default-release");
+
     /// <summary>
     /// The local profile is reached by name rather than by an enumeration that filters links, and
-    /// every segment of that name was synthesised from a text file plus two constants. A junction at
+    /// every segment of that name was synthesised from a text file plus two constants. A link at
     /// any one of them redirects the deletion while every §5.6 survivor named in the roaming half
     /// resolves independently and passes — the vacuous negative.
     /// </summary>
     [Theory]
-    [InlineData("Mozilla")]
-    [InlineData(@"Mozilla\Firefox")]
-    [InlineData(@"Mozilla\Firefox\Profiles\default-release")]
-    public async Task AJunctionAnywhereOnThePathToTheCacheIsNeverLookedThrough(string relative)
+    [MemberData(nameof(SegmentsOnTheWayToTheCache))]
+    public async Task ALinkAnywhereOnThePathToTheCacheIsNeverLookedThrough(string relative, DirectoryLinkKind kind)
     {
         var profile = AddProfile();
 
@@ -560,7 +563,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
 
         var link = Path.Combine(_environment.LocalAppData, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-        SymbolicLink.ToDirectory(link, outside);
+        DirectoryLink.Create(kind, link, outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -578,18 +581,19 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned cache is a child the user can see, so a plan that neither offers it nor mentions
+    /// A linked cache is a child the user can see, so a plan that neither offers it nor mentions
     /// it disagrees with the folder. Dropping it silently would also make the row read as clear,
     /// since presence resolves through the link.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var profile = AddProfile();
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         Directory.CreateDirectory(profile.Local);
-        SymbolicLink.ToDirectory(Path.Combine(profile.Local, "cache2"), outside);
+        DirectoryLink.Create(kind, Path.Combine(profile.Local, "cache2"), outside);
 
         var provider = CreateProvider();
 
@@ -608,7 +612,7 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(
-            File.Exists(Path.Combine(outside, "entry.bin")), "a junctioned cache was deleted through.");
+            File.Exists(Path.Combine(outside, "entry.bin")), "a linked cache was deleted through.");
     }
 
     /// <summary>

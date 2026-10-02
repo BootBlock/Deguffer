@@ -40,12 +40,13 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
 
     /// <summary>
     /// The root is reached by name from an environment variable, and the enumeration below it never
-    /// classifies the directory it is handed — so a junctioned root would hand back the far side's
+    /// classifies the directory it is handed — so a linked root would hand back the far side's
     /// ordinary directories, target the ones matching a browser name, and pass every §5.6 assertion,
     /// because each survivor named here resolves through the same link.
     /// </summary>
-    [Fact]
-    public async Task DeclinesARootThatIsItselfALink()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DeclinesARootThatIsItselfALink(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var stranger = Path.Combine(outside, "chromium-1228");
@@ -53,7 +54,7 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(stranger, "chrome.exe"), new byte[4096]);
 
         var linked = Path.Combine(_temp.Path, "linked-browsers");
-        SymbolicLink.ToDirectory(linked, outside);
+        DirectoryLink.Create(kind, linked, outside);
         _environment.WithEnvironmentVariable(PlaywrightBrowsersProvider.LocationVariable, linked);
 
         var provider = CreateProvider();
@@ -77,11 +78,12 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
 
     /// <summary>
     /// The same decline one level in, and with nothing left to offer. A browser build relocated by
-    /// junction leaves a root that is present, measures zero, and says nothing about the gigabytes
+    /// a link leaves a root that is present, measures zero, and says nothing about the gigabytes
     /// on the far side.
     /// </summary>
-    [Fact]
-    public async Task ARootWhoseEveryBuildIsALinkIsNotCalledClear()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ARootWhoseEveryBuildIsALinkIsNotCalledClear(DirectoryLinkKind kind)
     {
         var root = CreateRoot();
 
@@ -90,7 +92,7 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(outside, "chrome.exe"), new byte[65536]);
 
         var build = Path.Combine(root, "chromium-1228");
-        SymbolicLink.ToDirectory(build, outside);
+        DirectoryLink.Create(kind, build, outside);
 
         var provider = CreateProvider();
 

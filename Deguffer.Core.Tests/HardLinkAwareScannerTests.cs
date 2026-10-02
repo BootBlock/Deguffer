@@ -137,16 +137,17 @@ public sealed class HardLinkAwareScannerTests : IDisposable
     }
 
     /// <summary>
-    /// A junction's target keeps its own links and was never classified as this tree's, so the
+    /// A directory link's target keeps its own links and was never classified as this tree's, so the
     /// walk must not follow it — the same rule every other scanner applies.
     /// </summary>
-    [Fact]
-    public async Task DoesNotFollowAJunctionInsideTheTree()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DoesNotFollowALinkInsideTheTree(DirectoryLinkKind kind)
     {
         var store = _temp.CreateDirectory("store");
         _temp.CreateFile(4096, "store", "sole.bin");
         _temp.CreateFile(65536, "outside", "big.bin");
-        SymbolicLink.ToDirectory(Path.Combine(store, "linked"), Path.Combine(_temp.Path, "outside"));
+        DirectoryLink.Create(kind, Path.Combine(store, "linked"), Path.Combine(_temp.Path, "outside"));
 
         var size = await MeasureAsync(store);
 

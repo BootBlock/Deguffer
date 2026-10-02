@@ -512,20 +512,21 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned container is the worst case this provider has. <c>Cache</c> is reached by name
+    /// A linked container is the worst case this provider has. <c>Cache</c> is reached by name
     /// rather than by an enumeration that filters links, so without the check the deletion of
     /// <c>Cache_Data</c> lands wherever the link points, while every §5.6 survivor named inside the
     /// profile resolves through it and passes.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedContainerIsNeverLookedThrough()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedContainerIsNeverLookedThrough(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "Cache_Data"));
 
         var app = CreateApplication("Chatter");
         CreateDirectory(Path.Combine(app, "GPUCache"));
-        SymbolicLink.ToDirectory(Path.Combine(app, "Cache"), outside);
+        DirectoryLink.Create(kind, Path.Combine(app, "Cache"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -542,22 +543,23 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "planning looked through a junctioned container and deleted the far side.");
+            "planning looked through a linked container and deleted the far side.");
     }
 
     /// <summary>
-    /// A junctioned container is met twice — once as a link child of the profile, once as a level
+    /// A linked container is met twice — once as a link child of the profile, once as a level
     /// whose own directory turns out to be one — and both times it is the same path. Saying it
     /// twice is a plan that reads as though two things were skipped.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedContainerIsReportedOnceRatherThanOncePerLevel()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedContainerIsReportedOnceRatherThanOncePerLevel(DirectoryLinkKind kind)
     {
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         var app = CreateApplication("Chatter");
         CreateDirectory(Path.Combine(app, "GPUCache"));
-        SymbolicLink.ToDirectory(Path.Combine(app, "Cache"), outside);
+        DirectoryLink.Create(kind, Path.Combine(app, "Cache"), outside);
 
         var plan = await CreateProvider().PlanAsync();
 
@@ -565,19 +567,20 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The discovery walk is the only thing standing between a junctioned data folder and a
+    /// The discovery walk is the only thing standing between a linked data folder and a
     /// deletion on the far side of it, and it was the only link case with no test. A profile
     /// reached through such a folder is a real directory, so every later reparse check answers
     /// false and every §5.6 survivor resolves through the link and passes.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedApplicationDataFolderIsNeverIdentified()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedApplicationDataFolderIsNeverIdentified(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "Default", "Code Cache"));
         File.WriteAllText(Path.Combine(outside, "Local State"), "{}");
 
-        SymbolicLink.ToDirectory(Path.Combine(_environment.RoamingAppData, "Chatter"), outside);
+        DirectoryLink.Create(kind, Path.Combine(_environment.RoamingAppData, "Chatter"), outside);
 
         var provider = CreateProvider();
 
@@ -592,7 +595,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "discovery looked through a junctioned data folder and deleted the far side.");
+            "discovery looked through a linked data folder and deleted the far side.");
     }
 
     /// <summary>
@@ -605,15 +608,16 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     /// is defence in depth rather than a weak assertion, and it is written down because a mutation
     /// pass on one guard would otherwise read as a test that proves nothing.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedProfileIsNeverEntered()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedProfileIsNeverEntered(DirectoryLinkKind kind)
     {
         var outside = Path.Combine(_temp.Path, "elsewhere");
         var bystander = CreateDirectory(Path.Combine(outside, "Code Cache"));
 
         var app = CreateApplication("Browserish");
         CreateDirectory(Path.Combine(app, "GPUCache"));
-        SymbolicLink.ToDirectory(Path.Combine(app, "Default"), outside);
+        DirectoryLink.Create(kind, Path.Combine(app, "Default"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
@@ -625,7 +629,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
 
         Assert.True(
             File.Exists(Path.Combine(bystander, "entry.bin")),
-            "a junctioned profile was entered and the far side deleted.");
+            "a linked profile was entered and the far side deleted.");
     }
 
     /// <summary>
@@ -656,17 +660,18 @@ public sealed class ChromiumCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A junctioned cache is a child the user can see, so a plan that neither offers it nor mentions
+    /// A linked cache is a child the user can see, so a plan that neither offers it nor mentions
     /// it disagrees with the folder. Dropping it silently would also make the empty-plan message
     /// lie, since presence resolves through the link.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheIsNamedRatherThanDroppedSilently()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheIsNamedRatherThanDroppedSilently(DirectoryLinkKind kind)
     {
         var outside = CreateDirectory(Path.Combine(_temp.Path, "elsewhere"));
 
         var app = CreateApplication("Chatter");
-        SymbolicLink.ToDirectory(Path.Combine(app, "GPUCache"), outside);
+        DirectoryLink.Create(kind, Path.Combine(app, "GPUCache"), outside);
 
         var provider = CreateProvider();
 
@@ -687,7 +692,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(
-            File.Exists(Path.Combine(outside, "entry.bin")), "a junctioned cache was deleted through.");
+            File.Exists(Path.Combine(outside, "entry.bin")), "a linked cache was deleted through.");
     }
 
     /// <summary>

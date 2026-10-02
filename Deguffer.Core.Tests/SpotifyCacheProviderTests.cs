@@ -529,12 +529,13 @@ public sealed class SpotifyCacheProviderTests : IDisposable
     /// A cache moved onto another drive with a link. Deguffer offers nothing through it and says so,
     /// rather than deleting the far side of a redirection nobody classified.
     /// </summary>
-    [Fact]
-    public async Task AJunctionedCacheIsLeftAloneAndReported()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedCacheIsLeftAloneAndReported(DirectoryLinkKind kind)
     {
         var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
         Directory.CreateDirectory(LocalFolder);
-        SymbolicLink.ToDirectory(Path.Combine(LocalFolder, "Data"), outside);
+        DirectoryLink.Create(kind, Path.Combine(LocalFolder, "Data"), outside);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

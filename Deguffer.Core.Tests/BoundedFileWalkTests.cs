@@ -108,18 +108,19 @@ public sealed class BoundedFileWalkTests : IDisposable
 
     /// <summary>
     /// A link is reported and is never something the caller may descend into. The rule lives in the
-    /// walk rather than in each of its three callers, so it is asserted here: the junction is present
+    /// walk rather than in each of its three callers, so it is asserted here: the link is present
     /// among the links, and the file inside its target is visited exactly once — through the target's
     /// own place in the tree, and not again through the name pointing at it.
     /// </summary>
-    [Fact]
-    public void ReportsALinkSeparatelySoNoCallerCanDescendThroughIt()
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void ReportsALinkSeparatelySoNoCallerCanDescendThroughIt(DirectoryLinkKind kind)
     {
         var root = _temp.CreateDirectory("cache");
         var real = _temp.CreateDirectory("cache", "content-v2");
         _temp.CreateFile(32, "cache", "content-v2", "inside.bin");
 
-        SymbolicLink.ToDirectory(Path.Combine(root, "shortcut"), real);
+        DirectoryLink.Create(kind, Path.Combine(root, "shortcut"), real);
 
         var entries = new ConcurrentBag<string>();
         var links = new ConcurrentBag<string>();
