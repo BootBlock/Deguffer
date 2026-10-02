@@ -15,10 +15,12 @@ namespace Deguffer.Core.Providers;
 /// <para>An entry another row offers is not this step's to spare: the removal leaves it alone
 /// already, and that row asks its own question.</para>
 ///
-/// <para>A check that could not read every program's command line lets the step run, because the plan
-/// offered it on the same partial answer and said so in a note.</para>
+/// <para>A check that could not read every program's command line holds the whole step back where the
+/// plan's answer was whole, because no entry can be spared on an answer that names none. See
+/// <see cref="LiveTreeVeto.AtClean"/>.</para>
 /// </summary>
-internal sealed class LiveChildrenCheck(ILiveTreeInspector inspector) : IUseCheck
+/// <param name="planComplete">Whether the answer the plan offered the folder's entries on was whole.</param>
+internal sealed class LiveChildrenCheck(ILiveTreeInspector inspector, bool planComplete) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
@@ -33,13 +35,16 @@ internal sealed class LiveChildrenCheck(ILiveTreeInspector inspector) : IUseChec
         inspector.Invalidate();
 
         var elsewhere = step is ClearDirectoryStep clear ? clear.OwnedElsewhere : [];
+        var findings = inspector.FindLiveChildren([folder], ct);
 
-        return
+        IReadOnlyList<InUseNow> inUse =
         [
-            .. inspector.FindLiveChildren([folder], ct).Live
+            .. findings.Live
                 .Where(live => LongPath.Contains(step.Path, live.Directory)
                     && !elsewhere.Any(entry => LongPath.Contains(entry, live.Directory)))
                 .Select(live => new InUseNow(live.Directory, string.Join("; ", live.Holders))),
         ];
+
+        return LiveTreeVeto.AtClean(step, inUse, findings.Complete, planComplete);
     }
 }

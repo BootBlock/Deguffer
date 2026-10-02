@@ -90,9 +90,6 @@ public sealed record TempMarkerFindings(
 /// </summary>
 public static class TempMarkerSurvey
 {
-    /// <summary>Why a directory is held back where no program's working directory could be read.</summary>
-    private const string CannotTell = "Deguffer could not tell whether a running program is using this";
-
     public static TempMarkerFindings Examine(
         IReadOnlyList<TempMarkerPlace> places,
         IProcessInspector inspector,
@@ -214,7 +211,7 @@ public static class TempMarkerSurvey
                 .Select(c => new RecognisedBuildDirectory(c.Path, c.Holder))
                 .ToList();
 
-            var live = LiveTreeVeto.Apply(liveTrees, directories, lockFiles: [], ct, unknown: CannotTell);
+            var live = LiveTreeVeto.Apply(liveTrees, directories, lockFiles: [], ct);
             var stillUnused = live.Cleared
                 .DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
@@ -259,7 +256,7 @@ public static class TempMarkerSurvey
                 // unread, a directory is held back rather than offered.
                 if (!live.Complete && marker.Kind is not TargetKind.File)
                 {
-                    _survivors.Add((path, $"{CannotTell}, so it is left alone."));
+                    _survivors.Add((path, $"{LiveTreeVeto.CannotTell}, so it is left alone."));
                     _heldBack.Add(path);
                     _declined++;
                     continue;

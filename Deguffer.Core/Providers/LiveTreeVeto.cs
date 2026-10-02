@@ -72,13 +72,18 @@ internal static class LiveTreeVeto
     /// <summary>Why a vetoed directory is listed as a survivor, in the §5.6 report.</summary>
     public const string ProtectedReason = "Something is using this project right now, so it is left alone.";
 
+    /// <summary>
+    /// Why a place is held back where the inspector could not tell whether anything is using it, as an
+    /// <see cref="InUseNow.Reason"/>.
+    /// </summary>
+    public const string CannotTell = "Deguffer could not tell whether a running program is using this";
+
     public static LiveTreeVetoResult Apply(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         IReadOnlyList<string> lockFiles,
-        CancellationToken ct = default,
-        string? unknown = null) =>
-        Apply(inspector, candidates, _ => LiveTreeQuestion.ForLockFiles(_ => lockFiles), ct, unknown);
+        CancellationToken ct = default) =>
+        Apply(inspector, candidates, _ => LiveTreeQuestion.ForLockFiles(_ => lockFiles), ct);
 
     /// <param name="questions">
     /// The rule that builds the question for one reading of the machine, for a provider whose evidence
@@ -86,20 +91,14 @@ internal static class LiveTreeVeto
     /// after the project (see <see cref="BuildDirectoryKind.ProjectLockFiles"/>), or the solutions that
     /// open it (see <see cref="LiveTreeQuery.Workspaces"/>).
     /// </param>
-    /// <param name="unknown">
-    /// Why a cleared directory is held back at the clean where the inspector cannot tell then, for a
-    /// caller that refuses every directory on a partial answer rather than offering them with a note.
-    /// Null for one that offers. See <see cref="LiveTreeCheck"/>.
-    /// </param>
     public static LiveTreeVetoResult Apply(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         Func<CancellationToken, LiveTreeQuestion> questions,
-        CancellationToken ct = default,
-        string? unknown = null) =>
+        CancellationToken ct = default) =>
         candidates.Count == 0
             ? new LiveTreeVetoResult([], [], Complete: true)
-            : Apply(inspector, candidates, questions(ct), questions, ct, unknown);
+            : Apply(inspector, candidates, questions(ct), questions, ct);
 
     /// <param name="question">
     /// The question for this reading, for a caller that has built it already to read something else
@@ -111,8 +110,7 @@ internal static class LiveTreeVeto
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         LiveTreeQuestion question,
         Func<CancellationToken, LiveTreeQuestion> questions,
-        CancellationToken ct = default,
-        string? unknown = null)
+        CancellationToken ct = default)
     {
         if (candidates.Count == 0)
         {
@@ -128,7 +126,7 @@ internal static class LiveTreeVeto
                 .. candidates.Where(c => !findings.IsLive(c.Path)).Select(c => new ClearedBuildDirectory(
                     c.Path,
                     c.Project,
-                    new LiveTreeCheck(inspector, c, questions, unknown))),
+                    new LiveTreeCheck(inspector, c, questions, findings.Complete))),
             ],
             findings.Live,
             findings.Complete);
@@ -177,6 +175,26 @@ internal static class LiveTreeVeto
                 ? "Close what is using it and scan again to include it."
                 : "Close what is using each one and scan again to include them."));
     }
+
+    /// <summary>
+    /// What a check at the clean answers for <paramref name="step"/>, from what it found in use now.
+    ///
+    /// <para><b>Held back on a partial answer only where the plan's was whole.</b> A plan made on a
+    /// partial answer offered the step and said so in a note, so the same answer at the clean is no
+    /// new reason to refuse it. A plan made on a whole answer offered the step on evidence the clean
+    /// no longer has, and a question that could not be asked is not a clear answer: a preview that read
+    /// every program can be followed by a clean that cannot, and running the step then would rest on an
+    /// answer the user was never shown.</para>
+    /// </summary>
+    /// <param name="live">The places found in use now.</param>
+    /// <param name="complete">Whether the answer now is whole.</param>
+    /// <param name="planComplete">Whether the answer the plan offered the step on was whole.</param>
+    public static IReadOnlyList<InUseNow> AtClean(
+        DeleteStep step,
+        IReadOnlyList<InUseNow> live,
+        bool complete,
+        bool planComplete) =>
+        complete || !planComplete ? live : [.. live, new InUseNow(step.Path, CannotTell)];
 
     private static string Name(string path) => Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
 
