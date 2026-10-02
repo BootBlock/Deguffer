@@ -1864,7 +1864,8 @@ browser's folder: on the machine this was measured on it held 129 MB, with your 
 store and community pages (`Login Data`, `Web Data` and the cookies) beside the caches. Deguffer
 never removes it whole. The [Chromium application caches](#chromium-application-caches) row removes
 the browser's caches from inside it (120 MB of the 129 MB) and leaves your sign-in, the same way it
-treats the Epic Games and Battle.net launchers' browsers.
+treats the Battle.net launcher's browser. The Epic Games launcher's browser follows the same rule
+on its own row.
 
 ### What Deguffer does
 
@@ -1898,7 +1899,7 @@ rather than covered by an assertion on the folder above them:
 `appcache\librarycache`, the artwork Steam downloaded for your library, is not part of this row: it
 has a row of its own, [Steam library artwork](#steam-library-artwork).
 
-In Steam's folder in your profile, the Storage page refuses `htmlcache` whole and offers only the
+In Steam's folder in your profile, Explore refuses `htmlcache` whole and offers only the
 caches the Chromium rows recognise inside it. Two other things there are recognised and then
 deliberately left alone. `widevine` is a content-decryption module Steam downloaded so protected
 video will play, which is downloaded software rather than a cache. `cefdata` is the embedded

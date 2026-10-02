@@ -145,7 +145,7 @@ public sealed class ChromiumHostTests : IDisposable
     /// The Steam client's <c>htmlcache</c>, in the layout measured on a real installation: a whole
     /// browser user-data folder, with the client's sign-in to its store pages beside the caches. The
     /// caches go, at both levels, and the credential files, the folder and Steam's own folder around
-    /// it all stay. Before Steam was declared here, its own row removed the folder whole.
+    /// it all stay.
     /// </summary>
     [Fact]
     public async Task ReachesSteamsBrowserAndLeavesItsSignInStanding()

@@ -15,7 +15,7 @@ namespace Deguffer.Core.Providers;
 /// Valve distributes the compiled pipelines, and switching pre-caching off and on again is recorded
 /// as fetching all of them again from Valve. Removing it costs gigabytes of download for the games
 /// still played, which is the second tier by definition. A separate provider from
-/// <see cref="SteamCacheProvider"/> because a provider has one tier, and that one's caches are
+/// <see cref="SteamCacheProvider"/> because a provider has one tier, and that one's cache is
 /// Tier 1.</para>
 ///
 /// <para><b>Every library, and only Steam's list says where they are.</b> A library can be on any
@@ -32,7 +32,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>§5.1 exists and cannot be driven.</b> Steam offers to delete pre-cached shaders under
 /// Settings, Shader Pre-Caching, which is a button in a running client and not a command Deguffer
-/// can run — the limitation <see cref="SteamCacheProvider"/> records for the web cache. Path
+/// can run — the limitation <see cref="SteamCacheProvider"/> records for the HTTP cache. Path
 /// deletion is the only route available.</para>
 ///
 /// <para><b>A library is found through Steam's record and not checked for a link</b>, as the install

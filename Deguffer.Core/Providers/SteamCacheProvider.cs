@@ -11,10 +11,10 @@ namespace Deguffer.Core.Providers;
 /// client renders its store, library and overlay in an embedded Chromium whose folder is
 /// <c>%LOCALAPPDATA%\Steam\htmlcache</c>. Despite its name, that folder is a browser user-data folder:
 /// on the measured machine it held <c>Local State</c> and a <c>Default</c> profile with
-/// <c>Login Data</c>, <c>Web Data</c> and <c>Network\Cookies</c> beside the caches. This row used to
-/// remove it whole, which signed the user out of the client's store and community pages. It now
-/// follows the rule <see cref="EpicLauncherWebCacheProvider"/> and <see cref="BattleNetFolder"/>
-/// state for the same kind of folder: <see cref="ChromiumHost"/> declares it, so
+/// <c>Login Data</c>, <c>Web Data</c> and <c>Network\Cookies</c> beside the caches. Removing it
+/// whole signs the user out of the client's store and community pages. So it follows the rule
+/// <see cref="EpicLauncherWebCacheProvider"/> and <see cref="BattleNetFolder"/> state for the same
+/// kind of folder: <see cref="ChromiumHost"/> declares it, so
 /// <see cref="ChromiumCacheProvider"/> takes the caches inside it (120 MB of the 129 MB measured) and
 /// asserts the credential files survived, and the folder is Tier 4 here.</para>
 ///
@@ -161,7 +161,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
         {
             if (unreached is null)
             {
-                return EmptyPlan("The Steam client is keeping no web cache on this machine.");
+                return EmptyPlan("The Steam client is keeping no HTTP cache beside the program.");
             }
 
             return refusedInstall is null

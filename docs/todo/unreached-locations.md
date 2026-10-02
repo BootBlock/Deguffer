@@ -1641,7 +1641,7 @@ competing cleaners actively do. Worth encoding as knowledge, not merely omitting
 | `.cargo\credentials.toml`, `.m2\settings.xml` | Registry authentication tokens and encrypted server passwords, in the root of a directory whose children are being deleted. The §5.2 case exactly |
 | Steam `steamapps\downloading` | Looks temporary. Holds the in-progress half of a patch; deleting it restarts the download |
 | Squirrel `packages\RELEASES` and `.betaId` | An index and an identifier, in a folder of downloaded packages. `Update.exe --processStart` reads the index with no error handling to decide which build to launch, so removing it stops the application starting from its own shortcut. Named survivors on the Squirrel provider — see §12 |
-| Steam `userdata`, `steamapps\workshop`, `widevine` | Cloud saves, settings and screenshots; subscribed Workshop content; and a downloaded decryption module. All three sit beside the client's web caches, and none of them is one. Named survivors on the Steam provider |
+| Steam `userdata`, `steamapps\workshop`, `widevine` | Cloud saves, settings and screenshots; subscribed Workshop content; and a downloaded decryption module. All three sit near caches the client keeps, and none of them is one. The first two are named survivors on the Steam provider, and `widevine` is refused at Tier 4 in its Explore declaration |
 | `.vs\...\.suo` | The user's own solution options, inside an otherwise disposable directory |
 
 ---

@@ -121,8 +121,8 @@ public sealed class SteamCacheProviderTests : IDisposable
     /// §5.6's negative, and the one that matters most here: the games, the half-finished download,
     /// the cloud saves and Steam's own configuration all survive a run that removed the cache, and
     /// each is asserted by name rather than covered by an assertion on the folder above it. Steam's
-    /// folder in the profile, the browser's sign-in included, is checked on disk: this row no longer
-    /// reaches into it, so its plan has nothing to say about it.
+    /// folder in the profile, the browser's sign-in included, is checked on disk: this row does not
+    /// reach into it, so its plan has nothing to say about it.
     /// </summary>
     [Fact]
     public async Task TheGamesTheDownloadAndTheCloudSavesAllSurvive()
@@ -207,9 +207,10 @@ public sealed class SteamCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.2's dangerous direction is an unknown thing treated as safe. Neither root is ever
-    /// enumerated, so an unnamed neighbour is unreachable by construction — this is the assertion
-    /// that the construction is what it claims to be.
+    /// §5.2's dangerous direction is an unknown thing treated as safe. The install directory is
+    /// never enumerated and Steam's folder in the profile is not this row's at all, so an unnamed
+    /// neighbour in either is unreachable by construction — this is the assertion that the
+    /// construction is what it claims to be.
     /// </summary>
     [Theory]
     [InlineData(true, "logs")]
@@ -398,8 +399,8 @@ public sealed class SteamCacheProviderTests : IDisposable
 
     /// <summary>
     /// The whole table, read back. One root and exactly one path under it, so adding a second
-    /// location — <c>steamapps</c> is the one that would matter, and <c>htmlcache</c> the one that
-    /// was there — fails here rather than in a deletion.
+    /// location — <c>steamapps</c> and the browser's <c>htmlcache</c> are the ones that would
+    /// matter — fails here rather than in a deletion.
     ///
     /// <para>Read from the declaration rather than from a plan, so it holds on a machine with no
     /// cache on disk at all, where a plan-based assertion would pass with nothing in it.</para>
