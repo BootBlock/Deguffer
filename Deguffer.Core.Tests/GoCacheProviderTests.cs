@@ -28,9 +28,12 @@ public sealed class GoCacheProviderTests : IDisposable
 
     private string ModuleCache => Path.Combine(GoPath, "pkg", "mod");
 
+    /// <summary>The go the fake environment resolves, so a test names the program a step must run.</summary>
+    private string Go => _environment.FindExecutable("go")!;
+
     /// <summary>A runner whose <c>go env</c> answers with the three locations, one per line.</summary>
     private FakeProcessRunner Reporting(string buildCache, string moduleCache, string goPath) =>
-        new FakeProcessRunner().Responding("env", $"{buildCache}\r\n{moduleCache}\r\n{goPath}\r\n");
+        new FakeProcessRunner().Responding(Go, "env", $"{buildCache}\r\n{moduleCache}\r\n{goPath}\r\n");
 
     private GoCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
         new(_environment, runner ?? Reporting(BuildCache, ModuleCache, GoPath), FakeProcessInspector.NothingRunning);
@@ -62,6 +65,7 @@ public sealed class GoCacheProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
+        Assert.All(plan.Steps.OfType<RunCommandStep>(), s => Assert.Equal(Go, s.FileName));
         Assert.Equal(
             ["clean -cache", "clean -modcache"],
             plan.Steps.OfType<RunCommandStep>().Select(s => s.Arguments));
@@ -95,6 +99,7 @@ public sealed class GoCacheProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Go, step.FileName);
         Assert.Equal("clean -cache", step.Arguments);
     }
 
@@ -148,6 +153,7 @@ public sealed class GoCacheProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Go, step.FileName);
         Assert.Equal("clean -cache", step.Arguments);
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(
@@ -184,7 +190,7 @@ public sealed class GoCacheProviderTests : IDisposable
         Populate(Path.Combine(_environment.LocalAppData, "go-build"));
         Populate(Path.Combine(_environment.UserProfile, "go", "pkg", "mod"));
 
-        var plan = await CreateProvider(new FakeProcessRunner().Responding("env", "\r\n\r\n\r\n")).PlanAsync();
+        var plan = await CreateProvider(new FakeProcessRunner().Responding(Go, "env", "\r\n\r\n\r\n")).PlanAsync();
 
         Assert.Equal(
             [
@@ -204,7 +210,7 @@ public sealed class GoCacheProviderTests : IDisposable
     {
         Populate(Path.Combine(_environment.LocalAppData, "go-build"));
 
-        var plan = await CreateProvider(new FakeProcessRunner().Responding("env", string.Empty, exitCode: 1))
+        var plan = await CreateProvider(new FakeProcessRunner().Responding(Go, "env", string.Empty, exitCode: 1))
             .PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Message.Contains("Go did not say where", StringComparison.Ordinal));

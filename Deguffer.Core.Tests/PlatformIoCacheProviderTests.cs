@@ -25,8 +25,19 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>Where the fake environment puts <c>pio</c>, once a test has installed it.</summary>
+    private string Pio => _environment.FindExecutable("pio")!;
+
+    /// <summary>
+    /// The runner a test gets when it does not care what PlatformIO says: <c>pio</c> answers every
+    /// question with nothing, so the locations fall back to the documented ones and no package row
+    /// is offered.
+    /// </summary>
+    private FakeProcessRunner SayingNothing() =>
+        new FakeProcessRunner().Responding(Pio, "system info", string.Empty);
+
     private PlatformIoCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
-        new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        new(_environment, runner ?? SayingNothing(), FakeProcessInspector.NothingRunning);
 
     private string CoreRoot => Path.Combine(_environment.UserProfile, ".platformio");
 
@@ -105,9 +116,9 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
     /// <summary>256.34 × 1,048,576, which is what PlatformIO's humanised total can mean.</summary>
     private const long SupersededToolchainBytes = 268_791_972;
 
-    /// <summary>A runner that answers the package dry run and nothing else.</summary>
-    private static FakeProcessRunner Reporting(string pruneReport) =>
-        new FakeProcessRunner().Responding("--dry-run", pruneReport);
+    /// <summary>A runner whose <c>pio</c> answers the package dry run and nothing else.</summary>
+    private FakeProcessRunner Reporting(string pruneReport) =>
+        new FakeProcessRunner().Responding(Pio, "--dry-run", pruneReport);
 
     private static RunCommandStep StepContaining(CleanupPlan plan, string argument) =>
         Assert.Single(
@@ -134,7 +145,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
     [Fact]
     public async Task ReportsNotPresentWhenPlatformIoWasNeverInstalled()
     {
-        var provider = CreateProvider();
+        var provider = CreateProvider(new FakeProcessRunner());
 
         Assert.False(await provider.IsPresentAsync());
 
@@ -169,11 +180,11 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Directory.CreateDirectory(elsewhere);
         File.WriteAllBytes(Path.Combine(elsewhere, "payload.bin"), new byte[2048]);
 
-        var runner = new FakeProcessRunner().Responding("system info", InfoJson(cacheDir: elsewhere));
+        var runner = new FakeProcessRunner().Responding(Pio, "system info", InfoJson(cacheDir: elsewhere));
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(runner.Invocations, i =>
-            i.Arguments.Contains("--json-output", StringComparison.Ordinal));
+            i.FileName == Pio && i.Arguments.Contains("--json-output", StringComparison.Ordinal));
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(elsewhere));
     }
 
@@ -190,7 +201,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Directory.CreateDirectory(relocatedCache);
         File.WriteAllBytes(Path.Combine(relocatedCache, "payload.bin"), new byte[2048]);
 
-        var runner = new FakeProcessRunner().Responding("system info", InfoJson(coreDir: relocatedCore));
+        var runner = new FakeProcessRunner().Responding(Pio, "system info", InfoJson(coreDir: relocatedCore));
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(relocatedCache));
@@ -207,7 +218,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
 
         var json =
             $$$"""{"cache_dir": {"value": {{{JsonSerializer.Serialize(elsewhere)}}}, "default": null}}""";
-        var runner = new FakeProcessRunner().Responding("system info", json);
+        var runner = new FakeProcessRunner().Responding(Pio, "system info", json);
 
         var plan = await CreateProvider(runner).PlanAsync();
 
@@ -226,7 +237,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         _environment.WithExecutable("pio");
         var cache = CreateCache();
 
-        var runner = new FakeProcessRunner().Responding("system info", output);
+        var runner = new FakeProcessRunner().Responding(Pio, "system info", output);
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
@@ -243,6 +254,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         // §5.1: nothing is targeted for deletion; the tool is asked to evict.
         Assert.Empty(plan.TargetedPaths);
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Pio, step.FileName);
         Assert.Contains("system prune", step.Arguments, StringComparison.Ordinal);
     }
 
@@ -262,6 +274,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var plan = await CreateProvider(Reporting(ASupersededToolchain)).PlanAsync();
 
         var step = StepContaining(plan, "--cache");
+        Assert.Equal(Pio, step.FileName);
         Assert.DoesNotContain("--core-packages", step.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("--platform-packages", step.Arguments, StringComparison.Ordinal);
     }
@@ -281,6 +294,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         var step = StepContaining(plan, "--core-packages");
+        Assert.Equal(Pio, step.FileName);
         Assert.Contains("--platform-packages", step.Arguments, StringComparison.Ordinal);
         Assert.Contains(Path.Combine(provider.CoreRoot, "packages"), step.MeasuredPaths);
 
@@ -306,6 +320,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var plan = await CreateProvider(Reporting(ASupersededToolchain)).PlanAsync();
 
         var step = StepContaining(plan, "--core-packages");
+        Assert.Equal(Pio, step.FileName);
         Assert.NotNull(step.MeasuredBefore);
 
         var probed = step.MeasuredBefore.Value;
@@ -330,6 +345,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var asked = Assert.Single(runner.Invocations, i =>
             i.Arguments.Contains("--core-packages", StringComparison.Ordinal));
 
+        Assert.Equal(Pio, asked.FileName);
         Assert.Contains("--dry-run", asked.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("--force", asked.Arguments, StringComparison.Ordinal);
     }
@@ -411,6 +427,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var plan = await CreateProvider(Reporting(ASupersededToolchain)).PlanAsync();
 
         var step = StepContaining(plan, "--core-packages");
+        Assert.Equal(Pio, step.FileName);
         Assert.Equal(SupersededToolchainBytes, step.EstimatedBytes);
         Assert.DoesNotContain(plan.Steps.OfType<RunCommandStep>(), s =>
             s.Arguments.Contains("--cache", StringComparison.Ordinal));
@@ -432,6 +449,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(2, plan.Steps.OfType<RunCommandStep>().Count());
+        Assert.All(plan.Steps.OfType<RunCommandStep>(), step => Assert.Equal(Pio, step.FileName));
         Assert.Empty(plan.TargetedPaths);
 
         foreach (var sibling in siblings.Append(provider.CoreRoot))
@@ -460,8 +478,8 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         }
 
         var runner = new FakeProcessRunner()
-            .Responding("system info", InfoJson(coreDir: relocated))
-            .Responding("--dry-run", ASupersededToolchain);
+            .Responding(Pio, "system info", InfoJson(coreDir: relocated))
+            .Responding(Pio, "--dry-run", ASupersededToolchain);
 
         var plan = await CreateProvider(runner).PlanAsync();
 
@@ -543,13 +561,13 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Directory.CreateDirectory(moved);
         File.WriteAllBytes(Path.Combine(moved, "payload.bin"), new byte[2048]);
 
-        var runner = new FakeProcessRunner().Responding("system info", InfoJson(cacheDir: first));
+        var runner = new FakeProcessRunner().Responding(Pio, "system info", InfoJson(cacheDir: first));
         var provider = CreateProvider(runner);
 
         var before = await provider.PlanAsync();
         Assert.Contains(before.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
 
-        runner.Responding("system info", InfoJson(cacheDir: moved));
+        runner.Responding(Pio, "system info", InfoJson(cacheDir: moved));
         provider.InvalidateCaches();
 
         var after = await provider.PlanAsync();
@@ -565,7 +583,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         CreateCache();
 
         var provider = new PlatformIoCacheProvider(
-            _environment, new FakeProcessRunner(), new FakeProcessInspector("pio"));
+            _environment, SayingNothing(), new FakeProcessInspector("pio"));
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
@@ -608,7 +626,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Directory.CreateDirectory(LongPath.Extended(cache));
         File.WriteAllBytes(LongPath.Extended(Path.Combine(cache, "payload.bin")), new byte[4096]);
 
-        var runner = new FakeProcessRunner().Responding("system info", InfoJson(cacheDir: cache));
+        var runner = new FakeProcessRunner().Responding(Pio, "system info", InfoJson(cacheDir: cache));
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
@@ -636,7 +654,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
             ["packages_dir"] = packages,
         });
 
-        var provider = CreateProvider(new FakeProcessRunner().Responding("system info", report));
+        var provider = CreateProvider(new FakeProcessRunner().Responding(Pio, "system info", report));
         var plan = await provider.PlanAsync();
         var policy = await ExploreActionPolicy.ForAsync(
             new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);

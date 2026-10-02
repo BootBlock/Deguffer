@@ -106,7 +106,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         var root = _temp.CreateDirectory("tool");
         using var cts = new CancellationTokenSource();
 
-        var runner = new FakeProcessRunner().Replying(_ =>
+        var runner = new FakeProcessRunner().Replying("tool", _ =>
         {
             cts.Cancel();
             throw new OperationCanceledException(cts.Token);

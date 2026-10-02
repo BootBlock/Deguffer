@@ -129,7 +129,7 @@ public sealed class CleanupProviderBaseTests : IDisposable
         File.WriteAllBytes(archive, new byte[4096]);
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", cache);
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         var plan = await provider.PlanAsync();
@@ -190,7 +190,7 @@ public sealed class CleanupProviderBaseTests : IDisposable
         File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", cache);
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
         var plan = await provider.PlanAsync(MinimumAge.WithinHours(8, DateTime.UtcNow));
 
@@ -241,6 +241,9 @@ public sealed class CleanupProviderBaseTests : IDisposable
     private GradleCacheProvider Provider() =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
 
+    /// <summary>The npm the fake environment resolves, which the npm-driven cases answer for.</summary>
+    private string Npm => _environment.FindExecutable("npm")!;
+
     /// <summary>
     /// A §5.1 command step's estimate is never guard-filtered, however the guard is set.
     ///
@@ -266,7 +269,7 @@ public sealed class CleanupProviderBaseTests : IDisposable
         var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding("config get cache", cache);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", cache);
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         var unguarded = await provider.PlanAsync();

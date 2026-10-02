@@ -223,7 +223,8 @@ public sealed class PlanExecutorTests : IDisposable
 
         var archive = _temp.CreateFile(8192, "npm-cache", "saved", "archive.pst");
 
-        var runner = new FakeProcessRunner();
+        // The program answers, so a command that ran anyway fails the assertion rather than the fake.
+        var runner = new FakeProcessRunner().Responding(command.FileName, command.Arguments, string.Empty);
         var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
         var result = await executor.ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, default);
 
@@ -342,7 +343,7 @@ public sealed class PlanExecutorTests : IDisposable
             MeasuredPaths = [cache],
         };
 
-        var runner = new FakeProcessRunner();
+        var runner = new FakeProcessRunner().Responding(command.FileName, command.Arguments, string.Empty);
         var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
 
         StepOutcome step;
@@ -489,7 +490,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(ScanStrategy.MasterFileTable, planTime.Strategy);
 
         // The step's own command is what empties the tree, as a real cache eviction does.
-        var runner = new FakeProcessRunner().Replying(_ =>
+        var runner = new FakeProcessRunner().Replying("tool", _ =>
         {
             Directory.Delete(cache, recursive: true);
             return new CommandOutcome(0, "cleared", string.Empty);
@@ -548,7 +549,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         // A command that succeeds and clears nothing, which is what a failed eviction looks like
         // from here, and what conda's clean looks like for everything an environment still links.
-        var runner = new FakeProcessRunner();
+        var runner = new FakeProcessRunner().Responding("tool", "clean", string.Empty);
 
         var plan = new CleanupPlan
         {
@@ -701,11 +702,29 @@ public sealed class PlanExecutorTests : IDisposable
 
         var progress = new ProgressRecorder<double>();
 
-        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
+        await new PlanExecutor(new FakeProcessRunner().Responding("tool", "clean", string.Empty), new FakeDirectoryScanner(), RefusalLog)
             .ExecuteAsync(plan, runReach: null, residue: null, progress, default);
 
         // Two steps, two reports, and nothing else could have produced either of them.
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
+    }
+
+    /// <summary>
+    /// The program a step names is the one its provider resolved, and the executor runs exactly that:
+    /// not a bare name for Windows to search the path for, not quoted, not trimmed. A path with a space
+    /// in it is where a rewrite would show.
+    /// </summary>
+    [Fact]
+    public async Task RunsACommandStepWithTheProgramItNamesUnchanged()
+    {
+        var step = new RunCommandStep(@"C:\Program Files\Example Tool\example.exe", "cache clean --force", "Clear the cache");
+        var runner = new FakeProcessRunner().Responding(step.FileName, step.Arguments, string.Empty);
+
+        var result = await new PlanExecutor(runner, new FakeDirectoryScanner(), RefusalLog)
+            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, ct: default);
+
+        Assert.True(Assert.Single(result.Steps).Succeeded);
+        Assert.Equal([(step.FileName, step.Arguments)], runner.Invocations);
     }
 
     /// <summary>

@@ -56,15 +56,18 @@ public sealed class PoetryCacheProviderTests : IDisposable
         return (artifacts, repositories, environments);
     }
 
+    /// <summary>Where the fake environment puts <c>poetry</c>, once a test has installed it.</summary>
+    private string PoetryPath => _environment.FindExecutable("poetry")!;
+
     /// <summary>Poetry installed, answering its two config lookups and naming one cache.</summary>
     private FakeProcessRunner Poetry(string? cacheRoot = null, string? environments = null)
     {
         _environment.WithExecutable("poetry");
 
         return new FakeProcessRunner()
-            .Responding("config cache-dir", cacheRoot ?? CacheRoot)
-            .Responding("config virtualenvs.path", environments ?? Path.Combine(cacheRoot ?? CacheRoot, "virtualenvs"))
-            .Responding("cache list", "PyPI");
+            .Responding(PoetryPath, "config cache-dir", cacheRoot ?? CacheRoot)
+            .Responding(PoetryPath, "config virtualenvs.path", environments ?? Path.Combine(cacheRoot ?? CacheRoot, "virtualenvs"))
+            .Responding(PoetryPath, "cache list", "PyPI");
     }
 
     [Fact]
@@ -88,7 +91,8 @@ public sealed class PoetryCacheProviderTests : IDisposable
         var runner = Poetry(elsewhere);
         var plan = await CreateProvider(runner).PlanAsync();
 
-        Assert.Contains(runner.Invocations, i => i.Arguments.Contains("config cache-dir", StringComparison.Ordinal));
+        Assert.Contains(runner.Invocations, i =>
+            i.FileName == PoetryPath && i.Arguments.Contains("config cache-dir", StringComparison.Ordinal));
         Assert.Contains(Path.Combine(elsewhere, "artifacts"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(
             Path.Combine(CacheRoot, "artifacts"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
@@ -109,7 +113,8 @@ public sealed class PoetryCacheProviderTests : IDisposable
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Contains(
-            runner.Invocations, i => i.Arguments.Contains("config virtualenvs.path", StringComparison.Ordinal));
+            runner.Invocations,
+            i => i.FileName == PoetryPath && i.Arguments.Contains("config virtualenvs.path", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
@@ -136,8 +141,8 @@ public sealed class PoetryCacheProviderTests : IDisposable
         CreateCache();
 
         var runner = new FakeProcessRunner()
-            .Responding("config", string.Empty, exitCode: 1)
-            .Responding("cache list", "PyPI");
+            .Responding(PoetryPath, "config", string.Empty, exitCode: 1)
+            .Responding(PoetryPath, "cache list", "PyPI");
 
         var plan = await CreateProvider(runner).PlanAsync();
 
@@ -247,12 +252,13 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Directory.CreateDirectory(Path.Combine(repositories, "private-index"));
         File.WriteAllBytes(Path.Combine(repositories, "private-index", "metadata.json"), new byte[1024]);
 
-        var runner = Poetry().Responding("cache list", "PyPI\nprivate-index");
+        var runner = Poetry().Responding(PoetryPath, "cache list", "PyPI\nprivate-index");
         var plan = await CreateProvider(runner).PlanAsync();
 
         var commands = plan.Steps.OfType<RunCommandStep>().ToList();
 
         Assert.Equal(2, commands.Count);
+        Assert.All(commands, s => Assert.Equal(PoetryPath, s.FileName));
         Assert.Contains(commands, s => s.Arguments.Contains("cache clear PyPI --all", StringComparison.Ordinal));
         Assert.Contains(commands, s => s.Arguments.Contains("cache clear private-index --all", StringComparison.Ordinal));
 
@@ -334,10 +340,11 @@ public sealed class PoetryCacheProviderTests : IDisposable
         var (_, repositories, _) = CreateCache();
         Directory.CreateDirectory(Path.Combine(repositories, "odd name"));
 
-        var runner = Poetry().Responding("cache list", "PyPI\nodd name");
+        var runner = Poetry().Responding(PoetryPath, "cache list", "PyPI\nodd name");
         var plan = await CreateProvider(runner).PlanAsync();
 
         var command = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(PoetryPath, command.FileName);
         Assert.Contains("cache clear PyPI --all", command.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("odd name", command.Arguments, StringComparison.Ordinal);
     }
@@ -357,10 +364,11 @@ public sealed class PoetryCacheProviderTests : IDisposable
     {
         var (_, repositories, _) = CreateCache();
 
-        var runner = Poetry().Responding("cache list", $"PyPI\n{name}");
+        var runner = Poetry().Responding(PoetryPath, "cache list", $"PyPI\n{name}");
         var plan = await CreateProvider(runner).PlanAsync();
 
         var command = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(PoetryPath, command.FileName);
         Assert.Contains("cache clear PyPI --all", command.Arguments, StringComparison.Ordinal);
 
         // Whatever it measures is inside the repository cache, and is not the repository cache.
@@ -496,7 +504,7 @@ public sealed class PoetryCacheProviderTests : IDisposable
 
         // §5.1's half was handed to Poetry rather than done by path.
         Assert.Contains(runner.Invocations, i =>
-            i.Arguments.Contains("cache clear PyPI --all", StringComparison.Ordinal));
+            i.FileName == PoetryPath && i.Arguments.Contains("cache clear PyPI --all", StringComparison.Ordinal));
         Assert.True(Directory.Exists(Path.Combine(repositories, "PyPI")));
     }
 
@@ -557,8 +565,8 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.Contains(Path.Combine(first, "artifacts"), before.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
         // POETRY_CACHE_DIR moved between scans; the planner invalidates before replanning.
-        runner.Responding("config cache-dir", moved)
-            .Responding("config virtualenvs.path", Path.Combine(moved, "virtualenvs"));
+        runner.Responding(PoetryPath, "config cache-dir", moved)
+            .Responding(PoetryPath, "config virtualenvs.path", Path.Combine(moved, "virtualenvs"));
         provider.InvalidateCaches();
 
         var after = await provider.PlanAsync();

@@ -27,6 +27,12 @@ public sealed class DotNetObjProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>
+    /// Git, where the environment says it is once a test has installed it: the fake answers no other
+    /// program, so the tracked-file check is held to the git the environment found.
+    /// </summary>
+    private string Git => _environment.FindExecutable("git")!;
+
     private string ApproveRoot(string name = "src")
     {
         var root = _temp.CreateDirectory(name);
@@ -365,7 +371,7 @@ public sealed class DotNetObjProviderTests : IDisposable
         var obj = ProjectFixture.CreateProject(Path.Combine(repository, "Example"), "Example");
 
         _environment.WithExecutable("git");
-        var runner = new FakeProcessRunner().Responding("ls-files", "Example/obj/committed.props\0");
+        var runner = new FakeProcessRunner().Responding(Git, "ls-files", "Example/obj/committed.props\0");
 
         var plan = await CreateProvider(runner: runner).PlanAsync();
 
@@ -397,7 +403,7 @@ public sealed class DotNetObjProviderTests : IDisposable
         }
 
         _environment.WithExecutable("git");
-        var runner = new FakeProcessRunner();
+        var runner = new FakeProcessRunner().Responding(Git, "ls-files", string.Empty);
 
         var plan = await CreateProvider(runner: runner).PlanAsync();
 
@@ -422,7 +428,7 @@ public sealed class DotNetObjProviderTests : IDisposable
         var obj = ProjectFixture.CreateProject(Path.Combine(repository, "Example"), "Example");
 
         _environment.WithExecutable("git");
-        var runner = new FakeProcessRunner().Responding("ls-files", string.Empty, exitCode: 128);
+        var runner = new FakeProcessRunner().Responding(Git, "ls-files", string.Empty, exitCode: 128);
 
         var plan = await CreateProvider(runner: runner).PlanAsync();
 

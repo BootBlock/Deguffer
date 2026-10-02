@@ -11,17 +11,23 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class BackupRestorerTests : IDisposable
 {
+    private const string RegExe = @"C:\Windows\System32\reg.exe";
+
     private readonly TempDirectory _temp = new();
 
     private readonly FakeUninstallRegistry _registry = new();
 
-    private readonly FakeProcessRunner _runner = new();
+    /// <summary>
+    /// reg.exe answering every import with success and writing nothing, so a test that expects no
+    /// import fails on its own assertion if one runs, and one that expects an entry back must put it there.
+    /// </summary>
+    private readonly FakeProcessRunner _runner = new FakeProcessRunner().Responding(RegExe, "import", string.Empty);
 
     public void Dispose() => _temp.Dispose();
 
     private string Folder => _temp.CreateDirectory("backups");
 
-    private BackupRestorer Restorer => new(_registry, new RegistryBackups(_runner, Folder, "reg.exe", TimeProvider.System));
+    private BackupRestorer Restorer => new(_registry, new RegistryBackups(_runner, Folder, RegExe, TimeProvider.System));
 
     private static string KeyOf(UninstallScope scope) => new UninstallKey(scope, "Tool").PhysicalPath;
 
@@ -40,7 +46,7 @@ public sealed class BackupRestorerTests : IDisposable
     {
         var backup = Backup(Export(KeyOf(UninstallScope.CurrentUser)));
         string? imported = null;
-        _runner.Replying(arguments =>
+        _runner.Replying(RegExe, arguments =>
         {
             imported = arguments.Split('"')[1];
             Assert.Equal(File.ReadAllBytes(backup.Path), File.ReadAllBytes(imported));

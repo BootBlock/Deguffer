@@ -17,6 +17,9 @@ public sealed class NpmCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>The npm the fake environment resolves, so a test names the program a step must run.</summary>
+    private string Npm => _environment.FindExecutable("npm")!;
+
     [Fact]
     public async Task ReportsNotPresentWhenNpmIsNotInstalled()
     {
@@ -30,7 +33,8 @@ public sealed class NpmCacheProviderTests : IDisposable
     public async Task ReportsNothingToDoWhenTheCacheDirectoryHasNotBeenCreatedYet()
     {
         _environment.WithExecutable("npm");
-        var provider = new NpmCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", string.Empty);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         Assert.True(await provider.IsPresentAsync());
         Assert.True((await provider.PlanAsync()).IsEmpty);
@@ -44,6 +48,7 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
 
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+        Assert.Equal(Npm, command.FileName);
         Assert.Equal("cache clean --force", command.Arguments);
         Assert.True(command.EstimatedBytes > 0);
     }
@@ -55,12 +60,13 @@ public sealed class NpmCacheProviderTests : IDisposable
         _temp.CreateFile(2048, "elsewhere", "npm-cache", "_cacache", "content", "blob");
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding("config get cache", relocated);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", relocated);
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         var plan = await provider.PlanAsync();
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
+        Assert.Equal(Npm, command.FileName);
         Assert.Equal([relocated], command.MeasuredPaths);
         Assert.True(command.EstimatedBytes >= 2048);
     }
@@ -146,14 +152,14 @@ public sealed class NpmCacheProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(moved, "payload.bin"), new byte[2048]);
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding("config get cache", first);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", first);
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         var before = await provider.PlanAsync();
         Assert.Contains(before.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
 
         // npm's cache config moved between scans; the planner invalidates before replanning.
-        runner.Responding("config get cache", moved);
+        runner.Responding(Npm, "config get cache", moved);
         provider.InvalidateCaches();
 
         var after = await provider.PlanAsync();
@@ -171,7 +177,7 @@ public sealed class NpmCacheProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding("config get cache", cache, cacheQueryExitCode);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", cache, cacheQueryExitCode);
 
         return await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, scanner)
             .PlanAsync();

@@ -16,10 +16,13 @@ public sealed class DriverStoreTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary><c>pnputil</c> where the store must run it: the fake answers no other program.</summary>
+    private string PnpUtil => DriverStore.PnpUtil(_system);
+
     [Fact]
     public async Task AsksPnpUtilInTheWindowsDirectoryForTheListingItReads()
     {
-        var runner = new FakeProcessRunner().Responding("/enum-drivers", "<PnpUtil />");
+        var runner = new FakeProcessRunner().Responding(PnpUtil, "/enum-drivers", "<PnpUtil />");
 
         var listing = await new DriverStore(runner, _system).ListAsync(CancellationToken.None);
 
@@ -33,7 +36,7 @@ public sealed class DriverStoreTests : IDisposable
     [Fact]
     public async Task ReportsAPnpUtilThatFailedAsAFailure()
     {
-        var runner = new FakeProcessRunner().Replying(_ => new CommandOutcome(5, string.Empty, "Access is denied."));
+        var runner = new FakeProcessRunner().Replying(PnpUtil, _ => new CommandOutcome(5, string.Empty, "Access is denied."));
 
         var listing = await new DriverStore(runner, _system).ListAsync(CancellationToken.None);
 
@@ -44,7 +47,7 @@ public sealed class DriverStoreTests : IDisposable
     [Fact]
     public async Task ReportsAnAnswerThatIsNotTheListingAsAFailure()
     {
-        var runner = new FakeProcessRunner().Responding("/enum-drivers", "Microsoft PnP Utility\r\n\r\nPNPUTIL [/add-driver <...>");
+        var runner = new FakeProcessRunner().Responding(PnpUtil, "/enum-drivers", "Microsoft PnP Utility\r\n\r\nPNPUTIL [/add-driver <...>");
 
         var listing = await new DriverStore(runner, _system).ListAsync(CancellationToken.None);
 

@@ -29,6 +29,9 @@ public sealed class CondaCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>Where the fake environment puts conda on <c>PATH</c>.</summary>
+    private string Conda => _environment.FindExecutable("conda")!;
+
     private string RootPrefix => Path.Combine(_environment.UserProfile, "miniconda3");
 
     private string PackageCache => Path.Combine(RootPrefix, "pkgs");
@@ -56,13 +59,18 @@ public sealed class CondaCacheProviderTests : IDisposable
         + ", \"packages\": { \"total_size\": " + packages + " } }"
         + "\r\nDryRunExit: Dry run. Exiting.";
 
+    /// <summary>
+    /// Conda's two reports, answered only by <paramref name="conda"/> — the program the test expects
+    /// the provider to have found, which is <see cref="Conda"/> unless the test finds it elsewhere.
+    /// </summary>
     private FakeProcessRunner Reporting(
         string? info = null,
         string? clean = null,
+        string? conda = null,
         params string[] packageCaches) =>
         new FakeProcessRunner()
-            .Responding("info --json", info ?? InfoJson(packageCaches))
-            .Responding("--dry-run", clean ?? CleanJson(tarballs: 1_000, packages: 9_000));
+            .Responding(conda ?? Conda, "info --json", info ?? InfoJson(packageCaches))
+            .Responding(conda ?? Conda, "--dry-run", clean ?? CleanJson(tarballs: 1_000, packages: 9_000));
 
     private CondaCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
         new(_environment, runner ?? Reporting(), FakeProcessInspector.NothingRunning, systemDirectories: _system);
@@ -101,6 +109,7 @@ public sealed class CondaCacheProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Conda, step.FileName);
         Assert.Equal("clean --index-cache --packages --tarballs --tempfiles --yes", step.Arguments);
         Assert.DoesNotContain("--all", step.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("force-pkgs-dirs", step.Arguments, StringComparison.Ordinal);
@@ -158,6 +167,7 @@ public sealed class CondaCacheProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Conda, step.FileName);
         Assert.Equal(65536, step.MeasuredBefore?.Reclaimable);
         Assert.NotEqual(step.MeasuredBefore?.Reclaimable, step.EstimatedBytes);
     }
@@ -174,7 +184,7 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         // Stands in for the command actually clearing the cache, so the executor's after-measure
         // has something to subtract.
-        var runner = Reporting().Replying(arguments =>
+        var runner = Reporting().Replying(Conda, arguments =>
         {
             if (arguments.EndsWith("--yes", StringComparison.Ordinal))
             {
@@ -317,6 +327,7 @@ public sealed class CondaCacheProviderTests : IDisposable
         var plan = await CreateProvider(Reporting(packageCaches: [PackageCache, second])).PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Conda, step.FileName);
         Assert.Equal([PackageCache, second], step.MeasuredPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(second, StringComparison.OrdinalIgnoreCase));
     }
@@ -334,6 +345,7 @@ public sealed class CondaCacheProviderTests : IDisposable
             Reporting(packageCaches: [PackageCache, Path.Combine(_temp.Path, "absent-pkgs")])).PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Conda, step.FileName);
         Assert.Equal([PackageCache], step.MeasuredPaths);
     }
 
@@ -352,10 +364,13 @@ public sealed class CondaCacheProviderTests : IDisposable
         Populate(Path.Combine(environment.UserProfile, "miniconda3", "pkgs"));
 
         var provider = new CondaCacheProvider(
-            environment, Reporting(), FakeProcessInspector.NothingRunning, systemDirectories: _system);
+            environment, Reporting(conda: exe), FakeProcessInspector.NothingRunning, systemDirectories: _system);
 
         Assert.True(await provider.IsPresentAsync());
-        Assert.False((await provider.PlanAsync()).IsEmpty);
+
+        // The step runs the conda CONDA_EXE names: found is only half of it if the clean ran another.
+        var step = Assert.Single((await provider.PlanAsync()).Steps.OfType<RunCommandStep>());
+        Assert.Equal(exe, step.FileName);
     }
 
     /// <summary>
@@ -371,7 +386,7 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         var environment = new FakeUserEnvironment(_temp.Path).WithEnvironmentVariable("CONDA_EXE", exe);
         Populate(Path.Combine(environment.UserProfile, "miniconda3", "pkgs"));
-        var runner = Reporting();
+        var runner = Reporting(conda: exe);
 
         var provider = new CondaCacheProvider(
             environment, runner, FakeProcessInspector.NothingRunning, systemDirectories: _system);
@@ -379,7 +394,9 @@ public sealed class CondaCacheProviderTests : IDisposable
         using var denied = DeniedDirectory.WithUnreadableFile(exe);
 
         Assert.True(await provider.IsPresentAsync());
-        Assert.False((await provider.PlanAsync()).IsEmpty);
+
+        var step = Assert.Single((await provider.PlanAsync()).Steps.OfType<RunCommandStep>());
+        Assert.Equal(exe, step.FileName);
     }
 
     /// <summary>
@@ -399,7 +416,9 @@ public sealed class CondaCacheProviderTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
         File.WriteAllBytes(installed, []);
 
-        var runner = new FakeProcessRunner();
+        // Registered with conda's empty answer, which leaves the plan unexamined: the test is about
+        // which conda is asked, not what it says.
+        var runner = new FakeProcessRunner().Responding(installed, "info --json", string.Empty);
         var provider = new CondaCacheProvider(
             environment, runner, FakeProcessInspector.NothingRunning, systemDirectories: _system);
 
@@ -420,12 +439,17 @@ public sealed class CondaCacheProviderTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(exe)!);
         File.WriteAllBytes(exe, []);
 
+        Populate(PackageCache);
+
         var provider = new CondaCacheProvider(
-            environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, systemDirectories: _system);
+            environment, Reporting(conda: exe), FakeProcessInspector.NothingRunning, systemDirectories: _system);
 
         using var denied = DeniedDirectory.WithUnreadableFile(exe);
 
         Assert.True(await provider.IsPresentAsync());
+
+        var step = Assert.Single((await provider.PlanAsync()).Steps.OfType<RunCommandStep>());
+        Assert.Equal(exe, step.FileName);
     }
 
     [Fact]
@@ -436,10 +460,17 @@ public sealed class CondaCacheProviderTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(exe)!);
         File.WriteAllBytes(exe, []);
 
+        Populate(PackageCache);
+
         var provider = new CondaCacheProvider(
-            environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, systemDirectories: _system);
+            environment, Reporting(conda: exe), FakeProcessInspector.NothingRunning, systemDirectories: _system);
 
         Assert.True(await provider.IsPresentAsync());
+
+        // The step runs the conda found at the install location, so the location queries and the
+        // clean all reach the same program.
+        var step = Assert.Single((await provider.PlanAsync()).Steps.OfType<RunCommandStep>());
+        Assert.Equal(exe, step.FileName);
     }
 
     [Fact]
@@ -529,6 +560,7 @@ public sealed class CondaCacheProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Conda, step.FileName);
         Assert.Equal(4096 + 8192, step.MeasuredBefore?.Reclaimable);
     }
 
@@ -611,6 +643,7 @@ public sealed class CondaCacheProviderTests : IDisposable
         var plan = await CreateProvider(Reporting(packageCaches: [PackageCache, refused])).PlanAsync();
 
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(Conda, step.FileName);
         Assert.Equal([PackageCache], step.MeasuredPaths);
         Assert.True(plan.HasUnreadableRoot);
         Assert.Contains(

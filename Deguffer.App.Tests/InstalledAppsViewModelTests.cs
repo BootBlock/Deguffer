@@ -14,6 +14,8 @@ namespace Deguffer.App.Tests;
 /// </summary>
 public sealed class InstalledAppsViewModelTests : IDisposable
 {
+    private const string RegExe = @"C:\Windows\System32\reg.exe";
+
     private readonly TempDirectory _temp = new();
 
     private readonly FakeUninstallRegistry _registry = new();
@@ -50,7 +52,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
     private InstalledAppsViewModel Page(bool relaunchStarts = false)
     {
         var reader = new InstalledAppsReader(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
-        var backups = new RegistryBackups(_runner, Path.Combine(_temp.Path, "backups"), "reg.exe", TimeProvider.System);
+        var backups = new RegistryBackups(_runner, Path.Combine(_temp.Path, "backups"), RegExe, TimeProvider.System);
 
         return new InstalledAppsViewModel(
             reader.Read,
@@ -159,7 +161,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
     public void ARestoredBackupSaysItsEntryIsBack() => UiThread.Run(async () =>
     {
         var key = new UninstallKey(UninstallScope.CurrentUser, "Tool");
-        _runner.Replying(_ =>
+        _runner.Replying(RegExe, _ =>
         {
             _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"));
             return null;
@@ -375,7 +377,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
     {
         var key = new UninstallKey(UninstallScope.CurrentUser, "Tool");
         IReadOnlyList<RunningAction> whileRestoring = [];
-        _runner.Replying(_ =>
+        _runner.Replying(RegExe, _ =>
         {
             whileRestoring = _running.Current;
             _registry.With(UninstallScope.CurrentUser, "Tool", ("DisplayName", "Tool"));

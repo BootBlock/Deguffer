@@ -18,6 +18,9 @@ public sealed class NuGetCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>The dotnet the fake environment resolves, so a test names the program a step must run.</summary>
+    private string Dotnet => _environment.FindExecutable("dotnet")!;
+
     [Fact]
     public async Task ReportsNotPresentWithoutTheDotnetSdk()
     {
@@ -35,6 +38,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
 
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+        Assert.Equal(Dotnet, command.FileName);
         Assert.Equal("nuget locals all --clear", command.Arguments);
     }
 
@@ -151,7 +155,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
 
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(
-            "locals all --list", $"global-packages: {before_[0]}\nhttp-cache: {before_[1]}");
+            Dotnet, "locals all --list", $"global-packages: {before_[0]}\nhttp-cache: {before_[1]}");
         var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         var planned = await provider.PlanAsync();
@@ -160,7 +164,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
 
         // NUGET_PACKAGES and NUGET_HTTP_CACHE_PATH both moved between scans; the planner
         // invalidates every provider before replanning.
-        runner.Responding("locals all --list", $"global-packages: {after_[0]}\nhttp-cache: {after_[1]}");
+        runner.Responding(Dotnet, "locals all --list", $"global-packages: {after_[0]}\nhttp-cache: {after_[1]}");
         provider.InvalidateCaches();
 
         var replanned = await provider.PlanAsync();
@@ -218,7 +222,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
     private Task<CleanupPlan> PlanReporting(string listing)
     {
         _environment.WithExecutable("dotnet");
-        var runner = new FakeProcessRunner().Responding("locals all --list", listing);
+        var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", listing);
 
         return new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
     }
@@ -236,7 +240,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
 
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(
-            "locals all --list", $"global-packages: {packages}\\\ntemp: {scratch}\\");
+            Dotnet, "locals all --list", $"global-packages: {packages}\\\ntemp: {scratch}\\");
 
         var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
@@ -254,7 +258,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var temporary = _temp.CreateDirectory("temp");
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(
-            "locals all --list", $"temp: {Path.Combine(temporary, "NuGetScratch")}\\");
+            Dotnet, "locals all --list", $"temp: {Path.Combine(temporary, "NuGetScratch")}\\");
 
         var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
@@ -279,7 +283,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
 
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(
-            "locals all --list", $"temp: {Path.Combine(asReported, "NuGetScratch")}\\");
+            Dotnet, "locals all --list", $"temp: {Path.Combine(asReported, "NuGetScratch")}\\");
 
         var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
@@ -320,7 +324,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
             $"plugins-cache: {locations[2]}");
 
         _environment.WithExecutable("dotnet");
-        var runner = new FakeProcessRunner().Responding("locals all --list", listing);
+        var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", listing);
 
         var plan = await new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
         return (plan, locations);
