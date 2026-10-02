@@ -191,10 +191,10 @@ public readonly record struct LevelWalk(
     /// walk found, as Claude Code's leftovers row does, so reading every row's declarations from
     /// inside a walk would ask that row for a declaration it is still building.</para>
     /// </summary>
-    public IReadOnlyList<(string Path, string Reason)> Survivors(RowDeclarations declarations)
+    public IReadOnlyList<(string Path, string Reason)> Survivors(RowDeclarations declarations, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(declarations);
 
-        return [.. Unrecognised.Where(child => !declarations.OfferedByARow(child.Path))];
+        return [.. Unrecognised.Where(child => !declarations.OfferedByARow(child.Path, ct))];
     }
 }

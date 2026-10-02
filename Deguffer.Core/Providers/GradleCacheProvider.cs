@@ -184,7 +184,9 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
         var walk = CacheLevelWalk.Under(Levels, home, ct);
 
-        List<PlanNote> notes = [.. walk.Notes, .. walk.Survivors(_declarations).Select(CacheLevelWalk.SparedNote)];
+        var spared = walk.Survivors(_declarations, ct);
+
+        List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
 
         var (steps, measured) = await PlanDeletionsAsync(walk.Targets, keep, ct).ConfigureAwait(false);
 
@@ -205,7 +207,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(home, walk),
+            ProtectedPaths = BuildProtectedPaths(home, walk, spared),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,
@@ -219,9 +221,12 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// the walk spared or declined is named as well: <c>jdks</c>, <c>native</c> and <c>daemon</c> are
     /// siblings of the two targets, which is exactly where an over-broad rule takes one with the other.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string home, LevelWalk walk) => Protect(
+    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        string home,
+        LevelWalk walk,
+        IReadOnlyList<(string Path, string Reason)> spared) => Protect(
         walk,
-        _declarations,
+        spared,
         [
             (home, "The Gradle user home itself must survive — only its known-disposable children are removed."),
             .. Configuration.Select(file => (Path.Combine(home, file.Name), file.Reason)),

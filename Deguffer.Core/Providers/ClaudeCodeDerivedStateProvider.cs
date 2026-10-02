@@ -295,7 +295,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths =
             [
-                .. Protect([.. Survivors(survey)]),
+                .. Protect([.. Survivors(survey, ct)]),
 
                 // Measured during planning, so each was there when the plan was made: the claim
                 // CleanupPlan.NarrowedTo makes for a step the user declined.
@@ -315,7 +315,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// begin the same way, every file at its top level, every folder at its top level, and what each
     /// kind of leftover left alone.
     /// </summary>
-    private IEnumerable<(string Path, string Reason)> Survivors(Survey survey)
+    private IEnumerable<(string Path, string Reason)> Survivors(Survey survey, CancellationToken ct)
     {
         yield return (survey.Evidence.Home, "Claude Code's own folder must survive — only recognised leftovers inside it are removed.");
 
@@ -332,7 +332,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             yield return (LongPath.Display(file.FullName), NamedFiles.GetValueOrDefault(file.Name, RootFileReason));
         }
 
-        foreach (var survivor in survey.Root.Survivors(_declarations).Concat(survey.Root.Declined))
+        foreach (var survivor in survey.Root.Survivors(_declarations, ct).Concat(survey.Root.Declined))
         {
             yield return survivor;
         }

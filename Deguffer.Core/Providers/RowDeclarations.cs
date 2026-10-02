@@ -61,14 +61,18 @@ public sealed class RowDeclarations
     /// Whether some row declares <paramref name="folder"/>, a directory that is not a link, as one it
     /// removes from the directory it sits in.
     /// </summary>
-    public bool OfferedByARow(string folder) =>
+    /// <param name="ct">
+    /// Checked between rows while the set is read. A row's declaration cannot be stopped part-way, but
+    /// the first question in a pass reads every row's, inside the plan of whichever row asked.
+    /// </param>
+    public bool OfferedByARow(string folder, CancellationToken ct = default) =>
         Path.GetDirectoryName(folder) is { } parent
         && LongPath.Configured(parent) is { } key
-        && ByFolder().TryGetValue(key, out var roots)
+        && ByFolder(ct).TryGetValue(key, out var roots)
         && roots.Exists(root => root.Recognises(new ToolRootChild(Path.GetFileName(folder), ChildKind.Folder)));
 
     /// <summary>Built once per planning pass (G4), because a plan asks once per spared child.</summary>
-    private Dictionary<string, List<ToolRoot>> ByFolder()
+    private Dictionary<string, List<ToolRoot>> ByFolder(CancellationToken ct)
     {
         if (_byFolder is { } built)
         {
@@ -89,19 +93,24 @@ public sealed class RowDeclarations
         {
             built = new Dictionary<string, List<ToolRoot>>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var root in _rows.SelectMany(row => row.ToolRoots))
+            foreach (var row in _rows)
             {
-                if (LongPath.Configured(root.Path) is not { } key)
-                {
-                    continue;
-                }
+                ct.ThrowIfCancellationRequested();
 
-                if (!built.TryGetValue(key, out var roots))
+                foreach (var root in row.ToolRoots)
                 {
-                    built[key] = roots = [];
-                }
+                    if (LongPath.Configured(root.Path) is not { } key)
+                    {
+                        continue;
+                    }
 
-                roots.Add(root);
+                    if (!built.TryGetValue(key, out var roots))
+                    {
+                        built[key] = roots = [];
+                    }
+
+                    roots.Add(root);
+                }
             }
 
             return _byFolder = built;

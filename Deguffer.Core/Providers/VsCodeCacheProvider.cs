@@ -292,7 +292,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
             }
 
             var walk = CacheLevelWalk.Under(LevelsOf(editor), folder, ct);
-            var spares = walk.Survivors(_declarations);
+            var spares = walk.Survivors(_declarations, ct);
 
             targets.AddRange(walk.Targets.Select(target => target with { Group = editor.UserData.Name }));
             declined.AddRange(walk.Declined);

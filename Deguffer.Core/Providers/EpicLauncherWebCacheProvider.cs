@@ -314,7 +314,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                 file => (Path.Combine(cache, file.Name), file.Reason)));
 
             var walk = CacheLevelWalk.Under(Levels, cache, ct);
-            var spares = walk.Survivors(_declarations);
+            var spares = walk.Survivors(_declarations, ct);
 
             targets.AddRange(walk.Targets);
             declined.AddRange(walk.Declined);

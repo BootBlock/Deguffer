@@ -275,7 +275,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 + $"environments as {LongPath.Display(environments)}."),
         };
 
-        var (targets, walk, withheld) = CollectTargets(cacheRoot, environments, notes, ct);
+        var (targets, walk, spared, withheld) = CollectTargets(cacheRoot, environments, notes, ct);
         var (deletions, deleted) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         var (commands, cleared, commandDeclined, repositoriesUnreachable) = await PlanRepositoryClearsAsync(
@@ -328,7 +328,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             // §5.1's route first: where Poetry can evict its own cache, that is what the user is
             // offered, and the path-based step is the one child no Poetry command reaches.
             Steps = [.. commands, .. deletions],
-            ProtectedPaths = BuildProtectedPaths(cacheRoot, environments, walk, withheld),
+            ProtectedPaths = BuildProtectedPaths(cacheRoot, environments, walk, spared, withheld),
             Notes = notes,
             Fallback = fallback,
             HasUnreadableRoot = walk.Unreadable || repositoriesUnreachable,
@@ -366,9 +366,10 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         string cacheRoot,
         string environments,
         LevelWalk walk,
+        IReadOnlyList<(string Path, string Reason)> spared,
         IReadOnlyList<(string Path, string Reason)> withheld) => Protect(
         walk,
-        _declarations,
+        spared,
         [
             (cacheRoot, "Poetry's cache directory must survive — only the caches within it are cleared."),
             (environments, "Every virtual environment Poetry has created. Each is a full install, not a cache."),
@@ -394,7 +395,11 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <para><c>Withheld</c> is a recognised child that holds the configured environments. It is
     /// spared as surely as a Tier 4 child, so §5.6 names it alongside the walk's own survivors.</para>
     /// </summary>
-    private (IReadOnlyList<DeletionTarget> Targets, LevelWalk Walk, IReadOnlyList<(string Path, string Reason)> Withheld)
+    private (
+        IReadOnlyList<DeletionTarget> Targets,
+        LevelWalk Walk,
+        IReadOnlyList<(string Path, string Reason)> Spared,
+        IReadOnlyList<(string Path, string Reason)> Withheld)
         CollectTargets(
         string cacheRoot,
         string environments,
@@ -403,8 +408,10 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     {
         var walk = CacheLevelWalk.Under(Levels, cacheRoot, ct);
 
+        var spared = walk.Survivors(_declarations, ct);
+
         notes.AddRange(walk.Notes);
-        notes.AddRange(walk.Survivors(_declarations).Select(CacheLevelWalk.SparedNote));
+        notes.AddRange(spared.Select(CacheLevelWalk.SparedNote));
 
         var targets = new List<DeletionTarget>();
         var withheld = new List<(string Path, string Reason)>();
@@ -433,7 +440,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             targets.Add(target);
         }
 
-        return (targets, walk, withheld);
+        return (targets, walk, spared, withheld);
     }
 
     /// <summary>

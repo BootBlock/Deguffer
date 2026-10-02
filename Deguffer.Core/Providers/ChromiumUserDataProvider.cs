@@ -299,7 +299,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 }
 
                 var walk = CacheLevelWalk.Under(CacheLevels, profile, ct);
-                var spares = walk.Survivors(_declarations);
+                var spares = walk.Survivors(_declarations, ct);
 
                 // Listed under the application and the profile, because those are what a reader
                 // knows: nobody chooses between 'Code Cache' folders by name.

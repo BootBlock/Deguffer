@@ -132,7 +132,9 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
 
         var walk = CacheLevelWalk.Under(Levels, _root, ct);
 
-        List<PlanNote> notes = [.. walk.Notes, .. walk.Survivors(_declarations).Select(CacheLevelWalk.SparedNote)];
+        var spared = walk.Survivors(_declarations, ct);
+
+        List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
 
         var (steps, measured) = await PlanDeletionsAsync(walk.Targets, keep, ct).ConfigureAwait(false);
 
@@ -153,7 +155,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(walk),
+            ProtectedPaths = BuildProtectedPaths(walk, spared),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,
@@ -167,9 +169,11 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
     /// indistinguishable in shape from them, and so exactly what an over-broad rule takes along.
     /// Every other child the walk spared or declined is named for the same reason.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(LevelWalk walk) => Protect(
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+        LevelWalk walk,
+        IReadOnlyList<(string Path, string Reason)> spared) => Protect(
         walk,
-        _declarations,
+        spared,
         (_root, "The .dartServer root itself must survive — only its known-disposable children are removed."),
         (Path.Combine(_root, ".prompts"), "The user's answers to the analysis server's prompts — a preference, not a cache."),
         (Path.Combine(_root, ".plugin_manager"), "State for the analyzer plugins the server loads."),

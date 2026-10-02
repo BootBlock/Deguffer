@@ -241,6 +241,25 @@ public sealed class RowDeclarationsTests : IDisposable
     }
 
     /// <summary>
+    /// The first question in a pass reads every row's declaration from inside the plan of whichever
+    /// row asked, so a cancelled pass stops there rather than reading the rest.
+    /// </summary>
+    [Fact]
+    public void ACancelledPassStopsReadingTheRows()
+    {
+        var read = 0;
+        var declarations = new RowDeclarations();
+        declarations.Admit([new DeclaringRow(() => { read++; return []; })]);
+
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        Assert.Throws<OperationCanceledException>(
+            () => declarations.OfferedByARow(Path.Combine(_environment.LocalAppData, "Tool", "cache"), cancelled.Token));
+        Assert.Equal(0, read);
+    }
+
+    /// <summary>
     /// The rows rebuild their declarations for each pass, so an answer kept from the last pass would
     /// miss a folder that appeared since.
     /// </summary>
