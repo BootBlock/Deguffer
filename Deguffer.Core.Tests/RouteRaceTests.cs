@@ -20,6 +20,10 @@ public class RouteRaceTests
     {
         private readonly TaskCompletionSource<T> _answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _mayStop = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes once the route has been told to stop.</summary>
+        public Task WhenStopped => _stopped.Task;
 
         public void LetStop() => _mayStop.TrySetResult();
 
@@ -40,6 +44,7 @@ public class RouteRaceTests
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
                 Stopped = true;
+                _stopped.TrySetResult();
 
                 if (stopsSlowly)
                 {
@@ -70,9 +75,11 @@ public class RouteRaceTests
         var racing = Race(table, walk);
 
         table.Answer(new Answer("table"));
-        await Task.Delay(TimeSpan.FromMilliseconds(100));
+        await walk.WhenStopped.WaitAsync(TimeSpan.FromSeconds(30));
 
-        Assert.True(walk.Stopped);
+        // Room for a race that did not wait to have returned. One that waits never can, whatever the
+        // machine's load, so this cannot fail the correct code.
+        await Task.Delay(TimeSpan.FromMilliseconds(100));
         Assert.False(racing.IsCompleted);
 
         walk.LetStop();
