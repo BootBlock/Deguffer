@@ -90,18 +90,32 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
     }
 
-    private ScanResult Slow((ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) measured) =>
-        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent) with { MailStores = measured.MailStores };
+    private ScanResult Slow(Walked measured) =>
+        ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent) with
+        {
+            MailStores = measured.MailStores,
+            Root = measured.Root,
+        };
 
-    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) Measure(
+    /// <summary>What the walk found, and whether it reached the root to find it.</summary>
+    private readonly record struct Walked(
+        ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root);
+
+    private static Walked Measure(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        if (!LongPath.DirectoryExists(path))
+        switch (LongPath.ProbeDirectory(path))
         {
-            return (ScanSize.Zero, false, []);
+            case PathPresence.Absent:
+                return new Walked(ScanSize.Zero, false, [], RootReach.Reached);
+
+            // A refused file arrives here too, because TryMeasureFile reads a refusal as "not a
+            // file", and the attribute read fails the same way whichever kind is asked for.
+            case PathPresence.Refused:
+                return new Walked(ScanSize.Zero, false, [], RootReach.NotDescribed);
         }
 
         long total = 0;
@@ -110,6 +124,10 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         // An int rather than a bool because the walk sets it from several threads at once, and
         // Interlocked has no bool overload. Only ever moved to 1, so no ordering question arises.
         var withheld = 0;
+
+        // Set by the root's own listing alone, which no other thread is reading at the time. See
+        // RootReach for why a folder refused below the root does not set it.
+        var rootRefused = false;
 
         var folders = new ConcurrentBag<VisitedFolder>();
         var stores = new ConcurrentBag<string>();
@@ -126,6 +144,11 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 if (contents.WasRefused)
                 {
                     folder.Stays();
+
+                    if (holder is null)
+                    {
+                        rootRefused = true;
+                    }
                 }
 
                 foreach (var entry in contents.Entries)
@@ -190,12 +213,18 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
             ct);
 
+        if (rootRefused)
+        {
+            return new Walked(ScanSize.Zero, false, [], RootReach.NotListed);
+        }
+
         var removed = Interlocked.Read(ref entries) + folders.Count(folder => !folder.HoldsSomethingThatStays);
 
-        return (
+        return new Walked(
             new ScanSize(Interlocked.Read(ref total), Interlocked.Read(ref total), Entries: removed),
             Volatile.Read(ref withheld) == 1,
-            [.. stores.Order(StringComparer.OrdinalIgnoreCase)]);
+            [.. stores.Order(StringComparer.OrdinalIgnoreCase)],
+            RootReach.Reached);
     }
 
     /// <summary>
@@ -230,7 +259,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// The length of <paramref name="path"/> if it is a file, or null for anything else — a
     /// directory, an absent path, or one we were refused. §5.3 makes the refusal ordinary rather
     /// than an error, and a null then leaves the caller to measure the path as a directory, which
-    /// answers zero for something that is not there.
+    /// answers zero for something that is not there and <see cref="RootReach.NotDescribed"/> for a
+    /// refusal.
     ///
     /// Deguffer measured only directories until <c>C:\Windows\MEMORY.DMP</c>, which is a single
     /// file and the largest reclaim it knows about. Answering zero for it — which is what this

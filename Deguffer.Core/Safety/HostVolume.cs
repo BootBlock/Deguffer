@@ -93,4 +93,14 @@ public static class HostVolume
     internal static bool Holds(string mountPoint, string path) =>
         LongPath.Contains(mountPoint, path)
         || path.Equals(Path.TrimEndingDirectorySeparator(mountPoint), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether <paramref name="path"/> names <paramref name="mountPoint"/> itself rather than
+    /// something below it, in any of the forms it arrives in: with or without the trailing separator,
+    /// and with or without the extended-length prefix. See <see cref="Holds"/> for why both forms of a
+    /// mount point name the same directory.
+    /// </summary>
+    internal static bool IsMountPoint(string mountPoint, string path) =>
+        Path.TrimEndingDirectorySeparator(LongPath.Display(path))
+            .Equals(Path.TrimEndingDirectorySeparator(mountPoint), StringComparison.OrdinalIgnoreCase);
 }

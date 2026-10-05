@@ -52,10 +52,11 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
 
         _arriving.Clear();
 
-        // Only volumes that can actually be read. An optical drive with no disc and a card reader
-        // with no card are both mounted and both answer no, and offering them is offering a scan that
-        // cannot start.
-        foreach (var volume in volumes.Volumes.Where(v => v.IsReady && v.Kind != DriveType.Network))
+        // Not volumes with nothing in them. An optical drive with no disc and a card reader with no
+        // card are both mounted and both answer no, and offering them is offering a scan that cannot
+        // start. A volume Windows would not describe is listed and refused, because the user can see
+        // it in File Explorer and leaving it out would not say why. See DriveChoice.UnreadableRefusal.
+        foreach (var volume in volumes.Volumes.Where(v => v.Readiness is not VolumeReadiness.NoMedia && v.Kind != DriveType.Network))
         {
             _arriving.Add(DriveChoice.From(volume));
         }

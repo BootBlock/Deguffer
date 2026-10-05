@@ -28,6 +28,32 @@ public enum VolumeFeatures : uint
 }
 
 /// <summary>
+/// Whether a mounted volume can be read, and in which way it cannot.
+///
+/// <para>Three states rather than a flag, because the two ways of not being ready send the reader to
+/// different places. An empty drive has nothing to say, and a caller is right to pass over it. A
+/// volume Windows would not describe may hold anything, and a caller that passed over it in silence
+/// would leave out a drive the user can see in File Explorer. See <see cref="PathPresence"/>.</para>
+/// </summary>
+public enum VolumeReadiness
+{
+    /// <summary>The volume answers, so its label, size and flags can be asked for.</summary>
+    Ready,
+
+    /// <summary>
+    /// Nothing to read: an optical drive with no disc, a card reader with no card. Windows answers
+    /// that much, and it is a complete answer.
+    /// </summary>
+    NoMedia,
+
+    /// <summary>
+    /// Windows would not say what is at the mount point: an access rule on the root, or a mount it
+    /// declines to follow. The volume may hold anything.
+    /// </summary>
+    Refused,
+}
+
+/// <summary>
 /// One volume the machine has mounted, wherever it is mounted.
 /// </summary>
 /// <param name="RootPath">
@@ -44,9 +70,10 @@ public enum VolumeFeatures : uint
 /// provider may act on is a safety decision belonging to that provider — and a seam that filtered
 /// would leave the decision untestable, since no fake could then present the kind being refused.
 /// </param>
-/// <param name="IsReady">
+/// <param name="Readiness">
 /// Whether the volume can be read at all. An optical drive with no disc and a card reader with no
-/// card are both mounted and both answer no.
+/// card are both mounted and both answer no, and a volume whose root Windows would not describe is
+/// told apart from them.
 /// </param>
 /// <param name="Label">
 /// What the volume is called, or null where it has no label, would not say, or was not asked. Null
@@ -69,13 +96,16 @@ public enum VolumeFeatures : uint
 public readonly record struct LocalVolume(
     string RootPath,
     DriveType Kind,
-    bool IsReady,
+    VolumeReadiness Readiness,
     string? Label = null,
     long? TotalBytes = null,
     long? FreeBytes = null,
     VolumeFeatures Features = VolumeFeatures.None,
     IReadOnlyList<string>? AlsoMountedAt = null)
 {
+    /// <summary>Whether the volume answers. See <see cref="Readiness"/>.</summary>
+    public bool IsReady => Readiness is VolumeReadiness.Ready;
+
     /// <summary>
     /// Every path this volume is reachable at, <see cref="RootPath"/> first.
     ///
@@ -321,16 +351,24 @@ public sealed class VolumeInventory : IVolumeInventory
     /// outright and <c>RecycleBinProvider</c> takes fixed ones only. This declines a cost, and
     /// filters nothing — which kinds a caller may act on stays that caller's decision.</para>
     /// </summary>
-    private static LocalVolume Describe(IReadOnlyList<string> mountPoints)
+    internal static LocalVolume Describe(IReadOnlyList<string> mountPoints)
     {
         var root = mountPoints[0];
         var elsewhere = mountPoints.Count > 1 ? mountPoints.Skip(1).ToArray() : null;
         var kind = VolumeCalls.KindOf(root);
-        var ready = LongPath.DirectoryExists(root);
 
-        if (!ready || kind == DriveType.Network)
+        // An empty drive answers ERROR_NOT_READY, which the probe reads as absent, so only a refusal
+        // is left to mean that Windows would not say.
+        var readiness = LongPath.ProbeDirectory(root) switch
         {
-            return new LocalVolume(root, kind, ready, AlsoMountedAt: elsewhere);
+            PathPresence.Present => VolumeReadiness.Ready,
+            PathPresence.Refused => VolumeReadiness.Refused,
+            _ => VolumeReadiness.NoMedia,
+        };
+
+        if (readiness is not VolumeReadiness.Ready || kind == DriveType.Network)
+        {
+            return new LocalVolume(root, kind, readiness, AlsoMountedAt: elsewhere);
         }
 
         // The label and the flags come from one call, so a volume that refuses cannot be recorded
@@ -343,7 +381,7 @@ public sealed class VolumeInventory : IVolumeInventory
         return new LocalVolume(
             root,
             kind,
-            IsReady: true,
+            VolumeReadiness.Ready,
             Label: label,
             TotalBytes: space?.Total,
             FreeBytes: space?.Free,

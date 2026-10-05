@@ -48,6 +48,24 @@ internal static class UnreadableRoot
         WhyItCouldNotBeReached(root));
 
     /// <summary>
+    /// The note for a path a plan asked to measure and Windows would not describe, where the rest of
+    /// the plan stands. It names the same causes as <see cref="WhyItCouldNotBeReached"/>, and says
+    /// what the figure leaves out rather than that nothing was planned.
+    /// </summary>
+    public static PlanNote UnmeasuredNote(string path) => new(
+        PlanNoteSeverity.Warning,
+        $"Windows would not say what is at '{path}', so Deguffer could not measure it. {Causes} It is "
+        + "left alone and is not counted in the size shown.");
+
+    /// <summary>
+    /// What makes Windows decline to describe a path, for every sentence that has to say so. See
+    /// <see cref="WhyItCouldNotBeReached"/> for why it names all three.
+    /// </summary>
+    private const string Causes =
+        "A link it will not follow, a folder this account may not read and a drive that is not "
+        + "connected all do that.";
+
+    /// <summary>
     /// Why §5.6 asserts that a location Windows would not describe survived. It is recorded as a
     /// refusal rather than as absent, so the check afterwards either sees it or says it could not.
     /// See <see cref="ProtectedPath.PresenceBefore"/>.
@@ -70,7 +88,6 @@ internal static class UnreadableRoot
     /// probe this replaced made every such provider say about a cache that was on the disk.</para>
     /// </summary>
     public static string WhyItCouldNotBeReached(string root) =>
-        $"Windows would not say what is at '{root}', so Deguffer could not look inside it. A link it "
-        + "will not follow, a folder this account may not read and a drive that is not connected all "
-        + "do that. Nothing was planned, and nothing was ruled out either.";
+        $"Windows would not say what is at '{root}', so Deguffer could not look inside it. {Causes} "
+        + "Nothing was planned, and nothing was ruled out either.";
 }

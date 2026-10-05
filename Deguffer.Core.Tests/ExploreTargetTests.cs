@@ -40,6 +40,40 @@ public sealed class ExploreTargetTests
         Assert.True(new ExploreTarget(@"C:\", Folder).IsScannable(volumes));
     }
 
+    /// <summary>
+    /// A volume Windows would not describe is refused at its mount point. A folder below it is not,
+    /// because every account may bypass traverse checking and the folder may well be readable.
+    /// </summary>
+    [Fact]
+    public void AVolumeWindowsWillNotDescribeIsRefusedAtItsRootAndNotBelowIt()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"R:\", readiness: VolumeReadiness.Refused);
+
+        Assert.Equal(DriveChoice.UnreadableRefusal, new ExploreTarget(@"R:\", null).Refusal(volumes));
+        Assert.Equal(DriveChoice.UnreadableRefusal, new ExploreTarget(null, @"\\?\R:\").Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"R:\", @"R:\Projects").Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"C:\", null).Refusal(volumes));
+    }
+
+    /// <summary>
+    /// The same for a volume mounted at a folder, which the folder picker names without the trailing
+    /// separator every mount point is reported with.
+    /// </summary>
+    [Fact]
+    public void AFolderMountedVolumeWindowsWillNotDescribeIsRefusedAtItsMountPointInEitherForm()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"C:\Mount\", readiness: VolumeReadiness.Refused);
+
+        Assert.Equal(DriveChoice.UnreadableRefusal, new ExploreTarget(@"C:\", @"C:\Mount").Refusal(volumes));
+        Assert.Equal(DriveChoice.UnreadableRefusal, new ExploreTarget(@"C:\", @"C:\Mount\").Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"C:\", @"C:\Mount\Projects").Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"C:\", @"C:\Mountain").Refusal(volumes));
+    }
+
     /// <summary>A share the inventory says nothing about has no flags to refuse on, and refusing on none would be a guess.</summary>
     [Fact]
     public void AFolderOnAVolumeNothingMeasuredIsNotRefused()

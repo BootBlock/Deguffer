@@ -23,6 +23,30 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// A mount point Windows would not describe is told apart from an empty drive. Asked of a folder
+    /// standing in for a mount point, because no test may mount a volume, and the readiness is decided
+    /// from the mount point's own attributes whatever is mounted there.
+    /// </summary>
+    [Fact]
+    public void TellsARefusedMountPointApartFromAnEmptyDrive()
+    {
+        using var temp = new TempDirectory();
+        var mountPoint = temp.CreateDirectory("mount") + Path.DirectorySeparatorChar;
+        var absent = Path.Combine(temp.Path, "no-media") + Path.DirectorySeparatorChar;
+
+        Assert.Equal(VolumeReadiness.Ready, VolumeInventory.Describe([mountPoint]).Readiness);
+        Assert.Equal(VolumeReadiness.NoMedia, VolumeInventory.Describe([absent]).Readiness);
+
+        using (DeniedDirectory.WithUnreadableAttributes(mountPoint))
+        {
+            var refused = VolumeInventory.Describe([mountPoint]);
+
+            Assert.Equal(VolumeReadiness.Refused, refused.Readiness);
+            Assert.False(refused.IsReady);
+        }
+    }
+
+    /// <summary>
     /// Every mount point is a rooted path ending in a separator, which is the form
     /// <see cref="HostVolume.For"/> compares against and the form <c>Path.Combine</c> builds a bin
     /// path from. <see cref="LocalVolume.RootPath"/> is the first of them.
