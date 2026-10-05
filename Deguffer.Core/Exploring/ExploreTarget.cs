@@ -51,7 +51,7 @@ public readonly record struct ExploreTarget(string? Drive, string? Folder)
             {
                 { StoresContentRemotely: true } => DriveChoice.RemoteStorageRefusal,
                 { Readiness: VolumeReadiness.Refused }
-                    when volume.MountPoints.Contains(root, StringComparer.OrdinalIgnoreCase) => DriveChoice.UnreadableRefusal,
+                    when volume.MountPoints.Any(mountPoint => HostVolume.IsMountPoint(mountPoint, root)) => DriveChoice.UnreadableRefusal,
                 _ => null,
             }
             : null;

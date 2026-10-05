@@ -242,7 +242,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// Remembered estimates deliberately survive this. Invalidate runs at the *start* of a planning
     /// pass, and clearing them here would throw away the values that make the window populate
     /// instantly — the entire point of caching them. They need no explicit clearing in any case:
-    /// every measurement overwrites its own entry with the fresh figure.
+    /// every measurement that reached its path overwrites its own entry with the fresh figure, and
+    /// one that did not leaves the last figure anybody read. See <see cref="Remember"/>.
     /// </summary>
     public void Invalidate()
     {

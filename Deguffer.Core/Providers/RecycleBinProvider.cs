@@ -186,7 +186,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(
             RemotelyStoredVolumes().Any()
-            || RefusedVolumes().Any()
+            || UnreadableVolumes().Any()
             || RecognisedBinPaths().Any(LongPath.DirectoryMayExist));
 
     /// <summary>
@@ -251,7 +251,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
 
         // Said for the same reason, and a warning rather than information: this is not a decision
         // Deguffer made, so the plan beside it is short by an amount nobody can state.
-        foreach (var volume in RefusedVolumes())
+        foreach (var volume in UnreadableVolumes())
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
@@ -517,7 +517,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// for. Kept apart from an empty drive, which has no bin to look for. See
     /// <see cref="VolumeReadiness"/>.
     /// </summary>
-    private IEnumerable<LocalVolume> RefusedVolumes() =>
+    private IEnumerable<LocalVolume> UnreadableVolumes() =>
         _volumes.Volumes.Where(v => v is { Kind: DriveType.Fixed, Readiness: VolumeReadiness.Refused });
 
     /// <summary>

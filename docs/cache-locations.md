@@ -4687,8 +4687,10 @@ clearing out this morning, and the two are indistinguishable by size.
 Drives that are not fixed are left out entirely. A network drive has no Recycle Bin — Windows
 deletes across one outright — so a `$RECYCLE.BIN` sitting on a share belongs to the server's users
 rather than to you. Removable media can be swapped between the scan and the clean, which would
-put a plan you approved for one disk in front of another. A fixed drive that is not ready to be
-read, which is unusual but possible, is skipped as well.
+put a plan you approved for one disk in front of another. A fixed drive with nothing in it to read,
+which is unusual but possible, is skipped as well. A fixed drive Windows will not let Deguffer read
+is not skipped in silence: the preview names it, says its Recycle Bin was not looked at, and the row
+reads "Could not be read" rather than "Already clear".
 
 **Windows has a command for this, and Deguffer uses it.** §5.1 says to prefer a tool's own eviction
 command, and `SHEmptyRecycleBin` is one: it empties the bin on a drive you name. Asking Windows

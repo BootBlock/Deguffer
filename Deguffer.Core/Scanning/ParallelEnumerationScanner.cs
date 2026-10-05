@@ -144,7 +144,11 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 if (contents.WasRefused)
                 {
                     folder.Stays();
-                    rootRefused |= holder is null;
+
+                    if (holder is null)
+                    {
+                        rootRefused = true;
+                    }
                 }
 
                 foreach (var entry in contents.Entries)
