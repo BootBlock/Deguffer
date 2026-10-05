@@ -63,16 +63,27 @@ public sealed partial class VolumeMftSource : IMftSource
             return null;
         }
 
+        // The handle is released here and nowhere else, on every exit that does not hand it to a
+        // source, a throw included: a leaked raw handle keeps the volume open until finalisation.
+        VolumeMftSource? source = null;
+
         try
         {
-            return Initialise(handle, ref reason);
+            source = Initialise(handle, ref reason);
+            return source;
         }
         catch (IOException)
         {
             // A volume that vanished mid-open, or one the driver will not serve raw reads from.
-            handle.Dispose();
             reason = FallbackReason.VolumeNotAddressable;
             return null;
+        }
+        finally
+        {
+            if (source is null)
+            {
+                handle.Dispose();
+            }
         }
     }
 
@@ -83,7 +94,6 @@ public sealed partial class VolumeMftSource : IMftSource
         if (RandomAccess.Read(handle, boot, 0) != boot.Length
             || !NtfsBootSector.TryParse(boot, out var geometry))
         {
-            handle.Dispose();
             reason = FallbackReason.NotNtfsVolume;
             return null;
         }
@@ -92,9 +102,8 @@ public sealed partial class VolumeMftSource : IMftSource
         var offset = geometry.MftStartCluster * geometry.BytesPerCluster;
 
         if (RandomAccess.Read(handle, record0, offset) != record0.Length
-            || !MftExtentMap.TryRead(record0, geometry.BytesPerSector, out var extents))
+            || !MftExtentMap.TryRead(record0, geometry.BytesPerSector, geometry.BytesPerCluster, out var extents))
         {
-            handle.Dispose();
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
         }

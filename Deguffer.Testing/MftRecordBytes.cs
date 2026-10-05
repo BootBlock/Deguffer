@@ -203,6 +203,32 @@ internal static class MftRecordBytes
             "No file name length places a $DATA size field across the sector boundary; the fixup test would be vacuous.");
     }
 
+    /// <summary>
+    /// A corrupt length chosen where it does the most damage: short of <see cref="int.MaxValue"/> by
+    /// less than any offset it is added to, so a bounds check that adds the two wraps negative and
+    /// passes, and the slice after it throws. Every offset the reader adds a length to is above 1.
+    /// </summary>
+    public const uint LengthJustUnderIntMax = int.MaxValue - 1;
+
+    /// <summary>
+    /// Overwrite the length the first attribute of a record declares — <c>$STANDARD_INFORMATION</c>
+    /// in a record <see cref="Build"/> or <see cref="SelfRecord"/> writes, though any first attribute
+    /// serves. The field lies well before the first sector stamp, so the
+    /// record's fixup still holds and the corruption is the only thing wrong with it.
+    /// </summary>
+    public static void DeclareFirstAttributeLength(Span<byte> record, uint length) =>
+        BinaryPrimitives.WriteUInt32LittleEndian(record[(FirstAttributeOffset() + 0x04)..], length);
+
+    /// <summary>
+    /// Overwrite the value length a record's <c>$FILE_NAME</c> declares, leaving the attribute's own
+    /// length intact so the walk reaches it. It follows <c>$STANDARD_INFORMATION</c> in every record
+    /// <see cref="Build"/> writes.
+    /// </summary>
+    public static void DeclareFileNameValueLength(Span<byte> record, uint length) =>
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            record[(FirstAttributeOffset() + MftAttributeBytes.StandardInformationLength + 0x10)..],
+            length);
+
     private static int UsaCount => (BytesPerRecord / BytesPerSector) + 1;
 
     private static int FirstAttributeOffset() => MftAttributeBytes.Align8(UsaOffset + (UsaCount * 2));

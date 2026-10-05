@@ -182,13 +182,14 @@ internal static class MftAttributeBytes
 
         foreach (var run in runs)
         {
-            // A four-byte length and a four-byte signed delta: not the most compact encoding NTFS
-            // would choose, but a legal one, which is what the reader has to cope with.
-            target[cursor++] = 0x44;
-            BinaryPrimitives.WriteInt32LittleEndian(target[cursor..], (int)run.ClusterCount);
-            cursor += 4;
-            BinaryPrimitives.WriteInt32LittleEndian(target[cursor..], (int)(run.StartCluster - previous));
-            cursor += 4;
+            // An eight-byte length and an eight-byte signed delta: not the most compact encoding NTFS
+            // would choose, but a legal one, which is what the reader has to cope with — and the
+            // only one wide enough to state a cluster past what a byte offset can address.
+            target[cursor++] = 0x88;
+            BinaryPrimitives.WriteInt64LittleEndian(target[cursor..], run.ClusterCount);
+            cursor += 8;
+            BinaryPrimitives.WriteInt64LittleEndian(target[cursor..], run.StartCluster - previous);
+            cursor += 8;
             previous = run.StartCluster;
         }
 

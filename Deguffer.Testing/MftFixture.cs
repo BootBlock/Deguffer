@@ -267,6 +267,26 @@ public sealed class MftFixture
     }
 
     /// <summary>
+    /// Make a record's first attribute declare itself far longer than the record, as a corrupt
+    /// sector the stamps do not cover would. The record must be rejected, not thrown on.
+    /// </summary>
+    public MftFixture CorruptAttributeLength(uint number)
+    {
+        MftRecordBytes.DeclareFirstAttributeLength(_records[(int)number], MftRecordBytes.LengthJustUnderIntMax);
+        return this;
+    }
+
+    /// <summary>
+    /// Make a record's <c>$FILE_NAME</c> declare a value far longer than the attribute around it.
+    /// The record then has no name it can be placed by, and must be rejected, not thrown on.
+    /// </summary>
+    public MftFixture CorruptFileNameValueLength(uint number)
+    {
+        MftRecordBytes.DeclareFileNameValueLength(_records[(int)number], MftRecordBytes.LengthJustUnderIntMax);
+        return this;
+    }
+
+    /// <summary>
     /// Make reads fail from <paramref name="record"/> onward, as a bad sector or a run list the
     /// reader could not follow would. The index must refuse rather than total what it did get.
     /// </summary>
