@@ -19,9 +19,11 @@ internal sealed class MemorySnapshotBuilder
     private long _nonPagedPool = 200 * MiB;
 
     /// <param name="created">The creation time, as FILETIME ticks. Only the order of these matters.</param>
-    public MemorySnapshotBuilder Process(int id, int parent, string name, long privateMiB, long created)
+    /// <param name="session">Deguffer's own session, as <see cref="FakeProcessCalls"/> reports it, unless given.</param>
+    public MemorySnapshotBuilder Process(
+        int id, int parent, string name, long privateMiB, long created, uint session = FakeProcessCalls.OwnSession)
     {
-        _processes.Add(new ProcessMemory(id, parent, name, CommitCharge: 2 * privateMiB * MiB, privateMiB * MiB, created));
+        _processes.Add(new ProcessMemory(id, parent, name, session, CommitCharge: 2 * privateMiB * MiB, privateMiB * MiB, created));
         return this;
     }
 

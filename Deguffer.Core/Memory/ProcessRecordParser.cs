@@ -22,6 +22,7 @@ internal sealed record ProcessRecordLayout(
     int NameBuffer,
     int ProcessId,
     int ParentProcessId,
+    int SessionId,
     int PagefileUsage)
 {
     public const int NextEntryOffset = 0x00;
@@ -36,10 +37,10 @@ internal sealed record ProcessRecordLayout(
     public const int NameLength = 0x38;
 
     public static readonly ProcessRecordLayout Wide = new(
-        PointerSize: 8, RecordSize: 0x100, NameBuffer: 0x40, ProcessId: 0x50, ParentProcessId: 0x58, PagefileUsage: 0xB8);
+        PointerSize: 8, RecordSize: 0x100, NameBuffer: 0x40, ProcessId: 0x50, ParentProcessId: 0x58, SessionId: 0x64, PagefileUsage: 0xB8);
 
     public static readonly ProcessRecordLayout Narrow = new(
-        PointerSize: 4, RecordSize: 0xB8, NameBuffer: 0x3C, ProcessId: 0x44, ParentProcessId: 0x48, PagefileUsage: 0x7C);
+        PointerSize: 4, RecordSize: 0xB8, NameBuffer: 0x3C, ProcessId: 0x44, ParentProcessId: 0x48, SessionId: 0x50, PagefileUsage: 0x7C);
 
     /// <summary>The form this process is handed.</summary>
     public static ProcessRecordLayout Current => IntPtr.Size == 8 ? Wide : Narrow;
@@ -55,6 +56,7 @@ internal readonly record struct ProcessRecord(
     int ProcessId,
     int ParentProcessId,
     string Name,
+    uint SessionId,
     long CommitCharge,
     long PrivateWorkingSet,
     long CreationTime);
@@ -97,6 +99,7 @@ internal static class ProcessRecordParser
                 ProcessId: (int)layout.PointerAt(record, layout.ProcessId),
                 ParentProcessId: (int)layout.PointerAt(record, layout.ParentProcessId),
                 Name: name,
+                SessionId: BinaryPrimitives.ReadUInt32LittleEndian(record[layout.SessionId..]),
                 CommitCharge: (long)layout.PointerAt(record, layout.PagefileUsage),
                 PrivateWorkingSet: BinaryPrimitives.ReadInt64LittleEndian(record[ProcessRecordLayout.WorkingSetPrivateSize..]),
                 CreationTime: BinaryPrimitives.ReadInt64LittleEndian(record[ProcessRecordLayout.CreateTime..])));

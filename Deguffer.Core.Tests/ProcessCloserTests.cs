@@ -38,7 +38,10 @@ public sealed class ProcessCloserTests
     private static readonly IReadOnlyList<ProcessWindow> OneWindow = Confirmed(TargetWindow);
 
     /// <summary>The machine as the close is asked for: a desktop, Deguffer, a host, and the target.</summary>
-    private static MemorySnapshot Before() =>
+    private static MemorySnapshot Before() => Machine().Build();
+
+    /// <summary><see cref="Before"/> still open, so a test can add to the machine it describes.</summary>
+    private static MemorySnapshotBuilder Machine() =>
         new MemorySnapshotBuilder()
             .Process(Shell, 1, "explorer.exe", 200, ShellCreated)
             .Process(Compositor, 1, "dwm.exe", 150, CompositorCreated)
@@ -46,8 +49,7 @@ public sealed class ProcessCloserTests
             .Process(Host, 1, "svchost.exe", 60, HostCreated)
             .Process(TargetId, Shell, "editor.exe", 300, TargetCreated)
             .Process(Child, TargetId, "editor-helper.exe", 50, ChildCreated)
-            .Service("Thing", Host)
-            .Build();
+            .Service("Thing", Host);
 
     /// <summary>The machine when the watch ends, holding only what <paramref name="running"/> names.</summary>
     private static MemorySnapshot After(params int[] running)
@@ -70,11 +72,14 @@ public sealed class ProcessCloserTests
     private static ProcessMemory Target(MemorySnapshot snapshot) =>
         snapshot.Processes.Processes.Single(p => p.ProcessId == TargetId);
 
-    /// <summary>Windows as it answers about a machine nothing has changed: the target holds its window.</summary>
+    /// <summary>
+    /// Windows as it answers about a machine nothing has changed: the target holds its window, and the
+    /// compositor will not open, as it did not to an unelevated Deguffer where that was measured.
+    /// </summary>
     private static FakeProcessCalls Processes(FakeProcess? target = null) =>
         new FakeProcessCalls()
             .With(target ?? new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated })
-            .With(new FakeProcess { ProcessId = Compositor, CreatedAt = CompositorCreated })
+            .With(new FakeProcess { ProcessId = Compositor, CreatedAt = CompositorCreated, OpenRefused = true })
             .With(new FakeProcess { ProcessId = Shell, CreatedAt = ShellCreated });
 
     private static FakeWindowCalls Desktop(params FakeWindow[] windows)
@@ -165,6 +170,33 @@ public sealed class ProcessCloserTests
         Assert.Equal(VerificationOutcome.Survived, outcomes[$"dwm.exe (process {Compositor})"]);
         Assert.Equal(VerificationOutcome.ExpectedExit, outcomes[$"editor-helper.exe (process {Child})"]);
         Assert.Equal(VerificationOutcome.UnclaimedExit, outcomes[$"svchost.exe (process {Host})"]);
+    }
+
+    /// <summary>
+    /// Another user signing out while the watch runs takes their session's compositor with it. That
+    /// compositor is no part of this desktop, so its going fails nothing, although it will not open
+    /// to say which session it was in.
+    /// </summary>
+    [Fact]
+    public async Task AnotherSessionsCompositorGoingDuringTheWatchFailsNothing()
+    {
+        const int OtherCompositor = 121;
+
+        var before = Machine()
+            .Process(OtherCompositor, 1, "dwm.exe", 90, created: 7, FakeProcessCalls.OtherSession)
+            .Build();
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var processes = Processes(target).With(new FakeProcess { ProcessId = OtherCompositor, CreatedAt = 7, OpenRefused = true });
+        var clock = new ManualTimeProvider();
+        var closer = Closer(processes, Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
+
+        var attempt = await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
+        var report = Assert.IsType<CloseReport>(attempt.Report);
+
+        Assert.True(report.Verification.Passed);
+        Assert.Equal(
+            VerificationOutcome.Survived,
+            report.Verification.Checks.Single(c => c.Subject == $"dwm.exe (process {Compositor})").Outcome);
     }
 
     /// <summary>
@@ -384,8 +416,8 @@ public sealed class ProcessCloserTests
 
     /// <summary>
     /// §7.2: nothing is asked of Windows for a row nobody selected. A close opens the target it acts
-    /// on, the shell whose identity §5.6 has to confirm, and the compositor whose session decides
-    /// whether it is this session's. No other process is opened, however many the machine holds.
+    /// on and the shell whose identity §5.6 has to confirm. The compositor's session comes from the
+    /// read, so it is not opened. No other process is opened, however many the machine holds.
     /// </summary>
     [Fact]
     public async Task OnlyTheTargetAndTheDesktopAreOpened()
@@ -398,7 +430,7 @@ public sealed class ProcessCloserTests
 
         await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
 
-        Assert.Equal([TargetId, Shell, Compositor], processes.Opened);
+        Assert.Equal([TargetId, Shell], processes.Opened);
     }
 
     /// <summary>

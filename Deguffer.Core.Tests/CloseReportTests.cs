@@ -15,7 +15,7 @@ public sealed class CloseReportTests
     private const long MiB = MemorySnapshotBuilder.MiB;
 
     private static readonly ProcessMemory Target =
-        new(4321, ParentProcessId: 900, "editor.exe", CommitCharge: 200, PrivateWorkingSet: 100, CreationTime: 10);
+        new(4321, ParentProcessId: 900, "editor.exe", SessionId: 1, CommitCharge: 200, PrivateWorkingSet: 100, CreationTime: 10);
 
     private static SystemMemory Machine(long committedMiB) =>
         new MemorySnapshotBuilder().Build().System with { CommitCharge = committedMiB * MiB };

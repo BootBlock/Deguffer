@@ -10,7 +10,7 @@ namespace Deguffer.Core.Tests;
 public sealed class ProcessMemoryTableTests
 {
     private static readonly ParsedProcessTable Parsed = new(
-        [new ProcessRecord(1_204, 4, "alpha.exe", CommitCharge: 31_000_000, PrivateWorkingSet: 22_000_000, CreationTime: 133_900_000_000_000_001)],
+        [new ProcessRecord(1_204, 4, "alpha.exe", SessionId: 2, CommitCharge: 31_000_000, PrivateWorkingSet: 22_000_000, CreationTime: 133_900_000_000_000_001)],
         Complete: true);
 
     [Fact]
@@ -19,7 +19,7 @@ public sealed class ProcessMemoryTableTests
         var table = ProcessMemoryTable.From(Parsed, ProcessFigures.Checked);
 
         Assert.Equal(
-            new ProcessMemory(1_204, 4, "alpha.exe", 31_000_000, PrivateWorkingSet: 22_000_000, CreationTime: 133_900_000_000_000_001),
+            new ProcessMemory(1_204, 4, "alpha.exe", SessionId: 2, CommitCharge: 31_000_000, PrivateWorkingSet: 22_000_000, CreationTime: 133_900_000_000_000_001),
             Assert.Single(table.Processes));
     }
 
@@ -34,7 +34,7 @@ public sealed class ProcessMemoryTableTests
 
         Assert.Equal(figures, table.Figures);
         Assert.Equal(
-            new ProcessMemory(1_204, 4, "alpha.exe", CommitCharge: 31_000_000, PrivateWorkingSet: null, CreationTime: null),
+            new ProcessMemory(1_204, 4, "alpha.exe", SessionId: 2, CommitCharge: 31_000_000, PrivateWorkingSet: null, CreationTime: null),
             Assert.Single(table.Processes));
     }
 
@@ -45,7 +45,7 @@ public sealed class ProcessMemoryTableTests
     [Fact]
     public void A32BitTableOn64BitWindowsCarriesNoCommitChargeEither() =>
         Assert.Equal(
-            new ProcessMemory(1_204, 4, "alpha.exe", CommitCharge: null, PrivateWorkingSet: null, CreationTime: null),
+            new ProcessMemory(1_204, 4, "alpha.exe", SessionId: 2, CommitCharge: null, PrivateWorkingSet: null, CreationTime: null),
             Assert.Single(ProcessMemoryTable.From(Parsed, ProcessFigures.NotOnThisArchitecture).Processes));
 
     /// <summary>Every value the check can give, so a verdict added later cannot slip past the cases above.</summary>

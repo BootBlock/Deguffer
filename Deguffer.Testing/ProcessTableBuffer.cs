@@ -39,6 +39,8 @@ internal sealed class ProcessTableBuffer(int pointerSize)
 
     private int ParentProcessId => pointerSize == 8 ? 0x58 : 0x48;
 
+    private int SessionId => pointerSize == 8 ? 0x64 : 0x50;
+
     private int PagefileUsage => pointerSize == 8 ? 0xB8 : 0x7C;
 
     /// <summary>An address the buffer pretends to start at, of the pointer width being written.</summary>
@@ -78,6 +80,7 @@ internal sealed class ProcessTableBuffer(int pointerSize)
             BinaryPrimitives.WriteInt64LittleEndian(slice[CreateTime..], record.CreationTime);
             BinaryPrimitives.WriteUInt16LittleEndian(slice[NameLength..], (ushort)name.Length);
             BinaryPrimitives.WriteUInt16LittleEndian(slice[(NameLength + 2)..], (ushort)(name.Length + 2));
+            BinaryPrimitives.WriteUInt32LittleEndian(slice[SessionId..], record.SessionId);
 
             WritePointer(slice, NameBuffer, name.Length == 0 ? 0 : Base + (ulong)(at + RecordSize));
             WritePointer(slice, ProcessId, (ulong)record.ProcessId);

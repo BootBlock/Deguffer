@@ -131,5 +131,5 @@ public sealed class ProcessFigureCheckTests
         new([Record(Own - 8, 900 * MiB), Record(Own, privateWorkingSet)], Complete: true);
 
     private static ProcessRecord Record(int processId, long privateWorkingSet) =>
-        new(processId, ParentProcessId: 4, Name: "alpha.exe", CommitCharge: 2 * privateWorkingSet, privateWorkingSet, Created);
+        new(processId, ParentProcessId: 4, Name: "alpha.exe", SessionId: 1, CommitCharge: 2 * privateWorkingSet, privateWorkingSet, Created);
 }
