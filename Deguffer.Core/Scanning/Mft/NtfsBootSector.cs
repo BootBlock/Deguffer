@@ -48,7 +48,10 @@ public readonly record struct NtfsBootSector(
 
         var bytesPerCluster = bytesPerSector * sectorsPerCluster;
         var mftStart = BinaryPrimitives.ReadInt64LittleEndian(sector[48..]);
-        if (mftStart <= 0)
+
+        // Bounded above as well as below: the opener multiplies it by the cluster size, and a start
+        // past any byte a long can address wraps negative there and throws out of the volume read.
+        if (mftStart <= 0 || mftStart > long.MaxValue / bytesPerCluster)
         {
             return false;
         }

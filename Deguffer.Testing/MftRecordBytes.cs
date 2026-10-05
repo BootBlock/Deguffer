@@ -212,7 +212,8 @@ internal static class MftRecordBytes
 
     /// <summary>
     /// Overwrite the length the first attribute of a record declares — <c>$STANDARD_INFORMATION</c>
-    /// in every record written here. The field lies well before the first sector stamp, so the
+    /// in a record <see cref="Build"/> or <see cref="SelfRecord"/> writes, though any first attribute
+    /// serves. The field lies well before the first sector stamp, so the
     /// record's fixup still holds and the corruption is the only thing wrong with it.
     /// </summary>
     public static void DeclareFirstAttributeLength(Span<byte> record, uint length) =>

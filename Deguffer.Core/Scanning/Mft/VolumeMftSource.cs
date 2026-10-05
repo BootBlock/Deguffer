@@ -64,8 +64,7 @@ public sealed partial class VolumeMftSource : IMftSource
         }
 
         // The handle is released here and nowhere else, on every exit that does not hand it to a
-        // source. Disposing it on each early return inside Initialise leaked it whenever something
-        // threw past them instead, and a leaked raw handle keeps the volume open until finalisation.
+        // source, a throw included: a leaked raw handle keeps the volume open until finalisation.
         VolumeMftSource? source = null;
 
         try
@@ -103,7 +102,7 @@ public sealed partial class VolumeMftSource : IMftSource
         var offset = geometry.MftStartCluster * geometry.BytesPerCluster;
 
         if (RandomAccess.Read(handle, record0, offset) != record0.Length
-            || !MftExtentMap.TryRead(record0, geometry.BytesPerSector, out var extents))
+            || !MftExtentMap.TryRead(record0, geometry.BytesPerSector, geometry.BytesPerCluster, out var extents))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
