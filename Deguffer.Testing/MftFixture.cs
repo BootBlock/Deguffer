@@ -260,15 +260,15 @@ public sealed class MftFixture
 
     /// <summary>
     /// A file whose name is sized so that its <c>$DATA</c> allocated-size field lies across the
-    /// first sector boundary, and so is one of the fields NTFS displaces into the update sequence
-    /// array.
+    /// first fixup stride boundary, and so is one of the fields NTFS displaces into the update
+    /// sequence array.
     ///
     /// Without a record shaped like this the fixup is untested: short records leave the boundary
     /// sitting in trailing zeroes, where failing to restore the displaced bytes changes nothing.
     /// On a real volume the boundary lands in live attribute data, and two unrestored bytes inside
     /// a 64-bit size field alter it by up to 2^48 — a wrong number, reported confidently.
     /// </summary>
-    public MftFixture AddFileWithSizeAcrossSectorBoundary(uint number, uint parent, long allocated, long logical)
+    public MftFixture AddFileWithSizeAcrossStrideBoundary(uint number, uint parent, long allocated, long logical)
     {
         var name = new string('n', MftRecordBytes.NameLengthPuttingSizeFieldAcrossBoundary(_bytesPerRecord));
 

@@ -439,15 +439,15 @@ public class MftVolumeIndexTests
 
     /// <summary>
     /// The update sequence fixup, exercised where it actually matters: a record whose size field
-    /// lies across a sector boundary, so NTFS has displaced two of its bytes into the array. A
-    /// reader that does not restore them reports a size wrong by up to 2^48.
+    /// lies across a fixup stride boundary, so NTFS has displaced two of its bytes into the array.
+    /// A reader that does not restore them reports a size wrong by up to 2^48.
     /// </summary>
     [Fact]
     public void RestoresSizeFieldBytesDisplacedByTheSectorStamp()
     {
         const long Allocated = 0x0000_1234_5678_9ABC;
 
-        var index = Build(Tree().AddFileWithSizeAcrossSectorBoundary(20, Cache, Allocated, logical: Allocated));
+        var index = Build(Tree().AddFileWithSizeAcrossStrideBoundary(20, Cache, Allocated, logical: Allocated));
 
         Assert.Equal(Allocated, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
@@ -463,7 +463,7 @@ public class MftVolumeIndexTests
         const long Allocated = 0x0000_1234_5678_9ABC;
 
         var index = Build(Tree(bytesPerRecord: 4096)
-            .AddFileWithSizeAcrossSectorBoundary(20, Cache, Allocated, logical: Allocated)
+            .AddFileWithSizeAcrossStrideBoundary(20, Cache, Allocated, logical: Allocated)
             .AddFile(21, Nested, "b.tgz", allocated: 8192, logical: 8000)
             .AddFile(22, Sibling, "c.json", allocated: 4096, logical: 100));
 
@@ -473,7 +473,7 @@ public class MftVolumeIndexTests
 
     /// <summary>
     /// A torn write must take the record out entirely: half-applying the fixup leaves two wrong
-    /// bytes per sector, which lands inside a size field often enough to matter. Taking the record
+    /// bytes per stride, which lands inside a size field often enough to matter. Taking the record
     /// out means the table no longer describes a file that exists, so the index goes with it.
     ///
     /// This used to keep the rest of the table and answer anyway. That answer was 4096 for a
