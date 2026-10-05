@@ -18,6 +18,7 @@ public sealed class ProcessRecordParserTests
         ProcessId: 1_204,
         ParentProcessId: 4,
         Name: "alpha.exe",
+        SessionId: 3,
         CommitCharge: 31_000_000,
         PrivateWorkingSet: 22_000_000,
         CreationTime: 133_900_000_000_000_001);
@@ -26,6 +27,7 @@ public sealed class ProcessRecordParserTests
         ProcessId: 5_508,
         ParentProcessId: 1_204,
         Name: "beta.exe",
+        SessionId: 7,
         CommitCharge: 47_000_000,
         PrivateWorkingSet: 39_000_000,
         CreationTime: 133_900_000_000_000_777);

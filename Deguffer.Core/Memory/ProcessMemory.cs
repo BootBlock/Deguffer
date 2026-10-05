@@ -60,6 +60,12 @@ public enum ProcessFigures
 /// <see cref="CreationTime"/> can tell apart.
 /// </param>
 /// <param name="Name">The image name. Empty where Windows gives none, as it does for the idle process.</param>
+/// <param name="SessionId">
+/// The session it runs in. Documented, as <c>SessionId</c>, and 32 bits in both forms of the table, so
+/// it is carried under every <see cref="ProcessFigures"/> verdict, as the identifier is. It comes with
+/// the table, so knowing it opens nothing: §7.2.1 tells this session's compositor from another's by
+/// it, where neither compositor will open to an unelevated Deguffer.
+/// </param>
 /// <param name="CommitCharge">
 /// Private bytes the process has committed, whether in memory, compressed or paged out. Documented,
 /// as <c>PagefileUsage</c>. Null under <see cref="ProcessFigures.NotOnThisArchitecture"/>, where the
@@ -78,6 +84,7 @@ public sealed record ProcessMemory(
     int ProcessId,
     int ParentProcessId,
     string Name,
+    uint SessionId,
     long? CommitCharge,
     long? PrivateWorkingSet,
     long? CreationTime)
@@ -124,6 +131,7 @@ public sealed record ProcessMemoryTable(
                 record.ProcessId,
                 record.ParentProcessId,
                 record.Name,
+                record.SessionId,
                 narrow ? null : record.CommitCharge,
                 usable ? record.PrivateWorkingSet : null,
                 usable ? record.CreationTime : null);

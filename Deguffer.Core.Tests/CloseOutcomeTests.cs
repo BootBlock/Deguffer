@@ -14,7 +14,7 @@ namespace Deguffer.Core.Tests;
 public sealed class CloseOutcomeTests
 {
     private static readonly ProcessMemory Target =
-        new(4321, ParentProcessId: 900, "editor.exe", CommitCharge: 200, PrivateWorkingSet: 100, CreationTime: 10);
+        new(4321, ParentProcessId: 900, "editor.exe", SessionId: 1, CommitCharge: 200, PrivateWorkingSet: 100, CreationTime: 10);
 
     private static SystemMemory Machine() => new MemorySnapshotBuilder().Build().System;
 
