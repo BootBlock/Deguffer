@@ -32,7 +32,7 @@ public sealed class RegistryBackupsTests : IDisposable
             entry.CreateSubKey("Child").Dispose();
         }
 
-        var backups = new RegistryBackups(ProcessRunner.Default, Folder, RegExe, TimeProvider.System);
+        var backups = new RegistryBackups(new ProcessRunner(_temp.CreateDirectory("tools")), Folder, RegExe, TimeProvider.System);
         var keyPath = $@"HKEY_CURRENT_USER\{scratch.Path}\Tool";
 
         var exported = await backups.ExportAsync(keyPath, "Tool", CancellationToken.None);
@@ -55,7 +55,7 @@ public sealed class RegistryBackupsTests : IDisposable
     [Fact]
     public async Task AMissingKeyIsAFailedBackupWithNoFile()
     {
-        var backups = new RegistryBackups(ProcessRunner.Default, Folder, RegExe, TimeProvider.System);
+        var backups = new RegistryBackups(new ProcessRunner(_temp.CreateDirectory("tools")), Folder, RegExe, TimeProvider.System);
 
         var exported = await backups.ExportAsync(@"HKEY_CURRENT_USER\Software\Deguffer.Tests.Missing\Nothing", "Nothing", CancellationToken.None);
 
