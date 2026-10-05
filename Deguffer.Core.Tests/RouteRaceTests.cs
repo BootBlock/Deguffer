@@ -10,11 +10,18 @@ public class RouteRaceTests
 {
     private sealed record Answer(string From, bool Reached = true);
 
-    /// <summary>A route that answers when the test says, and notes whether it was told to stop.</summary>
-    private sealed class Route<T>
+    /// <summary>
+    /// A route that answers when the test says, and notes whether it was told to stop. Once told, it
+    /// stops at once, or when the test lets it where it was built to stop slowly, as a walk part way
+    /// through a listing does.
+    /// </summary>
+    private sealed class Route<T>(bool stopsSlowly = false)
         where T : class
     {
         private readonly TaskCompletionSource<T> _answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _mayStop = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void LetStop() => _mayStop.TrySetResult();
 
         public bool Stopped { get; private set; }
 
@@ -33,6 +40,12 @@ public class RouteRaceTests
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
                 Stopped = true;
+
+                if (stopsSlowly)
+                {
+                    await _mayStop.Task;
+                }
+
                 throw;
             }
             finally
@@ -45,19 +58,28 @@ public class RouteRaceTests
     private static Task<Raced<Answer>> Race(Route<Answer> table, Route<Answer> walk, CancellationToken ct = default) =>
         RouteRace.FirstAsync<Answer>(async stop => await table.Run(stop), walk.Run, answer => answer.Reached, ct);
 
+    /// <summary>
+    /// The walk is not left reading the disk, or reporting progress, after its question has been
+    /// answered. The race returns only once the walk has stopped, however long stopping takes.
+    /// </summary>
     [Fact]
     public async Task TheTableAnsweringFirstStopsTheWalkAndWaitsForItToStop()
     {
         var table = new Route<Answer>();
-        var walk = new Route<Answer>();
+        var walk = new Route<Answer>(stopsSlowly: true);
         var racing = Race(table, walk);
 
         table.Answer(new Answer("table"));
+        await Task.Delay(TimeSpan.FromMilliseconds(100));
+
+        Assert.True(walk.Stopped);
+        Assert.False(racing.IsCompleted);
+
+        walk.LetStop();
         var raced = await racing;
 
         Assert.Equal(RaceOutcome.TableAnswered, raced.Outcome);
         Assert.Equal("table", raced.Answer.From);
-        Assert.True(walk.Stopped);
         Assert.True(walk.Finished);
     }
 
