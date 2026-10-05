@@ -29,6 +29,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     private static readonly AsyncLocal<ConcurrentBag<string>?> MeasuredMailStores = new();
 
+    /// <summary>
+    /// Every path the measurements behind the plan being built could not reach, collected and
+    /// scoped exactly as <see cref="MeasuredMailStores"/> is and for the same reason. See
+    /// <see cref="UnmeasuredPaths"/>.
+    /// </summary>
+    private static readonly AsyncLocal<ConcurrentBag<(string Path, RootReach Root)>?> UnreachedMeasurements = new();
+
     private readonly PlanExecutor _executor;
     private readonly RefusalRecord _refusals;
     private readonly ICloudFiles? _cloud;
@@ -159,7 +166,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
         var measured = new ConcurrentBag<string>();
         MeasuredMailStores.Value = measured;
 
-        var built = await BuildPlanAsync(keep, ct).ConfigureAwait(false);
+        var unreached = new ConcurrentBag<(string Path, RootReach Root)>();
+        UnreachedMeasurements.Value = unreached;
+
+        var built = UnmeasuredPaths.Apply(await BuildPlanAsync(keep, ct).ConfigureAwait(false), unreached);
 
         // §9, stamped here for the reason the guard is: a store has to be protected, and a step that
         // cannot leave one withheld, on every plan, and no provider may be able to forget either. First,
@@ -447,6 +457,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
             foreach (var store in measured.MailStores)
             {
                 MeasuredMailStores.Value?.Add(store);
+            }
+
+            if (!measured.WasReached)
+            {
+                UnreachedMeasurements.Value?.Add((path, measured.Root));
             }
 
             // Paths in one plan can sit on different volumes and so take different routes; the

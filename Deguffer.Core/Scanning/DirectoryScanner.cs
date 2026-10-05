@@ -70,7 +70,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         if (remember)
         {
-            _estimates?.Set(path, result.Size);
+            Remember(path, result);
         }
 
         return result;
@@ -89,8 +89,22 @@ public sealed class DirectoryScanner : IDirectoryScanner
             .MeasureAsync(path, MinimumAge.Off, progress: null, ct)
             .ConfigureAwait(false);
 
-        _estimates?.Set(path, result.Size);
+        Remember(path, result);
         return result;
+    }
+
+    /// <summary>
+    /// Keep <paramref name="result"/> as the figure the next run opens on, unless it measured
+    /// nothing. A zero for a path the walk could not reach would open the next run on "this cache is
+    /// empty", and the figure it replaces is still the last one anybody read. See
+    /// <see cref="RootReach"/>.
+    /// </summary>
+    private void Remember(string path, ScanResult result)
+    {
+        if (result.WasReached)
+        {
+            _estimates?.Set(path, result.Size);
+        }
     }
 
     /// <summary>

@@ -35,6 +35,15 @@ public sealed record ScanResult(
     /// </summary>
     public IReadOnlyList<string> MailStores { get; init; } = [];
 
+    /// <summary>
+    /// Whether this measurement reached its path, and if not, in which way. <see cref="Size"/> is
+    /// zero wherever it did not, and that zero measures nothing. See <see cref="RootReach"/>.
+    /// </summary>
+    public RootReach Root { get; init; }
+
+    /// <summary>Whether <see cref="Size"/> describes the path. See <see cref="Root"/>.</summary>
+    public bool WasReached => Root is RootReach.Reached;
+
     public static ScanResult Fast(ScanSize size, bool withheldRecent = false) =>
         new(size, ScanStrategy.MasterFileTable, FallbackReason.None, withheldRecent);
 

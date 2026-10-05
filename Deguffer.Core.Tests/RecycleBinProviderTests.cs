@@ -58,12 +58,12 @@ public sealed class RecycleBinProviderTests : IDisposable
     private string CreateVolume(
         string name,
         DriveType kind = DriveType.Fixed,
-        bool isReady = true,
+        VolumeReadiness readiness = VolumeReadiness.Ready,
         VolumeFeatures features = VolumeFeatures.ReparsePoints,
         IReadOnlyList<string>? alsoMountedAt = null)
     {
         var root = _temp.CreateDirectory("volumes", name);
-        _volumes.With(root, kind, isReady, features, alsoMountedAt);
+        _volumes.With(root, kind, readiness, features, alsoMountedAt);
         return root;
     }
 
@@ -306,13 +306,13 @@ public sealed class RecycleBinProviderTests : IDisposable
     /// swapped between the preview and the clean; and an unready drive cannot be read at all.
     /// </summary>
     [Theory]
-    [InlineData(DriveType.Removable, true)]
-    [InlineData(DriveType.Network, true)]
-    [InlineData(DriveType.CDRom, true)]
-    [InlineData(DriveType.Fixed, false)]
-    public async Task OnlyAFixedReadyVolumeIsEvenLookedAt(DriveType kind, bool isReady)
+    [InlineData(DriveType.Removable, VolumeReadiness.Ready)]
+    [InlineData(DriveType.Network, VolumeReadiness.Ready)]
+    [InlineData(DriveType.CDRom, VolumeReadiness.Ready)]
+    [InlineData(DriveType.Fixed, VolumeReadiness.NoMedia)]
+    public async Task OnlyAFixedReadyVolumeIsEvenLookedAt(DriveType kind, VolumeReadiness readiness)
     {
-        var volume = CreateVolume("X", kind, isReady);
+        var volume = CreateVolume("X", kind, readiness);
         var bin = CreateBin(volume, Sid);
 
         var provider = CreateProvider();
@@ -386,6 +386,52 @@ public sealed class RecycleBinProviderTests : IDisposable
         Assert.True(plan.IsEmpty);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains(volume, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A volume whose root Windows would not describe is not an empty drive. It may hold a bin, so it
+    /// is named, the row says it could not be read, and nothing on it is touched. The empty drive's
+    /// own case is <see cref="OnlyAFixedReadyVolumeIsEvenLookedAt"/>, which still reads as nothing.
+    /// </summary>
+    [Fact]
+    public async Task AVolumeWindowsWillNotDescribeIsNamedRatherThanReadAsAnEmptyDrive()
+    {
+        var refused = CreateVolume("R", readiness: VolumeReadiness.Refused);
+        var untouched = CreateBin(refused, Sid);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+        Assert.Empty(provider.BinRoots);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(refused, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(FindingStatus.UnreadableRoot, new Finding(provider, IsPresent: true, plan).ToStatus(isElevated: false));
+
+        await provider.ExecuteAsync(plan);
+        Assert.True(File.Exists(Path.Combine(untouched, "$RA1B2C3.txt")));
+    }
+
+    /// <summary>The rest of the machine is still planned, and only the refused volume is named.</summary>
+    [Fact]
+    public async Task AVolumeWindowsWillNotDescribeLeavesTheOtherVolumesPlanned()
+    {
+        var ready = CreateVolume("C");
+        var bin = CreateBin(ready, Sid);
+        var refused = CreateVolume("R", readiness: VolumeReadiness.Refused);
+        var untouched = CreateBin(refused, Sid);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([bin], plan.TargetedPaths);
+        Assert.Contains(refused, Assert.Single(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning).Message, StringComparison.OrdinalIgnoreCase);
+
+        await CreateProvider().ExecuteAsync(plan);
+        Assert.True(File.Exists(Path.Combine(untouched, "$RA1B2C3.txt")));
     }
 
     /// <summary>

@@ -402,9 +402,28 @@ public sealed class PlanExecutor(
         //
         // A tool that states its own figure is asked for it instead, because the disk is not where
         // that figure came from. See IToolMeasurement.
-        var measured = step.MeasuredBy is { } tool
-            ? await tool.MeasureAsync(ct).ConfigureAwait(false)
-            : (await MeasureFromDiskAsync(scanner, step.MeasuredPaths, ct).ConfigureAwait(false)).Reclaimable;
+        long? measured;
+
+        if (step.MeasuredBy is { } tool)
+        {
+            measured = await tool.MeasureAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            var reading = await MeasureFromDiskAsync(scanner, step.MeasuredPaths, ct).ConfigureAwait(false);
+
+            if (reading.Unreached is not null)
+            {
+                return new StepOutcome(
+                    step.Description,
+                    outcome.Succeeded,
+                    BytesReclaimed: 0,
+                    Refusals.None,
+                    $"{outcome.Message} ({reading.WhyNothingIsCounted})");
+            }
+
+            measured = reading.Size.Reclaimable;
+        }
 
         // Nothing is counted rather than the whole estimate: a figure nobody checked is the one this
         // subtraction exists to avoid reporting.
@@ -549,17 +568,30 @@ public sealed class PlanExecutor(
 
         var outcome = await Task.Run(() => _emptier!.Empty(step.VolumeRoot), ct).ConfigureAwait(false);
 
-        var after = await scanner.MeasureFromDiskAsync(step.Path, ct).ConfigureAwait(false);
+        var after = await MeasureFromDiskAsync(scanner, [step.Path], ct).ConfigureAwait(false);
+
+        // Nothing to report along the way — the shell offers no progress of its own, and its
+        // progress window is one of the three things the flags suppress.
+        progress?.Report(1.0);
+
+        // No evidence either way, so Windows' own answer is the only thing to report and nothing is
+        // credited. Taking the zero instead would report the whole bin as reclaimed.
+        if (after.Unreached is not null)
+        {
+            return new StepOutcome(
+                step.Description,
+                outcome.Emptied,
+                BytesReclaimed: 0,
+                Refusals.None,
+                $"{outcome.Message ?? "Windows reported the bin emptied."} {after.WhyNothingIsCounted}.");
+        }
+
         var remaining = after.Size.Reclaimable;
         var reclaimed = step.EstimatedBytes - remaining;
 
         // The entries by the same subtraction. The bin's own folder stays standing and was never in
         // the estimate's count, so it comes out of the reading afterwards as well.
         var entriesRemoved = Math.Max(0, step.Estimated.Entries - Math.Max(0, after.Size.Entries - 1));
-
-        // Nothing to report along the way — the shell offers no progress of its own, and its
-        // progress window is one of the three things the flags suppress.
-        progress?.Report(1.0);
 
         // The disk is the evidence and the HRESULT is only the explanation, which is the whole
         // reason the measurement above is taken: SHEmptyRecycleBin reports S_OK and no figures, so
@@ -862,20 +894,26 @@ public sealed class PlanExecutor(
     /// nothing invalidates that snapshot between planning and executing, so an ordinary measurement
     /// here would hand back the figure it is about to be subtracted from.
     /// </summary>
-    internal static async Task<ScanSize> MeasureFromDiskAsync(
+    internal static async Task<DiskReading> MeasureFromDiskAsync(
         IDirectoryScanner scanner,
         IReadOnlyList<string> paths,
         CancellationToken ct)
     {
         var total = ScanSize.Zero;
+        string? unreached = null;
 
         foreach (var path in paths)
         {
             var measured = await scanner.MeasureFromDiskAsync(path, ct).ConfigureAwait(false);
             total += measured.Size;
+
+            if (!measured.WasReached)
+            {
+                unreached ??= LongPath.Display(path);
+            }
         }
 
-        return total;
+        return new DiskReading(total, unreached);
     }
 
     /// <summary>What a tool that removes later was seen to do. See <see cref="AwaitMarkingAsync"/>.</summary>

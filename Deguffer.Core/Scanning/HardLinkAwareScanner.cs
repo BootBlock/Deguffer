@@ -44,20 +44,47 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
         CancellationToken ct = default) =>
         new(Task.Run(() => MeasureNow(path, keep, progress, ct), ct));
 
+    /// <summary>
+    /// The directory is asked about first, and the file only where no directory is there, so each
+    /// path costs one attribute read in the ordinary case and a refusal is met once. The read fails
+    /// the same way whichever kind is asked for, so a refused file is answered here as a refused
+    /// directory would be.
+    /// </summary>
     private static ScanResult MeasureNow(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        if (TryMeasureFile(path, keep) is { } file)
+        var presence = LongPath.ProbeDirectory(path);
+
+        if (presence is PathPresence.Present)
         {
+            var walked = Measure(path, keep, progress, ct);
+
+            return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
+            {
+                MailStores = walked.MailStores,
+                Root = walked.Root,
+            };
+        }
+
+        if (presence is PathPresence.Absent)
+        {
+            presence = LongPath.ProbeFile(path);
+        }
+
+        if (presence is PathPresence.Present)
+        {
+            var file = MeasureFile(path, keep);
+
             return ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores };
         }
 
-        var walked = Measure(path, keep, progress, ct);
-
-        return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with { MailStores = walked.MailStores };
+        return ScanResult.ByChoice(Approximate(0, 0)) with
+        {
+            Root = presence is PathPresence.Refused ? RootReach.NotDescribed : RootReach.Reached,
+        };
     }
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
@@ -75,17 +102,13 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     {
     }
 
-    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) Measure(
+    /// <summary>The walk of a directory Windows describes. See <see cref="MeasureNow"/>.</summary>
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root) Measure(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        if (!LongPath.DirectoryExists(path))
-        {
-            return (Approximate(0, 0), false, []);
-        }
-
         long allocated = 0;
         long logical = 0;
 
@@ -95,7 +118,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         var stores = new ConcurrentBag<string>();
 
-        BoundedFileWalk.Visit(
+        var listed = BoundedFileWalk.Visit(
             LongPath.Extended(path),
             file =>
             {
@@ -136,10 +159,16 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                 Interlocked.Read(ref allocated), Interlocked.Read(ref logical))),
             ct);
 
+        if (!listed)
+        {
+            return (Approximate(0, 0), false, [], RootReach.NotListed);
+        }
+
         return (
             Approximate(Interlocked.Read(ref allocated), Interlocked.Read(ref logical)),
             Volatile.Read(ref withheld) == 1,
-            [.. stores.Order(StringComparer.OrdinalIgnoreCase)]);
+            [.. stores.Order(StringComparer.OrdinalIgnoreCase)],
+            RootReach.Reached);
     }
 
     /// <summary>
@@ -157,19 +186,14 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
         new(allocated, logical, IsApproximate: true);
 
     /// <summary>
-    /// The sole-link size of <paramref name="path"/> if it is a file, or null for anything else,
-    /// mirroring <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate
-    /// subject, and answering zero for one would make its step unofferable.
+    /// The sole-link size of the file at <paramref name="path"/>, mirroring
+    /// <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate subject, and
+    /// answering zero for one would make its step unofferable.
     /// </summary>
-    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores)? TryMeasureFile(
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) MeasureFile(
         string path,
         MinimumAge keep)
     {
-        if (!LongPath.FileExists(path))
-        {
-            return null;
-        }
-
         if (MailStore.Is(path))
         {
             return (Approximate(0, 0), false, [LongPath.Display(path)]);

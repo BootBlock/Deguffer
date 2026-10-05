@@ -418,10 +418,15 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                         .MeasureAsync(path, MinimumAge.Off, progress: null, ct)
                         .ConfigureAwait(false);
 
+                    // A folder Windows would not let the walk into measures zero, and "keeps 0 bytes" is a
+                    // claim about it that nobody checked.
+                    var kept = size.WasReached
+                        ? $"Firefox keeps {FreeSpace.Format(size.Size)} of synchronised data in '{path}'"
+                        : $"Firefox keeps synchronised data in '{path}', which Windows would not let Deguffer measure";
+
                     notes.Add(new PlanNote(
                         PlanNoteSeverity.Information,
-                        $"Firefox keeps {FreeSpace.Format(size.Size)} of synchronised data in "
-                        + $"'{path}', most of it the Firefox Suggest dataset. It is left alone: "
+                        $"{kept}, most of it the Firefox Suggest dataset. It is left alone: "
                         + "Mozilla documents no way to remove it, and what re-downloading it would "
                         + "cost has not been established."));
                 }

@@ -40,7 +40,7 @@ public sealed class DriveListTests
     {
         var volumes = new FakeVolumeInventory()
             .With(@"C:\")
-            .With(@"D:\", DriveType.CDRom, isReady: false)
+            .With(@"D:\", DriveType.CDRom, readiness: VolumeReadiness.NoMedia)
             .With(@"N:\", DriveType.Network);
 
         var drives = new DriveList(volumes, new ManualTimeProvider());
@@ -48,6 +48,26 @@ public sealed class DriveListTests
         drives.Refresh();
 
         Assert.Equal([@"C:\"], drives.Entries.Select(entry => entry.RootPath));
+    }
+
+    /// <summary>
+    /// A volume Windows would not describe is not an empty drive. The user can see it in File
+    /// Explorer, so it is listed, refused, and told why, as a cloud mount is.
+    /// </summary>
+    [Fact]
+    public void ListsAVolumeWindowsWillNotDescribeAndRefusesIt()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"R:\", readiness: VolumeReadiness.Refused);
+
+        var drives = new DriveList(volumes, new ManualTimeProvider());
+
+        drives.Refresh();
+
+        var refused = Assert.Single(drives.Entries, entry => entry.RootPath == @"R:\").Choice;
+        Assert.Equal(DriveChoice.UnreadableRefusal, refused.Refusal);
+        Assert.False(Assert.Single(drives.Entries, entry => entry.RootPath == @"C:\").Choice.IsRefused);
     }
 
     /// <summary>

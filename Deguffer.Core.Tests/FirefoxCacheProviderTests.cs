@@ -363,6 +363,29 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A synchronised dataset Windows would not let the walk into measures zero, and a note saying
+    /// Firefox keeps nothing there is a claim about a folder nobody saw into.
+    /// </summary>
+    [Fact]
+    public async Task SynchronisedDataThatWouldNotBeListedIsNotReportedAsHoldingNothing()
+    {
+        var profile = AddProfile();
+        var synchronised = CreateDirectory(Path.Combine(profile.Local, "remote-settings"), bytes: 32768);
+
+        CleanupPlan plan;
+        using (new DeniedDirectory(synchronised))
+        {
+            plan = await CreateProvider().PlanAsync();
+        }
+
+        var note = Assert.Single(plan.Notes, n => n.Message.Contains(synchronised, StringComparison.Ordinal));
+        Assert.StartsWith(
+            $"Firefox keeps synchronised data in '{synchronised}', which Windows would not let Deguffer measure,",
+            note.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The same short-circuit, from the direction that makes a false claim rather than an incomplete
     /// one: one profile is stored somewhere Deguffer will not examine, and the other has no cache.
     /// Dropping the note leaves the row reading as clear about a profile nobody looked at.

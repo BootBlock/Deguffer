@@ -40,6 +40,22 @@ public sealed class ExploreTargetTests
         Assert.True(new ExploreTarget(@"C:\", Folder).IsScannable(volumes));
     }
 
+    /// <summary>
+    /// A volume Windows would not describe is refused at its mount point. A folder below it is not,
+    /// because every account may bypass traverse checking and the folder may well be readable.
+    /// </summary>
+    [Fact]
+    public void AVolumeWindowsWillNotDescribeIsRefusedAtItsRootAndNotBelowIt()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"R:\", readiness: VolumeReadiness.Refused);
+
+        Assert.Equal(DriveChoice.UnreadableRefusal, new ExploreTarget(@"R:\", null).Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"R:\", @"R:\Projects").Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"C:\", null).Refusal(volumes));
+    }
+
     /// <summary>A share the inventory says nothing about has no flags to refuse on, and refusing on none would be a guess.</summary>
     [Fact]
     public void AFolderOnAVolumeNothingMeasuredIsNotRefused()

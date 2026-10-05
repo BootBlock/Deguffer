@@ -328,7 +328,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
 
         _volumes
             .With(share, DriveType.Network)
-            .With(empty, DriveType.Removable, isReady: false)
+            .With(empty, DriveType.Removable, readiness: VolumeReadiness.NoMedia)
             .With(cloud, features: VolumeFeatures.RemoteStorage);
 
         var removable = Path.Combine(_temp.Path, "usb-ssd");

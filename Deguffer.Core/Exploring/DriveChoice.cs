@@ -50,6 +50,17 @@ public sealed record DriveChoice(
         "Deguffer does not scan this drive. It is cloud storage that Windows shows as an ordinary "
         + "drive or folder, and reading it would download every file on it onto this computer.";
 
+    /// <summary>
+    /// What a volume whose root Windows would not describe is told. See
+    /// <see cref="VolumeReadiness.Refused"/>.
+    ///
+    /// <para>It names both causes, because the probe cannot tell which it met and only one of them
+    /// is the user's to change.</para>
+    /// </summary>
+    public const string UnreadableRefusal =
+        "Deguffer cannot scan this drive. Windows would not say what is on it, which an access rule "
+        + "on the drive or a mount Windows will not follow both do.";
+
     /// <summary>What the machine reported about <paramref name="volume"/>, as an entry.</summary>
     public static DriveChoice From(LocalVolume volume) =>
         new(
@@ -57,7 +68,12 @@ public sealed record DriveChoice(
             volume.Label,
             volume.TotalBytes,
             volume.FreeBytes,
-            volume.StoresContentRemotely ? RemoteStorageRefusal : null);
+            volume switch
+            {
+                { Readiness: VolumeReadiness.Refused } => UnreadableRefusal,
+                { StoresContentRemotely: true } => RemoteStorageRefusal,
+                _ => null,
+            });
 
     /// <summary>
     /// Whether a scan may be pointed at this volume.
