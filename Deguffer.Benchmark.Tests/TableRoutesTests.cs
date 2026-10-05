@@ -22,7 +22,7 @@ public sealed class TableRoutesTests
     [InlineData("Explore")]
     public void AWholeTableIsACompleteRun(string route)
     {
-        var tally = Run(route, Volume());
+        var tally = Run(route, Volume().WithoutBitmap());
 
         Assert.True(tally.Complete);
         Assert.Equal(Records, tally.Items);
@@ -31,7 +31,7 @@ public sealed class TableRoutesTests
 
     /// <summary>
     /// A region that cannot be read stops every route short. The Explore tree is still drawn from
-    /// what was read, so only the count of records read can say it is short.
+    /// what was read, so it is the reader saying it read part of the table that makes the run short.
     /// </summary>
     [Theory]
     [InlineData("Table")]
@@ -39,7 +39,7 @@ public sealed class TableRoutesTests
     [InlineData("Explore")]
     public void ATableThatStopsShortIsAnIncompleteRun(string route)
     {
-        var tally = Run(route, Volume().UnreadableFrom(17));
+        var tally = Run(route, Volume().UnreadableFrom(17).WithoutBitmap());
 
         Assert.False(tally.Complete);
         Assert.Equal(17, tally.Items);
@@ -53,7 +53,7 @@ public sealed class TableRoutesTests
     [Fact]
     public void AnIndexThatAbandonsTheVolumeIsAnIncompleteRun()
     {
-        var tally = Run("Index", Volume().CorruptSectorStamp(17));
+        var tally = Run("Index", Volume().CorruptSectorStamp(17).WithoutBitmap());
 
         Assert.False(tally.Complete);
         Assert.Equal(Records, tally.Items);
@@ -69,17 +69,40 @@ public sealed class TableRoutesTests
     {
         var tally = Run("Table", new MftFixture()
             .AddDirectory(16, 5, "folder")
-            .AddFileWithANonResidentAttributeList(17, 16, "file.bin", allocated: 8192, logical: 8000, extension: 18, listCluster: 500));
+            .AddFileWithANonResidentAttributeList(17, 16, "file.bin", allocated: 8192, logical: 8000, extension: 18, listCluster: 500)
+            .WithoutBitmap());
 
         Assert.True(tally.Complete);
         Assert.Equal(19 + 1, tally.Items);
         Assert.Equal((20 * BytesPerRecord) + 4096, tally.BytesRead);
     }
 
+    /// <summary>
+    /// The records <c>$MFT</c>'s <c>$BITMAP</c> marks free are never read, so a table read whole is a
+    /// complete run with far fewer records read than it holds, and the cluster holding the bitmap is
+    /// part of what it read.
+    ///
+    /// <para>Records 4 to 19 are read as one, from the sector boundary below the root to the one
+    /// after the file at 17, and the file at 4,100 alone. The 4,080 free records between are not.</para>
+    /// </summary>
+    [Fact]
+    public void ATableReadThroughItsBitmapIsCompleteHavingReadOnlyWhatIsInUse()
+    {
+        var tally = Run("Table", Volume().AddFile(4_100, 16, "far.bin", allocated: 4096, logical: 4000));
+
+        Assert.True(tally.Complete);
+        Assert.Equal(16 + 1, tally.Items);
+        Assert.Equal((17 * BytesPerRecord) + 4096, tally.BytesRead);
+    }
+
     [Fact]
     public void AVolumeThatCannotBeOpenedAgainStopsTheBenchmark() =>
         Assert.Throws<IOException>(() => TableRoutes.Run(
-            Route.Table, FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable), Drive, TableTuning.Default, CancellationToken.None));
+            Route.Table,
+            FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable),
+            Drive,
+            TableTuning.Default,
+            CancellationToken.None));
 
     [Fact]
     public void TheProbeGivesTheReasonAVolumeCannotBeRead() =>

@@ -413,6 +413,25 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
+            <views:SettingsRow Glyph="&#xE950;"
+                               Title="File table parse threads"
+                               Description="How many threads turn a volume's file table into folders and sizes, on every kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind Scanning.TableParseThreads, Mode=TwoWay}"
+                               PlaceholderText="{x:Bind Scanning.AutoTableParseThreads, Mode=OneWay}"
+                               Minimum="{x:Bind Scanning.MinimumTableParseThreads}"
+                               Maximum="{x:Bind Scanning.MaximumTableParseThreads}"
+                               SmallChange="1"
+                               LargeChange="4"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="Threads"
+                               ToolTipService.ToolTip="Auto uses one thread per processor, up to four, which was as fast as more where it was measured."
+                               AutomationProperties.Name="File table parse threads" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <views:SettingsRow Glyph="&#xEDA2;"
                                Title="Kind of drive"
                                Description="Each kind of drive has its own values, because a value that suits one kind can slow another. Choose a kind to see or change its values below.">
@@ -478,6 +497,25 @@
                                Header="KiB"
                                ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
                                AutomationProperties.Name="File table read size in KiB" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <views:SettingsRow Glyph="&#xE9D5;"
+                               Title="File table reads at once"
+                               Description="How many reads of a volume's file table wait on this kind of drive at the same time. Each read and each parse thread holds a buffer of the read size until the scan ends. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind Scanning.TableReadsInFlight, Mode=TwoWay}"
+                               PlaceholderText="{x:Bind Scanning.AutoTableReadsInFlight, Mode=OneWay}"
+                               Minimum="{x:Bind Scanning.MinimumTableReadsInFlight}"
+                               Maximum="{x:Bind Scanning.MaximumTableReadsInFlight}"
+                               SmallChange="1"
+                               LargeChange="4"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="Reads"
+                               ToolTipService.ToolTip="Auto uses the number past which more reads gained little on this kind of drive, or one read at a time where no measurement favoured more."
+                               AutomationProperties.Name="File table reads at once" />
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 

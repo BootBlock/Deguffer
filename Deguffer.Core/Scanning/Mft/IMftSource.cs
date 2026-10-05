@@ -30,6 +30,32 @@ public interface IMftSource : IDisposable
     /// </summary>
     int ReadBatch(long firstRecord, Span<byte> destination);
 
+    /// <summary>
+    /// How many records <see cref="ReadBatch"/> or <see cref="ReadBatchAsync"/> would read from
+    /// <paramref name="firstRecord"/> into room for <paramref name="capacity"/> records, if every
+    /// byte arrived. Zero at the end of the table, or where the region has no place to read it from.
+    ///
+    /// <para>Asked before the read, so a pass can start the next read before this one has completed.
+    /// A read can still return fewer, which is a short read, and never more.</para>
+    /// </summary>
+    int BatchLength(long firstRecord, int capacity);
+
+    /// <summary>
+    /// <see cref="ReadBatch"/>, without holding a thread while the disk works. Several can be
+    /// outstanding at once, each into its own buffer.
+    ///
+    /// <para>A volume source reads straight into <paramref name="destination"/>, so a caller passes
+    /// the memory of a <see cref="VolumeReadBuffer"/>, and keeps it until the read has completed,
+    /// cancelled or not.</para>
+    /// </summary>
+    ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct);
+
+    /// <summary>
+    /// Where <c>$MFT</c>'s <c>$BITMAP</c> is, which says which records are in use, or null where the
+    /// source does not know. A pass reads every record where it is null.
+    /// </summary>
+    MftBitmapPlacement? Bitmap { get; }
+
     /// <summary>The volume's allocation unit, which a non-resident attribute's runs count in.</summary>
     int BytesPerCluster { get; }
 
@@ -38,9 +64,10 @@ public interface IMftSource : IDisposable
     /// clusters starting at <paramref name="firstCluster"/>. Returns false unless every byte was
     /// read.
     ///
-    /// <para>Needed for the one thing in a table that is clusters rather than records: an
+    /// <para>Needed for what a table keeps in clusters rather than records: an
     /// <c>$ATTRIBUTE_LIST</c> grown too large to stay inside its record, which NTFS then keeps
-    /// outside the table altogether.</para>
+    /// outside the table altogether, and <c>$MFT</c>'s own <c>$BITMAP</c> once it is too large to
+    /// stay inside record 0.</para>
     ///
     /// <para>A volume source reads straight into <paramref name="destination"/>, so, as for
     /// <see cref="ReadBatch"/>, a caller passes a <see cref="VolumeReadBuffer"/>.</para>

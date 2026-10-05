@@ -28,11 +28,27 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private static MediaScanPreferences Smallest { get; } = new(
-        WalkTuning.MinimumThreads, WalkTuning.MinimumListingBuffer / 1024, TableTuning.MinimumReadBytes / 1024);
+    private static ScanPreferences Smallest { get; } = ScanPreferences.Default.With(
+        StorageMedia.Unknown,
+        new MediaScanPreferences(
+            WalkTuning.MinimumThreads,
+            WalkTuning.MinimumListingBuffer / 1024,
+            TableTuning.MinimumReadBytes / 1024,
+            TableTuning.MinimumReadsInFlight)) with
+    {
+        TableParseThreads = TableTuning.MinimumParseThreads,
+    };
 
-    private static MediaScanPreferences Largest { get; } = new(
-        WalkTuning.MaximumThreads, WalkTuning.MaximumListingBuffer / 1024, TableTuning.MaximumReadBytes / 1024);
+    private static ScanPreferences Largest { get; } = ScanPreferences.Default.With(
+        StorageMedia.Unknown,
+        new MediaScanPreferences(
+            WalkTuning.MaximumThreads,
+            WalkTuning.MaximumListingBuffer / 1024,
+            TableTuning.MaximumReadBytes / 1024,
+            TableTuning.MaximumReadsInFlight)) with
+    {
+        TableParseThreads = TableTuning.MaximumParseThreads,
+    };
 
     [Fact]
     public async Task TheWalkMeasuresTheSameTreeAtTheSmallestAndLargestValues()
@@ -49,7 +65,7 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
         // NTFS updates the times a folder's parent keeps for it lazily, so the first walk of a new
         // tree can read times the second reads newer. One walk first leaves both compared below
         // reading the same disk.
-        await Walking(MediaScanPreferences.Auto).MeasureAsync(root);
+        await Walking(ScanPreferences.Default).MeasureAsync(root);
 
         var smallest = await Walking(Smallest).MeasureAsync(root);
         var largest = await Walking(Largest).MeasureAsync(root);
@@ -100,7 +116,7 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
     {
         var root = Tree();
 
-        await WalkingExplore(MediaScanPreferences.Auto).ScanAsync(root);
+        await WalkingExplore(ScanPreferences.Default).ScanAsync(root);
 
         var smallest = await WalkingExplore(Smallest).ScanAsync(root);
         var largest = await WalkingExplore(Largest).ScanAsync(root);
@@ -109,20 +125,30 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
     }
 
     /// <summary>
-    /// The volume source cuts every read to whole sectors and whole records, so the size is held to
-    /// each layout Windows produces: records smaller than sectors, records the size of a sector, and
-    /// a table in two extents.
+    /// The volume source cuts every read to whole sectors and whole records, and reads in flight
+    /// complete in any order, so the values are held to each layout Windows produces: records smaller
+    /// than sectors, records the size of a sector, and a table in two extents.
     /// </summary>
     [Theory]
     [InlineData(512, 4096, 1024, null)]
     [InlineData(4096, 4096, 1024, null)]
     [InlineData(4096, 4096, 1024, 2L)]
     [InlineData(4096, 4096, 4096, 7L)]
-    public void AVolumeIsReadTheSameAtTheSmallestAndLargestReadSize(
+    public void AVolumeIsReadTheSameAtTheSmallestAndLargestValues(
         int bytesPerSector, int bytesPerCluster, int bytesPerRecord, long? gapAfterCluster)
     {
-        var smallest = ReadVolume(bytesPerSector, bytesPerCluster, bytesPerRecord, gapAfterCluster, TableTuning.MinimumReadBytes);
-        var largest = ReadVolume(bytesPerSector, bytesPerCluster, bytesPerRecord, gapAfterCluster, TableTuning.MaximumReadBytes);
+        var smallest = ReadVolume(
+            bytesPerSector,
+            bytesPerCluster,
+            bytesPerRecord,
+            gapAfterCluster,
+            new TableTuning(TableTuning.MinimumReadBytes, TableTuning.MinimumReadsInFlight, TableTuning.MinimumParseThreads));
+        var largest = ReadVolume(
+            bytesPerSector,
+            bytesPerCluster,
+            bytesPerRecord,
+            gapAfterCluster,
+            new TableTuning(TableTuning.MaximumReadBytes, TableTuning.MaximumReadsInFlight, TableTuning.MaximumParseThreads));
 
         Assert.Equal(TableTotal, smallest);
         Assert.Equal(smallest, largest);
@@ -177,31 +203,31 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
     }
 
     private static long ReadVolume(
-        int bytesPerSector, int bytesPerCluster, int bytesPerRecord, long? gapAfterCluster, int readBytes)
+        int bytesPerSector, int bytesPerCluster, int bytesPerRecord, long? gapAfterCluster, TableTuning tuning)
     {
         using var source = VolumeMftSource.TryOpen(
             Table(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster, gapAfterCluster), out _);
 
         Assert.NotNull(source);
-        Assert.True(MftVolumeIndexBuilder.TryBuild(source, new TableTuning(readBytes), out var index));
+        Assert.True(MftVolumeIndexBuilder.TryBuild(source, tuning, out var index));
 
         return index.TryMeasure(["Users", "testuser"])!.Value.Allocated;
     }
 
-    /// <summary>A tuner that finds every drive of unknown kind, and the given values for that kind.</summary>
-    private static ScanTuner Tuner(MediaScanPreferences values) =>
+    /// <summary>A tuner that finds every drive of unknown kind, and reads it with <paramref name="values"/>.</summary>
+    private static ScanTuner Tuner(ScanPreferences values) =>
         new(
             new FakePreferences(AppPreferences.Default with
             {
-                Scanning = ScanPreferences.Default.With(StorageMedia.Unknown, values),
+                Scanning = values,
             }),
             new VolumeMediaCache(new FakeStorageQueries()),
             new FakeVolumeInventory());
 
-    private static DirectoryScanner Walking(MediaScanPreferences values) =>
+    private static DirectoryScanner Walking(ScanPreferences values) =>
         new(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), tuning: Tuner(values));
 
-    private static DirectoryScanner Indexing(MediaScanPreferences values, long? unreadableFrom = null)
+    private static DirectoryScanner Indexing(ScanPreferences values, long? unreadableFrom = null)
     {
         var table = Table();
 
@@ -213,10 +239,10 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
         return new DirectoryScanner(FakeMftSourceFactory.Serving('C', table), tuning: Tuner(values));
     }
 
-    private static ExploreScanner Exploring(MediaScanPreferences values) =>
+    private static ExploreScanner Exploring(ScanPreferences values) =>
         new(FakeMftSourceFactory.Serving('C', Table()), tuning: Tuner(values));
 
-    private static ExploreScanner WalkingExplore(MediaScanPreferences values) =>
+    private static ExploreScanner WalkingExplore(ScanPreferences values) =>
         new(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), tuning: Tuner(values));
 
     private static void AssertSame(ScanResult expected, ScanResult actual)

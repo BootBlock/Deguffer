@@ -251,7 +251,7 @@ public class MftExtentMapReaderTests
             t => MftAttributeBytes.WriteAttributeList(t, list),
             t => MftAttributeBytes.WriteMftData(t, runs, dataSize: 16 * 4096));
 
-        Assert.False(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, MftExtentMapTests.NoClusters, out _));
+        Assert.False(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, MftExtentMapTests.NoClusters, out _, out _));
     }
 
     /// <summary>The second half of record 16, the half in the second extent, is a bad sector.</summary>
@@ -269,5 +269,5 @@ public class MftExtentMapReaderTests
         new(0x80, FragmentedMftVolume.Reference(piece.Holder, MftRecordBytes.Sequence), piece.LowestVcn);
 
     private static bool TryRead(FragmentedMftVolume volume, out MftExtentMap map) =>
-        MftExtentMapReader.TryRead(volume.Record0, FragmentedMftVolume.BytesPerCluster, volume.TryReadClusters, out map);
+        MftExtentMapReader.TryRead(volume.Record0, FragmentedMftVolume.BytesPerCluster, volume.TryReadClusters, out map, out _);
 }

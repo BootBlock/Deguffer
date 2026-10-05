@@ -25,7 +25,8 @@ public static class ScanTuningText
     /// <summary>
     /// What a scan of <paramref name="drive"/> runs with under <paramref name="preferences"/>, each
     /// value marked where Auto chose it, such as
-    /// <c>C: (NVMe SSD): 16 threads (Auto), 16 KiB listing buffer (Auto), 16,384 KiB table reads (Auto)</c>.
+    /// <c>C: (NVMe SSD): 16 threads (Auto), 16 KiB listing buffer (Auto), 1,024 KiB table reads (Auto),
+    /// 8 in flight (Auto), parsed on 4 threads (Auto)</c>.
     /// </summary>
     public static string Describe(DriveKind drive, ScanPreferences preferences)
     {
@@ -37,7 +38,9 @@ public static class ScanTuningText
             $"{drive.Drive} ({MediaName(tuning.Media)}): " +
             $"{tuning.Walk.Threads:N0} threads{AutoMark(chosen.WalkThreads)}, " +
             $"{tuning.Walk.ListingBufferBytes / 1024:N0} KiB listing buffer{AutoMark(chosen.ListingBufferKiB)}, " +
-            $"{tuning.Table.ReadBytes / 1024:N0} KiB table reads{AutoMark(chosen.TableReadKiB)}");
+            $"{tuning.Table.ReadBytes / 1024:N0} KiB table reads{AutoMark(chosen.TableReadKiB)}, " +
+            $"{tuning.Table.ReadsInFlight:N0} in flight{AutoMark(chosen.TableReadsInFlight)}, " +
+            $"parsed on {tuning.Table.ParseThreads:N0} threads{AutoMark(preferences.TableParseThreads)}");
     }
 
     private static string AutoMark(int? chosen) => chosen is null ? " (Auto)" : string.Empty;

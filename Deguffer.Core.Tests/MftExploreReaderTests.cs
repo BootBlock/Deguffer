@@ -202,19 +202,19 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
-    /// Records whose attributes continue elsewhere are handed on after the rest of the table, under
-    /// numbers the pass has already gone past. A progress count that followed them would run
-    /// backwards on screen.
+    /// Progress is the count of records the first pass has dealt with, which every parse thread adds
+    /// to at once, and which never counts a record by its number. A record whose attributes continue
+    /// elsewhere is handed on after the pass, under a number the pass has gone past, and moves
+    /// nothing. The count on screen only goes forward, and reaches past the second interval of a
+    /// table that holds two.
     ///
-    /// <para>The table runs past two reporting intervals, and the held-back record sits on the
-    /// first, so it arrives after the second has been reported. A smaller table cannot show it:
-    /// progress is reported once an interval, and a held-back record anywhere else is never
-    /// reported at all.</para>
+    /// <para>Several reads in flight and several parse threads, so the counts arrive out of order
+    /// and from several threads, which is what the reporting lock is for.</para>
     /// </summary>
     [Fact]
     public void ReportsProgressThatOnlyMovesForward()
     {
-        const uint Interval = 65_536;
+        const uint Interval = MftPassProgress.Interval;
 
         using var source = Tree()
             .AddFileWithItsNameInAnExtensionRecord(Interval, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: Interval + 1)
@@ -222,10 +222,10 @@ public class MftExploreReaderTests
             .Build();
         var reported = new List<long>();
 
-        var tree = MftExploreReader.Read(source, Root, [], TableTuning.Default, reported.Add, default).Tree!;
+        var tree = MftExploreReader.Read(source, Root, [], new TableTuning(64 * 1024, 8, 4), reported.Add, default).Tree!;
 
         Assert.Equal(7000, tree.TotalBytes);
-        Assert.Contains(2 * Interval, reported);
+        Assert.Contains(reported, done => done >= 2 * Interval);
         Assert.Equal(reported.Order(), reported);
     }
 
@@ -449,20 +449,29 @@ public class MftExploreReaderTests
     /// The table states its own record count up front, which is what lets this route drive a real
     /// progress bar where the walk can only be indeterminate. The reports have to arrive while the
     /// pass runs and rise, or the bar is decoration.
+    ///
+    /// <para>A report counts the records dealt with, read or known from the bitmap to be free, so
+    /// the 69,980 free records after the file count as soon as the pass knows to skip them.</para>
     /// </summary>
-    [Fact]
-    public void ReportsHowFarThroughTheTableItHasRead()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReportsHowFarThroughTheTableItHasRead(bool withBitmap)
     {
-        using var source = Tree()
+        var fixture = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
-            .AddUnused(70_000)
-            .Build();
+            .AddUnused(70_000);
+
+        using var source = (withBitmap ? fixture : fixture.WithoutBitmap()).Build();
 
         var reports = new List<long>();
 
         MftExploreReader.Read(source, Root, [], TableTuning.Default, reports.Add, default);
 
-        Assert.Equal([0, 65_536], reports);
+        // One read at a time, so the count is exact. Without the bitmap, the report comes as the
+        // 64th read of 1,024 records lands. With it, the free records after the file are counted
+        // all at once as the plan runs out.
+        Assert.Equal([0, withBitmap ? source.RecordCount : 65_536], reports);
     }
 
     /// <summary>

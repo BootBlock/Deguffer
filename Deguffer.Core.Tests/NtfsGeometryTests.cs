@@ -51,7 +51,7 @@ public class NtfsGeometryTests
             dataSize: 393_216,
             bytesPerRecord: geometry.BytesPerFileRecord);
 
-        Assert.True(MftExtentMapReader.TryRead(record, geometry.BytesPerCluster, MftExtentMapTests.NoClusters, out var map));
+        Assert.True(MftExtentMapReader.TryRead(record, geometry.BytesPerCluster, MftExtentMapTests.NoClusters, out var map, out _));
         Assert.Equal([new DataRun(786_432, 64), new DataRun(900_000, 32)], map.Runs);
     }
 
@@ -346,7 +346,7 @@ public class MftExtentMapTests
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64), new DataRun(900_000, 32)], dataSize: 98_304);
 
-        Assert.True(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out var map));
+        Assert.True(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out var map, out _));
 
         Assert.Equal(98_304, map.DataSize);
         Assert.Equal([new DataRun(786_432, 64), new DataRun(900_000, 32)], map.Runs);
@@ -361,7 +361,7 @@ public class MftExtentMapTests
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536, withAttributeList: true);
 
-        Assert.True(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out var map));
+        Assert.True(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out var map, out _));
         Assert.Equal([new DataRun(786_432, 64)], map.Runs);
     }
 
@@ -375,13 +375,13 @@ public class MftExtentMapTests
         var past = MftRecordBytes.SelfRecord([new DataRun(786_432, 16)], dataSize: (16 * 4096) + 1);
         var exact = MftRecordBytes.SelfRecord([new DataRun(786_432, 16)], dataSize: 16 * 4096);
 
-        Assert.False(MftExtentMapReader.TryRead(past, bytesPerCluster: 4096, NoClusters, out _));
-        Assert.True(MftExtentMapReader.TryRead(exact, bytesPerCluster: 4096, NoClusters, out _));
+        Assert.False(MftExtentMapReader.TryRead(past, bytesPerCluster: 4096, NoClusters, out _, out _));
+        Assert.True(MftExtentMapReader.TryRead(exact, bytesPerCluster: 4096, NoClusters, out _, out _));
     }
 
     [Fact]
     public void RefusesARecordThatIsNotARecord() =>
-        Assert.False(MftExtentMapReader.TryRead(new byte[1024], bytesPerCluster: 4096, NoClusters, out _));
+        Assert.False(MftExtentMapReader.TryRead(new byte[1024], bytesPerCluster: 4096, NoClusters, out _, out _));
 
     /// <summary>
     /// Record 0 is read while the volume is being opened, so a throw here would escape before the
@@ -393,7 +393,7 @@ public class MftExtentMapTests
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536);
         MftRecordBytes.DeclareFirstAttributeLength(record, MftRecordBytes.LengthJustUnderIntMax);
 
-        Assert.False(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out _));
+        Assert.False(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out _, out _));
     }
 
     /// <summary>
@@ -410,7 +410,7 @@ public class MftExtentMapTests
         var past = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 63, 64)], dataSize: 65_536);
         var atTheLimit = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 64, 64)], dataSize: 65_536);
 
-        Assert.False(MftExtentMapReader.TryRead(past, bytesPerCluster: 4096, NoClusters, out _));
-        Assert.True(MftExtentMapReader.TryRead(atTheLimit, bytesPerCluster: 4096, NoClusters, out _));
+        Assert.False(MftExtentMapReader.TryRead(past, bytesPerCluster: 4096, NoClusters, out _, out _));
+        Assert.True(MftExtentMapReader.TryRead(atTheLimit, bytesPerCluster: 4096, NoClusters, out _, out _));
     }
 }

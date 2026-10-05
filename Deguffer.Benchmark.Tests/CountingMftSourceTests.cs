@@ -24,6 +24,21 @@ public sealed class CountingMftSourceTests
         Assert.Equal(10 * BytesPerRecord, source.BytesRead);
     }
 
+    /// <summary>A pass reads its batches overlapped, so those are counted the same way.</summary>
+    [Fact]
+    public async Task CountsTheRecordsAnOverlappedReadReturned()
+    {
+        using var source = new CountingMftSource(Table(records: 10, unreadableFrom: 6));
+        var buffer = new byte[4 * BytesPerRecord];
+
+        Assert.Equal(4, await source.ReadBatchAsync(0, buffer, CancellationToken.None));
+        Assert.Equal(2, await source.ReadBatchAsync(4, buffer, CancellationToken.None));
+        Assert.Equal(0, await source.ReadBatchAsync(6, buffer, CancellationToken.None));
+
+        Assert.Equal(6, source.RecordsRead);
+        Assert.Equal(6 * BytesPerRecord, source.BytesRead);
+    }
+
     [Fact]
     public void ARegionThatCannotBeReadAddsNothing()
     {
@@ -44,5 +59,6 @@ public sealed class CountingMftSourceTests
             BytesPerRecord,
             unreadableFrom,
             bytesPerCluster: 4096,
-            clusters: new Dictionary<long, byte[]>());
+            clusters: new Dictionary<long, byte[]>(),
+            bitmap: null);
 }

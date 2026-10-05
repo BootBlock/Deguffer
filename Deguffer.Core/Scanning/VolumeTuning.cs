@@ -39,10 +39,20 @@ public sealed record VolumeTuning(StorageMedia Media, MediaScanPreferences Chose
             TableTuning.MinimumReadBytes / 1024,
             TableTuning.MaximumReadBytes / 1024);
 
+        var readsInFlight = Math.Clamp(
+            chosen.TableReadsInFlight ?? AutoTuning.TableReadsInFlight(media),
+            TableTuning.MinimumReadsInFlight,
+            TableTuning.MaximumReadsInFlight);
+
+        var parseThreads = Math.Clamp(
+            preferences.TableParseThreads ?? AutoTuning.TableParseThreads(),
+            TableTuning.MinimumParseThreads,
+            TableTuning.MaximumParseThreads);
+
         return new VolumeTuning(
             media,
             chosen,
             new WalkTuning(threads, listingKiB * 1024),
-            new TableTuning(tableKiB * 1024));
+            new TableTuning(tableKiB * 1024, readsInFlight, parseThreads));
     }
 }

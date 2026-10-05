@@ -34,6 +34,22 @@ internal sealed class SectorStrictVolume(byte[] image, int bytesPerSector) : IRa
         return count;
     }
 
+    /// <summary>
+    /// Completes before it returns, refusing what <see cref="Read"/> refuses by faulting the task, as
+    /// an overlapped read the volume refuses does.
+    /// </summary>
+    public ValueTask<int> ReadAsync(Memory<byte> destination, long offset, CancellationToken ct)
+    {
+        try
+        {
+            return ValueTask.FromResult(Read(destination.Span, offset));
+        }
+        catch (IOException ex)
+        {
+            return ValueTask.FromException<int>(ex);
+        }
+    }
+
     public void Dispose()
     {
     }

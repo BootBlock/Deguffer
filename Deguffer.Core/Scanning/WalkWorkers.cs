@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Runtime.ExceptionServices;
 
 namespace Deguffer.Core.Scanning;
 
@@ -15,11 +14,11 @@ namespace Deguffer.Core.Scanning;
 /// queued until its children have been queued.</para>
 ///
 /// <para><b>The calling thread is the first worker, and the only one that waits.</b> The others are
-/// thread-pool work items, started only when a worker queues more directories than it will take
-/// itself, so a walk of one folder, or of a chain of single folders, starts none. A helper that finds the queue empty ends rather
-/// than blocking a pool thread. The calling thread instead waits for the queue to fill again, the walk
-/// to end or the token to be cancelled. It makes no report while it waits: the totals only move when
-/// a directory is read, and the worker that read it reports.</para>
+/// a <see cref="WorkerCrew"/>'s helpers, started only when a worker queues more directories than it
+/// will take itself, so a walk of one folder, or of a chain of single folders, starts none. The
+/// calling thread waits for the queue to fill again, the walk to end or the token to be cancelled.
+/// It makes no report while it waits: the totals only move when a directory is read, and the worker
+/// that read it reports.</para>
 ///
 /// <para><b>Progress is timed, and never concurrent with itself.</b> With no levels, the trigger is
 /// elapsed time: the first directory read reports, and after that whichever worker finishes a
@@ -37,14 +36,11 @@ namespace Deguffer.Core.Scanning;
 internal sealed class WalkWorkers<TState>
 {
     private readonly ConcurrentQueue<(string Path, TState State)> _pending = new();
-
-    // Never disposed. A helper sets it after the count that lets the calling thread return, so it can
-    // be set after the walk is over, and nothing here asks it for the kernel handle disposal would free.
-    private readonly ManualResetEventSlim _changed = new(initialState: false);
     private readonly Lock _reporting = new();
 
+    private readonly WorkerCrew _crew;
+    private readonly Func<bool> _readyToLook;
     private readonly ListingBuffer _buffer;
-    private readonly int _helpersAllowed;
     private readonly Action<TState, DirectoryContents, Action<WalkEntry, TState>> _onDirectory;
     private readonly Action _onProgress;
     private readonly TimeProvider _clock;
@@ -52,9 +48,7 @@ internal sealed class WalkWorkers<TState>
     private readonly CancellationToken _ct;
 
     private int _outstanding;
-    private int _helpers;
     private long _nextReport;
-    private ExceptionDispatchInfo? _failure;
 
     public WalkWorkers(
         WalkTuning tuning,
@@ -63,8 +57,9 @@ internal sealed class WalkWorkers<TState>
         TimeProvider clock,
         CancellationToken ct)
     {
+        _crew = new WorkerCrew(tuning.Threads, NewHelper, () => !Stopping && !_pending.IsEmpty);
+        _readyToLook = () => !_pending.IsEmpty || Stopping || Volatile.Read(ref _outstanding) == 0;
         _buffer = new ListingBuffer(tuning.ListingBufferBytes);
-        _helpersAllowed = tuning.Threads - 1;
         _onDirectory = onDirectory;
         _onProgress = onProgress;
         _clock = clock;
@@ -72,12 +67,12 @@ internal sealed class WalkWorkers<TState>
         _ct = ct;
     }
 
-    private bool Stopping => Volatile.Read(ref _failure) is not null || _ct.IsCancellationRequested;
+    private bool Stopping => _crew.Failed || _ct.IsCancellationRequested;
 
     /// <param name="root">In the extended form (§6.3).</param>
     public void Run(string root, TState rootState)
     {
-        using var wake = _ct.Register(static changed => ((ManualResetEventSlim)changed!).Set(), _changed);
+        using var wake = _crew.WakeOn(_ct);
 
         _nextReport = _clock.GetTimestamp();
         Enqueue(root, rootState);
@@ -90,21 +85,10 @@ internal sealed class WalkWorkers<TState>
         {
             // Held, not thrown here: the helpers are still inside the caller's callbacks, and stop
             // only once they see it. It is thrown below, unchanged, when they have.
-            Fail(ex);
+            _crew.Fail(ex);
         }
 
-        // As Parallel.ForEach did, nothing is thrown and nothing returned while a helper is still
-        // inside a caller's callback.
-        while (Volatile.Read(ref _helpers) > 0)
-        {
-            _changed.Reset();
-            if (Volatile.Read(ref _helpers) > 0)
-            {
-                _changed.Wait();
-            }
-        }
-
-        _failure?.Throw();
+        _crew.Finish();
         _ct.ThrowIfCancellationRequested();
 
         _onProgress();
@@ -114,59 +98,36 @@ internal sealed class WalkWorkers<TState>
     {
         while (true)
         {
-            while (!Stopping && _pending.TryDequeue(out var next))
-            {
-                worker.Read(next);
-            }
+            Drain(worker);
 
             if (Stopping || Volatile.Read(ref _outstanding) == 0)
             {
                 return;
             }
 
-            // Reset before looking again, so a directory queued between the look and the wait sets the
-            // event after this reset and ends the wait at once.
-            _changed.Reset();
-            if (_pending.IsEmpty && !Stopping && Volatile.Read(ref _outstanding) > 0)
-            {
-                _changed.Wait();
-            }
+            _crew.WaitUnless(_readyToLook);
         }
     }
 
-    private void Help()
+    private Action NewHelper()
     {
         var worker = new Worker(this);
+        return () => Drain(worker);
+    }
 
-        do
+    private void Drain(Worker worker)
+    {
+        while (!Stopping && _pending.TryDequeue(out var next))
         {
-            try
-            {
-                while (!Stopping && _pending.TryDequeue(out var next))
-                {
-                    worker.Read(next);
-                }
-            }
-            catch (Exception ex)
-            {
-                Fail(ex);
-            }
-
-            Interlocked.Decrement(ref _helpers);
-            _changed.Set();
-
-            // A directory queued after the last look and before the decrement found this helper still
-            // counted, and started no other. Taking the place back here is what keeps it from waiting
-            // for the calling thread alone.
+            worker.Read(next);
         }
-        while (!Stopping && !_pending.IsEmpty && TryClaimHelper());
     }
 
     private void Enqueue(string path, TState state)
     {
         Interlocked.Increment(ref _outstanding);
         _pending.Enqueue((path, state));
-        _changed.Set();
+        _crew.Signal();
     }
 
     /// <summary>
@@ -175,26 +136,10 @@ internal sealed class WalkWorkers<TState>
     /// </summary>
     private void StartHelpers(int wanted)
     {
-        for (var started = 0; started < wanted && TryClaimHelper(); started++)
+        var started = 0;
+        while (started < wanted && _crew.TryStartHelper())
         {
-            ThreadPool.UnsafeQueueUserWorkItem(static workers => workers.Help(), this, preferLocal: false);
-        }
-    }
-
-    private bool TryClaimHelper()
-    {
-        while (true)
-        {
-            var running = Volatile.Read(ref _helpers);
-            if (running >= _helpersAllowed)
-            {
-                return false;
-            }
-
-            if (Interlocked.CompareExchange(ref _helpers, running + 1, running) == running)
-            {
-                return true;
-            }
+            started++;
         }
     }
 
@@ -219,16 +164,6 @@ internal sealed class WalkWorkers<TState>
             Volatile.Write(ref _nextReport, now + _progressTicks);
             _onProgress();
         }
-    }
-
-    /// <summary>
-    /// Keep the first exception a worker raised, to be thrown on the calling thread once every worker
-    /// has stopped. A helper runs on a pool thread, where an exception would end the process.
-    /// </summary>
-    private void Fail(Exception ex)
-    {
-        Interlocked.CompareExchange(ref _failure, ExceptionDispatchInfo.Capture(ex), null);
-        _changed.Set();
     }
 
     /// <summary>
@@ -265,7 +200,7 @@ internal sealed class WalkWorkers<TState>
 
             if (Interlocked.Decrement(ref _walk._outstanding) == 0)
             {
-                _walk._changed.Set();
+                _walk._crew.Signal();
             }
         }
 

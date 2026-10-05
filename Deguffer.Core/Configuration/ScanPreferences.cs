@@ -33,18 +33,20 @@ public enum ScanRoute
 /// <param name="WalkThreads">How many folders the walk lists at once.</param>
 /// <param name="ListingBufferKiB">How many KiB of entries each listing asks Windows for.</param>
 /// <param name="TableReadKiB">How many KiB of records each read of the file table asks for.</param>
+/// <param name="TableReadsInFlight">How many reads of the file table are outstanding at once.</param>
 public sealed record MediaScanPreferences(
     int? WalkThreads = null,
     int? ListingBufferKiB = null,
-    int? TableReadKiB = null)
+    int? TableReadKiB = null,
+    int? TableReadsInFlight = null)
 {
     public static readonly MediaScanPreferences Auto = new();
 }
 
 /// <summary>
-/// How a scan reads the disk: the route, and a <see cref="MediaScanPreferences"/> for each kind of
+/// How a scan reads the disk: the route, a <see cref="MediaScanPreferences"/> for each kind of
 /// storage, because one machine often has drives of several kinds and a value right for one is wrong
-/// for another.
+/// for another, and the one value that belongs to the machine rather than to a drive.
 ///
 /// <para><b>These change how fast a scan is, never what it finds.</b> Neither route relaxes a rule
 /// for any value here: the table is still read whole and a short read still ends it, the walk still
@@ -60,6 +62,12 @@ public sealed record ScanPreferences
     public static readonly ScanPreferences Default = new();
 
     public ScanRoute Route { get; init; } = ScanRoute.Auto;
+
+    /// <summary>
+    /// How many threads parse the file table's records, or null for Auto. One value for the machine,
+    /// because parsing is the processor's work whatever drive the records came from.
+    /// </summary>
+    public int? TableParseThreads { get; init; }
 
     public MediaScanPreferences Nvme { get; init; } = MediaScanPreferences.Auto;
 
