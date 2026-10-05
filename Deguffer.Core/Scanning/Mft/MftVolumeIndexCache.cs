@@ -73,7 +73,7 @@ public sealed class MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tun
         }
 
         // Never cancelled before it starts, so the volume handle is always closed by the build that
-        // owns it. A build Invalidate ends stops between reads instead, with the handle in hand.
+        // owns it. A build Invalidate ends stops at its next check of the token, with the handle in hand.
         return Task.Run(
             () =>
             {

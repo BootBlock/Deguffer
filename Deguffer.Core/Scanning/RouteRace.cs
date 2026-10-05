@@ -73,22 +73,23 @@ internal static class RouteRace
         finally
         {
             await stop.CancelAsync().ConfigureAwait(false);
-            await SettleAsync(reading, stop.Token).ConfigureAwait(false);
-            await SettleAsync(walking, stop.Token).ConfigureAwait(false);
+            await SettleAsync(reading).ConfigureAwait(false);
+            await SettleAsync(walking).ConfigureAwait(false);
         }
     }
 
     /// <summary>
-    /// Wait for a route that lost. Its cancellation is what stopped it, so that is swallowed, and
-    /// anything else it threw is not.
+    /// Wait for a route once the race is over. Both have been told to stop by then, so a
+    /// cancellation is what stopping looks like and is swallowed, and anything else a route threw is
+    /// not. An answer or a failure that decided the race has already left through the body above.
     /// </summary>
-    private static async Task SettleAsync(Task route, CancellationToken stopped)
+    private static async Task SettleAsync(Task route)
     {
         try
         {
             await route.ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (stopped.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
         }
     }

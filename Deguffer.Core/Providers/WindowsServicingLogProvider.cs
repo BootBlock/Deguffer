@@ -215,7 +215,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
 
             steps.AddRange(cleared);
 
-            if (scanned.Fallback == FallbackReason.None)
+            if (FallbackReasonText.Prevailing(scanned.Fallback, resetMeasured.Fallback) != scanned.Fallback)
             {
                 scanned = resetMeasured;
             }

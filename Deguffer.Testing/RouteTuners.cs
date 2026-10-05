@@ -17,7 +17,7 @@ public static class RouteTuners
     /// <summary>The table wherever it can be read, waited for.</summary>
     public static ScanTuner Table { get; } = With(ScanRoute.Table);
 
-    public static ScanTuner With(ScanRoute route) => new(
+    private static ScanTuner With(ScanRoute route) => new(
         new FakePreferences(AppPreferences.Default with { Scanning = ScanPreferences.Default with { Route = route } }),
         new VolumeMediaCache(new FakeStorageQueries()),
         new FakeVolumeInventory());
