@@ -6,7 +6,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// Handles one record of a table. Return false to abandon the read.
 /// </summary>
 /// <param name="number">The record's position in the table, which is its record number.</param>
-/// <param name="outcome">What the parser made of it. The three cases are not interchangeable.</param>
+/// <param name="outcome">
+/// What the parser made of it. The three cases are not interchangeable, and
+/// <see cref="MftParseOutcome.Continued"/> is never one of them.
+/// </param>
 /// <param name="record">Meaningful only where <paramref name="outcome"/> is
 /// <see cref="MftParseOutcome.Parsed"/>.</param>
 internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in MftRecord record);
@@ -39,6 +42,12 @@ internal static class MftRecordStream
     /// can see: the files in the missed range simply never arrive, and every directory above them
     /// totals short with nothing to show for it. What a caller does about that is its own decision,
     /// but it always gets to make it.</para>
+    ///
+    /// <para>A record whose attributes continue in extension records is held back and handed on
+    /// after the first pass, once <see cref="MftExtensionReader"/> has read what it needs, so
+    /// records do not all arrive in table order. Those held back are still handed on where the
+    /// first pass stopped at a region it could not read, because a caller that keeps going has a
+    /// use for every record that was read.</para>
     /// </summary>
     public static bool TryReadAll(IMftSource source, int count, MftRecordHandler onRecord, CancellationToken ct)
     {
@@ -47,10 +56,12 @@ internal static class MftRecordStream
 
         var batchBytes = RecordsPerBatch * source.BytesPerRecord;
         var buffer = ArrayPool<byte>.Shared.Rent(batchBytes);
+        var deferred = new List<MftDeferredRecord>();
 
         try
         {
             long next = 0;
+            var wholeTable = true;
 
             while (next < count)
             {
@@ -59,13 +70,20 @@ internal static class MftRecordStream
                 var read = source.ReadBatch(next, buffer.AsSpan(0, batchBytes));
                 if (read <= 0)
                 {
-                    return false;
+                    wholeTable = false;
+                    break;
                 }
 
                 for (var i = 0; i < read; i++)
                 {
                     var slice = buffer.AsSpan(i * source.BytesPerRecord, source.BytesPerRecord);
-                    var outcome = MftRecordParser.Parse(slice, source.BytesPerSector, out var record);
+                    var outcome = MftRecordParser.Parse(slice, next + i, source.BytesPerSector, out var record, out var continued);
+
+                    if (continued is not null)
+                    {
+                        deferred.Add(continued);
+                        continue;
+                    }
 
                     if (!onRecord(next + i, outcome, in record))
                     {
@@ -76,7 +94,19 @@ internal static class MftRecordStream
                 next += read;
             }
 
-            return true;
+            MftExtensionReader.Resolve(source, deferred, buffer.AsSpan(0, batchBytes), ct);
+
+            foreach (var held in deferred)
+            {
+                var outcome = held.Finish(out var record);
+
+                if (!onRecord(held.Self.Record, outcome, in record))
+                {
+                    return false;
+                }
+            }
+
+            return wholeTable;
         }
         finally
         {

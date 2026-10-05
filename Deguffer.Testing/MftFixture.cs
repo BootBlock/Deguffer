@@ -15,7 +15,16 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class MftFixture
 {
+    private const uint StandardInformation = 0x10;
+    private const uint FileName = 0x30;
+    private const uint Data = 0x80;
+    private const uint IndexAllocation = 0xA0;
+
     private readonly List<byte[]> _records = [];
+
+    private readonly Dictionary<long, byte[]> _clusters = [];
+
+    private static readonly byte[] Blank = new byte[MftRecordBytes.BytesPerRecord];
 
     private long _unreadableFrom = long.MaxValue;
 
@@ -52,7 +61,7 @@ public sealed class MftFixture
         // proves the reader works on a volume nobody has.
         while (_records.Count < MftRecord.ReservedRecordCount)
         {
-            _records.Add(MftRecordBytes.RecordWithoutAName(withAttributeList: false));
+            _records.Add(MftRecordBytes.RecordWithoutAName());
         }
     }
 
@@ -158,22 +167,172 @@ public sealed class MftFixture
             Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.NoData));
 
     /// <summary>
-    /// A file whose <c>$DATA</c> no longer fits in its base record. NTFS moves the attribute into an
-    /// extension record and leaves an <c>$ATTRIBUTE_LIST</c> behind pointing at it, so the base
-    /// record carries a name and no size at all — which is not the same as a size of zero.
+    /// A file whose <c>$DATA</c> no longer fits in its base record. NTFS moves the attribute into
+    /// <paramref name="extension"/> and leaves an <c>$ATTRIBUTE_LIST</c> behind pointing at it, so
+    /// the base record carries a name and no size at all — which is not the same as a size of zero.
+    /// The shape 400 of 400 records the index declined on a real volume took.
     /// </summary>
-    public MftFixture AddFileWithDataInAnExtensionRecord(uint number, uint parent, string name) =>
-        Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.InExtensionRecord));
+    public MftFixture AddFileWithDataInAnExtensionRecord(
+        uint number, uint parent, string name, long allocated, long logical, uint extension) =>
+        Add(number, ListingFile(number, parent, name, [new ListedAttribute(Data, Reference(extension))]))
+            .Add(extension, DataPiece(number, allocated, logical, startVirtualCluster: 0));
 
     /// <summary>
-    /// A file fragmented across extents but still fully described here: an attribute list, then the
-    /// extent starting at VCN 0 that carries the sizes, then a continuation extent that does not.
-    /// The sizes are known, so this must not be confused with a record that has lost them.
+    /// The same, with the list itself grown too large for the base record. NTFS then keeps it in
+    /// clusters outside the table, at <paramref name="listCluster"/> here, so following it takes a
+    /// read the table's records cannot serve.
+    /// </summary>
+    public MftFixture AddFileWithANonResidentAttributeList(
+        uint number, uint parent, string name, long allocated, long logical, uint extension, long listCluster)
+    {
+        var value = MftAttributeBytes.AttributeListValue(ListOf(number, [new ListedAttribute(Data, Reference(extension))]));
+        var cluster = new byte[MftRecordBytes.BytesPerCluster];
+        value.CopyTo(cluster, 0);
+        _clusters[listCluster] = cluster;
+
+        return Add(number, MftRecordBytes.Compose(
+                isDirectory: false,
+                baseReference: 0,
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, 0, 0),
+                t => MftAttributeBytes.WriteNonResidentAttributeList(t, listCluster, clusterCount: 1, value.Length)))
+            .Add(extension, DataPiece(number, allocated, logical, startVirtualCluster: 0));
+    }
+
+    /// <summary>
+    /// A file fragmented across two extension records. Only the piece starting at cluster 0 states
+    /// the sizes, and here it sits in the later record: the earlier one holds a continuation whose
+    /// size fields are zero, as NTFS leaves them.
+    /// </summary>
+    public MftFixture AddFileWithDataSplitAcrossExtensionRecords(
+        uint number, uint parent, string name, long allocated, long logical, uint continuation, uint start) =>
+        Add(number, ListingFile(number, parent, name,
+            [
+                new ListedAttribute(Data, Reference(start), LowestVcn: 0),
+                new ListedAttribute(Data, Reference(continuation), LowestVcn: 4),
+            ]))
+            .Add(continuation, DataPiece(number, allocated: 0, logical: 0, startVirtualCluster: 4))
+            .Add(start, DataPiece(number, allocated, logical, startVirtualCluster: 0));
+
+    /// <summary>
+    /// A file whose name moved into <paramref name="extension"/>, which is what NTFS does once a
+    /// file has enough hard links to overflow its own record. A system volume is full of these, and
+    /// the base record alone cannot say which directory the file is in.
+    /// </summary>
+    public MftFixture AddFileWithItsNameInAnExtensionRecord(
+        uint number, uint parent, string name, long allocated, long logical, uint extension) =>
+        Add(number, NamelessListingFile(number, allocated, logical, extension))
+            .Add(extension, MftRecordBytes.Compose(
+                isDirectory: false,
+                Reference(number),
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, allocated, logical)));
+
+    /// <summary>
+    /// A file whose base record keeps only its 8.3 alias, under <paramref name="aliasParent"/>,
+    /// while its Win32 name — a hard link in another directory — moved to
+    /// <paramref name="extension"/>. The Win32 name outranks the alias wherever it is kept, so the
+    /// file belongs under <paramref name="parent"/>.
+    /// </summary>
+    public MftFixture AddFileWithItsBetterNameInAnExtensionRecord(
+        uint number, uint aliasParent, string alias, uint parent, string name, long logical, uint extension) =>
+        Add(number, MftRecordBytes.Compose(
+                isDirectory: false,
+                baseReference: 0,
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+                t => MftAttributeBytes.WriteFileName(t, Reference(aliasParent), alias, logical, logical, nameSpace: 2),
+                t => MftAttributeBytes.WriteAttributeList(t,
+                [
+                    new ListedAttribute(StandardInformation, Reference(number)),
+                    new ListedAttribute(FileName, Reference(number)),
+                    new ListedAttribute(FileName, Reference(extension)),
+                    new ListedAttribute(Data, Reference(number)),
+                ]),
+                t => MftAttributeBytes.WriteNonResidentData(t, logical, logical, startVirtualCluster: 0)))
+            .Add(extension, MftRecordBytes.Compose(
+                isDirectory: false,
+                Reference(number),
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, logical, logical, nameSpace: 1)));
+
+    /// <summary>
+    /// <see cref="AddFileWithDataInAnExtensionRecord"/>, with the extension record caught mid-change:
+    /// it no longer matches what the list says, in the way <paramref name="mismatch"/> names. A
+    /// reader that takes its sizes anyway reports a file that has since become something else.
+    /// </summary>
+    public MftFixture AddFileWithDataInAMismatchedExtensionRecord(
+        uint number, uint parent, string name, uint extension, ExtensionMismatch mismatch)
+    {
+        var (owner, sequence) = Mismatched(number, mismatch);
+
+        return Add(number, ListingFile(number, parent, name, [new ListedAttribute(Data, Reference(extension))]))
+            .Add(extension, MftRecordBytes.Compose(
+                isDirectory: false,
+                owner,
+                sequence,
+                t => MftAttributeBytes.WriteNonResidentData(t, allocated: 4096, logical: 4096, startVirtualCluster: 0)));
+    }
+
+    /// <summary>
+    /// <see cref="AddFileWithItsNameInAnExtensionRecord"/>, with the extension record caught
+    /// mid-change. Nothing then says which directory the file is in, so it could belong to any.
+    /// </summary>
+    public MftFixture AddFileWithItsNameInAMismatchedExtensionRecord(
+        uint number, uint parent, string name, long logical, uint extension, ExtensionMismatch mismatch)
+    {
+        var (owner, sequence) = Mismatched(number, mismatch);
+
+        return Add(number, NamelessListingFile(number, logical, logical, extension))
+            .Add(extension, MftRecordBytes.Compose(
+                isDirectory: false,
+                owner,
+                sequence,
+                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, logical, logical)));
+    }
+
+    /// <summary>
+    /// A file whose <c>$ATTRIBUTE_LIST</c> cannot be read: its one entry declares a length that
+    /// runs past the end of the list. A list read in part may have lost the very entry saying
+    /// where the size went.
+    /// </summary>
+    public MftFixture AddFileWithAMalformedAttributeList(uint number, uint parent, string name)
+    {
+        var value = MftAttributeBytes.AttributeListValue([new ListedAttribute(Data, Reference(number))]);
+        value[0x04] = 0xFF;
+
+        return Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, 0, 0),
+            t => MftAttributeBytes.WriteAttributeListValue(t, value)));
+    }
+
+    /// <summary>
+    /// A file fragmented across extents but still fully described here: an attribute list naming
+    /// this record for every piece, then the extent starting at VCN 0 that carries the sizes, then
+    /// a continuation extent that does not. The sizes are known, so this must not be confused with
+    /// a record that has lost them.
     /// </summary>
     public MftFixture AddFileSplitAcrossExtents(uint number, uint parent, string name, long allocated, long logical) =>
-        Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.SplitAcrossExtents));
+        Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, allocated, logical),
+            t => MftAttributeBytes.WriteAttributeList(t,
+            [
+                new ListedAttribute(StandardInformation, Reference(number)),
+                new ListedAttribute(FileName, Reference(number)),
+                new ListedAttribute(Data, Reference(number), LowestVcn: 0),
+                new ListedAttribute(Data, Reference(number), LowestVcn: 4),
+            ]),
+            t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0),
+            t => MftAttributeBytes.WriteNonResidentData(t, allocated: 0, logical: 0, startVirtualCluster: 4)));
 
     /// <summary>
     /// A file whose base record holds a later extent of a split <c>$DATA</c> rather than the first.
@@ -198,34 +357,38 @@ public sealed class MftFixture
             Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.TruncatedResidentHeader));
 
     /// <summary>
-    /// A directory big enough that NTFS moved its index attributes out of the base record. Common
-    /// on any real volume, and carrying no size of its own that anything counts.
+    /// A directory big enough that NTFS moved its index into <paramref name="extension"/>. Common on
+    /// any real volume, and carrying no size of its own that anything counts, so nothing in the
+    /// extension record is needed to measure it.
     /// </summary>
-    public MftFixture AddDirectoryWithAttributesInAnExtensionRecord(uint number, uint parent, string name) =>
-        Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: true, allocated: 0, logical: 0, DataPlacement.InExtensionRecord));
+    public MftFixture AddDirectoryWithAttributesInAnExtensionRecord(uint number, uint parent, string name, uint extension) =>
+        Add(number, MftRecordBytes.Compose(
+                isDirectory: true,
+                baseReference: 0,
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, 0, 0),
+                t => MftAttributeBytes.WriteAttributeList(t,
+                [
+                    new ListedAttribute(StandardInformation, Reference(number)),
+                    new ListedAttribute(FileName, Reference(number)),
+                    new ListedAttribute(IndexAllocation, Reference(extension), Name: "$I30"),
+                ])))
+            .Add(extension, MftRecordBytes.Compose(isDirectory: true, Reference(number), MftRecordBytes.Sequence));
 
     /// <summary>
-    /// One of the extension records the shapes above point at. A real volume holds many, and none
-    /// of them is a fault: the base record that owns them carries the file's identity.
+    /// An extension record met on its own in the first pass. A real volume holds many, and none of
+    /// them is a fault: the base record that owns it carries the file's identity.
     /// </summary>
     public MftFixture AddExtensionRecord(uint number, uint baseRecordNumber) =>
-        Add(number, MftRecordBytes.ExtensionRecord(baseRecordNumber));
+        Add(number, MftRecordBytes.Compose(isDirectory: false, Reference(baseRecordNumber), MftRecordBytes.Sequence));
 
     /// <summary>
-    /// A base record whose names live in extension records, which is what NTFS does once a file has
-    /// enough hard links to overflow its own record. A system volume is full of these, so a reader
-    /// that treats one as corruption gives up on the volume that matters most.
-    /// </summary>
-    public MftFixture AddRecordWithNamesInExtensionRecords(uint number) =>
-        Add(number, MftRecordBytes.RecordWithoutAName(withAttributeList: true));
-
-    /// <summary>
-    /// The same shape without the attribute list: a record in use, holding data, claiming no
-    /// identity and pointing nowhere else for one. No healthy volume produces this.
+    /// A record in use, holding data, claiming no identity and with no attribute list pointing
+    /// anywhere else for one. No healthy volume produces this.
     /// </summary>
     public MftFixture AddRecordWithNoIdentityAtAll(uint number) =>
-        Add(number, MftRecordBytes.RecordWithoutAName(withAttributeList: false));
+        Add(number, MftRecordBytes.RecordWithoutAName());
 
     /// <summary>
     /// A record naming a parent beyond the 32-bit range the index addresses. Narrowing this
@@ -262,7 +425,9 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture CorruptSectorStamp(uint number)
     {
-        _records[(int)number][MftRecordBytes.BytesPerSector - 1] ^= 0xFF;
+        var record = (byte[])_records[(int)number].Clone();
+        record[MftRecordBytes.BytesPerSector - 1] ^= 0xFF;
+        _records[(int)number] = record;
         return this;
     }
 
@@ -277,7 +442,13 @@ public sealed class MftFixture
     }
 
     public IMftSource Build() =>
-        new FixtureMftSource(_records, MftRecordBytes.BytesPerSector, MftRecordBytes.BytesPerRecord, _unreadableFrom);
+        new FixtureMftSource(
+            _records,
+            MftRecordBytes.BytesPerSector,
+            MftRecordBytes.BytesPerRecord,
+            _unreadableFrom,
+            MftRecordBytes.BytesPerCluster,
+            _clusters);
 
     /// <summary>
     /// A parent as NTFS stores it: record number in the low 48 bits, reuse sequence above. The
@@ -295,11 +466,66 @@ public sealed class MftFixture
     /// </summary>
     private static long FileTime(DateTime? when) => when?.ToFileTimeUtc() ?? 0;
 
+    /// <summary>
+    /// A base record keeping its name and its dates, with a list naming this record for those and
+    /// <paramref name="elsewhere"/> for the rest.
+    /// </summary>
+    private static byte[] ListingFile(uint number, uint parent, string name, IReadOnlyList<ListedAttribute> elsewhere) =>
+        MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, 0, 0),
+            t => MftAttributeBytes.WriteAttributeList(t, ListOf(number, elsewhere)));
+
+    /// <summary>A base record keeping its dates and its data, whose only name is in <paramref name="extension"/>.</summary>
+    private static byte[] NamelessListingFile(uint number, long allocated, long logical, uint extension) =>
+        MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteAttributeList(t,
+            [
+                new ListedAttribute(StandardInformation, Reference(number)),
+                new ListedAttribute(FileName, Reference(extension)),
+                new ListedAttribute(Data, Reference(number)),
+            ]),
+            t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0));
+
+    private static IReadOnlyList<ListedAttribute> ListOf(uint number, IReadOnlyList<ListedAttribute> elsewhere) =>
+    [
+        new ListedAttribute(StandardInformation, Reference(number)),
+        new ListedAttribute(FileName, Reference(number)),
+        .. elsewhere,
+    ];
+
+    /// <summary>An extension record holding one piece of <paramref name="owner"/>'s unnamed <c>$DATA</c>.</summary>
+    private static byte[] DataPiece(uint owner, long allocated, long logical, long startVirtualCluster) =>
+        MftRecordBytes.Compose(
+            isDirectory: false,
+            Reference(owner),
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster));
+
+    /// <summary>The owner and sequence an extension record states, wrong in the one way asked for.</summary>
+    private static (ulong Owner, ushort Sequence) Mismatched(uint number, ExtensionMismatch mismatch) => mismatch switch
+    {
+        ExtensionMismatch.ItsOwnSequence => (Reference(number), MftRecordBytes.Sequence + 1),
+        ExtensionMismatch.OwnerNumber => (Reference(number + 1), MftRecordBytes.Sequence),
+        ExtensionMismatch.OwnerSequence => (number | ((ulong)(MftRecordBytes.Sequence + 1) << 48), MftRecordBytes.Sequence),
+        _ => throw new ArgumentOutOfRangeException(nameof(mismatch), mismatch, null),
+    };
+
     private MftFixture Add(uint number, byte[] record)
     {
+        // Every gap is the one blank record, shared. A source copies what it serves and nothing
+        // writes to a record in place without copying it first, so a test can place a record past
+        // a hundred thousand others for the cost of the references.
         while (_records.Count <= number)
         {
-            _records.Add(new byte[MftRecordBytes.BytesPerRecord]);
+            _records.Add(Blank);
         }
 
         _records[(int)number] = record;

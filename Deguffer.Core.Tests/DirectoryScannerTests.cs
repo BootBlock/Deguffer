@@ -172,13 +172,32 @@ public class DirectoryScannerTests
     [Fact]
     public async Task FallsBackWhenTheTableCannotEstablishASizeInTheSubtree()
     {
-        var volume = Volume().AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz");
+        var volume = Volume().AddFileWithDataInAMismatchedExtensionRecord(
+            21, Cache, "fragmented.tgz", extension: 22, ExtensionMismatch.ItsOwnSequence);
         var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume));
 
         var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
+    }
+
+    /// <summary>
+    /// A cache holding a fragmented file is answered by the table, not the walk. On a real volume
+    /// this shape sent every large package cache to the walk.
+    /// </summary>
+    [Fact]
+    public async Task ReadsTheTableForATreeHoldingAFileWhoseSizeIsInAnExtensionRecord()
+    {
+        var volume = Volume().AddFileWithDataInAnExtensionRecord(
+            21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22);
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume));
+
+        var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
+
+        Assert.Equal(ScanStrategy.MasterFileTable, result.Strategy);
+        Assert.Equal(FallbackReason.None, result.Fallback);
+        Assert.Equal(8192 + 8_388_608, result.Size.Allocated);
     }
 
     [Fact]

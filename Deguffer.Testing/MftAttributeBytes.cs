@@ -10,12 +10,19 @@ public enum DataPlacement
     NonResident,
     Resident,
     NoData,
-    InExtensionRecord,
-    SplitAcrossExtents,
     LaterExtent,
     TruncatedHeader,
     TruncatedResidentHeader,
 }
+
+/// <summary>
+/// One line of an <c>$ATTRIBUTE_LIST</c>, as a fixture writes it.
+/// </summary>
+/// <param name="Type">The listed attribute's type code.</param>
+/// <param name="Segment">The record holding it, as a file reference: number, then sequence above.</param>
+/// <param name="LowestVcn">The first cluster of the attribute this piece describes.</param>
+/// <param name="Name">The attribute's name, or null for the unnamed one.</param>
+internal readonly record struct ListedAttribute(uint Type, ulong Segment, long LowestVcn = 0, string? Name = null);
 
 /// <summary>
 /// One attribute at a time, encoded as NTFS encodes it.
@@ -54,8 +61,6 @@ internal static class MftAttributeBytes
         {
             DataPlacement.Resident => WriteResidentData(target, (int)logical),
             DataPlacement.NoData => 0,
-            DataPlacement.InExtensionRecord => WriteAttributeList(target),
-            DataPlacement.SplitAcrossExtents => WriteSplitData(target, allocated, logical),
             DataPlacement.LaterExtent => WriteNonResidentData(target, allocated, logical, startVirtualCluster: 4),
             DataPlacement.TruncatedHeader => WriteTruncatedData(target, 0x30, resident: false),
             DataPlacement.TruncatedResidentHeader => WriteTruncatedData(target, 0x10, resident: true),
@@ -99,7 +104,12 @@ internal static class MftAttributeBytes
         return StandardInformationLength;
     }
 
-    public static int WriteFileName(Span<byte> target, ulong parentReference, string name, long allocated, long logical)
+    /// <param name="nameSpace">
+    /// Which namespace the name is in: 0 Posix, 1 Win32, 2 DOS, 3 both Win32 and DOS. The last is
+    /// what an ordinary short name gets, so it is the default.
+    /// </param>
+    public static int WriteFileName(
+        Span<byte> target, ulong parentReference, string name, long allocated, long logical, byte nameSpace = 3)
     {
         var nameBytes = Encoding.Unicode.GetBytes(name);
         var valueLength = 0x42 + nameBytes.Length;
@@ -118,7 +128,7 @@ internal static class MftAttributeBytes
         BinaryPrimitives.WriteInt64LittleEndian(value[0x28..], allocated);
         BinaryPrimitives.WriteInt64LittleEndian(value[0x30..], logical);
         value[0x40] = (byte)name.Length;
-        value[0x41] = 3; // Win32AndDos
+        value[0x41] = nameSpace;
         nameBytes.CopyTo(value[0x42..]);
 
         return length;
@@ -148,21 +158,87 @@ internal static class MftAttributeBytes
     }
 
     /// <summary>
-    /// A resident <c>$ATTRIBUTE_LIST</c>, standing in for the index NTFS writes when a record's
-    /// attributes no longer fit in it. Its contents are not read — what a reader has to notice is
-    /// that the record has one at all, and so may be describing itself somewhere else.
+    /// A resident <c>$ATTRIBUTE_LIST</c>: the index NTFS writes when a record's attributes no longer
+    /// fit in it, saying which record each one moved to.
     /// </summary>
-    public static int WriteAttributeList(Span<byte> target)
+    public static int WriteAttributeList(Span<byte> target, IReadOnlyList<ListedAttribute> entries) =>
+        WriteAttributeListValue(target, AttributeListValue(entries));
+
+    /// <summary>A resident list holding exactly <paramref name="value"/>, whether or not it reads as one.</summary>
+    public static int WriteAttributeListValue(Span<byte> target, ReadOnlySpan<byte> value)
     {
-        const int Length = 0x28;
+        var length = Align8(0x18 + value.Length);
+
+        BinaryPrimitives.WriteUInt32LittleEndian(target, 0x20);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], (uint)length);
+        target[0x08] = 0;
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x10..], (uint)value.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x14..], 0x18);
+        value.CopyTo(target[0x18..]);
+
+        return length;
+    }
+
+    /// <summary>
+    /// A list grown too large for its record, which NTFS then keeps in clusters of its own outside
+    /// the table. <paramref name="length"/> bytes of it, starting at <paramref name="startCluster"/>
+    /// and running for <paramref name="clusterCount"/> clusters.
+    /// </summary>
+    public static int WriteNonResidentAttributeList(Span<byte> target, long startCluster, int clusterCount, int length)
+    {
+        const int RunsOffset = 0x40;
+        const int Length = RunsOffset + 16;
 
         BinaryPrimitives.WriteUInt32LittleEndian(target, 0x20);
         BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], Length);
-        target[0x08] = 0;
-        BinaryPrimitives.WriteUInt32LittleEndian(target[0x10..], Length - 0x18);
-        BinaryPrimitives.WriteUInt16LittleEndian(target[0x14..], 0x18);
+        target[0x08] = 1;
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x18..], clusterCount - 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x20..], RunsOffset);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], (long)clusterCount * MftRecordBytes.BytesPerCluster);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], length);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], length);
+
+        // One run: a four-byte length and a four-byte start, then the terminating zero.
+        var runs = target[RunsOffset..];
+        runs[0] = 0x44;
+        BinaryPrimitives.WriteInt32LittleEndian(runs[1..], clusterCount);
+        BinaryPrimitives.WriteInt32LittleEndian(runs[5..], (int)startCluster);
+        runs[9] = 0;
 
         return Length;
+    }
+
+    /// <summary>The entries of a list, laid end to end as NTFS lays them.</summary>
+    public static byte[] AttributeListValue(IReadOnlyList<ListedAttribute> entries)
+    {
+        const int NameOffset = 0x1A;
+
+        var lengths = entries.Select(e => Align8(NameOffset + ((e.Name?.Length ?? 0) * 2))).ToArray();
+        var value = new byte[lengths.Sum()];
+        var offset = 0;
+
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var entry = entries[i];
+            var target = value.AsSpan(offset, lengths[i]);
+
+            BinaryPrimitives.WriteUInt32LittleEndian(target, entry.Type);
+            BinaryPrimitives.WriteUInt16LittleEndian(target[0x04..], (ushort)lengths[i]);
+            target[0x06] = (byte)(entry.Name?.Length ?? 0);
+            target[0x07] = NameOffset;
+            BinaryPrimitives.WriteInt64LittleEndian(target[0x08..], entry.LowestVcn);
+            BinaryPrimitives.WriteUInt64LittleEndian(target[0x10..], entry.Segment);
+            BinaryPrimitives.WriteUInt16LittleEndian(target[0x18..], (ushort)i);
+
+            if (entry.Name is { } name)
+            {
+                Encoding.Unicode.GetBytes(name).CopyTo(target[NameOffset..]);
+            }
+
+            offset += lengths[i];
+        }
+
+        return value;
     }
 
     /// <summary>The <c>$DATA</c> of <c>$MFT</c> itself, whose run list says where the table lives.</summary>
@@ -202,7 +278,11 @@ internal static class MftAttributeBytes
 
     public static int Align8(int value) => (value + 7) & ~7;
 
-    private static int WriteNonResidentData(Span<byte> target, long allocated, long logical, long startVirtualCluster)
+    /// <summary>
+    /// One piece of a non-resident unnamed <c>$DATA</c>. Only the piece starting at cluster 0
+    /// states the sizes on a real volume, so a later piece is written with zeroes in them.
+    /// </summary>
+    public static int WriteNonResidentData(Span<byte> target, long allocated, long logical, long startVirtualCluster)
     {
         const int Length = 0x48;
 
@@ -216,20 +296,6 @@ internal static class MftAttributeBytes
         BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], logical);
 
         return Length;
-    }
-
-    /// <summary>
-    /// A file too fragmented for one record: an attribute list, the extent starting at VCN 0 that
-    /// carries the sizes, and a continuation extent that does not. NTFS writes them in this order,
-    /// and the sizes are still fully known from the first one.
-    /// </summary>
-    private static int WriteSplitData(Span<byte> target, long allocated, long logical)
-    {
-        var written = WriteAttributeList(target);
-        written += WriteNonResidentData(target[written..], allocated, logical, startVirtualCluster: 0);
-        written += WriteNonResidentData(target[written..], allocated: 0, logical: 0, startVirtualCluster: 4);
-
-        return written;
     }
 
     /// <summary>

@@ -29,4 +29,18 @@ public interface IMftSource : IDisposable
     /// the table, or where a region cannot be read at all.
     /// </summary>
     int ReadBatch(long firstRecord, Span<byte> destination);
+
+    /// <summary>The volume's allocation unit, which a non-resident attribute's runs count in.</summary>
+    int BytesPerCluster { get; }
+
+    /// <summary>
+    /// Fill <paramref name="destination"/>, a whole number of clusters long, from the volume's
+    /// clusters starting at <paramref name="firstCluster"/>. Returns false unless every byte was
+    /// read.
+    ///
+    /// <para>Needed for the one thing in a table that is clusters rather than records: an
+    /// <c>$ATTRIBUTE_LIST</c> grown too large to stay inside its record, which NTFS then keeps
+    /// outside the table altogether.</para>
+    /// </summary>
+    bool TryReadClusters(long firstCluster, Span<byte> destination);
 }

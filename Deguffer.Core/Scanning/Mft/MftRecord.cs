@@ -18,9 +18,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <param name="Name">The file or directory name, without any path.</param>
 /// <param name="Size">
 /// Allocated and logical bytes of the unnamed <c>$DATA</c> stream, or null where the record does
-/// not establish them — the attribute lives in an extension record, or describes only a later
-/// extent, or is malformed. Null is not zero: a subtree holding one of these cannot be totalled,
-/// and saying so is what sends the caller to the walk instead of reporting a cache short.
+/// not establish them — the attribute is in an extension record caught mid-change, or describes
+/// only a later extent, or is malformed. Null is not zero: a subtree holding one of these cannot
+/// be totalled, and saying so is what sends the caller to the walk instead of reporting a cache
+/// short.
 /// </param>
 /// <param name="IsDirectory">Whether this entry contains other entries.</param>
 /// <param name="IsReparsePoint">

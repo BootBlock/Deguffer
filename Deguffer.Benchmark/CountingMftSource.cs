@@ -19,12 +19,31 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
 
     public long RecordsRead { get; private set; }
 
-    public long BytesRead => RecordsRead * BytesPerRecord;
+    /// <summary>
+    /// Records and clusters both. A table whose files spill into extension records also reads the
+    /// attribute lists kept outside it, and those bytes are as much a part of the run.
+    /// </summary>
+    public long BytesRead { get; private set; }
 
     public int ReadBatch(long firstRecord, Span<byte> destination)
     {
         var read = inner.ReadBatch(firstRecord, destination);
         RecordsRead += Math.Max(read, 0);
+        BytesRead += (long)Math.Max(read, 0) * BytesPerRecord;
+        return read;
+    }
+
+    public int BytesPerCluster => inner.BytesPerCluster;
+
+    public bool TryReadClusters(long firstCluster, Span<byte> destination)
+    {
+        var read = inner.TryReadClusters(firstCluster, destination);
+
+        if (read)
+        {
+            BytesRead += destination.Length;
+        }
+
         return read;
     }
 

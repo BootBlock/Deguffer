@@ -3,6 +3,9 @@ using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Testing;
 
+/// <summary>Writes one attribute at the start of <paramref name="target"/>, returning its length.</summary>
+internal delegate int AttributeWriter(Span<byte> target);
+
 /// <summary>
 /// One MFT record, assembled from the attributes it holds.
 ///
@@ -19,6 +22,12 @@ internal static class MftRecordBytes
 {
     public const int BytesPerSector = 512;
     public const int BytesPerRecord = 1024;
+
+    /// <summary>
+    /// What a non-resident attribute list's runs count in. Larger than a record, as on a real
+    /// volume, so a reader that confuses clusters with records reads the wrong bytes.
+    /// </summary>
+    public const int BytesPerCluster = 4096;
 
     /// <summary>
     /// Every fixture directory carries a non-zero <c>$DATA</c> stream, and it is deliberately not
@@ -60,7 +69,7 @@ internal static class MftRecordBytes
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
-        var offset = WriteHeader(span, (ushort)(isDirectory ? 0x0003 : 0x0001), baseReference: 0);
+        var offset = WriteHeader(span, (ushort)(isDirectory ? 0x0003 : 0x0001), baseReference: 0, Sequence);
 
         // First, which is where NTFS puts it, and on every record rather than only the dated ones.
         // A fixture that wrote it when a test asked about dates and not otherwise would be modelling
@@ -82,17 +91,25 @@ internal static class MftRecordBytes
     }
 
     /// <summary>
-    /// A record whose attributes belong to another record's file. NTFS writes these whenever one
-    /// record runs out of room, so a real volume is full of them and none of them is a fault.
-    ///
-    /// <para>No <c>$STANDARD_INFORMATION</c>, and that is the format rather than an omission: the
-    /// times belong to the base record that owns this one.</para>
+    /// A record holding exactly <paramref name="attributes"/>, in order — the shape every record that
+    /// spreads a file across several takes, base and extension alike.
     /// </summary>
-    public static byte[] ExtensionRecord(uint baseRecordNumber)
+    /// <param name="baseReference">
+    /// Zero for a base record. For an extension record, the base record that owns it, as a file
+    /// reference: number, then sequence above.
+    /// </param>
+    /// <param name="sequence">How many times the record has been reused.</param>
+    public static byte[] Compose(
+        bool isDirectory, ulong baseReference, ushort sequence, params AttributeWriter[] attributes)
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
-        var offset = WriteHeader(span, flags: 0x0001, baseReference: baseRecordNumber | (1UL << 48));
+        var offset = WriteHeader(span, (ushort)(isDirectory ? 0x0003 : 0x0001), baseReference, sequence);
+
+        foreach (var write in attributes)
+        {
+            offset += write(span[offset..]);
+        }
 
         return Close(record, offset);
     }
@@ -110,7 +127,7 @@ internal static class MftRecordBytes
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
-        var offset = WriteHeader(span, flags: 0x0001, baseReference: 0);
+        var offset = WriteHeader(span, flags: 0x0001, baseReference: 0, Sequence);
 
         offset += MftAttributeBytes.WriteFileName(span[offset..], parentReference, name, logical, logical);
         offset += MftAttributeBytes.WriteData(span[offset..], logical, logical, DataPlacement.NonResident);
@@ -119,18 +136,14 @@ internal static class MftRecordBytes
     }
 
     /// <summary>
-    /// A base record carrying no <c>$FILE_NAME</c>, which happens when a file has enough hard links
-    /// to overflow its own record and NTFS moves the names into extension records. Common on a
-    /// system volume, and not a fault: the record is in use and simply cannot be placed from here.
-    ///
-    /// Without the attribute list it is a different thing entirely — a record in use that carries
-    /// no identity at all, which no healthy volume produces.
+    /// A record in use carrying no <c>$FILE_NAME</c> and no <c>$ATTRIBUTE_LIST</c> to say where one
+    /// went: NTFS's reserved records 12 to 15, and damage anywhere else.
     /// </summary>
-    public static byte[] RecordWithoutAName(bool withAttributeList)
+    public static byte[] RecordWithoutAName()
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
-        var offset = WriteHeader(span, flags: 0x0001, baseReference: 0);
+        var offset = WriteHeader(span, flags: 0x0001, baseReference: 0, Sequence);
 
         // Dated like any other record. This shape stands in for reserved records 12 to 15 among
         // others, and those carry times on a real volume — the thing that makes them unreadable is
@@ -138,12 +151,6 @@ internal static class MftRecordBytes
         // have made the four records the reader's carve-out exists for the least realistic ones in
         // the fixture.
         offset += MftAttributeBytes.WriteStandardInformation(span[offset..], created: 0, lastWritten: 0);
-
-        if (withAttributeList)
-        {
-            offset += MftAttributeBytes.WriteAttributeList(span[offset..]);
-        }
-
         offset += MftAttributeBytes.WriteData(span[offset..], allocated: 4096, logical: 4096, DataPlacement.NonResident);
 
         return Close(record, offset);
@@ -158,7 +165,7 @@ internal static class MftRecordBytes
     {
         var record = new byte[BytesPerRecord];
         var span = record.AsSpan();
-        var offset = WriteHeader(span, flags: 0x0001, baseReference: 0);
+        var offset = WriteHeader(span, flags: 0x0001, baseReference: 0, Sequence);
 
         // Record 0 is a real file with real times, so it carries the attribute like the rest. The
         // run list that follows is located by an offset within its own attribute, so starting it
@@ -167,7 +174,11 @@ internal static class MftRecordBytes
 
         if (withAttributeList)
         {
-            offset += MftAttributeBytes.WriteAttributeList(span[offset..]);
+            ulong self = (ulong)Sequence << 48;
+
+            offset += MftAttributeBytes.WriteAttributeList(
+                span[offset..],
+                [new ListedAttribute(0x10, self), new ListedAttribute(0x80, self)]);
         }
 
         offset += MftAttributeBytes.WriteMftData(span[offset..], runs, dataSize);
@@ -203,19 +214,26 @@ internal static class MftRecordBytes
             "No file name length places a $DATA size field across the sector boundary; the fixup test would be vacuous.");
     }
 
+    /// <summary>
+    /// The sequence number every fixture record carries unless a test asks for another. Not zero,
+    /// for the reason <see cref="MftFixture"/>'s references are not: a reader that ignores it still
+    /// works on a freshly formatted volume.
+    /// </summary>
+    public const ushort Sequence = 1;
+
     private static int UsaCount => (BytesPerRecord / BytesPerSector) + 1;
 
     private static int FirstAttributeOffset() => MftAttributeBytes.Align8(UsaOffset + (UsaCount * 2));
 
     /// <summary>The fixed part every record starts with. Returns the offset its attributes begin at.</summary>
-    private static int WriteHeader(Span<byte> record, ushort flags, ulong baseReference)
+    private static int WriteHeader(Span<byte> record, ushort flags, ulong baseReference, ushort sequence)
     {
         var firstAttribute = FirstAttributeOffset();
 
         "FILE"u8.CopyTo(record);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x04..], UsaOffset);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x06..], (ushort)UsaCount);
-        BinaryPrimitives.WriteUInt16LittleEndian(record[0x10..], 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(record[0x10..], sequence);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x12..], 1);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x14..], (ushort)firstAttribute);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x16..], flags);

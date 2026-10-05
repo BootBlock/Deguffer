@@ -27,12 +27,26 @@ internal static class MftRecordParser
     /// NTFS 3.1 and later, and the caller already knows the number from its position in the table —
     /// so reading it would add a version dependency to learn something nobody needs.
     ///
-    /// The three outcomes are not interchangeable: see <see cref="MftParseOutcome"/> for why a
-    /// record this cannot read is a different event from one there is nothing to read in.
+    /// The outcomes are not interchangeable: see <see cref="MftParseOutcome"/> for why a record this
+    /// cannot read is a different event from one there is nothing to read in.
     /// </summary>
-    internal static MftParseOutcome Parse(Span<byte> record, int bytesPerSector, out MftRecord result)
+    /// <param name="number">
+    /// The record's position in the table. The record's own <c>$ATTRIBUTE_LIST</c> names the
+    /// records its attributes went to by number, the base record among them.
+    /// </param>
+    /// <param name="deferred">
+    /// Where the outcome is <see cref="MftParseOutcome.Continued"/>, what has to be read from other
+    /// records before this one can be answered; otherwise null.
+    /// </param>
+    internal static MftParseOutcome Parse(
+        Span<byte> record,
+        long number,
+        int bytesPerSector,
+        out MftRecord result,
+        out MftDeferredRecord? deferred)
     {
         result = default;
+        deferred = null;
 
         var outcome = MftRecordHeader.Read(record, bytesPerSector, out var header);
         if (outcome != MftParseOutcome.Parsed)
@@ -40,136 +54,44 @@ internal static class MftRecordParser
             return outcome;
         }
 
-        var attributes = ReadAttributes(record[..header.UsedLength], header.FirstAttributeOffset, out var parsed);
-        if (attributes != MftParseOutcome.Parsed)
-        {
-            return attributes;
-        }
+        var draft = new MftRecordDraft();
+        var used = record[..header.UsedLength];
 
-        // A directory's own $DATA is not the size of its contents — the contents are counted
-        // through their own records — so attributing anything here would double-count them.
-        // Nothing is read from it, so a directory that keeps its attributes elsewhere is still a
-        // known quantity: zero. Refusing there would give up on every large directory on the volume,
-        // which is precisely where NTFS runs out of room in a record.
-        result = new MftRecord(
-            parsed.Parent,
-            parsed.Name,
-            header.IsDirectory ? ScanSize.Zero : parsed.Size,
-            header.IsDirectory,
-            parsed.IsReparsePoint,
-            parsed.Created,
-            parsed.LastWritten);
-
-        return MftParseOutcome.Parsed;
-    }
-
-    /// <summary>
-    /// Read what the tree needs from one record's attributes, saying which of the three things this
-    /// record turned out to be. A record can be in use and hold nothing placeable, and that is not
-    /// the same as one this reader failed on.
-    /// </summary>
-    private static MftParseOutcome ReadAttributes(
-        ReadOnlySpan<byte> record,
-        int firstAttributeOffset,
-        out (uint Parent, string Name, ScanSize? Size, bool IsReparsePoint, long Created, long LastWritten) result)
-    {
-        result = default;
-
-        uint parent = 0;
-        var name = string.Empty;
-        ScanSize? size = null;
-        var sawData = false;
-        var sawAttributeList = false;
-        var sawReparsePoint = false;
-        var bestRank = int.MaxValue;
-        long created = 0;
-        long lastWritten = 0;
-
-        var walk = new MftAttributeEnumerator(record, firstAttributeOffset);
-
-        while (walk.MoveNext())
-        {
-            switch (walk.CurrentType)
-            {
-                // Where the dates come from, and the only place they may. NTFS keeps a second copy
-                // of all four times inside $FILE_NAME, and refreshes that copy when the name
-                // changes rather than when the file does — so a project rebuilt every day since it
-                // was last renamed reports the date of the rename there. The same trap the
-                // reparse-point flag beside the name sets, and the same answer: read the structure
-                // that is the thing itself.
-                case AttributeStandardInformation:
-                    (created, lastWritten) = ReadTimestamps(walk.Current);
-                    break;
-
-                case AttributeFileName when TryReadFileName(walk.Current, out var candidate):
-                    // Prefer the Win32 name over the 8.3 alias: a long-named file carries several
-                    // $FILE_NAME attributes, and picking the DOS alias would make path resolution
-                    // fail against the name the user actually typed.
-                    var rank = RankOf(candidate.Namespace);
-                    if (rank < bestRank)
-                    {
-                        (parent, name, bestRank) = (candidate.Parent, candidate.Name, rank);
-                    }
-
-                    break;
-
-                case AttributeList:
-                    sawAttributeList = true;
-                    break;
-
-                // The structure that makes an entry a junction or a link, rather than the flag for
-                // it kept beside the name: NTFS refreshes those flags when the name changes rather
-                // than when the file does, so a junction made over an existing directory can still
-                // read as an ordinary one there. The attribute is the thing itself.
-                case AttributeReparsePoint:
-                    sawReparsePoint = IsNameSurrogate(walk.Current);
-                    break;
-
-                case AttributeData when IsUnnamed(walk.Current):
-                    sawData = true;
-
-                    // The first extent that establishes a size is the one to keep. A file split
-                    // across extents lists the one starting at VCN 0 first — the only one carrying
-                    // the sizes — and the continuations after it declare nothing. Assigning each in
-                    // turn would let a continuation erase what the record had already established.
-                    size ??= ReadDataSize(walk.Current);
-                    break;
-            }
-        }
-
-        if (walk.IsMalformed)
+        if (!draft.TryAbsorb(used, header.FirstAttributeOffset, isBase: true, out _, out var listAt))
         {
             return MftParseOutcome.Unreadable;
         }
 
-        if (bestRank == int.MaxValue)
+        if (listAt is not { } list)
         {
-            // No name in this record. With an $ATTRIBUTE_LIST the names are in extension records —
-            // what NTFS does once a file has enough hard links to overflow its own record, which a
-            // system volume is full of.
-            //
-            // Skipping such a record is a compromise rather than a clean answer: the file is real,
-            // so the directory holding it totals short by however much it occupies, and the total
-            // is not marked approximate. Refusing instead would take the fast path off any volume
-            // holding one, which on C: means always. Following the attribute list to the extension
-            // record that holds the name is the answer that costs nothing, and it is a larger piece
-            // of work than the one this rule sits in.
-            //
-            // Without a list, a record in use claims no identity and points nowhere else for one,
-            // which no healthy volume produces.
-            return sawAttributeList ? MftParseOutcome.IdentityElsewhere : MftParseOutcome.Unreadable;
+            return draft.Finish(header.IsDirectory, list: null, out result);
         }
 
-        if (!sawData)
+        var pending = new MftDeferredRecord(number, header.Sequence, header.IsDirectory, draft);
+        var attribute = used.Slice(list.Offset, list.Length);
+
+        if (attribute[0x08] == 0)
         {
-            // No unnamed $DATA here. With an $ATTRIBUTE_LIST present it is in an extension record
-            // and this record cannot say how large the file is; with no list at all there is
-            // genuinely no unnamed stream — a symbolic link, say — and zero is the true answer.
-            size = sawAttributeList ? null : ScanSize.Zero;
+            pending.Follow(MftAttributeList.TryReadResidentValue(attribute, out var value)
+                ? MftAttributeList.TryReadEntries(value)
+                : null);
+        }
+        else if (MftAttributeList.TryReadPlacement(attribute, out var runs, out var length))
+        {
+            pending.AwaitList(runs, length);
+        }
+        else
+        {
+            pending.Follow(null);
         }
 
-        result = (parent, name, size, sawReparsePoint, created, lastWritten);
-        return MftParseOutcome.Parsed;
+        if (pending.IsComplete)
+        {
+            return pending.Finish(out result);
+        }
+
+        deferred = pending;
+        return MftParseOutcome.Continued;
     }
 
     /// <summary>
@@ -236,7 +158,7 @@ internal static class MftRecordParser
     /// An attribute too short to state a tag is not a link under any reading, and saying so keeps
     /// the two routes agreeing on it.
     /// </summary>
-    private static bool IsNameSurrogate(ReadOnlySpan<byte> attribute)
+    internal static bool IsNameSurrogate(ReadOnlySpan<byte> attribute)
     {
         const uint NameSurrogateBit = 0x2000_0000;
 
@@ -259,7 +181,7 @@ internal static class MftRecordParser
     /// space, but attributing them to the file would make a scan disagree with what the user sees
     /// in Explorer, and they are vanishingly rare in the cache trees this tool targets.
     /// </summary>
-    private static bool IsUnnamed(ReadOnlySpan<byte> attribute) => attribute[0x09] == 0;
+    internal static bool IsUnnamed(ReadOnlySpan<byte> attribute) => attribute[0x09] == 0;
 
     /// <summary>
     /// The sizes an unnamed <c>$DATA</c> declares, or null where this attribute does not declare
@@ -299,7 +221,7 @@ internal static class MftRecordParser
         return allocated < 0 || logical < 0 ? null : new ScanSize(allocated, logical);
     }
 
-    private static bool TryReadFileName(
+    internal static bool TryReadFileName(
         ReadOnlySpan<byte> attribute,
         out (uint Parent, string Name, FileNameNamespace Namespace) result)
     {
@@ -353,7 +275,7 @@ internal static class MftRecordParser
     /// A Posix name beats a bare DOS alias only because it is at least the real name; both are rare
     /// enough that the choice almost never arises.
     /// </summary>
-    private static int RankOf(FileNameNamespace value) => value switch
+    internal static int RankOf(FileNameNamespace value) => value switch
     {
         FileNameNamespace.Win32AndDos => 0,
         FileNameNamespace.Win32 => 1,
@@ -362,7 +284,7 @@ internal static class MftRecordParser
     };
 
     /// <summary>The values NTFS stores in the namespace byte. See <see cref="RankOf"/> for preference.</summary>
-    private enum FileNameNamespace : byte
+    internal enum FileNameNamespace : byte
     {
         Posix = 0,
         Win32 = 1,
