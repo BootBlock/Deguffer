@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Core.Execution;
 
 namespace Deguffer.Core.Providers;
 
@@ -46,7 +47,19 @@ public sealed record TempMarker(string Tool, Regex Name, TargetKind Kind, string
     /// Whether the tool says, entry by entry, that the entry is live. Null where it has no way to.
     /// Asked with the entry's name, because that is what the tools that answer this key on.
     /// </summary>
-    public Func<string, bool>? InUse { get; init; }
+    public Func<string, CancellationToken, bool>? InUse { get; init; }
+
+    /// <summary>
+    /// The question the clean asks immediately before removing an entry this marker offered, in place of
+    /// <see cref="InUse"/>, given the entry's full path. Null where <see cref="InUse"/> is asked again, and
+    /// the function may answer null for an entry with nothing left to ask.
+    ///
+    /// <para>For a marker whose answer rests on evidence read once for the planning pass (G4), such as
+    /// Claude Code's list of running sessions: <see cref="InUse"/> answers the preview from that pass's
+    /// copy, which is as old as the preview, and the clean must read the evidence again because a preview
+    /// can sit on screen while a session starts.</para>
+    /// </summary>
+    public Func<string, IUseCheck?>? CheckAtClean { get; init; }
 
     /// <summary>
     /// Why <see cref="InUse"/> holds an entry back, as a lower-case clause with no full stop. One

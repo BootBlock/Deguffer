@@ -92,6 +92,24 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
             ? null
             : "a Claude Code session that is running now may have made it");
 
+    /// <summary>
+    /// For something a running Claude Code process keeps using for as long as it runs, which names no
+    /// session it can be tied to: held while any running session could have made it, which is
+    /// <see cref="ClaudeCodeSessionList.Predates"/> answering no, and while Claude Code keeps no list here
+    /// at all.
+    ///
+    /// <para>The second is what <see cref="Predating"/> leaves to the week-long floor behind it. A row
+    /// with no floor reads a missing list as what it may be — a version of Claude Code the list cannot
+    /// see — rather than as nothing running.</para>
+    /// </summary>
+    /// <param name="createdUtc">When the thing was made, which is the moment a process that made it existed.</param>
+    public static ClaudeCodeSessionCheck MadeBeforeEverySession(ClaudeCodeSessionRegistry sessions, DateTime createdUtc) =>
+        new(sessions, (list, _) => !list.Kept
+            ? "Claude Code keeps no list of running sessions here, so Deguffer cannot tell whether one made it"
+            : list.Predates(createdUtc)
+                ? null
+                : "a Claude Code session that is running now may have made it");
+
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
         var list = _sessions.ReadAfresh(ct);

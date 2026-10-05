@@ -20,8 +20,19 @@ namespace Deguffer.Core.Providers;
 /// directly. Every directory between the two must be a real one: a junction called <c>Roslyn</c>
 /// would otherwise hand back somewhere else's entries under Roslyn's names.
 /// </param>
+/// <param name="ClaimsOnlyItself">
+/// Whether this row speaks for <paramref name="Directory"/> alone rather than for the whole entry of the
+/// temporary folder it sits in. See <see cref="TempMarkerFindings.ClaimsIn"/>.
+///
+/// <para>Only for an owned place whose neighbours the "Temporary files" row already handles safely on
+/// its age rule. Claude Code's <c>claude</c> folder holds each session's scratch beside its command
+/// snapshots: the scratch is what that row ages out, and the snapshots are swept by Claude Code itself
+/// before they are old enough for it. Claiming the whole folder for the snapshots would leave the
+/// scratch to nobody.</para>
+/// </param>
 public sealed record TempMarkerPlace(
     string Directory,
     IReadOnlyList<TempMarker> Markers,
     string? Owner = null,
-    string? Below = null);
+    string? Below = null,
+    bool ClaimsOnlyItself = false);

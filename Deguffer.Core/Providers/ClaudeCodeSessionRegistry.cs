@@ -34,6 +34,13 @@ public sealed record ClaudeCodeSessionList(IReadOnlyList<ClaudeCodeLiveSession> 
     private readonly HashSet<string> _ids =
         new(Live.Select(session => session.SessionId), StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether Claude Code keeps a list here at all. False where its folder is not there, which reads as
+    /// a complete list naming nobody and is also how a version of Claude Code older than the list looks.
+    /// A row with no age floor behind the list refuses what depends on it while this is false.
+    /// </summary>
+    public bool Kept { get; init; } = true;
+
     /// <summary>Whether the list names <paramref name="sessionId"/> as running.</summary>
     public bool Lists(string sessionId) => _ids.Contains(sessionId);
 
@@ -140,9 +147,10 @@ public sealed partial class ClaudeCodeSessionRegistry
         {
             // Not there is an answer: no session has registered. It is also how a version of Claude
             // Code that predates the list looks, which this cannot tell apart, and that is why no
-            // provider relies on the list alone — each holds back what was written recently as well.
+            // provider relies on the list alone. Each holds back what was written recently as well, or,
+            // with no such floor, refuses what depends on the list while it is not kept.
             case PathPresence.Absent:
-                return new ClaudeCodeSessionList([], Complete: true);
+                return new ClaudeCodeSessionList([], Complete: true) { Kept = false };
 
             // Windows would not say, which is not an answer. Treated as an unread list, so a
             // transcript is never called an orphan on the strength of it.
