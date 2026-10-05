@@ -222,6 +222,27 @@ public sealed class KnownItemsTests : IDisposable
     }
 
     /// <summary>
+    /// The Dart and Flutter package cache, whose one eviction command is a trap. <c>dart pub cache
+    /// clean</c> empties the whole cache, the packages installed with <c>dart pub global
+    /// activate</c> and their launchers in <c>bin</c> included, and that folder is commonly on the
+    /// command path (dart-lang/pub#3783). A note that names the command and prices it as a slower
+    /// build sends the reader to it without the cost that matters.
+    /// </summary>
+    [Theory]
+    [InlineData(KnownPlace.LocalAppData, @"Pub\Cache")]
+    [InlineData(KnownPlace.UserProfile, ".pub-cache")]
+    public void ThePubCacheNoteSaysCleaningItRemovesTheGlobalTools(KnownPlace place, string relativePath)
+    {
+        var entry = ItemGuide.For(_system, _environment, new FakeVolumeInventory())
+            .Describe(Path.Combine(Anchor(place), relativePath));
+
+        Assert.NotNull(entry);
+        Assert.Contains("'dart pub cache clean'", entry.Removal, StringComparison.Ordinal);
+        Assert.Contains("'dart pub global activate'", entry.Removal, StringComparison.Ordinal);
+        Assert.Contains("'bin'", entry.Removal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The catalogue against a real machine's directories, which is the one arrangement the app
     /// actually runs in. It asserts the wiring rather than the text: that
     /// <see cref="ItemGuide.ForThisMachine"/> resolves its anchors and finds something through them.

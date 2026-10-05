@@ -110,8 +110,10 @@ internal static class ToolchainItems
             + "has depended on, shared between them all. Flutter pulls in a great deal, so hundreds "
             + "of megabytes to a few gigabytes is normal.",
 
-            "'dart pub cache clean' empties it and the packages are downloaded again on the next "
-            + "build."),
+            "'dart pub cache clean' empties all of it, including the tools installed with 'dart pub "
+            + "global activate' and their launchers in its 'bin' folder, so each of those stops "
+            + "working until it is activated again by hand. The other packages are downloaded again "
+            + "on the next build."),
 
         new(
             KnownPlace.UserProfile,
@@ -121,8 +123,10 @@ internal static class ToolchainItems
             + "means the PUB_CACHE setting points here or the profile came from a Unix-shaped "
             + "environment.",
 
-            "'dart pub cache clean' empties whichever one is actually in use, and the packages are "
-            + "downloaded again on the next build."),
+            "'dart pub cache clean' empties whichever one is actually in use, including the tools "
+            + "installed with 'dart pub global activate' and their launchers in its 'bin' folder, so "
+            + "each of those stops working until it is activated again by hand. The other packages "
+            + "are downloaded again on the next build."),
 
         new(
             KnownPlace.UserProfile,
