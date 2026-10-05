@@ -18,6 +18,12 @@ public readonly record struct NtfsBootSector(
 {
     private const int MinimumLength = 512;
 
+    /// <summary>
+    /// The largest sector a volume may declare. A read sized to this is a whole number of sectors
+    /// on every volume this accepts, which an unbuffered volume read must be.
+    /// </summary>
+    internal const int MaximumBytesPerSector = 4096;
+
     /// <summary>NTFS writes this at offset 3; anything else is a different filesystem.</summary>
     private static ReadOnlySpan<byte> OemId => "NTFS    "u8;
 
@@ -35,7 +41,7 @@ public readonly record struct NtfsBootSector(
         // A power of two between a 512-byte sector and a 64 KB cluster. Rejecting anything else
         // matters because these values multiply into every later offset, and a nonsense geometry
         // would otherwise produce plausible-looking garbage rather than a clean fallback.
-        if (bytesPerSector is < 256 or > 4096 || !int.IsPow2(bytesPerSector))
+        if (bytesPerSector is < 256 or > MaximumBytesPerSector || !int.IsPow2(bytesPerSector))
         {
             return false;
         }
@@ -56,8 +62,11 @@ public readonly record struct NtfsBootSector(
             return false;
         }
 
+        // At least one fixup stride as well as one sector: a smaller record has no room for the
+        // update sequence array, so not one of its records could be read.
         var bytesPerFileRecord = DecodeRecordSize((sbyte)sector[64], bytesPerCluster);
-        if (bytesPerFileRecord < bytesPerSector || !int.IsPow2(bytesPerFileRecord))
+        if (bytesPerFileRecord < Math.Max(bytesPerSector, UpdateSequenceArray.StrideBytes)
+            || !int.IsPow2(bytesPerFileRecord))
         {
             return false;
         }

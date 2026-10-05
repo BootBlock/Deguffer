@@ -8,8 +8,6 @@ namespace Deguffer.Benchmark.Tests;
 /// </summary>
 public sealed class CountingMftSourceTests
 {
-    private const int BytesPerSector = 512;
-
     private const int BytesPerRecord = 1024;
 
     [Fact]
@@ -41,5 +39,5 @@ public sealed class CountingMftSourceTests
     }
 
     private static FixtureMftSource Table(int records, long unreadableFrom) =>
-        new([.. Enumerable.Range(0, records).Select(_ => new byte[BytesPerRecord])], BytesPerSector, BytesPerRecord, unreadableFrom);
+        new([.. Enumerable.Range(0, records).Select(_ => new byte[BytesPerRecord])], BytesPerRecord, unreadableFrom);
 }

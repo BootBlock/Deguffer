@@ -20,7 +20,7 @@ public class MftVolumeIndexTests
     private const uint Nested = 9;
     private const uint Sibling = 10;
 
-    private static MftFixture Tree() => new MftFixture()
+    private static MftFixture Tree(int bytesPerRecord = MftRecordBytes.BytesPerRecord) => new MftFixture(bytesPerRecord)
         .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
         .AddDirectory(Profile, Users, "testuser")
         .AddDirectory(Cache, Profile, ".npm-cache")
@@ -450,6 +450,25 @@ public class MftVolumeIndexTests
         var index = Build(Tree().AddFileWithSizeAcrossSectorBoundary(20, Cache, Allocated, logical: Allocated));
 
         Assert.Equal(Allocated, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// A table read from a disk with native 4,096-byte sectors, whose records are 4,096 bytes and
+    /// stamped every 512. A reader that strides by the sector size cannot read one of them, and the
+    /// volume falls back to the walk. Every stride is restored, the first holding a size field.
+    /// </summary>
+    [Fact]
+    public void MeasuresATableOfFourKilobyteRecords()
+    {
+        const long Allocated = 0x0000_1234_5678_9ABC;
+
+        var index = Build(Tree(bytesPerRecord: 4096)
+            .AddFileWithSizeAcrossSectorBoundary(20, Cache, Allocated, logical: Allocated)
+            .AddFile(21, Nested, "b.tgz", allocated: 8192, logical: 8000)
+            .AddFile(22, Sibling, "c.json", allocated: 4096, logical: 100));
+
+        Assert.Equal(Allocated + 8192, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Allocated);
     }
 
     /// <summary>

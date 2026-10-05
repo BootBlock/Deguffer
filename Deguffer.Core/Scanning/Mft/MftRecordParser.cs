@@ -30,11 +30,11 @@ internal static class MftRecordParser
     /// The three outcomes are not interchangeable: see <see cref="MftParseOutcome"/> for why a
     /// record this cannot read is a different event from one there is nothing to read in.
     /// </summary>
-    internal static MftParseOutcome Parse(Span<byte> record, int bytesPerSector, out MftRecord result)
+    internal static MftParseOutcome Parse(Span<byte> record, out MftRecord result)
     {
         result = default;
 
-        var outcome = MftRecordHeader.Read(record, bytesPerSector, out var header);
+        var outcome = MftRecordHeader.Read(record, out var header);
         if (outcome != MftParseOutcome.Parsed)
         {
             return outcome;

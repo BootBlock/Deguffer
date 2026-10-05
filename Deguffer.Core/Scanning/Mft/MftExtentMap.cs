@@ -16,11 +16,11 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
     /// Read the extent map out of <paramref name="record0"/>, which is modified in place by the
     /// update sequence fixup.
     /// </summary>
-    public static bool TryRead(Span<byte> record0, int bytesPerSector, int bytesPerCluster, out MftExtentMap map)
+    public static bool TryRead(Span<byte> record0, int bytesPerCluster, out MftExtentMap map)
     {
         map = default!;
 
-        if (MftRecordHeader.Read(record0, bytesPerSector, out var header) != MftParseOutcome.Parsed)
+        if (MftRecordHeader.Read(record0, out var header) != MftParseOutcome.Parsed)
         {
             return false;
         }
