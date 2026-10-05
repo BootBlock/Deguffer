@@ -182,6 +182,12 @@ guideline.
 official cache command, call it and parse the result; fall back to path deletion only when none
 exists.
 
+Every tool runs in one fixed folder Deguffer owns, `%LOCALAPPDATA%\Deguffer\tool-working-directory`,
+never in Deguffer's own working directory. pnpm picks its store by the drive it runs on, and NuGet,
+npm, uv, Poetry and PlatformIO read project configuration from the directory they run in and its
+parents. Run from a shortcut's "Start in" folder or a terminal inside a repository, a row described
+as the profile's cache would measure, clean and protect a project's or another drive's instead.
+
 ### 5.2 Config lives next to cache — target subfolders, never roots
 
 - `%USERPROFILE%\.gradle` contains `caches` and `wrapper` (disposable) alongside

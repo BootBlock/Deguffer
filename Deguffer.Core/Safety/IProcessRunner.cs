@@ -38,13 +38,45 @@ public interface IProcessRunner
     Task<CommandOutcome> RunAsync(string fileName, string arguments, CancellationToken ct);
 }
 
-/// <inheritdoc />
-public sealed class ProcessRunner : IProcessRunner
+/// <summary>
+/// Runs every tool in one folder Deguffer owns, never in Deguffer's own working directory.
+///
+/// <para>pnpm chooses its store from the drive of the directory it runs in, and NuGet, npm, uv,
+/// Poetry and PlatformIO read project configuration from that directory and its parents. Deguffer's
+/// own directory is whatever the shortcut or the terminal that started it said, so a row described
+/// as the profile's cache would measure, clean and protect a project's or another drive's instead,
+/// all three agreeing on the wrong folder. The folder is fixed, holds nothing a tool reads as
+/// configuration, and is on the drive of the profile's caches.</para>
+///
+/// <para>Not a parameter of <see cref="IProcessRunner.RunAsync"/>: every command names its targets
+/// by absolute path, and no caller has a reason to choose a different directory, so there is no
+/// choice for a caller to get wrong.</para>
+/// </summary>
+public sealed class ProcessRunner(string workingDirectory) : IProcessRunner
 {
-    public static readonly ProcessRunner Default = new();
+    public static readonly ProcessRunner Default = new(WorkingDirectoryFor(UserEnvironment.Current));
+
+    internal static string WorkingDirectoryFor(IUserEnvironment environment) =>
+        Path.Combine(environment.LocalAppData, "Deguffer", "tool-working-directory");
+
+    /// <summary>The directory every tool this runner starts runs in.</summary>
+    public string WorkingDirectory => workingDirectory;
 
     public async Task<CommandOutcome> RunAsync(string fileName, string arguments, CancellationToken ct)
     {
+        try
+        {
+            // Made on every run rather than once, so a folder removed while Deguffer is open is
+            // there again for the next tool instead of failing every launch after it.
+            Directory.CreateDirectory(LongPath.Extended(workingDirectory));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Running in Deguffer's own directory instead would reintroduce the wrong-folder
+            // answer this directory exists to prevent, so the step fails and says why.
+            return new CommandOutcome(-1, string.Empty, ex.Message);
+        }
+
         // npm and friends ship as .cmd shims on Windows, and CreateProcess cannot launch a batch
         // file directly — it has to go through the interpreter.
         var isBatch = Path.GetExtension(fileName) is ".cmd" or ".bat";
@@ -57,6 +89,7 @@ public sealed class ProcessRunner : IProcessRunner
         startInfo.RedirectStandardError = true;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = true;
+        startInfo.WorkingDirectory = workingDirectory;
 
         using var process = new Process { StartInfo = startInfo };
 
