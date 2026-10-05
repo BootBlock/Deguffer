@@ -70,11 +70,11 @@ public readonly record struct NtfsBootSector(
             return false;
         }
 
-        // At least one fixup stride as well as one sector: a smaller record has no room for the
-        // update sequence array, so not one of its records could be read.
+        // At least one fixup stride: a smaller record has no room for the update sequence array, so
+        // not one of its records could be read. Not at least one sector, because Windows gives a
+        // disk with 4,096-byte sectors 1,024-byte records unless it is formatted with large ones.
         var bytesPerFileRecord = DecodeRecordSize((sbyte)sector[64], bytesPerCluster);
-        if (bytesPerFileRecord < Math.Max(bytesPerSector, UpdateSequenceArray.StrideBytes)
-            || !int.IsPow2(bytesPerFileRecord))
+        if (bytesPerFileRecord < UpdateSequenceArray.StrideBytes || !int.IsPow2(bytesPerFileRecord))
         {
             return false;
         }

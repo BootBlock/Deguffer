@@ -189,8 +189,13 @@ internal static class MftRecordBytes
 
             offset += MftAttributeBytes.WriteAttributeList(
                 span[offset..],
-                [new ListedAttribute(0x10, self), new ListedAttribute(0x80, self)]);
+                [new ListedAttribute(0x10, self), new ListedAttribute(0x30, self), new ListedAttribute(0x80, self)]);
         }
+
+        // Named, as $MFT is on a real volume: a table read whole parses record 0 like any other,
+        // and a record in use with no name among the first twelve is damage the index refuses.
+        offset += MftAttributeBytes.WriteFileName(
+            span[offset..], MftFixture.Reference(MftRecord.RootRecordNumber), "$MFT", dataSize, dataSize);
 
         offset += MftAttributeBytes.WriteMftData(span[offset..], runs, dataSize);
 

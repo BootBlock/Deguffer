@@ -32,8 +32,8 @@ public sealed class MftFixture
     private long _unreadableFrom = long.MaxValue;
 
     /// <param name="bytesPerRecord">
-    /// 1,024 on a disk with 512-byte sectors, and 4,096 on a disk with native 4,096-byte sectors,
-    /// where NTFS sizes a record to one sector.
+    /// 1,024 unless the volume was formatted with large records, which are 4,096. Not tied to the
+    /// sector size: Windows gives a disk with 4,096-byte sectors 1,024-byte records by default.
     /// </param>
     public MftFixture(int bytesPerRecord = MftRecordBytes.BytesPerRecord)
     {
@@ -285,6 +285,25 @@ public sealed class MftFixture
             _unreadableFrom,
             MftRecordBytes.BytesPerCluster,
             _clusters);
+
+    /// <summary>
+    /// This table laid out on a whole volume image, boot sector and all, for a test to open the
+    /// way a real volume is opened. Record 0 becomes <c>$MFT</c>'s own record, describing where the
+    /// table was placed.
+    /// </summary>
+    /// <param name="gapAfterCluster">
+    /// Where to split the table into two extents with a gap between them, counted in clusters
+    /// from its start. Null keeps it in one.
+    /// </param>
+    internal SectorStrictVolume BuildVolume(int bytesPerSector, int bytesPerCluster, long? gapAfterCluster = null)
+    {
+        if (_clusters.Count != 0 || _unreadableFrom != long.MaxValue)
+        {
+            throw new InvalidOperationException("A volume image models a table and nothing outside it.");
+        }
+
+        return NtfsVolumeImage.Build(_records, _bytesPerRecord, bytesPerSector, bytesPerCluster, gapAfterCluster);
+    }
 
     /// <summary>
     /// A parent as NTFS stores it: record number in the low 48 bits, reuse sequence above. The
