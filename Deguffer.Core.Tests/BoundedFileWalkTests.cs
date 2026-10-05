@@ -482,7 +482,10 @@ public sealed class BoundedFileWalkTests : IDisposable
         }
 
         var failure = new InvalidOperationException("The callback failed.");
+        var callingThread = Environment.CurrentManagedThreadId;
+        using var failed = new ManualResetEventSlim();
         var inside = 0;
+        var helpersInside = 0;
 
         var thrown = Assert.Throws<InvalidOperationException>(() => Walk(root, "cache", (state, contents, descend) =>
         {
@@ -491,10 +494,21 @@ public sealed class BoundedFileWalkTests : IDisposable
             {
                 if (state == "folder-20")
                 {
+                    // Thrown once a helper is inside a callback of its own, so there is a worker for
+                    // the walk to wait for.
+                    SpinWait.SpinUntil(() => Volatile.Read(ref helpersInside) > 0, TimeSpan.FromSeconds(5));
+                    failed.Set();
                     throw failure;
                 }
 
-                Thread.Sleep(5);
+                // A helper stays in its callback well after the failure, and the calling thread does
+                // not, so a walk that threw as soon as it saw the failure would leave one running.
+                if (state != "cache" && Environment.CurrentManagedThreadId != callingThread)
+                {
+                    Interlocked.Increment(ref helpersInside);
+                    failed.Wait(TimeSpan.FromSeconds(5));
+                    Thread.Sleep(200);
+                }
 
                 foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
                 {
