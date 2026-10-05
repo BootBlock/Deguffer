@@ -236,7 +236,8 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
             table.UnreadableFrom(from);
         }
 
-        return new DirectoryScanner(FakeMftSourceFactory.Serving('C', table), tuning: Tuner(values));
+        // The table waited for: under Auto a walk could answer first, and this compares the table.
+        return new DirectoryScanner(FakeMftSourceFactory.Serving('C', table), tuning: Tuner(values with { Route = ScanRoute.Table }));
     }
 
     private static ExploreScanner Exploring(ScanPreferences values) =>

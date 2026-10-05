@@ -172,7 +172,7 @@ public class MftDirectorySearchTests
     [Fact]
     public async Task TheScannerReturnsOnlyDirectoriesInsideTheRootItWasAskedAbout()
     {
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Tree()));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Tree()), tuning: RouteTuners.Table);
 
         var found = await scanner.TryFindDirectoriesNamedAsync("obj", @"C:\Source\Example");
 
@@ -187,7 +187,7 @@ public class MftDirectorySearchTests
     [Fact]
     public async Task DoesNotTreatASiblingWithASharedNamePrefixAsBeingInsideTheRoot()
     {
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Tree()));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Tree()), tuning: RouteTuners.Table);
 
         var found = await scanner.TryFindDirectoriesNamedAsync("obj", @"C:\Source\Example");
 

@@ -22,8 +22,10 @@ public class RouteAgreementTests
     private static DirectoryScanner Walking() =>
         new(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
 
+    // The table waited for, because under Auto a walk of these small trees can answer first, and
+    // the comparison would then be the walk with itself.
     private static DirectoryScanner Indexing(string path, MftFixture fixture) =>
-        new(FakeMftSourceFactory.Serving(Path.GetFullPath(path)[0], fixture));
+        new(FakeMftSourceFactory.Serving(Path.GetFullPath(path)[0], fixture), tuning: RouteTuners.Table);
 
     [Fact]
     public async Task TheTwoRoutesTotalOneTreeToTheSameNumber()
@@ -219,8 +221,8 @@ public class RouteAgreementTests
         var walked = await Discovery(Walking()).FindAsync([new SourceRoot(root)]);
         var indexed = await Discovery(Indexing(root, fixture)).FindAsync([new SourceRoot(root)]);
 
-        Assert.False(walked.UsedIndex);
-        Assert.True(indexed.UsedIndex);
+        Assert.True(walked.FellBack);
+        Assert.False(indexed.FellBack);
 
         Assert.Equal([Path.Combine(root, "Example", "obj")], walked.Candidates);
         Assert.Equal(walked.Candidates, indexed.Candidates);

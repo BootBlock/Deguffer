@@ -123,14 +123,17 @@ public sealed class ScanSettingsViewModelTests : IDisposable
             section.AutoTableParseThreads);
     }
 
-    [Fact]
-    public void TheRouteIsStored()
+    /// <summary>The combo box lists the routes in the enum's order, so its index is the route.</summary>
+    [Theory]
+    [InlineData(1, ScanRoute.WalkOnly)]
+    [InlineData(2, ScanRoute.Table)]
+    public void TheRouteIsStored(int index, ScanRoute route)
     {
         var (section, preferences, _) = Section();
 
-        section.RouteIndex = (int)ScanRoute.WalkOnly;
+        section.RouteIndex = index;
 
-        Assert.Equal(ScanRoute.WalkOnly, preferences.Current.Scanning.Route);
+        Assert.Equal(route, preferences.Current.Scanning.Route);
     }
 
     [Fact]

@@ -35,8 +35,11 @@ public sealed class ScanTuner
     /// </summary>
     public static ScanTuner Shipped { get; } = new();
 
+    /// <summary>The route the user allows.</summary>
+    public ScanRoute Route => _preferences.Current.Scanning.Route;
+
     /// <summary>Whether the user asked for the walk even where the file table could be read.</summary>
-    public bool WalkOnly => _preferences.Current.Scanning.Route is ScanRoute.WalkOnly;
+    public bool WalkOnly => Route is ScanRoute.WalkOnly;
 
     /// <summary>
     /// The values a scan of <paramref name="path"/> runs with. Asks the device the first time a

@@ -1,6 +1,7 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
@@ -9,8 +10,12 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The route choice: Auto reads the table wherever it can, as every scan did before the choice
-/// existed, and walk only walks even where the table is readable, and says why.
+/// The route choice: Auto races the walk against the table wherever the table can be read and takes
+/// the first answer, Table waits for the table as every scan did before the routes raced, and walk
+/// only walks even where the table is readable, and says why.
+///
+/// <para>The races are held still with <see cref="HeldMftSourceFactory"/>, whose table is not read
+/// until the test says, so which route answers is never left to timing.</para>
 /// </summary>
 public sealed class ScanRouteSettingTests : IDisposable
 {
@@ -28,15 +33,154 @@ public sealed class ScanRouteSettingTests : IDisposable
         .AddDirectory(Cache, Profile, ".npm-cache")
         .AddFile(20, Cache, "a.tgz", allocated: 8192, logical: 8000);
 
+    /// <summary>
+    /// The walk of a small folder answers long before the table is read, and Table still waits for the
+    /// table. The table is held for long enough that a walk raced against it would already have
+    /// answered, so a raced scan answers from the walk here and fails this.
+    /// </summary>
     [Fact]
-    public async Task AutoReadsTheTableWhereItCan()
+    public async Task TableWaitsForTheTableWhereTheWalkWouldAnswerFirst()
     {
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Volume()), tuning: Tuner(ScanRoute.Auto).Tuner);
+        var (path, fixture) = SmallTree();
+        var sources = Held(path, fixture);
+        var scanner = new DirectoryScanner(sources, tuning: Tuner(ScanRoute.Table).Tuner);
 
-        var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
+        var measuring = scanner.MeasureAsync(path).AsTask();
+        await Task.Delay(TimeSpan.FromMilliseconds(250));
+        sources.Release();
+        var result = await measuring;
 
         Assert.Equal(ScanStrategy.MasterFileTable, result.Strategy);
+        Assert.Equal(4096, result.Size.Logical);
     }
+
+    /// <summary>
+    /// While the table is still being read, Auto takes the walk's answer and says nothing about it:
+    /// nothing was unavailable, and administrator rights are already held. Once the table is read,
+    /// it answers.
+    /// </summary>
+    [Fact]
+    public async Task AutoTakesTheWalkWhileTheTableIsStillBeingReadAndTheTableOnceItIsRead()
+    {
+        var (path, fixture) = SmallTree();
+        var sources = Held(path, fixture);
+        var scanner = new DirectoryScanner(sources, tuning: Tuner(ScanRoute.Auto).Tuner);
+
+        // Bounded, so a scan that waits for the held table fails here rather than hanging.
+        var walked = await scanner.MeasureAsync(path).AsTask().WaitAsync(Bound);
+
+        Assert.Equal(ScanStrategy.ParallelEnumeration, walked.Strategy);
+        Assert.Equal(FallbackReason.WalkAnsweredFirst, walked.Fallback);
+        Assert.Null(walked.FallbackNote);
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, walked.Fallback));
+        Assert.Equal(4096, walked.Size.Logical);
+
+        sources.Release();
+
+        // A search by name waits for the table, so once it has answered the table is read.
+        Assert.NotNull(await scanner.TryFindDirectoriesNamedAsync("cache", path));
+        var indexed = await scanner.MeasureAsync(path);
+
+        Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
+        Assert.Equal(walked.Size.Logical, indexed.Size.Logical);
+        Assert.Equal(1, sources.OpenCount);
+    }
+
+    /// <summary>
+    /// A walk refused the folder has measured nothing, and the table may still answer for it, so
+    /// the race waits for the table rather than report a folder it never read.
+    /// </summary>
+    [Fact]
+    public async Task AutoWaitsForTheTableWhereTheWalkCannotReadThePath()
+    {
+        var (path, fixture) = SmallTree();
+        using var denied = new DeniedDirectory(path);
+        var sources = Held(path, fixture);
+        var scanner = new DirectoryScanner(sources, tuning: Tuner(ScanRoute.Auto).Tuner);
+
+        var measuring = scanner.MeasureAsync(path).AsTask();
+        await Task.Delay(TimeSpan.FromMilliseconds(250));
+        sources.Release();
+        var result = await measuring;
+
+        Assert.Equal(ScanStrategy.MasterFileTable, result.Strategy);
+        Assert.True(result.WasReached);
+        Assert.Equal(4096, result.Size.Logical);
+    }
+
+    /// <summary>
+    /// Where the table then cannot be read either, the walk's answer stands, with the reason the
+    /// table gave rather than the claim that the walk was merely quicker.
+    /// </summary>
+    [Fact]
+    public async Task AutoSaysWhyTheTableDeclinedWhereTheWalkWaitedForIt()
+    {
+        var (path, fixture) = SmallTree();
+        using var denied = new DeniedDirectory(path);
+        var sources = Held(path, fixture.UnreadableFrom(MftRecord.ReservedRecordCount));
+        var scanner = new DirectoryScanner(sources, tuning: Tuner(ScanRoute.Auto).Tuner);
+
+        var measuring = scanner.MeasureAsync(path).AsTask();
+        sources.Release();
+        var result = await measuring;
+
+        Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
+        Assert.False(result.WasReached);
+    }
+
+    /// <summary>
+    /// A search of a source folder races the same way, and a walk that answered first is not a
+    /// fallback, so the plan does not offer administrator rights the process already has.
+    /// </summary>
+    [Fact]
+    public async Task DiscoveryUnderAutoTakesTheWalkWhileTheTableIsStillBeingRead()
+    {
+        var (root, fixture) = MirroredTree.Realise(_temp, new TreeDirectory(
+            "src",
+            new TreeDirectory("Example", new TreeDirectory("obj", new TreeFile("a.dll", 10)))));
+        var sources = Held(root, fixture);
+        var discovery = new SourceDirectoryDiscovery(
+            new DirectoryScanner(sources, tuning: Tuner(ScanRoute.Auto).Tuner), new FakeVolumeInventory());
+        discovery.Include(["obj"]);
+
+        var found = await discovery.FindAsync([new SourceRoot(root)]).WaitAsync(Bound);
+
+        Assert.Equal([Path.Combine(root, "Example", "obj")], found.Candidates);
+        Assert.False(found.FellBack);
+        sources.Release();
+    }
+
+    /// <summary>
+    /// A new scan ends a build the last one left running, rather than leave it reading a table
+    /// nothing will ask about, and the volume is opened again for the new scan.
+    /// </summary>
+    [Fact]
+    public async Task InvalidatingEndsABuildStillRunning()
+    {
+        var (path, fixture) = SmallTree();
+        var sources = Held(path, fixture);
+        var scanner = new DirectoryScanner(sources, tuning: Tuner(ScanRoute.Table).Tuner);
+
+        var measuring = scanner.MeasureAsync(path).AsTask();
+        scanner.Invalidate();
+        sources.Release();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => measuring);
+        Assert.Equal(1, sources.CloseCount);
+
+        Assert.Equal(ScanStrategy.MasterFileTable, (await scanner.MeasureAsync(path)).Strategy);
+        Assert.Equal(2, sources.OpenCount);
+    }
+
+    /// <summary>Far longer than a walk of a few entries takes, and short enough to fail a run that waits.</summary>
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
+
+    private (string Path, MftFixture Fixture) SmallTree() =>
+        MirroredTree.Realise(_temp, new TreeDirectory("cache", new TreeFile("a.bin", 4096)));
+
+    private static HeldMftSourceFactory Held(string path, MftFixture fixture) =>
+        new(char.ToUpperInvariant(Path.GetFullPath(path)[0]), fixture);
 
     /// <summary>
     /// The table is readable here, and walk only must not read it: the walk answers, and the result

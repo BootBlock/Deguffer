@@ -5,17 +5,19 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
-/// <summary>Candidate directories, and whether the volume index answered for every root.</summary>
+/// <summary>Candidate directories, and whether any root had to be walked.</summary>
 /// <param name="Candidates">Every directory of a sought name inside an approved root.</param>
-/// <param name="UsedIndex">
-/// False if any root had to be walked. §5.5 requires the fallback to be observable, and a discovery
-/// pass that took thirty seconds is otherwise indistinguishable from a large source tree.
+/// <param name="FellBack">
+/// True if any root had to be walked because the volume index could not answer for it. §5.5
+/// requires the fallback to be observable, and a discovery pass that took thirty seconds is
+/// otherwise indistinguishable from a large source tree. False for a root whose walk finished while
+/// the index was still being read, because nothing was unavailable there: the walk was quicker.
 /// </param>
 /// <param name="UnreadableDirectories">
 /// Directories inside an approved root that refused to be listed, so the walk never went below
 /// them. Reported rather than dropped: part of a root the user approved went unsearched, and a plan
-/// that says nothing about it describes a search it did not perform. Always empty on an indexed
-/// run, which reads the volume table rather than enumerating.
+/// that says nothing about it describes a search it did not perform. Always empty for a root the
+/// index answered, because reading the volume table enumerates nothing.
 /// </param>
 /// <param name="RefusedRoots">
 /// Approved roots no pass looked inside at all, because each is on a volume whose contents are not
@@ -25,7 +27,7 @@ namespace Deguffer.Core.Providers;
 /// </param>
 public sealed record SourceDiscovery(
     IReadOnlyList<string> Candidates,
-    bool UsedIndex,
+    bool FellBack,
     IReadOnlyList<string> UnreadableDirectories,
     IReadOnlyList<string> RefusedRoots)
 {
@@ -148,7 +150,7 @@ public sealed class SourceDirectoryDiscovery
         var unreadable = new List<string>();
         var unreached = new List<string>();
         var refused = new List<string>();
-        var usedIndex = true;
+        var fellBack = false;
 
         foreach (var root in roots)
         {
@@ -177,42 +179,18 @@ public sealed class SourceDirectoryDiscovery
                     continue;
             }
 
-            var walked = false;
+            var searched = await SearchAsync(names, root.Path, ct).ConfigureAwait(false);
 
-            foreach (var name in names)
-            {
-                var indexed = await _scanner.TryFindDirectoriesNamedAsync(name, root.Path, ct).ConfigureAwait(false);
-
-                if (indexed is null)
-                {
-                    // One walk answers for every name at once, so the remaining names need no pass
-                    // of their own.
-                    usedIndex = false;
-                    walked = true;
-                    break;
-                }
-
-                // The index answers with every directory of that name on the volume, narrowed to
-                // this root. Narrowing is not the whole of the boundary, and the difference is not
-                // cosmetic: without this an elevated run offers directories inside .git and
-                // node_modules, and nested ones already covered by their own parent. What the
-                // filter cannot restore is the walk's reach, which is a property of the token —
-                // SourceTreeBoundary says why, and says why that is reach rather than licence.
-                candidates.AddRange(
-                    indexed.Where(path => SourceTreeBoundary.IsInsideTheSearch(path, root.Path, names)));
-            }
-
-            if (walked)
-            {
-                Walk(names, root.Path, candidates, unreadable, ct);
-            }
+            candidates.AddRange(searched.Candidates);
+            unreadable.AddRange(searched.Unreadable);
+            fellBack |= searched.FellBack;
         }
 
         // Approved roots may nest or repeat, and the same directory reached twice would become two
         // steps deleting one path.
         var result = new SourceDiscovery(
             [.. candidates.Distinct(StringComparer.OrdinalIgnoreCase)],
-            usedIndex,
+            fellBack,
             [.. unreadable.Distinct(StringComparer.OrdinalIgnoreCase)],
             [.. refused.Distinct(StringComparer.OrdinalIgnoreCase)])
         {
@@ -325,19 +303,76 @@ public sealed class SourceDirectoryDiscovery
         }
     }
 
+    /// <summary>What a search of one root found, and how.</summary>
+    /// <param name="RootListed">Whether the walk listed the root itself. Always true of the index.</param>
+    private sealed record RootSearch(
+        IReadOnlyList<string> Candidates,
+        IReadOnlyList<string> Unreadable,
+        bool RootListed,
+        bool FellBack = false);
+
+    /// <summary>
+    /// Search <paramref name="root"/> through the volume index, the walk, or both at once, as the
+    /// scanner says. Racing, a walk that could not list the root has found nothing the index cannot
+    /// find, so the index is waited for.
+    /// </summary>
+    private async Task<RootSearch> SearchAsync(FrozenSet<string> names, string root, CancellationToken ct)
+    {
+        if (!_scanner.RacesTheWalk)
+        {
+            return await FromIndexAsync(names, root, ct).ConfigureAwait(false)
+                ?? Walk(names, root, ct) with { FellBack = true };
+        }
+
+        var raced = await RouteRace.FirstAsync(
+            stop => FromIndexAsync(names, root, stop),
+            stop => Task.Run(() => Walk(names, root, stop), stop),
+            walked => walked.RootListed,
+            ct).ConfigureAwait(false);
+
+        return raced.Outcome is RaceOutcome.TableDeclined ? raced.Answer with { FellBack = true } : raced.Answer;
+    }
+
+    /// <summary>The index's answer for every name in <paramref name="root"/>, or null where it has none.</summary>
+    private async Task<RootSearch?> FromIndexAsync(FrozenSet<string> names, string root, CancellationToken ct)
+    {
+        var candidates = new List<string>();
+
+        foreach (var name in names)
+        {
+            var indexed = await _scanner.TryFindDirectoriesNamedAsync(name, root, ct).ConfigureAwait(false);
+
+            if (indexed is null)
+            {
+                // One walk answers for every name at once, so the remaining names need no search of
+                // their own.
+                return null;
+            }
+
+            // The index answers with every directory of that name on the volume, narrowed to
+            // this root. Narrowing is not the whole of the boundary, and the difference is not
+            // cosmetic: without this an elevated run offers directories inside .git and
+            // node_modules, and nested ones already covered by their own parent. What the
+            // filter cannot restore is the walk's reach, which is a property of the token —
+            // SourceTreeBoundary says why, and says why that is reach rather than licence.
+            candidates.AddRange(indexed.Where(path => SourceTreeBoundary.IsInsideTheSearch(path, root, names)));
+        }
+
+        return new RootSearch(candidates, [], RootListed: true);
+    }
+
     /// <summary>
     /// The guaranteed route: enumerate the root ourselves. Iterative rather than recursive, because
     /// the trees this runs over are exactly the deeply nested ones that overflow a stack.
     /// </summary>
-    private static void Walk(
-        FrozenSet<string> names,
-        string root,
-        List<string> candidates,
-        List<string> unreadable,
-        CancellationToken ct)
+    private static RootSearch Walk(FrozenSet<string> names, string root, CancellationToken ct)
     {
+        var candidates = new List<string>();
+        var unreadable = new List<string>();
+        var rootListed = true;
+        var top = LongPath.Extended(root);
         var pending = new Stack<string>();
-        pending.Push(LongPath.Extended(root));
+        pending.Push(top);
 
         while (pending.TryPop(out var directory))
         {
@@ -350,6 +385,7 @@ public sealed class SourceDirectoryDiscovery
                 // Everything below here went unsearched. Silence would leave the plan describing a
                 // sweep of the whole approved root, which is not what happened.
                 unreadable.Add(LongPath.Display(directory));
+                rootListed &= !ReferenceEquals(directory, top);
                 continue;
             }
 
@@ -369,5 +405,7 @@ public sealed class SourceDirectoryDiscovery
                 }
             }
         }
+
+        return new RootSearch(candidates, unreadable, rootListed);
     }
 }

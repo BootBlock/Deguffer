@@ -79,6 +79,15 @@ public enum FallbackReason
     /// is. Not a fault, and administrator rights would not change it, so nothing offers them.
     /// </summary>
     WalkChosen,
+
+    /// <summary>
+    /// The table was still being read when the walk answered, so the walk's answer was taken. See
+    /// <see cref="Configuration.ScanRoute.Auto"/>.
+    ///
+    /// <para>Nothing was unavailable, and the walk was the quicker route, so there is nothing to
+    /// apologise for and nothing to offer.</para>
+    /// </summary>
+    WalkAnsweredFirst,
 }
 
 public static class FallbackReasonText
@@ -107,6 +116,8 @@ public static class FallbackReasonText
 
         FallbackReason.WalkChosen =>
             "Scanned by walking directories, because Settings asks for the walk only.",
+
+        FallbackReason.WalkAnsweredFirst => null,
 
         _ => throw new ArgumentOutOfRangeException(nameof(reason)),
     };

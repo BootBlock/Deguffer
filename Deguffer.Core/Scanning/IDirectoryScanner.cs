@@ -85,6 +85,14 @@ public interface IDirectoryScanner
         CancellationToken ct = default);
 
     /// <summary>
+    /// Whether a caller that can walk <c>root</c> itself should walk while
+    /// <see cref="TryFindDirectoriesNamedAsync"/> waits for the volume index, and take whichever
+    /// answers first. False for a scanner that answers at once, and for one the user has asked to
+    /// wait for the table. See <see cref="Configuration.ScanRoute.Auto"/>.
+    /// </summary>
+    bool RacesTheWalk => false;
+
+    /// <summary>
     /// Drop cached volume indexes and sizes. Called before a planning pass, for the same reason
     /// providers drop theirs: a preview must describe the machine as it is now.
     /// </summary>

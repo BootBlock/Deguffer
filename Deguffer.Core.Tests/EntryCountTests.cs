@@ -27,7 +27,7 @@ public sealed class EntryCountTests : IDisposable
         new(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
 
     private static DirectoryScanner Indexing(string path, MftFixture fixture) =>
-        new(FakeMftSourceFactory.Serving(Path.GetFullPath(path)[0], fixture));
+        new(FakeMftSourceFactory.Serving(Path.GetFullPath(path)[0], fixture), tuning: RouteTuners.Table);
 
     private static MftFixture Profile() => new MftFixture()
         .AddDirectory(6, MftRecord.RootRecordNumber, "Users")
