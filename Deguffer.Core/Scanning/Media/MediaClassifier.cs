@@ -52,9 +52,13 @@ internal static class MediaClassifier
 
         if (extents.Bytes is not { } bytes || !StorageDescriptors.TryReadDiskNumbers(bytes, out var disks))
         {
-            return removable
-                ? new VolumeMedia(StorageMedia.Removable, [])
-                : new VolumeMedia(StorageMedia.Unknown, [], MediaUnknownReason.ExtentsNotRead, extents.Win32Error);
+            // A removable volume keeps the class its kind gave it, and still reports the failure, so
+            // that its empty disk list reads as "not known" rather than "on no disk".
+            return new VolumeMedia(
+                removable ? StorageMedia.Removable : StorageMedia.Unknown,
+                [],
+                MediaUnknownReason.ExtentsNotRead,
+                extents.Win32Error);
         }
 
         if (removable)
@@ -88,8 +92,8 @@ internal static class MediaClassifier
     /// <para>The bus decides where it says something the seek penalty cannot: NVMe, a bridge to
     /// removable media, a disk reached over the network, a virtual disk. Every other bus, Storage
     /// Spaces included, is classed by whether the disk incurs a seek penalty, and is unknown where
-    /// it does not say. An NVMe drive behind a RAID adapter reports the RAID bus and so is classed
-    /// as solid state, which is the conservative side of the truth.</para>
+    /// it does not say. An NVMe drive behind a RAID adapter reports the RAID bus, so it is classed by
+    /// its seek penalty and is never NVMe, which is the conservative side of the truth.</para>
     /// </summary>
     internal static DiskMedia ClassifyDisk(int disk, IStorageQueries queries)
     {

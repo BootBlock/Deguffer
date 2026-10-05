@@ -1,12 +1,17 @@
 namespace Deguffer.Core.Scanning.Media;
 
 /// <summary>
-/// Why a volume's media is <see cref="StorageMedia.Unknown"/>. Each value names the step that did
-/// not answer, so a report of an unknown drive says where to look rather than only that it failed.
+/// What was not learned about a volume: why its media is <see cref="StorageMedia.Unknown"/>, or,
+/// for a removable volume whose kind decided its class, why its disks are not listed. Each value
+/// names the step that did not answer, so a report of an unknown drive says where to look rather
+/// than only that it failed.
 /// </summary>
 public enum MediaUnknownReason
 {
-    /// <summary>The class is known.</summary>
+    /// <summary>
+    /// Everything asked was answered. A share and an optical drive are asked nothing, so they have
+    /// no disks listed and no reason either.
+    /// </summary>
     None,
 
     /// <summary>

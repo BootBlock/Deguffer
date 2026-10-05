@@ -1,12 +1,12 @@
 namespace Deguffer.Core.Scanning.Media;
 
 /// <summary>
-/// The <c>STORAGE_BUS_TYPE</c> values that decide a class on their own, and Storage Spaces, which
-/// does not and is named so that a test can state that it does not.
+/// The <c>STORAGE_BUS_TYPE</c> values that decide a class on their own.
 ///
 /// <para>Deliberately partial, as <see cref="Safety.VolumeFeatures"/> is. SATA, SAS, SCSI, ATA,
-/// RAID and every value Windows adds later all take the same route, which is the disk's own
-/// seek-penalty answer, so naming them would only invite a branch nothing has measured.</para>
+/// RAID, Storage Spaces and every value Windows adds later all take the same route, which is the
+/// disk's own seek-penalty answer, so naming them would only invite a branch nothing has
+/// measured.</para>
 /// </summary>
 internal enum StorageBusType : byte
 {
@@ -17,6 +17,5 @@ internal enum StorageBusType : byte
     Mmc = 0x0D,
     Virtual = 0x0E,
     FileBackedVirtual = 0x0F,
-    Spaces = 0x10,
     Nvme = 0x11,
 }

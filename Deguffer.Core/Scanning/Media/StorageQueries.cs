@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Safety;
 using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Scanning.Media;
@@ -39,9 +40,6 @@ public sealed partial class StorageQueries : IStorageQueries
     /// </summary>
     private const int DescriptorBytes = 64;
 
-    /// <summary>A volume name is <c>\\?\Volume{GUID}\</c>: 49 characters and a terminator.</summary>
-    private const int VolumeNameLength = 50;
-
     private const uint FileShareRead = 0x0000_0001;
     private const uint FileShareWrite = 0x0000_0002;
     private const uint OpenExisting = 3;
@@ -55,7 +53,7 @@ public sealed partial class StorageQueries : IStorageQueries
     {
         // The volume's own name rather than \\.\X:, because a volume mounted at a folder has no
         // letter, and this is the name that opens a volume wherever it is mounted.
-        if (VolumeNameOf(mountPoint, out var error) is not { } volumeName)
+        if (VolumeCalls.VolumeNameOf(mountPoint, out var error) is not { } volumeName)
         {
             return StorageAnswer.Failed(error);
         }
@@ -69,17 +67,14 @@ public sealed partial class StorageQueries : IStorageQueries
             return StorageAnswer.Failed(Marshal.GetLastPInvokeError());
         }
 
-        var first = Query(volume, VolumeGetVolumeDiskExtents, [], FirstExtentsBytes);
+        var first = new byte[FirstExtentsBytes];
+        var answer = Query(volume, VolumeGetVolumeDiskExtents, [], first);
 
-        if (first.Win32Error != ErrorMoreData)
-        {
-            return first;
-        }
-
-        // The header is written even when the extents do not fit, so the count sizes the retry.
-        return first.Bytes is { } header && StorageDescriptors.TryReadExtentCount(header, out var count)
-            ? Query(volume, VolumeGetVolumeDiskExtents, [], StorageDescriptors.ExtentsHeaderBytes + (count * StorageDescriptors.ExtentBytes))
-            : first;
+        // The header is written even when the extents do not fit, so the count it declares sizes the
+        // retry. A retry that does not fit either fails like any other query.
+        return answer.Win32Error == ErrorMoreData && StorageDescriptors.TryReadExtentCount(first, out var count)
+            ? Query(volume, VolumeGetVolumeDiskExtents, [], new byte[StorageDescriptors.ExtentsHeaderBytes + (count * StorageDescriptors.ExtentBytes)])
+            : answer;
     }
 
     public StorageAnswer Adapter(int disk) => Property(disk, StorageAdapterProperty);
@@ -98,7 +93,7 @@ public sealed partial class StorageQueries : IStorageQueries
         var query = new byte[PropertyQueryBytes];
         BitConverter.TryWriteBytes(query, property);
 
-        return Query(device, StorageQueryProperty, query, DescriptorBytes);
+        return Query(device, StorageQueryProperty, query, new byte[DescriptorBytes]);
     }
 
     /// <summary>
@@ -110,12 +105,13 @@ public sealed partial class StorageQueries : IStorageQueries
         CreateFile(device, 0, FileShareRead | FileShareWrite, nint.Zero, OpenExisting, 0, nint.Zero);
 
     /// <summary>
-    /// Sends <paramref name="code"/> and returns what came back. On <c>ERROR_MORE_DATA</c> the bytes
-    /// written so far come back with the error, because they are what says how much room to give.
+    /// Sends <paramref name="code"/> and returns what the driver wrote into
+    /// <paramref name="output"/>, cut to the length it reported, or the error alone. A failure never
+    /// carries bytes, because bytes a driver did not finish writing read as zeroes, and a zero is an
+    /// answer to every field read here.
     /// </summary>
-    private static unsafe StorageAnswer Query(SafeFileHandle device, uint code, byte[] input, int outputBytes)
+    private static unsafe StorageAnswer Query(SafeFileHandle device, uint code, byte[] input, byte[] output)
     {
-        var output = new byte[outputBytes];
         bool answered;
         uint written;
 
@@ -126,30 +122,9 @@ public sealed partial class StorageQueries : IStorageQueries
                 device, code, inputPointer, (uint)input.Length, outputPointer, (uint)output.Length, out written, nint.Zero);
         }
 
-        if (answered)
-        {
-            return StorageAnswer.Answered(output[..(int)written]);
-        }
-
-        var error = Marshal.GetLastPInvokeError();
-
-        return error == ErrorMoreData
-            ? new StorageAnswer(output, error)
-            : StorageAnswer.Failed(error);
-    }
-
-    private static unsafe string? VolumeNameOf(string mountPoint, out int error)
-    {
-        var buffer = stackalloc char[VolumeNameLength];
-
-        if (!GetVolumeNameForVolumeMountPoint(mountPoint, buffer, VolumeNameLength))
-        {
-            error = Marshal.GetLastPInvokeError();
-            return null;
-        }
-
-        error = 0;
-        return new string(buffer);
+        return answered
+            ? StorageAnswer.Answered(output[..(int)written])
+            : StorageAnswer.Failed(Marshal.GetLastPInvokeError());
     }
 
     [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
@@ -173,13 +148,4 @@ public sealed partial class StorageQueries : IStorageQueries
         uint outBufferSize,
         out uint bytesReturned,
         nint overlapped);
-
-    [LibraryImport(
-        "kernel32.dll",
-        EntryPoint = "GetVolumeNameForVolumeMountPointW",
-        StringMarshalling = StringMarshalling.Utf16,
-        SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static unsafe partial bool GetVolumeNameForVolumeMountPoint(
-        string volumeMountPoint, char* volumeName, uint bufferLength);
 }

@@ -133,7 +133,7 @@ public sealed class VolumeMediaTests
 
     /// <summary>
     /// A removable volume keeps its class when the extents fail, because its kind already said what
-    /// it is, and reports its disk where the extents answer, so a caller can tell which volumes share
+    /// it is, with the failure, and reports its disk where the extents answer, so a caller can tell which volumes share
     /// that disk. The bus is not asked: the kind decided.
     /// </summary>
     [Fact]
@@ -148,10 +148,16 @@ public sealed class VolumeMediaTests
         Assert.Equal([6], media.PhysicalDisks);
         Assert.Equal(0, answered.AdaptersAsked);
 
-        var unanswered = Classify(new FakeStorageQueries(), removable);
+        Assert.Equal(MediaUnknownReason.None, media.Reason);
+
+        // The failure is kept, so an empty disk list is not read as a volume on no disk, which a
+        // caller deciding which volumes share a disk would take as sharing none.
+        var unanswered = Classify(new FakeStorageQueries().VolumeAnswer(@"F:\", StorageAnswer.Failed(ErrorAccessDenied)), removable);
 
         Assert.Equal(StorageMedia.Removable, unanswered.Class);
         Assert.Empty(unanswered.PhysicalDisks);
+        Assert.Equal(MediaUnknownReason.ExtentsNotRead, unanswered.Reason);
+        Assert.Equal(ErrorAccessDenied, unanswered.Win32Error);
     }
 
     [Fact]
