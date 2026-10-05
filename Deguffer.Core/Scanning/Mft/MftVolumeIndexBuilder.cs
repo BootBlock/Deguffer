@@ -23,10 +23,7 @@ public static class MftVolumeIndexBuilder
     /// whole reason to exist.
     /// </summary>
     public static bool TryBuild(
-        IMftSource source,
-        TableTuning tuning,
-        out MftVolumeIndex index,
-        CancellationToken ct = default)
+        IMftSource source, TableTuning tuning, out MftVolumeIndex index, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -36,7 +33,7 @@ public static class MftVolumeIndexBuilder
         var tree = new MftVolumeTree(count);
 
         if (!MftRecordStream.TryReadAll(
-            source, count, tuning, (number, outcome, in record) => Place(tree, number, outcome, in record), ct))
+                source, count, tuning, (number, outcome, in record) => Place(tree, number, outcome, in record), onProgress: null, ct))
         {
             return false;
         }
@@ -50,6 +47,9 @@ public static class MftVolumeIndexBuilder
     ///
     /// Returning false here takes the index down, and the two cases where it does not are the whole
     /// of this method's judgement.
+    ///
+    /// <para>Called from several threads at once, each with its own record, which is all
+    /// <see cref="MftVolumeTree.Set"/> needs.</para>
     /// </summary>
     private static bool Place(MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record)
     {

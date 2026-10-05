@@ -16,6 +16,13 @@ namespace Deguffer.Core.Scanning.Mft;
 internal static class MftExtensionReader
 {
     /// <summary>
+    /// The longest run of unwanted records one read of the second pass reads across rather than
+    /// making two reads: sixty-four of the usual 1,024-byte records. Reading across a short gap saves
+    /// a second read, and reading across a long one brings records nobody wants.
+    /// </summary>
+    private const int GapBytes = 64 * 1024;
+
+    /// <summary>
     /// Complete every record in <paramref name="deferred"/>. Returns false where the lists read
     /// here want more extension records than <paramref name="budget"/> allows, which a table NTFS
     /// wrote never does; the records past that point are then lost whole rather than followed.
@@ -62,48 +69,16 @@ internal static class MftExtensionReader
 
     /// <summary>
     /// The entries of a list kept outside the table, or null where any part of it cannot be read.
-    /// Only the clusters holding the list's bytes are read: the allocation can run past them, and a
-    /// sparse run is a hole where entries should be.
     ///
     /// <para>Also how <see cref="MftExtentMapReader"/> reads <c>$MFT</c>'s own list, which is why
     /// it takes a <see cref="ClusterReader"/> rather than a source.</para>
     /// </summary>
+    /// <param name="length">At most <see cref="MftAttributeList.MaximumLength"/>.</param>
     internal static IReadOnlyList<MftAttributeListEntry>? TryReadList(
-        ClusterReader read, int clusterBytes, IReadOnlyList<DataRun> runs, int length)
-    {
-        // Neither product can overflow: the length is capped at MftAttributeList.MaximumLength,
-        // and a cluster is at most 2 MiB.
-        var wanted = (length + clusterBytes - 1) / clusterBytes * clusterBytes;
-
-        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
-        using var buffer = new VolumeReadBuffer(wanted);
-        var clusters = buffer.Span;
-        var filled = 0;
-
-        foreach (var run in runs)
-        {
-            if (filled == wanted)
-            {
-                break;
-            }
-
-            if (run.IsSparse)
-            {
-                return null;
-            }
-
-            var take = (int)Math.Min(run.ClusterCount, (wanted - filled) / clusterBytes) * clusterBytes;
-
-            if (!read(run.StartCluster, clusters.Slice(filled, take)))
-            {
-                return null;
-            }
-
-            filled += take;
-        }
-
-        return filled == wanted ? MftAttributeList.TryReadEntries(clusters[..length]) : null;
-    }
+        ClusterReader read, int clusterBytes, IReadOnlyList<DataRun> runs, int length) =>
+        MftClusterValue.TryRead(read, clusterBytes, runs, length) is { } value
+            ? MftAttributeList.TryReadEntries(value)
+            : null;
 
     private static void ReadExtensionRecords(
         IMftSource source,
@@ -130,6 +105,7 @@ internal static class MftExtensionReader
 
         var bytesPerRecord = source.BytesPerRecord;
         var capacity = batch.Length / bytesPerRecord;
+        var gapRecords = Math.Max(1, GapBytes / bytesPerRecord);
 
         // Each record is parsed from a copy. The update sequence fixup rewrites a record in place,
         // so a second owner naming the same record — only a damaged table produces one — would
@@ -144,10 +120,14 @@ internal static class MftExtensionReader
             var first = wanted[next].Segment.Record;
 
             // One read from the first wanted record to the furthest the batch can reach, so records
-            // close together cost one read rather than one each.
+            // close together cost one read rather than one each. Only while they are close: a gap
+            // longer than GapBytes ends the read, or a large buffer would read megabytes of records
+            // nobody wants to reach two that somebody does.
             var last = first;
 
-            for (var i = next; i < wanted.Count && wanted[i].Segment.Record - first < capacity; i++)
+            for (var i = next;
+                 i < wanted.Count && wanted[i].Segment.Record - first < capacity && wanted[i].Segment.Record - last <= gapRecords;
+                 i++)
             {
                 last = wanted[i].Segment.Record;
             }

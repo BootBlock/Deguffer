@@ -31,6 +31,17 @@ public sealed class MftFixture
 
     private long _unreadableFrom = long.MaxValue;
 
+    private bool _withBitmap = true;
+
+    /// <summary>Records whose bit says otherwise than their header, and what it says.</summary>
+    private readonly Dictionary<long, bool> _bitOverrides = [];
+
+    /// <summary>
+    /// Where a fixture source keeps <c>$MFT</c>'s <c>$BITMAP</c>: far from anything a test places, so
+    /// a reader that looks for it elsewhere finds nothing.
+    /// </summary>
+    internal const long BitmapCluster = 7_000_000;
+
     /// <param name="bytesPerRecord">
     /// 1,024 unless the volume was formatted with large records, which are 4,096. Not tied to the
     /// sector size: Windows gives a disk with 4,096-byte sectors 1,024-byte records by default.
@@ -278,13 +289,101 @@ public sealed class MftFixture
         return this;
     }
 
-    public IMftSource Build() =>
-        new FixtureMftSource(
+    /// <summary>
+    /// Leave <c>$MFT</c>'s <c>$BITMAP</c> out, as a source that cannot locate it does, so a pass
+    /// reads and parses every record.
+    /// </summary>
+    public MftFixture WithoutBitmap()
+    {
+        _withBitmap = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Clear the bit of a record in use, as for a file created after the bitmap was read. A pass
+    /// believes the bit, so the record is never read.
+    /// </summary>
+    public MftFixture MarkFree(uint number)
+    {
+        _bitOverrides[number] = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Set the bit of a free record, as for a file deleted after the bitmap was read. The record's
+    /// header still says it is free, and the header decides.
+    /// </summary>
+    public MftFixture MarkInUse(uint number)
+    {
+        _bitOverrides[number] = true;
+        return this;
+    }
+
+    /// <summary>
+    /// The table as a source. It carries <c>$MFT</c>'s <c>$BITMAP</c> unless
+    /// <see cref="WithoutBitmap"/> was asked for, set for every record whose header says it is in use,
+    /// as NTFS keeps it, and kept in clusters of its own at <see cref="BitmapCluster"/>.
+    /// </summary>
+    public IMftSource Build()
+    {
+        var clusters = new Dictionary<long, byte[]>(_clusters);
+        MftBitmapPlacement? placement = null;
+
+        if (_withBitmap)
+        {
+            var bits = BitmapBytes();
+            placement = MftBitmapPlacement.InClusters(Place(clusters, BitmapCluster, bits), bits.Length);
+        }
+
+        return new FixtureMftSource(
             _records,
             _bytesPerRecord,
             _unreadableFrom,
             MftRecordBytes.BytesPerCluster,
-            _clusters);
+            clusters,
+            placement);
+    }
+
+    /// <summary>
+    /// One bit a record, set where the record's header says it is in use, then as
+    /// <see cref="MarkFree"/> and <see cref="MarkInUse"/> say. Rounded up to eight bytes, as NTFS
+    /// grows it.
+    /// </summary>
+    internal byte[] BitmapBytes()
+    {
+        var bits = new byte[(_records.Count + 63) / 64 * 8];
+
+        for (var i = 0; i < _records.Count; i++)
+        {
+            var inUse = _bitOverrides.TryGetValue(i, out var overridden)
+                ? overridden
+                : MftRecordBytes.IsInUse(_records[i]);
+
+            if (inUse)
+            {
+                bits[i >> 3] |= (byte)(1 << (i & 7));
+            }
+        }
+
+        return bits;
+    }
+
+    /// <summary>Lay <paramref name="bytes"/> out in whole clusters from <paramref name="first"/>.</summary>
+    private static IReadOnlyList<DataRun> Place(Dictionary<long, byte[]> clusters, long first, byte[] bytes)
+    {
+        const int ClusterBytes = MftRecordBytes.BytesPerCluster;
+        var count = Math.Max(1, (bytes.Length + ClusterBytes - 1) / ClusterBytes);
+
+        for (var i = 0; i < count; i++)
+        {
+            var cluster = new byte[ClusterBytes];
+            var start = i * ClusterBytes;
+            bytes.AsSpan(start, Math.Min(ClusterBytes, bytes.Length - start)).CopyTo(cluster);
+            clusters[first + i] = cluster;
+        }
+
+        return [new DataRun(first, count)];
+    }
 
     /// <summary>
     /// This table laid out on a whole volume image, boot sector and all, for a test to open the
@@ -302,7 +401,8 @@ public sealed class MftFixture
             throw new InvalidOperationException("A volume image models a table and nothing outside it.");
         }
 
-        return NtfsVolumeImage.Build(_records, _bytesPerRecord, bytesPerSector, bytesPerCluster, gapAfterCluster);
+        return NtfsVolumeImage.Build(
+            _records, _bytesPerRecord, bytesPerSector, bytesPerCluster, gapAfterCluster, _withBitmap ? BitmapBytes() : null);
     }
 
     /// <summary>

@@ -18,7 +18,7 @@ public class MftNonResidentHeaderTests
         Assert.True(MftNonResidentHeader.TryRead(attribute, out var header));
 
         Assert.Equal(new MftNonResidentHeader(
-            LowestVcn: 0x11, HighestVcn: 0x22, MappingPairsOffset: 0x40, AllocatedSize: 0x3300, DataSize: 0x2200), header);
+            LowestVcn: 0x11, HighestVcn: 0x22, MappingPairsOffset: 0x40, AllocatedSize: 0x3300, DataSize: 0x2200, InitializedSize: 0x1100), header);
     }
 
     /// <summary>

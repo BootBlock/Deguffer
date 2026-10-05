@@ -36,7 +36,7 @@ public class VolumeReadTests
     {
         using var source = new AddressRecordingSource();
 
-        MftRecordStream.TryReadAll(source, count: 1, TableTuning.Default, (_, _, in _) => true, CancellationToken.None);
+        MftRecordStream.TryReadAll(source, count: 1, TableTuning.Default, (_, _, in _) => true, onProgress: null, CancellationToken.None);
 
         Assert.NotNull(source.Address);
         Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);
@@ -52,9 +52,11 @@ public class VolumeReadTests
         using var source = new ClusterAddressRecordingSource(new MftFixture()
             .AddFileWithANonResidentAttributeList(
                 20, MftRecord.RootRecordNumber, "fragmented.tgz", allocated: 8192, logical: 8000, extension: 21, listCluster: 500)
+            .WithoutBitmap()
             .Build());
 
-        MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, (_, _, in _) => true, CancellationToken.None);
+        MftRecordStream.TryReadAll(
+            source, (int)source.RecordCount, TableTuning.Default, (_, _, in _) => true, onProgress: null, CancellationToken.None);
 
         Assert.NotNull(source.Address);
         Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);
@@ -71,11 +73,18 @@ public class VolumeReadTests
 
         public long? Address { get; private set; }
 
+        public MftBitmapPlacement? Bitmap => null;
+
+        public int BatchLength(long firstRecord, int capacity) => firstRecord < RecordCount ? 1 : 0;
+
         public int ReadBatch(long firstRecord, Span<byte> destination)
         {
             Address = VolumeReadTests.Address(destination);
             return 0;
         }
+
+        public ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct) =>
+            ValueTask.FromResult(ReadBatch(firstRecord, destination.Span));
 
         public int BytesPerCluster => 4096;
 
@@ -97,7 +106,14 @@ public class VolumeReadTests
 
         public long? Address { get; private set; }
 
+        public MftBitmapPlacement? Bitmap => table.Bitmap;
+
+        public int BatchLength(long firstRecord, int capacity) => table.BatchLength(firstRecord, capacity);
+
         public int ReadBatch(long firstRecord, Span<byte> destination) => table.ReadBatch(firstRecord, destination);
+
+        public ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct) =>
+            table.ReadBatchAsync(firstRecord, destination, ct);
 
         public bool TryReadClusters(long firstCluster, Span<byte> destination)
         {

@@ -2,6 +2,10 @@ namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
 /// Handles one record of a table. Return false to abandon the read.
+///
+/// <para>Called from up to <see cref="TableTuning.ParseThreads"/> threads at once, each with a
+/// different record, and in no particular order. Whatever a handler writes for one record has to be
+/// its own, or safe to share.</para>
 /// </summary>
 /// <param name="number">The record's position in the table, which is its record number.</param>
 /// <param name="outcome">
@@ -13,7 +17,7 @@ namespace Deguffer.Core.Scanning.Mft;
 internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in MftRecord record);
 
 /// <summary>
-/// Reads a table from end to end in batches, parsing each record and handing it on.
+/// Reads a table from end to end, parsing each record in use and handing it on.
 ///
 /// <para>This is the byte-level half of reading an MFT, and nothing else. It holds no opinion about
 /// what an unreadable record means, what to keep, or when to give up — those are policy, they
@@ -23,13 +27,17 @@ internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in
 /// <para>Two callers need it and they want opposite things.
 /// <see cref="MftVolumeIndexBuilder"/> abandons the volume rather than report a total that is
 /// short, because its numbers decide deletions. <see cref="Exploring.MftExploreReader"/> keeps
-/// going and marks what it missed, because its numbers draw a picture. Written twice, the batching,
-/// the aligned buffer and the short-read rule would be written twice as well.</para>
+/// going and marks what it missed, because its numbers draw a picture. Written twice, the reads in
+/// flight, the aligned buffers and the short-read rule would be written twice as well.</para>
+///
+/// <para>The first pass is <see cref="MftReadPass"/>, which reads and parses at once. A record
+/// <c>$MFT</c>'s <c>$BITMAP</c> marks free is neither parsed nor handed on, and a long run of them is
+/// not read at all.</para>
 /// </summary>
 internal static class MftRecordStream
 {
     /// <summary>
-    /// Read records <c>0</c> to <paramref name="count"/> and hand each to
+    /// Read records <c>0</c> to <paramref name="count"/> and hand each one in use to
     /// <paramref name="onRecord"/>. Returns false if a region of the table could not be read, or if
     /// the handler asked to stop.
     ///
@@ -42,7 +50,7 @@ internal static class MftRecordStream
     /// after the first pass, once <see cref="MftExtensionReader"/> has read what it needs, so
     /// records do not all arrive in table order. Those held back are still handed on where the
     /// first pass stopped at a region it could not read, because a caller that keeps going has a
-    /// use for every record that was read.</para>
+    /// use for every record that was read. They are handed on one at a time, in record order.</para>
     ///
     /// <para>A table that wants more extension records than it holds is not one NTFS wrote: each
     /// extension record belongs to one base record, so the wants of a healthy table sum to fewer
@@ -50,66 +58,37 @@ internal static class MftRecordStream
     /// every want of a hostile table would grow without bound, and running out of memory is a
     /// failure no caller can fall back from.</para>
     /// </summary>
+    /// <param name="onProgress">
+    /// Called with how many records the pass has dealt with, read or known to be free, at least
+    /// <see cref="MftPassProgress.Interval"/> records apart. Never called twice at once, and
+    /// never with a smaller number than before.
+    /// </param>
     public static bool TryReadAll(
         IMftSource source,
         int count,
         TableTuning tuning,
         MftRecordHandler onRecord,
+        Action<long>? onProgress,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(tuning);
         ArgumentNullException.ThrowIfNull(onRecord);
 
-        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
-        using var buffer = new VolumeReadBuffer(tuning.RecordsPerRead(source.BytesPerRecord) * source.BytesPerRecord);
-        var batch = buffer.Span;
-        var deferred = new List<MftDeferredRecord>();
+        var bitmap = MftBitmapReader.TryRead(source, count);
 
-        long next = 0;
-        long wanted = 0;
-        var wholeTable = true;
+        using var pass = new MftReadPass(source, count, tuning, bitmap, onRecord, onProgress, ct);
+        var first = pass.Run();
 
-        while (wholeTable && next < count)
+        if (first.Abandoned)
         {
-            ct.ThrowIfCancellationRequested();
-
-            var read = source.ReadBatch(next, batch);
-            if (read <= 0)
-            {
-                wholeTable = false;
-                break;
-            }
-
-            for (var i = 0; i < read; i++)
-            {
-                var slice = batch.Slice(i * source.BytesPerRecord, source.BytesPerRecord);
-                var outcome = MftRecordParser.Parse(slice, next + i, out var record, out var continued);
-
-                if (continued is not null)
-                {
-                    wanted += continued.Segments.Count;
-                    if (wanted > count)
-                    {
-                        wholeTable = false;
-                        break;
-                    }
-
-                    deferred.Add(continued);
-                    continue;
-                }
-
-                if (!onRecord(next + i, outcome, in record))
-                {
-                    return false;
-                }
-            }
-
-            next += read;
+            return false;
         }
 
-        wholeTable &= MftExtensionReader.TryResolve(source, deferred, count - wanted, batch, ct);
+        var wholeTable = first.WholeTable
+            & MftExtensionReader.TryResolve(source, first.Deferred, count - first.Wanted, pass.SpareBuffer, ct);
 
-        foreach (var held in deferred)
+        foreach (var held in first.Deferred)
         {
             var outcome = held.Finish(out var record);
 

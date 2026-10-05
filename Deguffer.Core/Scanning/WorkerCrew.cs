@@ -7,9 +7,9 @@ namespace Deguffer.Core.Scanning;
 /// and up to a bound of thread-pool helpers, each started when there is work for it and ended when
 /// there is none.
 ///
-/// <para>Apart from what the work is and when the run is over, which stay with the walk
-/// (<see cref="WalkWorkers{TState}"/>): how a helper starts, ends, fails and is waited for, so the
-/// read of the file table can share it.</para>
+/// <para>The walk (<see cref="WalkWorkers{TState}"/>) and the read of the file table
+/// (<see cref="Mft.MftReadPass"/>) differ in what their work is and in when they are over. They agree
+/// in how a helper starts, ends, fails and is waited for, which is what this holds.</para>
 ///
 /// <para><b>A helper that finds no work ends</b> rather than blocking a pool thread. The calling
 /// thread instead waits for a <see cref="Signal"/>, which anything that changes what it is waiting

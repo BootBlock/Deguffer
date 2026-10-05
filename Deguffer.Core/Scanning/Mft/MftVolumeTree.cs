@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning.Mft;
@@ -8,6 +9,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// Parallel arrays rather than an array of records because this is sized by the volume: a
 /// real disk runs to millions of entries, and one object per record would cost more in
 /// headers alone than every field here put together.
+///
+/// <para>Filled from several threads at once, one record each. Every array slot belongs to one
+/// record, so no two threads write the same one. The mail-store names are the one thing records
+/// share, and they are kept in a structure safe to share.</para>
 /// </summary>
 public sealed class MftVolumeTree(int count)
 {
@@ -55,7 +60,7 @@ public sealed class MftVolumeTree(int count)
     /// </summary>
     public long[] Newest { get; } = new long[count];
 
-    private readonly Dictionary<uint, string> _mailStoreNames = [];
+    private readonly ConcurrentDictionary<uint, string> _mailStoreNames = [];
 
     /// <summary>
     /// Names are kept for directories only. Path resolution never needs a file's name — a subtree

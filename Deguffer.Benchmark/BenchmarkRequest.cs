@@ -1,5 +1,7 @@
 using System.Globalization;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark;
@@ -12,8 +14,8 @@ namespace Deguffer.Benchmark;
 /// folder, fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
-/// <param name="Walk">The values the walk runs with. The table routes take none.</param>
-/// <param name="Table">The values a route that reads the table runs with. The walk takes none.</param>
+/// <param name="Walk">The values the walk runs with. The table routes take none of them.</param>
+/// <param name="Table">The values the table routes run with. The walk takes none of them.</param>
 internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, WalkTuning Walk, TableTuning Table)
 {
     public const int DefaultRuns = 5;
@@ -22,8 +24,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
 
     public const string Usage =
         """
-        Usage: Deguffer.Benchmark <route> <target> [--runs N] [--threads N] [--listing-buffer KiB]
-                                     [--read-size KiB]
+        Usage: Deguffer.Benchmark <route> <target> [--runs N] [options]
 
         Routes:
           table <drive>     Read the volume's file table end to end, parse only. Elevated.
@@ -37,9 +38,12 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                                default is what a scan uses.
         --listing-buffer KiB   Walk only. How many KiB of entries each listing asks Windows for,
                                4 to 1024. The default is what a scan uses.
-        --read-size KiB        Table routes only. How many KiB of records each read of the
-                               file table asks for, 4 to 16384. The default is what a scan
-                               uses on a drive of unknown kind.
+        --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
+                               to 16384.
+        --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
+        --parse-threads N      Table routes only. How many threads parse records, 1 to 64.
+
+        A table route's defaults are what a scan uses on a drive of unknown kind.
 
         It only reads. Nothing on the drive is written, moved or deleted.
         """;
@@ -77,7 +81,9 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
         var runs = DefaultRuns;
         var threads = WalkTuning.Default.Threads;
         var bufferKiB = WalkTuning.Default.ListingBufferBytes / 1024;
-        var readKiB = TableTuning.Default.ReadBytes / 1024;
+        var readKiB = UnknownDrive.ReadBytes / 1024;
+        var readsInFlight = UnknownDrive.ReadsInFlight;
+        var parseThreads = UnknownDrive.ParseThreads;
 
         for (var i = 2; i < args.Count; i += 2)
         {
@@ -92,6 +98,10 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                     value, WalkTuning.MinimumListingBuffer / 1024, WalkTuning.MaximumListingBuffer / 1024, out bufferKiB),
                 "--read-size" when route.ReadsTable() => TryNumber(
                     value, TableTuning.MinimumReadBytes / 1024, TableTuning.MaximumReadBytes / 1024, out readKiB),
+                "--reads-in-flight" when route.ReadsTable() => TryNumber(
+                    value, TableTuning.MinimumReadsInFlight, TableTuning.MaximumReadsInFlight, out readsInFlight),
+                "--parse-threads" when route.ReadsTable() => TryNumber(
+                    value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
                 _ => false,
             };
 
@@ -100,9 +110,12 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                 error =
                     $"--runs takes a number from 1 to {MaximumRuns}. For the walk, --threads takes a number from " +
                     $"{WalkTuning.MinimumThreads} to {WalkTuning.MaximumThreads} and --listing-buffer from " +
-                    $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. For a route " +
-                    $"that reads the table, --read-size takes a number from {TableTuning.MinimumReadBytes / 1024} to " +
-                    $"{TableTuning.MaximumReadBytes / 1024}. " +
+                    $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. " +
+                    $"For the table routes, --read-size takes a number from " +
+                    $"{TableTuning.MinimumReadBytes / 1024} to {TableTuning.MaximumReadBytes / 1024}, " +
+                    $"--reads-in-flight a number from {TableTuning.MinimumReadsInFlight} to " +
+                    $"{TableTuning.MaximumReadsInFlight} and --parse-threads from " +
+                    $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads}. " +
                     "Nothing else is accepted after the target.";
                 return null;
             }
@@ -118,8 +131,19 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
         }
 
         return new BenchmarkRequest(
-            route, path, runs, new WalkTuning(threads, bufferKiB * 1024), new TableTuning(readKiB * 1024));
+            route,
+            path,
+            runs,
+            new WalkTuning(threads, bufferKiB * 1024),
+            new TableTuning(readKiB * 1024, readsInFlight, parseThreads));
     }
+
+    /// <summary>
+    /// What a scan reads the table with on a drive of unknown kind: the values from before they could
+    /// be set, and the parse threads Auto gives the machine.
+    /// </summary>
+    public static TableTuning UnknownDrive { get; } =
+        VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.Unknown).Table;
 
     private static bool TryNumber(string? text, int minimum, int maximum, out int number) =>
         int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)

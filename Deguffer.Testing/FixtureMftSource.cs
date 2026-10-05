@@ -9,15 +9,31 @@ namespace Deguffer.Testing;
 /// <para>Also serves the few clusters outside the table a fixture placed something in. Any other
 /// cluster cannot be read, so a reader that goes looking in the wrong place fails rather than
 /// finding zeroes that happen to parse.</para>
+///
+/// <para>Every read completes before it returns, so reads complete in the order they were made. A
+/// test that needs them to complete otherwise wraps this source.</para>
 /// </summary>
 public sealed class FixtureMftSource(
     IReadOnlyList<byte[]> records,
     int bytesPerRecord,
     long unreadableFrom,
     int bytesPerCluster,
-    IReadOnlyDictionary<long, byte[]> clusters) : IMftSource
+    IReadOnlyDictionary<long, byte[]> clusters,
+    MftBitmapPlacement? bitmap) : IMftSource
 {
     public int BytesPerRecord => bytesPerRecord;
+
+    public MftBitmapPlacement? Bitmap => bitmap;
+
+    /// <summary>
+    /// What the table holds from the record on, up to the room given. A read past where the table
+    /// stops being readable is still planned, and then reads short, as a bad sector does.
+    /// </summary>
+    public int BatchLength(long firstRecord, int capacity) =>
+        firstRecord < 0 || firstRecord >= records.Count ? 0 : (int)Math.Min(capacity, records.Count - firstRecord);
+
+    public ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct) =>
+        ValueTask.FromResult(ReadBatch(firstRecord, destination.Span));
 
     public int BytesPerCluster => bytesPerCluster;
 

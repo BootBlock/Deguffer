@@ -57,6 +57,13 @@ internal static class MftRecordBytes
     /// </summary>
     public const uint WindowsOverlayFilterTag = 0x8000_0017;
 
+    /// <summary>
+    /// Whether a record's header says it is in use, which is what NTFS keeps <c>$MFT</c>'s
+    /// <c>$BITMAP</c> in step with. A blank record is not.
+    /// </summary>
+    public static bool IsInUse(ReadOnlySpan<byte> record) =>
+        record.Length > 0x17 && record[..4].SequenceEqual("FILE"u8) && (record[0x16] & 0x01) != 0;
+
     /// <param name="created">
     /// The <c>$STANDARD_INFORMATION</c> creation time, as a <c>FILETIME</c>. Zero is what NTFS
     /// itself writes for a time it never set, so it is the honest default for a fixture that is not
@@ -171,8 +178,15 @@ internal static class MftRecordBytes
     /// the rest of the table physically lives. Built here rather than in a test so it carries a
     /// real update sequence array and a real mapping pair list.
     /// </summary>
+    /// <param name="bitmap">
+    /// Where <c>$MFT</c>'s <c>$BITMAP</c> is kept, and how long it is, or null for a record without one.
+    /// </param>
     public static byte[] SelfRecord(
-        IReadOnlyList<DataRun> runs, long dataSize, bool withAttributeList = false, int bytesPerRecord = BytesPerRecord)
+        IReadOnlyList<DataRun> runs,
+        long dataSize,
+        bool withAttributeList = false,
+        int bytesPerRecord = BytesPerRecord,
+        (IReadOnlyList<DataRun> Runs, long Length)? bitmap = null)
     {
         var record = new byte[bytesPerRecord];
         var span = record.AsSpan();
@@ -189,7 +203,12 @@ internal static class MftRecordBytes
 
             offset += MftAttributeBytes.WriteAttributeList(
                 span[offset..],
-                [new ListedAttribute(0x10, self), new ListedAttribute(0x30, self), new ListedAttribute(0x80, self)]);
+                [
+                    new ListedAttribute(0x10, self),
+                    new ListedAttribute(0x30, self),
+                    new ListedAttribute(0x80, self),
+                    .. bitmap is null ? Array.Empty<ListedAttribute>() : [new ListedAttribute(0xB0, self)],
+                ]);
         }
 
         // Named, as $MFT is on a real volume: a table read whole parses record 0 like any other,
@@ -198,6 +217,11 @@ internal static class MftRecordBytes
             span[offset..], MftFixture.Reference(MftRecord.RootRecordNumber), "$MFT", dataSize, dataSize);
 
         offset += MftAttributeBytes.WriteMftData(span[offset..], runs, dataSize);
+
+        if (bitmap is { } placed)
+        {
+            offset += MftAttributeBytes.WriteMftBitmap(span[offset..], placed.Runs, placed.Length);
+        }
 
         return Close(record, offset);
     }

@@ -56,8 +56,10 @@ Deguffer.Benchmark explore C
 - `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
   how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan
   uses, and only the walk takes them.
-- `--read-size KiB` sets how many KiB of records each read of the file table asks for (4 to 16384).
-  It defaults to what a scan uses on a drive of unknown kind, and only the table routes take it.
+- `--read-size KiB`, `--reads-in-flight N` and `--parse-threads N` set how many KiB of records each
+  read of the file table asks for (4 to 16384), how many reads are outstanding at once (1 to 32),
+  and how many threads parse what arrives (1 to 64). They default to what a scan uses on a drive of
+  unknown kind, and only the table routes take them.
 - Every result states the values it ran with, so compare two results only where those match, or
   where they are the one thing you changed. The values a scan uses for each kind of drive are in
   `AutoTuning`, beside the measurements they come from.

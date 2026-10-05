@@ -12,8 +12,8 @@ using Deguffer.Core.Viewing;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// The Settings page's Scanning section: the route, the values for each kind of drive, and what
-/// Auto chose for each drive present.
+/// The Settings page's Scanning section: the route, the one value for the machine, the values for
+/// each kind of drive, and what Auto chose for each drive present.
 ///
 /// <para>Every decision here is Core's. <see cref="EnteredSetting"/> turns what was typed into what
 /// is stored, <see cref="VolumeTuning.Resolve"/> says what Auto means, and <see cref="ScanTuner"/>
@@ -58,7 +58,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         set => Apply(current => current with { Route = (ScanRoute)value });
     }
 
-    /// <summary>Which kind of drive the three boxes below set. Not stored: it is where the reader is looking.</summary>
+    /// <summary>Which kind of drive the four boxes below set. Not stored: it is where the reader is looking.</summary>
     public int KindIndex
     {
         get;
@@ -84,6 +84,24 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
 
     public double MaximumTableReadKiB => TableTuning.MaximumReadBytes / 1024;
 
+    public double MinimumTableReadsInFlight => TableTuning.MinimumReadsInFlight;
+
+    public double MaximumTableReadsInFlight => TableTuning.MaximumReadsInFlight;
+
+    public double MinimumTableParseThreads => TableTuning.MinimumParseThreads;
+
+    public double MaximumTableParseThreads => TableTuning.MaximumParseThreads;
+
+    /// <summary>
+    /// How many threads parse the file table, for every kind of drive, on the terms
+    /// <see cref="WalkThreads"/> states.
+    /// </summary>
+    public double TableParseThreads
+    {
+        get => Shown(Scanning.TableParseThreads);
+        set => Apply(current => current with { TableParseThreads = EnteredSetting.TableParseThreads(value) });
+    }
+
     /// <summary>
     /// The chosen kind's thread count, or <see cref="double.NaN"/> on Auto, which a <c>NumberBox</c>
     /// shows as empty with its placeholder. Emptying the box is how a person goes back to Auto.
@@ -108,12 +126,23 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         set => ApplyChosen(chosen => chosen with { TableReadKiB = EnteredSetting.TableReadKiB(value) });
     }
 
+    /// <summary>The chosen kind's file-table reads in flight, on the terms <see cref="WalkThreads"/> states.</summary>
+    public double TableReadsInFlight
+    {
+        get => Shown(Chosen.TableReadsInFlight);
+        set => ApplyChosen(chosen => chosen with { TableReadsInFlight = EnteredSetting.TableReadsInFlight(value) });
+    }
+
     /// <summary>What an empty box means for the chosen kind, as its placeholder: <c>Auto (16)</c>.</summary>
     public string AutoWalkThreads => AutoText(Auto.Walk.Threads);
 
     public string AutoListingBufferKiB => AutoText(Auto.Walk.ListingBufferBytes / 1024);
 
     public string AutoTableReadKiB => AutoText(Auto.Table.ReadBytes / 1024);
+
+    public string AutoTableReadsInFlight => AutoText(Auto.Table.ReadsInFlight);
+
+    public string AutoTableParseThreads => AutoText(Auto.Table.ParseThreads);
 
     /// <summary>
     /// One line per drive present, saying what its kind is and what each scan of it runs with. Brought

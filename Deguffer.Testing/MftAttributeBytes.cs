@@ -267,20 +267,54 @@ internal static class MftAttributeBytes
     /// what NTFS writes.
     /// </param>
     public static int WriteMftData(
-        Span<byte> target, IReadOnlyList<DataRun> runs, long dataSize, long lowestVcn = 0, long? highestVcn = null)
+        Span<byte> target, IReadOnlyList<DataRun> runs, long dataSize, long lowestVcn = 0, long? highestVcn = null) =>
+        WriteMftNonResident(target, 0x80, runs, dataSize, dataSize, lowestVcn, highestVcn);
+
+    /// <summary>
+    /// A piece of <c>$MFT</c>'s own <c>$BITMAP</c>, one bit a record, kept in clusters of its own as
+    /// it is on every volume but a tiny one. Only the piece at cluster 0 states the sizes.
+    /// </summary>
+    /// <param name="initializedSize">How much of it NTFS has written, or null for all of it.</param>
+    public static int WriteMftBitmap(
+        Span<byte> target, IReadOnlyList<DataRun> runs, long length, long lowestVcn = 0, long? initializedSize = null) =>
+        WriteMftNonResident(target, 0xB0, runs, length, initializedSize ?? length, lowestVcn, highestVcn: null);
+
+    /// <summary><c>$MFT</c>'s own <c>$BITMAP</c>, kept inside its record, as a tiny table's is.</summary>
+    public static int WriteResidentMftBitmap(Span<byte> target, ReadOnlySpan<byte> value)
+    {
+        var length = Align8(0x18 + value.Length);
+
+        BinaryPrimitives.WriteUInt32LittleEndian(target, 0xB0);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], (uint)length);
+        target[0x08] = 0;
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x10..], (uint)value.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x14..], 0x18);
+        value.CopyTo(target[0x18..]);
+
+        return length;
+    }
+
+    private static int WriteMftNonResident(
+        Span<byte> target,
+        uint type,
+        IReadOnlyList<DataRun> runs,
+        long dataSize,
+        long initializedSize,
+        long lowestVcn,
+        long? highestVcn)
     {
         const int RunsOffset = 0x40;
 
         var sizes = lowestVcn == 0 ? dataSize : 0;
 
-        BinaryPrimitives.WriteUInt32LittleEndian(target, 0x80);
+        BinaryPrimitives.WriteUInt32LittleEndian(target, type);
         target[0x08] = 1;
         BinaryPrimitives.WriteInt64LittleEndian(target[0x10..], lowestVcn);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x18..], highestVcn ?? (lowestVcn + runs.Sum(r => r.ClusterCount) - 1));
         BinaryPrimitives.WriteUInt16LittleEndian(target[0x20..], RunsOffset);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], sizes);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], sizes);
-        BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], sizes);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], lowestVcn == 0 ? initializedSize : 0);
 
         var cursor = RunsOffset;
         long previous = 0;

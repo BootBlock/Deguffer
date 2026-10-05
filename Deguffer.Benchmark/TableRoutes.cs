@@ -26,6 +26,11 @@ internal static class TableRoutes
         return reason;
     }
 
+    /// <summary>
+    /// Run <paramref name="route"/> once. Complete only where the route read every record in use and,
+    /// for the index, did not abandon the volume. Records <c>$MFT</c>'s <c>$BITMAP</c> marks free are
+    /// never read, so how many records were read cannot say whether the table was read whole.
+    /// </summary>
     public static RunTally Run(Route route, IMftSourceFactory volumes, char drive, TableTuning tuning, CancellationToken ct)
     {
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
@@ -39,16 +44,16 @@ internal static class TableRoutes
         {
             Route.Table => ReadOnly(source, count, tuning, ct),
             Route.Index => MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct),
-            Route.Explore => MftExploreReader.Read(source, $"{drive}:\\", [], tuning, onProgress: null, ct).Tree is not null,
+            Route.Explore => MftExploreReader.Read(source, $"{drive}:\\", [], tuning, onProgress: null, ct) is { Tree: not null, WholeTable: true },
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
 
-        return new RunTally(source.RecordsRead, source.BytesRead, complete && source.RecordsRead >= count);
+        return new RunTally(source.RecordsRead, source.BytesRead, complete);
     }
 
     /// <summary>
     /// Read and parse every record and keep none of them: the floor the two structures are built on.
     /// </summary>
     private static bool ReadOnly(IMftSource source, int count, TableTuning tuning, CancellationToken ct) =>
-        MftRecordStream.TryReadAll(source, count, tuning, static (_, _, in _) => true, ct);
+        MftRecordStream.TryReadAll(source, count, tuning, static (_, _, in _) => true, onProgress: null, ct);
 }

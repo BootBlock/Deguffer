@@ -43,6 +43,10 @@ internal sealed class FragmentedMftVolume
     /// <param name="extensionBase">The owner every extension record names, or null for record 0 as it is.</param>
     /// <param name="extensionSequence">The sequence number every extension record carries.</param>
     /// <param name="extensionsCarryTheList">Whether every extension record carries a copy of record 0's list.</param>
+    /// <param name="bitmap">
+    /// The pieces of <c>$MFT</c>'s <c>$BITMAP</c>, the records holding them, and its length, or null
+    /// for a table without one. The default list names them as it names the pieces of <c>$DATA</c>.
+    /// </param>
     public FragmentedMftVolume(
         IReadOnlyList<DataRun> layout,
         long dataSize,
@@ -51,12 +55,20 @@ internal sealed class FragmentedMftVolume
         bool listOutside = false,
         ulong? extensionBase = null,
         ushort extensionSequence = MftRecordBytes.Sequence,
-        bool extensionsCarryTheList = false)
+        bool extensionsCarryTheList = false,
+        (IReadOnlyList<MftPiece> Pieces, long Length)? bitmap = null)
     {
         _layout = new MftExtentMap(dataSize, layout);
 
         var self = Reference(0, MftRecordBytes.Sequence);
-        list ??= pieces.Select(p => new ListedAttribute(Data, Reference(p.Holder, MftRecordBytes.Sequence), p.LowestVcn)).ToList();
+        var bitmapPieces = bitmap?.Pieces ?? [];
+        var bitmapLength = bitmap?.Length ?? 0;
+
+        list ??=
+        [
+            .. pieces.Select(p => new ListedAttribute(Data, Reference(p.Holder, MftRecordBytes.Sequence), p.LowestVcn)),
+            .. bitmapPieces.Select(p => new ListedAttribute(Bitmap, Reference(p.Holder, MftRecordBytes.Sequence), p.LowestVcn)),
+        ];
 
         _record0 = MftRecordBytes.Compose(
             isDirectory: false,
@@ -67,10 +79,11 @@ internal sealed class FragmentedMftVolume
                 t => MftAttributeBytes.WriteStandardInformation(t, created: 0, lastWritten: 0),
                 t => WriteList(t, list, listOutside),
                 .. PiecesIn(0, pieces, dataSize),
+                .. BitmapPiecesIn(0, bitmapPieces, bitmapLength),
             ]);
         Place(0, _record0);
 
-        foreach (var holder in pieces.Select(p => p.Holder).Where(h => h != 0).Distinct())
+        foreach (var holder in pieces.Concat(bitmapPieces).Select(p => p.Holder).Where(h => h != 0).Distinct())
         {
             Place(holder, MftRecordBytes.Compose(
                 isDirectory: false,
@@ -80,6 +93,7 @@ internal sealed class FragmentedMftVolume
                 [
                     .. extensionsCarryTheList ? [t => MftAttributeBytes.WriteAttributeList(t, list)] : Array.Empty<AttributeWriter>(),
                     .. PiecesIn(holder, pieces, dataSize),
+                    .. BitmapPiecesIn(holder, bitmapPieces, bitmapLength),
                 ]));
         }
     }
@@ -119,6 +133,8 @@ internal sealed class FragmentedMftVolume
 
     private const uint Data = 0x80;
 
+    private const uint Bitmap = 0xB0;
+
     private int WriteList(Span<byte> target, IReadOnlyList<ListedAttribute> list, bool outside)
     {
         if (!outside)
@@ -139,6 +155,11 @@ internal sealed class FragmentedMftVolume
         pieces
             .Where(p => p.Holder == holder)
             .Select(p => (AttributeWriter)(t => MftAttributeBytes.WriteMftData(t, p.Runs, dataSize, p.LowestVcn, p.HighestVcn)));
+
+    private static IEnumerable<AttributeWriter> BitmapPiecesIn(long holder, IReadOnlyList<MftPiece> pieces, long length) =>
+        pieces
+            .Where(p => p.Holder == holder)
+            .Select(p => (AttributeWriter)(t => MftAttributeBytes.WriteMftBitmap(t, p.Runs, length, p.LowestVcn)));
 
     /// <summary>Write record <paramref name="number"/> where the table's layout puts it, cluster by cluster.</summary>
     private void Place(long number, byte[] record)

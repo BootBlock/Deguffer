@@ -69,6 +69,14 @@ public static class EnteredSetting
     public static int? TableReadKiB(double entered) =>
         WholeOrAuto(entered, TableTuning.MinimumReadBytes / 1024, TableTuning.MaximumReadBytes / 1024);
 
+    /// <summary>How many reads of the file table are outstanding at once, or null for Auto.</summary>
+    public static int? TableReadsInFlight(double entered) =>
+        WholeOrAuto(entered, TableTuning.MinimumReadsInFlight, TableTuning.MaximumReadsInFlight);
+
+    /// <summary>How many threads parse the file table's records, or null for Auto.</summary>
+    public static int? TableParseThreads(double entered) =>
+        WholeOrAuto(entered, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads);
+
     /// <summary>
     /// <paramref name="entered"/> as a whole number between <paramref name="minimum"/> and
     /// <paramref name="maximum"/>, or null where the box was emptied.

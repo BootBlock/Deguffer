@@ -17,6 +17,7 @@ internal static class MftRecordParser
     internal const uint AttributeFileName = 0x30;
     internal const uint AttributeList = 0x20;
     internal const uint AttributeData = 0x80;
+    internal const uint AttributeBitmap = 0xB0;
     internal const uint AttributeReparsePoint = 0xC0;
 
     /// <summary>

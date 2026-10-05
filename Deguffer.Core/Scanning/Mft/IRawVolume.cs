@@ -15,4 +15,11 @@ internal interface IRawVolume : IDisposable
     /// read that is not whole sectors is.
     /// </summary>
     int Read(Span<byte> destination, long offset);
+
+    /// <summary>
+    /// <see cref="Read"/>, overlapped: the read is in flight when this returns, and holds no thread
+    /// while the disk works. The same rules apply, and a read the volume refuses faults the task with
+    /// an <see cref="IOException"/>.
+    /// </summary>
+    ValueTask<int> ReadAsync(Memory<byte> destination, long offset, CancellationToken ct);
 }

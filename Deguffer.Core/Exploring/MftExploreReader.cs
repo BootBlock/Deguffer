@@ -12,7 +12,11 @@ namespace Deguffer.Core.Exploring;
 /// <param name="Reason">
 /// Why the caller has to walk instead. Meaningful only where <paramref name="Tree"/> is null.
 /// </param>
-internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason Reason);
+/// <param name="WholeTable">
+/// Whether every record in use was read. Where it is false the tree is drawn from part of the table,
+/// and its root says its totals are lower bounds.
+/// </param>
+internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason Reason, bool WholeTable);
 
 /// <summary>
 /// Builds an <see cref="ExploreTree"/> straight from a volume's master file table — §5.5's fast
@@ -33,9 +37,6 @@ internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason
 /// </summary>
 internal static class MftExploreReader
 {
-    /// <summary>How often the record count is reported, in records, whatever size each read is.</summary>
-    private const int ProgressInterval = 65536;
-
     /// <summary>
     /// Read <paramref name="source"/> into a tree rooted at <paramref name="rootPath"/>, which
     /// <paramref name="components"/> locates below the volume's own root — empty for the volume
@@ -58,6 +59,10 @@ internal static class MftExploreReader
     /// record was caught mid-change, a lost size is marked unknown and a lost name makes the file
     /// one this could not read.</para>
     /// </summary>
+    /// <param name="onProgress">
+    /// Called with how many records have been dealt with, as <see cref="MftRecordStream.TryReadAll"/>
+    /// describes.
+    /// </param>
     public static MftExploreRead Read(
         IMftSource source,
         string rootPath,
@@ -93,11 +98,10 @@ internal static class MftExploreReader
 
         Array.Fill(names, string.Empty);
 
+        // Written from several parse threads at once, and only ever to true, so no write can undo
+        // another. The stream has finished with every thread before it returns, which is when this
+        // is read.
         var sawUnreadableRecord = false;
-
-        // Records whose attributes continue in extension records arrive again after the first pass,
-        // with numbers it has already gone past, so progress only ever moves forward.
-        long nextProgress = 0;
 
         var couldNotReadWholeTable = !MftRecordStream.TryReadAll(
             source,
@@ -105,12 +109,6 @@ internal static class MftExploreReader
             tuning,
             (number, outcome, in record) =>
             {
-                if (number >= nextProgress)
-                {
-                    onProgress?.Invoke(number);
-                    nextProgress = number - (number % ProgressInterval) + ProgressInterval;
-                }
-
                 if (outcome != MftParseOutcome.Parsed)
                 {
                     // Every other outcome leaves a slot empty, and only one of them leaves nothing
@@ -132,9 +130,11 @@ internal static class MftExploreReader
                     // for six weeks. The bound is both-ended there for a reason and it is
                     // both-ended here for the same one: records 0 to 11 are the named metadata
                     // files, and an unreadable one of those is real damage.
-                    sawUnreadableRecord |= outcome == MftParseOutcome.Unreadable
-                        && (number < MftRecord.FirstUnnamedReservedRecord
-                            || number >= MftRecord.ReservedRecordCount);
+                    if (outcome == MftParseOutcome.Unreadable
+                        && (number < MftRecord.FirstUnnamedReservedRecord || number >= MftRecord.ReservedRecordCount))
+                    {
+                        sawUnreadableRecord = true;
+                    }
 
                     return true;
                 }
@@ -159,6 +159,7 @@ internal static class MftExploreReader
 
                 return true;
             },
+            onProgress,
             ct);
 
         // The volume's root is forced present whether or not record 5 parsed. Resolution starts
@@ -172,7 +173,7 @@ internal static class MftExploreReader
         var resolved = Resolve(components, names, parents, isDirectory, isLink, present, count);
         if (resolved.Node is not { } root)
         {
-            return new MftExploreRead(Tree: null, resolved.Reason);
+            return new MftExploreRead(Tree: null, resolved.Reason, !couldNotReadWholeTable);
         }
 
         // The scan's root carries the path the user chose rather than the name NTFS holds for it —
@@ -198,7 +199,8 @@ internal static class MftExploreReader
             ExploreTree.Create(
                 rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, created,
                 modified, present, ExploreChildOrder.BySize),
-            FallbackReason.None);
+            FallbackReason.None,
+            !couldNotReadWholeTable);
     }
 
     /// <summary>

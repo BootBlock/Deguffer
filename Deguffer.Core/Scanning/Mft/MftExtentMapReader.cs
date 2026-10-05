@@ -12,6 +12,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <para>Every extension record of <c>$MFT</c> is itself a record of <c>$MFT</c>, so each is found
 /// through the extents already read. The pieces are followed in the order of the clusters they
 /// describe, which is the order in which each one's position becomes known.</para>
+///
+/// <para>Where <c>$MFT</c>'s <c>$BITMAP</c> is kept is read on the same pass, by
+/// <see cref="MftBitmapLocator"/>, from the same records. Unlike the map, it is an answer or none:
+/// a bitmap that cannot be located costs a pass that reads every record, not the volume.</para>
 /// </summary>
 internal static class MftExtentMapReader
 {
@@ -19,9 +23,15 @@ internal static class MftExtentMapReader
     /// Read the map from <paramref name="record0"/>, which the update sequence fixup modifies in
     /// place, reading any other record or cluster it needs through <paramref name="read"/>.
     /// </summary>
-    public static bool TryRead(Span<byte> record0, int bytesPerCluster, ClusterReader read, out MftExtentMap map)
+    /// <param name="bitmap">
+    /// Where <c>$MFT</c>'s <c>$BITMAP</c> is, or null where it could not be located. Meaningful only
+    /// where the map was read.
+    /// </param>
+    public static bool TryRead(
+        Span<byte> record0, int bytesPerCluster, ClusterReader read, out MftExtentMap map, out MftBitmapPlacement? bitmap)
     {
         map = default!;
+        bitmap = null;
 
         if (MftRecordHeader.Read(record0, out var header) != MftParseOutcome.Parsed)
         {
@@ -30,10 +40,12 @@ internal static class MftExtentMapReader
 
         var self = new MftSegmentReference(0, header.Sequence);
         var pieces = new List<Piece>();
+        var bitmapPieces = new MftBitmapLocator(bytesPerCluster);
+        var visited = new HashSet<long>();
 
         // The piece at cluster 0 has to be in record 0: until it is read, no other record of the
         // table can be found, the extension records that hold the rest included.
-        if (!TryReadPieces(record0[..header.UsedLength], header.FirstAttributeOffset, self, bytesPerCluster, read, pieces, out var list)
+        if (!TryReadPieces(record0[..header.UsedLength], header.FirstAttributeOffset, self, bytesPerCluster, read, pieces, bitmapPieces, out var list)
             || pieces.FindIndex(static p => p.LowestVcn == 0) is not (>= 0 and var first))
         {
             return false;
@@ -41,7 +53,7 @@ internal static class MftExtentMapReader
 
         var dataSize = pieces[first].DataSize;
 
-        if (list is not null && !TryFollow(list, self, record0.Length, bytesPerCluster, dataSize, read, pieces))
+        if (list is not null && !TryFollow(list, self, record0.Length, bytesPerCluster, dataSize, read, pieces, bitmapPieces, visited))
         {
             return false;
         }
@@ -56,13 +68,14 @@ internal static class MftExtentMapReader
         }
 
         map = new MftExtentMap(dataSize, runs);
+        bitmap = bitmapPieces.Locate(map, self, record0.Length, read, visited, listed: list is not null);
         return true;
     }
 
     /// <summary>
     /// Read every extension record <paramref name="list"/> names for a piece of <c>$MFT</c>'s
     /// <c>$DATA</c>, adding its pieces to <paramref name="pieces"/>, and check that the pieces found
-    /// are exactly the pieces listed.
+    /// are exactly the pieces listed. Each record read is added to <paramref name="visited"/>.
     /// </summary>
     private static bool TryFollow(
         IReadOnlyList<MftAttributeListEntry> list,
@@ -71,13 +84,21 @@ internal static class MftExtentMapReader
         int bytesPerCluster,
         long dataSize,
         ClusterReader read,
-        List<Piece> pieces)
+        List<Piece> pieces,
+        MftBitmapLocator bitmapPieces,
+        HashSet<long> visited)
     {
         var listed = new HashSet<(MftSegmentReference Segment, long LowestVcn)>();
         var extensions = new List<(long LowestVcn, MftSegmentReference Segment)>();
 
         foreach (var entry in list)
         {
+            if (entry.Type == MftRecordParser.AttributeBitmap && !entry.IsNamed)
+            {
+                bitmapPieces.Expect(entry);
+                continue;
+            }
+
             if (entry.Type != MftRecordParser.AttributeData || entry.IsNamed)
             {
                 continue;
@@ -97,7 +118,6 @@ internal static class MftExtentMapReader
         extensions.Sort(static (a, b) => a.LowestVcn.CompareTo(b.LowestVcn));
 
         var record = new byte[bytesPerRecord];
-        var visited = new HashSet<long>();
 
         foreach (var (_, segment) in extensions)
         {
@@ -114,12 +134,9 @@ internal static class MftExtentMapReader
 
             // Only the extents read so far: a record they do not reach cannot be found, and the map
             // cannot be completed without it.
-            if (!known.TryReadRecord(segment.Record, bytesPerCluster, read, record)
-                || MftRecordHeader.ReadExtension(record, out var header) != MftParseOutcome.Parsed
-                || header.BaseReference != self
-                || header.Sequence != segment.Sequence
+            if (!TryReadExtension(known, segment, self, bytesPerCluster, read, record, out var header)
                 || !TryReadPieces(
-                    record.AsSpan(0, header.UsedLength), header.FirstAttributeOffset, segment, bytesPerCluster, read, pieces, out _))
+                    record.AsSpan(0, header.UsedLength), header.FirstAttributeOffset, segment, bytesPerCluster, read, pieces, bitmapPieces, out _))
             {
                 return false;
             }
@@ -134,9 +151,32 @@ internal static class MftExtentMapReader
     }
 
     /// <summary>
+    /// Read <paramref name="segment"/>, an extension record of <c>$MFT</c>, through
+    /// <paramref name="known"/> into <paramref name="record"/>. False unless it is an extension
+    /// record of <paramref name="self"/> still carrying the sequence number the list names it by.
+    /// </summary>
+    internal static bool TryReadExtension(
+        MftExtentMap known,
+        MftSegmentReference segment,
+        MftSegmentReference self,
+        int bytesPerCluster,
+        ClusterReader read,
+        byte[] record,
+        out MftRecordHeader header)
+    {
+        header = default;
+
+        return known.TryReadRecord(segment.Record, bytesPerCluster, read, record)
+            && MftRecordHeader.ReadExtension(record, out header) == MftParseOutcome.Parsed
+            && header.BaseReference == self
+            && header.Sequence == segment.Sequence;
+    }
+
+    /// <summary>
     /// Add the pieces of the unnamed <c>$DATA</c> a record of <c>$MFT</c> holds to
-    /// <paramref name="pieces"/>, and read the record's <c>$ATTRIBUTE_LIST</c> where it has one.
-    /// False where the record is malformed, or holds a list that cannot be read.
+    /// <paramref name="pieces"/>, offer its unnamed <c>$BITMAP</c> to <paramref name="bitmapPieces"/>,
+    /// and read the record's <c>$ATTRIBUTE_LIST</c> where it has one. False where the record is
+    /// malformed, or holds a list that cannot be read.
     /// </summary>
     private static bool TryReadPieces(
         ReadOnlySpan<byte> used,
@@ -145,6 +185,7 @@ internal static class MftExtentMapReader
         int bytesPerCluster,
         ClusterReader read,
         List<Piece> pieces,
+        MftBitmapLocator bitmapPieces,
         out IReadOnlyList<MftAttributeListEntry>? list)
     {
         list = null;
@@ -169,6 +210,12 @@ internal static class MftExtentMapReader
                     return false;
                 }
 
+                continue;
+            }
+
+            if (attributes.CurrentType == MftRecordParser.AttributeBitmap && MftRecordParser.IsUnnamed(attribute))
+            {
+                bitmapPieces.Offer(attribute, segment);
                 continue;
             }
 
@@ -207,10 +254,11 @@ internal static class MftExtentMapReader
     }
 
     /// <summary>
-    /// One piece of <c>$MFT</c>'s <c>$DATA</c>, accepted only where its runs cover exactly the
-    /// clusters its header says it describes, and every cluster they name has a byte offset.
+    /// One piece of a non-resident attribute of <c>$MFT</c>, accepted only where its runs cover
+    /// exactly the clusters its header says it describes, and every cluster they name has a byte
+    /// offset.
     /// </summary>
-    private static bool TryReadPiece(
+    internal static bool TryReadPiece(
         ReadOnlySpan<byte> attribute,
         MftNonResidentHeader header,
         MftSegmentReference segment,
@@ -252,7 +300,7 @@ internal static class MftExtentMapReader
             return false;
         }
 
-        piece = new Piece(segment, header.LowestVcn, header.HighestVcn, runs, header.DataSize);
+        piece = new Piece(segment, header.LowestVcn, header.HighestVcn, runs, header.DataSize, header.InitializedSize);
         return true;
     }
 
@@ -262,7 +310,7 @@ internal static class MftExtentMapReader
     /// every piece joined: a gap or an overlap stops the join, and the runs before it are the part
     /// of the table whose position is known.
     /// </summary>
-    private static (IReadOnlyList<DataRun> Runs, long Clusters, bool Whole) Join(IReadOnlyList<Piece> pieces)
+    internal static (IReadOnlyList<DataRun> Runs, long Clusters, bool Whole) Join(IReadOnlyList<Piece> pieces)
     {
         var runs = new List<DataRun>();
         long clusters = 0;
@@ -282,7 +330,13 @@ internal static class MftExtentMapReader
     }
 
     /// <param name="Segment">The record holding the piece.</param>
-    /// <param name="DataSize">The table's size, stated by the piece at cluster 0 and zero in the rest.</param>
-    private readonly record struct Piece(
-        MftSegmentReference Segment, long LowestVcn, long HighestVcn, IReadOnlyList<DataRun> Runs, long DataSize);
+    /// <param name="DataSize">The attribute's size, stated by the piece at cluster 0 and zero in the rest.</param>
+    /// <param name="InitializedSize">How much of it was written, stated as the size is.</param>
+    internal readonly record struct Piece(
+        MftSegmentReference Segment,
+        long LowestVcn,
+        long HighestVcn,
+        IReadOnlyList<DataRun> Runs,
+        long DataSize,
+        long InitializedSize);
 }

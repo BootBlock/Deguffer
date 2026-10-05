@@ -7,20 +7,25 @@ namespace Deguffer.Core.Scanning.Mft;
 /// describes, where its run list starts, and the sizes the piece at cluster 0 states.
 ///
 /// <para>Read in one place for every attribute that needs it — a file's <c>$DATA</c>, an
-/// <c>$ATTRIBUTE_LIST</c> kept outside its record, and <c>$MFT</c>'s own <c>$DATA</c> — because a
-/// field read from the wrong offset still parses, and only a single reader keeps the three
-/// agreeing on where each field is.</para>
+/// <c>$ATTRIBUTE_LIST</c> kept outside its record, and <c>$MFT</c>'s own <c>$DATA</c> and
+/// <c>$BITMAP</c> — because a field read from the wrong offset still parses, and only a single
+/// reader keeps them agreeing on where each field is.</para>
 /// </summary>
 /// <param name="LowestVcn">The first virtual cluster this piece describes.</param>
 /// <param name="HighestVcn">The last. Not checked against the run list here: only a caller that
 /// joins pieces together needs it to agree.</param>
-/// <param name="AllocatedSize">Zero in every piece but the one at cluster 0, as is the data size.</param>
+/// <param name="AllocatedSize">Zero in every piece but the one at cluster 0, as are the other sizes.</param>
+/// <param name="InitializedSize">
+/// How much of the data has been written. NTFS reads anything past it as zeroes without reading the
+/// disk, so the clusters there can hold anything.
+/// </param>
 internal readonly record struct MftNonResidentHeader(
     long LowestVcn,
     long HighestVcn,
     int MappingPairsOffset,
     long AllocatedSize,
-    long DataSize)
+    long DataSize,
+    long InitializedSize)
 {
     /// <summary>
     /// The header's length as NTFS writes it for an uncompressed attribute. A compressed attribute's
@@ -54,7 +59,8 @@ internal readonly record struct MftNonResidentHeader(
             BinaryPrimitives.ReadInt64LittleEndian(attribute[0x18..]),
             mappingPairsOffset,
             BinaryPrimitives.ReadInt64LittleEndian(attribute[0x28..]),
-            BinaryPrimitives.ReadInt64LittleEndian(attribute[0x30..]));
+            BinaryPrimitives.ReadInt64LittleEndian(attribute[0x30..]),
+            BinaryPrimitives.ReadInt64LittleEndian(attribute[0x38..]));
         return true;
     }
 

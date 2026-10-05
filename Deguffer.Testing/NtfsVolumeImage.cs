@@ -9,6 +9,9 @@ namespace Deguffer.Testing;
 /// <para>The table ends where its last record does, as a real table's data size does, rather than
 /// being padded to a cluster. Where records are smaller than sectors, that can be part-way through
 /// a sector, and a reader that only reads whole sectors of records has the rest to deal with.</para>
+///
+/// <para>Where a bitmap is given, record 0 also says where <c>$MFT</c>'s <c>$BITMAP</c> is, and the
+/// bitmap is laid out after the table, with record 0's own bit set.</para>
 /// </summary>
 internal static class NtfsVolumeImage
 {
@@ -16,7 +19,12 @@ internal static class NtfsVolumeImage
     private const int GapClusters = 3;
 
     public static SectorStrictVolume Build(
-        IReadOnlyList<byte[]> records, int bytesPerRecord, int bytesPerSector, int bytesPerCluster, long? gapAfterCluster)
+        IReadOnlyList<byte[]> records,
+        int bytesPerRecord,
+        int bytesPerSector,
+        int bytesPerCluster,
+        long? gapAfterCluster,
+        byte[]? bitmap)
     {
         // Past the boot sector, and past the largest sector whatever the cluster size.
         var mftStart = Math.Max(1, 2 * NtfsBootSector.MaximumBytesPerSector / bytesPerCluster);
@@ -34,10 +42,27 @@ internal static class NtfsVolumeImage
             records[i].CopyTo(table, (long)i * bytesPerRecord);
         }
 
-        MftRecordBytes.SelfRecord(runs, tableBytes, bytesPerRecord: bytesPerRecord).CopyTo(table, 0);
-
         var end = runs.Max(run => run.StartCluster + run.ClusterCount);
+        (IReadOnlyList<DataRun> Runs, long Length)? bitmapPlace = null;
+
+        if (bitmap is not null)
+        {
+            bitmap = (byte[])bitmap.Clone();
+            bitmap[0] |= 1;
+
+            var bitmapClusters = Math.Max(1, (bitmap.Length + bytesPerCluster - 1) / bytesPerCluster);
+            bitmapPlace = ([new DataRun(end, bitmapClusters)], bitmap.Length);
+            end += bitmapClusters;
+        }
+
+        MftRecordBytes.SelfRecord(runs, tableBytes, bytesPerRecord: bytesPerRecord, bitmap: bitmapPlace).CopyTo(table, 0);
+
         var image = new byte[end * bytesPerCluster];
+
+        if (bitmapPlace is { } placed)
+        {
+            bitmap!.CopyTo(image, placed.Runs[0].StartCluster * bytesPerCluster);
+        }
 
         NtfsBootSectorBytes.Build(
                 (ushort)bytesPerSector,

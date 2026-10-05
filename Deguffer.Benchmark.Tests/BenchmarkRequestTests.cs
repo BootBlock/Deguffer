@@ -1,4 +1,6 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark.Tests;
@@ -72,13 +74,18 @@ public sealed class BenchmarkRequestTests
 
     [Fact]
     public void TheTablesReadSizeCanBeChosen() =>
-        Assert.Equal(
-            new TableTuning(4096 * 1024),
-            BenchmarkRequest.Parse(["table", "C", "--read-size", "4096"], out _)!.Table);
+        Assert.Equal(4096 * 1024, BenchmarkRequest.Parse(["table", "C", "--read-size", "4096"], out _)!.Table.ReadBytes);
+
+    /// <summary>A size that is not whole sectors is taken as it is: the source cuts each read to whole sectors.</summary>
+    [Fact]
+    public void AReadSizeNeedNotBeWholeSectors() =>
+        Assert.Equal(5 * 1024, BenchmarkRequest.Parse(["table", "C", "--read-size", "5"], out _)!.Table.ReadBytes);
 
     [Fact]
     public void ATableReadNotToldOtherwiseRunsAsAScanOfAnUnknownDriveDoes() =>
-        Assert.Equal(TableTuning.Default, BenchmarkRequest.Parse(["table", "C"], out _)!.Table);
+        Assert.Equal(
+            VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.Unknown).Table,
+            BenchmarkRequest.Parse(["table", "C"], out _)!.Table);
 
     [Theory]
     [InlineData("3")]
@@ -98,6 +105,39 @@ public sealed class BenchmarkRequestTests
     [Fact]
     public void AWalkNotToldOtherwiseRunsAsAScanDoes() =>
         Assert.Equal(WalkTuning.Default, BenchmarkRequest.Parse(["walk", @"C:\"], out _)!.Walk);
+
+    [Fact]
+    public void TheTableReadsSizeReadsInFlightAndParseThreadsCanBeChosen()
+    {
+        var request = BenchmarkRequest.Parse(
+            ["index", "C", "--read-size", "2048", "--reads-in-flight", "8", "--parse-threads", "2", "--runs", "2"], out _);
+
+        Assert.Equal(new TableTuning(2048 * 1024, 8, 2), request!.Table);
+        Assert.Equal(2, request.Runs);
+    }
+
+    [Theory]
+    [InlineData("--reads-in-flight", "0")]
+    [InlineData("--reads-in-flight", "33")]
+    [InlineData("--parse-threads", "0")]
+    [InlineData("--parse-threads", "65")]
+    [InlineData("--parse-threads")]
+    public void ATableValueOutOfRangeIsRefused(params string[] rest)
+    {
+        Assert.Null(BenchmarkRequest.Parse(["table", "C", .. rest], out var error));
+        Assert.NotNull(error);
+    }
+
+    /// <summary>The walk reads no table, so a table value given to it would be reported unused.</summary>
+    [Theory]
+    [InlineData("--read-size", "1024")]
+    [InlineData("--reads-in-flight", "4")]
+    [InlineData("--parse-threads", "4")]
+    public void TheWalkTakesNoTableValue(params string[] rest)
+    {
+        Assert.Null(BenchmarkRequest.Parse(["walk", @"C:\", .. rest], out var error));
+        Assert.NotNull(error);
+    }
 
     [Theory]
     [InlineData("--runs", "0")]

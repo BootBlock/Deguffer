@@ -269,9 +269,11 @@ public class PreferenceStoreTests
         var scanning = ScanPreferences.Default
             .With(StorageMedia.Nvme, new MediaScanPreferences(WalkThreads: 24))
             .With(StorageMedia.Rotational, new MediaScanPreferences(WalkThreads: 2, TableReadKiB: 256))
-            .With(StorageMedia.Unknown, new MediaScanPreferences(ListingBufferKiB: 64)) with
+            .With(StorageMedia.Unknown, new MediaScanPreferences(ListingBufferKiB: 64))
+            .With(StorageMedia.SolidState, new MediaScanPreferences(TableReadsInFlight: 12)) with
         {
             Route = ScanRoute.WalkOnly,
+            TableParseThreads = 6,
         };
 
         Assert.True(store.Save(AppPreferences.Default with { Scanning = scanning }));

@@ -74,11 +74,12 @@ public sealed class ReportTests
             "3 folders listed at once, 8 KiB listing buffer",
             Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default));
 
+    /// <summary>The same for a table route, whose values are the reads and the parse threads.</summary>
     [Fact]
-    public void TheTablesValuesAreTheOnesItRanWith() =>
+    public void ATableRoutesValuesAreTheOnesItRanWith() =>
         Assert.Equal(
-            "256 KiB per read, one read at a time, parsed on one thread",
-            Deguffer.Benchmark.Tuning.Describe(Route.Table, WalkTuning.Default, new TableTuning(256 * 1024)));
+            "2048 KiB reads, 8 in flight, parsed on 3 threads",
+            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3)));
 
     [Fact]
     public void ADebugBuildIsCalledOut()

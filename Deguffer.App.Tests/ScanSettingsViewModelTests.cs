@@ -46,8 +46,9 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         section.WalkThreads = 2;
         section.ListingBufferKiB = 64;
         section.TableReadKiB = 512;
+        section.TableReadsInFlight = 6;
 
-        Assert.Equal(new MediaScanPreferences(2, 64, 512), preferences.Current.Scanning.Rotational);
+        Assert.Equal(new MediaScanPreferences(2, 64, 512, 6), preferences.Current.Scanning.Rotational);
         Assert.Equal(MediaScanPreferences.Auto, preferences.Current.Scanning.Nvme);
         Assert.False(section.SaveFailed);
     }
@@ -92,6 +93,34 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         Assert.Equal(
             $"Auto ({VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.SolidState).Table.ReadBytes / 1024:N0})",
             section.AutoTableReadKiB);
+        Assert.Equal(
+            $"Auto ({VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.SolidState).Table.ReadsInFlight:N0})",
+            section.AutoTableReadsInFlight);
+    }
+
+    /// <summary>
+    /// The parse threads belong to the machine, so their box sets one value whichever kind the picker
+    /// names, and keeps showing it when another kind is chosen.
+    /// </summary>
+    [Fact]
+    public void TheParseThreadsBoxSetsOneValueForEveryKind()
+    {
+        var (section, preferences, _) = Section();
+
+        section.KindIndex = KindIndex(section, StorageMedia.Rotational);
+        section.TableParseThreads = 3;
+        section.KindIndex = KindIndex(section, StorageMedia.Nvme);
+
+        Assert.Equal(3, preferences.Current.Scanning.TableParseThreads);
+        Assert.Equal(MediaScanPreferences.Auto, preferences.Current.Scanning.Rotational);
+        Assert.Equal(3, section.TableParseThreads);
+
+        section.TableParseThreads = double.NaN;
+
+        Assert.Null(preferences.Current.Scanning.TableParseThreads);
+        Assert.Equal(
+            $"Auto ({VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.Nvme).Table.ParseThreads:N0})",
+            section.AutoTableParseThreads);
     }
 
     [Fact]

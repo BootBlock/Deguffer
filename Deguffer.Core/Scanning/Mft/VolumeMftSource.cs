@@ -23,12 +23,13 @@ public sealed partial class VolumeMftSource : IMftSource
     private readonly MftExtentMap _extents;
     private readonly ClusterReader _readClusters;
 
-    private VolumeMftSource(IRawVolume volume, NtfsBootSector geometry, MftExtentMap extents)
+    private VolumeMftSource(IRawVolume volume, NtfsBootSector geometry, MftExtentMap extents, MftBitmapPlacement? bitmap)
     {
         _volume = volume;
         _geometry = geometry;
         _extents = extents;
         _readClusters = TryReadClusters;
+        Bitmap = bitmap;
     }
 
     public int BytesPerRecord => _geometry.BytesPerFileRecord;
@@ -42,16 +43,7 @@ public sealed partial class VolumeMftSource : IMftSource
     /// </summary>
     public static VolumeMftSource? TryOpen(char driveLetter, out FallbackReason reason)
     {
-        // FILE_SHARE_WRITE is not optional: the system volume is always open for writing by other
-        // processes, and omitting it makes the open fail on exactly the drive that matters.
-        var handle = CreateFile(
-            $@"\\.\{char.ToUpperInvariant(driveLetter)}:",
-            GenericRead,
-            FileShareRead | FileShareWrite,
-            nint.Zero,
-            OpenExisting,
-            0,
-            nint.Zero);
+        var handle = OpenOverlapped($@"\\.\{char.ToUpperInvariant(driveLetter)}:");
 
         if (handle.IsInvalid)
         {
@@ -69,6 +61,16 @@ public sealed partial class VolumeMftSource : IMftSource
 
         return TryOpen(new VolumeHandle(handle), out reason);
     }
+
+    /// <summary>
+    /// Open <paramref name="path"/> for reading with overlapped I/O, which <see cref="VolumeHandle"/>
+    /// needs. Internal so a test can open an ordinary file the way a volume is opened, which needs no
+    /// administrator rights.
+    /// </summary>
+    internal static SafeFileHandle OpenOverlapped(string path) =>
+        // FILE_SHARE_WRITE is not optional: the system volume is always open for writing by other
+        // processes, and omitting it makes the open fail on exactly the drive that matters.
+        CreateFile(path, GenericRead, FileShareRead | FileShareWrite, nint.Zero, OpenExisting, FileFlagOverlapped, nint.Zero);
 
     /// <summary>
     /// Read enough of <paramref name="volume"/> to serve records, taking ownership of it: it is
@@ -124,22 +126,64 @@ public sealed partial class VolumeMftSource : IMftSource
         var record0 = start.Span[..geometry.BytesPerFileRecord];
 
         if (!read(geometry.MftStartCluster, start.Span)
-            || !MftExtentMapReader.TryRead(record0, geometry.BytesPerCluster, read, out var extents))
+            || !MftExtentMapReader.TryRead(record0, geometry.BytesPerCluster, read, out var extents, out var bitmap))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
         }
 
         reason = FallbackReason.None;
-        return new VolumeMftSource(volume, geometry, extents);
+        return new VolumeMftSource(volume, geometry, extents, bitmap);
     }
+
+    public MftBitmapPlacement? Bitmap { get; }
+
+    public int BatchLength(long firstRecord, int capacity) => Plan(firstRecord, capacity).Records;
 
     public int ReadBatch(long firstRecord, Span<byte> destination)
     {
-        var capacity = destination.Length / BytesPerRecord;
-        if (capacity == 0 || firstRecord >= RecordCount)
+        var plan = Plan(firstRecord, destination.Length / BytesPerRecord);
+
+        return plan switch
         {
-            return 0;
+            { Records: 0 } => 0,
+            { OneRecord: true } => ReadOneRecord(firstRecord, destination),
+
+            // A short read is not fatal: whole records that did arrive are still usable, and the
+            // caller resumes from where this batch stopped.
+            _ => _volume.Read(destination[..(plan.Records * BytesPerRecord)], plan.Offset) / BytesPerRecord,
+        };
+    }
+
+    public async ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct)
+    {
+        var plan = Plan(firstRecord, destination.Length / BytesPerRecord);
+
+        return plan switch
+        {
+            { Records: 0 } => 0,
+
+            // Read a cluster at a time, and only for the few records nothing else can serve, so not
+            // worth overlapping.
+            { OneRecord: true } => ReadOneRecord(firstRecord, destination.Span),
+            _ => await _volume.ReadAsync(destination[..(plan.Records * BytesPerRecord)], plan.Offset, ct).ConfigureAwait(false)
+                / BytesPerRecord,
+        };
+    }
+
+    private int ReadOneRecord(long number, Span<byte> destination) =>
+        _extents.TryReadRecord(number, BytesPerCluster, _readClusters, destination[..BytesPerRecord]) ? 1 : 0;
+
+    /// <summary>
+    /// How many records a read from <paramref name="firstRecord"/> serves into room for
+    /// <paramref name="capacity"/>, and the byte offset it reads them from. <c>OneRecord</c> is a
+    /// record read in whole clusters, because no whole-sector read can serve it.
+    /// </summary>
+    private (int Records, long Offset, bool OneRecord) Plan(long firstRecord, int capacity)
+    {
+        if (capacity <= 0 || firstRecord < 0 || firstRecord >= RecordCount)
+        {
+            return default;
         }
 
         // Never rounded to an earlier boundary to make the read aligned. That would shift which
@@ -151,7 +195,7 @@ public sealed partial class VolumeMftSource : IMftSource
 
         if (!_extents.TryTranslate(virtualCluster, out var physicalCluster, out var contiguousClusters))
         {
-            return 0;
+            return default;
         }
 
         var contiguousBytes = (contiguousClusters * _geometry.BytesPerCluster) - withinCluster;
@@ -159,8 +203,8 @@ public sealed partial class VolumeMftSource : IMftSource
         var offset = (physicalCluster * _geometry.BytesPerCluster) + withinCluster;
 
         // Rounded down to whole records so a batch never ends mid-record, and to whole sectors so
-        // the read is one the volume serves. Ending a batch on a sector boundary is also what keeps
-        // the next one starting on one.
+        // the read is one the volume serves. Where the next read starts is the planner's choice,
+        // which puts it on a sector boundary: see MftBatchPlanner.
         var recordsPerSector = Math.Max(1, _geometry.BytesPerSector / BytesPerRecord);
         var wholeRecords = Math.Min(contiguousBytes / BytesPerRecord, remainingRecords);
         wholeRecords -= wholeRecords % recordsPerSector;
@@ -170,14 +214,9 @@ public sealed partial class VolumeMftSource : IMftSource
         // a record; the last few records of a table that ends part-way through a sector; and a
         // batch starting inside a sector after a short read. Returning nothing here would be
         // indistinguishable from an unreadable table, and would send the whole volume to the walk.
-        if (wholeRecords == 0 || offset % _geometry.BytesPerSector != 0)
-        {
-            return _extents.TryReadRecord(firstRecord, BytesPerCluster, _readClusters, destination[..BytesPerRecord]) ? 1 : 0;
-        }
-
-        // A short read is not fatal: whole records that did arrive are still usable, and the
-        // caller resumes from where this batch stopped.
-        return _volume.Read(destination[..(int)(wholeRecords * BytesPerRecord)], offset) / BytesPerRecord;
+        return wholeRecords == 0 || offset % _geometry.BytesPerSector != 0
+            ? (1, 0, OneRecord: true)
+            : ((int)wholeRecords, offset, OneRecord: false);
     }
 
     public int BytesPerCluster => _geometry.BytesPerCluster;
@@ -210,6 +249,7 @@ public sealed partial class VolumeMftSource : IMftSource
     private const uint FileShareRead = 0x0000_0001;
     private const uint FileShareWrite = 0x0000_0002;
     private const uint OpenExisting = 3;
+    private const uint FileFlagOverlapped = 0x4000_0000;
     private const int ErrorAccessDenied = 5;
 
     [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
