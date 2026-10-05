@@ -259,9 +259,11 @@ Deguffer.Core/
   Configuration/ user preferences
   Diagnostics/   run logging
 Deguffer.Core.Tests/
-Deguffer.Testing/  the fakes and fixtures both test projects use
+Deguffer.Testing/  the fakes and fixtures the test projects use
 Deguffer.App/  WinUI 3 shell, MVVM over Core
 Deguffer.App.Tests/
+Deguffer.Benchmark/  times the file-table read and the walk, run by hand (see CONTRIBUTING.md)
+Deguffer.Benchmark.Tests/
 ```
 
 Adding a cache source is one `ICleanupProvider` plus tests; the safety model then applies to it

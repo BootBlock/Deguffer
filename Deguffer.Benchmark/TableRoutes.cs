@@ -10,6 +10,9 @@ namespace Deguffer.Benchmark;
 /// <para>Each run opens the volume again. A scan opens it once per scan, so opening it here once
 /// for every run would leave the open and the boot-sector read out of every run after the first.
 /// </para>
+///
+/// <para>Opened through <see cref="IMftSourceFactory"/>, the scanner's own seam, so whether a run
+/// counts as complete is tested against a fixture table rather than this machine's volumes.</para>
 /// </summary>
 internal static class TableRoutes
 {
@@ -17,17 +20,17 @@ internal static class TableRoutes
     /// Open the volume, or say why it cannot be. Asked once before any run is timed, so a run
     /// without administrator rights stops with the reason rather than with a timing of nothing.
     /// </summary>
-    public static FallbackReason Probe(char drive)
+    public static FallbackReason Probe(IMftSourceFactory volumes, char drive)
     {
-        using var source = VolumeMftSource.TryOpen(drive, out var reason);
+        using var source = volumes.TryOpen(drive, out var reason);
         return reason;
     }
 
-    public static RunTally Run(Route route, char drive, CancellationToken ct)
+    public static RunTally Run(Route route, IMftSourceFactory volumes, char drive, CancellationToken ct)
     {
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
         using var source = new CountingMftSource(
-            VolumeMftSource.TryOpen(drive, out var reason)
+            volumes.TryOpen(drive, out var reason)
             ?? throw new IOException($"The volume could not be opened again: {reason}."));
 
         var count = (int)Math.Min(source.RecordCount, int.MaxValue);

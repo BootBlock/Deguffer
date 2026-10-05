@@ -1,6 +1,7 @@
 using Deguffer.Benchmark;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 
 // The result goes to standard output and nothing else does, so it can be redirected to a file and
 // pasted as it stands. Progress and errors go to standard error, and name no path either.
@@ -16,7 +17,7 @@ if (request is null)
 
 if (request.Route.ReadsTable())
 {
-    var reason = TableRoutes.Probe(request.Drive);
+    var reason = TableRoutes.Probe(VolumeMftSourceFactory.Default, request.Drive);
     if (reason is not FallbackReason.None)
     {
         Console.Error.WriteLine(reason switch
@@ -35,7 +36,7 @@ else if (LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
 }
 
 Func<CancellationToken, RunTally> run = request.Route.ReadsTable()
-    ? ct => TableRoutes.Run(request.Route, request.Drive, ct)
+    ? ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Drive, ct)
     : ct => WalkRoute.Run(request.Path, ct);
 
 using var cancel = new CancellationTokenSource();
