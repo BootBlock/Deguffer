@@ -172,10 +172,19 @@ public sealed class MftFixture
     /// the base record carries a name and no size at all — which is not the same as a size of zero.
     /// The shape 400 of 400 records the index declined on a real volume took.
     /// </summary>
+    /// <param name="mismatch">
+    /// Where given, the list and the extension record disagree in this way, as they do for a file
+    /// caught mid-change. A reader that takes the sizes anyway reports a file that has since become
+    /// something else.
+    /// </param>
     public MftFixture AddFileWithDataInAnExtensionRecord(
-        uint number, uint parent, string name, long allocated, long logical, uint extension) =>
-        Add(number, ListingFile(number, parent, name, [new ListedAttribute(Data, Reference(extension))]))
-            .Add(extension, DataPiece(number, allocated, logical, startVirtualCluster: 0));
+        uint number, uint parent, string name, long allocated, long logical, uint extension, ListMismatch? mismatch = null)
+    {
+        var (self, listed) = PlaceExtension(
+            number, extension, mismatch, t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0));
+
+        return Add(number, ListingFile(self, parent, name, [new ListedAttribute(Data, listed)]));
+    }
 
     /// <summary>
     /// The same, with the list itself grown too large for the base record. NTFS then keeps it in
@@ -185,7 +194,7 @@ public sealed class MftFixture
     public MftFixture AddFileWithANonResidentAttributeList(
         uint number, uint parent, string name, long allocated, long logical, uint extension, long listCluster)
     {
-        var value = MftAttributeBytes.AttributeListValue(ListOf(number, [new ListedAttribute(Data, Reference(extension))]));
+        var value = MftAttributeBytes.AttributeListValue(ListOf(Reference(number), [new ListedAttribute(Data, Reference(extension))]));
         var cluster = new byte[MftRecordBytes.BytesPerCluster];
         value.CopyTo(cluster, 0);
         _clusters[listCluster] = cluster;
@@ -207,7 +216,7 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture AddFileWithDataSplitAcrossExtensionRecords(
         uint number, uint parent, string name, long allocated, long logical, uint continuation, uint start) =>
-        Add(number, ListingFile(number, parent, name,
+        Add(number, ListingFile(Reference(number), parent, name,
             [
                 new ListedAttribute(Data, Reference(start), LowestVcn: 0),
                 new ListedAttribute(Data, Reference(continuation), LowestVcn: 4),
@@ -220,14 +229,29 @@ public sealed class MftFixture
     /// file has enough hard links to overflow its own record. A system volume is full of these, and
     /// the base record alone cannot say which directory the file is in.
     /// </summary>
+    /// <param name="mismatch">
+    /// Where given, the list and the extension record disagree in this way. Nothing then says which
+    /// directory the file is in, so it could belong to any.
+    /// </param>
     public MftFixture AddFileWithItsNameInAnExtensionRecord(
-        uint number, uint parent, string name, long allocated, long logical, uint extension) =>
-        Add(number, NamelessListingFile(number, allocated, logical, extension))
-            .Add(extension, MftRecordBytes.Compose(
-                isDirectory: false,
-                Reference(number),
-                MftRecordBytes.Sequence,
-                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, allocated, logical)));
+        uint number, uint parent, string name, long allocated, long logical, uint extension, ListMismatch? mismatch = null)
+    {
+        var (self, listed) = PlaceExtension(
+            number, extension, mismatch, t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, allocated, logical));
+
+        return Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteAttributeList(t,
+            [
+                new ListedAttribute(StandardInformation, self),
+                new ListedAttribute(FileName, listed),
+                new ListedAttribute(Data, self),
+            ]),
+            t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0)));
+    }
 
     /// <summary>
     /// A file whose base record keeps only its 8.3 alias, under <paramref name="aliasParent"/>,
@@ -235,62 +259,49 @@ public sealed class MftFixture
     /// <paramref name="extension"/>. The Win32 name outranks the alias wherever it is kept, so the
     /// file belongs under <paramref name="parent"/>.
     /// </summary>
+    /// <param name="mismatch">
+    /// Where given, the list and the extension record disagree in this way. The alias is then the
+    /// only name left, and placing the file by it would be a guess at its directory.
+    /// </param>
     public MftFixture AddFileWithItsBetterNameInAnExtensionRecord(
-        uint number, uint aliasParent, string alias, uint parent, string name, long logical, uint extension) =>
-        Add(number, MftRecordBytes.Compose(
-                isDirectory: false,
-                baseReference: 0,
-                MftRecordBytes.Sequence,
-                t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
-                t => MftAttributeBytes.WriteFileName(t, Reference(aliasParent), alias, logical, logical, nameSpace: 2),
-                t => MftAttributeBytes.WriteAttributeList(t,
-                [
-                    new ListedAttribute(StandardInformation, Reference(number)),
-                    new ListedAttribute(FileName, Reference(number)),
-                    new ListedAttribute(FileName, Reference(extension)),
-                    new ListedAttribute(Data, Reference(number)),
-                ]),
-                t => MftAttributeBytes.WriteNonResidentData(t, logical, logical, startVirtualCluster: 0)))
-            .Add(extension, MftRecordBytes.Compose(
-                isDirectory: false,
-                Reference(number),
-                MftRecordBytes.Sequence,
-                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, logical, logical, nameSpace: 1)));
+        uint number,
+        uint aliasParent,
+        string alias,
+        uint parent,
+        string name,
+        long logical,
+        uint extension,
+        ListMismatch? mismatch = null) =>
+        AddFileWithANameInAnExtensionRecord(
+            number,
+            t => MftAttributeBytes.WriteFileName(t, Reference(aliasParent), alias, logical, logical, nameSpace: 2),
+            t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, logical, logical, nameSpace: 1),
+            logical,
+            extension,
+            mismatch);
 
     /// <summary>
-    /// <see cref="AddFileWithDataInAnExtensionRecord"/>, with the extension record caught mid-change:
-    /// it no longer matches what the list says, in the way <paramref name="mismatch"/> names. A
-    /// reader that takes its sizes anyway reports a file that has since become something else.
+    /// A file with two hard links: its own record keeps the one under <paramref name="parent"/>,
+    /// and the one under <paramref name="otherParent"/> moved to <paramref name="extension"/>. Both
+    /// are in the best namespace, so nothing in the extension record can outrank the name the base
+    /// record already holds.
     /// </summary>
-    public MftFixture AddFileWithDataInAMismatchedExtensionRecord(
-        uint number, uint parent, string name, uint extension, ExtensionMismatch mismatch)
-    {
-        var (owner, sequence) = Mismatched(number, mismatch);
-
-        return Add(number, ListingFile(number, parent, name, [new ListedAttribute(Data, Reference(extension))]))
-            .Add(extension, MftRecordBytes.Compose(
-                isDirectory: false,
-                owner,
-                sequence,
-                t => MftAttributeBytes.WriteNonResidentData(t, allocated: 4096, logical: 4096, startVirtualCluster: 0)));
-    }
-
-    /// <summary>
-    /// <see cref="AddFileWithItsNameInAnExtensionRecord"/>, with the extension record caught
-    /// mid-change. Nothing then says which directory the file is in, so it could belong to any.
-    /// </summary>
-    public MftFixture AddFileWithItsNameInAMismatchedExtensionRecord(
-        uint number, uint parent, string name, long logical, uint extension, ExtensionMismatch mismatch)
-    {
-        var (owner, sequence) = Mismatched(number, mismatch);
-
-        return Add(number, NamelessListingFile(number, logical, logical, extension))
-            .Add(extension, MftRecordBytes.Compose(
-                isDirectory: false,
-                owner,
-                sequence,
-                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, logical, logical)));
-    }
+    public MftFixture AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
+        uint number,
+        uint parent,
+        string name,
+        uint otherParent,
+        string otherName,
+        long logical,
+        uint extension,
+        ListMismatch? mismatch = null) =>
+        AddFileWithANameInAnExtensionRecord(
+            number,
+            t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, logical, logical),
+            t => MftAttributeBytes.WriteFileName(t, Reference(otherParent), otherName, logical, logical),
+            logical,
+            extension,
+            mismatch);
 
     /// <summary>
     /// A file whose <c>$ATTRIBUTE_LIST</c> cannot be read: its one entry declares a length that
@@ -467,37 +478,99 @@ public sealed class MftFixture
     private static long FileTime(DateTime? when) => when?.ToFileTimeUtc() ?? 0;
 
     /// <summary>
-    /// A base record keeping its name and its dates, with a list naming this record for those and
-    /// <paramref name="elsewhere"/> for the rest.
+    /// A file whose base record keeps one name, written by <paramref name="ownName"/>, and whose
+    /// other name, written by <paramref name="otherName"/>, is in <paramref name="extension"/>.
     /// </summary>
-    private static byte[] ListingFile(uint number, uint parent, string name, IReadOnlyList<ListedAttribute> elsewhere) =>
+    private MftFixture AddFileWithANameInAnExtensionRecord(
+        uint number,
+        AttributeWriter ownName,
+        AttributeWriter otherName,
+        long logical,
+        uint extension,
+        ListMismatch? mismatch)
+    {
+        var (self, listed) = PlaceExtension(number, extension, mismatch, otherName);
+
+        return Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            ownName,
+            t => MftAttributeBytes.WriteAttributeList(t,
+            [
+                new ListedAttribute(StandardInformation, self),
+                new ListedAttribute(FileName, self),
+                new ListedAttribute(FileName, listed),
+                new ListedAttribute(Data, self),
+            ]),
+            t => MftAttributeBytes.WriteNonResidentData(t, logical, logical, startVirtualCluster: 0)));
+    }
+
+    /// <summary>
+    /// Put <paramref name="content"/> in extension record <paramref name="extension"/>, owned by
+    /// record <paramref name="number"/> and wrong in the way <paramref name="mismatch"/> names, if
+    /// one is given. Returns how the owner's list names its own record and the extension record.
+    /// </summary>
+    private (ulong Self, ulong Listed) PlaceExtension(
+        uint number, uint extension, ListMismatch? mismatch, AttributeWriter content)
+    {
+        // A record number no fixture table reaches, so a read of it finds the end of the table.
+        const uint PastTheTable = 0x00FF_FFFF;
+
+        var stale = (ushort)(MftRecordBytes.Sequence + 1);
+        var self = Reference(number);
+        var owner = Reference(number);
+        var sequence = MftRecordBytes.Sequence;
+        AttributeWriter[] attributes = [content];
+
+        switch (mismatch)
+        {
+            case ListMismatch.ItsOwnSequence:
+                sequence = stale;
+                break;
+
+            case ListMismatch.OwnerNumber:
+                owner = Reference(number + 1);
+                break;
+
+            case ListMismatch.OwnerSequence:
+                owner = number | ((ulong)stale << 48);
+                break;
+
+            case ListMismatch.HoldsNothingListed:
+                attributes = [];
+                break;
+
+            case ListMismatch.OutsideTheTable:
+                return (self, Reference(PastTheTable));
+
+            case ListMismatch.ListNamesItsOwnRecordAsItWas:
+                self = number | ((ulong)stale << 48);
+                break;
+        }
+
+        Add(extension, MftRecordBytes.Compose(isDirectory: false, owner, sequence, attributes));
+        return (self, Reference(extension));
+    }
+
+    /// <summary>
+    /// A base record keeping its name and its dates, with a list naming the record as
+    /// <paramref name="self"/> for those and <paramref name="elsewhere"/> for the rest.
+    /// </summary>
+    private static byte[] ListingFile(ulong self, uint parent, string name, IReadOnlyList<ListedAttribute> elsewhere) =>
         MftRecordBytes.Compose(
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, 0, 0),
-            t => MftAttributeBytes.WriteAttributeList(t, ListOf(number, elsewhere)));
+            t => MftAttributeBytes.WriteAttributeList(t, ListOf(self, elsewhere)));
 
-    /// <summary>A base record keeping its dates and its data, whose only name is in <paramref name="extension"/>.</summary>
-    private static byte[] NamelessListingFile(uint number, long allocated, long logical, uint extension) =>
-        MftRecordBytes.Compose(
-            isDirectory: false,
-            baseReference: 0,
-            MftRecordBytes.Sequence,
-            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
-            t => MftAttributeBytes.WriteAttributeList(t,
-            [
-                new ListedAttribute(StandardInformation, Reference(number)),
-                new ListedAttribute(FileName, Reference(extension)),
-                new ListedAttribute(Data, Reference(number)),
-            ]),
-            t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0));
-
-    private static IReadOnlyList<ListedAttribute> ListOf(uint number, IReadOnlyList<ListedAttribute> elsewhere) =>
+    private static IReadOnlyList<ListedAttribute> ListOf(ulong self, IReadOnlyList<ListedAttribute> elsewhere) =>
     [
-        new ListedAttribute(StandardInformation, Reference(number)),
-        new ListedAttribute(FileName, Reference(number)),
+        new ListedAttribute(StandardInformation, self),
+        new ListedAttribute(FileName, self),
         .. elsewhere,
     ];
 
@@ -508,15 +581,6 @@ public sealed class MftFixture
             Reference(owner),
             MftRecordBytes.Sequence,
             t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster));
-
-    /// <summary>The owner and sequence an extension record states, wrong in the one way asked for.</summary>
-    private static (ulong Owner, ushort Sequence) Mismatched(uint number, ExtensionMismatch mismatch) => mismatch switch
-    {
-        ExtensionMismatch.ItsOwnSequence => (Reference(number), MftRecordBytes.Sequence + 1),
-        ExtensionMismatch.OwnerNumber => (Reference(number + 1), MftRecordBytes.Sequence),
-        ExtensionMismatch.OwnerSequence => (number | ((ulong)(MftRecordBytes.Sequence + 1) << 48), MftRecordBytes.Sequence),
-        _ => throw new ArgumentOutOfRangeException(nameof(mismatch), mismatch, null),
-    };
 
     private MftFixture Add(uint number, byte[] record)
     {

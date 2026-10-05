@@ -172,8 +172,8 @@ public class DirectoryScannerTests
     [Fact]
     public async Task FallsBackWhenTheTableCannotEstablishASizeInTheSubtree()
     {
-        var volume = Volume().AddFileWithDataInAMismatchedExtensionRecord(
-            21, Cache, "fragmented.tgz", extension: 22, ExtensionMismatch.ItsOwnSequence);
+        var volume = Volume().AddFileWithDataInAnExtensionRecord(
+            21, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence);
         var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume));
 
         var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");

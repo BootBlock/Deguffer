@@ -84,20 +84,17 @@ internal sealed class MftDeferredRecord
 
         // One read per record, however many entries name it. Ordered by record so names found in
         // extension records are ranked in a stable order: the base record first, then the rest
-        // from the start of the table.
-        wanted.Sort(static (a, b) => a.Segment.Record.CompareTo(b.Segment.Record));
+        // from the start of the table. Merged by reference rather than by number, so two entries
+        // naming one record by two sequence numbers stay two, and the one the record does not
+        // carry fails as any stale reference does.
+        wanted.Sort(static (a, b) => a.Segment.Record != b.Segment.Record
+            ? a.Segment.Record.CompareTo(b.Segment.Record)
+            : a.Segment.Sequence.CompareTo(b.Segment.Sequence));
 
         foreach (var (segment, needs) in wanted)
         {
-            if (_segments.Count > 0 && _segments[^1].Segment.Record == segment.Record)
+            if (_segments.Count > 0 && _segments[^1].Segment == segment)
             {
-                // Two entries naming one record by two sequence numbers cannot both be true of it.
-                if (_segments[^1].Segment.Sequence != segment.Sequence)
-                {
-                    Failed = true;
-                    return;
-                }
-
                 _segments[^1] = (segment, _segments[^1].Needs | needs);
                 continue;
             }

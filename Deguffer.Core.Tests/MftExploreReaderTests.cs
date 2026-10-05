@@ -188,8 +188,8 @@ public class MftExploreReaderTests
     {
         var fixture = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
-            .AddFileWithItsNameInAMismatchedExtensionRecord(
-                21, Cache, "linked.dll", logical: 3000, extension: 22, ExtensionMismatch.ItsOwnSequence);
+            .AddFileWithItsNameInAnExtensionRecord(
+                21, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: 22, ListMismatch.ItsOwnSequence);
 
         using var source = fixture.Build();
         var tree = WholeVolume(source);
@@ -339,7 +339,7 @@ public class MftExploreReaderTests
     {
         using var source = Tree()
             .AddFile(20, Nested, "known.tgz", allocated: 4096, logical: 4000)
-            .AddFileWithDataInAMismatchedExtensionRecord(21, Nested, "fragmented.tgz", extension: 22, ExtensionMismatch.ItsOwnSequence)
+            .AddFileWithDataInAnExtensionRecord(21, Nested, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence)
             .AddFile(23, Sibling, "settings.json", allocated: 1024, logical: 1000)
             .Build();
 
@@ -696,8 +696,8 @@ public class MftExploreReaderTests
     {
         using var source = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
-            .AddFileWithItsNameInAMismatchedExtensionRecord(
-                21, Cache, "linked.dll", logical: 3000, extension: 22, ExtensionMismatch.OwnerNumber)
+            .AddFileWithItsNameInAnExtensionRecord(
+                21, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: 22, ListMismatch.OwnerNumber)
             .Build();
 
         var tree = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default).Tree!;

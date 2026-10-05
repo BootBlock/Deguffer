@@ -247,14 +247,12 @@ public class MftVolumeIndexTests
     /// live volume. Its sizes may belong to something else entirely, so the subtree is not totalled.
     /// </summary>
     [Theory]
-    [InlineData(ExtensionMismatch.ItsOwnSequence)]
-    [InlineData(ExtensionMismatch.OwnerNumber)]
-    [InlineData(ExtensionMismatch.OwnerSequence)]
-    public void RefusesToTotalASubtreeWhoseExtensionRecordChangedMidRead(ExtensionMismatch mismatch)
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToTotalASubtreeWhoseExtensionRecordChangedMidRead(ListMismatch mismatch)
     {
         var index = Build(Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
-            .AddFileWithDataInAMismatchedExtensionRecord(21, Cache, "fragmented.tgz", extension: 22, mismatch));
+            .AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, mismatch));
 
         Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
     }
@@ -302,7 +300,7 @@ public class MftVolumeIndexTests
     public void StillTotalsSubtreesThatDoNotHoldTheUnestablishedFile()
     {
         var index = Build(Tree()
-            .AddFileWithDataInAMismatchedExtensionRecord(20, Cache, "fragmented.tgz", extension: 22, ExtensionMismatch.ItsOwnSequence)
+            .AddFileWithDataInAnExtensionRecord(20, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence)
             .AddFile(21, Sibling, "settings.json", allocated: 1024, logical: 1000));
 
         Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
@@ -379,18 +377,73 @@ public class MftVolumeIndexTests
     /// with nothing to say so, so the index is refused rather than built around it.
     /// </summary>
     [Theory]
-    [InlineData(ExtensionMismatch.ItsOwnSequence)]
-    [InlineData(ExtensionMismatch.OwnerNumber)]
-    [InlineData(ExtensionMismatch.OwnerSequence)]
-    public void RefusesToBuildAnIndexWhenAFilesNameIsInAnExtensionRecordThatChangedMidRead(ExtensionMismatch mismatch)
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToBuildAnIndexWhenAFilesNameIsInAnExtensionRecordThatChangedMidRead(ListMismatch mismatch)
     {
         using var source = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
-            .AddFileWithItsNameInAMismatchedExtensionRecord(21, Cache, "linked.dll", logical: 8000, extension: 22, mismatch)
+            .AddFileWithItsNameInAnExtensionRecord(21, Cache, "linked.dll", allocated: 8192, logical: 8000, extension: 22, mismatch)
             .Build();
 
         Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
     }
+
+    /// <summary>
+    /// The base record still holds a name here, its 8.3 alias. The Win32 name the list points to
+    /// could not be established, and it would have put the file in another directory, so placing
+    /// the file by its alias is a guess at where it belongs. The index is refused as for a file
+    /// with no name at all.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToPlaceAFileByItsAliasWhenItsBetterNameCannotBeEstablished(ListMismatch mismatch)
+    {
+        using var source = Tree()
+            .AddFileWithItsBetterNameInAnExtensionRecord(
+                21, aliasParent: Sibling, "LINKED~1.DLL", parent: Cache, "linked.dll", logical: 5000, extension: 22, mismatch)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// A name in the best namespace cannot be displaced by another, and a tie goes to the base
+    /// record, so a file whose own record holds one is placed without reading its other links at
+    /// all. A stale extension record holding one of them costs the file nothing.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryExtensionRecordMismatch))]
+    public void PlacesAFileByTheNameItsOwnRecordHoldsWhateverItsOtherLinksSay(ListMismatch mismatch)
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
+                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22, mismatch));
+
+        Assert.Equal(5000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Equal(0, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// A list that names the file's own record as it was before that record was reused is a list
+    /// from another moment. Nothing it says about where the size went can be trusted, even though
+    /// the name it leaves in the base record places the file.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalAFileWhoseListNamesItsOwnRecordAsItWas()
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
+                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22,
+                ListMismatch.ListNamesItsOwnRecordAsItWas));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    public static TheoryData<ListMismatch> EveryMismatch() => [.. Enum.GetValues<ListMismatch>()];
+
+    /// <summary>Every way the extension record itself can be stale, as opposed to the list naming it.</summary>
+    public static TheoryData<ListMismatch> EveryExtensionRecordMismatch() =>
+        [.. Enum.GetValues<ListMismatch>().Where(m => m != ListMismatch.ListNamesItsOwnRecordAsItWas)];
 
     /// <summary>
     /// The same record without an attribute list is a different thing: in use, holding data,
