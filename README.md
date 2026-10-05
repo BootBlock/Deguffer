@@ -10,7 +10,7 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 **Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
 purpose. **De-** removes it.
 
-> **Status:** Version 0.70.0. Seventy-eight sources across the tiers, a file-table-backed Explore view
+> **Status:** Version 0.70.0. Eighty sources across the tiers, a file-table-backed Explore view
 > of the whole drive, and a Memory view of where physical memory goes that can ask one program you
 > pick to close itself. See [Roadmap](#roadmap).
 
@@ -96,7 +96,7 @@ class of error is invisible until it is irreversible.
 
 ## What it handles today
 
-Seventy-eight providers, each holding its own knowledge of one location. A provider reports "not
+Eighty providers, each holding its own knowledge of one location. A provider reports "not
 installed" cleanly on a machine without that toolchain.
 
 **Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
@@ -132,6 +132,7 @@ installed" cleanly on a machine without that toolchain.
 | Squirrel updater leftovers | Staging directories an interrupted update left behind |
 | Tool caches in temporary folders | Node's compile cache, and what Flutter, Dart's test runner, Firefox and Roslyn left there, each recognised by its own name and left alone while its tool may be using it |
 | Claude Code session leftovers | Only what sessions and editors that have ended left behind; never a conversation, its memory or your sign-in |
+| Claude Code command snapshots | The project snapshots Claude Code fails to remove when it exits; only those made before every running session started, or that Claude Code began to remove |
 | Test browser profiles | The profiles Playwright and Puppeteer leave in a temporary folder when a test run is stopped; never one Deguffer can see a running browser using |
 | Delivery Optimization cache | Windows' own command clears it, sized by Windows' own figure; never a file Windows was told to keep, and never Windows Update's own folder |
 

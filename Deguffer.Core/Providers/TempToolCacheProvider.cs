@@ -273,7 +273,7 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
     private TempMarker Session(string tool) =>
         new(tool, RoslynSession(), TargetKind.Directory, RoslynReason)
         {
-            InUse = _mutexes.Exists,
+            InUse = (name, _) => _mutexes.Exists(name),
             InUseReason = "an editing session is still using these analyzer copies",
         };
 }

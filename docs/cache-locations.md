@@ -5478,7 +5478,7 @@ of a temporary folder — Node's compile cache, a Roslyn session, VS Code's down
 scratch folder — the row for that tool offers it, under that tool's rules, and this row leaves it
 out and says which rows have it. So each entry is counted once, and an entry that row would keep is
 not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. See
-[Tool caches in temporary folders](#tool-caches-in-temporary-folders) and the two sections after it.
+[Tool caches in temporary folders](#tool-caches-in-temporary-folders) and the three sections after it.
 
 The size shown already has all of those taken out of it, so the number the scan reports is what the
 clean will actually take — with the one exception described next.
@@ -5803,6 +5803,81 @@ different for sitting in a temporary folder.
 - [Remote Desktop client: where its traces are](https://learn.microsoft.com/en-us/previous-versions/remote-desktop-client/troubleshoot-client-windows)
 - [Windows App: collecting its logs](https://learn.microsoft.com/en-us/windows-app/troubleshoot-collect-logs)
 - [Visual Studio: log collection, including ServiceHub's](https://devblogs.microsoft.com/setup/visual-studio-and-net-log-collection-utility/)
+
+---
+
+## Claude Code command snapshots
+
+**Tier 1 — regenerable cache.** Offered and pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%TEMP%\claude\bash-edit-diff\<session>-<project>-<random>` in this account's temporary folders |
+| **Method** | Delete each snapshot no running session can be using, and each one Claude Code began to remove |
+| **Typical size** | 24.4 GB across 102 snapshots on one workstation, all written in the two days before |
+
+### What it is
+
+Claude Code keeps a snapshot of each project it runs shell commands in, so that it can show what each
+command changed. Each snapshot is a private Git folder: an index of the project, and a copy of every
+file Git did not already have. A Claude Code process keeps its snapshot of a project for as long as it
+runs, and removes it when it exits.
+
+That removal often fails. Claude Code gives it a fraction of a second at exit, and gives up on the
+first file Windows will not release, so the rest of the snapshot is left behind. On the measured
+workstation, 75 of the 102 snapshots had been half removed in this way. Claude Code clears what is
+left only once it is two days old, so the *Temporary files* row, which waits seven days, never reaches
+it.
+
+### What Deguffer does
+
+It removes each snapshot that no running Claude Code process can be using, one step each:
+
+- **A snapshot made before every running session started.** A process cannot make anything before it
+  exists, so a snapshot made before the start of every session Claude Code lists as running was made
+  by a process that has ended. Each entry in that list is checked against Windows, and a session whose
+  start cannot be established holds every snapshot back. "Before" means by at least two hours, because
+  a clock can be set back, and a temporary folder on a FAT drive keeps local time, which moves by an
+  hour with summer time. A snapshot's name starts with a hash of a
+  session, but Deguffer does not use it: a process keeps its snapshot when `/clear` or `/resume` moves
+  it to another session.
+- **A snapshot Claude Code has begun to remove, whatever made it.** Claude Code writes the snapshot's
+  `HEAD` before it copies the project's index in, so an index with no `HEAD` beside it is a removal
+  that failed part way.
+
+If the list of running sessions cannot be read, or Claude Code keeps none in its folder, only the
+snapshots Claude Code began to remove are offered, and the row says so. The list is read again when
+you press Clean, immediately before each snapshot is removed, so a session started after the scan
+keeps anything it may be using.
+
+There is no seven-day floor, which the other Claude Code rows keep because a version of Claude Code
+older than the list cannot be seen in it. Here such a floor would offer nothing, because Claude Code
+clears these itself after two days. If a Claude Code process the list cannot see loses its snapshot,
+its next diff fails and Claude Code takes a new snapshot, or stops showing diffs for that project
+until the session ends. Your project is never touched. If you run Claude Code with
+`CLAUDE_CONFIG_DIR` set where Deguffer does not see it, its list of running sessions is somewhere
+Deguffer does not read, and every snapshot those sessions are using can be offered at once, each at
+that same cost. Start Deguffer with the same setting to avoid it.
+
+Only the snapshot folder belongs to this row. Each session's scratch files and command output, in the
+rest of `%TEMP%\claude`, stay with the *Temporary files* row and its age rule.
+
+### What is protected
+
+The temporary folder, `claude`, `bash-edit-diff` itself, every snapshot a running session may be
+using, and anything in `bash-edit-diff` that is not named like a snapshot. Deguffer does not delete
+through a link, so a junction in place of `bash-edit-diff` is left alone.
+
+### What it costs you
+
+Nothing is lost. A snapshot is Git's view of a project, kept apart from the project, and nothing in
+the project refers to it. Claude Code takes a new snapshot the next time it runs a command there.
+
+### Why Tier 1
+
+Nothing of yours is in a snapshot. Every snapshot offered was made before any Claude Code session
+Deguffer can see was running, or is one Claude Code had already begun to delete. Claude Code itself deletes each one, and this row removes what its deletion
+left behind.
 
 ---
 
