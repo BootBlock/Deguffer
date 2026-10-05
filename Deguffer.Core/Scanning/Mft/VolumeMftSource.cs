@@ -7,18 +7,23 @@ namespace Deguffer.Core.Scanning.Mft;
 /// The only thing in Deguffer that reads a volume's raw sectors. <c>StorageQueries</c> also opens
 /// volumes and disks, with no access rights, to ask what storage they are, and reads nothing.
 ///
-/// Everything above it — the parser, the extent map, the index, the aggregation — works on spans
-/// and is tested against synthesised records, because this class cannot be: reading
-/// <c>\\.\C:</c> requires administrator rights (§6.3), which a build agent does not have.
+/// <para>Everything it reads goes through <see cref="IRawVolume"/>, so it is tested against a
+/// synthesised volume image that refuses any read a disk with 4,096-byte sectors would refuse.
+/// Reading <c>\\.\C:</c> itself requires administrator rights (§6.3), which a build agent does not
+/// have.</para>
+///
+/// <para>Windows treats a volume handle as unbuffered, so every read here is a whole number of
+/// sectors from a sector boundary, into memory aligned to one. A record need not be: Windows gives
+/// a disk with 4,096-byte sectors 1,024-byte records, four to a sector.</para>
 /// </summary>
 public sealed partial class VolumeMftSource : IMftSource
 {
-    private readonly SafeFileHandle _volume;
+    private readonly IRawVolume _volume;
     private readonly NtfsBootSector _geometry;
     private readonly MftExtentMap _extents;
     private readonly ClusterReader _readClusters;
 
-    private VolumeMftSource(SafeFileHandle volume, NtfsBootSector geometry, MftExtentMap extents)
+    private VolumeMftSource(IRawVolume volume, NtfsBootSector geometry, MftExtentMap extents)
     {
         _volume = volume;
         _geometry = geometry;
@@ -37,8 +42,6 @@ public sealed partial class VolumeMftSource : IMftSource
     /// </summary>
     public static VolumeMftSource? TryOpen(char driveLetter, out FallbackReason reason)
     {
-        reason = FallbackReason.MasterFileTableIncomplete;
-
         // FILE_SHARE_WRITE is not optional: the system volume is always open for writing by other
         // processes, and omitting it makes the open fail on exactly the drive that matters.
         var handle = CreateFile(
@@ -64,13 +67,22 @@ public sealed partial class VolumeMftSource : IMftSource
             return null;
         }
 
-        // The handle is released here and nowhere else, on every exit that does not hand it to a
-        // source, a throw included: a leaked raw handle keeps the volume open until finalisation.
+        return TryOpen(new VolumeHandle(handle), out reason);
+    }
+
+    /// <summary>
+    /// Read enough of <paramref name="volume"/> to serve records, taking ownership of it: it is
+    /// disposed here on every exit that does not hand it to a source, a throw included, because a
+    /// leaked raw handle keeps the volume open until finalisation.
+    /// </summary>
+    internal static VolumeMftSource? TryOpen(IRawVolume volume, out FallbackReason reason)
+    {
+        reason = FallbackReason.MasterFileTableIncomplete;
         VolumeMftSource? source = null;
 
         try
         {
-            source = Initialise(handle, ref reason);
+            source = Initialise(volume, ref reason);
             return source;
         }
         catch (IOException)
@@ -83,43 +95,43 @@ public sealed partial class VolumeMftSource : IMftSource
         {
             if (source is null)
             {
-                handle.Dispose();
+                volume.Dispose();
             }
         }
     }
 
-    private static VolumeMftSource? Initialise(SafeFileHandle handle, ref FallbackReason reason)
+    private static VolumeMftSource? Initialise(IRawVolume volume, ref FallbackReason reason)
     {
         // Sized to the largest sector, not to the 512 bytes the boot sector occupies, because the
         // sector size is not known until this read has succeeded. Microsoft's rules for an unbuffered
         // read ask for a whole number of sectors, which 512 bytes is not on a 4,096-byte-sector disk.
         using var boot = new VolumeReadBuffer(BootReadBytes);
 
-        if (RandomAccess.Read(handle, boot.Span, 0) != boot.Length
+        if (volume.Read(boot.Span, 0) != boot.Length
             || !NtfsBootSector.TryParse(boot.Span, out var geometry))
         {
             reason = FallbackReason.NotNtfsVolume;
             return null;
         }
 
-        using var record0 = new VolumeReadBuffer(geometry.BytesPerFileRecord);
-        var offset = geometry.MftStartCluster * geometry.BytesPerCluster;
+        // Record 0 is read in whole clusters rather than as one record, which can be shorter than
+        // a sector. $MFT's extension records are read through the same volume, before the source
+        // that would otherwise serve them exists.
+        ClusterReader read = (first, destination) => ReadClusters(volume, geometry.BytesPerCluster, first, destination);
+        var clusters = (geometry.BytesPerFileRecord + geometry.BytesPerCluster - 1) / geometry.BytesPerCluster;
 
-        // $MFT's extension records are read through the same handle, before the source that would
-        // otherwise serve them exists.
-        if (RandomAccess.Read(handle, record0.Span, offset) != record0.Length
-            || !MftExtentMapReader.TryRead(
-                record0.Span,
-                geometry.BytesPerCluster,
-                (first, destination) => ReadClusters(handle, geometry.BytesPerCluster, first, destination),
-                out var extents))
+        using var start = new VolumeReadBuffer(clusters * geometry.BytesPerCluster);
+        var record0 = start.Span[..geometry.BytesPerFileRecord];
+
+        if (!read(geometry.MftStartCluster, start.Span)
+            || !MftExtentMapReader.TryRead(record0, geometry.BytesPerCluster, read, out var extents))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
         }
 
         reason = FallbackReason.None;
-        return new VolumeMftSource(handle, geometry, extents);
+        return new VolumeMftSource(volume, geometry, extents);
     }
 
     public int ReadBatch(long firstRecord, Span<byte> destination)
@@ -130,11 +142,9 @@ public sealed partial class VolumeMftSource : IMftSource
             return 0;
         }
 
-        // No alignment adjustment is needed or wanted here. A raw volume read must be sector
-        // aligned, and record boundaries always are: the boot sector parse guarantees the record
-        // size is a power of two no smaller than a sector. Rounding to clusters instead would shift
-        // which record the batch starts at, and the caller numbers records by position — so every
-        // record after the first gap would be attributed to the wrong parent.
+        // Never rounded to an earlier boundary to make the read aligned. That would shift which
+        // record the batch starts at, and the caller numbers records by position — so every record
+        // after the first gap would be attributed to the wrong parent.
         var streamOffset = firstRecord * BytesPerRecord;
         var virtualCluster = streamOffset / _geometry.BytesPerCluster;
         var withinCluster = streamOffset % _geometry.BytesPerCluster;
@@ -148,24 +158,26 @@ public sealed partial class VolumeMftSource : IMftSource
         var remainingRecords = Math.Min(capacity, RecordCount - firstRecord);
         var offset = (physicalCluster * _geometry.BytesPerCluster) + withinCluster;
 
-        // Where a record spans a gap between extents, or several — possible whenever a cluster is
-        // smaller than a record — no contiguous read can produce it. Splicing it together is what keeps a
-        // legitimately fragmented volume on the fast path: returning nothing here would be
+        // Rounded down to whole records so a batch never ends mid-record, and to whole sectors so
+        // the read is one the volume serves. Ending a batch on a sector boundary is also what keeps
+        // the next one starting on one.
+        var recordsPerSector = Math.Max(1, _geometry.BytesPerSector / BytesPerRecord);
+        var wholeRecords = Math.Min(contiguousBytes / BytesPerRecord, remainingRecords);
+        wholeRecords -= wholeRecords % recordsPerSector;
+
+        // One record at a time, in whole clusters, where no whole-sector read can serve the batch:
+        // a record spanning a gap between extents, which happens whenever a cluster is smaller than
+        // a record; the last few records of a table that ends part-way through a sector; and a
+        // batch starting inside a sector after a short read. Returning nothing here would be
         // indistinguishable from an unreadable table, and would send the whole volume to the walk.
-        if (contiguousBytes < BytesPerRecord)
+        if (wholeRecords == 0 || offset % _geometry.BytesPerSector != 0)
         {
             return _extents.TryReadRecord(firstRecord, BytesPerCluster, _readClusters, destination[..BytesPerRecord]) ? 1 : 0;
         }
 
-        // Rounded down to whole records so a batch never ends mid-record: the caller advances by
-        // the returned count, and a trailing fragment would leave it re-reading from an offset the
-        // fragment already consumed.
-        var wholeRecords = Math.Min(contiguousBytes / BytesPerRecord, remainingRecords);
-        var bytes = (int)(wholeRecords * BytesPerRecord);
-
         // A short read is not fatal: whole records that did arrive are still usable, and the
         // caller resumes from where this batch stopped.
-        return RandomAccess.Read(_volume, destination[..bytes], offset) / BytesPerRecord;
+        return _volume.Read(destination[..(int)(wholeRecords * BytesPerRecord)], offset) / BytesPerRecord;
     }
 
     public int BytesPerCluster => _geometry.BytesPerCluster;
@@ -173,7 +185,7 @@ public sealed partial class VolumeMftSource : IMftSource
     public bool TryReadClusters(long firstCluster, Span<byte> destination) =>
         ReadClusters(_volume, BytesPerCluster, firstCluster, destination);
 
-    private static bool ReadClusters(SafeFileHandle volume, int bytesPerCluster, long firstCluster, Span<byte> destination)
+    private static bool ReadClusters(IRawVolume volume, int bytesPerCluster, long firstCluster, Span<byte> destination)
     {
         // Whole clusters only, so the read stays sector aligned as a raw volume handle requires. The
         // cluster comes from a run list on the disk, so its byte offset is bounded by division
@@ -186,7 +198,7 @@ public sealed partial class VolumeMftSource : IMftSource
             return false;
         }
 
-        return RandomAccess.Read(volume, destination, firstCluster * bytesPerCluster) == destination.Length;
+        return volume.Read(destination, firstCluster * bytesPerCluster) == destination.Length;
     }
 
     public void Dispose() => _volume.Dispose();

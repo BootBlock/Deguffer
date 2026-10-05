@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 
@@ -17,19 +16,8 @@ public class NtfsGeometryTests
         ushort bytesPerSector = 512,
         byte sectorsPerCluster = 8,
         long mftStart = 786_432,
-        sbyte clustersPerRecord = -10)
-    {
-        var sector = new byte[512];
-
-        "NTFS    "u8.CopyTo(sector.AsSpan(3));
-        BinaryPrimitives.WriteUInt16LittleEndian(sector.AsSpan(11), bytesPerSector);
-        sector[13] = sectorsPerCluster;
-        BinaryPrimitives.WriteInt64LittleEndian(sector.AsSpan(48), mftStart);
-        sector[64] = (byte)clustersPerRecord;
-        BinaryPrimitives.WriteUInt64LittleEndian(sector.AsSpan(72), 0xDEAD_BEEF_1234_5678);
-
-        return sector;
-    }
+        sbyte clustersPerRecord = -10) =>
+        NtfsBootSectorBytes.Build(bytesPerSector, sectorsPerCluster, mftStart, clustersPerRecord);
 
     [Fact]
     public void ReadsAConventionalVolumeLayout()
@@ -43,19 +31,20 @@ public class NtfsGeometryTests
     }
 
     /// <summary>
-    /// A disk with native 4,096-byte sectors, where NTFS makes each record one sector. Its record 0
-    /// is stamped every 512 bytes like any other, so the table's extents read from it all the same.
+    /// A disk with native 4,096-byte sectors, laid out as Windows formats one: 1,024-byte records,
+    /// four to a sector. Refusing a record smaller than a sector refused every such volume, and its
+    /// record 0 is stamped every 512 bytes like any other, so the table's extents read from it.
     /// </summary>
     [Fact]
     public void ReadsANativeFourKilobyteSectorLayout()
     {
         Assert.True(NtfsBootSector.TryParse(
-            BootSector(bytesPerSector: 4096, sectorsPerCluster: 1, clustersPerRecord: -12),
+            BootSector(bytesPerSector: 4096, sectorsPerCluster: 1, clustersPerRecord: -10),
             out var geometry));
 
         Assert.Equal(4096, geometry.BytesPerSector);
         Assert.Equal(4096, geometry.BytesPerCluster);
-        Assert.Equal(4096, geometry.BytesPerFileRecord);
+        Assert.Equal(1024, geometry.BytesPerFileRecord);
 
         var record = MftRecordBytes.SelfRecord(
             [new DataRun(786_432, 64), new DataRun(900_000, 32)],
