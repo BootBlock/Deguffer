@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -26,7 +24,7 @@ internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in
 /// <see cref="MftVolumeIndexBuilder"/> abandons the volume rather than report a total that is
 /// short, because its numbers decide deletions. <see cref="Exploring.MftExploreReader"/> keeps
 /// going and marks what it missed, because its numbers draw a picture. Written twice, the batching,
-/// the pooled buffer and the short-read rule would be written twice as well.</para>
+/// the aligned buffer and the short-read rule would be written twice as well.</para>
 /// </summary>
 internal static class MftRecordStream
 {
@@ -60,71 +58,65 @@ internal static class MftRecordStream
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(onRecord);
 
-        var batchBytes = RecordsPerBatch * source.BytesPerRecord;
-        var buffer = ArrayPool<byte>.Shared.Rent(batchBytes);
+        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
+        using var buffer = new VolumeReadBuffer(RecordsPerBatch * source.BytesPerRecord);
+        var batch = buffer.Span;
         var deferred = new List<MftDeferredRecord>();
 
-        try
+        long next = 0;
+        long wanted = 0;
+        var wholeTable = true;
+
+        while (wholeTable && next < count)
         {
-            long next = 0;
-            long wanted = 0;
-            var wholeTable = true;
+            ct.ThrowIfCancellationRequested();
 
-            while (wholeTable && next < count)
+            var read = source.ReadBatch(next, batch);
+            if (read <= 0)
             {
-                ct.ThrowIfCancellationRequested();
-
-                var read = source.ReadBatch(next, buffer.AsSpan(0, batchBytes));
-                if (read <= 0)
-                {
-                    wholeTable = false;
-                    break;
-                }
-
-                for (var i = 0; i < read; i++)
-                {
-                    var slice = buffer.AsSpan(i * source.BytesPerRecord, source.BytesPerRecord);
-                    var outcome = MftRecordParser.Parse(slice, next + i, source.BytesPerSector, out var record, out var continued);
-
-                    if (continued is not null)
-                    {
-                        wanted += continued.Segments.Count;
-                        if (wanted > count)
-                        {
-                            wholeTable = false;
-                            break;
-                        }
-
-                        deferred.Add(continued);
-                        continue;
-                    }
-
-                    if (!onRecord(next + i, outcome, in record))
-                    {
-                        return false;
-                    }
-                }
-
-                next += read;
+                wholeTable = false;
+                break;
             }
 
-            wholeTable &= MftExtensionReader.TryResolve(source, deferred, count - wanted, buffer.AsSpan(0, batchBytes), ct);
-
-            foreach (var held in deferred)
+            for (var i = 0; i < read; i++)
             {
-                var outcome = held.Finish(out var record);
+                var slice = batch.Slice(i * source.BytesPerRecord, source.BytesPerRecord);
+                var outcome = MftRecordParser.Parse(slice, next + i, out var record, out var continued);
 
-                if (!onRecord(held.Self.Record, outcome, in record))
+                if (continued is not null)
+                {
+                    wanted += continued.Segments.Count;
+                    if (wanted > count)
+                    {
+                        wholeTable = false;
+                        break;
+                    }
+
+                    deferred.Add(continued);
+                    continue;
+                }
+
+                if (!onRecord(next + i, outcome, in record))
                 {
                     return false;
                 }
             }
 
-            return wholeTable;
+            next += read;
         }
-        finally
+
+        wholeTable &= MftExtensionReader.TryResolve(source, deferred, count - wanted, batch, ct);
+
+        foreach (var held in deferred)
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            var outcome = held.Finish(out var record);
+
+            if (!onRecord(held.Self.Record, outcome, in record))
+            {
+                return false;
+            }
         }
+
+        return wholeTable;
     }
 }

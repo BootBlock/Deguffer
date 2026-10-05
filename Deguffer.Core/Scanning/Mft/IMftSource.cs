@@ -12,9 +12,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 public interface IMftSource : IDisposable
 {
-    /// <summary>Needed to undo the per-sector update sequence fixup.</summary>
-    int BytesPerSector { get; }
-
     int BytesPerRecord { get; }
 
     /// <summary>How many records the table holds, from <c>$MFT</c>'s own data size.</summary>
@@ -27,6 +24,9 @@ public interface IMftSource : IDisposable
     /// May return fewer than the buffer holds — the MFT is not necessarily contiguous, and a batch
     /// stops at an extent boundary rather than reading across the gap. Returns zero at the end of
     /// the table, or where a region cannot be read at all.
+    ///
+    /// <para>A volume source reads straight into <paramref name="destination"/>, so a caller passes
+    /// a <see cref="VolumeReadBuffer"/> rather than a managed array.</para>
     /// </summary>
     int ReadBatch(long firstRecord, Span<byte> destination);
 
@@ -41,6 +41,9 @@ public interface IMftSource : IDisposable
     /// <para>Needed for the one thing in a table that is clusters rather than records: an
     /// <c>$ATTRIBUTE_LIST</c> grown too large to stay inside its record, which NTFS then keeps
     /// outside the table altogether.</para>
+    ///
+    /// <para>A volume source reads straight into <paramref name="destination"/>, so, as for
+    /// <see cref="ReadBatch"/>, a caller passes a <see cref="VolumeReadBuffer"/>.</para>
     /// </summary>
     bool TryReadClusters(long firstCluster, Span<byte> destination);
 }

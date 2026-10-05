@@ -41,14 +41,13 @@ internal static class MftRecordParser
     internal static MftParseOutcome Parse(
         Span<byte> record,
         long number,
-        int bytesPerSector,
         out MftRecord result,
         out MftDeferredRecord? deferred)
     {
         result = default;
         deferred = null;
 
-        var outcome = MftRecordHeader.Read(record, bytesPerSector, out var header);
+        var outcome = MftRecordHeader.Read(record, out var header);
         if (outcome != MftParseOutcome.Parsed)
         {
             return outcome;

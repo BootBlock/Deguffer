@@ -20,7 +20,14 @@ internal delegate int AttributeWriter(Span<byte> target);
 /// </summary>
 internal static class MftRecordBytes
 {
-    public const int BytesPerSector = 512;
+    /// <summary>
+    /// What NTFS stamps a record in units of, whatever the disk's sector size. Written here rather
+    /// than taken from <see cref="UpdateSequenceArray.StrideBytes"/>, so a wrong stride in the reader
+    /// disagrees with the fixture instead of agreeing with itself.
+    /// </summary>
+    public const int FixupStride = 512;
+
+    /// <summary>The record size of every volume formatted on a disk with 512-byte sectors.</summary>
     public const int BytesPerRecord = 1024;
 
     /// <summary>
@@ -65,9 +72,10 @@ internal static class MftRecordBytes
         DataPlacement placement,
         uint reparseTag = 0,
         long created = 0,
-        long lastWritten = 0)
+        long lastWritten = 0,
+        int bytesPerRecord = BytesPerRecord)
     {
-        var record = new byte[BytesPerRecord];
+        var record = new byte[bytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, (ushort)(isDirectory ? 0x0003 : 0x0001), baseReference: 0, Sequence);
 
@@ -99,10 +107,11 @@ internal static class MftRecordBytes
     /// reference: number, then sequence above.
     /// </param>
     /// <param name="sequence">How many times the record has been reused.</param>
+    /// <param name="bytesPerRecord">How long the record is, as the fixture's table declares.</param>
     public static byte[] Compose(
-        bool isDirectory, ulong baseReference, ushort sequence, params AttributeWriter[] attributes)
+        bool isDirectory, ulong baseReference, ushort sequence, int bytesPerRecord, params AttributeWriter[] attributes)
     {
-        var record = new byte[BytesPerRecord];
+        var record = new byte[bytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, (ushort)(isDirectory ? 0x0003 : 0x0001), baseReference, sequence);
 
@@ -123,9 +132,10 @@ internal static class MftRecordBytes
     /// reserved records NTFS leaves nameless are the standing reminder of what a reader that gives
     /// up too readily costs.</para>
     /// </summary>
-    public static byte[] FileWithoutTimestamps(ulong parentReference, string name, long logical)
+    public static byte[] FileWithoutTimestamps(
+        ulong parentReference, string name, long logical, int bytesPerRecord = BytesPerRecord)
     {
-        var record = new byte[BytesPerRecord];
+        var record = new byte[bytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, flags: 0x0001, baseReference: 0, Sequence);
 
@@ -139,9 +149,9 @@ internal static class MftRecordBytes
     /// A record in use carrying no <c>$FILE_NAME</c> and no <c>$ATTRIBUTE_LIST</c> to say where one
     /// went: NTFS's reserved records 12 to 15, and damage anywhere else.
     /// </summary>
-    public static byte[] RecordWithoutAName()
+    public static byte[] RecordWithoutAName(int bytesPerRecord = BytesPerRecord)
     {
-        var record = new byte[BytesPerRecord];
+        var record = new byte[bytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, flags: 0x0001, baseReference: 0, Sequence);
 
@@ -161,9 +171,10 @@ internal static class MftRecordBytes
     /// the rest of the table physically lives. Built here rather than in a test so it carries a
     /// real update sequence array and a real mapping pair list.
     /// </summary>
-    public static byte[] SelfRecord(IReadOnlyList<DataRun> runs, long dataSize, bool withAttributeList = false)
+    public static byte[] SelfRecord(
+        IReadOnlyList<DataRun> runs, long dataSize, bool withAttributeList = false, int bytesPerRecord = BytesPerRecord)
     {
-        var record = new byte[BytesPerRecord];
+        var record = new byte[bytesPerRecord];
         var span = record.AsSpan();
         var offset = WriteHeader(span, flags: 0x0001, baseReference: 0, Sequence);
 
@@ -190,14 +201,14 @@ internal static class MftRecordBytes
     /// Solve for the name length that pushes <c>$DATA</c>'s allocated field over byte 510. Derived
     /// rather than hard-coded so it stays correct if the record layout above is ever adjusted.
     /// </summary>
-    public static int NameLengthPuttingSizeFieldAcrossBoundary()
+    public static int NameLengthPuttingSizeFieldAcrossBoundary(int bytesPerRecord = BytesPerRecord)
     {
-        var boundary = BytesPerSector - 2;
+        var boundary = FixupStride - 2;
 
         // $STANDARD_INFORMATION sits between the header and the name, so the name does not start at
         // the first attribute offset. Derived rather than hard-coded so it stays correct if the
         // record layout is ever adjusted — which is exactly what adding that attribute was.
-        var firstAttribute = FirstAttributeOffset() + MftAttributeBytes.StandardInformationLength;
+        var firstAttribute = FirstAttributeOffset(bytesPerRecord) + MftAttributeBytes.StandardInformationLength;
 
         for (var length = 1; length < 255; length++)
         {
@@ -211,7 +222,7 @@ internal static class MftRecordBytes
         }
 
         throw new InvalidOperationException(
-            "No file name length places a $DATA size field across the sector boundary; the fixup test would be vacuous.");
+            "No file name length places a $DATA size field across the first fixup stride boundary; the fixup test would be vacuous.");
     }
 
     /// <summary>
@@ -235,7 +246,7 @@ internal static class MftRecordBytes
     /// record's fixup still holds and the corruption is the only thing wrong with it.
     /// </summary>
     public static void DeclareFirstAttributeLength(Span<byte> record, uint length) =>
-        BinaryPrimitives.WriteUInt32LittleEndian(record[(FirstAttributeOffset() + 0x04)..], length);
+        BinaryPrimitives.WriteUInt32LittleEndian(record[(FirstAttributeOffset(record.Length) + 0x04)..], length);
 
     /// <summary>
     /// Overwrite the value length a record's <c>$FILE_NAME</c> declares, leaving the attribute's own
@@ -244,27 +255,28 @@ internal static class MftRecordBytes
     /// </summary>
     public static void DeclareFileNameValueLength(Span<byte> record, uint length) =>
         BinaryPrimitives.WriteUInt32LittleEndian(
-            record[(FirstAttributeOffset() + MftAttributeBytes.StandardInformationLength + 0x10)..],
+            record[(FirstAttributeOffset(record.Length) + MftAttributeBytes.StandardInformationLength + 0x10)..],
             length);
 
-    private static int UsaCount => (BytesPerRecord / BytesPerSector) + 1;
+    private static int UsaCount(int bytesPerRecord) => (bytesPerRecord / FixupStride) + 1;
 
-    private static int FirstAttributeOffset() => MftAttributeBytes.Align8(UsaOffset + (UsaCount * 2));
+    private static int FirstAttributeOffset(int bytesPerRecord) =>
+        MftAttributeBytes.Align8(UsaOffset + (UsaCount(bytesPerRecord) * 2));
 
     /// <summary>The fixed part every record starts with. Returns the offset its attributes begin at.</summary>
     private static int WriteHeader(Span<byte> record, ushort flags, ulong baseReference, ushort sequence)
     {
-        var firstAttribute = FirstAttributeOffset();
+        var firstAttribute = FirstAttributeOffset(record.Length);
 
         "FILE"u8.CopyTo(record);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x04..], UsaOffset);
-        BinaryPrimitives.WriteUInt16LittleEndian(record[0x06..], (ushort)UsaCount);
+        BinaryPrimitives.WriteUInt16LittleEndian(record[0x06..], (ushort)UsaCount(record.Length));
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x10..], sequence);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x12..], 1);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x14..], (ushort)firstAttribute);
         BinaryPrimitives.WriteUInt16LittleEndian(record[0x16..], flags);
         BinaryPrimitives.WriteUInt64LittleEndian(record[0x20..], baseReference);
-        BinaryPrimitives.WriteUInt32LittleEndian(record[0x1C..], BytesPerRecord);
+        BinaryPrimitives.WriteUInt32LittleEndian(record[0x1C..], (uint)record.Length);
 
         return firstAttribute;
     }
@@ -284,18 +296,19 @@ internal static class MftRecordBytes
 
     /// <summary>
     /// The exact inverse of <see cref="UpdateSequenceArray.TryApply"/>: displace the last two bytes
-    /// of every sector into the array and stamp the sequence number in their place.
+    /// of every stride into the array and stamp the sequence number in their place.
     /// </summary>
     private static void ApplyFixup(Span<byte> record)
     {
         const ushort Stamp = 0x5A5A;
 
-        var array = record.Slice(UsaOffset, UsaCount * 2);
+        var count = UsaCount(record.Length);
+        var array = record.Slice(UsaOffset, count * 2);
         BinaryPrimitives.WriteUInt16LittleEndian(array, Stamp);
 
-        for (var i = 0; i < UsaCount - 1; i++)
+        for (var i = 0; i < count - 1; i++)
         {
-            var tail = record.Slice(((i + 1) * BytesPerSector) - 2, 2);
+            var tail = record.Slice(((i + 1) * FixupStride) - 2, 2);
             tail.CopyTo(array[((i + 1) * 2)..]);
             BinaryPrimitives.WriteUInt16LittleEndian(tail, Stamp);
         }

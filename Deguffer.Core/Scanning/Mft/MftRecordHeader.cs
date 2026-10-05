@@ -34,21 +34,21 @@ internal readonly record struct MftRecordHeader(
     /// it turned out to be.
     ///
     /// The in-use flag is read before the fixup runs, which is safe — it sits at 0x16, nowhere near
-    /// a sector boundary — and necessary: a free record whose stale bytes fail the fixup is still
-    /// just a free record, and reporting it as unreadable would condemn a healthy table.
+    /// a fixup stride boundary — and necessary: a free record whose stale bytes fail the fixup is
+    /// still just a free record, and reporting it as unreadable would condemn a healthy table.
     /// </summary>
-    public static MftParseOutcome Read(Span<byte> record, int bytesPerSector, out MftRecordHeader header) =>
-        Read(record, bytesPerSector, extension: false, out header);
+    public static MftParseOutcome Read(Span<byte> record, out MftRecordHeader header) =>
+        Read(record, extension: false, out header);
 
     /// <summary>
     /// The same for an extension record, read only because a base record's <c>$ATTRIBUTE_LIST</c>
     /// named it. A base record is <see cref="MftParseOutcome.NotAnEntry"/> here, as an extension
-    /// record is to <see cref="Read(Span{byte}, int, out MftRecordHeader)"/>.
+    /// record is to <see cref="Read(Span{byte}, out MftRecordHeader)"/>.
     /// </summary>
-    public static MftParseOutcome ReadExtension(Span<byte> record, int bytesPerSector, out MftRecordHeader header) =>
-        Read(record, bytesPerSector, extension: true, out header);
+    public static MftParseOutcome ReadExtension(Span<byte> record, out MftRecordHeader header) =>
+        Read(record, extension: true, out header);
 
-    private static MftParseOutcome Read(Span<byte> record, int bytesPerSector, bool extension, out MftRecordHeader header)
+    private static MftParseOutcome Read(Span<byte> record, bool extension, out MftRecordHeader header)
     {
         header = default;
 
@@ -66,8 +66,7 @@ internal readonly record struct MftRecordHeader(
         if (!UpdateSequenceArray.TryApply(
                 record,
                 BinaryPrimitives.ReadUInt16LittleEndian(record[0x04..]),
-                BinaryPrimitives.ReadUInt16LittleEndian(record[0x06..]),
-                bytesPerSector))
+                BinaryPrimitives.ReadUInt16LittleEndian(record[0x06..])))
         {
             return MftParseOutcome.Unreadable;
         }

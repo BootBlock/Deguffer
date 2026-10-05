@@ -113,7 +113,7 @@ internal sealed class MftDeferredRecord
     /// mid-change, and the answer stays "could not establish", never a guess.
     /// </summary>
     /// <param name="record">The record's bytes, which the update sequence fixup modifies in place.</param>
-    public void Absorb(Span<byte> record, int bytesPerSector, MftSegmentReference expected, MftAttributeKinds needs)
+    public void Absorb(Span<byte> record, MftSegmentReference expected, MftAttributeKinds needs)
     {
         // Folded into a copy, kept only once the record is accepted. A record rejected for lacking
         // what it was read for can still hold a better-ranked name or a reparse point, and either
@@ -121,7 +121,7 @@ internal sealed class MftDeferredRecord
         // has just refused to believe.
         var trial = _draft;
 
-        if (MftRecordHeader.ReadExtension(record, bytesPerSector, out var header) != MftParseOutcome.Parsed
+        if (MftRecordHeader.ReadExtension(record, out var header) != MftParseOutcome.Parsed
             || header.BaseReference != Self
             || header.Sequence != expected.Sequence
             || !trial.TryAbsorb(record[..header.UsedLength], header.FirstAttributeOffset, isBase: false, out var supplied, out _)

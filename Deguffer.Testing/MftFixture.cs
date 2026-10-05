@@ -18,20 +18,34 @@ public sealed class MftFixture
 
     private readonly List<byte[]> _records = [];
 
+    private readonly int _bytesPerRecord;
+
     private readonly Dictionary<long, byte[]> _clusters = [];
 
-    private static readonly byte[] Blank = new byte[MftRecordBytes.BytesPerRecord];
+    /// <summary>
+    /// Every gap in the table, shared. A source copies what it serves, and <see cref="Corrupt"/>
+    /// damages a copy, so a test can place a record past a hundred thousand others for the cost of
+    /// the references.
+    /// </summary>
+    private readonly byte[] _blank;
 
     private long _unreadableFrom = long.MaxValue;
 
-    public MftFixture()
+    /// <param name="bytesPerRecord">
+    /// 1,024 on a disk with 512-byte sectors, and 4,096 on a disk with native 4,096-byte sectors,
+    /// where NTFS sizes a record to one sector.
+    /// </param>
+    public MftFixture(int bytesPerRecord = MftRecordBytes.BytesPerRecord)
     {
+        _bytesPerRecord = bytesPerRecord;
+        _blank = new byte[bytesPerRecord];
+
         // Records 0-4 are NTFS's own named metadata files ($MFT, $MFTMirr, $LogFile, $Volume,
         // $AttrDef), left blank here: an unused entry is skipped by the parser, which is worth
         // exercising rather than working around. Record 5 is the root.
         for (var i = 0; i < MftRecord.RootRecordNumber; i++)
         {
-            _records.Add(new byte[MftRecordBytes.BytesPerRecord]);
+            _records.Add(new byte[_bytesPerRecord]);
         }
 
         // The root is its own parent — the shape the index has to detect to avoid a cyclic walk.
@@ -41,12 +55,13 @@ public sealed class MftFixture
             isDirectory: true,
             MftRecordBytes.DirectoryStreamBytes,
             MftRecordBytes.DirectoryStreamBytes,
-            DataPlacement.NonResident));
+            DataPlacement.NonResident,
+            bytesPerRecord: _bytesPerRecord));
 
         // 6 to 11 are the rest of the named metadata, blank for the same reason as 0 to 4.
         while (_records.Count < 12)
         {
-            _records.Add(new byte[MftRecordBytes.BytesPerRecord]);
+            _records.Add(new byte[_bytesPerRecord]);
         }
 
         // 12 to 15 are not blank on a real volume, and this is the whole point of filling them in.
@@ -57,7 +72,7 @@ public sealed class MftFixture
         // proves the reader works on a volume nobody has.
         while (_records.Count < MftRecord.ReservedRecordCount)
         {
-            _records.Add(MftRecordBytes.RecordWithoutAName());
+            _records.Add(MftRecordBytes.RecordWithoutAName(_bytesPerRecord));
         }
     }
 
@@ -77,7 +92,8 @@ public sealed class MftFixture
             DataPlacement.NonResident,
             reparseTag: 0,
             FileTime(created),
-            FileTime(lastWritten)));
+            FileTime(lastWritten),
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A junction or directory symbolic link. Its target's entries belong to the target's own
@@ -91,7 +107,8 @@ public sealed class MftFixture
             MftRecordBytes.DirectoryStreamBytes,
             MftRecordBytes.DirectoryStreamBytes,
             DataPlacement.NonResident,
-            MftRecordBytes.MountPointTag));
+            MftRecordBytes.MountPointTag,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file that is a link rather than the thing it names — a symbolic link, or a placeholder a
@@ -101,7 +118,8 @@ public sealed class MftFixture
     public MftFixture AddFileLink(uint number, uint parent, string name, long logical) =>
         Add(number, MftRecordBytes.Build(
             Reference(parent), name, isDirectory: false, allocated: 0, logical, DataPlacement.NonResident,
-            MftRecordBytes.SymbolicLinkTag));
+            MftRecordBytes.SymbolicLinkTag,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file compressed in place by the Windows Overlay Filter. It carries a reparse point and is
@@ -111,7 +129,8 @@ public sealed class MftFixture
     public MftFixture AddOverlayCompressedFile(uint number, uint parent, string name, long allocated, long logical) =>
         Add(number, MftRecordBytes.Build(
             Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident,
-            MftRecordBytes.WindowsOverlayFilterTag));
+            MftRecordBytes.WindowsOverlayFilterTag,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file whose allocated and logical sizes may differ — the compressed or sparse case that a
@@ -127,7 +146,8 @@ public sealed class MftFixture
         DateTime? lastWritten = null) =>
         Add(number, MftRecordBytes.Build(
             Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident,
-            reparseTag: 0, FileTime(created), FileTime(lastWritten)));
+            reparseTag: 0, FileTime(created), FileTime(lastWritten),
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file whose record carries no <c>$STANDARD_INFORMATION</c>, so nothing can date it. It still
@@ -136,7 +156,7 @@ public sealed class MftFixture
     /// trade.
     /// </summary>
     public MftFixture AddFileWithNoTimestamps(uint number, uint parent, string name, long logical) =>
-        Add(number, MftRecordBytes.FileWithoutTimestamps(Reference(parent), name, logical));
+        Add(number, MftRecordBytes.FileWithoutTimestamps(Reference(parent), name, logical, _bytesPerRecord));
 
     /// <summary>
     /// A file small enough to live inside its own MFT record. It occupies no clusters, so deleting
@@ -151,7 +171,8 @@ public sealed class MftFixture
         DateTime? lastWritten = null) =>
         Add(number, MftRecordBytes.Build(
             Reference(parent), name, isDirectory: false, allocated: 0, logical: length, DataPlacement.Resident,
-            reparseTag: 0, FileTime(created), FileTime(lastWritten)));
+            reparseTag: 0, FileTime(created), FileTime(lastWritten),
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file with no unnamed <c>$DATA</c> at all, as a symbolic link has: its content is somewhere
@@ -160,7 +181,8 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture AddFileWithNoDataStream(uint number, uint parent, string name) =>
         Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.NoData));
+            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.NoData,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file whose base record holds a later extent of a split <c>$DATA</c> rather than the first.
@@ -169,7 +191,8 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture AddFileDescribingOnlyALaterExtent(uint number, uint parent, string name) =>
         Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.LaterExtent));
+            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.LaterExtent,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A non-resident <c>$DATA</c> whose declared length stops before the size fields — a corrupt
@@ -177,19 +200,21 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture AddFileWithATruncatedDataHeader(uint number, uint parent, string name) =>
         Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.TruncatedHeader));
+            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.TruncatedHeader,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>The same corruption in a resident <c>$DATA</c>, where the length field itself is cut off.</summary>
     public MftFixture AddFileWithATruncatedResidentDataHeader(uint number, uint parent, string name) =>
         Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.TruncatedResidentHeader));
+            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.TruncatedResidentHeader,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A record in use, holding data, claiming no identity and with no attribute list pointing
     /// anywhere else for one. No healthy volume produces this.
     /// </summary>
     public MftFixture AddRecordWithNoIdentityAtAll(uint number) =>
-        Add(number, MftRecordBytes.RecordWithoutAName());
+        Add(number, MftRecordBytes.RecordWithoutAName(_bytesPerRecord));
 
     /// <summary>
     /// A record naming a parent beyond the 32-bit range the index addresses. Narrowing this
@@ -197,35 +222,37 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture AddFileWithUnaddressableParent(uint number, string name, long allocated) =>
         Add(number, MftRecordBytes.Build(
-            0x1_0000_0007UL | (1UL << 48), name, isDirectory: false, allocated, allocated, DataPlacement.NonResident));
+            0x1_0000_0007UL | (1UL << 48), name, isDirectory: false, allocated, allocated, DataPlacement.NonResident,
+            bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file whose name is sized so that its <c>$DATA</c> allocated-size field lies across the
-    /// first sector boundary, and so is one of the fields NTFS displaces into the update sequence
-    /// array.
+    /// first fixup stride boundary, and so is one of the fields NTFS displaces into the update
+    /// sequence array.
     ///
     /// Without a record shaped like this the fixup is untested: short records leave the boundary
     /// sitting in trailing zeroes, where failing to restore the displaced bytes changes nothing.
     /// On a real volume the boundary lands in live attribute data, and two unrestored bytes inside
     /// a 64-bit size field alter it by up to 2^48 — a wrong number, reported confidently.
     /// </summary>
-    public MftFixture AddFileWithSizeAcrossSectorBoundary(uint number, uint parent, long allocated, long logical)
+    public MftFixture AddFileWithSizeAcrossStrideBoundary(uint number, uint parent, long allocated, long logical)
     {
-        var name = new string('n', MftRecordBytes.NameLengthPuttingSizeFieldAcrossBoundary());
+        var name = new string('n', MftRecordBytes.NameLengthPuttingSizeFieldAcrossBoundary(_bytesPerRecord));
 
         return Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident));
+            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident,
+            bytesPerRecord: _bytesPerRecord));
     }
 
     /// <summary>Blank out a record, standing in for a free or never-used entry.</summary>
-    public MftFixture AddUnused(uint number) => Add(number, new byte[MftRecordBytes.BytesPerRecord]);
+    public MftFixture AddUnused(uint number) => Add(number, new byte[_bytesPerRecord]);
 
     /// <summary>
-    /// Break one sector's update sequence stamp, as a torn write would. The record must then be
+    /// Break one stride's update sequence stamp, as a torn write would. The record must then be
     /// rejected outright — a half-fixed-up record parses cleanly and reports a wrong size.
     /// </summary>
     public MftFixture CorruptSectorStamp(uint number) =>
-        Corrupt(number, record => record[MftRecordBytes.BytesPerSector - 1] ^= 0xFF);
+        Corrupt(number, record => record[MftRecordBytes.FixupStride - 1] ^= 0xFF);
 
     /// <summary>
     /// Make a record's first attribute declare itself far longer than the record, as a corrupt
@@ -254,8 +281,7 @@ public sealed class MftFixture
     public IMftSource Build() =>
         new FixtureMftSource(
             _records,
-            MftRecordBytes.BytesPerSector,
-            MftRecordBytes.BytesPerRecord,
+            _bytesPerRecord,
             _unreadableFrom,
             MftRecordBytes.BytesPerCluster,
             _clusters);
@@ -280,6 +306,9 @@ public sealed class MftFixture
     /// Damage a copy of a record and put the copy in its place. A gap in the table is the one
     /// shared blank record, so damaging a record where it lies would damage every gap with it.
     /// </summary>
+    /// <summary>How long each record in this fixture's table is.</summary>
+    internal int BytesPerRecord => _bytesPerRecord;
+
     /// <summary>Place the bytes of one cluster outside the table, for a source to serve.</summary>
     internal void PutCluster(long cluster, byte[] bytes) => _clusters[cluster] = bytes;
 
@@ -293,12 +322,9 @@ public sealed class MftFixture
 
     internal MftFixture Add(uint number, byte[] record)
     {
-        // Every gap is the one blank record, shared. A source copies what it serves, and Corrupt
-        // damages a copy, so a test can place a record past a hundred thousand others for the cost
-        // of the references.
         while (_records.Count <= number)
         {
-            _records.Add(Blank);
+            _records.Add(_blank);
         }
 
         _records[(int)number] = record;

@@ -35,6 +35,7 @@ public static class MftListedFiles
                 isDirectory: false,
                 baseReference: 0,
                 MftRecordBytes.Sequence,
+                fixture.BytesPerRecord,
                 t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
                 t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0, nameSpace: 1),
                 t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), alias, 0, 0, nameSpace: 2),
@@ -49,6 +50,7 @@ public static class MftListedFiles
                 isDirectory: false,
                 self,
                 MftRecordBytes.Sequence,
+                fixture.BytesPerRecord,
                 t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(MftRecord.RootRecordNumber), "elsewhere.tgz", 0, 0),
                 t => MftAttributeBytes.WriteReparsePoint(t, MftRecordBytes.SymbolicLinkTag)));
     }
@@ -68,6 +70,7 @@ public static class MftListedFiles
             isDirectory: true,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
             t => MftAttributeBytes.WriteAttributeListValue(t, value),
@@ -112,6 +115,7 @@ public static class MftListedFiles
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             list));
     }
@@ -135,6 +139,7 @@ public static class MftListedFiles
             isDirectory: true,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
             t => MftAttributeBytes.WriteAttributeList(t,
@@ -178,13 +183,14 @@ public static class MftListedFiles
 
         if (alias is null)
         {
-            return fixture.Add(number, ListingFile(self, parent, name, [.. listed.Select(l => new ListedAttribute(Data, l))]));
+            return fixture.Add(number, ListingFile(fixture.BytesPerRecord, self, parent, name, [.. listed.Select(l => new ListedAttribute(Data, l))]));
         }
 
         return fixture.Add(number, MftRecordBytes.Compose(
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0, nameSpace: 1),
             t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), alias, 0, 0, nameSpace: 2),
@@ -225,13 +231,13 @@ public static class MftListedFiles
     public static MftFixture AddFileWithDataSplitAcrossExtensionRecords(
         this MftFixture fixture,
         uint number, uint parent, string name, long allocated, long logical, uint continuation, uint start) =>
-        fixture.Add(number, ListingFile(MftFixture.Reference(number), parent, name,
+        fixture.Add(number, ListingFile(fixture.BytesPerRecord, MftFixture.Reference(number), parent, name,
             [
                 new ListedAttribute(Data, MftFixture.Reference(start), LowestVcn: 0),
                 new ListedAttribute(Data, MftFixture.Reference(continuation), LowestVcn: 4),
             ]))
-            .Add(continuation, DataPiece(number, allocated: 0, logical: 0, startVirtualCluster: 4))
-            .Add(start, DataPiece(number, allocated, logical, startVirtualCluster: 0));
+            .Add(continuation, DataPiece(fixture.BytesPerRecord, number, allocated: 0, logical: 0, startVirtualCluster: 4))
+            .Add(start, DataPiece(fixture.BytesPerRecord, number, allocated, logical, startVirtualCluster: 0));
 
     /// <summary>
     /// A file whose name moved into <paramref name="extension"/>, which is what NTFS does once a
@@ -254,6 +260,7 @@ public static class MftListedFiles
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteAttributeList(t,
             [
@@ -333,6 +340,7 @@ public static class MftListedFiles
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
             t => MftAttributeBytes.WriteAttributeListValue(t, value)));
@@ -350,6 +358,7 @@ public static class MftListedFiles
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, allocated, logical),
             t => MftAttributeBytes.WriteAttributeList(t,
@@ -373,6 +382,7 @@ public static class MftListedFiles
                 isDirectory: true,
                 baseReference: 0,
                 MftRecordBytes.Sequence,
+                fixture.BytesPerRecord,
                 t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
                 t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
                 t => MftAttributeBytes.WriteAttributeList(t,
@@ -381,7 +391,7 @@ public static class MftListedFiles
                     new ListedAttribute(FileName, MftFixture.Reference(number)),
                     new ListedAttribute(IndexAllocation, MftFixture.Reference(extension), Name: "$I30"),
                 ])))
-            .Add(extension, MftRecordBytes.Compose(isDirectory: true, MftFixture.Reference(number), MftRecordBytes.Sequence));
+            .Add(extension, MftRecordBytes.Compose(isDirectory: true, MftFixture.Reference(number), MftRecordBytes.Sequence, fixture.BytesPerRecord));
 
     /// <summary>
     /// An extension record met on its own in the first pass. A real volume holds many, and none of
@@ -389,7 +399,7 @@ public static class MftListedFiles
     /// </summary>
     public static MftFixture AddExtensionRecord(
         this MftFixture fixture, uint number, uint baseRecordNumber) =>
-        fixture.Add(number, MftRecordBytes.Compose(isDirectory: false, MftFixture.Reference(baseRecordNumber), MftRecordBytes.Sequence));
+        fixture.Add(number, MftRecordBytes.Compose(isDirectory: false, MftFixture.Reference(baseRecordNumber), MftRecordBytes.Sequence, fixture.BytesPerRecord));
 
     /// <param name="listCluster">Where the base record says the list is, or null for a sparse run.</param>
     /// <param name="placedAt">Where the list's bytes actually are.</param>
@@ -406,10 +416,11 @@ public static class MftListedFiles
                 isDirectory: false,
                 baseReference: 0,
                 MftRecordBytes.Sequence,
+                fixture.BytesPerRecord,
                 t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
                 t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
                 t => MftAttributeBytes.WriteNonResidentAttributeList(t, listCluster, clusterCount: 1, value.Length)))
-            .Add(extension, DataPiece(number, allocated, logical, startVirtualCluster: 0));
+            .Add(extension, DataPiece(fixture.BytesPerRecord, number, allocated, logical, startVirtualCluster: 0));
     }
 
     /// <summary>
@@ -431,6 +442,7 @@ public static class MftListedFiles
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             ownName,
             t => MftAttributeBytes.WriteAttributeList(t,
@@ -486,7 +498,7 @@ public static class MftListedFiles
             // Before the true one, so a reader that kept one reference per record and let the last
             // decide would keep the true one, accept the record, and never notice the stale entry.
             case ListMismatch.ListedTwiceBySequence:
-                fixture.Add(extension, MftRecordBytes.Compose(isDirectory: false, owner, sequence, attributes));
+                fixture.Add(extension, MftRecordBytes.Compose(isDirectory: false, owner, sequence, fixture.BytesPerRecord, attributes));
                 return (self, [extension | ((ulong)(MftRecordBytes.Sequence - 1) << 48), MftFixture.Reference(extension)]);
 
             case ListMismatch.ListNamesItsOwnRecordAsItWas:
@@ -494,7 +506,7 @@ public static class MftListedFiles
                 break;
         }
 
-        fixture.Add(extension, MftRecordBytes.Compose(isDirectory: false, owner, sequence, attributes));
+        fixture.Add(extension, MftRecordBytes.Compose(isDirectory: false, owner, sequence, fixture.BytesPerRecord, attributes));
         return (self, [MftFixture.Reference(extension)]);
     }
 
@@ -502,11 +514,13 @@ public static class MftListedFiles
     /// A base record keeping its name and its dates, with a list naming the record as
     /// <paramref name="self"/> for those and <paramref name="elsewhere"/> for the rest.
     /// </summary>
-    private static byte[] ListingFile(ulong self, uint parent, string name, IReadOnlyList<ListedAttribute> elsewhere) =>
+    private static byte[] ListingFile(
+        int bytesPerRecord, ulong self, uint parent, string name, IReadOnlyList<ListedAttribute> elsewhere) =>
         MftRecordBytes.Compose(
             isDirectory: false,
             baseReference: 0,
             MftRecordBytes.Sequence,
+            bytesPerRecord,
             t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
             t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
             t => MftAttributeBytes.WriteAttributeList(t, ListOf(self, elsewhere)));
@@ -519,10 +533,11 @@ public static class MftListedFiles
     ];
 
     /// <summary>An extension record holding one piece of <paramref name="owner"/>'s unnamed <c>$DATA</c>.</summary>
-    private static byte[] DataPiece(uint owner, long allocated, long logical, long startVirtualCluster) =>
+    private static byte[] DataPiece(int bytesPerRecord, uint owner, long allocated, long logical, long startVirtualCluster) =>
         MftRecordBytes.Compose(
             isDirectory: false,
             MftFixture.Reference(owner),
             MftRecordBytes.Sequence,
+            bytesPerRecord,
             t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster));
 }

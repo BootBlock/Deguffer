@@ -12,14 +12,11 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class FixtureMftSource(
     IReadOnlyList<byte[]> records,
-    int bytesPerSector,
     int bytesPerRecord,
     long unreadableFrom,
     int bytesPerCluster,
     IReadOnlyDictionary<long, byte[]> clusters) : IMftSource
 {
-    public int BytesPerSector => bytesPerSector;
-
     public int BytesPerRecord => bytesPerRecord;
 
     public int BytesPerCluster => bytesPerCluster;

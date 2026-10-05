@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -73,40 +71,36 @@ internal static class MftExtensionReader
         // Neither product can overflow: the length is capped at MftAttributeList.MaximumLength,
         // and a cluster is at most 2 MiB.
         var wanted = (length + clusterBytes - 1) / clusterBytes * clusterBytes;
-        var buffer = ArrayPool<byte>.Shared.Rent(wanted);
 
-        try
+        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
+        using var buffer = new VolumeReadBuffer(wanted);
+        var clusters = buffer.Span;
+        var filled = 0;
+
+
+        foreach (var run in runs)
         {
-            var filled = 0;
-
-            foreach (var run in runs)
+            if (filled == wanted)
             {
-                if (filled == wanted)
-                {
-                    break;
-                }
-
-                if (run.IsSparse)
-                {
-                    return null;
-                }
-
-                var take = (int)Math.Min(run.ClusterCount, (wanted - filled) / clusterBytes) * clusterBytes;
-
-                if (!source.TryReadClusters(run.StartCluster, buffer.AsSpan(filled, take)))
-                {
-                    return null;
-                }
-
-                filled += take;
+                break;
             }
 
-            return filled == wanted ? MftAttributeList.TryReadEntries(buffer.AsSpan(0, length)) : null;
+            if (run.IsSparse)
+            {
+                return null;
+            }
+
+            var take = (int)Math.Min(run.ClusterCount, (wanted - filled) / clusterBytes) * clusterBytes;
+
+            if (!source.TryReadClusters(run.StartCluster, clusters.Slice(filled, take)))
+            {
+                return null;
+            }
+
+            filled += take;
         }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
+
+        return filled == wanted ? MftAttributeList.TryReadEntries(clusters[..length]) : null;
     }
 
     private static void ReadExtensionRecords(
@@ -174,7 +168,7 @@ internal static class MftExtensionReader
                 var offset = (int)(segment.Record - first) * bytesPerRecord;
 
                 batch.Slice(offset, bytesPerRecord).CopyTo(scratch);
-                owner.Absorb(scratch, source.BytesPerSector, segment, needs);
+                owner.Absorb(scratch, segment, needs);
             }
         }
     }

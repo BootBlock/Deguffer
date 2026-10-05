@@ -23,8 +23,6 @@ public sealed partial class VolumeMftSource : IMftSource
         _extents = extents;
     }
 
-    public int BytesPerSector => _geometry.BytesPerSector;
-
     public int BytesPerRecord => _geometry.BytesPerFileRecord;
 
     public long RecordCount => _extents.DataSize / _geometry.BytesPerFileRecord;
@@ -89,20 +87,23 @@ public sealed partial class VolumeMftSource : IMftSource
 
     private static VolumeMftSource? Initialise(SafeFileHandle handle, ref FallbackReason reason)
     {
-        Span<byte> boot = stackalloc byte[512];
+        // Sized to the largest sector, not to the 512 bytes the boot sector occupies, because the
+        // sector size is not known until this read has succeeded. Microsoft's rules for an unbuffered
+        // read ask for a whole number of sectors, which 512 bytes is not on a 4,096-byte-sector disk.
+        using var boot = new VolumeReadBuffer(BootReadBytes);
 
-        if (RandomAccess.Read(handle, boot, 0) != boot.Length
-            || !NtfsBootSector.TryParse(boot, out var geometry))
+        if (RandomAccess.Read(handle, boot.Span, 0) != boot.Length
+            || !NtfsBootSector.TryParse(boot.Span, out var geometry))
         {
             reason = FallbackReason.NotNtfsVolume;
             return null;
         }
 
-        var record0 = new byte[geometry.BytesPerFileRecord];
+        using var record0 = new VolumeReadBuffer(geometry.BytesPerFileRecord);
         var offset = geometry.MftStartCluster * geometry.BytesPerCluster;
 
-        if (RandomAccess.Read(handle, record0, offset) != record0.Length
-            || !MftExtentMap.TryRead(record0, geometry.BytesPerSector, geometry.BytesPerCluster, out var extents))
+        if (RandomAccess.Read(handle, record0.Span, offset) != record0.Length
+            || !MftExtentMap.TryRead(record0.Span, geometry.BytesPerCluster, out var extents))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
@@ -203,6 +204,9 @@ public sealed partial class VolumeMftSource : IMftSource
     }
 
     public void Dispose() => _volume.Dispose();
+
+    /// <summary>Internal so a test can hold it to every sector size the boot sector accepts.</summary>
+    internal const int BootReadBytes = NtfsBootSector.MaximumBytesPerSector;
 
     private const uint GenericRead = 0x8000_0000;
     private const uint FileShareRead = 0x0000_0001;

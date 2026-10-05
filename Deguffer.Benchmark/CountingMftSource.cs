@@ -11,8 +11,6 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal sealed class CountingMftSource(IMftSource inner) : IMftSource
 {
-    public int BytesPerSector => inner.BytesPerSector;
-
     public int BytesPerRecord => inner.BytesPerRecord;
 
     public long RecordCount => inner.RecordCount;
