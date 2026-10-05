@@ -60,10 +60,19 @@ public sealed class ProcessRunner(string workingDirectory) : IProcessRunner
         Path.Combine(environment.LocalAppData, "Deguffer", "tool-working-directory");
 
     /// <summary>The directory every tool this runner starts runs in.</summary>
-    public string WorkingDirectory => workingDirectory;
+    internal string WorkingDirectory => workingDirectory;
 
     public async Task<CommandOutcome> RunAsync(string fileName, string arguments, CancellationToken ct)
     {
+        // Windows gives an empty LocalAppData where no profile is loaded, and the folder composed
+        // from it is relative, so it would resolve against Deguffer's own directory: the folder
+        // this runner exists to keep tools out of.
+        if (!Path.IsPathFullyQualified(workingDirectory))
+        {
+            return new CommandOutcome(
+                -1, string.Empty, $"Not run, because the folder tools run in, '{workingDirectory}', is not a full path.");
+        }
+
         try
         {
             // Made on every run rather than once, so a folder removed while Deguffer is open is
@@ -89,6 +98,8 @@ public sealed class ProcessRunner(string workingDirectory) : IProcessRunner
         startInfo.RedirectStandardError = true;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = true;
+        // The plain form, because cmd.exe refuses an extended-length current directory, and the
+        // .cmd shims run through it. The folder is a short child of LocalAppData.
         startInfo.WorkingDirectory = workingDirectory;
 
         using var process = new Process { StartInfo = startInfo };

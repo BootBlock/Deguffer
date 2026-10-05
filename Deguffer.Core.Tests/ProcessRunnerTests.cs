@@ -66,10 +66,34 @@ public sealed class ProcessRunnerTests : IDisposable
         // A file where the folder belongs, so the folder cannot be made.
         var occupied = _temp.CreateFile(1, "occupied");
 
-        var outcome = await new ProcessRunner(Path.Combine(occupied, "tools")).RunAsync(shim, string.Empty, CancellationToken.None);
+        var folder = Path.Combine(occupied, "tools");
+        var refusal = Assert.Throws<IOException>(() => Directory.CreateDirectory(LongPath.Extended(folder)));
 
-        Assert.False(outcome.Succeeded);
+        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, CancellationToken.None);
+
         Assert.Equal(-1, outcome.ExitCode);
         Assert.False(File.Exists(marker), "The tool ran in a directory other than the one it was given.");
+
+        // The reason is the folder's, not the "directory name is invalid" a launch into a missing
+        // folder would give, so the step says what actually stopped it.
+        Assert.Equal(refusal.Message, outcome.StandardError);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(@"Deguffer\tool-working-directory")]
+    public async Task AFolderThatIsNotAFullPathFailsTheStepWithoutRunningTheTool(string folder)
+    {
+        // What WorkingDirectoryFor composes from the empty LocalAppData Windows gives where no profile
+        // is loaded. Resolved, it would be a folder under Deguffer's own working directory.
+        var marker = Path.Combine(_temp.Path, "ran");
+        var shim = Path.Combine(_temp.CreateDirectory("bin"), "tool.cmd");
+        File.WriteAllText(shim, $"@echo ran> \"{marker}\"\r\n");
+
+        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, CancellationToken.None);
+
+        Assert.Equal(-1, outcome.ExitCode);
+        Assert.False(File.Exists(marker), "The tool ran in a folder resolved against Deguffer's own directory.");
+        Assert.False(folder.Length > 0 && Directory.Exists(Path.GetFullPath(folder)), "A relative folder was made under Deguffer's own directory.");
     }
 }
