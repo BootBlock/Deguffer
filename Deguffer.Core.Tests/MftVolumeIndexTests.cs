@@ -191,17 +191,131 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
-    /// The file is real and its size is not in the base record, so the table cannot say how big
-    /// this subtree is. Returning a total anyway would report a cache short by whatever that file
-    /// holds — the same failure <see cref="MftVolumeIndexBuilder"/> refuses to commit when it
-    /// cannot read part of the table, arrived at one record later.
+    /// The file's size is not in its base record, so the table follows the record's
+    /// <c>$ATTRIBUTE_LIST</c> to the extension record that holds it. On a real volume this was the
+    /// whole of why the fast path declined: every one of 400 sampled records the index refused was
+    /// this shape, and the subtrees they sat in held about half the bytes measured.
     /// </summary>
     [Fact]
-    public void RefusesToTotalASubtreeHoldingAFileWhoseDataMovedToAnExtensionRecord()
+    public void TotalsASubtreeHoldingAFileWhoseDataMovedToAnExtensionRecord()
     {
         var index = Build(Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
-            .AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz"));
+            .AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(4096 + 8_388_608, size.Allocated);
+        Assert.Equal(4096 + 8_000_000, size.Logical);
+    }
+
+    /// <summary>
+    /// A list grown too large for its record is kept in clusters outside the table, which no record
+    /// read can reach. The size it leads to must arrive all the same.
+    /// </summary>
+    [Fact]
+    public void FollowsAnAttributeListKeptOutsideTheTable()
+    {
+        var index = Build(Tree()
+            .AddFileWithANonResidentAttributeList(
+                21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22, listCluster: 70_000));
+
+        Assert.Equal(8_000_000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// A sparse run in a list has no place on the disk, so the entries it should hold are not there
+    /// to be read, and a list missing them cannot say where the size went.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalAFileWhoseAttributeListIsSparse()
+    {
+        var index = Build(Tree()
+            .AddFileWithASparseAttributeList(21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// A stream fragmented across several extension records states its sizes only in the piece
+    /// starting at cluster 0. Here that piece is in the later record, and the earlier one holds a
+    /// continuation whose size fields are zero, so a reader that took sizes from the first piece it
+    /// met would report a large file as empty.
+    /// </summary>
+    [Fact]
+    public void TakesTheSizesFromThePieceStartingAtClusterZero()
+    {
+        var index = Build(Tree()
+            .AddFileWithDataSplitAcrossExtensionRecords(
+                21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, continuation: 22, start: 23));
+
+        var size = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(8_388_608, size.Allocated);
+        Assert.Equal(8_000_000, size.Logical);
+    }
+
+    /// <summary>
+    /// An extension record that no longer matches its owner's list is a file caught mid-change on a
+    /// live volume. Its sizes may belong to something else entirely, so the subtree is not totalled.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToTotalASubtreeWhoseExtensionRecordChangedMidRead(ListMismatch mismatch)
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, mismatch));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// A long-named file keeps its Win32 name and its 8.3 alias in its own record, and only its size
+    /// in an extension record. When that record is caught mid-change, the size is what was lost: the
+    /// file still has its place, its subtree declines, and the rest of the volume is still indexed.
+    /// Treating the lost size as a lost name would give the whole volume up over one growing file.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryExtensionRecordMismatch))]
+    public void LosesOnlyTheSizeOfALongNamedFileWhoseExtensionRecordChangedMidRead(ListMismatch mismatch)
+    {
+        var index = Build(Tree()
+            .AddFileWithDataInAnExtensionRecord(
+                21, Cache, "fragmented-archive.tgz", allocated: 4096, logical: 4096, extension: 22, mismatch, alias: "FRAGME~1.TGZ")
+            .AddFile(23, Sibling, "settings.json", allocated: 1024, logical: 1000));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.Equal(1000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// The same file whose list names its own record as it was is a list from another moment, and
+    /// what it says about the names cannot be trusted either. Its Win32 name could have been
+    /// displaced, so the file cannot be placed and the index is refused.
+    /// </summary>
+    [Fact]
+    public void RefusesToPlaceALongNamedFileWhoseListIsFromAnotherMoment()
+    {
+        using var source = Tree()
+            .AddFileWithDataInAnExtensionRecord(
+                21, Cache, "fragmented-archive.tgz", allocated: 4096, logical: 4096, extension: 22,
+                ListMismatch.ListNamesItsOwnRecordAsItWas, alias: "FRAGME~1.TGZ")
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// A list that cannot be read in full may have lost the very entry naming where the size went,
+    /// so it is not read as a shorter list.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalASubtreeHoldingAFileWithAMalformedAttributeList()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithAMalformedAttributeList(21, Cache, "fragmented.tgz"));
 
         Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
     }
@@ -235,7 +349,7 @@ public class MftVolumeIndexTests
     public void StillTotalsSubtreesThatDoNotHoldTheUnestablishedFile()
     {
         var index = Build(Tree()
-            .AddFileWithDataInAnExtensionRecord(20, Cache, "fragmented.tgz")
+            .AddFileWithDataInAnExtensionRecord(20, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence)
             .AddFile(21, Sibling, "settings.json", allocated: 1024, logical: 1000));
 
         Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
@@ -267,27 +381,184 @@ public class MftVolumeIndexTests
     public void StillTotalsADirectoryWhoseOwnAttributesMovedToAnExtensionRecord()
     {
         var index = Build(Tree()
-            .AddDirectoryWithAttributesInAnExtensionRecord(30, Cache, "many-entries")
+            .AddDirectoryWithAttributesInAnExtensionRecord(30, Cache, "many-entries", extension: 31)
             .AddFile(20, 30, "a.tgz", allocated: 4096, logical: 4096));
 
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
 
     /// <summary>
-    /// A base record whose names moved into extension records is skipped, not refused. NTFS does
-    /// this once a file has enough hard links to overflow its own record, and a system volume is
-    /// full of them — refusing would take the fast path off the volume that matters most, every
-    /// time, for a shape that is not a fault.
+    /// A base record whose name moved into an extension record is placed by that name, and counted.
+    /// NTFS does this once a file has enough hard links to overflow its own record, and a system
+    /// volume is full of them. Skipping one left the directory holding it short, with nothing to
+    /// say so.
     /// </summary>
     [Fact]
-    public void BuildsAnIndexFromATableHoldingRecordsWhoseNamesLiveElsewhere()
+    public void CountsAFileWhoseNameLivesInAnExtensionRecord()
     {
         var index = Build(Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
-            .AddRecordWithNamesInExtensionRecords(21));
+            .AddFileWithItsNameInAnExtensionRecord(21, Cache, "linked.dll", allocated: 8192, logical: 8000, extension: 22));
 
-        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+        Assert.Equal(4096 + 8192, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
+
+    /// <summary>
+    /// A name found in an extension record is ranked exactly as one in the base record. Here the
+    /// base record keeps only the 8.3 alias, under another directory, and the Win32 name in the
+    /// extension record outranks it, so the file is counted where its Win32 name puts it and only
+    /// there.
+    /// </summary>
+    [Fact]
+    public void PlacesAFileByItsBestNameWhereverThatNameIsKept()
+    {
+        var index = Build(Tree()
+            .AddFileWithItsBetterNameInAnExtensionRecord(
+                21, aliasParent: Sibling, "LINKED~1.DLL", parent: Cache, "linked.dll", logical: 5000, extension: 22));
+
+        Assert.Equal(5000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Equal(0, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// A file whose name is in an extension record caught mid-change cannot be placed, and it could
+    /// belong to any directory on the volume. Skipping it would let every one of them total short
+    /// with nothing to say so, so the index is refused rather than built around it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToBuildAnIndexWhenAFilesNameIsInAnExtensionRecordThatChangedMidRead(ListMismatch mismatch)
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithItsNameInAnExtensionRecord(21, Cache, "linked.dll", allocated: 8192, logical: 8000, extension: 22, mismatch)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// The base record still holds a name here, its 8.3 alias. The Win32 name the list points to
+    /// could not be established, and it would have put the file in another directory, so placing
+    /// the file by its alias is a guess at where it belongs. The index is refused as for a file
+    /// with no name at all.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToPlaceAFileByItsAliasWhenItsBetterNameCannotBeEstablished(ListMismatch mismatch)
+    {
+        using var source = Tree()
+            .AddFileWithItsBetterNameInAnExtensionRecord(
+                21, aliasParent: Sibling, "LINKED~1.DLL", parent: Cache, "linked.dll", logical: 5000, extension: 22, mismatch)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
+    /// A name in the best namespace cannot be displaced by another, and a tie goes to the base
+    /// record, so a file whose own record holds one is placed without reading its other links at
+    /// all. A stale extension record holding one of them costs the file nothing.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryExtensionRecordMismatch))]
+    public void PlacesAFileByTheNameItsOwnRecordHoldsWhateverItsOtherLinksSay(ListMismatch mismatch)
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
+                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22, mismatch));
+
+        Assert.Equal(5000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Equal(0, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// A list that names the file's own record as it was before that record was reused is a list
+    /// from another moment. Nothing it says about where the size went can be trusted, even though
+    /// the name it leaves in the base record places the file.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalAFileWhoseListNamesItsOwnRecordAsItWas()
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
+                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22,
+                ListMismatch.ListNamesItsOwnRecordAsItWas));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// A junction's reparse point found in its extension record makes it a link: it holds nothing
+    /// here, its folder still totals, and a question about the link itself goes to the walk.
+    /// </summary>
+    [Fact]
+    public void TreatsADirectoryAsALinkWhenItsReparsePointIsInAnExtensionRecord()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddDirectoryLinkWithItsReparsePointInAnExtensionRecord(30, Cache, "moved", extension: 31));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "moved"]));
+    }
+
+    /// <summary>
+    /// Where that extension record cannot be established, nothing says whether the directory is a
+    /// link. Read as an ordinary directory it would have no children and total nothing, and a
+    /// cache moved to another drive behind a junction would be reported empty — so the answer is
+    /// unknown, for it and for the folder holding it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToTotalADirectoryWhoseReparsePointCannotBeEstablished(ListMismatch mismatch)
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddDirectoryLinkWithItsReparsePointInAnExtensionRecord(30, Cache, "moved", extension: 31, mismatch)
+            .AddFile(23, Sibling, "settings.json", allocated: 1024, logical: 1000));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "moved"]));
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.Equal(1000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// An extension record refused for lacking what it was read for counts for nothing, whatever
+    /// else it holds. Here it holds a better-ranked name in the volume root and a link's reparse
+    /// point: believed, they would move the file out of its cache and make it a link that occupies
+    /// nothing, and the cache would total short with nothing to say so.
+    /// </summary>
+    [Fact]
+    public void BelievesNothingFromAnExtensionRecordItRefused()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddLongNamedFileWhoseSizeRecordHoldsSomethingElse(21, Cache, "fragmented-archive.tgz", "FRAGME~1.TGZ", extension: 22));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// A junction whose own record holds its reparse point is a link however unreadable its list
+    /// is, so its folder still totals and only a question about the link itself goes to the walk.
+    /// </summary>
+    [Fact]
+    public void KeepsALinkItsOwnRecordProvesWhenItsListCannotBeRead()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddDirectoryLinkWithAMalformedAttributeList(30, Cache, "moved"));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "moved"]));
+    }
+
+    public static TheoryData<ListMismatch> EveryMismatch() => [.. Enum.GetValues<ListMismatch>()];
+
+    /// <summary>Every way the extension record itself can be stale, as opposed to the list naming it.</summary>
+    public static TheoryData<ListMismatch> EveryExtensionRecordMismatch() =>
+        [.. Enum.GetValues<ListMismatch>().Where(m => m != ListMismatch.ListNamesItsOwnRecordAsItWas)];
 
     /// <summary>
     /// The same record without an attribute list is a different thing: in use, holding data,

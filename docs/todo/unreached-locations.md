@@ -430,7 +430,8 @@ piece of NTFS work with its own fixture requirements rather than a correction �
 [after-the-scanner.md](after-the-scanner.md) items 6 and 7, which also carry the per-volume index
 cost. Item 8 there carries a third thing this pass established and did not fix: a root probed by
 name cannot tell "not there" from "I was refused", so a provider reports a cache as not installed
-when the directory is on disk with content in it.
+when the directory is on disk with content in it. (Item 6 has since landed, and its outcome records
+the declines it removed.)
 
 ### pnpm — Tier 1, researched ✅ done
 

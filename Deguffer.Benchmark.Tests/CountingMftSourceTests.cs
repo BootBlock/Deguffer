@@ -39,5 +39,10 @@ public sealed class CountingMftSourceTests
     }
 
     private static FixtureMftSource Table(int records, long unreadableFrom) =>
-        new([.. Enumerable.Range(0, records).Select(_ => new byte[BytesPerRecord])], BytesPerRecord, unreadableFrom);
+        new(
+            [.. Enumerable.Range(0, records).Select(_ => new byte[BytesPerRecord])],
+            BytesPerRecord,
+            unreadableFrom,
+            bytesPerCluster: 4096,
+            clusters: new Dictionary<long, byte[]>());
 }

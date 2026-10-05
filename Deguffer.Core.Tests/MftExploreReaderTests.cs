@@ -150,26 +150,46 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
-    /// A record whose <c>$FILE_NAME</c> lives in an extension record is a real file, and the tree
-    /// says its totals are short because of it.
+    /// A file whose <c>$FILE_NAME</c> lives in an extension record is drawn under that name, and the
+    /// total is exact. NTFS moves the name out once a file has enough hard links to overflow its own
+    /// record, which a system volume is full of.
     ///
-    /// <para>NTFS moves the name out once a file has enough hard links to overflow its own record —
-    /// the shape the fixture describes as one "a system volume is full of". The parser reports it as
-    /// its own outcome rather than folding it in with a free record, because the two look identical
-    /// to a caller reading only "nothing to place": one holds nothing, and the other holds bytes
-    /// this reader cannot reach. Counting the second as the first is how a whole drive comes to be
-    /// reported short with no caveat at all.</para>
-    ///
-    /// <para>The index, whose numbers decide deletions, still skips it silently. That compromise
-    /// predates Explore and is <c>after-the-scanner.md</c> item 6; what is asserted here is that the
-    /// picture is honest about it and that the index's own answer did not change.</para>
+    /// <para>The caveat is asserted absent as well as the file present. The reserved records every
+    /// table carries raise none — see <see cref="TheReservedRecordsEveryNtfsVolumeCarriesRaiseNoCaveat"/>
+    /// — so a reader that drew the file and still said the drive was short would be wrong in a way
+    /// the total alone does not show. The index, read from the same table, agrees.</para>
     /// </summary>
     [Fact]
-    public void SaysItIsShortWhenAFilesNameLivesInAnExtensionRecord()
+    public void DrawsAFileWhoseNameLivesInAnExtensionRecord()
     {
         var fixture = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
-            .AddRecordWithNamesInExtensionRecords(21);
+            .AddFileWithItsNameInAnExtensionRecord(21, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: 22);
+
+        using var source = fixture.Build();
+        var tree = WholeVolume(source);
+
+        Assert.Equal(7000, tree.TotalBytes);
+        Assert.Equal(@"C:\Users\testuser\.npm-cache\linked.dll", tree.PathOf(21));
+        Assert.False(tree.HasUnknownSizes, "every record was placed and the total was still called a lower bound");
+
+        using var strict = fixture.Build();
+        Assert.True(MftVolumeIndexBuilder.TryBuild(strict, out var index));
+        Assert.Equal(7000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// Where the extension record holding the name was caught mid-change, the file cannot be placed,
+    /// and the picture keeps going and says its total is a lower bound. The index, whose numbers
+    /// decide deletions, refuses the same table.
+    /// </summary>
+    [Fact]
+    public void SaysItIsShortWhenAFilesNameIsInAnExtensionRecordThatChangedMidRead()
+    {
+        var fixture = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .AddFileWithItsNameInAnExtensionRecord(
+                21, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: 22, ListMismatch.ItsOwnSequence);
 
         using var source = fixture.Build();
         var tree = WholeVolume(source);
@@ -177,10 +197,36 @@ public class MftExploreReaderTests
         Assert.Equal(4000, tree.TotalBytes);
         Assert.True(tree.HasUnknownSizes, "a real file was skipped and the total was called exact");
 
-        // The index treats it exactly as it always has: skipped, and the volume still usable.
         using var strict = fixture.Build();
-        Assert.True(MftVolumeIndexBuilder.TryBuild(strict, out var index));
-        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+        Assert.False(MftVolumeIndexBuilder.TryBuild(strict, out _));
+    }
+
+    /// <summary>
+    /// Records whose attributes continue elsewhere are handed on after the rest of the table, under
+    /// numbers the pass has already gone past. A progress count that followed them would run
+    /// backwards on screen.
+    ///
+    /// <para>The table runs past two reporting intervals, and the held-back record sits on the
+    /// first, so it arrives after the second has been reported. A smaller table cannot show it:
+    /// progress is reported once an interval, and a held-back record anywhere else is never
+    /// reported at all.</para>
+    /// </summary>
+    [Fact]
+    public void ReportsProgressThatOnlyMovesForward()
+    {
+        const uint Interval = 65_536;
+
+        using var source = Tree()
+            .AddFileWithItsNameInAnExtensionRecord(Interval, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: Interval + 1)
+            .AddFile((2 * Interval) + 1, Cache, "late.tgz", allocated: 4096, logical: 4000)
+            .Build();
+        var reported = new List<long>();
+
+        var tree = MftExploreReader.Read(source, Root, [], reported.Add, default).Tree!;
+
+        Assert.Equal(7000, tree.TotalBytes);
+        Assert.Contains(2 * Interval, reported);
+        Assert.Equal(reported.Order(), reported);
     }
 
     /// <summary>
@@ -279,23 +325,43 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
-    /// A record whose <c>$DATA</c> lives in an extension record carries no size at all, which is not
-    /// a size of zero. On a real volume this is ordinary rather than a fault — every fragmented file
-    /// sampled during §5.5's measurement was in this shape — so the answer has to be a total that
-    /// says it is a lower bound, and not the absence of a total.
+    /// A file whose attributes continue elsewhere is completed after the rest of the table has been
+    /// read. Where the table stops short of its end, what was read before the stop is still drawn,
+    /// that file included, and its size is the one its extension record states.
+    /// </summary>
+    [Fact]
+    public void CompletesAFileReadBeforeARegionThatCannotBeRead()
+    {
+        using var source = Tree()
+            .AddFileWithDataInAnExtensionRecord(20, Cache, "fragmented.tgz", allocated: 8192, logical: 8000, extension: 21)
+            .AddFile(23, Cache, "unreachable.tgz", allocated: 4096, logical: 4000)
+            .UnreadableFrom(22)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(@"C:\Users\testuser\.npm-cache\fragmented.tgz", tree.PathOf(20));
+        Assert.Equal(8000, tree.TotalBytes);
+        Assert.False(tree.HasUnknownSizeBelow(20));
+        Assert.True(tree.HasUnknownSizes, "the table stopped short and the total was called exact");
+    }
+
+    /// <summary>
+    /// A file whose <c>$DATA</c> is in an extension record caught mid-change carries no size at all,
+    /// which is not a size of zero. The answer has to be a total that says it is a lower bound, and
+    /// not the absence of a total.
     ///
     /// <para>The unknown has to reach every level above it, and stop at the branch that does not
     /// contain it: a sibling directory fully described is still fully described. The chain is what
-    /// is asserted rather than the root's own flag, which every table raises regardless — see
-    /// <see cref="KeepsGoingPastARecordTheIndexWouldAbandonTheVolumeOver"/>.</para>
+    /// is asserted rather than the root's own flag, which says only that something below it is
+    /// unknown.</para>
     /// </summary>
     [Fact]
     public void CarriesARecordWithNoEstablishedSizeUpItsWholeParentChain()
     {
         using var source = Tree()
             .AddFile(20, Nested, "known.tgz", allocated: 4096, logical: 4000)
-            .AddFileWithDataInAnExtensionRecord(21, Nested, "fragmented.tgz")
-            .AddExtensionRecord(22, baseRecordNumber: 21)
+            .AddFileWithDataInAnExtensionRecord(21, Nested, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence)
             .AddFile(23, Sibling, "settings.json", allocated: 1024, logical: 1000)
             .Build();
 
@@ -652,7 +718,8 @@ public class MftExploreReaderTests
     {
         using var source = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
-            .AddRecordWithNamesInExtensionRecords(21)
+            .AddFileWithItsNameInAnExtensionRecord(
+                21, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: 22, ListMismatch.OwnerNumber)
             .Build();
 
         var tree = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default).Tree!;
