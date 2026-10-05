@@ -722,9 +722,12 @@ and the result says which of the four each line belongs to rather than smoothing
    those exits by itself while a user is signed in, so this negative is exact, and a run that lost
    one fails and names it. Both are taken from the snapshot before the action, because §7.2.1 does
    not open five hundred processes to build a survivor list either. The compositor is every process
-   named `dwm.exe` in that snapshot whose session is Deguffer's own, which is one or two more
-   processes asked about at the moment of the action, and one whose session will not answer is kept
-   rather than dropped, because a fact nobody established is not a pass.
+   named `dwm.exe` in that snapshot whose session, as the snapshot records it, is Deguffer's own. The
+   session comes from the process table and never from opening the compositor, because no
+   compositor opens to an unelevated Deguffer, and asking that way would keep every other session's
+   compositor and fail a run when another user signs out. Where Deguffer's own session will not
+   answer, every compositor is kept rather than dropped, because a fact nobody established is not a
+   pass.
 
    **The set is narrower than the refusal table above, and deliberately.** The table refuses
    Deguffer's own process tree and every `explorer.exe` because closing one of those would take the

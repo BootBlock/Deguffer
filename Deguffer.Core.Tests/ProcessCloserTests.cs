@@ -70,11 +70,14 @@ public sealed class ProcessCloserTests
     private static ProcessMemory Target(MemorySnapshot snapshot) =>
         snapshot.Processes.Processes.Single(p => p.ProcessId == TargetId);
 
-    /// <summary>Windows as it answers about a machine nothing has changed: the target holds its window.</summary>
+    /// <summary>
+    /// Windows as it answers about a machine nothing has changed: the target holds its window, and the
+    /// compositor will not open, as no compositor does to an unelevated Deguffer.
+    /// </summary>
     private static FakeProcessCalls Processes(FakeProcess? target = null) =>
         new FakeProcessCalls()
             .With(target ?? new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated })
-            .With(new FakeProcess { ProcessId = Compositor, CreatedAt = CompositorCreated })
+            .With(new FakeProcess { ProcessId = Compositor, CreatedAt = CompositorCreated, OpenRefused = true })
             .With(new FakeProcess { ProcessId = Shell, CreatedAt = ShellCreated });
 
     private static FakeWindowCalls Desktop(params FakeWindow[] windows)
@@ -165,6 +168,46 @@ public sealed class ProcessCloserTests
         Assert.Equal(VerificationOutcome.Survived, outcomes[$"dwm.exe (process {Compositor})"]);
         Assert.Equal(VerificationOutcome.ExpectedExit, outcomes[$"editor-helper.exe (process {Child})"]);
         Assert.Equal(VerificationOutcome.UnclaimedExit, outcomes[$"svchost.exe (process {Host})"]);
+    }
+
+    /// <summary>
+    /// Another user signing out while the watch runs takes their session's compositor with it. That
+    /// compositor is no part of this desktop, so its going fails nothing, although it will not open
+    /// to say which session it was in.
+    /// </summary>
+    [Fact]
+    public async Task AnotherSessionsCompositorGoingDuringTheWatchFailsNothing()
+    {
+        const int OtherCompositor = 121;
+
+        var builder = new MemorySnapshotBuilder();
+
+        foreach (var process in Before().Processes.Processes)
+        {
+            builder.Process(
+                process.ProcessId,
+                process.ParentProcessId,
+                process.Name,
+                process.PrivateWorkingSet!.Value / MemorySnapshotBuilder.MiB,
+                process.CreationTime!.Value);
+        }
+
+        var before = builder
+            .Process(OtherCompositor, 1, "dwm.exe", 90, created: 7, FakeProcessCalls.OtherSession)
+            .Service("Thing", Host)
+            .Build();
+        var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        var processes = Processes(target).With(new FakeProcess { ProcessId = OtherCompositor, CreatedAt = 7, OpenRefused = true });
+        var clock = new ManualTimeProvider();
+        var closer = Closer(processes, Desktop(Window()), new QueuedMemorySource(before, After(Shell, Compositor, Own)), clock);
+
+        var attempt = await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
+        var report = Assert.IsType<CloseReport>(attempt.Report);
+
+        Assert.True(report.Verification.Passed);
+        Assert.Equal(
+            VerificationOutcome.Survived,
+            report.Verification.Checks.Single(c => c.Subject == $"dwm.exe (process {Compositor})").Outcome);
     }
 
     /// <summary>
@@ -384,8 +427,8 @@ public sealed class ProcessCloserTests
 
     /// <summary>
     /// §7.2: nothing is asked of Windows for a row nobody selected. A close opens the target it acts
-    /// on, the shell whose identity §5.6 has to confirm, and the compositor whose session decides
-    /// whether it is this session's. No other process is opened, however many the machine holds.
+    /// on and the shell whose identity §5.6 has to confirm. The compositor's session comes from the
+    /// read, so it is not opened. No other process is opened, however many the machine holds.
     /// </summary>
     [Fact]
     public async Task OnlyTheTargetAndTheDesktopAreOpened()
@@ -398,7 +441,7 @@ public sealed class ProcessCloserTests
 
         await ClosedWhileWatchedAsync(closer, Target(before), target, clock);
 
-        Assert.Equal([TargetId, Shell, Compositor], processes.Opened);
+        Assert.Equal([TargetId, Shell], processes.Opened);
     }
 
     /// <summary>

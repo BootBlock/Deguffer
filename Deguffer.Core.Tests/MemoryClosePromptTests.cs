@@ -12,7 +12,7 @@ namespace Deguffer.Core.Tests;
 public sealed class MemoryClosePromptTests
 {
     private static readonly ProcessMemory Target =
-        new(4321, ParentProcessId: 900, "editor.exe", CommitCharge: 200, PrivateWorkingSet: 100, CreationTime: 10);
+        new(4321, ParentProcessId: 900, "editor.exe", SessionId: 1, CommitCharge: 200, PrivateWorkingSet: 100, CreationTime: 10);
 
     /// <summary>
     /// §7.2.1: the dialog names the program and its identifier. The identifier is what tells two

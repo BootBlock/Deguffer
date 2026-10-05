@@ -39,9 +39,9 @@ internal static class DesktopProcesses
     /// <param name="before">The read taken as the action began, which is where both are named from.</param>
     /// <param name="shell">What Windows says about the shell window's owner.</param>
     /// <param name="processes">
-    /// Where each candidate is opened, to confirm the shell's identity and to ask a compositor which
-    /// session it runs in. One or two processes are opened here, at the moment of the action and
-    /// never for a row nobody selected (§7.2).
+    /// Where the shell's owner is opened to confirm its identity, and where Deguffer's own session is
+    /// asked. That one process is opened at the moment of the action and never for a row nobody
+    /// selected (§7.2).
     /// </param>
     public static DesktopSet Of(
         ProcessTree before,
@@ -74,7 +74,7 @@ internal static class DesktopProcesses
             ct.ThrowIfCancellationRequested();
 
             if (!candidate.Name.Equals(CompositorName, StringComparison.OrdinalIgnoreCase)
-                || InAnotherSession(candidate, ownSession, processes))
+                || InAnotherSession(candidate, ownSession))
             {
                 continue;
             }
@@ -117,30 +117,17 @@ internal static class DesktopProcesses
     }
 
     /// <summary>
-    /// Whether Windows says outright that this process belongs to another session.
+    /// Whether the read says outright that this process belongs to another session.
     ///
-    /// <para>A session that will not answer keeps the process, because a fact nobody established is
-    /// not grounds for dropping a process out of the one assertion this action can make. Only the
-    /// session is asked, through the handle it takes to ask: the whole fact set would open the same
-    /// process to enumerate every window on the desktop, for one field.</para>
+    /// <para>The session is the read's, never one asked of the process. Every compositor refuses an
+    /// unelevated Deguffer a handle, so asking it would make "will not answer" the ordinary case, and
+    /// every other session's compositor would enter the survivor set. A sign-out in that session
+    /// during a watch with no deadline would then fail a run in which nothing went wrong.</para>
+    ///
+    /// <para>Where Deguffer's own session will not answer, nothing can be said to be another, so every
+    /// compositor is kept: a fact nobody established is not grounds for dropping a process out of the
+    /// one assertion this action can make.</para>
     /// </summary>
-    private static bool InAnotherSession(ProcessMemory candidate, uint? ownSession, IProcessCalls processes)
-    {
-        if (ownSession is not { } ours)
-        {
-            return false;
-        }
-
-        var opening = processes.Open(candidate.ProcessId);
-
-        if (opening.Process is not { } process)
-        {
-            return false;
-        }
-
-        using (process)
-        {
-            return process.SessionId() is { } theirs && theirs != ours;
-        }
-    }
+    private static bool InAnotherSession(ProcessMemory candidate, uint? ownSession) =>
+        ownSession is { } ours && candidate.SessionId != ours;
 }

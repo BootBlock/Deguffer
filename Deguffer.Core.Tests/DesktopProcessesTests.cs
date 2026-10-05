@@ -120,63 +120,56 @@ public sealed class DesktopProcessesTests
         Assert.Empty(desktop.Unestablished);
     }
 
+    /// <summary>Two compositors, one in another session, as a second signed-in user leaves the machine.</summary>
+    private static MemorySnapshot TwoSessions() =>
+        new MemorySnapshotBuilder()
+            .Process(Shell, 1, "explorer.exe", 200, ShellCreated)
+            .Process(Compositor, 1, "dwm.exe", 150, CompositorCreated)
+            .Process(OtherCompositor, 1, "dwm.exe", 90, OtherCompositorCreated, FakeProcessCalls.OtherSession)
+            .Build();
+
+    /// <summary>A compositor as an unelevated Deguffer meets one: it will not open (§7.2's measurement).</summary>
+    private static FakeProcess Refusing(int processId, long created) =>
+        new() { ProcessId = processId, CreatedAt = created, OpenRefused = true };
+
     /// <summary>
     /// Another session's compositor is not this desktop, and a close in this session cannot end it
-    /// either way. Dropping it keeps a signed-out user's compositor from failing a run in which
-    /// nothing went wrong.
+    /// either way. Dropping it keeps another user's sign-out from failing a run in which nothing went
+    /// wrong. Both compositors refuse to open, as they do on a real machine, so the session can only
+    /// have come from the read.
     /// </summary>
     [Fact]
     public void ACompositorInAnotherSessionIsNotThisDesktop()
     {
-        var machine = new MemorySnapshotBuilder()
-            .Process(Shell, 1, "explorer.exe", 200, ShellCreated)
-            .Process(Compositor, 1, "dwm.exe", 150, CompositorCreated)
-            .Process(OtherCompositor, 1, "dwm.exe", 90, OtherCompositorCreated)
-            .Build();
+        var processes = Windows(
+            Living(Shell, ShellCreated),
+            Refusing(Compositor, CompositorCreated),
+            Refusing(OtherCompositor, OtherCompositorCreated));
 
-        var desktop = Of(
-            machine,
-            ShellOwner.Is(Shell),
-            Windows(
-                Living(Shell, ShellCreated),
-                Living(Compositor, CompositorCreated),
-                new FakeProcess
-                {
-                    ProcessId = OtherCompositor,
-                    CreatedAt = OtherCompositorCreated,
-                    Session = FakeProcessCalls.OtherSession,
-                }));
+        var desktop = Of(TwoSessions(), ShellOwner.Is(Shell), processes);
 
         Assert.Equal([Shell, Compositor], desktop.Processes.Select(p => p.ProcessId));
         Assert.Empty(desktop.Unestablished);
+        Assert.Equal([Shell], processes.Opened);
     }
 
     /// <summary>
-    /// §7.2.1: "one whose session will not answer is kept rather than dropped, because a fact nobody
-    /// established is not a pass". Keeping it can only add an assertion, and the assertion it adds is
-    /// about a process no close can end.
+    /// §7.2.1: "where Deguffer's own session will not answer, every compositor is kept rather than
+    /// dropped, because a fact nobody established is not a pass". Keeping them can only add
+    /// assertions, each about a process no close can end.
     /// </summary>
-    [Theory]
-    [InlineData(true)]  // Windows will not open it at all.
-    [InlineData(false)] // It opens, and will not say which session it is in.
-    public void ACompositorWhoseSessionWillNotAnswerIsKept(bool refusesToOpen)
+    [Fact]
+    public void EveryCompositorIsKeptWhereDegufferCannotSayWhichSessionIsItsOwn()
     {
-        var machine = Machine();
+        var processes = Windows(
+            Living(Shell, ShellCreated),
+            Refusing(Compositor, CompositorCreated),
+            Refusing(OtherCompositor, OtherCompositorCreated));
+        processes.OwnFacts = processes.OwnFacts with { SessionId = null };
 
-        var desktop = Of(
-            machine,
-            ShellOwner.Is(Shell),
-            Windows(
-                Living(Shell, ShellCreated),
-                new FakeProcess
-                {
-                    ProcessId = Compositor,
-                    CreatedAt = CompositorCreated,
-                    OpenRefused = refusesToOpen,
-                    Session = null,
-                }));
+        var desktop = Of(TwoSessions(), ShellOwner.Is(Shell), processes);
 
-        Assert.Contains(desktop.Processes, p => p.ProcessId == Compositor);
+        Assert.Equal([Shell, Compositor, OtherCompositor], desktop.Processes.Select(p => p.ProcessId));
         Assert.Empty(desktop.Unestablished);
     }
 
