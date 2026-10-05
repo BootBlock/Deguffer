@@ -22,10 +22,10 @@ internal readonly record struct MftRecordHeader(int FirstAttributeOffset, int Us
     /// it turned out to be.
     ///
     /// The in-use flag is read before the fixup runs, which is safe — it sits at 0x16, nowhere near
-    /// a sector boundary — and necessary: a free record whose stale bytes fail the fixup is still
-    /// just a free record, and reporting it as unreadable would condemn a healthy table.
+    /// a fixup stride boundary — and necessary: a free record whose stale bytes fail the fixup is
+    /// still just a free record, and reporting it as unreadable would condemn a healthy table.
     /// </summary>
-    public static MftParseOutcome Read(Span<byte> record, int bytesPerSector, out MftRecordHeader header)
+    public static MftParseOutcome Read(Span<byte> record, out MftRecordHeader header)
     {
         header = default;
 
@@ -43,8 +43,7 @@ internal readonly record struct MftRecordHeader(int FirstAttributeOffset, int Us
         if (!UpdateSequenceArray.TryApply(
                 record,
                 BinaryPrimitives.ReadUInt16LittleEndian(record[0x04..]),
-                BinaryPrimitives.ReadUInt16LittleEndian(record[0x06..]),
-                bytesPerSector))
+                BinaryPrimitives.ReadUInt16LittleEndian(record[0x06..])))
         {
             return MftParseOutcome.Unreadable;
         }

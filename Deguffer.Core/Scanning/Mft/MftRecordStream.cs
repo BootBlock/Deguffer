@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -23,7 +21,7 @@ internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in
 /// <see cref="MftVolumeIndexBuilder"/> abandons the volume rather than report a total that is
 /// short, because its numbers decide deletions. <see cref="Exploring.MftExploreReader"/> keeps
 /// going and marks what it missed, because its numbers draw a picture. Written twice, the batching,
-/// the pooled buffer and the short-read rule would be written twice as well.</para>
+/// the aligned buffer and the short-read rule would be written twice as well.</para>
 /// </summary>
 internal static class MftRecordStream
 {
@@ -45,42 +43,36 @@ internal static class MftRecordStream
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(onRecord);
 
-        var batchBytes = RecordsPerBatch * source.BytesPerRecord;
-        var buffer = ArrayPool<byte>.Shared.Rent(batchBytes);
+        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
+        using var buffer = new VolumeReadBuffer(RecordsPerBatch * source.BytesPerRecord);
+        var batch = buffer.Span;
 
-        try
+        long next = 0;
+
+        while (next < count)
         {
-            long next = 0;
+            ct.ThrowIfCancellationRequested();
 
-            while (next < count)
+            var read = source.ReadBatch(next, batch);
+            if (read <= 0)
             {
-                ct.ThrowIfCancellationRequested();
+                return false;
+            }
 
-                var read = source.ReadBatch(next, buffer.AsSpan(0, batchBytes));
-                if (read <= 0)
+            for (var i = 0; i < read; i++)
+            {
+                var slice = batch.Slice(i * source.BytesPerRecord, source.BytesPerRecord);
+                var outcome = MftRecordParser.Parse(slice, out var record);
+
+                if (!onRecord(next + i, outcome, in record))
                 {
                     return false;
                 }
-
-                for (var i = 0; i < read; i++)
-                {
-                    var slice = buffer.AsSpan(i * source.BytesPerRecord, source.BytesPerRecord);
-                    var outcome = MftRecordParser.Parse(slice, source.BytesPerSector, out var record);
-
-                    if (!onRecord(next + i, outcome, in record))
-                    {
-                        return false;
-                    }
-                }
-
-                next += read;
             }
 
-            return true;
+            next += read;
         }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
+
+        return true;
     }
 }

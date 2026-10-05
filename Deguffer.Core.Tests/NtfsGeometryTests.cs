@@ -43,6 +43,59 @@ public class NtfsGeometryTests
     }
 
     /// <summary>
+    /// A disk with native 4,096-byte sectors, where NTFS makes each record one sector. Its record 0
+    /// is stamped every 512 bytes like any other, so the table's extents read from it all the same.
+    /// </summary>
+    [Fact]
+    public void ReadsANativeFourKilobyteSectorLayout()
+    {
+        Assert.True(NtfsBootSector.TryParse(
+            BootSector(bytesPerSector: 4096, sectorsPerCluster: 1, clustersPerRecord: -12),
+            out var geometry));
+
+        Assert.Equal(4096, geometry.BytesPerSector);
+        Assert.Equal(4096, geometry.BytesPerCluster);
+        Assert.Equal(4096, geometry.BytesPerFileRecord);
+
+        var record = MftRecordBytes.SelfRecord(
+            [new DataRun(786_432, 64), new DataRun(900_000, 32)],
+            dataSize: 393_216,
+            bytesPerRecord: geometry.BytesPerFileRecord);
+
+        Assert.True(MftExtentMap.TryRead(record, geometry.BytesPerCluster, out var map));
+        Assert.Equal([new DataRun(786_432, 64), new DataRun(900_000, 32)], map.Runs);
+    }
+
+    /// <summary>
+    /// A record smaller than one fixup stride has no room for the array that protects it, so not
+    /// one record of the table could be read. Refused here, the volume reports itself as not NTFS
+    /// rather than as a table that could not be read.
+    /// </summary>
+    [Fact]
+    public void RejectsARecordSmallerThanOneFixupStride() =>
+        Assert.False(NtfsBootSector.TryParse(
+            BootSector(bytesPerSector: 256, sectorsPerCluster: 1, clustersPerRecord: 1),
+            out _));
+
+    /// <summary>
+    /// The boot sector is read before the sector size is known, so that one read has to be a whole
+    /// number of sectors on every volume the parse accepts.
+    /// </summary>
+    [Fact]
+    public void ReadsTheBootSectorInWholeSectorsOfEverySizeAVolumeMayDeclare()
+    {
+        var accepted = Enumerable.Range(0, 16)
+            .Select(power => (ushort)(1 << power))
+            .Where(size => NtfsBootSector.TryParse(
+                BootSector(bytesPerSector: size, sectorsPerCluster: 1, clustersPerRecord: -12),
+                out _))
+            .ToList();
+
+        Assert.Contains((ushort)4096, accepted);
+        Assert.All(accepted, size => Assert.Equal(0, VolumeMftSource.BootReadBytes % size));
+    }
+
+    /// <summary>
     /// The record size has two encodings, and only the negative one appears on modern volumes.
     /// The positive form is legal, and reading it as a byte count would give 2 rather than 8192.
     /// </summary>
@@ -216,7 +269,7 @@ public class MftExtentMapTests
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64), new DataRun(900_000, 32)], dataSize: 98_304);
 
-        Assert.True(MftExtentMap.TryRead(record, bytesPerSector: 512, bytesPerCluster: 4096, out var map));
+        Assert.True(MftExtentMap.TryRead(record, bytesPerCluster: 4096, out var map));
 
         Assert.Equal(98_304, map.DataSize);
         Assert.Equal([new DataRun(786_432, 64), new DataRun(900_000, 32)], map.Runs);
@@ -233,12 +286,12 @@ public class MftExtentMapTests
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536, withAttributeList: true);
 
-        Assert.False(MftExtentMap.TryRead(record, bytesPerSector: 512, bytesPerCluster: 4096, out _));
+        Assert.False(MftExtentMap.TryRead(record, bytesPerCluster: 4096, out _));
     }
 
     [Fact]
     public void RefusesARecordThatIsNotARecord() =>
-        Assert.False(MftExtentMap.TryRead(new byte[1024], bytesPerSector: 512, bytesPerCluster: 4096, out _));
+        Assert.False(MftExtentMap.TryRead(new byte[1024], bytesPerCluster: 4096, out _));
 
     /// <summary>
     /// Record 0 is read while the volume is being opened, so a throw here would escape before the
@@ -250,7 +303,7 @@ public class MftExtentMapTests
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536);
         MftRecordBytes.DeclareFirstAttributeLength(record, MftRecordBytes.LengthJustUnderIntMax);
 
-        Assert.False(MftExtentMap.TryRead(record, bytesPerSector: 512, bytesPerCluster: 4096, out _));
+        Assert.False(MftExtentMap.TryRead(record, bytesPerCluster: 4096, out _));
     }
 
     /// <summary>
@@ -267,7 +320,7 @@ public class MftExtentMapTests
         var past = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 63, 64)], dataSize: 65_536);
         var atTheLimit = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 64, 64)], dataSize: 65_536);
 
-        Assert.False(MftExtentMap.TryRead(past, bytesPerSector: 512, bytesPerCluster: 4096, out _));
-        Assert.True(MftExtentMap.TryRead(atTheLimit, bytesPerSector: 512, bytesPerCluster: 4096, out _));
+        Assert.False(MftExtentMap.TryRead(past, bytesPerCluster: 4096, out _));
+        Assert.True(MftExtentMap.TryRead(atTheLimit, bytesPerCluster: 4096, out _));
     }
 }
