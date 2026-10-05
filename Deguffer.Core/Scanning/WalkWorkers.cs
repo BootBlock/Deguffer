@@ -15,8 +15,8 @@ namespace Deguffer.Core.Scanning;
 /// queued until its children have been queued.</para>
 ///
 /// <para><b>The calling thread is the first worker, and the only one that waits.</b> The others are
-/// thread-pool work items, started only while the queue holds more than the running workers are
-/// taking, so a walk of one small folder starts none. A helper that finds the queue empty ends rather
+/// thread-pool work items, started only when a worker queues more directories than it will take
+/// itself, so a walk of one folder, or of a chain of single folders, starts none. A helper that finds the queue empty ends rather
 /// than blocking a pool thread. The calling thread instead waits for the queue to fill again, the walk
 /// to end or the token to be cancelled. It makes no report while it waits: the totals only move when
 /// a directory is read, and the worker that read it reports.</para>
@@ -166,13 +166,19 @@ internal sealed class WalkWorkers<TState>
     {
         Interlocked.Increment(ref _outstanding);
         _pending.Enqueue((path, state));
+        _changed.Set();
+    }
 
-        if (TryClaimHelper())
+    /// <summary>
+    /// Start up to <paramref name="wanted"/> helpers, as far as the thread count allows. A worker that
+    /// has just queued some directories takes one of them itself, so it asks for one fewer.
+    /// </summary>
+    private void StartHelpers(int wanted)
+    {
+        for (var started = 0; started < wanted && TryClaimHelper(); started++)
         {
             ThreadPool.UnsafeQueueUserWorkItem(static workers => workers.Help(), this, preferLocal: false);
         }
-
-        _changed.Set();
     }
 
     private bool TryClaimHelper()
@@ -254,6 +260,8 @@ internal sealed class WalkWorkers<TState>
             {
                 _walk.Enqueue(path, state);
             }
+
+            _walk.StartHelpers(_chosen.Count - 1);
 
             if (Interlocked.Decrement(ref _walk._outstanding) == 0)
             {

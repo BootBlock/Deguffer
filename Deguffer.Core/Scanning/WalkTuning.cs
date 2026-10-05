@@ -14,7 +14,10 @@ internal sealed record WalkTuning
 
     public const int MaximumThreads = 64;
 
-    /// <summary>The smallest buffer the runtime will use. It reads anything less as this.</summary>
+    /// <summary>
+    /// The size the runtime lists with when none is asked for, which is what the walk used before the
+    /// buffer could be set. A smaller buffer would only add calls.
+    /// </summary>
     public const int MinimumListingBuffer = 4 * 1024;
 
     /// <summary>Room for roughly ten thousand entries in one call, which few directories exceed.</summary>

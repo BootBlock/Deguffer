@@ -580,7 +580,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            // The last snapshot goes with it. A partial tree covers only the levels walked so far,
+            // The last snapshot goes with it. A partial tree covers only the folders read so far,
             // its HasUnknownSizes is false because nothing refused anything, and it draws and
             // navigates exactly like a finished scan — so leaving it on screen states a total for
             // the drive that is wrong by however much was left.
