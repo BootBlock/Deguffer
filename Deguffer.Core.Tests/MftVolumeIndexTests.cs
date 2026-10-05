@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Safety;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 
@@ -31,7 +31,7 @@ public class MftVolumeIndexTests
     {
         using var source = fixture.Build();
 
-        Assert.True(MftVolumeIndexBuilder.TryBuild(source, out var index));
+        Assert.True(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out var index));
         return index;
     }
 
@@ -49,7 +49,7 @@ public class MftVolumeIndexTests
             .UnreadableFrom(21)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -80,7 +80,7 @@ public class MftVolumeIndexTests
             .Build();
 
         Assert.True(
-            MftVolumeIndexBuilder.TryBuild(source, out var index),
+            MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out var index),
             "The reserved records NTFS writes on every volume took the whole index with them.");
 
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
@@ -108,7 +108,7 @@ public class MftVolumeIndexTests
             .AddRecordWithNoIdentityAtAll(record)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public class MftVolumeIndexTests
                 ListMismatch.ListNamesItsOwnRecordAsItWas, alias: "FRAGME~1.TGZ")
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -434,7 +434,7 @@ public class MftVolumeIndexTests
             .AddFileWithItsNameInAnExtensionRecord(21, Cache, "linked.dll", allocated: 8192, logical: 8000, extension: 22, mismatch)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -452,7 +452,7 @@ public class MftVolumeIndexTests
                 21, aliasParent: Sibling, "LINKED~1.DLL", parent: Cache, "linked.dll", logical: 5000, extension: 22, mismatch)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -573,7 +573,7 @@ public class MftVolumeIndexTests
             .AddRecordWithNoIdentityAtAll(21)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -762,7 +762,7 @@ public class MftVolumeIndexTests
             .CorruptSectorStamp(21)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -779,7 +779,7 @@ public class MftVolumeIndexTests
             .CorruptAttributeLength(21)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>The same corruption one level down, in the length of the name's value.</summary>
@@ -792,7 +792,7 @@ public class MftVolumeIndexTests
             .CorruptFileNameValueLength(21)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -854,7 +854,7 @@ public class MftVolumeIndexTests
             .AddFileWithUnaddressableParent(21, "stray.tgz", allocated: 1_000_000)
             .Build();
 
-        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     [Fact]

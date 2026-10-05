@@ -33,7 +33,7 @@ internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason
 /// </summary>
 internal static class MftExploreReader
 {
-    /// <summary>How often the record count is reported. A batch is 1024 records, so this is rarely.</summary>
+    /// <summary>How often the record count is reported, in records, whatever size each read is.</summary>
     private const int ProgressInterval = 65536;
 
     /// <summary>
@@ -62,6 +62,7 @@ internal static class MftExploreReader
         IMftSource source,
         string rootPath,
         IReadOnlyList<string> components,
+        TableTuning tuning,
         Action<long>? onProgress,
         CancellationToken ct)
     {
@@ -101,6 +102,7 @@ internal static class MftExploreReader
         var couldNotReadWholeTable = !MftRecordStream.TryReadAll(
             source,
             records,
+            tuning,
             (number, outcome, in record) =>
             {
                 if (number >= nextProgress)

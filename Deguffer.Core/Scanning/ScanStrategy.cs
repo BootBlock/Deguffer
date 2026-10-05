@@ -73,6 +73,12 @@ public enum FallbackReason
     /// subtracted from. See <see cref="IDirectoryScanner.MeasureFromDiskAsync"/>.
     /// </summary>
     FreshReadingRequired,
+
+    /// <summary>
+    /// The user chose the walk on the Settings page, so the table was not read however readable it
+    /// is. Not a fault, and administrator rights would not change it, so nothing offers them.
+    /// </summary>
+    WalkChosen,
 }
 
 public static class FallbackReasonText
@@ -98,6 +104,9 @@ public static class FallbackReasonText
         // executor's after-measure, where what reaches the user is the reclaim itself and how it was
         // arrived at is not a thing to explain.
         FallbackReason.FreshReadingRequired => null,
+
+        FallbackReason.WalkChosen =>
+            "Scanned by walking directories, because Settings asks for the walk only.",
 
         _ => throw new ArgumentOutOfRangeException(nameof(reason)),
     };

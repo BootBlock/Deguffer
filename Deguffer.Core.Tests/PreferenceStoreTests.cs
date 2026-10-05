@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -254,5 +255,73 @@ public class PreferenceStoreTests
 
         Assert.True(new PreferenceStore(environment).Save(AppPreferences.Default));
         Assert.True(File.Exists(Path.Combine(environment.LocalAppData, "Deguffer", "preferences.json")));
+    }
+
+    /// <summary>
+    /// Every value is set to something other than Auto, and on a different kind of drive, so a kind
+    /// read from another kind's key fails here as well as a key that was dropped.
+    /// </summary>
+    [Fact]
+    public void RoundTripsTheScanSettings()
+    {
+        using var temp = new TempDirectory();
+        var store = new PreferenceStore(new FakeUserEnvironment(temp.Path));
+        var scanning = ScanPreferences.Default
+            .With(StorageMedia.Nvme, new MediaScanPreferences(WalkThreads: 24))
+            .With(StorageMedia.Rotational, new MediaScanPreferences(WalkThreads: 2, TableReadKiB: 256))
+            .With(StorageMedia.Unknown, new MediaScanPreferences(ListingBufferKiB: 64)) with
+        {
+            Route = ScanRoute.WalkOnly,
+        };
+
+        Assert.True(store.Save(AppPreferences.Default with { Scanning = scanning }));
+
+        Assert.Equal(scanning, store.Load().Scanning);
+    }
+
+    /// <summary>
+    /// A file written before the scan settings existed is every file on an upgraded machine. It reads
+    /// with every value on Auto, which is what every scan did before.
+    /// </summary>
+    [Fact]
+    public void AFileFromBeforeTheScanSettingsReadsThemAsAuto()
+    {
+        var loaded = LoadWritten("""{ "Theme": "Dark" }""");
+
+        // The file parsed, rather than falling through to the defaults wholesale.
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.Equal(ScanPreferences.Default, loaded.Scanning);
+    }
+
+    [Fact]
+    public void AKindTheFileDoesNotMentionStaysOnAuto()
+    {
+        var loaded = LoadWritten("""{ "Theme": "Dark", "Scanning": { "Route": "WalkOnly", "Nvme": { "WalkThreads": 8 } } }""");
+
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.Equal(ScanRoute.WalkOnly, loaded.Scanning.Route);
+        Assert.Equal(new MediaScanPreferences(WalkThreads: 8), loaded.Scanning.Nvme);
+        Assert.Equal(MediaScanPreferences.Auto, loaded.Scanning.Rotational);
+    }
+
+    /// <summary>
+    /// A hand-edited null where a group of settings belongs is a corrupt file like any other, rather
+    /// than a null handed to a scan that the type says cannot be there.
+    /// </summary>
+    [Theory]
+    [InlineData("""{ "Theme": "Dark", "Scanning": null }""")]
+    [InlineData("""{ "Theme": "Dark", "Scanning": { "Nvme": null } }""")]
+    public void ANullWhereScanSettingsBelongIsACorruptFile(string json) =>
+        Assert.Equal(AppPreferences.Default, LoadWritten(json));
+
+    private static AppPreferences LoadWritten(string json)
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var directory = Directory.CreateDirectory(Path.Combine(environment.LocalAppData, "Deguffer"));
+
+        File.WriteAllText(Path.Combine(directory.FullName, "preferences.json"), json);
+
+        return new PreferenceStore(environment).Load();
     }
 }

@@ -35,12 +35,13 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         IProcessInspector? inspector,
         ISystemDirectories? system,
         IWindowsServicing? servicing,
-        ComponentStoreAnalysis? analysis)
+        ComponentStoreAnalysis? analysis,
+        IDirectoryScanner? scanner)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            DirectoryScanner.Default,
+            scanner ?? DirectoryScanner.Default,
             servicing: servicing)
     {
         system ??= SystemDirectories.Current;

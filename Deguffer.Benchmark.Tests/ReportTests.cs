@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark.Tests;
 
@@ -71,7 +72,13 @@ public sealed class ReportTests
     public void TheWalksValuesAreTheOnesItRanWith() =>
         Assert.Equal(
             "3 folders listed at once, 8 KiB listing buffer",
-            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024)));
+            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default));
+
+    [Fact]
+    public void TheTablesValuesAreTheOnesItRanWith() =>
+        Assert.Equal(
+            "256 KiB per read, one read at a time, parsed on one thread",
+            Deguffer.Benchmark.Tuning.Describe(Route.Table, WalkTuning.Default, new TableTuning(256 * 1024)));
 
     [Fact]
     public void ADebugBuildIsCalledOut()

@@ -14,10 +14,10 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class Tuning
 {
-    public static string Describe(Route route, WalkTuning walk) => route.ReadsTable()
+    public static string Describe(Route route, WalkTuning walk, TableTuning table) => route.ReadsTable()
         ? string.Create(
             CultureInfo.InvariantCulture,
-            $"{MftRecordStream.RecordsPerBatch:N0} records per read, one read at a time, parsed on one thread")
+            $"{table.ReadBytes / 1024:N0} KiB per read, one read at a time, parsed on one thread")
         : string.Create(
             CultureInfo.InvariantCulture,
             $"{walk.Threads} folders listed at once, {walk.ListingBufferBytes / 1024} KiB listing buffer");

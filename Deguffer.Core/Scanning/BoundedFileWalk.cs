@@ -46,6 +46,37 @@ internal static class BoundedFileWalk
     /// §5.3 says, and only the root's refusal is returned, because only that one leaves the caller
     /// with nothing measured. See <see cref="RootReach"/>.
     /// </returns>
+    /// <summary>
+    /// <see cref="Visit(string, WalkTuning, Action{WalkEntry}, Action{WalkEntry}, Action, TimeProvider, CancellationToken)"/>
+    /// with the values <paramref name="tuning"/> resolves for the drive that holds
+    /// <paramref name="root"/>. Every scan walks through here, so the values the user set are resolved
+    /// in one place and no caller can ask for them and walk with others.
+    /// </summary>
+    public static bool Visit(
+        string root,
+        ScanTuner tuning,
+        Action<WalkEntry> onFile,
+        Action<WalkEntry> onReparseFile,
+        Action onProgress,
+        TimeProvider clock,
+        CancellationToken ct) =>
+        Visit(root, tuning.For(root).Walk, onFile, onReparseFile, onProgress, clock, ct);
+
+    /// <summary>
+    /// <see cref="Visit{TState}(string, TState, WalkTuning, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>
+    /// with the values <paramref name="tuning"/> resolves for the drive that holds
+    /// <paramref name="root"/>, on the terms the overload above states.
+    /// </summary>
+    public static void Visit<TState>(
+        string root,
+        TState rootState,
+        ScanTuner tuning,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action onProgress,
+        TimeProvider clock,
+        CancellationToken ct) =>
+        Visit(root, rootState, tuning.For(root).Walk, onDirectory, onProgress, clock, ct);
+
     public static bool Visit(
         string root,
         WalkTuning tuning,

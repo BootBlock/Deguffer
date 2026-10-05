@@ -131,7 +131,7 @@ public class ExplorePlaceTests
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
             .Build();
 
-        var table = MftExploreReader.Read(source, @"C:\", [], onProgress: null, default).Tree!;
+        var table = MftExploreReader.Read(source, @"C:\", [], TableTuning.Default, onProgress: null, default).Tree!;
         var walked = ProfileTree(@"C:\");
 
         // Record 1 is in range and was never described, so this tree cannot place it.

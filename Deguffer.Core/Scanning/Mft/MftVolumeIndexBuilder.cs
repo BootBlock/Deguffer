@@ -22,7 +22,11 @@ public static class MftVolumeIndexBuilder
     /// distinction between those and a record that could not be read is <see cref="MftParseOutcome"/>'s
     /// whole reason to exist.
     /// </summary>
-    public static bool TryBuild(IMftSource source, out MftVolumeIndex index, CancellationToken ct = default)
+    public static bool TryBuild(
+        IMftSource source,
+        TableTuning tuning,
+        out MftVolumeIndex index,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -31,7 +35,8 @@ public static class MftVolumeIndexBuilder
         var count = (int)Math.Min(source.RecordCount, int.MaxValue);
         var tree = new MftVolumeTree(count);
 
-        if (!MftRecordStream.TryReadAll(source, count, (number, outcome, in record) => Place(tree, number, outcome, in record), ct))
+        if (!MftRecordStream.TryReadAll(
+            source, count, tuning, (number, outcome, in record) => Place(tree, number, outcome, in record), ct))
         {
             return false;
         }

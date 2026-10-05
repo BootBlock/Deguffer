@@ -80,7 +80,7 @@ public sealed partial class ExplorePage : Page
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
         // whatever the framework's initialisation order does next.
         ViewModel = new ExploreViewModel(
-            ExploreScanner.Default,
+            new ExploreScanner(tuning: App.ScanTuning),
             VolumeInventory.Current,
             TimeProvider.System,
 

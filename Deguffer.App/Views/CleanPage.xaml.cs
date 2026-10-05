@@ -31,7 +31,7 @@ public sealed partial class CleanPage : Page
         // Assigned before InitializeComponent so no x:Bind can ever evaluate against a null
         // view-model, whatever the framework's initialisation order does next.
         ViewModel = new CleanViewModel(
-            CleanupPlanner.CreateDefault(App.Preferences),
+            CleanupPlanner.CreateDefault(App.Preferences, tuning: App.ScanTuning),
             UserEnvironment.Current,
             VolumeInventory.Current,
             ElevatedRelaunch.IsElevated,

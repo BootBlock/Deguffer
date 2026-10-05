@@ -28,9 +28,6 @@ internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in
 /// </summary>
 internal static class MftRecordStream
 {
-    /// <summary>Internal rather than private so a benchmark result can state the value it measured.</summary>
-    internal const int RecordsPerBatch = 1024;
-
     /// <summary>
     /// Read records <c>0</c> to <paramref name="count"/> and hand each to
     /// <paramref name="onRecord"/>. Returns false if a region of the table could not be read, or if
@@ -53,13 +50,18 @@ internal static class MftRecordStream
     /// every want of a hostile table would grow without bound, and running out of memory is a
     /// failure no caller can fall back from.</para>
     /// </summary>
-    public static bool TryReadAll(IMftSource source, int count, MftRecordHandler onRecord, CancellationToken ct)
+    public static bool TryReadAll(
+        IMftSource source,
+        int count,
+        TableTuning tuning,
+        MftRecordHandler onRecord,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(onRecord);
 
         // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
-        using var buffer = new VolumeReadBuffer(RecordsPerBatch * source.BytesPerRecord);
+        using var buffer = new VolumeReadBuffer(tuning.RecordsPerRead(source.BytesPerRecord) * source.BytesPerRecord);
         var batch = buffer.Span;
         var deferred = new List<MftDeferredRecord>();
 

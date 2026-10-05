@@ -13,10 +13,39 @@ public sealed partial class SettingsPage : Page
     {
         ViewModel = new SettingsViewModel(
             App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current);
+        Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current);
         InitializeComponent();
+
+        Loaded += OnLoaded;
+        Unloaded += (_, _) => _visit?.Cancel();
+    }
+
+    /// <summary>The listing of drives for the visit under way, stopped when the page is left.</summary>
+    private CancellationTokenSource? _visit;
+
+    /// <summary>
+    /// At each visit rather than once, so a drive attached while the app was open is listed.
+    /// </summary>
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _visit?.Cancel();
+        _visit?.Dispose();
+        _visit = new CancellationTokenSource();
+
+        try
+        {
+            await Scanning.RefreshDrivesAsync(_visit.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // The page was left, or visited again, before every drive had answered. The next
+            // visit lists them afresh.
+        }
     }
 
     public SettingsViewModel ViewModel { get; }
+
+    public ScanSettingsViewModel Scanning { get; }
 
     /// <summary>
     /// Approving a folder goes through the system picker rather than a text box, so the path is one

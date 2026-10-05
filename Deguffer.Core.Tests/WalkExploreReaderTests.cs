@@ -28,7 +28,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         _temp.CreateFile(2048, "cache", "content-v2", "sha512", "c.tgz");
         _temp.CreateDirectory("cache", "empty");
 
-        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(
@@ -71,7 +71,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
-        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(4608, tree.TotalBytes);
@@ -97,7 +97,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         using var denied = new DeniedDirectory(refused);
 
         ExploreTree? tree = null;
-        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default));
+        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default));
 
         Assert.Empty(thrown);
         Assert.Equal(4096, tree!.TotalBytes);
@@ -124,7 +124,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         DirectoryLink.Create(kind, Path.Combine(root, "shortcut"), real);
 
-        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
         var link = byPath[Path.Combine(root, "shortcut")];
 
@@ -156,7 +156,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         var file = _temp.CreateFile(64, "cache", "content-v2", "sha512", "a.tgz");
 
-        var tree = WalkExploreReader.Read(LongPath.Extended(root), onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(LongPath.Extended(root), ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
         var deepest = ByPath(tree)[file];
 
         Assert.Equal(root, tree.RootPath);
@@ -186,7 +186,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var reports = new List<(long Items, long Bytes)>();
 
         WalkExploreReader.Read(
-            root,
+            root, ScanTuner.Shipped,
             (_, items, bytes) =>
             {
                 reports.Add((items, bytes));
@@ -226,7 +226,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         // layout was settled long before its contents were last rewritten.
         Directory.SetLastWriteTimeUtc(root, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         var node = byPath[Path.Combine(root, "a.tgz")];
@@ -252,7 +252,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         Directory.SetCreationTimeUtc(root, made);
 
-        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
 
         Assert.Equal(made, tree.CreatedOf(tree.RootNode).Utc);
     }
@@ -277,7 +277,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         DirectoryLink.Create(kind, link, target);
         Directory.SetCreationTimeUtc(link, made);
 
-        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
         var node = ByPath(tree)[link];
 
         Assert.True(tree.IsLink(node));

@@ -18,7 +18,10 @@ namespace Deguffer.Core.Exploring;
 /// <para>The snapshot cadence is measured through <paramref name="time"/>, so a test decides when
 /// the interval has passed rather than spending real time for it.</para>
 /// </summary>
-public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvider? time = null) : IExploreScanner
+public sealed class ExploreScanner(
+    IMftSourceFactory? sources = null,
+    TimeProvider? time = null,
+    ScanTuner? tuning = null) : IExploreScanner
 {
     /// <summary>
     /// How often the walk publishes a tree to draw.
@@ -41,9 +44,7 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvid
 
     private readonly IMftSourceFactory _sources = sources ?? VolumeMftSourceFactory.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
-
-    /// <summary>The scanner the app runs with: real volumes (G5).</summary>
-    public static ExploreScanner Default { get; } = new();
+    private readonly ScanTuner _tuning = tuning ?? ScanTuner.Shipped;
 
     /// <summary>
     /// Scan everything at or below <paramref name="root"/>, which is a volume root or any folder
@@ -72,6 +73,15 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvid
             return Walk(root, FallbackReason.VolumeNotAddressable, progress, ct);
         }
 
+        // Each scan is a look at the machine of its own, so a drive attached since the last one is
+        // asked what it is rather than taken for the drive that last had its letter.
+        _tuning.Invalidate();
+
+        if (_tuning.WalkOnly)
+        {
+            return Walk(root, FallbackReason.WalkChosen, progress, ct);
+        }
+
         var source = _sources.TryOpen(volume.DriveLetter, out var reason);
         if (source is null)
         {
@@ -82,7 +92,7 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvid
         {
             try
             {
-                var read = Read(source, volume, progress, ct);
+                var read = Read(source, volume, _tuning.ForVolume(volume.DriveLetter).Table, progress, ct);
 
                 if (read.Tree is { } tree)
                 {
@@ -112,6 +122,7 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvid
     private static MftExploreRead Read(
         IMftSource source,
         VolumePath volume,
+        TableTuning tuning,
         IProgress<ExploreProgress>? progress,
         CancellationToken ct)
     {
@@ -128,6 +139,7 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvid
             source,
             volume.FullPath,
             volume.Components,
+            tuning,
             done => progress?.Report(new ExploreProgress(done, total, BytesSeen: 0)),
             ct);
     }
@@ -142,6 +154,7 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvid
 
         var tree = WalkExploreReader.Read(
             root,
+            _tuning,
             (builder, items, bytes) =>
             {
                 if (progress is null)
