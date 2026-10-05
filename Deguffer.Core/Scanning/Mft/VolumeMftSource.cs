@@ -102,8 +102,14 @@ public sealed partial class VolumeMftSource : IMftSource
         using var record0 = new VolumeReadBuffer(geometry.BytesPerFileRecord);
         var offset = geometry.MftStartCluster * geometry.BytesPerCluster;
 
+        // $MFT's extension records are read through the same handle, before the source that would
+        // otherwise serve them exists.
         if (RandomAccess.Read(handle, record0.Span, offset) != record0.Length
-            || !MftExtentMap.TryRead(record0.Span, geometry.BytesPerCluster, out var extents))
+            || !MftExtentMapReader.TryRead(
+                record0.Span,
+                geometry.BytesPerCluster,
+                (first, destination) => ReadClusters(handle, geometry.BytesPerCluster, first, destination),
+                out var extents))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
@@ -187,20 +193,23 @@ public sealed partial class VolumeMftSource : IMftSource
 
     public int BytesPerCluster => _geometry.BytesPerCluster;
 
-    public bool TryReadClusters(long firstCluster, Span<byte> destination)
+    public bool TryReadClusters(long firstCluster, Span<byte> destination) =>
+        ReadClusters(_volume, BytesPerCluster, firstCluster, destination);
+
+    private static bool ReadClusters(SafeFileHandle volume, int bytesPerCluster, long firstCluster, Span<byte> destination)
     {
         // Whole clusters only, so the read stays sector aligned as a raw volume handle requires. The
         // cluster comes from a run list on the disk, so its byte offset is bounded by division
         // before it is formed: a corrupt run naming a cluster near 2^63 would otherwise wrap the
         // offset negative and throw out of the read.
         if (firstCluster < 0
-            || destination.Length % BytesPerCluster != 0
-            || firstCluster > (long.MaxValue - destination.Length) / BytesPerCluster)
+            || destination.Length % bytesPerCluster != 0
+            || firstCluster > (long.MaxValue - destination.Length) / bytesPerCluster)
         {
             return false;
         }
 
-        return RandomAccess.Read(_volume, destination, firstCluster * BytesPerCluster) == destination.Length;
+        return RandomAccess.Read(volume, destination, firstCluster * bytesPerCluster) == destination.Length;
     }
 
     public void Dispose() => _volume.Dispose();

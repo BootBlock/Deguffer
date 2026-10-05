@@ -35,6 +35,8 @@ internal static class MftExtensionReader
         Span<byte> batch,
         CancellationToken ct)
     {
+        ClusterReader read = source.TryReadClusters;
+
         foreach (var record in deferred)
         {
             ct.ThrowIfCancellationRequested();
@@ -50,7 +52,7 @@ internal static class MftExtensionReader
                 continue;
             }
 
-            record.Follow(TryReadList(source, list.Runs, list.Length));
+            record.Follow(TryReadList(read, source.BytesPerCluster, list.Runs, list.Length));
             budget -= record.Segments.Count;
         }
 
@@ -62,11 +64,13 @@ internal static class MftExtensionReader
     /// The entries of a list kept outside the table, or null where any part of it cannot be read.
     /// Only the clusters holding the list's bytes are read: the allocation can run past them, and a
     /// sparse run is a hole where entries should be.
+    ///
+    /// <para>Also how <see cref="MftExtentMapReader"/> reads <c>$MFT</c>'s own list, which is why
+    /// it takes a <see cref="ClusterReader"/> rather than a source.</para>
     /// </summary>
-    private static IReadOnlyList<MftAttributeListEntry>? TryReadList(
-        IMftSource source, IReadOnlyList<DataRun> runs, int length)
+    internal static IReadOnlyList<MftAttributeListEntry>? TryReadList(
+        ClusterReader read, int clusterBytes, IReadOnlyList<DataRun> runs, int length)
     {
-        var clusterBytes = source.BytesPerCluster;
 
         // Neither product can overflow: the length is capped at MftAttributeList.MaximumLength,
         // and a cluster is at most 2 MiB.
@@ -76,7 +80,6 @@ internal static class MftExtensionReader
         using var buffer = new VolumeReadBuffer(wanted);
         var clusters = buffer.Span;
         var filled = 0;
-
 
         foreach (var run in runs)
         {
@@ -92,7 +95,7 @@ internal static class MftExtensionReader
 
             var take = (int)Math.Min(run.ClusterCount, (wanted - filled) / clusterBytes) * clusterBytes;
 
-            if (!source.TryReadClusters(run.StartCluster, clusters.Slice(filled, take)))
+            if (!read(run.StartCluster, clusters.Slice(filled, take)))
             {
                 return null;
             }

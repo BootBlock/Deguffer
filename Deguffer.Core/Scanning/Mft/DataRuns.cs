@@ -14,7 +14,8 @@ public readonly record struct DataRun(long StartCluster, long ClusterCount, bool
 /// Decodes an NTFS mapping pair list — the compact, delta-encoded form in which a non-resident
 /// attribute records where its clusters live.
 ///
-/// Needed for exactly one attribute: <c>$MFT</c>'s own <c>$DATA</c>. The MFT is not necessarily
+/// Needed where the reader has to find clusters rather than count them: <c>$MFT</c>'s own
+/// <c>$DATA</c>, and an <c>$ATTRIBUTE_LIST</c> kept outside its record. The MFT is not necessarily
 /// contiguous, and a reader that assumes it is will read the correct number of bytes from the wrong
 /// place once the table has grown — producing records that parse cleanly and describe nothing.
 /// </summary>

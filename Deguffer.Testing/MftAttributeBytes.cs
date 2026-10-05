@@ -255,17 +255,30 @@ internal static class MftAttributeBytes
         return value;
     }
 
-    /// <summary>The <c>$DATA</c> of <c>$MFT</c> itself, whose run list says where the table lives.</summary>
-    public static int WriteMftData(Span<byte> target, IReadOnlyList<DataRun> runs, long dataSize)
+    /// <summary>
+    /// A piece of the <c>$DATA</c> of <c>$MFT</c> itself, whose run list says where the table lives:
+    /// the whole of it, or, on a table fragmented enough to need extension records, the piece
+    /// starting at <paramref name="lowestVcn"/>. Only the piece at cluster 0 states the sizes.
+    /// </summary>
+    /// <param name="highestVcn">
+    /// The last cluster the piece declares, or null for the last cluster its runs reach, which is
+    /// what NTFS writes.
+    /// </param>
+    public static int WriteMftData(
+        Span<byte> target, IReadOnlyList<DataRun> runs, long dataSize, long lowestVcn = 0, long? highestVcn = null)
     {
         const int RunsOffset = 0x40;
 
+        var sizes = lowestVcn == 0 ? dataSize : 0;
+
         BinaryPrimitives.WriteUInt32LittleEndian(target, 0x80);
         target[0x08] = 1;
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x10..], lowestVcn);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x18..], highestVcn ?? (lowestVcn + runs.Sum(r => r.ClusterCount) - 1));
         BinaryPrimitives.WriteUInt16LittleEndian(target[0x20..], RunsOffset);
-        BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], dataSize);
-        BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], dataSize);
-        BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], dataSize);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], sizes);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], sizes);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], sizes);
 
         var cursor = RunsOffset;
         long previous = 0;

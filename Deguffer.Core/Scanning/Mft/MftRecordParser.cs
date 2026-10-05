@@ -217,22 +217,16 @@ internal static class MftRecordParser
                 : new ScanSize(Allocated: 0, Logical: BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]));
         }
 
-        if (attribute.Length < 0x38)
-        {
-            return null;
-        }
-
         // Only the first extent of a split attribute carries the sizes; later extents continue the
         // run list from a non-zero starting VCN and leave these fields zero.
-        if (BinaryPrimitives.ReadUInt64LittleEndian(attribute[0x10..]) != 0)
+        if (!MftNonResidentHeader.TryRead(attribute, out var header) || header.LowestVcn != 0)
         {
             return null;
         }
 
-        var allocated = BinaryPrimitives.ReadInt64LittleEndian(attribute[0x28..]);
-        var logical = BinaryPrimitives.ReadInt64LittleEndian(attribute[0x30..]);
-
-        return allocated < 0 || logical < 0 ? null : new ScanSize(allocated, logical);
+        return header.AllocatedSize < 0 || header.DataSize < 0
+            ? null
+            : new ScanSize(header.AllocatedSize, header.DataSize);
     }
 
     internal static bool TryReadFileName(
