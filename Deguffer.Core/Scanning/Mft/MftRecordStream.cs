@@ -48,6 +48,12 @@ internal static class MftRecordStream
     /// records do not all arrive in table order. Those held back are still handed on where the
     /// first pass stopped at a region it could not read, because a caller that keeps going has a
     /// use for every record that was read.</para>
+    ///
+    /// <para>A table that wants more extension records than it holds is not one NTFS wrote: each
+    /// extension record belongs to one base record, so the wants of a healthy table sum to fewer
+    /// than its records. Such a table is treated as one that could not be read in full. Holding
+    /// every want of a hostile table would grow without bound, and running out of memory is a
+    /// failure no caller can fall back from.</para>
     /// </summary>
     public static bool TryReadAll(IMftSource source, int count, MftRecordHandler onRecord, CancellationToken ct)
     {
@@ -61,9 +67,10 @@ internal static class MftRecordStream
         try
         {
             long next = 0;
+            long wanted = 0;
             var wholeTable = true;
 
-            while (next < count)
+            while (wholeTable && next < count)
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -81,6 +88,13 @@ internal static class MftRecordStream
 
                     if (continued is not null)
                     {
+                        wanted += continued.Segments.Count;
+                        if (wanted > count)
+                        {
+                            wholeTable = false;
+                            break;
+                        }
+
                         deferred.Add(continued);
                         continue;
                     }
@@ -94,7 +108,7 @@ internal static class MftRecordStream
                 next += read;
             }
 
-            MftExtensionReader.Resolve(source, deferred, buffer.AsSpan(0, batchBytes), ct);
+            wholeTable &= MftExtensionReader.TryResolve(source, deferred, count - wanted, buffer.AsSpan(0, batchBytes), ct);
 
             foreach (var held in deferred)
             {

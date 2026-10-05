@@ -17,13 +17,23 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 internal static class MftExtensionReader
 {
+    /// <summary>
+    /// Complete every record in <paramref name="deferred"/>. Returns false where the lists read
+    /// here want more extension records than <paramref name="budget"/> allows, which a table NTFS
+    /// wrote never does; the records past that point are then lost whole rather than followed.
+    /// </summary>
+    /// <param name="budget">
+    /// How many more extension records the table can hold for these records to want, after the
+    /// first pass's own.
+    /// </param>
     /// <param name="batch">
     /// A buffer of whole records to read into, lent by the caller so the second pass reuses the
     /// first pass's pooled buffer rather than renting another.
     /// </param>
-    public static void Resolve(
+    public static bool TryResolve(
         IMftSource source,
         IReadOnlyList<MftDeferredRecord> deferred,
+        long budget,
         Span<byte> batch,
         CancellationToken ct)
     {
@@ -31,13 +41,23 @@ internal static class MftExtensionReader
         {
             ct.ThrowIfCancellationRequested();
 
-            if (record.PendingList is { } list)
+            if (record.PendingList is not { } list)
             {
-                record.Follow(TryReadList(source, list.Runs, list.Length));
+                continue;
             }
+
+            if (budget < 0)
+            {
+                record.Fail(MftAttributeKinds.Name | MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint);
+                continue;
+            }
+
+            record.Follow(TryReadList(source, list.Runs, list.Length));
+            budget -= record.Segments.Count;
         }
 
         ReadExtensionRecords(source, deferred, batch, ct);
+        return budget >= 0;
     }
 
     /// <summary>
@@ -143,7 +163,8 @@ internal static class MftExtensionReader
                 // A region that cannot be read, or a record past the end of the table. Never
                 // skipped past as though it had been read: the record wanted there fails, and the
                 // loop tries again from the next one wanted.
-                wanted[next++].Owner.Fail();
+                var (owner, _, needs) = wanted[next++];
+                owner.Fail(needs);
                 continue;
             }
 

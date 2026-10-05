@@ -72,7 +72,7 @@ internal static class MftRecordParser
 
         if (attribute[0x08] == 0)
         {
-            pending.Follow(MftAttributeList.TryReadResidentValue(attribute, out var value)
+            pending.Follow(TryReadResidentValue(attribute, out var value)
                 ? MftAttributeList.TryReadEntries(value)
                 : null);
         }
@@ -112,37 +112,52 @@ internal static class MftRecordParser
     {
         // Always resident on any volume NTFS wrote — it is 48 bytes at most and is the first
         // attribute of every record — so a non-resident one is a corrupt record rather than a shape
-        // to follow. The enumerator admits an attribute of 0x10 bytes, which is shorter than the
-        // resident header itself, so the length is checked before either field is read.
-        if (attribute.Length < 0x18 || attribute[0x08] != 0)
-        {
-            return default;
-        }
-
-        var valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
-        var valueLength = (int)BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]);
-
+        // to follow.
+        //
         // The two wanted are the first two fields of the value: created, then last written. The
         // other two NTFS keeps here — when the record itself last changed, and when the file was
         // last read — are deliberately not taken. The first dates bookkeeping rather than content,
         // and the second is the signal §8 rejected, because Windows stops maintaining it by
         // default.
-        // Subtracted rather than added, because the sum overflows. A corrupt record can declare a
-        // value length near int.MaxValue, and `valueOffset + valueLength` then wraps negative, passes
-        // a `>` test and throws out of the slice below — which nothing on the scan path catches, so
-        // it would take the window down. Reading this attribute at all is new, so this exposure is
-        // new with it: the length is bounded by the record and the offset by a ushort, so neither
-        // side of the subtraction can wrap.
-        if (valueLength < 0x10 || valueOffset > attribute.Length - valueLength)
+        if (!TryReadResidentValue(attribute, out var value) || value.Length < 0x10)
         {
             return default;
         }
 
-        var value = attribute.Slice(valueOffset, valueLength);
-
         return (
             BinaryPrimitives.ReadInt64LittleEndian(value),
             BinaryPrimitives.ReadInt64LittleEndian(value[0x08..]));
+    }
+
+    /// <summary>
+    /// The value of a resident attribute, or false where the attribute is not resident or its
+    /// header does not fit it. Every resident value is read through here.
+    ///
+    /// <para>The enumerator admits an attribute of 0x10 bytes, which is shorter than the resident
+    /// header itself, so the length is checked before either field is read. The bound is a
+    /// subtraction rather than a sum, because the sum overflows: a corrupt record can declare a
+    /// value length near <see cref="uint.MaxValue"/>, and `offset + length` then wraps negative,
+    /// passes a `&gt;` test and throws out of the slice — which nothing on the scan path catches.</para>
+    /// </summary>
+    internal static bool TryReadResidentValue(ReadOnlySpan<byte> attribute, out ReadOnlySpan<byte> value)
+    {
+        value = default;
+
+        if (attribute.Length < 0x18 || attribute[0x08] != 0)
+        {
+            return false;
+        }
+
+        int valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
+        var valueLength = BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]);
+
+        if (valueLength > (uint)attribute.Length || valueOffset > attribute.Length - (int)valueLength)
+        {
+            return false;
+        }
+
+        value = attribute.Slice(valueOffset, (int)valueLength);
+        return true;
     }
 
     /// <summary>
@@ -228,21 +243,10 @@ internal static class MftRecordParser
         result = default;
 
         // $FILE_NAME is always resident; a non-resident one would mean a corrupt record.
-        if (attribute[0x08] != 0 || attribute.Length < 0x18)
+        if (!TryReadResidentValue(attribute, out var value) || value.Length < 0x42)
         {
             return false;
         }
-
-        var valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
-        var valueLength = (int)BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]);
-
-        // Subtracted rather than added, for the reason ReadTimestamps gives.
-        if (valueLength < 0x42 || valueOffset > attribute.Length - valueLength)
-        {
-            return false;
-        }
-
-        var value = attribute.Slice(valueOffset, valueLength);
 
         // A file reference packs a 48-bit record number under a 16-bit reuse sequence. Masking the
         // sequence off is what makes the parent usable as an index — but the remaining 48 bits can

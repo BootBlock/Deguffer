@@ -64,12 +64,13 @@ public sealed class MftAttributeListTests
 
     /// <summary>
     /// Bytes left over that cannot hold an entry are a list cut short, and the entry that was cut
-    /// may be the one that mattered.
+    /// may be the one that mattered. Five of them, too few to hold even the entry's length field,
+    /// so nothing but the check on what is left can refuse them before the length is read.
     /// </summary>
     [Fact]
     public void RefusesAListEndingPartWayThroughAnEntry()
     {
-        var value = OneEntry().Concat(new byte[0x10]).ToArray();
+        var value = OneEntry().Concat(new byte[0x05]).ToArray();
 
         Assert.Null(MftAttributeList.TryReadEntries(value));
     }
@@ -96,7 +97,7 @@ public sealed class MftAttributeListTests
         BinaryPrimitives.WriteUInt32LittleEndian(attribute.AsSpan(0x10), valueLength);
         BinaryPrimitives.WriteUInt16LittleEndian(attribute.AsSpan(0x14), 0x18);
 
-        Assert.False(MftAttributeList.TryReadResidentValue(attribute, out _));
+        Assert.False(MftRecordParser.TryReadResidentValue(attribute, out _));
     }
 
     /// <summary>

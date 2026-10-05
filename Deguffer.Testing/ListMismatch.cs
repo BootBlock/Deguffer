@@ -27,4 +27,10 @@ public enum ListMismatch
     /// list from another moment and nothing it says about where attributes went can be trusted.
     /// </summary>
     ListNamesItsOwnRecordAsItWas,
+
+    /// <summary>
+    /// The list names the extension record twice, by two sequence numbers. Only one can be true of
+    /// it, so the other is a stale entry.
+    /// </summary>
+    ListedTwiceBySequence,
 }

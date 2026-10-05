@@ -39,8 +39,11 @@ internal sealed class MftDeferredRecord
     /// <summary>The extension records still to be read, and what each must supply.</summary>
     public IReadOnlyList<(MftSegmentReference Segment, MftAttributeKinds Needs)> Segments => _segments;
 
+    /// <summary>The kinds of attribute the scan needed and could not establish.</summary>
+    public MftAttributeKinds Lost { get; private set; }
+
     /// <summary>Whether something the scan needs could not be established.</summary>
-    public bool Failed { get; private set; }
+    public bool Failed => Lost != MftAttributeKinds.None;
 
     /// <summary>Whether nothing further has to be read before <see cref="Finish"/> can answer.</summary>
     public bool IsComplete => Failed || (PendingList is null && _segments.Count == 0);
@@ -57,7 +60,7 @@ internal sealed class MftDeferredRecord
 
         if (entries is null)
         {
-            Failed = true;
+            FailList();
             return;
         }
 
@@ -72,7 +75,7 @@ internal sealed class MftDeferredRecord
             // base record as it is now. A list that does not is one caught mid-change.
             if (!elsewhere && entry.Segment.Sequence != Self.Sequence)
             {
-                Failed = true;
+                FailList();
                 return;
             }
 
@@ -112,26 +115,36 @@ internal sealed class MftDeferredRecord
     /// <param name="record">The record's bytes, which the update sequence fixup modifies in place.</param>
     public void Absorb(Span<byte> record, int bytesPerSector, MftSegmentReference expected, MftAttributeKinds needs)
     {
-        if (Failed)
-        {
-            return;
-        }
-
         if (MftRecordHeader.ReadExtension(record, bytesPerSector, out var header) != MftParseOutcome.Parsed
             || header.BaseReference != Self
             || header.Sequence != expected.Sequence
             || !_draft.TryAbsorb(record[..header.UsedLength], header.FirstAttributeOffset, isBase: false, out var supplied, out _)
             || (needs & ~supplied) != MftAttributeKinds.None)
         {
-            Failed = true;
+            Fail(needs);
         }
     }
 
-    /// <summary>Record that an extension record this needed could not be read at all.</summary>
-    public void Fail() => Failed = true;
+    /// <summary>
+    /// Record that an extension record this needed for <paramref name="needs"/> could not be
+    /// established, and lose exactly that. Only a record wanted for a name puts the file's place in
+    /// doubt: one wanted for the size alone loses the size and nothing else, so a growing file caught
+    /// mid-change on a live volume reads as a size unknown under its own directory, not as a file
+    /// that could be anywhere.
+    /// </summary>
+    public void Fail(MftAttributeKinds needs) => Lost |= needs;
 
     public MftParseOutcome Finish(out MftRecord result) =>
-        _draft.Finish(_isDirectory, new MftListFindings(_declaresUnnamedData, Failed), out result);
+        _draft.Finish(_isDirectory, new MftListFindings(_declaresUnnamedData, Lost), out result);
+
+    /// <summary>
+    /// The list itself could not be trusted, so anything could have been anywhere: the size, a
+    /// reparse point, and a name — unless the base record's own name is one nothing can displace.
+    /// </summary>
+    private void FailList() =>
+        Fail(MftAttributeKinds.DataStart
+            | MftAttributeKinds.ReparsePoint
+            | (_draft.BaseRank != 0 ? MftAttributeKinds.Name : MftAttributeKinds.None));
 
     /// <summary>
     /// What one entry would have to supply, judged by what the base record already settled.

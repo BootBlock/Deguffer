@@ -271,6 +271,42 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
+    /// A long-named file keeps its Win32 name and its 8.3 alias in its own record, and only its size
+    /// in an extension record. When that record is caught mid-change, the size is what was lost: the
+    /// file still has its place, its subtree declines, and the rest of the volume is still indexed.
+    /// Treating the lost size as a lost name would give the whole volume up over one growing file.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryExtensionRecordMismatch))]
+    public void LosesOnlyTheSizeOfALongNamedFileWhoseExtensionRecordChangedMidRead(ListMismatch mismatch)
+    {
+        var index = Build(Tree()
+            .AddFileWithDataInAnExtensionRecord(
+                21, Cache, "fragmented-archive.tgz", allocated: 4096, logical: 4096, extension: 22, mismatch, alias: "FRAGME~1.TGZ")
+            .AddFile(23, Sibling, "settings.json", allocated: 1024, logical: 1000));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.Equal(1000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// The same file whose list names its own record as it was is a list from another moment, and
+    /// what it says about the names cannot be trusted either. Its Win32 name could have been
+    /// displaced, so the file cannot be placed and the index is refused.
+    /// </summary>
+    [Fact]
+    public void RefusesToPlaceALongNamedFileWhoseListIsFromAnotherMoment()
+    {
+        using var source = Tree()
+            .AddFileWithDataInAnExtensionRecord(
+                21, Cache, "fragmented-archive.tgz", allocated: 4096, logical: 4096, extension: 22,
+                ListMismatch.ListNamesItsOwnRecordAsItWas, alias: "FRAGME~1.TGZ")
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
     /// A list that cannot be read in full may have lost the very entry naming where the size went,
     /// so it is not read as a shorter list.
     /// </summary>
@@ -450,6 +486,41 @@ public class MftVolumeIndexTests
                 ListMismatch.ListNamesItsOwnRecordAsItWas));
 
         Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// A junction's reparse point found in its extension record makes it a link: it holds nothing
+    /// here, its folder still totals, and a question about the link itself goes to the walk.
+    /// </summary>
+    [Fact]
+    public void TreatsADirectoryAsALinkWhenItsReparsePointIsInAnExtensionRecord()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddDirectoryLinkWithItsReparsePointInAnExtensionRecord(30, Cache, "moved", extension: 31));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "moved"]));
+    }
+
+    /// <summary>
+    /// Where that extension record cannot be established, nothing says whether the directory is a
+    /// link. Read as an ordinary directory it would have no children and total nothing, and a
+    /// cache moved to another drive behind a junction would be reported empty — so the answer is
+    /// unknown, for it and for the folder holding it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToTotalADirectoryWhoseReparsePointCannotBeEstablished(ListMismatch mismatch)
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddDirectoryLinkWithItsReparsePointInAnExtensionRecord(30, Cache, "moved", extension: 31, mismatch)
+            .AddFile(23, Sibling, "settings.json", allocated: 1024, logical: 1000));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "moved"]));
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.Equal(1000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
     }
 
     public static TheoryData<ListMismatch> EveryMismatch() => [.. Enum.GetValues<ListMismatch>()];

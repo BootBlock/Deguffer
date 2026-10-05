@@ -91,28 +91,6 @@ internal static class MftAttributeList
         return entries;
     }
 
-    /// <summary>The value of a resident list, or false where its header does not fit the attribute.</summary>
-    public static bool TryReadResidentValue(ReadOnlySpan<byte> attribute, out ReadOnlySpan<byte> value)
-    {
-        value = default;
-
-        if (attribute.Length < 0x18 || attribute[0x08] != 0)
-        {
-            return false;
-        }
-
-        int valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
-        var valueLength = BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]);
-
-        if (valueLength > (uint)attribute.Length || valueOffset > attribute.Length - (int)valueLength)
-        {
-            return false;
-        }
-
-        value = attribute.Slice(valueOffset, (int)valueLength);
-        return true;
-    }
-
     /// <summary>
     /// Where a non-resident list's bytes are on the volume, and how many of them are the list.
     ///

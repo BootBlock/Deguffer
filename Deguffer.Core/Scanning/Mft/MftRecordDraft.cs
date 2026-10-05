@@ -165,28 +165,43 @@ internal struct MftRecordDraft
         // The same holds where the base record's own name could have been displaced by one in an
         // extension record that could not be read. Placing the file under its second-best name
         // is a guess at which directory it belongs to.
-        if (_bestRank == NoName || (list is { Failed: true } && BaseRank != 0))
+        if (_bestRank == NoName || list?.Lost.HasFlag(MftAttributeKinds.Name) == true)
         {
             return MftParseOutcome.Unreadable;
         }
 
-        result = new MftRecord(_parent, _name, SizeFor(isDirectory, list), isDirectory, _isReparsePoint, _created, _lastWritten);
+        // A reparse point that could not be established is no more a link than it is not one. The
+        // index steps over a link without asking its size, so a link mark kept here would let the
+        // unknown size below it pass unseen; the unknown alone is what sends the question to the
+        // walk.
+        var isReparsePoint = _isReparsePoint && list?.Lost.HasFlag(MftAttributeKinds.ReparsePoint) != true;
+
+        result = new MftRecord(_parent, _name, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten);
         return MftParseOutcome.Parsed;
     }
 
     private readonly ScanSize? SizeFor(bool isDirectory, MftListFindings? list)
     {
+        var lost = list?.Lost ?? MftAttributeKinds.None;
+
         // A directory's own $DATA is not the size of its contents — the contents are counted
         // through their own records — so attributing anything here would double-count them.
         // Nothing is read from it, so a directory that keeps its attributes elsewhere is still a
         // known quantity: zero. Refusing there would give up on every large directory on the volume,
         // which is precisely where NTFS runs out of room in a record.
+        //
+        // Except where its reparse point was lost. A junction has no children in the table — what
+        // it stands for keeps its own place — so read as an ordinary directory it totals zero, and
+        // a cache moved to another drive behind one would be reported empty. Unknown sends the
+        // question to the walk, which follows the link.
         if (isDirectory)
         {
-            return ScanSize.Zero;
+            return lost.HasFlag(MftAttributeKinds.ReparsePoint) ? null : ScanSize.Zero;
         }
 
-        if (list is { Failed: true })
+        // Any loss leaves a file's size in doubt: the stream itself, or the reparse point that
+        // would have said the stream is a link's and occupies nothing here.
+        if (lost != MftAttributeKinds.None)
         {
             return null;
         }
@@ -206,8 +221,10 @@ internal struct MftRecordDraft
 
 /// <summary>What following a base record's <c>$ATTRIBUTE_LIST</c> established.</summary>
 /// <param name="DeclaresUnnamedData">Whether the list names an unnamed <c>$DATA</c> at all.</param>
-/// <param name="Failed">
-/// Whether the list, or a record it named and the scan needed, could not be established. Never a
-/// smaller answer: what could not be read may be the very attribute the scan wanted.
+/// <param name="Lost">
+/// The kinds of attribute the list, or a record it named, could have supplied and did not: what
+/// could not be read may be the very attribute the scan wanted, so each is an unknown rather than
+/// an absence. A lost name is one that could have outranked the best name found, so the file's
+/// directory is not known.
 /// </param>
-internal readonly record struct MftListFindings(bool DeclaresUnnamedData, bool Failed);
+internal readonly record struct MftListFindings(bool DeclaresUnnamedData, MftAttributeKinds Lost);
