@@ -39,7 +39,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     public FakeVolumeInventory With(
         string rootPath,
         DriveType kind = DriveType.Fixed,
-        bool isReady = true,
+        VolumeReadiness readiness = VolumeReadiness.Ready,
         VolumeFeatures features = VolumeFeatures.ReparsePoints,
         IReadOnlyList<string>? alsoMountedAt = null,
         long? totalBytes = null,
@@ -48,7 +48,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         _volumes.Add(new LocalVolume(
             rootPath,
             kind,
-            isReady,
+            readiness,
             TotalBytes: totalBytes,
             FreeBytes: freeBytes,
             Features: features,

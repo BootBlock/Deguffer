@@ -180,10 +180,14 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// built only if this says yes — and the machine that most needs to hear it is the one whose
     /// only bin is on the cloud mount, where every other answer here is no. Presence is what puts
     /// the row on the page, and a refusal the user is never shown is the silence
-    /// <see cref="LocalVolume.StoresContentRemotely"/> exists to break.</para>
+    /// <see cref="LocalVolume.StoresContentRemotely"/> exists to break. A volume Windows would not
+    /// describe counts for the same reason: its bin may hold anything.</para>
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(RemotelyStoredVolumes().Any() || RecognisedBinPaths().Any(LongPath.DirectoryMayExist));
+        Task.FromResult(
+            RemotelyStoredVolumes().Any()
+            || UnreadableVolumes().Any()
+            || RecognisedBinPaths().Any(LongPath.DirectoryMayExist));
 
     /// <summary>
     /// The volume list is remembered for the life of a pass, so a drive mounted while the app was
@@ -243,6 +247,18 @@ public sealed class RecycleBinProvider : CleanupProviderBase
                 $"Leaving {remote.RootPath} alone: it is cloud storage that Windows shows as an "
                 + "ordinary drive or folder, and its Recycle Bin was not looked at. Reading it "
                 + "would download the files on it onto this computer."));
+        }
+
+        // Said for the same reason, and a warning rather than information: this is not a decision
+        // Deguffer made, so the plan beside it is short by an amount nobody can state.
+        foreach (var volume in UnreadableVolumes())
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"Windows would not say what is on {volume.RootPath}, so its Recycle Bin was not looked "
+                + "at. A drive this account may not read and a mount Windows will not follow both do "
+                + "that. Anything in that bin is left alone and is not counted in the size shown."));
+            unreadable = true;
         }
 
         foreach (var bin in CandidateBins())
@@ -495,6 +511,14 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// <summary>The fixed volumes left out of <see cref="CandidateBins"/> because they are not local.</summary>
     private IEnumerable<LocalVolume> RemotelyStoredVolumes() =>
         FixedVolumes().Where(v => v.StoresContentRemotely);
+
+    /// <summary>
+    /// The fixed volumes whose root Windows would not describe, so their bins could not be looked
+    /// for. Kept apart from an empty drive, which has no bin to look for. See
+    /// <see cref="VolumeReadiness"/>.
+    /// </summary>
+    private IEnumerable<LocalVolume> UnreadableVolumes() =>
+        _volumes.Volumes.Where(v => v is { Kind: DriveType.Fixed, Readiness: VolumeReadiness.Refused });
 
     /// <summary>
     /// Every path this provider could ever target, by declaration rather than by enumeration — so

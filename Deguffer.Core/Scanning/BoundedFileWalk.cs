@@ -41,7 +41,12 @@ internal static class BoundedFileWalk
     /// Called, concurrently, for each file carrying a reparse point, which <paramref name="onFile"/>
     /// never sees. See <see cref="DirectoryContents.ReparseFiles"/>.
     /// </param>
-    public static void Visit(
+    /// <returns>
+    /// Whether <paramref name="root"/> itself was listed. A folder refused below it is skipped as
+    /// §5.3 says, and only the root's refusal is returned, because only that one leaves the caller
+    /// with nothing measured. See <see cref="RootReach"/>.
+    /// </returns>
+    public static bool Visit(
         string root,
         WalkTuning tuning,
         Action<WalkEntry> onFile,
@@ -50,17 +55,25 @@ internal static class BoundedFileWalk
         TimeProvider clock,
         CancellationToken ct)
     {
-        Visit<byte>(
+        // Written by the root's own listing alone, before anything below it is queued.
+        var rootListed = true;
+
+        Visit(
             root,
-            rootState: 0,
+            rootState: true,
             tuning,
-            (_, contents, descend) =>
+            (isRoot, contents, descend) =>
             {
+                if (isRoot && contents.WasRefused)
+                {
+                    rootListed = false;
+                }
+
                 foreach (var entry in contents.Entries)
                 {
                     if (entry.IsDirectory)
                     {
-                        descend(entry, 0);
+                        descend(entry, false);
                     }
                     else
                     {
@@ -76,6 +89,8 @@ internal static class BoundedFileWalk
             onProgress,
             clock,
             ct);
+
+        return rootListed;
     }
 
     /// <summary>

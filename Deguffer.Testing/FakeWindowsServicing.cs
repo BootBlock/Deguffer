@@ -20,5 +20,5 @@ public sealed class FakeWindowsServicing : IWindowsServicing
     public int UninstallWindowDays { get; init; } = 10;
 
     public bool HasPendingOperationsIn(string directory) =>
-        PendingFileOperations.Any(path => LongPath.Contains(LongPath.Display(directory), path));
+        LongPath.MayContainAny(directory, PendingFileOperations);
 }

@@ -26,7 +26,7 @@ public sealed class LocalVolumeTests
     [Fact]
     public void ACloudMountPresentedAsADriveLetterStoresItsContentRemotely()
     {
-        var volume = new LocalVolume(@"V:\", DriveType.Fixed, IsReady: true, Features: GoogleDriveMount);
+        var volume = new LocalVolume(@"V:\", DriveType.Fixed, VolumeReadiness.Ready, Features: GoogleDriveMount);
 
         Assert.True(volume.StoresContentRemotely);
     }
@@ -38,7 +38,7 @@ public sealed class LocalVolumeTests
     [Fact]
     public void AnOrdinaryLocalVolumeDoesNot()
     {
-        var volume = new LocalVolume(@"C:\", DriveType.Fixed, IsReady: true, Features: LocalNtfsVolume);
+        var volume = new LocalVolume(@"C:\", DriveType.Fixed, VolumeReadiness.Ready, Features: LocalNtfsVolume);
 
         Assert.False(volume.StoresContentRemotely);
     }
@@ -55,7 +55,7 @@ public sealed class LocalVolumeTests
         var volume = new LocalVolume(
             @"C:\",
             DriveType.Fixed,
-            IsReady: true,
+            VolumeReadiness.Ready,
             Features: VolumeFeatures.RemoteStorage | VolumeFeatures.ReparsePoints);
 
         Assert.False(volume.StoresContentRemotely);
@@ -74,7 +74,7 @@ public sealed class LocalVolumeTests
     [Fact]
     public void AVolumeThatSaidNothingIsNotRefused()
     {
-        Assert.False(new LocalVolume(@"E:\", DriveType.Fixed, IsReady: true).StoresContentRemotely);
+        Assert.False(new LocalVolume(@"E:\", DriveType.Fixed, VolumeReadiness.Ready).StoresContentRemotely);
     }
 
     /// <summary>
@@ -89,7 +89,7 @@ public sealed class LocalVolumeTests
         var volume = new LocalVolume(
             @"D:\",
             DriveType.Fixed,
-            IsReady: true,
+            VolumeReadiness.Ready,
             AlsoMountedAt: [@"C:\Mount\", @"C:\Second\"]);
 
         Assert.Equal([@"D:\", @"C:\Mount\", @"C:\Second\"], volume.MountPoints);
@@ -102,6 +102,6 @@ public sealed class LocalVolumeTests
     [Fact]
     public void ListsOnlyItsRootWhereItIsMountedNowhereElse()
     {
-        Assert.Equal([@"E:\"], new LocalVolume(@"E:\", DriveType.Fixed, IsReady: true).MountPoints);
+        Assert.Equal([@"E:\"], new LocalVolume(@"E:\", DriveType.Fixed, VolumeReadiness.Ready).MountPoints);
     }
 }

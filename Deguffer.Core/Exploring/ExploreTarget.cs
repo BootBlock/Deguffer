@@ -37,13 +37,23 @@ public readonly record struct ExploreTarget(string? Drive, string? Folder)
     /// picker's list, which answers only for the volumes the page chose to offer. A target on a
     /// volume the inventory says nothing about — a share, most often — is not refused: nothing
     /// measured its flags, and refusing on no reading would be a guess.</para>
+    ///
+    /// <para>A volume Windows would not describe is refused at its mount point and nowhere else. A
+    /// folder below it can still be readable, because every account may bypass traverse checking, so
+    /// refusing the folder would refuse a scan that can run.</para>
     /// </summary>
     public string? Refusal(IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(volumes);
 
-        return Root is { } root && HostVolume.For(volumes, root) is { StoresContentRemotely: true }
-            ? DriveChoice.RemoteStorageRefusal
+        return Root is { } root && HostVolume.For(volumes, root) is { } volume
+            ? volume switch
+            {
+                { StoresContentRemotely: true } => DriveChoice.RemoteStorageRefusal,
+                { Readiness: VolumeReadiness.Refused }
+                    when volume.MountPoints.Any(mountPoint => HostVolume.IsMountPoint(mountPoint, root)) => DriveChoice.UnreadableRefusal,
+                _ => null,
+            }
             : null;
     }
 

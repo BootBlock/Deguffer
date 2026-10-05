@@ -41,13 +41,25 @@ internal static class DiskCleanupRun
         // hand back the figure it is about to be subtracted from.
         var after = await PlanExecutor.MeasureFromDiskAsync(scanner, step.Destroys, ct).ConfigureAwait(false);
 
-        var remaining = after.Reclaimable;
-        var reclaimed = step.EstimatedBytes - remaining;
-        var entriesRemoved = Math.Max(0, step.Estimated.Entries - after.Entries);
-
         // The handler reports its own progress to a sink that passes nothing on, so there is only the
         // end of it to report.
         progress?.Report(1.0);
+
+        // No evidence either way, so the handler's own answer is the only thing to report and nothing
+        // is credited, as for a Recycle Bin.
+        if (after.Unreached is not null)
+        {
+            return new StepOutcome(
+                step.Description,
+                outcome.Ran,
+                BytesReclaimed: 0,
+                Refusals.None,
+                $"{outcome.Message ?? "Windows reported its cleanup finished."} {after.WhyNothingIsCounted}.");
+        }
+
+        var remaining = after.Size.Reclaimable;
+        var reclaimed = step.EstimatedBytes - remaining;
+        var entriesRemoved = Math.Max(0, step.Estimated.Entries - after.Size.Entries);
 
         // The disk is the evidence and the handler's answer only the explanation, as it is for a
         // Recycle Bin: a success taken from the answer alone would repeat a claim the reading above

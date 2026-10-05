@@ -16,7 +16,7 @@ public sealed class DriveChoiceTests
     public void CarriesWhatTheMachineReportedAboutTheVolume()
     {
         var choice = DriveChoice.From(new LocalVolume(
-            @"D:\", DriveType.Fixed, IsReady: true, Label: "Projects",
+            @"D:\", DriveType.Fixed, VolumeReadiness.Ready, Label: "Projects",
             TotalBytes: 100 * Gigabyte, FreeBytes: 40 * Gigabyte));
 
         Assert.Equal(@"D:\", choice.RootPath);
@@ -52,7 +52,7 @@ public sealed class DriveChoiceTests
     [Fact]
     public void SaysTheSizeIsUnknownRatherThanShowingAZero()
     {
-        var choice = DriveChoice.From(new LocalVolume(@"E:\", DriveType.Removable, IsReady: true));
+        var choice = DriveChoice.From(new LocalVolume(@"E:\", DriveType.Removable, VolumeReadiness.Ready));
 
         Assert.Null(choice.UsedBytes);
         Assert.Equal("size unknown", choice.Sizes);
@@ -100,7 +100,7 @@ public sealed class DriveChoiceTests
     public void ACloudMountIsOfferedAndRefused()
     {
         var choice = DriveChoice.From(new LocalVolume(
-            @"V:\", DriveType.Fixed, IsReady: true, Label: "Google Drive",
+            @"V:\", DriveType.Fixed, VolumeReadiness.Ready, Label: "Google Drive",
             Features: (VolumeFeatures)0x0000_0106));
 
         Assert.True(choice.IsRefused);
@@ -128,7 +128,7 @@ public sealed class DriveChoiceTests
     public void AnOrdinaryVolumeIsNotRefused()
     {
         var choice = DriveChoice.From(new LocalVolume(
-            @"C:\", DriveType.Fixed, IsReady: true, Features: (VolumeFeatures)0x03E7_2EFF));
+            @"C:\", DriveType.Fixed, VolumeReadiness.Ready, Features: (VolumeFeatures)0x03E7_2EFF));
 
         Assert.False(choice.IsRefused);
         Assert.Null(choice.Refusal);
@@ -145,7 +145,7 @@ public sealed class DriveChoiceTests
     public void AVolumeMountedAtAFolderIsOffered()
     {
         var choice = DriveChoice.From(new LocalVolume(
-            @"C:\Mount\", DriveType.Fixed, IsReady: true, Label: "Archive",
+            @"C:\Mount\", DriveType.Fixed, VolumeReadiness.Ready, Label: "Archive",
             Features: (VolumeFeatures)0x03E7_2EFF));
 
         Assert.False(choice.IsRefused);
@@ -163,7 +163,7 @@ public sealed class DriveChoiceTests
     public void ACloudVolumeMountedAtAFolderIsRefusedForTheDownload()
     {
         var choice = DriveChoice.From(new LocalVolume(
-            @"C:\Mount\", DriveType.Fixed, IsReady: true, Features: (VolumeFeatures)0x0000_0106));
+            @"C:\Mount\", DriveType.Fixed, VolumeReadiness.Ready, Features: (VolumeFeatures)0x0000_0106));
 
         Assert.Equal(DriveChoice.RemoteStorageRefusal, choice.Refusal);
     }

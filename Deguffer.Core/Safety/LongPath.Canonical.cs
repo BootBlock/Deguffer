@@ -103,6 +103,25 @@ public static partial class LongPath
         }
     }
 
+    /// <summary>
+    /// Whether any of <paramref name="candidates"/> may be <paramref name="ancestor"/> or sit inside
+    /// it: <see cref="Contains"/> asked of both sides in <see cref="Canonical"/> form, and true for
+    /// a candidate where either side has none.
+    ///
+    /// <para><b>For a guard whose "no" lets something be deleted.</b> A path a program or Windows
+    /// recorded may be spelled with an 8.3 alias, and compared as spelled it reads as outside the
+    /// folder it names, in the direction that deletes. A side that cannot be put in canonical form
+    /// may be an alias for the very folder asked about, so it cannot be ruled out.</para>
+    ///
+    /// <para>Asked of every candidate at once because the ancestor is put in canonical form once:
+    /// a folder such as <c>$Windows.~BT</c> carries a <c>~</c>, so each of its forms asks the
+    /// disk.</para>
+    /// </summary>
+    public static bool MayContainAny(string ancestor, IEnumerable<string> candidates) =>
+        Canonical(ancestor) is { } folder
+            ? candidates.Any(candidate => Canonical(candidate) is not { } path || Contains(folder, path))
+            : candidates.Any();
+
     /// <param name="whole">
     /// Whether the answer is the canonical form, rather than the best spelling available of a path
     /// that has none.

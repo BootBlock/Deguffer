@@ -70,7 +70,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         if (remember)
         {
-            _estimates?.Set(path, result.Size);
+            Remember(path, result);
         }
 
         return result;
@@ -89,8 +89,22 @@ public sealed class DirectoryScanner : IDirectoryScanner
             .MeasureAsync(path, MinimumAge.Off, progress: null, ct)
             .ConfigureAwait(false);
 
-        _estimates?.Set(path, result.Size);
+        Remember(path, result);
         return result;
+    }
+
+    /// <summary>
+    /// Keep <paramref name="result"/> as the figure the next run opens on, unless it measured
+    /// nothing. A zero for a path the walk could not reach would open the next run on "this cache is
+    /// empty", and the figure it replaces is still the last one anybody read. See
+    /// <see cref="RootReach"/>.
+    /// </summary>
+    private void Remember(string path, ScanResult result)
+    {
+        if (result.WasReached)
+        {
+            _estimates?.Set(path, result.Size);
+        }
     }
 
     /// <summary>
@@ -228,7 +242,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// Remembered estimates deliberately survive this. Invalidate runs at the *start* of a planning
     /// pass, and clearing them here would throw away the values that make the window populate
     /// instantly — the entire point of caching them. They need no explicit clearing in any case:
-    /// every measurement overwrites its own entry with the fresh figure.
+    /// every measurement that reached its path overwrites its own entry with the fresh figure, and
+    /// one that did not leaves the last figure anybody read. See <see cref="Remember"/>.
     /// </summary>
     public void Invalidate()
     {
