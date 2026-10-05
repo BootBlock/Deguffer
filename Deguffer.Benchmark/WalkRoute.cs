@@ -13,7 +13,7 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class WalkRoute
 {
-    public static RunTally Run(string folder, CancellationToken ct)
+    public static RunTally Run(string folder, WalkTuning tuning, CancellationToken ct)
     {
         long entries = 0;
         var refused = 0;
@@ -23,6 +23,7 @@ internal static class WalkRoute
         BoundedFileWalk.Visit<byte>(
             LongPath.Extended(folder),
             rootState: 0,
+            tuning,
             (_, contents, descend) =>
             {
                 if (contents.WasRefused)
@@ -32,15 +33,16 @@ internal static class WalkRoute
 
                 foreach (var entry in contents.Entries)
                 {
-                    if (entry is DirectoryInfo directory)
+                    if (entry.IsDirectory)
                     {
-                        descend(directory, 0);
+                        descend(entry, 0);
                     }
                 }
 
                 Interlocked.Add(ref entries, contents.Entries.Count + contents.Links.Count + contents.ReparseFiles.Count);
             },
-            onLevel: static () => { },
+            onProgress: static () => { },
+            TimeProvider.System,
             ct);
 
         return new RunTally(Interlocked.Read(ref entries), BytesRead: 0, Complete: Volatile.Read(ref refused) == 0);

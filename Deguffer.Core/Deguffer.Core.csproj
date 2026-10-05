@@ -72,10 +72,14 @@
       MftExploreReader. Those are internal because nothing in the app calls them except through a
       scanner, and a timing taken through a scanner would include its caching and route choice. The
       grant measures the routes themselves without making them part of Core's public surface.
+
+      Deguffer.Benchmark.Tests is granted it too, because the walk's values (WalkTuning) are what
+      the benchmark's command line produces, and its tests assert them.
     -->
     <InternalsVisibleTo Include="Deguffer.Core.Tests" />
     <InternalsVisibleTo Include="Deguffer.Testing" />
     <InternalsVisibleTo Include="Deguffer.Benchmark" />
+    <InternalsVisibleTo Include="Deguffer.Benchmark.Tests" />
   </ItemGroup>
 
 </Project>

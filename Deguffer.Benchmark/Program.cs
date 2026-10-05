@@ -37,7 +37,7 @@ else if (LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
 
 Func<CancellationToken, RunTally> run = request.Route.ReadsTable()
     ? ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Drive, ct)
-    : ct => WalkRoute.Run(request.Path, ct);
+    : ct => WalkRoute.Run(request.Path, request.Walk, ct);
 
 using var cancel = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -71,5 +71,10 @@ catch (IOException ex)
     return 2;
 }
 
-Console.Out.Write(Report.Render(request.Route, MeasuredPlace.Of(request.Path), MachineFacts.Current, runs));
+Console.Out.Write(Report.Render(
+    request.Route,
+    Tuning.Describe(request.Route, request.Walk),
+    MeasuredPlace.Of(request.Path),
+    MachineFacts.Current,
+    runs));
 return 0;

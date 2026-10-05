@@ -92,6 +92,7 @@ public static class ChromiumUserDataWalk
         BoundedFileWalk.Visit<(string Path, int Depth)>(
             LongPath.Extended(root),
             (root, 0),
+            WalkTuning.Default,
             (directory, contents, descend) =>
             {
                 if (directory.Depth == 0)
@@ -103,8 +104,13 @@ public static class ChromiumUserDataWalk
                     return;
                 }
 
-                foreach (var child in contents.Entries.OfType<DirectoryInfo>())
+                foreach (var child in contents.Entries)
                 {
+                    if (!child.IsDirectory)
+                    {
+                        continue;
+                    }
+
                     var path = LongPath.Display(child.FullName);
 
                     if (!excluded.Contains(Path.TrimEndingDirectorySeparator(path)))
@@ -136,6 +142,7 @@ public static class ChromiumUserDataWalk
                 }
             },
             static () => { },
+            TimeProvider.System,
             ct);
 
         return new ChromiumFolderWalk(
@@ -151,10 +158,10 @@ public static class ChromiumUserDataWalk
     /// </summary>
     private static PathPresence Marked(string directory, DirectoryContents listed) => listed.WasRefused
         ? LongPath.ProbeFile(Path.Combine(directory, ChromiumLayout.Browser.IdentifyingFile))
-        : listed.Entries.OfType<FileInfo>().Concat(listed.ReparseFiles).Any(IsMarker)
+        : listed.Entries.Any(entry => !entry.IsDirectory && IsMarker(entry)) || listed.ReparseFiles.Any(IsMarker)
             ? PathPresence.Present
             : PathPresence.Absent;
 
-    private static bool IsMarker(FileInfo file) =>
+    private static bool IsMarker(WalkEntry file) =>
         file.Name.Equals(ChromiumLayout.Browser.IdentifyingFile, StringComparison.OrdinalIgnoreCase);
 }

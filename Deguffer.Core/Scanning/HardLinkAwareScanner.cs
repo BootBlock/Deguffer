@@ -97,6 +97,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         BoundedFileWalk.Visit(
             LongPath.Extended(path),
+            WalkTuning.Default,
             file =>
             {
                 // §9, named rather than only left out: a store inside a tool's own folder is what
@@ -110,7 +111,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                 // Asked before the handle is opened, because the guard is the cheaper question and
                 // the answer is the same either way: a file it keeps is one this store's eviction
                 // will not take, so its sole-linked bytes are not reclaimable here.
-                if (keep.Protects(file))
+                if (keep.Protects(file.NewestFileTime))
                 {
                     Interlocked.Exchange(ref withheld, 1);
                     return;
@@ -131,9 +132,10 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
                     stores.Add(LongPath.Display(marked.FullName));
                 }
             },
-            // §5.5: stream partial results. One report per breadth-first level, not per file.
+            // §5.5: stream partial results, at the walk's interval rather than per file.
             () => progress?.Report(Approximate(
                 Interlocked.Read(ref allocated), Interlocked.Read(ref logical))),
+            TimeProvider.System,
             ct);
 
         return (

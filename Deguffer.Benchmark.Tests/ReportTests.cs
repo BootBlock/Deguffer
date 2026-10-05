@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Benchmark.Tests;
 
@@ -8,6 +9,8 @@ namespace Deguffer.Benchmark.Tests;
 /// </summary>
 public sealed class ReportTests
 {
+    private const string Tuning = "4 folders listed at once, 64 KiB listing buffer";
+
     private static readonly MeasuredPlace Place = new("C:", DriveType.Fixed, "NTFS");
 
     private static readonly MachineFacts Machine =
@@ -57,16 +60,23 @@ public sealed class ReportTests
     }
 
     [Fact]
-    public void TheValuesTheRouteRanWithAreStated()
-    {
-        Assert.Equal("tuning             " + Tuning.Describe(Route.Walk), Line(Render(Route.Walk, Run(1)), "tuning"));
-        Assert.Equal("tuning             " + Tuning.Describe(Route.Table), Line(Render(Route.Table, Run(1)), "tuning"));
-    }
+    public void TheValuesTheRouteRanWithAreStated() =>
+        Assert.Equal("tuning             " + Tuning, Line(Render(Route.Walk, Run(1)), "tuning"));
+
+    /// <summary>
+    /// The walk's values are the ones it was asked to run with, so two results taken at different
+    /// values can never be read as one comparison.
+    /// </summary>
+    [Fact]
+    public void TheWalksValuesAreTheOnesItRanWith() =>
+        Assert.Equal(
+            "3 folders listed at once, 8 KiB listing buffer",
+            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024)));
 
     [Fact]
     public void ADebugBuildIsCalledOut()
     {
-        var text = Report.Render(Route.Walk, Place, Machine with { DebugBuild = true }, [Run(1)]);
+        var text = Report.Render(Route.Walk, Tuning, Place, Machine with { DebugBuild = true }, [Run(1)]);
 
         Assert.StartsWith("warning ", Line(text, "warning"), StringComparison.Ordinal);
         Assert.DoesNotContain("warning", Render(Route.Walk, Run(1)), StringComparison.Ordinal);
@@ -76,7 +86,7 @@ public sealed class ReportTests
     public void ThePlaceIsTheDriveAndItsFileSystem() =>
         Assert.Equal("place              C: (Fixed, NTFS)", Line(Render(Route.Walk, Run(1)), "place"));
 
-    private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Place, Machine, runs);
+    private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, Place, Machine, runs);
 
     private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true) =>
         new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete), AllocatedBytes: 1 << 20, PeakWorkingSet: 64 << 20);

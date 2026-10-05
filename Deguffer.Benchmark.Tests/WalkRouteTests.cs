@@ -1,3 +1,4 @@
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Benchmark.Tests;
@@ -31,7 +32,7 @@ public sealed class WalkRouteTests : IDisposable
         _temp.CreateDirectory("root", "b");
         Junction.ToDirectory(Path.Combine(root, "link"), target);
 
-        var tally = WalkRoute.Run(root, CancellationToken.None);
+        var tally = WalkRoute.Run(root, WalkTuning.Default, CancellationToken.None);
 
         // a, b and link at the top, and the two files in a.
         Assert.Equal(5, tally.Items);
@@ -49,7 +50,7 @@ public sealed class WalkRouteTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
-        var tally = WalkRoute.Run(root, CancellationToken.None);
+        var tally = WalkRoute.Run(root, WalkTuning.Default, CancellationToken.None);
 
         // open, refused and the file in open. Nothing inside the refused folder.
         Assert.Equal(3, tally.Items);
