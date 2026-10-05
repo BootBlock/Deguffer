@@ -21,12 +21,18 @@ internal sealed record WalkTuning
     public const int MaximumListingBuffer = 1024 * 1024;
 
     /// <summary>
-    /// What every scan uses. The thread count is the value the walk used before it could be set,
-    /// and the buffer is what measurement favoured on the drives it was tried on.
+    /// What every scan uses. The thread count is the value the walk used before it could be set.
+    ///
+    /// <para>The buffer is the size that was fastest, or level with the fastest, on each tree it was
+    /// measured on: three folders on one NVMe drive, alternating with the walk it replaced. A larger
+    /// buffer is not free on a local drive. Each listing pays for the whole buffer however few
+    /// entries the folder holds, and at 1 MiB a walk of mostly small folders ran four to nine times
+    /// slower. The gain Microsoft describes from a larger buffer is for network shares, which were
+    /// not measured.</para>
     /// </summary>
     public static readonly WalkTuning Default = new(
         Math.Min(Environment.ProcessorCount * 2, 16),
-        64 * 1024);
+        16 * 1024);
 
     public WalkTuning(int threads, int listingBufferBytes)
     {
