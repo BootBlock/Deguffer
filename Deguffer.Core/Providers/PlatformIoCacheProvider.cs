@@ -230,9 +230,8 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths = BuildProtectedPaths(locations),
             Notes = notes,
-            // Two measurements now, and the first reason to appear is the one the user is shown —
-            // the same rule ScanBatch already applies within a single measurement.
-            Fallback = cache.Fallback != FallbackReason.None ? cache.Fallback : packages.Fallback,
+            // Two measurements now, combined by the rule ScanBatch already applies within one.
+            Fallback = FallbackReasonText.Prevailing(cache.Fallback, packages.Fallback),
             HasUnreadableRoot = cache.Unreachable || packages.Unreachable,
         };
     }

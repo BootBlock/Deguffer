@@ -48,8 +48,8 @@ public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, Fallba
 ///
 /// <para>Separate from <see cref="FallbackReasonText"/>, which says the opposite thing for good
 /// reason. That one qualifies the measurement of a dozen named caches, where building the table
-/// costs a pass over the whole volume to answer a handful of questions — measured at 9.9 seconds
-/// against 1.24 for walking the same paths — so its sentence is careful not to promise a speed-up.
+/// costs a pass over the whole volume to answer a handful of questions — which is why the walk
+/// races the table there, and why its sentence is careful not to promise a speed-up.
 /// Here the table answers for every directory on the disk from that same single pass, and the walk
 /// it replaces is the one §5.5 measured at over ten minutes. The same fact, and opposite
 /// advice.</para>
@@ -93,6 +93,10 @@ public static class ExploreRouteText
 
             FallbackReason.WalkChosen =>
                 "Scanned by walking directories, because Settings asks for the walk only.",
+
+            // Cannot arise here either. Explore reads the table and never races it, because the walk
+            // it would race is the whole volume.
+            FallbackReason.WalkAnsweredFirst => null,
 
             _ => throw new ArgumentOutOfRangeException(nameof(reason)),
         };

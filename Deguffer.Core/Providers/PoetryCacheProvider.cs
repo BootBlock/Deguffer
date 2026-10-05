@@ -300,8 +300,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         }
 
         // §5.5's fallback is a property of the volume rather than of one path, so the first reason
-        // either measurement met is the one the user is shown.
-        var fallback = cleared.Fallback != FallbackReason.None ? cleared.Fallback : deleted.Fallback;
+        // with something to say, from either measurement, is the one the user is shown.
+        var fallback = FallbackReasonText.Prevailing(cleared.Fallback, deleted.Fallback);
 
         // Said once, and that is why this provider builds the sentence rather than taking each
         // batch's own note. It is the only provider that measures twice — the command route and the

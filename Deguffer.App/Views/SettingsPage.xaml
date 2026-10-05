@@ -401,14 +401,15 @@
             <!-- Indexed against ScanRoute. -->
             <views:SettingsRow Glyph="&#xE721;"
                                Title="How to scan"
-                               Description="Auto reads a volume's file table where it can, which needs Deguffer to run as administrator on an NTFS volume, and walks folders everywhere else. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. Neither changes what is found.">
+                               Description="Reading a volume's file table needs Deguffer to run as administrator on an NTFS volume. Auto walks folders while it reads the table and uses whichever answers first, and walks everywhere the table cannot be read. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. File table first waits for the table instead, which may suit a spinning disk. None of them changes what is found.">
                 <views:SettingsRow.Control>
                     <ComboBox SelectedIndex="{x:Bind Scanning.RouteIndex, Mode=TwoWay}"
                               MinWidth="150"
-                              ToolTipService.ToolTip="Auto reads the file table wherever Deguffer can, and walks folders where it cannot."
+                              ToolTipService.ToolTip="Auto reads the file table and walks folders at the same time, and uses whichever answers first."
                               AutomationProperties.Name="How to scan">
                         <ComboBoxItem Content="Auto" />
                         <ComboBoxItem Content="Walk folders only" />
+                        <ComboBoxItem Content="File table first" />
                     </ComboBox>
                 </views:SettingsRow.Control>
             </views:SettingsRow>

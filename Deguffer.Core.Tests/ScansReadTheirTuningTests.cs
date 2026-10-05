@@ -33,7 +33,8 @@ public sealed class ScansReadTheirTuningTests : IDisposable
         _tuner = new ScanTuner(
             new FakePreferences(AppPreferences.Default with
             {
-                Scanning = ScanPreferences.Default.With(
+                // The table waited for, so a measurement does not return while the build is still reading.
+                Scanning = (ScanPreferences.Default with { Route = ScanRoute.Table }).With(
                     StorageMedia.Nvme, new MediaScanPreferences(TableReadKiB: ReadKiB, TableReadsInFlight: ReadsInFlight)),
             }),
             new VolumeMediaCache(_queries),

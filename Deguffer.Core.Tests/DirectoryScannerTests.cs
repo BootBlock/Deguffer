@@ -24,7 +24,7 @@ public class DirectoryScannerTests
     [Fact]
     public async Task ReadsTheTableWhereItCan()
     {
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Volume()));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Volume()), tuning: RouteTuners.Table);
 
         var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
 
@@ -84,7 +84,7 @@ public class DirectoryScannerTests
 
         // The fixture serves the volume the temp directory is on, but knows nothing of this path.
         var drive = Path.GetFullPath(temp.Path)[0];
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(drive, Volume()));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(drive, Volume()), tuning: RouteTuners.Table);
 
         var result = await scanner.MeasureAsync(cache);
 
@@ -155,7 +155,7 @@ public class DirectoryScannerTests
         File.WriteAllBytes(Path.Combine(cache, "a.bin"), new byte[3000]);
 
         var drive = Path.GetFullPath(temp.Path)[0];
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(drive, Volume().UnreadableFrom(9)));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(drive, Volume().UnreadableFrom(9)), tuning: RouteTuners.Table);
 
         var result = await scanner.MeasureAsync(cache);
 
@@ -174,7 +174,7 @@ public class DirectoryScannerTests
     {
         var volume = Volume().AddFileWithDataInAnExtensionRecord(
             21, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence);
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume), tuning: RouteTuners.Table);
 
         var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
 
@@ -191,7 +191,7 @@ public class DirectoryScannerTests
     {
         var volume = Volume().AddFileWithDataInAnExtensionRecord(
             21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22);
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume), tuning: RouteTuners.Table);
 
         var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
 
@@ -203,7 +203,7 @@ public class DirectoryScannerTests
     [Fact]
     public async Task AcceptsAnExtendedLengthPath()
     {
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Volume()));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Volume()), tuning: RouteTuners.Table);
 
         var result = await scanner.MeasureAsync(@"\\?\C:\Users\testuser\.npm-cache");
 

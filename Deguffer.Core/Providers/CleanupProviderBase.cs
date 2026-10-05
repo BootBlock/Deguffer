@@ -465,11 +465,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
             }
 
             // Paths in one plan can sit on different volumes and so take different routes; the
-            // first reason to appear is the one the user is shown.
-            if (fallback == FallbackReason.None)
-            {
-                fallback = measured.Fallback;
-            }
+            // first reason with something to say is the one the user is shown.
+            fallback = FallbackReasonText.Prevailing(fallback, measured.Fallback);
         }
 
         return new ScanBatch(sizes, fallback, withheld, stores);

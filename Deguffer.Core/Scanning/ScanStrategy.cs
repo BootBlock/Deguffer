@@ -79,10 +79,30 @@ public enum FallbackReason
     /// is. Not a fault, and administrator rights would not change it, so nothing offers them.
     /// </summary>
     WalkChosen,
+
+    /// <summary>
+    /// The table was still being read when the walk answered, so the walk's answer was taken. See
+    /// <see cref="Configuration.ScanRoute.Auto"/>.
+    ///
+    /// <para>Nothing was unavailable, and the walk was the quicker route, so there is nothing to
+    /// apologise for and nothing to offer.</para>
+    /// </summary>
+    WalkAnsweredFirst,
 }
 
 public static class FallbackReasonText
 {
+    /// <summary>
+    /// The reason a figure built from two measurements carries: the first that has something to say,
+    /// and otherwise the first that is not <see cref="FallbackReason.None"/>.
+    ///
+    /// <para>Not simply the first that is not None. <see cref="FallbackReason.WalkAnsweredFirst"/> is
+    /// not None and says nothing, so taking it first would hide the sentence a later measurement's
+    /// real fallback owes the user, and §5.5 requires that fallback to be seen.</para>
+    /// </summary>
+    public static FallbackReason Prevailing(FallbackReason first, FallbackReason second) =>
+        Describe(first) is not null || (Describe(second) is null && first != FallbackReason.None) ? first : second;
+
     /// <summary>The sentence shown beside a walked scan, or null when the table answered.</summary>
     public static string? Describe(FallbackReason reason) => reason switch
     {
@@ -107,6 +127,8 @@ public static class FallbackReasonText
 
         FallbackReason.WalkChosen =>
             "Scanned by walking directories, because Settings asks for the walk only.",
+
+        FallbackReason.WalkAnsweredFirst => null,
 
         _ => throw new ArgumentOutOfRangeException(nameof(reason)),
     };

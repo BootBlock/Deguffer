@@ -23,9 +23,10 @@ internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason
 /// path, applied to a whole volume or to one folder on it rather than to a handful of named
 /// locations.
 ///
-/// <para>This is where the table pays for itself. The deletion path asks it about a dozen paths and
-/// measured the index costing more to build than walking those paths cost outright
-/// (<c>docs/todo/after-the-scanner.md</c>, item 7). Drawing a whole drive is the opposite trade:
+/// <para>This is where the table pays for itself. The deletion path asks it about a dozen paths, and
+/// measured, building the index there was sometimes slower than walking those paths outright, so it
+/// races the walk (<c>docs/todo/after-the-scanner.md</c>, item 7). Drawing a whole drive is the
+/// opposite trade:
 /// one pass over the table answers for every directory on the disk at once, and the walk it
 /// replaces is the one §5.5 measured at over ten minutes.</para>
 ///

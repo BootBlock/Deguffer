@@ -2,7 +2,7 @@
 
 > **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
 > are done; item 4 records what was deferred and why, and item 5 what is still undecided. Items 6
-> to 8 came later, from watching the fast path actually run; items 6 and 8 are done and 7 is open.
+> to 8 came later, from watching the fast path actually run, and are done.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
 
@@ -412,7 +412,18 @@ The shape, so the seam survives it:
 - Verification needs an elevated run against a real volume: the decline count is the assertion, and
   no fixture can produce a machine's own table.
 
-## 7. Do not build a volume index that cannot pay for itself
+## 7. Do not build a volume index that cannot pay for itself ✅ done
+
+**Outcome: neither route is chosen. Auto races them.** Measured after #249, neither route won an
+elevated preview on its own: with the disk cache warm the walk was quicker, and with it cold the
+table was, and nothing a scan can see says which of the two it is in. So every rule that picks a
+route in advance is wrong in one of the two cases. Auto now starts a volume's build in the
+background at the first question about the volume, walks while the build runs, and takes whichever
+answers first (`RouteRace`, `MftVolumeIndexCache`). A walk that could not reach its path has not
+answered, so the table is waited for there. A walk that answered first is not a fallback and says
+nothing. The previous behaviour stays available as the route "File table first", for a disk where
+two reads at once may cost more than the race gains. The measurements are below the original
+record.
 
 **Measured, on the same pass.** Building the index cost 9.9 seconds across seven volumes. Walking
 every path it then answered for would have cost 1.24 seconds. Five of those volumes were indexed at
@@ -441,6 +452,30 @@ in 167 ms against 400, and a 757,000-record SATA volume with about 5,800 records
 against 460. A volume whose table is mostly free records, which is what a volume holding only a
 Recycle Bin tends to be, now costs about as much as the records it uses. The question this item
 asks is still open, but the five small volumes may no longer be the cost it was written about.
+
+**Measured end to end, before the race.** One machine, elevated, with seven NTFS volumes, five of
+them sharing one NVMe disk. A whole planning pass, alternating the routes, three passes each, with
+the minutes the Windows component store analysis sometimes adds taken out. With the cache warm the
+pass took about 30.8, 30.3 and 28.9 seconds reading the table against 24.2, 24.0 and 22.4 walking.
+Cold, after emptying the standby list, it took 36.0, 33.7 and 35.6 seconds against about 49.3, 34.5
+and 42.2. On the system volume the build took 4.9 to 6.8 seconds, and walking every path it then
+answered took 5.0 warm and 6.6 to 7.8 cold. On the source volume discovery started the build, which
+took 3.5 to 4.7 seconds, against 2.0 seconds walking warm and 8.1 to 18.1 cold. The five small
+volumes' builds now cost about half a second together, against about ten milliseconds walking them.
+
+**Measured after the race**, the same way, with all three routes in each round. Medians of three:
+
+| Elevated pass | Auto (race) | Walk only | File table first |
+| --- | --- | --- | --- |
+| Warm | 23.1 s | 27.6 s | 28.8 s |
+| Cold | 40.1 s | 47.9 s | 43.8 s |
+
+The system volume gains most: its questions now cost 0.8 to 2.3 seconds together, against 5.3 to 7.2
+walking and 5.4 to 6.3 waiting for the table. **Discovery does not gain yet.** On the source volume
+a walk raced against that volume's own build ran at about half the speed it runs alone, so the table
+usually answered first there, and the search cost about what waiting for the table costs: 4.0 to
+6.0 seconds warm against 1.8 to 2.5 walking alone. Why the two slow each other on one volume was not
+investigated. Not measured: a spinning disk, a removable drive, a network share and a virtual disk.
 
 ## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 

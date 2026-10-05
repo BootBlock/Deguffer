@@ -484,7 +484,7 @@ public sealed class PlanExecutorTests : IDisposable
             _temp,
             new TreeDirectory("cache", new TreeFile("a.bin", 4096), new TreeFile("b.bin", 8192)));
 
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(VolumeLetter(cache), fixture));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(VolumeLetter(cache), fixture), tuning: RouteTuners.Table);
 
         var planTime = await scanner.MeasureAsync(cache);
         Assert.Equal(ScanStrategy.MasterFileTable, planTime.Strategy);
@@ -540,7 +540,7 @@ public sealed class PlanExecutorTests : IDisposable
             _temp,
             new TreeDirectory("cache", new TreeFile("a.bin", 4096, Allocated: 8192)));
 
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(VolumeLetter(cache), fixture));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(VolumeLetter(cache), fixture), tuning: RouteTuners.Table);
 
         var planTime = await scanner.MeasureAsync(cache);
         Assert.Equal(ScanStrategy.MasterFileTable, planTime.Strategy);
@@ -583,7 +583,7 @@ public sealed class PlanExecutorTests : IDisposable
             _temp,
             new TreeDirectory("cache", new TreeFile("a.bin", 4096)));
 
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(VolumeLetter(cache), fixture));
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(VolumeLetter(cache), fixture), tuning: RouteTuners.Table);
 
         Assert.Equal(ScanStrategy.MasterFileTable, (await scanner.MeasureAsync(cache)).Strategy);
 

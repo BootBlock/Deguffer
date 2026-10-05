@@ -10,8 +10,15 @@ namespace Deguffer.Core.Configuration;
 public enum ScanRoute
 {
     /// <summary>
-    /// The file table wherever it can be read, and the walk where it cannot. What every scan did
-    /// before the route could be chosen.
+    /// Both routes at once where the file table can be read, and the walk where it cannot. A volume's
+    /// table is read in the background from the first question about the volume, and each question
+    /// takes whichever route answers it first: the walk while the table is being read, and the table
+    /// once it is.
+    ///
+    /// <para>Measured, neither route wins alone. On one machine an elevated preview took about 24
+    /// seconds walking and 30 reading the table with the disk cache warm, and about 42 against 35
+    /// with it cold, and nothing a scan can see says which of the two it is in. See
+    /// <c>docs/todo/after-the-scanner.md</c> item 7.</para>
     /// </summary>
     Auto = 0,
 
@@ -20,6 +27,14 @@ public enum ScanRoute
     /// for somebody who suspects what the table says.
     /// </summary>
     WalkOnly = 1,
+
+    /// <summary>
+    /// The file table wherever it can be read, waited for while it is read, and the walk where it
+    /// cannot be read. What Auto did before the routes raced, and the answer for a disk where two
+    /// reads at once slow each other more than the race gains, which a spinning disk may be. Not
+    /// measured on one.
+    /// </summary>
+    Table = 2,
 }
 
 /// <summary>

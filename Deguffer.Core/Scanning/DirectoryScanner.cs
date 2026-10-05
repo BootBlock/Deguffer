@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning.Mft;
 
@@ -137,18 +138,25 @@ public sealed class DirectoryScanner : IDirectoryScanner
             return new((IReadOnlyList<string>?)null);
         }
 
-        var index = _volumes.Get(volumeRoot.DriveLetter, out _, ct);
+        return new(FindAsync(name, root, volumeRoot.DriveLetter, ct));
+    }
 
-        if (index is null)
+    /// <summary>
+    /// Under <see cref="ScanRoute.Auto"/>. A search waits for the volume's table, so a caller that can
+    /// walk the root itself walks while it waits, as <see cref="MeasureAsync"/> does.
+    /// </summary>
+    public bool RacesTheWalk => _tuner.Route is ScanRoute.Auto;
+
+    private async Task<IReadOnlyList<string>?> FindAsync(string name, string root, char driveLetter, CancellationToken ct)
+    {
+        var built = await _volumes.Get(driveLetter).WaitAsync(ct).ConfigureAwait(false);
+
+        if (built.Index is not { } index)
         {
-            return new((IReadOnlyList<string>?)null);
+            return null;
         }
 
-        var found = NamedDirectories(index, name, volumeRoot.DriveLetter, ct)
-            .Where(path => IsUnder(path, root))
-            .ToList();
-
-        return new((IReadOnlyList<string>?)found);
+        return [.. NamedDirectories(index, name, driveLetter, ct).Where(path => IsUnder(path, root))];
     }
 
     /// <summary>
@@ -199,7 +207,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
             || path.StartsWith(normalised + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
-    private ValueTask<ScanResult> MeasureFreshAsync(
+    private async ValueTask<ScanResult> MeasureFreshAsync(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
@@ -207,40 +215,97 @@ public sealed class DirectoryScanner : IDirectoryScanner
     {
         if (!VolumePath.TryParse(path, out var volumePath))
         {
-            return _fallback
+            return await _fallback
                 .Because(FallbackReason.VolumeNotAddressable)
-                .MeasureAsync(path, keep, progress, ct);
+                .MeasureAsync(path, keep, progress, ct)
+                .ConfigureAwait(false);
         }
 
         if (_tuner.WalkOnly)
         {
-            return _fallback.Because(FallbackReason.WalkChosen).MeasureAsync(path, keep, progress, ct);
+            return await _fallback.Because(FallbackReason.WalkChosen).MeasureAsync(path, keep, progress, ct).ConfigureAwait(false);
         }
 
-        var index = _volumes.Get(volumePath.DriveLetter, out var reason, ct);
+        var building = _volumes.Get(volumePath.DriveLetter);
+
+        // Raced only while the table is still being read, and only where the user has not asked for
+        // the table to be waited for. A table already read answers in a lookup, and one that could not
+        // be read has a reason the walk has to carry, which a race would let a quick walk hide.
+        if (!building.IsCompleted && _tuner.Route is ScanRoute.Auto)
+        {
+            return await RaceAsync(path, volumePath, building, keep, progress, ct).ConfigureAwait(false);
+        }
+
+        var built = await building.WaitAsync(ct).ConfigureAwait(false);
 
         // A path the index cannot answer for is not the same as an empty one. The tree changed
         // under the index, or the path runs through a link, or something below it does not
         // establish its own size — so ask the slow path rather than reporting zero, which would
         // render as "this cache is already clear" and quietly hide gigabytes.
-        // Assigned first because the call sits behind a null-conditional, which leaves an out
-        // parameter unassigned on the branch where there is no index to ask.
-        var withheldRecent = false;
-        IReadOnlyList<IReadOnlyList<string>> stores = [];
-
-        if (index?.TryMeasure(volumePath.Components, keep, out withheldRecent, out stores) is { } size)
+        if (FromIndex(built.Index, volumePath, keep) is { } indexed)
         {
-            progress?.Report(size);
-
-            return ValueTask.FromResult(ScanResult.Fast(size, withheldRecent) with
-            {
-                MailStores = [.. stores.Select(s => PathOf(volumePath.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
-            });
+            progress?.Report(indexed.Size);
+            return indexed;
         }
 
-        var fallbackReason = reason == FallbackReason.None ? FallbackReason.MasterFileTableIncomplete : reason;
-        return _fallback.Because(fallbackReason).MeasureAsync(path, keep, progress, ct);
+        return await _fallback.Because(Declined(built)).MeasureAsync(path, keep, progress, ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Walk <paramref name="path"/> while the table is read, and take whichever answers first. See
+    /// <see cref="ScanRoute.Auto"/>.
+    /// </summary>
+    private async ValueTask<ScanResult> RaceAsync(
+        string path,
+        VolumePath volumePath,
+        Task<MftVolumeIndexCache.Built> building,
+        MinimumAge keep,
+        IProgress<ScanSize>? progress,
+        CancellationToken ct)
+    {
+        var raced = await RouteRace.FirstAsync(
+            async stop => FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, volumePath, keep),
+            stop => _fallback.Because(FallbackReason.WalkAnsweredFirst).MeasureAsync(path, keep, progress, stop).AsTask(),
+            walked => walked.WasReached,
+            ct).ConfigureAwait(false);
+
+        switch (raced.Outcome)
+        {
+            case RaceOutcome.TableAnswered:
+                // After the walk has stopped, so the last figure the caller is shown is this one.
+                progress?.Report(raced.Answer.Size);
+                return raced.Answer;
+
+            // The walk was stamped as the quicker route before anyone knew the table would decline.
+            // A file is a direct read, which carries no reason on either route.
+            case RaceOutcome.TableDeclined when raced.Answer.Strategy is ScanStrategy.ParallelEnumeration:
+                return raced.Answer with { Fallback = Declined(building.Result) };
+
+            default:
+                return raced.Answer;
+        }
+    }
+
+    /// <summary>
+    /// What the index says about <paramref name="volumePath"/>, or null where there is no index or it
+    /// cannot answer for the path.
+    /// </summary>
+    private static ScanResult? FromIndex(MftVolumeIndex? index, VolumePath volumePath, MinimumAge keep)
+    {
+        if (index is null || index.TryMeasure(volumePath.Components, keep, out var withheldRecent, out var stores) is not { } size)
+        {
+            return null;
+        }
+
+        return ScanResult.Fast(size, withheldRecent) with
+        {
+            MailStores = [.. stores.Select(s => PathOf(volumePath.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
+        };
+    }
+
+    /// <summary>Why the walk answered a path the table did not.</summary>
+    private static FallbackReason Declined(MftVolumeIndexCache.Built built) =>
+        built.Reason == FallbackReason.None ? FallbackReason.MasterFileTableIncomplete : built.Reason;
 
     /// <summary>
     /// A path the index rebuilt as components below a volume root, in the display form the walk

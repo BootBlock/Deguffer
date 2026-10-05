@@ -58,7 +58,7 @@ internal static class SourceTreePlanNotes
         // twice in two wordings reads as a defect rather than as precision, so the sentence is left
         // to the note that is already there. Where measuring took the fast path and only discovery
         // walked, this is the only thing that would say so, which is why it is not simply dropped.
-        if (!discovered.UsedIndex && scanNote is null)
+        if (discovered.FellBack && scanNote is null)
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
