@@ -2,7 +2,7 @@
 
 > **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
 > are done; item 4 records what was deferred and why, and item 5 what is still undecided. Items 6
-> to 8 came later, from watching the fast path actually run; item 8 is done and 6 and 7 are open.
+> to 8 came later, from watching the fast path actually run; items 6 and 8 are done and 7 is open.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
 
@@ -366,7 +366,25 @@ process, which Deguffer is not, so there is no correct interpretation available.
 
 ---
 
-## 6. Follow `$ATTRIBUTE_LIST` to the extension record that holds a file's size
+## 6. Follow `$ATTRIBUTE_LIST` to the extension record that holds a file's size ✅ done
+
+**Outcome: the table now follows the list, for a file's size and for its names alike
+([#247](https://github.com/BootBlock/Deguffer/issues/247)).** The shape below held, with the second
+read moved one level down: `MftRecordStream` does it for both of its callers, because Explore's
+reader needed it as much as the index did. A list too long for its record lives in clusters outside
+the table, so `IMftSource` gained a cluster read. An extension record is accepted only where it
+still names its owner by number and sequence and carries the sequence the list recorded; anything
+else is a record caught mid-change, so a lost size stays unknown and a lost name makes the file
+unplaceable. The index now refuses a volume holding a file it cannot place, since that file could
+belong to any total.
+
+Measured elevated on one machine's `C:`, across 737 folders under the profile, `AppData` and
+`C:\Windows`: before the change the table declined 69 of them, holding 144 GB by the walk's count;
+after it, none. 718 of the 737 agreed with the walk to the byte. Of the 19 that did not, 7 differed
+by the same amounts before the change. The three large new ones — an `npx` cache, a global npm
+prefix and uv's tools — differ by exactly the bytes of their multiply-linked files, which is
+[#171](https://github.com/BootBlock/Deguffer/issues/171). The rest were files being written while
+the run read them. That changes item 7's arithmetic on `C:`, as its second framing anticipated.
 
 **This is the whole of why §5.5's fast path declines.** On a real volume, all 13 of the 48 measured
 locations the index refused were refused for one reason: `SumSubtree` met a record whose size the
