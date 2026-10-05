@@ -27,7 +27,8 @@ internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in
 /// </summary>
 internal static class MftRecordStream
 {
-    private const int RecordsPerBatch = 1024;
+    /// <summary>Internal rather than private so a benchmark result can state the value it measured.</summary>
+    internal const int RecordsPerBatch = 1024;
 
     /// <summary>
     /// Read records <c>0</c> to <paramref name="count"/> and hand each to

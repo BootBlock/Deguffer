@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Times the routes a scan takes: the file-table read, the two structures built from it, and the
+    walk. Run by hand, never by `dotnet test`, because a timing on a shared build machine changes
+    for reasons that have nothing to do with the code. CONTRIBUTING.md says how to run it.
+
+    The .NET base library and Core only. A benchmarking package would bring its own process model
+    and its own idea of a warm-up, and the first run against the drive is one of the results here,
+    not noise to be discarded.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deguffer.Core\Deguffer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Deguffer.Benchmark.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -48,6 +48,12 @@ internal readonly record struct DirectoryContents(
 internal static class BoundedFileWalk
 {
     /// <summary>
+    /// How many directories are listed at once. Readable outside the walk only so a benchmark result
+    /// can state the value it was measured with, and so stays comparable when the value changes.
+    /// </summary>
+    internal static readonly int Parallelism = Math.Min(Environment.ProcessorCount * 2, 16);
+
+    /// <summary>
     /// Visit every file at or below <paramref name="root"/>, minus the two things this walk
     /// deliberately never reaches: anything under a directory it was refused (§5.3), and anything
     /// under a reparse point.
@@ -126,7 +132,7 @@ internal static class BoundedFileWalk
         var options = new ParallelOptions
         {
             CancellationToken = ct,
-            MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 2, 16),
+            MaxDegreeOfParallelism = Parallelism,
         };
 
         while (!pending.IsEmpty)
