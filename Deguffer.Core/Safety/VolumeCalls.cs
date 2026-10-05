@@ -188,6 +188,32 @@ internal static partial class VolumeCalls
     }
 
     /// <summary>
+    /// The <c>\\?\Volume{GUID}\</c> name of the volume mounted at <paramref name="mountPoint"/>, which
+    /// opens that volume wherever it is mounted, or null with the error where Windows will not say.
+    /// <paramref name="mountPoint"/> ends in a separator, as every mount point here does.
+    /// </summary>
+    internal static string? VolumeNameOf(string mountPoint, out int error)
+    {
+        var buffer = Marshal.AllocHGlobal(VolumeNameLength * sizeof(char));
+
+        try
+        {
+            if (!GetVolumeNameForVolumeMountPoint(mountPoint, buffer, VolumeNameLength))
+            {
+                error = Marshal.GetLastPInvokeError();
+                return null;
+            }
+
+            error = 0;
+            return Marshal.PtrToStringUni(buffer);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    /// <summary>
     /// Fixed, removable, network and so on, for a volume reached at <paramref name="mountPoint"/>.
     /// <see cref="DriveType"/>'s members are the <c>DRIVE_</c> constants this returns.
     /// </summary>
@@ -263,6 +289,15 @@ internal static partial class VolumeCalls
         StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetVolumePathName(string fileName, IntPtr volumePathName, uint bufferLength);
+
+    [LibraryImport(
+        "kernel32.dll",
+        EntryPoint = "GetVolumeNameForVolumeMountPointW",
+        SetLastError = true,
+        StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetVolumeNameForVolumeMountPoint(
+        string volumeMountPoint, IntPtr volumeName, uint bufferLength);
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetDriveTypeW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetDriveType(string rootPathName);

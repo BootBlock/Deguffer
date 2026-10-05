@@ -4,7 +4,8 @@ using Microsoft.Win32.SafeHandles;
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
-/// The only thing in Deguffer that opens a raw volume handle.
+/// The only thing in Deguffer that reads a volume's raw sectors. <c>StorageQueries</c> also opens
+/// volumes and disks, with no access rights, to ask what storage they are, and reads nothing.
 ///
 /// Everything above it — the parser, the extent map, the index, the aggregation — works on spans
 /// and is tested against synthesised records, because this class cannot be: reading
