@@ -373,6 +373,10 @@ public sealed class BoundedFileWalkTests : IDisposable
     /// G4: a walk the user cannot abandon is a bug. Cancelled from inside the walk, so what is under
     /// test is a walk already running: a chain six directories deep stops at the one that was being
     /// read, and reports no further progress.
+    ///
+    /// <para>Every directory moves the clock on by an interval, so a report is due after each one,
+    /// the one that cancelled included. A report there would describe a walk that is not going to
+    /// finish.</para>
     /// </summary>
     [Fact]
     public void StopsWhenCancelledPartWayAndReportsNothingMore()
@@ -381,6 +385,7 @@ public sealed class BoundedFileWalkTests : IDisposable
         _temp.CreateFile(8, "cache", "l1", "l2", "l3", "l4", "l5", "file.bin");
 
         using var cancel = new CancellationTokenSource();
+        var clock = new ManualTimeProvider();
         var read = new ConcurrentBag<string>();
         var reports = 0;
 
@@ -391,6 +396,8 @@ public sealed class BoundedFileWalkTests : IDisposable
             (state, contents, descend) =>
             {
                 read.Add(state);
+                clock.Advance(BoundedFileWalk.ProgressInterval);
+
                 if (state == "l2")
                 {
                     cancel.Cancel();
@@ -402,11 +409,61 @@ public sealed class BoundedFileWalkTests : IDisposable
                 }
             },
             () => reports++,
-            new ManualTimeProvider(),
+            clock,
             cancel.Token));
 
         Assert.Equal(["cache", "l1", "l2"], read.Order(StringComparer.Ordinal));
-        Assert.Equal(1, reports);
+        Assert.Equal(2, reports);
+    }
+
+    /// <summary>
+    /// A directory's children are queued only once its report has been made. A report then
+    /// describes the walk up to that directory, and a child read while its parent's report is still
+    /// being made cannot find the next report not yet due and skip it, which is what made a timed
+    /// cadence uneven.
+    ///
+    /// <para>The report holds on, with workers free to take anything queued. None takes the child.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void QueuesADirectorysChildrenOnlyOnceItsReportIsMade()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(8, "cache", "child", "file.bin");
+
+        var childRead = 0;
+        var childReadDuringReport = false;
+        var reports = 0;
+
+        BoundedFileWalk.Visit(
+            root,
+            "cache",
+            new WalkTuning(4, WalkTuning.MinimumListingBuffer),
+            (state, contents, descend) =>
+            {
+                if (state == "child")
+                {
+                    Interlocked.Exchange(ref childRead, 1);
+                }
+
+                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                {
+                    descend(entry, entry.Name);
+                }
+            },
+            () =>
+            {
+                if (reports++ == 0)
+                {
+                    Thread.Sleep(200);
+                    childReadDuringReport = Volatile.Read(ref childRead) == 1;
+                }
+            },
+            new ManualTimeProvider(),
+            default);
+
+        Assert.False(childReadDuringReport, "The child was read while its parent's report was being made.");
+        Assert.Equal(1, childRead);
     }
 
     /// <summary>
