@@ -225,4 +225,17 @@ public class MftExtentMapTests
     [Fact]
     public void RefusesARecordThatIsNotARecord() =>
         Assert.False(MftExtentMap.TryRead(new byte[1024], bytesPerSector: 512, out _));
+
+    /// <summary>
+    /// Record 0 is read while the volume is being opened, so a throw here would escape before the
+    /// volume could fall back to the walk. A corrupt length has to refuse like any other damage.
+    /// </summary>
+    [Fact]
+    public void RefusesRecordZeroWhenAnAttributeOverrunsIt()
+    {
+        var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536);
+        MftRecordBytes.DeclareFirstAttributeLength(record, MftRecordBytes.LengthJustUnderIntMax);
+
+        Assert.False(MftExtentMap.TryRead(record, bytesPerSector: 512, out _));
+    }
 }
