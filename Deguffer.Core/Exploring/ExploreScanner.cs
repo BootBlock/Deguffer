@@ -164,6 +164,8 @@ public sealed class ExploreScanner(IMftSourceFactory? sources = null, TimeProvid
                     // the same disk. The finished tree is built by size, once, at the end.
                     due ? builder.Build(ExploreChildOrder.ByName) : null));
             },
+            // The scan's own clock, so the walk's reports and the snapshots above keep one time.
+            _time,
             ct);
 
         return ExploreScan.Walked(tree, reason);

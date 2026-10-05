@@ -139,8 +139,8 @@ public class ParallelEnumerationScannerTests
 
         var result = await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress);
 
-        // §5.5: partial totals reach the caller as the walk descends, rather than one number at
-        // the end. The tree is three levels deep, so there is more than one level to report.
+        // §5.5: partial totals reach the caller as the walk descends, as well as one number at the
+        // end. The first is reported once the first folder has been read.
         Assert.Equal(6000, result.Size.Logical);
         Assert.NotEmpty(progress.Reports);
         Assert.All(progress.Reports, size => Assert.InRange(size.Logical, 0, 6000));
@@ -148,12 +148,13 @@ public class ParallelEnumerationScannerTests
     }
 
     /// <summary>
-    /// A scan cancelled once its walk is under way stops at the next level rather than finishing it.
+    /// A scan cancelled once its walk is under way stops rather than finishing it.
     ///
-    /// <para>Cancelled from the first level's report, not before the call: <c>Task.Run</c> given a
-    /// token that is already cancelled never runs the walk at all, so a test cancelling up front
-    /// stays green with every check inside the walk deleted. The tree is a chain seven levels deep,
-    /// so a walk that ignored the cancel would report six more levels and return a total.</para>
+    /// <para>Cancelled from the first report, which follows the first folder read, not before the
+    /// call: <c>Task.Run</c> given a token that is already cancelled never runs the walk at all, so a
+    /// test cancelling up front stays green with every check inside the walk deleted. The tree is a
+    /// chain seven folders deep, so a walk that ignored the cancel would go on to report its total.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task StopsWhenCancelledPartWay()
@@ -162,17 +163,17 @@ public class ParallelEnumerationScannerTests
         temp.CreateFile(64, "cache", "l1", "l2", "l3", "l4", "l5", "l6", "file.bin");
 
         using var cancel = new CancellationTokenSource();
-        var levels = 0;
+        var reports = 0;
         var progress = new CallbackProgress<ScanSize>(_ =>
         {
-            levels++;
+            reports++;
             cancel.Cancel();
         });
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () => await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress, cancel.Token));
 
-        Assert.Equal(1, levels);
+        Assert.Equal(1, reports);
     }
 
     /// <summary>

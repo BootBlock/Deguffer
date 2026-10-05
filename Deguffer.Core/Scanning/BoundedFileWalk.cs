@@ -1,57 +1,26 @@
-using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
-/// What one directory turned out to hold, as the walk found it.
-/// </summary>
-/// <param name="Entries">
-/// The ordinary children — files and directories. A link is not among them; see
-/// <paramref name="Links"/> for why they are separated rather than mixed.
-/// </param>
-/// <param name="Links">
-/// The children that are junctions, symbolic links or other name surrogates. Reported separately
-/// because a caller totalling bytes must not count them — their target keeps its own place on the
-/// volume — while a caller drawing the tree still has to show that they are there. Hiding them
-/// outright is what the walk used to do, and it makes a directory the user can see disappear.
-/// </param>
-/// <param name="ReparseFiles">
-/// The children that are files carrying a reparse point: a symbolic link to a file, and also a OneDrive
-/// placeholder or a deduplicated file, which are not links and whose content a removal would take.
-/// Kept out of <paramref name="Entries"/> so a caller totalling bytes counts none of them, as the walk
-/// always has, and handed back so a caller asking a file's type still meets them. See
-/// <see cref="Safety.MailStore"/>.
-/// </param>
-/// <param name="WasRefused">
-/// Whether the directory could not be listed at all. §5.3 makes that ordinary rather than an error,
-/// so the walk still skips it silently — but a caller reporting a total needs to know the total is
-/// now a lower bound, and one that never hears about it cannot say so.
-/// </param>
-internal readonly record struct DirectoryContents(
-    IReadOnlyList<FileSystemInfo> Entries,
-    IReadOnlyList<DirectoryInfo> Links,
-    IReadOnlyList<FileInfo> ReparseFiles,
-    bool WasRefused);
-
-/// <summary>
-/// §5.5's walk, once: breadth-first, bounded parallelism, one level at a time.
+/// §5.5's walk, once: a bounded set of workers, each listing a directory and queueing what is below
+/// it. <see cref="WalkWorkers{TState}"/> schedules them.
 ///
-/// <para>This exists because three callers need the same traversal and differ only in what they do
+/// <para>This exists because several callers need the same traversal and differ only in what they do
 /// with what it finds — <see cref="ParallelEnumerationScanner"/> adds each file's length,
 /// <see cref="HardLinkAwareScanner"/> asks the file whether anything else links it, and
-/// <see cref="Exploring.WalkExploreReader"/> records the shape of the tree itself. Written three
-/// times, the traversal would carry three copies of two safety rules: §5.3's "access denied is
+/// <see cref="Exploring.WalkExploreReader"/> records the shape of the tree itself. Written once per
+/// caller, the traversal would carry a copy each of two safety rules: §5.3's "access denied is
 /// normal, skip silently" and the refusal to follow a reparse point into a tree the caller never
-/// classified. A safety rule in three places is one that gets corrected in one of them.</para>
+/// classified. A safety rule in several places is one that gets corrected in one of them.</para>
 /// </summary>
 internal static class BoundedFileWalk
 {
     /// <summary>
-    /// How many directories are listed at once. Readable outside the walk only so a benchmark result
-    /// can state the value it was measured with, and so stays comparable when the value changes.
+    /// How often the walk reports progress while it runs. §5.5 streams partial totals, and the UI
+    /// cannot use thousands of updates a second: marshalling them would cost more than the walk.
     /// </summary>
-    internal static readonly int Parallelism = Math.Min(Environment.ProcessorCount * 2, 16);
+    public static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>
     /// Visit every file at or below <paramref name="root"/>, minus the two things this walk
@@ -59,10 +28,10 @@ internal static class BoundedFileWalk
     /// under a reparse point.
     ///
     /// <paramref name="onFile"/> is called concurrently from several threads, so what it does must
-    /// be safe to do that way. <paramref name="onLevel"/> is called once per breadth-first level,
-    /// on the walking thread, which is where §5.5's streamed partial totals come from — one report
-    /// per level rather than per file, because the UI cannot use thousands of updates a second and
-    /// marshalling them would cost more than the enumeration.
+    /// be safe to do that way. <paramref name="onProgress"/> is called once the first directory has
+    /// been read, then at most once per <see cref="ProgressInterval"/> of <paramref name="clock"/>
+    /// while the walk runs, and once at the end. It is never called beside itself, and never after
+    /// this returns.
     /// </summary>
     /// <param name="root">
     /// The directory to walk. Every directory is listed in the extended-length form §6.3 requires,
@@ -79,9 +48,11 @@ internal static class BoundedFileWalk
     /// </returns>
     public static bool Visit(
         string root,
-        Action<FileInfo> onFile,
-        Action<FileInfo> onReparseFile,
-        Action onLevel,
+        WalkTuning tuning,
+        Action<WalkEntry> onFile,
+        Action<WalkEntry> onReparseFile,
+        Action onProgress,
+        TimeProvider clock,
         CancellationToken ct)
     {
         // Written by the root's own listing alone, before anything below it is queued.
@@ -90,6 +61,7 @@ internal static class BoundedFileWalk
         Visit(
             root,
             rootState: true,
+            tuning,
             (isRoot, contents, descend) =>
             {
                 if (isRoot && contents.WasRefused)
@@ -99,13 +71,13 @@ internal static class BoundedFileWalk
 
                 foreach (var entry in contents.Entries)
                 {
-                    if (entry is DirectoryInfo directory)
+                    if (entry.IsDirectory)
                     {
-                        descend(directory, false);
+                        descend(entry, false);
                     }
-                    else if (entry is FileInfo file)
+                    else
                     {
-                        onFile(file);
+                        onFile(entry);
                     }
                 }
 
@@ -114,7 +86,8 @@ internal static class BoundedFileWalk
                     onReparseFile(marked);
                 }
             },
-            onLevel,
+            onProgress,
+            clock,
             ct);
 
         return rootListed;
@@ -130,103 +103,20 @@ internal static class BoundedFileWalk
     /// in a dictionary once per file, which across millions of files is a locked lookup each (G4).
     /// </para>
     ///
-    /// <paramref name="onDirectory"/> is called concurrently. Nothing is descended into unless it
-    /// asks: the third argument is how it says so, and a link is never a legitimate argument to it
-    /// — the walk holds that rule, not the caller.
+    /// <paramref name="onDirectory"/> is called concurrently, and the contents it is handed are valid
+    /// only while it runs. Nothing is descended into unless it asks: the third argument is how it says
+    /// so, and a link is never a legitimate argument to it — the walk holds that rule, not the caller.
+    /// <paramref name="onProgress"/> is called as the other overload calls it.
     /// </summary>
     public static void Visit<TState>(
         string root,
         TState rootState,
-        Action<TState, DirectoryContents, Action<DirectoryInfo, TState>> onDirectory,
-        Action onLevel,
+        WalkTuning tuning,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action onProgress,
+        TimeProvider clock,
         CancellationToken ct)
     {
-        var pending = new ConcurrentQueue<(string Path, TState State)>();
-        pending.Enqueue((root, rootState));
-
-        var options = new ParallelOptions
-        {
-            CancellationToken = ct,
-            MaxDegreeOfParallelism = Parallelism,
-        };
-
-        while (!pending.IsEmpty)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var batch = new List<(string Path, TState State)>(pending.Count);
-            while (pending.TryDequeue(out var next))
-            {
-                batch.Add(next);
-            }
-
-            Parallel.ForEach(batch, options, item =>
-            {
-                var contents = Read(item.Path);
-
-                onDirectory(item.State, contents, Descend);
-
-                void Descend(DirectoryInfo directory, TState state)
-                {
-                    // The walk holds this rule rather than trusting the caller to, because the
-                    // caller is the half that changes. A junction's target keeps its own place on
-                    // the volume, so descending through one both counts it twice and describes a
-                    // tree nothing classified — and `Read` hands links back now instead of dropping
-                    // them, so a caller iterating the wrong list is a mistake that can be made.
-                    //
-                    // The attributes were read during enumeration and are cached on the instance,
-                    // so this costs no I/O.
-                    if (!directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                    {
-                        pending.Enqueue((directory.FullName, state));
-                    }
-                }
-            });
-
-            onLevel();
-        }
-    }
-
-    /// <summary>
-    /// The immediate children of <paramref name="directory"/>, materialised so an enumeration
-    /// failure surfaces here rather than part-way through the caller's accounting.
-    ///
-    /// Two rules live here and nowhere else. §5.3: a directory we cannot read is skipped rather
-    /// than raised, because a locked or refused path is the operating system protecting live state
-    /// rather than an error — it is reported as refused so a caller can qualify its total, and
-    /// never as an exception. And a reparse point is kept apart from the ordinary children: a
-    /// junction's target holds its own place on the volume, so counting through one both
-    /// double-counts and describes a tree the caller never classified.
-    /// </summary>
-    private static DirectoryContents Read(string directory)
-    {
-        var entries = new List<FileSystemInfo>();
-        var links = new List<DirectoryInfo>();
-        var reparseFiles = new List<FileInfo>();
-
-        using var listing = DirectoryListing.Of(directory);
-
-        while (listing.MoveNext())
-        {
-            var info = listing.Current;
-
-            if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            {
-                entries.Add(info);
-            }
-            else if (info is DirectoryInfo link)
-            {
-                links.Add(link);
-            }
-            else if (info is FileInfo marked)
-            {
-                reparseFiles.Add(marked);
-            }
-        }
-
-        // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
-        // A directory gone since its parent was listed counts as refused too: its bytes were never
-        // read, so the totals above it are lower bounds either way.
-        return new DirectoryContents(entries, links, reparseFiles, WasRefused: listing.Outcome is not PathPresence.Present);
+        new WalkWorkers<TState>(tuning, onDirectory, onProgress, clock, ct).Run(LongPath.Extended(root), rootState);
     }
 }

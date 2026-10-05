@@ -189,8 +189,15 @@ public readonly record struct MinimumAge
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        return NewestFileTimeOf(ToFileTime(entry.CreationTimeUtc), ToFileTime(entry.LastWriteTimeUtc));
+        return NewestFileTimeOf(entry.CreationTimeUtc, entry.LastWriteTimeUtc);
     }
+
+    /// <summary>
+    /// The same number from the two timestamps alone, for the walk, which keeps them from the
+    /// listing rather than building a <see cref="FileSystemInfo"/> per entry to carry them.
+    /// </summary>
+    public static long NewestFileTimeOf(DateTime createdUtc, DateTime lastWrittenUtc) =>
+        NewestFileTimeOf(ToFileTime(createdUtc), ToFileTime(lastWrittenUtc));
 
     /// <summary>
     /// The same question of a path, for the one caller that has no entry in hand: a plan deciding

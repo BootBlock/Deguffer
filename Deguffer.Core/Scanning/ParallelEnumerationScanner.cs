@@ -135,6 +135,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         BoundedFileWalk.Visit<VisitedFolder?>(
             LongPath.Extended(path),
             rootState: null,
+            WalkTuning.Default,
             (holder, contents, descend) =>
             {
                 var folder = new VisitedFolder(holder);
@@ -153,30 +154,30 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
 
                 foreach (var entry in contents.Entries)
                 {
-                    if (entry is DirectoryInfo child)
+                    if (entry.IsDirectory)
                     {
-                        descend(child, folder);
+                        descend(entry, folder);
                     }
 
                     // §9, and before the guard for the reason the removal asks it first: the store is
                     // left whatever its age, so it is out of the total and its folders stay.
-                    else if (entry is FileInfo store && MailStore.Is(store.Name))
+                    else if (MailStore.Is(entry.Name))
                     {
-                        stores.Add(LongPath.Display(store.FullName));
+                        stores.Add(LongPath.Display(entry.FullName));
                         folder.Stays();
                     }
 
-                    // The walk hands over a FileInfo whose attributes and timestamps were populated by
-                    // the enumeration that found it, so asking its age here costs no further I/O (G4).
-                    // A file the guard keeps contributes nothing, because the removal will not take it.
-                    else if (entry is FileInfo file && keep.Protects(file))
+                    // The walk hands over the timestamps the listing read, so asking a file's age here
+                    // costs no further I/O (G4). A file the guard keeps contributes nothing, because
+                    // the removal will not take it.
+                    else if (keep.Protects(entry.NewestFileTime))
                     {
                         Interlocked.Exchange(ref withheld, 1);
                         folder.Stays();
                     }
-                    else if (entry is FileInfo counted)
+                    else
                     {
-                        Interlocked.Add(ref total, counted.Length);
+                        Interlocked.Add(ref total, entry.Length);
                         Interlocked.Increment(ref entries);
                     }
                 }
@@ -185,7 +186,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 // applies to it exactly as the removal applies it, by the link's own timestamp.
                 foreach (var link in contents.Links)
                 {
-                    if (keep.Protects(link))
+                    if (keep.Protects(link.NewestFileTime))
                     {
                         Interlocked.Exchange(ref withheld, 1);
                         folder.Stays();
@@ -209,8 +210,9 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     }
                 }
             },
-            // §5.5: stream partial results. One report per breadth-first level, not per file.
+            // §5.5: stream partial results, at the walk's interval rather than per file.
             () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
+            TimeProvider.System,
             ct);
 
         if (rootRefused)
@@ -231,8 +233,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// One folder the walk reached, and whether the removal would leave it standing.
     ///
     /// <para>A folder stays while anything inside it stays, however deep, so a kept file has to mark
-    /// every folder above it. The walk is breadth-first and parallel, so no folder's children are all
-    /// known when it is reached; each folder instead holds the one above it, and a kept entry walks the
+    /// every folder above it. The walk is parallel, so no folder's children are all known when it is
+    /// reached; each folder instead holds the one above it, and a kept entry walks the
     /// chain upward.</para>
     /// </summary>
     private sealed class VisitedFolder(VisitedFolder? holder)

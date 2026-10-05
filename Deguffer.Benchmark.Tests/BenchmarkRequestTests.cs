@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Benchmark.Tests;
 
 /// <summary>
@@ -58,16 +60,44 @@ public sealed class BenchmarkRequestTests
     public void TheRunsCanBeChosen() =>
         Assert.Equal(3, BenchmarkRequest.Parse(["walk", @"C:\", "--runs", "3"], out _)!.Runs);
 
+    [Fact]
+    public void TheWalksThreadsAndListingBufferCanBeChosen()
+    {
+        var request = BenchmarkRequest.Parse(["walk", @"C:\", "--threads", "4", "--listing-buffer", "256", "--runs", "2"], out _);
+
+        Assert.Equal(new WalkTuning(4, 256 * 1024), request!.Walk);
+        Assert.Equal(2, request.Runs);
+    }
+
+    [Fact]
+    public void AWalkNotToldOtherwiseRunsAsAScanDoes() =>
+        Assert.Equal(WalkTuning.Default, BenchmarkRequest.Parse(["walk", @"C:\"], out _)!.Walk);
+
     [Theory]
     [InlineData("--runs", "0")]
     [InlineData("--runs", "1001")]
     [InlineData("--runs", "-1")]
     [InlineData("--runs", "many")]
     [InlineData("--runs")]
-    [InlineData("--threads", "4")]
+    [InlineData("--threads", "0")]
+    [InlineData("--threads", "65")]
+    [InlineData("--threads")]
+    [InlineData("--listing-buffer", "3")]
+    [InlineData("--listing-buffer", "1025")]
+    [InlineData("--depth", "4")]
     public void AnythingElseAfterTheTargetIsRefused(params string[] rest)
     {
         Assert.Null(BenchmarkRequest.Parse(["walk", @"C:\", .. rest], out var error));
+        Assert.NotNull(error);
+    }
+
+    /// <summary>The table routes do not walk, so a walk value given to one would be reported unused.</summary>
+    [Theory]
+    [InlineData("--threads", "4")]
+    [InlineData("--listing-buffer", "64")]
+    public void ARouteThatReadsTheTableTakesNoWalkValue(params string[] rest)
+    {
+        Assert.Null(BenchmarkRequest.Parse(["table", "C", .. rest], out var error));
         Assert.NotNull(error);
     }
 

@@ -16,13 +16,15 @@ internal static class WalkExploreReader
     /// <summary>
     /// Walk <paramref name="root"/> and return everything under it.
     ///
-    /// <paramref name="onLevel"/> is called once per breadth-first level with the running counts,
-    /// which is the cadence §5.5 wants for a UI: a level is coarse enough to be worth marshalling
-    /// and frequent enough that a large scan does not look stalled.
+    /// <paramref name="onProgress"/> is called with the running counts at the walk's
+    /// <see cref="BoundedFileWalk.ProgressInterval"/> of <paramref name="clock"/>, which is the
+    /// cadence §5.5 wants for a UI: coarse enough to be worth marshalling and frequent enough that a
+    /// large scan does not look stalled. It is never called beside itself.
     /// </summary>
     public static ExploreTree Read(
         string root,
-        Action<ExploreTreeBuilder, long, long>? onLevel,
+        Action<ExploreTreeBuilder, long, long>? onProgress,
+        TimeProvider clock,
         CancellationToken ct)
     {
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
@@ -41,6 +43,7 @@ internal static class WalkExploreReader
         BoundedFileWalk.Visit(
             LongPath.Extended(root),
             ExploreTreeBuilder.RootNode,
+            WalkTuning.Default,
             (parent, contents, descend) =>
             {
                 if (contents.WasRefused)
@@ -70,13 +73,14 @@ internal static class WalkExploreReader
 
                 for (var i = 0; i < contents.Entries.Count; i++)
                 {
-                    if (contents.Entries[i] is DirectoryInfo directory)
+                    if (contents.Entries[i].IsDirectory)
                     {
-                        descend(directory, first + i);
+                        descend(contents.Entries[i], first + i);
                     }
                 }
             },
-            () => onLevel?.Invoke(builder, Interlocked.Read(ref items), Interlocked.Read(ref bytes)),
+            () => onProgress?.Invoke(builder, Interlocked.Read(ref items), Interlocked.Read(ref bytes)),
+            clock,
             ct);
 
         return builder.Build(ExploreChildOrder.BySize);
@@ -99,13 +103,9 @@ internal static class WalkExploreReader
 
         foreach (var entry in contents.Entries)
         {
-            children.Add(entry is FileInfo file
-                ? new ExploreChild(
-                    file.Name, IsDirectory: false, IsLink: false, Length(file),
-                    Created(file), LastWritten(file))
-                : new ExploreChild(
-                    entry.Name, IsDirectory: true, IsLink: false, Size: 0,
-                    Created(entry), LastWritten(entry)));
+            children.Add(new ExploreChild(
+                entry.Name, entry.IsDirectory, IsLink: false, entry.Length,
+                ExploreTimestamp.FromUtc(entry.CreationTimeUtc), ExploreTimestamp.FromUtc(entry.LastWriteTimeUtc)));
         }
 
         foreach (var link in contents.Links)
@@ -119,70 +119,45 @@ internal static class WalkExploreReader
             // this tree, carrying its own.
             children.Add(new ExploreChild(
                 link.Name, IsDirectory: true, IsLink: true, Size: 0,
-                Created(link), LastWritten(link)));
+                ExploreTimestamp.FromUtc(link.CreationTimeUtc), ExploreTimestamp.FromUtc(link.LastWriteTimeUtc)));
         }
 
         return children;
     }
 
-    /// <summary>When the entry was made, or unknown where nothing could say.</summary>
-    private static ExploreTimestamp Created(FileSystemInfo entry) =>
-        TimeOf(entry, static e => e.CreationTimeUtc);
+    /// <summary>When the root was made, or unknown where nothing could say.</summary>
+    private static ExploreTimestamp Created(DirectoryInfo root) =>
+        TimeOf(root, static r => r.CreationTimeUtc);
 
-    /// <summary>When the entry itself was last written.</summary>
-    private static ExploreTimestamp LastWritten(FileSystemInfo entry) =>
-        TimeOf(entry, static e => e.LastWriteTimeUtc);
+    /// <summary>When the root itself was last written.</summary>
+    private static ExploreTimestamp LastWritten(DirectoryInfo root) =>
+        TimeOf(root, static r => r.LastWriteTimeUtc);
 
     /// <summary>
-    /// One timestamp off an entry, or unknown where reading it fails.
+    /// One timestamp off the root, or unknown where reading it fails.
     ///
-    /// <para><b>Free for the entries, and that is why both routes can answer alike.</b> The
-    /// enumeration already read the full directory record and .NET caches it on the instance, so
-    /// for a child this is a field read rather than a second trip to the disk — which across
-    /// millions of files is the difference between a column worth having and one that doubles the
-    /// scan.</para>
+    /// <para><b>Only the root is read this way.</b> Every other entry's timestamps come from the
+    /// listing that found it, so they cost nothing and cannot fail. The root is the one entry nothing
+    /// listed, so the first of these reads goes to the disk — and against a share that has gone away
+    /// that is a real network round trip that raises rather than answering. A scan is not worth
+    /// failing over a date: §5.3 already makes an unreadable path ordinary, the walk below still
+    /// reports what it could reach, and the honest answer for a location nothing can open is that its
+    /// age is not known.</para>
     ///
-    /// <para><b>Not free for the root, which is what the guard is here for.</b> The root is the one
-    /// entry nothing enumerated, so the first of these reads is what initialises it — and against a
-    /// share that has gone away that is a real network round trip that raises rather than answering.
-    /// A scan is not worth failing over a date: §5.3 already makes an unreadable path ordinary, the
-    /// walk below still reports what it could reach, and the honest answer for a location nothing
-    /// can open is that its age is not known.</para>
-    ///
-    /// <para>An entry that has gone since the enumeration answers with the start of the Windows
-    /// epoch rather than failing, and <see cref="ExploreTimestamp"/> reads that as unknown.
+    /// <para>An entry that has gone since it was listed answers with the start of the Windows epoch
+    /// rather than failing, and <see cref="ExploreTimestamp"/> reads that as unknown.
     /// <see cref="Providers.DirectoryAge"/> guards the same value for the same reason: January 1601
     /// in an age column is the oldest invitation there is to delete something.</para>
     /// </summary>
-    private static ExploreTimestamp TimeOf(FileSystemInfo entry, Func<FileSystemInfo, DateTime> read)
+    private static ExploreTimestamp TimeOf(DirectoryInfo root, Func<DirectoryInfo, DateTime> read)
     {
         try
         {
-            return ExploreTimestamp.FromUtc(read(entry));
+            return ExploreTimestamp.FromUtc(read(root));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return ExploreTimestamp.Unknown;
-        }
-    }
-
-    /// <summary>
-    /// A file's length, or zero where it cannot be read.
-    ///
-    /// <para><see cref="FileInfo.Length"/> throws for a file deleted between the enumeration and
-    /// this call, which on a live machine is ordinary rather than exceptional — a build writing to
-    /// a temp directory produces it constantly. Zero is the honest answer for a file that is no
-    /// longer there, and it must not take the scan down.</para>
-    /// </summary>
-    private static long Length(FileInfo file)
-    {
-        try
-        {
-            return file.Length;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return 0;
         }
     }
 }

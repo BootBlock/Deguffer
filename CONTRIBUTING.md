@@ -53,6 +53,10 @@ Deguffer.Benchmark explore C
   `table` reads and parses every record and keeps nothing. `index` builds what the clean measures
   locations from. `explore` builds the Explore tree for the whole volume.
 - `--runs N` runs the route N times. The default is 5.
+- `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
+  how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan
+  uses, and only the walk takes them. Every result states the values it ran with, so compare two
+  results only where those match, or where they are the one thing you changed.
 
 The first run is reported apart from the median of the rest, because they answer different
 questions. The walk's first run lists folders from the drive, and later runs list them largely from

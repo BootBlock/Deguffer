@@ -21,7 +21,8 @@ internal static class Report
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-    public static string Render(Route route, MeasuredPlace place, MachineFacts machine, IReadOnlyList<RunSample> runs)
+    public static string Render(
+        Route route, string tuning, MeasuredPlace place, MachineFacts machine, IReadOnlyList<RunSample> runs)
     {
         ArgumentOutOfRangeException.ThrowIfZero(runs.Count);
 
@@ -32,7 +33,7 @@ internal static class Report
         Line(text, "Deguffer scan benchmark");
         Field(text, "route", route.ToString().ToLowerInvariant());
         Field(text, "place", place.ToString());
-        Field(text, "tuning", Tuning.Describe(route));
+        Field(text, "tuning", tuning);
         Field(text, "machine", Describe(machine));
         Field(text, "runs", $"{runs.Count} ({runs.Count(r => r.Tally.Complete)} complete)");
 

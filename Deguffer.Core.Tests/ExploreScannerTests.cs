@@ -250,11 +250,12 @@ public class ExploreScannerTests
     /// results, and a snapshot is what "partial" means for a picture — a running total says a scan is
     /// progressing, but gives the view nothing to put on screen.
     ///
-    /// <para>The cadence is a wall-clock interval rather than a level count, deliberately: copying
-    /// every array is not free, and a scan of a full drive is long enough that an unchanging window
-    /// reads as a hung one. So what the test has to produce is elapsed time, and it moves the
-    /// scanner's clock from the reporting thread rather than spending real time, which would race
-    /// the walk and every test running beside it.</para>
+    /// <para>The cadence is a wall-clock interval, deliberately: copying every array is not free, and
+    /// a scan of a full drive is long enough that an unchanging window reads as a hung one. So what
+    /// the test has to produce is elapsed time, and it moves the scanner's clock from the reporting
+    /// thread rather than spending real time, which would race the walk and every test running beside
+    /// it. The walk reports on the same clock, so each step is at least the walk's own interval, or
+    /// the walk would make no report for the snapshot to ride on.</para>
     /// </summary>
     [Fact]
     public async Task PublishesATreeToDrawOnlyOnceTheSnapshotIntervalHasPassed()
@@ -269,10 +270,11 @@ public class ExploreScannerTests
         var reports = new List<ExploreProgress>();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock);
 
-        // One tick short of the interval by the second report, and exactly on it by the third. The
-        // fourth follows with no time passing, so it shows the interval starting again.
+        // Short of the interval by the second report, and exactly on it by the third. The fourth
+        // follows one walk interval later, so it shows the snapshot interval starting again.
+        var walkStep = BoundedFileWalk.ProgressInterval;
         var steps = new Queue<TimeSpan>(
-            [ExploreScanner.SnapshotInterval - TimeSpan.FromTicks(1), TimeSpan.FromTicks(1)]);
+            [ExploreScanner.SnapshotInterval - walkStep, walkStep, walkStep]);
 
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
@@ -286,7 +288,7 @@ public class ExploreScannerTests
 
         var scan = await scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress);
 
-        Assert.True(reports.Count >= 4, $"The walk reported {reports.Count} levels, not the four it holds.");
+        Assert.True(reports.Count >= 4, $"The walk made {reports.Count} reports, not one for each of its four folders.");
         Assert.Null(reports[0].Snapshot);
         Assert.Null(reports[1].Snapshot);
         Assert.NotNull(reports[2].Snapshot);
@@ -337,8 +339,8 @@ public class ExploreScannerTests
 
     /// <summary>
     /// G4: a scan the user cannot abandon is a bug, and it is a bug on both routes. Neither is
-    /// interruptible in itself — one is a pass over millions of records, the other a level-by-level
-    /// walk — so the token has to reach the loop that drives each of them.
+    /// interruptible in itself — one is a pass over millions of records, the other a walk of every
+    /// folder — so the token has to reach the loop that drives each of them.
     ///
     /// <para>Cancelled from inside a progress report, so what is under test is a scan already under
     /// way. A token cancelled beforehand proves only that <see cref="Task.Run(Action,

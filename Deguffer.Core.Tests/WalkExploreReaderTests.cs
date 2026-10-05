@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -27,7 +28,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         _temp.CreateFile(2048, "cache", "content-v2", "sha512", "c.tgz");
         _temp.CreateDirectory("cache", "empty");
 
-        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(
@@ -70,7 +71,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
-        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(4608, tree.TotalBytes);
@@ -96,7 +97,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         using var denied = new DeniedDirectory(refused);
 
         ExploreTree? tree = null;
-        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, onLevel: null, default));
+        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default));
 
         Assert.Empty(thrown);
         Assert.Equal(4096, tree!.TotalBytes);
@@ -123,7 +124,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         DirectoryLink.Create(kind, Path.Combine(root, "shortcut"), real);
 
-        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
         var link = byPath[Path.Combine(root, "shortcut")];
 
@@ -155,7 +156,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         var file = _temp.CreateFile(64, "cache", "content-v2", "sha512", "a.tgz");
 
-        var tree = WalkExploreReader.Read(LongPath.Extended(root), onLevel: null, default);
+        var tree = WalkExploreReader.Read(LongPath.Extended(root), onProgress: null, TimeProvider.System, default);
         var deepest = ByPath(tree)[file];
 
         Assert.Equal(root, tree.RootPath);
@@ -165,24 +166,36 @@ public sealed class WalkExploreReaderTests : IDisposable
     }
 
     /// <summary>
-    /// One report per breadth-first level with the running counts, which is the cadence §5.5 wants:
-    /// coarse enough to be worth marshalling to a UI, frequent enough that a large scan does not
-    /// look stalled. The counts have to rise, or the window shows a scan that is running and never
-    /// getting anywhere.
+    /// A report with the running counts once per interval of the clock it is given, which is the
+    /// cadence §5.5 wants: coarse enough to be worth marshalling to a UI, frequent enough that a
+    /// large scan does not look stalled. The counts have to rise, or the window shows a scan that is
+    /// running and never getting anywhere.
+    ///
+    /// <para>Each report moves the clock on by an interval, so every directory read is followed by
+    /// one, and the counts are seen as the tree grows rather than only at the end.</para>
     /// </summary>
     [Fact]
-    public void ReportsRisingCountsOncePerLevel()
+    public void ReportsRisingCountsOncePerInterval()
     {
         var root = _temp.CreateDirectory("cache");
         _temp.CreateFile(1000, "cache", "a.bin");
         _temp.CreateFile(2000, "cache", "one", "b.bin");
         _temp.CreateFile(4000, "cache", "one", "two", "c.bin");
 
+        var clock = new ManualTimeProvider();
         var reports = new List<(long Items, long Bytes)>();
 
-        WalkExploreReader.Read(root, (_, items, bytes) => reports.Add((items, bytes)), default);
+        WalkExploreReader.Read(
+            root,
+            (_, items, bytes) =>
+            {
+                reports.Add((items, bytes));
+                clock.Advance(BoundedFileWalk.ProgressInterval);
+            },
+            clock,
+            default);
 
-        Assert.True(reports.Count >= 3, $"Only {reports.Count} levels were reported.");
+        Assert.True(reports.Count >= 3, $"Only {reports.Count} reports were made.");
         Assert.Equal(reports.OrderBy(r => r.Items).ThenBy(r => r.Bytes), reports);
         Assert.Equal((5, 7000), reports[^1]);
     }
@@ -213,7 +226,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         // layout was settled long before its contents were last rewritten.
         Directory.SetLastWriteTimeUtc(root, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         var node = byPath[Path.Combine(root, "a.tgz")];
@@ -239,7 +252,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         Directory.SetCreationTimeUtc(root, made);
 
-        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
 
         Assert.Equal(made, tree.CreatedOf(tree.RootNode).Utc);
     }
@@ -264,7 +277,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         DirectoryLink.Create(kind, link, target);
         Directory.SetCreationTimeUtc(link, made);
 
-        var tree = WalkExploreReader.Read(root, onLevel: null, default);
+        var tree = WalkExploreReader.Read(root, onProgress: null, TimeProvider.System, default);
         var node = ByPath(tree)[link];
 
         Assert.True(tree.IsLink(node));
