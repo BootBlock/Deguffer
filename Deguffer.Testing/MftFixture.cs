@@ -192,22 +192,17 @@ public sealed class MftFixture
     /// read the table's records cannot serve.
     /// </summary>
     public MftFixture AddFileWithANonResidentAttributeList(
-        uint number, uint parent, string name, long allocated, long logical, uint extension, long listCluster)
-    {
-        var value = MftAttributeBytes.AttributeListValue(ListOf(Reference(number), [new ListedAttribute(Data, Reference(extension))]));
-        var cluster = new byte[MftRecordBytes.BytesPerCluster];
-        value.CopyTo(cluster, 0);
-        _clusters[listCluster] = cluster;
+        uint number, uint parent, string name, long allocated, long logical, uint extension, long listCluster) =>
+        AddFileWithAListInClusters(number, parent, name, allocated, logical, extension, listCluster, listCluster);
 
-        return Add(number, MftRecordBytes.Compose(
-                isDirectory: false,
-                baseReference: 0,
-                MftRecordBytes.Sequence,
-                t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
-                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, 0, 0),
-                t => MftAttributeBytes.WriteNonResidentAttributeList(t, listCluster, clusterCount: 1, value.Length)))
-            .Add(extension, DataPiece(number, allocated, logical, startVirtualCluster: 0));
-    }
+    /// <summary>
+    /// The same, with the list's one run sparse: it has a length and no place on the disk, so it
+    /// holds no entries at all. A complete list is placed at cluster 0 as well, so a reader that
+    /// took the sparse run's start of zero as a real cluster would find one and follow it.
+    /// </summary>
+    public MftFixture AddFileWithASparseAttributeList(
+        uint number, uint parent, string name, long allocated, long logical, uint extension) =>
+        AddFileWithAListInClusters(number, parent, name, allocated, logical, extension, listCluster: null, placedAt: 0);
 
     /// <summary>
     /// A file fragmented across two extension records. Only the piece starting at cluster 0 states
@@ -476,6 +471,26 @@ public sealed class MftFixture
     /// agreeing with each other about a mistake.</para>
     /// </summary>
     private static long FileTime(DateTime? when) => when?.ToFileTimeUtc() ?? 0;
+
+    /// <param name="listCluster">Where the base record says the list is, or null for a sparse run.</param>
+    /// <param name="placedAt">Where the list's bytes actually are.</param>
+    private MftFixture AddFileWithAListInClusters(
+        uint number, uint parent, string name, long allocated, long logical, uint extension, long? listCluster, long placedAt)
+    {
+        var value = MftAttributeBytes.AttributeListValue(ListOf(Reference(number), [new ListedAttribute(Data, Reference(extension))]));
+        var cluster = new byte[MftRecordBytes.BytesPerCluster];
+        value.CopyTo(cluster, 0);
+        _clusters[placedAt] = cluster;
+
+        return Add(number, MftRecordBytes.Compose(
+                isDirectory: false,
+                baseReference: 0,
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+                t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, 0, 0),
+                t => MftAttributeBytes.WriteNonResidentAttributeList(t, listCluster, clusterCount: 1, value.Length)))
+            .Add(extension, DataPiece(number, allocated, logical, startVirtualCluster: 0));
+    }
 
     /// <summary>
     /// A file whose base record keeps one name, written by <paramref name="ownName"/>, and whose

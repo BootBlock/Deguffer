@@ -224,6 +224,19 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
+    /// A sparse run in a list has no place on the disk, so the entries it should hold are not there
+    /// to be read, and a list missing them cannot say where the size went.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalAFileWhoseAttributeListIsSparse()
+    {
+        var index = Build(Tree()
+            .AddFileWithASparseAttributeList(21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
     /// A stream fragmented across several extension records states its sizes only in the piece
     /// starting at cluster 0. Here that piece is in the later record, and the earlier one holds a
     /// continuation whose size fields are zero, so a reader that took sizes from the first piece it

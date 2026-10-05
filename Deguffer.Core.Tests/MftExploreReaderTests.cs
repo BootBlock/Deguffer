@@ -325,6 +325,28 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
+    /// A file whose attributes continue elsewhere is completed after the rest of the table has been
+    /// read. Where the table stops short of its end, what was read before the stop is still drawn,
+    /// that file included, and its size is the one its extension record states.
+    /// </summary>
+    [Fact]
+    public void CompletesAFileReadBeforeARegionThatCannotBeRead()
+    {
+        using var source = Tree()
+            .AddFileWithDataInAnExtensionRecord(20, Cache, "fragmented.tgz", allocated: 8192, logical: 8000, extension: 21)
+            .AddFile(23, Cache, "unreachable.tgz", allocated: 4096, logical: 4000)
+            .UnreadableFrom(22)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(@"C:\Users\testuser\.npm-cache\fragmented.tgz", tree.PathOf(20));
+        Assert.Equal(8000, tree.TotalBytes);
+        Assert.False(tree.HasUnknownSizeBelow(20));
+        Assert.True(tree.HasUnknownSizes, "the table stopped short and the total was called exact");
+    }
+
+    /// <summary>
     /// A file whose <c>$DATA</c> is in an extension record caught mid-change carries no size at all,
     /// which is not a size of zero. The answer has to be a total that says it is a lower bound, and
     /// not the absence of a total.

@@ -184,7 +184,11 @@ internal static class MftAttributeBytes
     /// the table. <paramref name="length"/> bytes of it, starting at <paramref name="startCluster"/>
     /// and running for <paramref name="clusterCount"/> clusters.
     /// </summary>
-    public static int WriteNonResidentAttributeList(Span<byte> target, long startCluster, int clusterCount, int length)
+    /// <param name="startCluster">
+    /// Null for a sparse run: clusters with no place on the disk, which read as zeroes and so hold
+    /// none of the list's entries.
+    /// </param>
+    public static int WriteNonResidentAttributeList(Span<byte> target, long? startCluster, int clusterCount, int length)
     {
         const int RunsOffset = 0x40;
         const int Length = RunsOffset + 16;
@@ -198,12 +202,22 @@ internal static class MftAttributeBytes
         BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], length);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], length);
 
-        // One run: a four-byte length and a four-byte start, then the terminating zero.
+        // One run: a four-byte length and a four-byte start, then the terminating zero. A sparse run
+        // has a length and no start.
         var runs = target[RunsOffset..];
-        runs[0] = 0x44;
         BinaryPrimitives.WriteInt32LittleEndian(runs[1..], clusterCount);
-        BinaryPrimitives.WriteInt32LittleEndian(runs[5..], (int)startCluster);
-        runs[9] = 0;
+
+        if (startCluster is { } start)
+        {
+            runs[0] = 0x44;
+            BinaryPrimitives.WriteInt32LittleEndian(runs[5..], (int)start);
+            runs[9] = 0;
+        }
+        else
+        {
+            runs[0] = 0x04;
+            runs[5] = 0;
+        }
 
         return Length;
     }
