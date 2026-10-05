@@ -433,6 +433,15 @@ worth thinking about before anyone writes code:
   back more per volume and this may cease to matter on `C:` while still mattering on the five
   volumes with one tiny location each.
 
+**Measured again after #249**, which reads the table with several reads in flight, parses on
+several threads, and skips the records `$MFT`'s `$BITMAP` marks free. On the same machine, elevated,
+alternating with the build before it, which read 16 MiB at a time on solid state: a 5.6-million-record
+NVMe system volume's index builds in about 4.4 seconds against 6.8, an 871,000-record NVMe volume's
+in 167 ms against 400, and a 757,000-record SATA volume with about 5,800 records in use in 12 ms
+against 460. A volume whose table is mostly free records, which is what a volume holding only a
+Recycle Bin tends to be, now costs about as much as the records it uses. The question this item
+asks is still open, but the five small volumes may no longer be the cost it was written about.
+
 ## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 
 **Outcome: the probe answers in three states, and the decision the item was waiting on went the
