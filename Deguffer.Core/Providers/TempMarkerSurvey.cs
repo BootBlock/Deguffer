@@ -27,6 +27,10 @@ namespace Deguffer.Core.Providers;
 /// clear" while something is still there.
 /// </param>
 /// <param name="Unreadable">Whether a place would not be listed, so the figures are short by an unknown amount.</param>
+/// <param name="ClaimRoots">
+/// Each owned place that claims only itself (<see cref="TempMarkerPlace.ClaimsOnlyItself"/>), which
+/// <see cref="ClaimsIn"/> names in place of the temporary folder's entry above it.
+/// </param>
 public sealed record TempMarkerFindings(
     IReadOnlyList<DeletionTarget> Targets,
     IReadOnlyList<(string Path, string Reason)> Survivors,
@@ -35,7 +39,8 @@ public sealed record TempMarkerFindings(
     IReadOnlyList<string> Recognised,
     IReadOnlyList<(string Directory, string Owner)> OwnedPlaces,
     int Declined,
-    bool Unreadable)
+    bool Unreadable,
+    IReadOnlyList<string> ClaimRoots)
 {
     /// <summary>
     /// The entries directly inside <paramref name="folders"/> this survey speaks for: each one a
@@ -45,6 +50,10 @@ public sealed record TempMarkerFindings(
     /// it. Handing <c>Roslyn</c> back to the temporary-folder row because only its dead sessions are
     /// recognised would let that row take a live session on its age alone, which is the mistake the
     /// session check exists to prevent.</para>
+    ///
+    /// <para><b>Except where the place says it speaks for itself alone.</b> A recognised path inside one
+    /// of <see cref="ClaimRoots"/> is claimed as that place, so the temporary-folder row goes on taking,
+    /// on its own rules, what sits beside it.</para>
     /// </summary>
     public IReadOnlyList<string> ClaimsIn(IReadOnlyList<string> folders)
     {
@@ -59,15 +68,21 @@ public sealed record TempMarkerFindings(
 
             foreach (var path in Recognised)
             {
-                var relative = Path.GetRelativePath(canonical, LongPath.Unaliased(path));
+                var unaliased = LongPath.Unaliased(path);
+                var relative = Path.GetRelativePath(canonical, unaliased);
 
                 if (relative == "." || relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
                 {
                     continue;
                 }
 
-                var top = relative.Split(Path.DirectorySeparatorChar, 2)[0];
-                claimed.Add(Path.Combine(root, top));
+                var place = ClaimRoots
+                    .Select(claimRoot => LongPath.Unaliased(claimRoot))
+                    .FirstOrDefault(claimRoot => LongPath.Contains(claimRoot, unaliased));
+
+                claimed.Add(place is null
+                    ? Path.Combine(root, relative.Split(Path.DirectorySeparatorChar, 2)[0])
+                    : Path.Combine(root, Path.GetRelativePath(canonical, place)));
             }
         }
 
@@ -121,6 +136,7 @@ public static class TempMarkerSurvey
         private readonly List<string> _heldBack = [];
         private readonly List<string> _recognised = [];
         private readonly List<(string Directory, string Owner)> _owned = [];
+        private readonly List<string> _claimRoots = [];
         private readonly Dictionary<TempMarker, IReadOnlyList<string>> _running = [];
         private readonly Dictionary<TempMarker, int> _heldByProcess = [];
         private readonly Dictionary<string, bool> _reachable = new(StringComparer.OrdinalIgnoreCase);
@@ -138,6 +154,12 @@ public static class TempMarkerSurvey
             {
                 _recognised.Add(place.Directory);
                 _owned.Add((place.Directory, owner));
+
+                if (place.ClaimsOnlyItself)
+                {
+                    _claimRoots.Add(place.Directory);
+                }
+
                 _survivors.Add((
                     place.Directory,
                     $"This is {owner}'s own folder, and it must survive — only what Deguffer recognises inside it is removed."));
@@ -187,7 +209,7 @@ public static class TempMarkerSurvey
                     continue;
                 }
 
-                Consider(path, marker, isDirectory ? DirectoryAge.Of(path, ct) : entry.LastWriteTimeUtc);
+                Consider(path, marker, isDirectory ? DirectoryAge.Of(path, ct) : entry.LastWriteTimeUtc, ct);
             }
         }
 
@@ -268,7 +290,7 @@ public static class TempMarkerSurvey
                     lastWritten,
                     marker.Kind,
                     Group: marker.Tool,
-                    UseCheck: Recheck(marker, stillUnused.GetValueOrDefault(path))));
+                    UseCheck: Recheck(marker, path, stillUnused.GetValueOrDefault(path))));
             }
 
             return new TempMarkerFindings(
@@ -279,13 +301,14 @@ public static class TempMarkerSurvey
                 _recognised,
                 _owned,
                 _declined,
-                _unreadable);
+                _unreadable,
+                _claimRoots);
         }
 
         /// <summary>
         /// Hold back an entry its tool says is live or may be using, or keep it as a candidate.
         /// </summary>
-        private void Consider(string path, TempMarker marker, DateTime? lastWritten)
+        private void Consider(string path, TempMarker marker, DateTime? lastWritten, CancellationToken ct)
         {
             var running = Running(marker);
 
@@ -298,7 +321,7 @@ public static class TempMarkerSurvey
                 return;
             }
 
-            if (marker.InUse is { } inUse && inUse(Path.GetFileName(path)))
+            if (marker.InUse is { } inUse && inUse(Path.GetFileName(path), ct))
             {
                 _survivors.Add((path, $"Left alone because {marker.InUseReason}."));
                 _heldBack.Add(path);
@@ -318,7 +341,7 @@ public static class TempMarkerSurvey
         /// than offering it with a note.</para>
         /// </summary>
         /// <param name="directoryCheck">The veto's question, or null for a file, which the veto was never asked about.</param>
-        private IUseCheck? Recheck(TempMarker marker, IUseCheck? directoryCheck)
+        private IUseCheck? Recheck(TempMarker marker, string path, IUseCheck? directoryCheck)
         {
             if (!_entryRules.TryGetValue(marker, out var entryRules))
             {
@@ -329,7 +352,7 @@ public static class TempMarkerSurvey
                     rules.Add(new RunningProcessCheck(inspector, marker.HeldBy));
                 }
 
-                if (marker.InUse is { } inUse)
+                if (marker.CheckAtClean is null && marker.InUse is { } inUse)
                 {
                     rules.Add(new TempMarkerEntryCheck(inUse, marker.InUseReason));
                 }
@@ -338,7 +361,12 @@ public static class TempMarkerSurvey
                 _entryRules[marker] = entryRules;
             }
 
-            IReadOnlyList<IUseCheck> all = directoryCheck is null ? entryRules : [.. entryRules, directoryCheck];
+            IReadOnlyList<IUseCheck> all =
+            [
+                .. entryRules,
+                .. marker.CheckAtClean?.Invoke(path) is { } atClean ? [atClean] : Array.Empty<IUseCheck>(),
+                .. directoryCheck is null ? Array.Empty<IUseCheck>() : [directoryCheck],
+            ];
 
             return all.Count switch
             {

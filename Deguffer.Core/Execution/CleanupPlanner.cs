@@ -106,9 +106,9 @@ public sealed class CleanupPlanner
         // holding hundreds of children twice per pass.
         var squirrel = new SquirrelDiscovery(environment);
 
-        // One reading of Claude Code's list of running sessions for both providers over its folder, on the
-        // same reasoning: every entry in it costs a process probe, and two unshared registries would ask
-        // about each running process twice per pass.
+        // One reading of Claude Code's list of running sessions for every Claude Code provider, on the same
+        // reasoning: every entry in it costs a process probe, and unshared registries would ask about each
+        // running process once per provider per pass.
         var claudeSessions = new ClaudeCodeSessionRegistry(environment, ProcessInspector.Default);
 
         // One walk over Claude Code's project folders for the two providers inside them, on the same
@@ -176,6 +176,8 @@ public sealed class CleanupPlanner
         var toolLogs = new TempToolLogProvider(environment, liveTrees: liveTrees, scanner: scanner);
         var testBrowsers = new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences, scanner: scanner);
         var afterEffects = new AfterEffectsDiskCacheProvider(environment, scanner: scanner);
+        var claudeSnapshots = new ClaudeCodeCommandSnapshotProvider(
+            environment, liveTrees: liveTrees, sessions: claudeSessions, scanner: scanner);
 
         // The routes that hand Windows a whole volume or a cloud account are given here and nowhere else
         // in the product. A provider takes each as a required argument, so a test builds one only by
@@ -249,6 +251,7 @@ public sealed class CleanupPlanner
             new ClaudeCodeDerivedStateProvider(
                 environment, projects: claudeProjects, sessions: claudeSessions, declarations: declarations,
                 scanner: scanner),
+            claudeSnapshots,
             new RecycleBinProvider(ShellRecycleBinEmptier.Default, environment, preferences: preferences, scanner: scanner),
             new FileHistoryProvider(environment, preferences: preferences, scanner: scanner),
             new CloudLocalCopiesProvider(CloudFiles.Default, environment, scanner: scanner),
@@ -256,7 +259,7 @@ public sealed class CleanupPlanner
                 environment,
                 liveTrees: liveTrees,
                 preferences: preferences,
-                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects],
+                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects, claudeSnapshots],
                 scanner: scanner),
             installerDownloads,
             new DeliveryOptimizationProvider(environment, scanner: scanner),

@@ -12,10 +12,10 @@ namespace Deguffer.Core.Providers;
 /// clean is a session holding the folder, whatever the preview saw, and a lookup Windows will not
 /// answer reads as one, as it did at the preview.</para>
 /// </summary>
-internal sealed class TempMarkerEntryCheck(Func<string, bool> inUse, string reason) : IUseCheck
+internal sealed class TempMarkerEntryCheck(Func<string, CancellationToken, bool> inUse, string reason) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct) =>
-        inUse(Path.GetFileName(Path.TrimEndingDirectorySeparator(step.Path)))
+        inUse(Path.GetFileName(Path.TrimEndingDirectorySeparator(step.Path)), ct)
             ? [new InUseNow(step.Path, reason)]
             : [];
 }
