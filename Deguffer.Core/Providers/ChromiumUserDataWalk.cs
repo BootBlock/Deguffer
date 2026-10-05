@@ -73,11 +73,11 @@ public static class ChromiumUserDataWalk
     /// Folders that are never entered or identified: the user's temporary folder, and each declared
     /// host's own folder, which the caller classifies as a whole.
     /// </param>
-    /// <param name="tuning">What the walk runs with, for the drive that holds <paramref name="root"/>.</param>
+    /// <param name="tuning">What the walk runs with, resolved for the drive that holds <paramref name="root"/>.</param>
     public static ChromiumFolderWalk Under(
         string root,
         IReadOnlyList<string> notEntered,
-        WalkTuning tuning,
+        ScanTuner tuning,
         CancellationToken ct = default)
     {
         // Absent is a complete answer, and the walk below would report it as a refusal.

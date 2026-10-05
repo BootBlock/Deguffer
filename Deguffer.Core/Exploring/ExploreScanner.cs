@@ -154,7 +154,7 @@ public sealed class ExploreScanner(
 
         var tree = WalkExploreReader.Read(
             root,
-            _tuning.For(root).Walk,
+            _tuning,
             (builder, items, bytes) =>
             {
                 if (progress is null)

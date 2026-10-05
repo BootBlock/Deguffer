@@ -78,7 +78,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         new(Task.Run(
             () => TryMeasureFile(path, keep) is { } file
                 ? ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores }
-                : Slow(Measure(path, keep, _tuner.For(path).Walk, progress, ct)),
+                : Slow(Measure(path, keep, _tuner, progress, ct)),
             ct));
 
     /// <summary>
@@ -121,7 +121,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     private static Walked Measure(
         string path,
         MinimumAge keep,
-        WalkTuning tuning,
+        ScanTuner tuning,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {

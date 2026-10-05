@@ -132,13 +132,20 @@ public sealed class ScanTuningTests
         Assert.Equal(3, tuning.Walk.Threads);
     }
 
-    /// <summary>A path on no volume the inventory lists gets the conservative values.</summary>
-    [Fact]
-    public void APathOnNoKnownVolumeIsOfUnknownKind()
+    /// <summary>
+    /// A path on no volume the inventory lists gets the conservative values. A volume named by its
+    /// GUID starts with two separators as a share does, and is a local volume of unknown kind rather
+    /// than a share.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Q:\cache")]
+    [InlineData(@"\\?\Volume{00000000-0000-0000-0000-000000000000}\cache")]
+    [InlineData(@"\\.\Volume{00000000-0000-0000-0000-000000000000}\cache")]
+    public void APathOnNoKnownVolumeIsOfUnknownKind(string path)
     {
         var tuner = Tuner(new FakePreferences(AppPreferences.Default), new FakeStorageQueries(), new FakeVolumeInventory());
 
-        Assert.Equal(StorageMedia.Unknown, tuner.For(@"Q:\cache").Media);
+        Assert.Equal(StorageMedia.Unknown, tuner.For(path).Media);
     }
 
     /// <summary>
@@ -190,7 +197,7 @@ public sealed class ScanTuningTests
     {
         Assert.Equal(StorageMedia.Unknown, ScanTuner.Shipped.MediaOf(@"C:\Windows"));
         Assert.False(ScanTuner.Shipped.WalkOnly);
-        Assert.Empty(ScanTuner.Shipped.Drives());
+        Assert.Empty(ScanTuner.Shipped.Drives(CancellationToken.None));
     }
 
     /// <summary>
@@ -212,7 +219,18 @@ public sealed class ScanTuningTests
 
         Assert.Equal(
             [new DriveKind("C:", StorageMedia.Nvme), new DriveKind("D:", StorageMedia.Rotational)],
-            tuner.Drives());
+            tuner.Drives(CancellationToken.None));
+    }
+
+    /// <summary>Each drive's first answer waits on its device, so a listing nobody wants any more stops.</summary>
+    [Fact]
+    public void AListingOfDrivesStopsWhenCancelled()
+    {
+        var queries = new FakeStorageQueries().Volume(@"C:\", 1).Disk(1, Nvme, seekPenalty: false);
+        var tuner = Tuner(new FakePreferences(AppPreferences.Default), queries, new FakeVolumeInventory().With(@"C:\"));
+
+        Assert.Throws<OperationCanceledException>(() => tuner.Drives(new CancellationToken(canceled: true)));
+        Assert.Equal(0, queries.ExtentsAsked);
     }
 
     [Fact]

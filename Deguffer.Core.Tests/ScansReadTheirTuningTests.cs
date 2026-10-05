@@ -10,9 +10,9 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Every scan asks for the values of the drive it reads as it starts, so a setting reaches each of
-/// them. The table's read size is seen directly, in the size of the reads the source is handed. A
-/// walk's values cannot be seen from outside it, so each walk is shown to ask about its drive, and
-/// <c>BoundedFileWalkTests</c> shows the walk runs with the values it is given.
+/// them. The table's read size is seen directly, in the size of the reads the source is handed. Each
+/// walk hands its tuner to the walk itself, which resolves the values, so each walk is shown to ask
+/// about its drive and the walk is shown to run with the thread count it resolved.
 /// </summary>
 public sealed class ScansReadTheirTuningTests : IDisposable
 {
@@ -81,6 +81,61 @@ public sealed class ScansReadTheirTuningTests : IDisposable
         new ChromiumUserDataDiscovery(environment, _tuner).Discover();
 
         Assert.Equal(1, _queries.ExtentsAsked);
+    }
+
+    /// <summary>
+    /// Every scan walks through the overload that takes the tuner, so the walk is held here to the
+    /// thread count the tuner resolves. One thread lists every folder on the calling thread, and
+    /// many spread them across the pool, which the second walk shows the tree is wide and slow
+    /// enough to do.
+    /// </summary>
+    [Fact]
+    public void TheWalkRunsWithTheThreadCountTheTunerResolves()
+    {
+        for (var i = 0; i < 40; i++)
+        {
+            _temp.CreateFile(1, "wide", $"folder-{i:D2}", "a.bin");
+        }
+
+        var root = Path.Combine(_temp.Path, "wide");
+
+        Assert.Equal(1, ThreadsListing(root, threads: 1));
+        Assert.True(ThreadsListing(root, threads: WalkTuning.MaximumThreads) > 1);
+    }
+
+    /// <summary>How many threads listed a folder in one walk of <paramref name="root"/>.</summary>
+    private static int ThreadsListing(string root, int threads)
+    {
+        var tuner = new ScanTuner(
+            new FakePreferences(AppPreferences.Default with
+            {
+                Scanning = ScanPreferences.Default.With(StorageMedia.Unknown, new MediaScanPreferences(WalkThreads: threads)),
+            }),
+            new VolumeMediaCache(new FakeStorageQueries()),
+            new FakeVolumeInventory());
+        var listing = new System.Collections.Concurrent.ConcurrentDictionary<int, bool>();
+
+        BoundedFileWalk.Visit(
+            root,
+            rootState: 0,
+            tuner,
+            (_, contents, descend) =>
+            {
+                listing.TryAdd(Environment.CurrentManagedThreadId, true);
+
+                // Long enough that a pool worker is started while the calling thread is still here.
+                Thread.Sleep(5);
+
+                foreach (var entry in contents.Entries.Where(entry => entry.IsDirectory))
+                {
+                    descend(entry, 0);
+                }
+            },
+            static () => { },
+            TimeProvider.System,
+            CancellationToken.None);
+
+        return listing.Count;
     }
 
     [Fact]

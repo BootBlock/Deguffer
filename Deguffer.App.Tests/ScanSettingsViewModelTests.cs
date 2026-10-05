@@ -130,7 +130,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
     {
         var (section, _, queries) = Section();
 
-        await section.RefreshDrivesAsync();
+        await section.RefreshDrivesAsync(CancellationToken.None);
 
         Assert.Equal(["C:", "D:"], section.Drives.Select(line => line.Drive));
         Assert.StartsWith("C: (NVMe SSD): ", section.Drives[0].Text, StringComparison.Ordinal);

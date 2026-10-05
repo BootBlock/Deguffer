@@ -25,7 +25,7 @@ public static class ScanTuningText
     /// <summary>
     /// What a scan of <paramref name="drive"/> runs with under <paramref name="preferences"/>, each
     /// value marked where Auto chose it, such as
-    /// <c>C: (NVMe SSD): 16 threads (Auto), 16 KiB listing buffer (Auto), 1,024 KiB table reads (Auto)</c>.
+    /// <c>C: (NVMe SSD): 16 threads (Auto), 16 KiB listing buffer (Auto), 16,384 KiB table reads (Auto)</c>.
     /// </summary>
     public static string Describe(DriveKind drive, ScanPreferences preferences)
     {

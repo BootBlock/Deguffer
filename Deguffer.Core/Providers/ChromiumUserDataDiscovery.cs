@@ -135,7 +135,7 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
 
         foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
         {
-            var walk = ChromiumUserDataWalk.Under(root, notEntered, _tuning.For(root).Walk, ct);
+            var walk = ChromiumUserDataWalk.Under(root, notEntered, _tuning, ct);
 
             if (walk.RootUnreadable)
             {

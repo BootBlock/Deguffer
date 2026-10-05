@@ -375,7 +375,7 @@ public class RouteAgreementTests
 
         using var source = fixture.Build();
 
-        var walked = WalkExploreReader.Read(path, WalkTuning.Default, onProgress: null, TimeProvider.System, default);
+        var walked = WalkExploreReader.Read(path, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
         // The whole volume, then descended to the tree — rather than a scoped read, which would
         // root the table at the same folder the walk was handed and hide any disagreement about
         // where that folder sits.

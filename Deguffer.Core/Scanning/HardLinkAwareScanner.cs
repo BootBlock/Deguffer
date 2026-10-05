@@ -61,7 +61,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var walked = Measure(path, keep, _tuner.For(path).Walk, progress, ct);
+            var walked = Measure(path, keep, _tuner, progress, ct);
 
             return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
             {
@@ -107,7 +107,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root) Measure(
         string path,
         MinimumAge keep,
-        WalkTuning tuning,
+        ScanTuner tuning,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {

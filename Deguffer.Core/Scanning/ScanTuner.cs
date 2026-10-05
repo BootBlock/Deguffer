@@ -59,7 +59,7 @@ public sealed class ScanTuner
             return StorageMedia.Unknown;
         }
 
-        if (LongPath.Display(path).StartsWith(@"\\", StringComparison.Ordinal))
+        if (LongPath.IsShare(path))
         {
             return StorageMedia.Network;
         }
@@ -72,24 +72,26 @@ public sealed class ScanTuner
     /// page, which says what Auto chose for the drives present. Asks each device the first time, so
     /// never call it on the UI thread.
     /// </summary>
-    public IReadOnlyList<DriveKind> Drives()
+    public IReadOnlyList<DriveKind> Drives(CancellationToken ct)
     {
         if (_media is null || _volumes is null)
         {
             return [];
         }
 
-        return
-        [
-            .. _volumes.Volumes
-                .Where(volume => volume.IsReady && IsDriveRoot(volume.RootPath))
-                .OrderBy(volume => volume.RootPath, StringComparer.OrdinalIgnoreCase)
-                .Select(volume => new DriveKind(volume.RootPath[..2], _media.Of(volume).Class)),
-        ];
-    }
+        var drives = new List<DriveKind>();
 
-    private static bool IsDriveRoot(string root) =>
-        root.Length == 3 && char.IsAsciiLetter(root[0]) && root[1] == ':' && root[2] == '\\';
+        foreach (var volume in _volumes.Volumes
+            .Where(volume => volume.IsReady && VolumeRoot.IsDriveTop(volume.RootPath))
+            .OrderBy(volume => volume.RootPath, StringComparer.OrdinalIgnoreCase))
+        {
+            // Between drives, because each first question about one waits on its device.
+            ct.ThrowIfCancellationRequested();
+            drives.Add(new DriveKind(volume.RootPath[..2], _media.Of(volume).Class));
+        }
+
+        return drives;
+    }
 
     /// <summary>Forget each drive's kind, so the next scan sees disks attached or swapped since.</summary>
     public void Invalidate() => _media?.Invalidate();

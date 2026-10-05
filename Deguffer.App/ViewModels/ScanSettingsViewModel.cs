@@ -130,12 +130,12 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     /// first question about a drive opens its device. The kinds are kept, so a change to a value
     /// redescribes the drives without asking a device again.
     /// </summary>
-    public async Task RefreshDrivesAsync()
+    public async Task RefreshDrivesAsync(CancellationToken ct)
     {
         _volumes.Invalidate();
         _tuner.Invalidate();
 
-        _drives = await Task.Run(_tuner.Drives);
+        _drives = await Task.Run(() => _tuner.Drives(ct), ct);
 
         DescribeDrives();
     }

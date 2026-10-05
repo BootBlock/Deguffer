@@ -23,7 +23,7 @@ internal static class WalkExploreReader
     /// </summary>
     public static ExploreTree Read(
         string root,
-        WalkTuning tuning,
+        ScanTuner tuning,
         Action<ExploreTreeBuilder, long, long>? onProgress,
         TimeProvider clock,
         CancellationToken ct)
