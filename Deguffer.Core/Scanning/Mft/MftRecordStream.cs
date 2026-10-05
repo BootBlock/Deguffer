@@ -4,7 +4,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// Handles one record of a table. Return false to abandon the read.
 /// </summary>
 /// <param name="number">The record's position in the table, which is its record number.</param>
-/// <param name="outcome">What the parser made of it. The three cases are not interchangeable.</param>
+/// <param name="outcome">
+/// What the parser made of it. The three cases are not interchangeable, and
+/// <see cref="MftParseOutcome.Continued"/> is never one of them.
+/// </param>
 /// <param name="record">Meaningful only where <paramref name="outcome"/> is
 /// <see cref="MftParseOutcome.Parsed"/>.</param>
 internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in MftRecord record);
@@ -37,6 +40,18 @@ internal static class MftRecordStream
     /// can see: the files in the missed range simply never arrive, and every directory above them
     /// totals short with nothing to show for it. What a caller does about that is its own decision,
     /// but it always gets to make it.</para>
+    ///
+    /// <para>A record whose attributes continue in extension records is held back and handed on
+    /// after the first pass, once <see cref="MftExtensionReader"/> has read what it needs, so
+    /// records do not all arrive in table order. Those held back are still handed on where the
+    /// first pass stopped at a region it could not read, because a caller that keeps going has a
+    /// use for every record that was read.</para>
+    ///
+    /// <para>A table that wants more extension records than it holds is not one NTFS wrote: each
+    /// extension record belongs to one base record, so the wants of a healthy table sum to fewer
+    /// than its records. Such a table is treated as one that could not be read in full. Holding
+    /// every want of a hostile table would grow without bound, and running out of memory is a
+    /// failure no caller can fall back from.</para>
     /// </summary>
     public static bool TryReadAll(IMftSource source, int count, MftRecordHandler onRecord, CancellationToken ct)
     {
@@ -46,23 +61,40 @@ internal static class MftRecordStream
         // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
         using var buffer = new VolumeReadBuffer(RecordsPerBatch * source.BytesPerRecord);
         var batch = buffer.Span;
+        var deferred = new List<MftDeferredRecord>();
 
         long next = 0;
+        long wanted = 0;
+        var wholeTable = true;
 
-        while (next < count)
+        while (wholeTable && next < count)
         {
             ct.ThrowIfCancellationRequested();
 
             var read = source.ReadBatch(next, batch);
             if (read <= 0)
             {
-                return false;
+                wholeTable = false;
+                break;
             }
 
             for (var i = 0; i < read; i++)
             {
                 var slice = batch.Slice(i * source.BytesPerRecord, source.BytesPerRecord);
-                var outcome = MftRecordParser.Parse(slice, out var record);
+                var outcome = MftRecordParser.Parse(slice, next + i, out var record, out var continued);
+
+                if (continued is not null)
+                {
+                    wanted += continued.Segments.Count;
+                    if (wanted > count)
+                    {
+                        wholeTable = false;
+                        break;
+                    }
+
+                    deferred.Add(continued);
+                    continue;
+                }
 
                 if (!onRecord(next + i, outcome, in record))
                 {
@@ -73,6 +105,18 @@ internal static class MftRecordStream
             next += read;
         }
 
-        return true;
+        wholeTable &= MftExtensionReader.TryResolve(source, deferred, count - wanted, batch, ct);
+
+        foreach (var held in deferred)
+        {
+            var outcome = held.Finish(out var record);
+
+            if (!onRecord(held.Self.Record, outcome, in record))
+            {
+                return false;
+            }
+        }
+
+        return wholeTable;
     }
 }

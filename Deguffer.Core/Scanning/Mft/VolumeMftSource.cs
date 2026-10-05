@@ -185,6 +185,24 @@ public sealed partial class VolumeMftSource : IMftSource
         return read == tail ? 1 : 0;
     }
 
+    public int BytesPerCluster => _geometry.BytesPerCluster;
+
+    public bool TryReadClusters(long firstCluster, Span<byte> destination)
+    {
+        // Whole clusters only, so the read stays sector aligned as a raw volume handle requires. The
+        // cluster comes from a run list on the disk, so its byte offset is bounded by division
+        // before it is formed: a corrupt run naming a cluster near 2^63 would otherwise wrap the
+        // offset negative and throw out of the read.
+        if (firstCluster < 0
+            || destination.Length % BytesPerCluster != 0
+            || firstCluster > (long.MaxValue - destination.Length) / BytesPerCluster)
+        {
+            return false;
+        }
+
+        return RandomAccess.Read(_volume, destination, firstCluster * BytesPerCluster) == destination.Length;
+    }
+
     public void Dispose() => _volume.Dispose();
 
     /// <summary>Internal so a test can hold it to every sector size the boot sector accepts.</summary>

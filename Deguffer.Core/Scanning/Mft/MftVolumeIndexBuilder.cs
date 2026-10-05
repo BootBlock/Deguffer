@@ -48,20 +48,16 @@ public static class MftVolumeIndexBuilder
     /// </summary>
     private static bool Place(MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record)
     {
-        // Both are skipped, and the index cannot tell them apart usefully. A record whose name lives
-        // in an extension record is a real file this reader cannot place, so the directory above it
-        // totals short and the total is not marked approximate — a compromise this builder has
-        // always made, because refusing instead would take the fast path off any volume holding one,
-        // which on a system drive means always. Following the attribute list is the fix, and it is
-        // after-the-scanner.md item 6.
-        if (outcome is MftParseOutcome.NotAnEntry or MftParseOutcome.IdentityElsewhere)
+        if (outcome == MftParseOutcome.NotAnEntry)
         {
             return true;
         }
 
         // A record in use that this reader cannot place is the same loss as a region it could not
-        // read: a file exists, the tree cannot hold it, and every directory above it would total
-        // short with nothing to show for it.
+        // read: a file exists, the tree cannot hold it, and the directory it belongs to — which
+        // could be any of them — would total short with nothing to show for it. That includes a
+        // file whose names are in extension records that were caught mid-change: the stream has
+        // already followed its $ATTRIBUTE_LIST, so what arrives here unplaced could not be placed.
         //
         // The whole volume goes with it, and on a live read that can be one record caught mid-write
         // — the condition the update sequence array exists to detect, and one a second read of that

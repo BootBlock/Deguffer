@@ -54,9 +54,9 @@ internal static class MftExploreReader
     ///
     /// <para>Best effort by design. A record this cannot read is skipped and the tree says its
     /// totals are lower bounds; a region that cannot be read at all ends the pass and keeps what was
-    /// gathered. On a real volume the records that decline are the ones whose size lives in an
-    /// extension record the parser does not follow — measured at 400 of 400 sampled, and the
-    /// unfinished work is <c>docs/todo/after-the-scanner.md</c> item 6.</para>
+    /// gathered. A file whose size or name is in an extension record is followed there. Where that
+    /// record was caught mid-change, a lost size is marked unknown and a lost name makes the file
+    /// one this could not read.</para>
     /// </summary>
     public static MftExploreRead Read(
         IMftSource source,
@@ -94,29 +94,29 @@ internal static class MftExploreReader
 
         var sawUnreadableRecord = false;
 
+        // Records whose attributes continue in extension records arrive again after the first pass,
+        // with numbers it has already gone past, so progress only ever moves forward.
+        long nextProgress = 0;
+
         var couldNotReadWholeTable = !MftRecordStream.TryReadAll(
             source,
             records,
             (number, outcome, in record) =>
             {
-                if ((number & (ProgressInterval - 1)) == 0)
+                if (number >= nextProgress)
                 {
                     onProgress?.Invoke(number);
+                    nextProgress = number - (number % ProgressInterval) + ProgressInterval;
                 }
 
                 if (outcome != MftParseOutcome.Parsed)
                 {
                     // Every other outcome leaves a slot empty, and only one of them leaves nothing
-                    // missing. A free record genuinely holds nothing. An unreadable one, and one
-                    // whose identity lives in an extension record, both hold a real file this
-                    // cannot place — and there is no parent to attribute the loss to, so it is
-                    // declared once, on the scan's root, rather than guessed at somewhere in the
-                    // middle of the tree.
-                    //
-                    // The second of those is the common one rather than the exotic one: NTFS moves
-                    // a file's $FILE_NAME into an extension record once it has enough hard links to
-                    // overflow its own record, which a system volume is full of. Counting it as a
-                    // free record is how a drive comes to be reported short with no caveat at all.
+                    // missing. A free record genuinely holds nothing. An unreadable one holds a real
+                    // file this cannot place — and there is no parent to attribute the loss to, so
+                    // it is declared once, on the scan's root, rather than guessed at somewhere in
+                    // the middle of the tree. That includes a file whose names are in extension
+                    // records caught mid-change, which the stream has already tried to follow.
                     //
                     // Except across records 12 to 15, which are not damage but the format. NTFS
                     // holds those four back for future metadata, marks them in use, and gives them
@@ -130,10 +130,9 @@ internal static class MftExploreReader
                     // for six weeks. The bound is both-ended there for a reason and it is
                     // both-ended here for the same one: records 0 to 11 are the named metadata
                     // files, and an unreadable one of those is real damage.
-                    sawUnreadableRecord |= outcome == MftParseOutcome.IdentityElsewhere
-                        || (outcome == MftParseOutcome.Unreadable
-                            && (number < MftRecord.FirstUnnamedReservedRecord
-                                || number >= MftRecord.ReservedRecordCount));
+                    sawUnreadableRecord |= outcome == MftParseOutcome.Unreadable
+                        && (number < MftRecord.FirstUnnamedReservedRecord
+                            || number >= MftRecord.ReservedRecordCount);
 
                     return true;
                 }

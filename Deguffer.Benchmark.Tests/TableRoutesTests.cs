@@ -58,6 +58,23 @@ public sealed class TableRoutesTests
         Assert.Equal(Records, tally.Items);
     }
 
+    /// <summary>
+    /// Following an attribute list is part of the read. A file whose list is kept outside the table
+    /// costs the clusters holding the list and a second read of the extension record it names, and
+    /// a rate that left either out would credit the run with a speed it did not have.
+    /// </summary>
+    [Fact]
+    public void CountsWhatFollowingAnAttributeListRead()
+    {
+        var tally = Run("Table", new MftFixture()
+            .AddDirectory(16, 5, "folder")
+            .AddFileWithANonResidentAttributeList(17, 16, "file.bin", allocated: 8192, logical: 8000, extension: 18, listCluster: 500));
+
+        Assert.True(tally.Complete);
+        Assert.Equal(19 + 1, tally.Items);
+        Assert.Equal((20 * BytesPerRecord) + 4096, tally.BytesRead);
+    }
+
     [Fact]
     public void AVolumeThatCannotBeOpenedAgainStopsTheBenchmark() =>
         Assert.Throws<IOException>(() => TableRoutes.Run(

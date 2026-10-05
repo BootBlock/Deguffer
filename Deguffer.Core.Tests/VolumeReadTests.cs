@@ -42,6 +42,24 @@ public class VolumeReadTests
         Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);
     }
 
+    /// <summary>
+    /// A list grown too large for its record is read from clusters outside the table, straight into
+    /// the buffer handed over, so that buffer is held to the same rule.
+    /// </summary>
+    [Fact]
+    public void HandsASourceAClusterReadAlignedToTheLargestSector()
+    {
+        using var source = new ClusterAddressRecordingSource(new MftFixture()
+            .AddFileWithANonResidentAttributeList(
+                20, MftRecord.RootRecordNumber, "fragmented.tgz", allocated: 8192, logical: 8000, extension: 21, listCluster: 500)
+            .Build());
+
+        MftRecordStream.TryReadAll(source, (int)source.RecordCount, (_, _, in _) => true, CancellationToken.None);
+
+        Assert.NotNull(source.Address);
+        Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);
+    }
+
     private static long Address(Span<byte> span) =>
         Unsafe.ByteOffset(ref Unsafe.NullRef<byte>(), ref MemoryMarshal.GetReference(span));
 
@@ -59,8 +77,34 @@ public class VolumeReadTests
             return 0;
         }
 
+        public int BytesPerCluster => 4096;
+
+        public bool TryReadClusters(long firstCluster, Span<byte> destination) => false;
+
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>A fixture table that records where its cluster reads were asked to land.</summary>
+    private sealed class ClusterAddressRecordingSource(IMftSource table) : IMftSource
+    {
+        public int BytesPerRecord => table.BytesPerRecord;
+
+        public long RecordCount => table.RecordCount;
+
+        public int BytesPerCluster => table.BytesPerCluster;
+
+        public long? Address { get; private set; }
+
+        public int ReadBatch(long firstRecord, Span<byte> destination) => table.ReadBatch(firstRecord, destination);
+
+        public bool TryReadClusters(long firstCluster, Span<byte> destination)
+        {
+            Address = VolumeReadTests.Address(destination);
+            return table.TryReadClusters(firstCluster, destination);
+        }
+
+        public void Dispose() => table.Dispose();
     }
 }

@@ -21,28 +21,22 @@ internal enum MftParseOutcome
     NotAnEntry,
 
     /// <summary>
-    /// A record in use whose identity this reader cannot reach: it carries an
-    /// <c>$ATTRIBUTE_LIST</c> and no name of its own, so its <c>$FILE_NAME</c> lives in an
-    /// extension record the parser does not follow. NTFS does this once a file has enough hard
-    /// links to overflow its own record, which a system volume is full of.
+    /// A base record whose <c>$ATTRIBUTE_LIST</c> says something the scan needs — its name, the
+    /// sizes of its data, or its reparse point — is in another record. NTFS does this once a file's
+    /// attributes outgrow one record: a large fragmented file, or one with many hard links.
     ///
-    /// <para>Deliberately not <see cref="NotAnEntry"/>, though both are skipped. A free record
-    /// holds nothing; this one holds a real file of real size, so the directory above it totals
-    /// short. Collapsing the two means a caller cannot tell "there was nothing here" from "there
-    /// was something here and I could not place it", and a total that is short with nothing to say
-    /// so is the one thing a size scan must not produce.</para>
-    ///
-    /// <para>Deliberately not <see cref="Unreadable"/> either. That takes a volume down, and this
-    /// shape is ordinary rather than damage — refusing it would take the fast path off any machine
-    /// with a system volume. Following the attribute list to the extension record is the fix that
-    /// costs nothing, and it is <c>docs/todo/after-the-scanner.md</c> item 6.</para>
+    /// <para>Only the parser and <see cref="MftRecordStream"/> see this. The stream reads the other
+    /// records once the first pass is over and turns every one of these into
+    /// <see cref="Parsed"/> or <see cref="Unreadable"/> before any caller is told of it, so no
+    /// caller has a third kind of record to make a policy for.</para>
     /// </summary>
-    IdentityElsewhere,
+    Continued,
 
     /// <summary>
-    /// A record in use that could not be read — a torn write, a malformed attribute run, or a name
-    /// this reader cannot decode. Something exists here and the table will not say what, so every
-    /// directory above it would total short.
+    /// A record in use that could not be read — a torn write, a malformed attribute run, a name
+    /// this reader cannot decode, or a name in an extension record that was caught mid-change or
+    /// damaged. Something exists here and the table will not say where, so any directory on the
+    /// volume could total short by it.
     /// </summary>
     Unreadable,
 }

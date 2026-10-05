@@ -15,9 +15,19 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class MftFixture
 {
+
     private readonly List<byte[]> _records = [];
 
     private readonly int _bytesPerRecord;
+
+    private readonly Dictionary<long, byte[]> _clusters = [];
+
+    /// <summary>
+    /// Every gap in the table, shared. A source copies what it serves, and <see cref="Corrupt"/>
+    /// damages a copy, so a test can place a record past a hundred thousand others for the cost of
+    /// the references.
+    /// </summary>
+    private readonly byte[] _blank;
 
     private long _unreadableFrom = long.MaxValue;
 
@@ -28,6 +38,7 @@ public sealed class MftFixture
     public MftFixture(int bytesPerRecord = MftRecordBytes.BytesPerRecord)
     {
         _bytesPerRecord = bytesPerRecord;
+        _blank = new byte[bytesPerRecord];
 
         // Records 0-4 are NTFS's own named metadata files ($MFT, $MFTMirr, $LogFile, $Volume,
         // $AttrDef), left blank here: an unused entry is skipped by the parser, which is worth
@@ -61,7 +72,7 @@ public sealed class MftFixture
         // proves the reader works on a volume nobody has.
         while (_records.Count < MftRecord.ReservedRecordCount)
         {
-            _records.Add(MftRecordBytes.RecordWithoutAName(withAttributeList: false, _bytesPerRecord));
+            _records.Add(MftRecordBytes.RecordWithoutAName(_bytesPerRecord));
         }
     }
 
@@ -174,26 +185,6 @@ public sealed class MftFixture
             bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
-    /// A file whose <c>$DATA</c> no longer fits in its base record. NTFS moves the attribute into an
-    /// extension record and leaves an <c>$ATTRIBUTE_LIST</c> behind pointing at it, so the base
-    /// record carries a name and no size at all — which is not the same as a size of zero.
-    /// </summary>
-    public MftFixture AddFileWithDataInAnExtensionRecord(uint number, uint parent, string name) =>
-        Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated: 0, logical: 0, DataPlacement.InExtensionRecord,
-            bytesPerRecord: _bytesPerRecord));
-
-    /// <summary>
-    /// A file fragmented across extents but still fully described here: an attribute list, then the
-    /// extent starting at VCN 0 that carries the sizes, then a continuation extent that does not.
-    /// The sizes are known, so this must not be confused with a record that has lost them.
-    /// </summary>
-    public MftFixture AddFileSplitAcrossExtents(uint number, uint parent, string name, long allocated, long logical) =>
-        Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.SplitAcrossExtents,
-            bytesPerRecord: _bytesPerRecord));
-
-    /// <summary>
     /// A file whose base record holds a later extent of a split <c>$DATA</c> rather than the first.
     /// Only the extent starting at VCN 0 carries the sizes; the rest leave those fields zero, so a
     /// reader that trusts them reads a real file as empty.
@@ -219,35 +210,11 @@ public sealed class MftFixture
             bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
-    /// A directory big enough that NTFS moved its index attributes out of the base record. Common
-    /// on any real volume, and carrying no size of its own that anything counts.
-    /// </summary>
-    public MftFixture AddDirectoryWithAttributesInAnExtensionRecord(uint number, uint parent, string name) =>
-        Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: true, allocated: 0, logical: 0, DataPlacement.InExtensionRecord,
-            bytesPerRecord: _bytesPerRecord));
-
-    /// <summary>
-    /// One of the extension records the shapes above point at. A real volume holds many, and none
-    /// of them is a fault: the base record that owns them carries the file's identity.
-    /// </summary>
-    public MftFixture AddExtensionRecord(uint number, uint baseRecordNumber) =>
-        Add(number, MftRecordBytes.ExtensionRecord(baseRecordNumber, _bytesPerRecord));
-
-    /// <summary>
-    /// A base record whose names live in extension records, which is what NTFS does once a file has
-    /// enough hard links to overflow its own record. A system volume is full of these, so a reader
-    /// that treats one as corruption gives up on the volume that matters most.
-    /// </summary>
-    public MftFixture AddRecordWithNamesInExtensionRecords(uint number) =>
-        Add(number, MftRecordBytes.RecordWithoutAName(withAttributeList: true, _bytesPerRecord));
-
-    /// <summary>
-    /// The same shape without the attribute list: a record in use, holding data, claiming no
-    /// identity and pointing nowhere else for one. No healthy volume produces this.
+    /// A record in use, holding data, claiming no identity and with no attribute list pointing
+    /// anywhere else for one. No healthy volume produces this.
     /// </summary>
     public MftFixture AddRecordWithNoIdentityAtAll(uint number) =>
-        Add(number, MftRecordBytes.RecordWithoutAName(withAttributeList: false, _bytesPerRecord));
+        Add(number, MftRecordBytes.RecordWithoutAName(_bytesPerRecord));
 
     /// <summary>
     /// A record naming a parent beyond the 32-bit range the index addresses. Narrowing this
@@ -284,31 +251,22 @@ public sealed class MftFixture
     /// Break one stride's update sequence stamp, as a torn write would. The record must then be
     /// rejected outright — a half-fixed-up record parses cleanly and reports a wrong size.
     /// </summary>
-    public MftFixture CorruptSectorStamp(uint number)
-    {
-        _records[(int)number][MftRecordBytes.FixupStride - 1] ^= 0xFF;
-        return this;
-    }
+    public MftFixture CorruptSectorStamp(uint number) =>
+        Corrupt(number, record => record[MftRecordBytes.FixupStride - 1] ^= 0xFF);
 
     /// <summary>
     /// Make a record's first attribute declare itself far longer than the record, as a corrupt
     /// sector the stamps do not cover would. The record must be rejected, not thrown on.
     /// </summary>
-    public MftFixture CorruptAttributeLength(uint number)
-    {
-        MftRecordBytes.DeclareFirstAttributeLength(_records[(int)number], MftRecordBytes.LengthJustUnderIntMax);
-        return this;
-    }
+    public MftFixture CorruptAttributeLength(uint number) =>
+        Corrupt(number, record => MftRecordBytes.DeclareFirstAttributeLength(record, MftRecordBytes.LengthJustUnderIntMax));
 
     /// <summary>
     /// Make a record's <c>$FILE_NAME</c> declare a value far longer than the attribute around it.
     /// The record then has no name it can be placed by, and must be rejected, not thrown on.
     /// </summary>
-    public MftFixture CorruptFileNameValueLength(uint number)
-    {
-        MftRecordBytes.DeclareFileNameValueLength(_records[(int)number], MftRecordBytes.LengthJustUnderIntMax);
-        return this;
-    }
+    public MftFixture CorruptFileNameValueLength(uint number) =>
+        Corrupt(number, record => MftRecordBytes.DeclareFileNameValueLength(record, MftRecordBytes.LengthJustUnderIntMax));
 
     /// <summary>
     /// Make reads fail from <paramref name="record"/> onward, as a bad sector or a run list the
@@ -321,14 +279,19 @@ public sealed class MftFixture
     }
 
     public IMftSource Build() =>
-        new FixtureMftSource(_records, _bytesPerRecord, _unreadableFrom);
+        new FixtureMftSource(
+            _records,
+            _bytesPerRecord,
+            _unreadableFrom,
+            MftRecordBytes.BytesPerCluster,
+            _clusters);
 
     /// <summary>
     /// A parent as NTFS stores it: record number in the low 48 bits, reuse sequence above. The
     /// sequence is deliberately non-zero, because a reader that forgets to mask it off still works
     /// on a freshly formatted volume and fails on a used one.
     /// </summary>
-    private static ulong Reference(uint recordNumber) => recordNumber | (1UL << 48);
+    internal static ulong Reference(uint recordNumber) => recordNumber | (1UL << 48);
 
     /// <summary>
     /// A <see cref="DateTime"/> as NTFS stores one, or zero for "never set".
@@ -339,11 +302,29 @@ public sealed class MftFixture
     /// </summary>
     private static long FileTime(DateTime? when) => when?.ToFileTimeUtc() ?? 0;
 
-    private MftFixture Add(uint number, byte[] record)
+    /// <summary>
+    /// Damage a copy of a record and put the copy in its place. A gap in the table is the one
+    /// shared blank record, so damaging a record where it lies would damage every gap with it.
+    /// </summary>
+    /// <summary>How long each record in this fixture's table is.</summary>
+    internal int BytesPerRecord => _bytesPerRecord;
+
+    /// <summary>Place the bytes of one cluster outside the table, for a source to serve.</summary>
+    internal void PutCluster(long cluster, byte[] bytes) => _clusters[cluster] = bytes;
+
+    private MftFixture Corrupt(uint number, Action<byte[]> corrupt)
+    {
+        var record = (byte[])_records[(int)number].Clone();
+        corrupt(record);
+        _records[(int)number] = record;
+        return this;
+    }
+
+    internal MftFixture Add(uint number, byte[] record)
     {
         while (_records.Count <= number)
         {
-            _records.Add(new byte[_bytesPerRecord]);
+            _records.Add(_blank);
         }
 
         _records[(int)number] = record;

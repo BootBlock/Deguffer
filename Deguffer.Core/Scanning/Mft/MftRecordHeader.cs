@@ -9,7 +9,19 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <see cref="Read"/> also applies the update sequence fixup, because there is no correct order
 /// other than "before anything else" — every field beyond the header is wrong until it has run.
 /// </summary>
-internal readonly record struct MftRecordHeader(int FirstAttributeOffset, int UsedLength, bool IsDirectory)
+/// <param name="Sequence">
+/// How many times this record has been reused. A reference into the table carries the sequence it
+/// expects, so a mismatch is a record that has since become something else.
+/// </param>
+/// <param name="BaseReference">
+/// For an extension record, the base record that owns it. All zeroes for a base record.
+/// </param>
+internal readonly record struct MftRecordHeader(
+    int FirstAttributeOffset,
+    int UsedLength,
+    bool IsDirectory,
+    ushort Sequence,
+    MftSegmentReference BaseReference)
 {
     private static ReadOnlySpan<byte> Signature => "FILE"u8;
 
@@ -25,7 +37,18 @@ internal readonly record struct MftRecordHeader(int FirstAttributeOffset, int Us
     /// a fixup stride boundary — and necessary: a free record whose stale bytes fail the fixup is
     /// still just a free record, and reporting it as unreadable would condemn a healthy table.
     /// </summary>
-    public static MftParseOutcome Read(Span<byte> record, out MftRecordHeader header)
+    public static MftParseOutcome Read(Span<byte> record, out MftRecordHeader header) =>
+        Read(record, extension: false, out header);
+
+    /// <summary>
+    /// The same for an extension record, read only because a base record's <c>$ATTRIBUTE_LIST</c>
+    /// named it. A base record is <see cref="MftParseOutcome.NotAnEntry"/> here, as an extension
+    /// record is to <see cref="Read(Span{byte}, out MftRecordHeader)"/>.
+    /// </summary>
+    public static MftParseOutcome ReadExtension(Span<byte> record, out MftRecordHeader header) =>
+        Read(record, extension: true, out header);
+
+    private static MftParseOutcome Read(Span<byte> record, bool extension, out MftRecordHeader header)
     {
         header = default;
 
@@ -48,9 +71,12 @@ internal readonly record struct MftRecordHeader(int FirstAttributeOffset, int Us
             return MftParseOutcome.Unreadable;
         }
 
-        // An extension record's attributes are already reachable from the base record that owns
-        // them, so parsing this one separately would count the same file twice.
-        if (BinaryPrimitives.ReadUInt64LittleEndian(record[0x20..]) != 0)
+        // An extension record's attributes are reached through the base record that owns them, so
+        // parsing one as an entry of its own would count the same file twice. Checked before the
+        // lengths below, so a damaged extension record met in passing costs nothing here: whether
+        // it matters is for the base record that lists it to decide, when it follows its list.
+        var baseReference = BinaryPrimitives.ReadUInt64LittleEndian(record[0x20..]);
+        if ((baseReference != 0) != extension)
         {
             return MftParseOutcome.NotAnEntry;
         }
@@ -63,7 +89,12 @@ internal readonly record struct MftRecordHeader(int FirstAttributeOffset, int Us
             return MftParseOutcome.Unreadable;
         }
 
-        header = new MftRecordHeader(first, (int)used, (flags & FlagDirectory) != 0);
+        header = new MftRecordHeader(
+            first,
+            (int)used,
+            (flags & FlagDirectory) != 0,
+            BinaryPrimitives.ReadUInt16LittleEndian(record[0x10..]),
+            MftSegmentReference.FromRaw(baseReference));
         return MftParseOutcome.Parsed;
     }
 }
