@@ -104,24 +104,16 @@ internal static class MftAttributeList
         runs = [];
         length = 0;
 
-        if (attribute.Length < 0x40 || attribute[0x08] == 0)
+        if (!MftNonResidentHeader.TryRead(attribute, out var header)
+            || header.LowestVcn != 0
+            || header.DataSize <= 0
+            || header.DataSize > MaximumLength)
         {
             return false;
         }
 
-        int mappingPairsOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x20..]);
-        var dataSize = BinaryPrimitives.ReadInt64LittleEndian(attribute[0x30..]);
-
-        if (BinaryPrimitives.ReadUInt64LittleEndian(attribute[0x10..]) != 0
-            || mappingPairsOffset >= attribute.Length
-            || dataSize <= 0
-            || dataSize > MaximumLength)
-        {
-            return false;
-        }
-
-        runs = DataRuns.Parse(attribute[mappingPairsOffset..]);
-        length = (int)dataSize;
+        runs = header.ReadRuns(attribute);
+        length = (int)header.DataSize;
 
         return runs.Count > 0;
     }

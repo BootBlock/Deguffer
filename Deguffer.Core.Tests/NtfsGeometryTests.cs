@@ -62,8 +62,37 @@ public class NtfsGeometryTests
             dataSize: 393_216,
             bytesPerRecord: geometry.BytesPerFileRecord);
 
-        Assert.True(MftExtentMap.TryRead(record, geometry.BytesPerCluster, out var map));
+        Assert.True(MftExtentMapReader.TryRead(record, geometry.BytesPerCluster, MftExtentMapTests.NoClusters, out var map));
         Assert.Equal([new DataRun(786_432, 64), new DataRun(900_000, 32)], map.Runs);
+    }
+
+    /// <summary>
+    /// A cluster count past what NTFS formats: 2^20 sectors of 4,096 bytes and 2^23 of 512 wrap the
+    /// cluster size to zero, and 0xA0 asks for a shift C# would take modulo 32. Each has to refuse
+    /// the volume rather than throw from the open or read it with the wrong cluster size.
+    /// </summary>
+    [Theory]
+    [InlineData(4096, 0xEC)]
+    [InlineData(512, 0xE9)]
+    [InlineData(512, 0xA0)]
+    [InlineData(512, 0x81)]
+    [InlineData(4096, 0xF6)]
+    public void RejectsAClusterLargerThanNtfsFormats(ushort bytesPerSector, byte sectorsPerCluster) =>
+        Assert.False(NtfsBootSector.TryParse(
+            BootSector(bytesPerSector, sectorsPerCluster, clustersPerRecord: -12),
+            out _));
+
+    /// <summary>The largest cluster Windows formats, 2 MiB, encoded as the negative exponent form.</summary>
+    [Theory]
+    [InlineData(4096, 0xF7)]
+    [InlineData(512, 0xF4)]
+    public void ReadsTheLargestClusterNtfsFormats(ushort bytesPerSector, byte sectorsPerCluster)
+    {
+        Assert.True(NtfsBootSector.TryParse(
+            BootSector(bytesPerSector, sectorsPerCluster, clustersPerRecord: -12),
+            out var geometry));
+
+        Assert.Equal(NtfsBootSector.MaximumBytesPerCluster, geometry.BytesPerCluster);
     }
 
     /// <summary>
@@ -220,6 +249,12 @@ public class DataRunTests
 /// </summary>
 public class MftExtentMapTests
 {
+    /// <summary>
+    /// For a record 0 with no list to follow, so nothing beyond it is read. A reader that went
+    /// looking would be reading clusters no test placed anything in.
+    /// </summary>
+    internal static readonly ClusterReader NoClusters = static (_, _) => false;
+
     private static readonly MftExtentMap Map =
         new(DataSize: 8 * 1024, Runs: [new DataRun(100, 5), new DataRun(200, 3)]);
 
@@ -236,6 +271,59 @@ public class MftExtentMapTests
 
         // The contiguous count is what stops a batch straddling the gap between extents.
         Assert.Equal(expectedRemaining, contiguous);
+    }
+
+    /// <summary>
+    /// A 2,048-byte record on a volume of 512-byte clusters, whose four clusters lie in three
+    /// extents. Every one of them has to be found, in order: reading the tail as though it were
+    /// contiguous with the second extent would splice in a cluster of something else.
+    /// </summary>
+    [Fact]
+    public void ReadsARecordSpreadAcrossThreeExtents()
+    {
+        const int ClusterBytes = 512;
+
+        var map = new MftExtentMap(DataSize: 4 * 2048, Runs: [new DataRun(100, 1), new DataRun(200, 1), new DataRun(300, 6)]);
+        var clusters = new Dictionary<long, byte[]>();
+
+        foreach (var cluster in new long[] { 100, 200, 201, 300, 301, 302, 303, 304, 305 })
+        {
+            clusters[cluster] = Enumerable.Repeat((byte)(cluster % 251), ClusterBytes).ToArray();
+        }
+
+        var record = new byte[2048];
+        Assert.True(map.TryReadRecord(0, ClusterBytes, (first, destination) =>
+        {
+            for (var i = 0; i < destination.Length / ClusterBytes; i++)
+            {
+                if (!clusters.TryGetValue(first + i, out var bytes))
+                {
+                    return false;
+                }
+
+                bytes.CopyTo(destination[(i * ClusterBytes)..]);
+            }
+
+            return true;
+        }, record));
+
+        Assert.Equal(
+            new long[] { 100, 200, 300, 301 }.SelectMany(c => clusters[c]),
+            record);
+    }
+
+    /// <summary>
+    /// The extents run on past the table's end, as an allocation can. A record there is not one of
+    /// the table's records, whatever the clusters hold.
+    /// </summary>
+    [Fact]
+    public void RefusesToReadARecordPastTheEndOfTheTable()
+    {
+        var map = new MftExtentMap(DataSize: 4 * 1024, Runs: [new DataRun(100, 8)]);
+        ClusterReader everything = static (_, _) => true;
+
+        Assert.True(map.TryReadRecord(3, bytesPerCluster: 1024, everything, new byte[1024]));
+        Assert.False(map.TryReadRecord(4, bytesPerCluster: 1024, everything, new byte[1024]));
     }
 
     [Fact]
@@ -269,29 +357,42 @@ public class MftExtentMapTests
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64), new DataRun(900_000, 32)], dataSize: 98_304);
 
-        Assert.True(MftExtentMap.TryRead(record, bytesPerCluster: 4096, out var map));
+        Assert.True(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out var map));
 
         Assert.Equal(98_304, map.DataSize);
         Assert.Equal([new DataRun(786_432, 64), new DataRun(900_000, 32)], map.Runs);
     }
 
     /// <summary>
-    /// On a heavily fragmented volume $MFT's run list spills into extension records reached through
-    /// an $ATTRIBUTE_LIST. Reading only the runs that fit in record 0 would index part of the volume
-    /// and report short sizes for everything outside it — so this has to refuse, not partially
-    /// succeed.
+    /// Record 0 can carry an $ATTRIBUTE_LIST that names only record 0 itself, where the attributes
+    /// still fit. There is nothing to follow, and the table is read as though there were no list.
     /// </summary>
     [Fact]
-    public void RefusesATableWhoseRunListSpillsIntoAnAttributeList()
+    public void ReadsATableWhoseListNamesOnlyRecordZero()
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536, withAttributeList: true);
 
-        Assert.False(MftExtentMap.TryRead(record, bytesPerCluster: 4096, out _));
+        Assert.True(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out var map));
+        Assert.Equal([new DataRun(786_432, 64)], map.Runs);
+    }
+
+    /// <summary>
+    /// The table is one byte longer than its runs reach. A map that ends short indexes part of the
+    /// volume and reports short sizes for the rest, so it is refused like any other damage.
+    /// </summary>
+    [Fact]
+    public void RefusesRunsThatEndShortOfTheTable()
+    {
+        var past = MftRecordBytes.SelfRecord([new DataRun(786_432, 16)], dataSize: (16 * 4096) + 1);
+        var exact = MftRecordBytes.SelfRecord([new DataRun(786_432, 16)], dataSize: 16 * 4096);
+
+        Assert.False(MftExtentMapReader.TryRead(past, bytesPerCluster: 4096, NoClusters, out _));
+        Assert.True(MftExtentMapReader.TryRead(exact, bytesPerCluster: 4096, NoClusters, out _));
     }
 
     [Fact]
     public void RefusesARecordThatIsNotARecord() =>
-        Assert.False(MftExtentMap.TryRead(new byte[1024], bytesPerCluster: 4096, out _));
+        Assert.False(MftExtentMapReader.TryRead(new byte[1024], bytesPerCluster: 4096, NoClusters, out _));
 
     /// <summary>
     /// Record 0 is read while the volume is being opened, so a throw here would escape before the
@@ -303,7 +404,7 @@ public class MftExtentMapTests
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536);
         MftRecordBytes.DeclareFirstAttributeLength(record, MftRecordBytes.LengthJustUnderIntMax);
 
-        Assert.False(MftExtentMap.TryRead(record, bytesPerCluster: 4096, out _));
+        Assert.False(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, NoClusters, out _));
     }
 
     /// <summary>
@@ -320,7 +421,7 @@ public class MftExtentMapTests
         var past = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 63, 64)], dataSize: 65_536);
         var atTheLimit = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 64, 64)], dataSize: 65_536);
 
-        Assert.False(MftExtentMap.TryRead(past, bytesPerCluster: 4096, out _));
-        Assert.True(MftExtentMap.TryRead(atTheLimit, bytesPerCluster: 4096, out _));
+        Assert.False(MftExtentMapReader.TryRead(past, bytesPerCluster: 4096, NoClusters, out _));
+        Assert.True(MftExtentMapReader.TryRead(atTheLimit, bytesPerCluster: 4096, NoClusters, out _));
     }
 }

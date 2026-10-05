@@ -1,10 +1,8 @@
-using System.Buffers.Binary;
-
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
-/// Where the MFT's own records physically live, read from record 0 — the entry <c>$MFT</c> keeps
-/// about itself.
+/// Where the MFT's own records physically live, as <see cref="MftExtentMapReader"/> reads it from
+/// <c>$MFT</c>'s own records.
 ///
 /// The table is not necessarily contiguous. A reader that assumes it is will, on any volume whose
 /// MFT has ever grown, read the right number of bytes from the wrong place and produce records that
@@ -12,96 +10,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
 {
-    /// <summary>
-    /// Read the extent map out of <paramref name="record0"/>, which is modified in place by the
-    /// update sequence fixup.
-    /// </summary>
-    public static bool TryRead(Span<byte> record0, int bytesPerCluster, out MftExtentMap map)
-    {
-        map = default!;
-
-        if (MftRecordHeader.Read(record0, out var header) != MftParseOutcome.Parsed)
-        {
-            return false;
-        }
-
-        var attributes = new MftAttributeEnumerator(record0[..header.UsedLength], header.FirstAttributeOffset);
-
-        while (attributes.MoveNext())
-        {
-            // On a heavily fragmented volume $MFT's run list outgrows one record and spills into
-            // extension records reached through an $ATTRIBUTE_LIST. Following that chain is not
-            // implemented, and reading only the runs that fit here would index part of the volume
-            // and report short sizes for everything outside it — a wrong number, silently. Refuse
-            // instead, and let the caller take the slow route.
-            if (attributes.CurrentType == MftRecordParser.AttributeList)
-            {
-                return false;
-            }
-
-            // $MFT's data is always non-resident and always the unnamed stream — it is the largest
-            // thing on the volume, so a resident one would mean this is not record 0 at all.
-            if (attributes.CurrentType != MftRecordParser.AttributeData
-                || attributes.Current[0x08] == 0
-                || attributes.Current[0x09] != 0)
-            {
-                continue;
-            }
-
-            return TryReadRuns(attributes.Current, bytesPerCluster, out map);
-        }
-
-        return false;
-    }
-
-    private static bool TryReadRuns(ReadOnlySpan<byte> attribute, int bytesPerCluster, out MftExtentMap map)
-    {
-        map = default!;
-
-        if (attribute.Length < 0x40)
-        {
-            return false;
-        }
-
-        int mappingPairsOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x20..]);
-        var dataSize = BinaryPrimitives.ReadInt64LittleEndian(attribute[0x30..]);
-
-        if (mappingPairsOffset >= attribute.Length || dataSize <= 0)
-        {
-            return false;
-        }
-
-        var runs = DataRuns.Parse(attribute[mappingPairsOffset..]);
-        if (runs.Count == 0 || !IsAddressable(runs, bytesPerCluster))
-        {
-            return false;
-        }
-
-        map = new MftExtentMap(dataSize, runs);
-        return true;
-    }
-
-    /// <summary>
-    /// Whether every cluster a run names has a byte offset a <c>long</c> can hold. A run list can
-    /// state a start cluster up to 2^63, and the reader multiplies it by the cluster size: a corrupt
-    /// one wraps negative there and throws out of the volume read rather than falling back to the
-    /// walk. Bounding each run's end bounds every offset and contiguous length read from it.
-    /// </summary>
-    private static bool IsAddressable(IReadOnlyList<DataRun> runs, int bytesPerCluster)
-    {
-        var lastAddressableCluster = long.MaxValue / bytesPerCluster;
-
-        foreach (var run in runs)
-        {
-            if (!run.IsSparse && run.StartCluster > lastAddressableCluster - run.ClusterCount)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     /// <summary>
     /// Translate a virtual cluster within the MFT stream to its physical cluster, and report how
     /// many clusters remain contiguous from there.
@@ -141,5 +49,53 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Read record <paramref name="number"/> of the table into <paramref name="destination"/>,
+    /// one record long. False where any of its clusters lies outside these extents, or a read fails.
+    ///
+    /// <para>Read in whole clusters, as a raw volume read must be, and assembled from as many
+    /// extents as the record spans. On a volume whose clusters are smaller than its records, a
+    /// record can begin in one extent and end in another, or in one past that.</para>
+    /// </summary>
+    internal bool TryReadRecord(long number, int bytesPerCluster, ClusterReader read, Span<byte> destination)
+    {
+        var bytesPerRecord = destination.Length;
+
+        // Bounded by division before the offset is formed: the number can come off the disk, and a
+        // record past the table's end is not one of its records.
+        if (number < 0 || number >= DataSize / bytesPerRecord)
+        {
+            return false;
+        }
+
+        var offset = number * bytesPerRecord;
+        var firstCluster = offset / bytesPerCluster;
+        var clusterCount = (int)(((offset + bytesPerRecord - 1) / bytesPerCluster) - firstCluster + 1);
+
+        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
+        using var buffer = new VolumeReadBuffer(clusterCount * bytesPerCluster);
+        var filled = 0;
+
+        while (filled < clusterCount)
+        {
+            if (!TryTranslate(firstCluster + filled, out var physical, out var contiguous))
+            {
+                return false;
+            }
+
+            var take = (int)Math.Min(contiguous, clusterCount - filled);
+
+            if (!read(physical, buffer.Span.Slice(filled * bytesPerCluster, take * bytesPerCluster)))
+            {
+                return false;
+            }
+
+            filled += take;
+        }
+
+        buffer.Span.Slice((int)(offset - (firstCluster * bytesPerCluster)), bytesPerRecord).CopyTo(destination);
+        return true;
     }
 }

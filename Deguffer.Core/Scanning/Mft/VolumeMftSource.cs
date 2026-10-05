@@ -16,12 +16,14 @@ public sealed partial class VolumeMftSource : IMftSource
     private readonly SafeFileHandle _volume;
     private readonly NtfsBootSector _geometry;
     private readonly MftExtentMap _extents;
+    private readonly ClusterReader _readClusters;
 
     private VolumeMftSource(SafeFileHandle volume, NtfsBootSector geometry, MftExtentMap extents)
     {
         _volume = volume;
         _geometry = geometry;
         _extents = extents;
+        _readClusters = TryReadClusters;
     }
 
     public int BytesPerRecord => _geometry.BytesPerFileRecord;
@@ -103,8 +105,14 @@ public sealed partial class VolumeMftSource : IMftSource
         using var record0 = new VolumeReadBuffer(geometry.BytesPerFileRecord);
         var offset = geometry.MftStartCluster * geometry.BytesPerCluster;
 
+        // $MFT's extension records are read through the same handle, before the source that would
+        // otherwise serve them exists.
         if (RandomAccess.Read(handle, record0.Span, offset) != record0.Length
-            || !MftExtentMap.TryRead(record0.Span, geometry.BytesPerCluster, out var extents))
+            || !MftExtentMapReader.TryRead(
+                record0.Span,
+                geometry.BytesPerCluster,
+                (first, destination) => ReadClusters(handle, geometry.BytesPerCluster, first, destination),
+                out var extents))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
@@ -140,13 +148,13 @@ public sealed partial class VolumeMftSource : IMftSource
         var remainingRecords = Math.Min(capacity, RecordCount - firstRecord);
         var offset = (physicalCluster * _geometry.BytesPerCluster) + withinCluster;
 
-        // Where a record spans the gap between two extents — possible whenever a cluster is smaller
-        // than a record — no contiguous read can produce it. Splicing it together is what keeps a
+        // Where a record spans a gap between extents, or several — possible whenever a cluster is
+        // smaller than a record — no contiguous read can produce it. Splicing it together is what keeps a
         // legitimately fragmented volume on the fast path: returning nothing here would be
         // indistinguishable from an unreadable table, and would send the whole volume to the walk.
         if (contiguousBytes < BytesPerRecord)
         {
-            return TryReadStraddlingRecord(destination, offset, (int)contiguousBytes, virtualCluster + contiguousClusters);
+            return _extents.TryReadRecord(firstRecord, BytesPerCluster, _readClusters, destination[..BytesPerRecord]) ? 1 : 0;
         }
 
         // Rounded down to whole records so a batch never ends mid-record: the caller advances by
@@ -160,48 +168,25 @@ public sealed partial class VolumeMftSource : IMftSource
         return RandomAccess.Read(_volume, destination[..bytes], offset) / BytesPerRecord;
     }
 
-    /// <summary>
-    /// Read one record whose bytes are split across two extents, returning 1 on success and 0 if
-    /// the second half cannot be located.
-    /// </summary>
-    private int TryReadStraddlingRecord(Span<byte> destination, long offset, int head, long nextVirtualCluster)
-    {
-        if (head <= 0 || !_extents.TryTranslate(nextVirtualCluster, out var nextCluster, out _))
-        {
-            return 0;
-        }
-
-        var tail = BytesPerRecord - head;
-
-        if (RandomAccess.Read(_volume, destination[..head], offset) != head)
-        {
-            return 0;
-        }
-
-        var read = RandomAccess.Read(
-            _volume,
-            destination.Slice(head, tail),
-            nextCluster * _geometry.BytesPerCluster);
-
-        return read == tail ? 1 : 0;
-    }
-
     public int BytesPerCluster => _geometry.BytesPerCluster;
 
-    public bool TryReadClusters(long firstCluster, Span<byte> destination)
+    public bool TryReadClusters(long firstCluster, Span<byte> destination) =>
+        ReadClusters(_volume, BytesPerCluster, firstCluster, destination);
+
+    private static bool ReadClusters(SafeFileHandle volume, int bytesPerCluster, long firstCluster, Span<byte> destination)
     {
         // Whole clusters only, so the read stays sector aligned as a raw volume handle requires. The
         // cluster comes from a run list on the disk, so its byte offset is bounded by division
         // before it is formed: a corrupt run naming a cluster near 2^63 would otherwise wrap the
         // offset negative and throw out of the read.
         if (firstCluster < 0
-            || destination.Length % BytesPerCluster != 0
-            || firstCluster > (long.MaxValue - destination.Length) / BytesPerCluster)
+            || destination.Length % bytesPerCluster != 0
+            || firstCluster > (long.MaxValue - destination.Length) / bytesPerCluster)
         {
             return false;
         }
 
-        return RandomAccess.Read(_volume, destination, firstCluster * BytesPerCluster) == destination.Length;
+        return RandomAccess.Read(volume, destination, firstCluster * bytesPerCluster) == destination.Length;
     }
 
     public void Dispose() => _volume.Dispose();
