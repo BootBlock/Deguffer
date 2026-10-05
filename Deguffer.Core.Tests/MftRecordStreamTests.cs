@@ -29,6 +29,29 @@ public sealed class MftRecordStreamTests
         Assert.False(MftRecordStream.TryReadAll(source, (int)source.RecordCount, static (_, _, in _) => true, default));
     }
 
+    /// <summary>
+    /// Where the first pass meets the record that takes the wants past the table's size, it stops
+    /// there rather than reading on and holding the wants of every record after it.
+    /// </summary>
+    [Fact]
+    public void StopsReadingAtTheRecordWhoseWantsOutgrowTheTable()
+    {
+        using var source = new MftFixture()
+            .AddFileWhoseListWantsMoreRecordsThanTheTableHolds(20, outsideTheRecord: false)
+            .AddFile(21, MftRecord.RootRecordNumber, "after.tgz", allocated: 4096, logical: 4000)
+            .Build();
+        var handed = new List<long>();
+
+        MftRecordStream.TryReadAll(source, (int)source.RecordCount, (number, _, in _) =>
+        {
+            handed.Add(number);
+            return true;
+        }, default);
+
+        Assert.Contains(19L, handed);
+        Assert.DoesNotContain(21L, handed);
+    }
+
     /// <summary>The same stream reads a table whose lists want only what it holds to its end.</summary>
     [Fact]
     public void ReadsATableWhoseListsWantOnlyWhatItHolds()
