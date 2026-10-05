@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 

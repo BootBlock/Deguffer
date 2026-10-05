@@ -10,8 +10,9 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>Each layout here is one Windows produces. A disk with 4,096-byte sectors gets 1,024-byte
 /// records by default, four to a sector, so the table's record boundaries are not its sector
-/// boundaries; formatted with large records it gets 4,096. Every table ends part-way through a
-/// sector, as a real one can, so the reader also meets records no whole-sector read can serve.</para>
+/// boundaries; formatted with large records it gets 4,096. Where records are smaller than sectors,
+/// the table ends part-way through a sector, as a real one can, so the reader also meets records no
+/// whole-sector read can serve.</para>
 /// </summary>
 public class VolumeMftSourceTests
 {

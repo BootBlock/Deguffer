@@ -6,9 +6,9 @@ namespace Deguffer.Testing;
 /// Lays a table of records out on a volume image: a boot sector at the start, then the table in
 /// one extent or two, with record 0 rewritten as <c>$MFT</c>'s own record saying where they are.
 ///
-/// <para>The table ends where its last record does, not on a cluster or a sector boundary, as a
-/// real table's data size does. A reader that only ever reads whole sectors of records has to deal
-/// with the few that are left over.</para>
+/// <para>The table ends where its last record does, as a real table's data size does, rather than
+/// being padded to a cluster. Where records are smaller than sectors, that can be part-way through
+/// a sector, and a reader that only reads whole sectors of records has the rest to deal with.</para>
 /// </summary>
 internal static class NtfsVolumeImage
 {
