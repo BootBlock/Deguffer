@@ -28,3 +28,37 @@ and crop any screenshot that shows them.
 
 For a security vulnerability, follow [SECURITY.md](SECURITY.md) and report it privately. Do not
 open a public issue.
+
+## Measuring a scan
+
+`Deguffer.Benchmark` times the routes a scan takes, so a change to how Deguffer reads the disk can
+be judged by a measurement rather than a guess. It only reads: nothing on the drive is written,
+moved or deleted. It is not part of `dotnet test`, because a timing changes with whatever else the
+machine is doing.
+
+Build it in Release, then run one route at a time:
+
+```
+dotnet build Deguffer.Benchmark -c Release
+cd Deguffer.Benchmark\bin\Release\net10.0-windows10.0.19041.0
+
+Deguffer.Benchmark walk C:\Users\<user>\source --runs 5
+Deguffer.Benchmark table C
+Deguffer.Benchmark index C
+Deguffer.Benchmark explore C
+```
+
+- `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
+- `table`, `index` and `explore` read a volume's file table, which needs an elevated prompt.
+  `table` reads and parses every record and keeps nothing. `index` builds what the clean measures
+  locations from. `explore` builds the Explore tree for the whole volume.
+- `--runs N` runs the route N times. The default is 5.
+
+The first run is reported apart from the median of the rest, because they answer different
+questions. The walk's first run lists folders from the drive, and later runs list them largely from
+the Windows file cache. The file table is read without the cache, so its later runs mostly measure
+the drive again. The peak working set for the later runs is the highest the process reached.
+
+To report a result, open an issue and paste the output as it stands. It names the drive letter and
+the file system, and never a path, a volume label, a user or a machine. Add the kind of drive
+(NVMe, SATA SSD, spinning disk, network share) and whether anything else was running.

@@ -67,9 +67,15 @@
 
       Deguffer.Testing holds the fakes behind those same internal seams (the process and window
       calls, the process table records), so it is granted what the tests it serves are granted.
+
+      Deguffer.Benchmark times the routes a scan takes: BoundedFileWalk, MftRecordStream and
+      MftExploreReader. Those are internal because nothing in the app calls them except through a
+      scanner, and a timing taken through a scanner would include its caching and route choice. The
+      grant measures the routes themselves without making them part of Core's public surface.
     -->
     <InternalsVisibleTo Include="Deguffer.Core.Tests" />
     <InternalsVisibleTo Include="Deguffer.Testing" />
+    <InternalsVisibleTo Include="Deguffer.Benchmark" />
   </ItemGroup>
 
 </Project>
