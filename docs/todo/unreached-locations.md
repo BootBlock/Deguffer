@@ -1740,7 +1740,8 @@ written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
    unelevated. `RebootInProgress` and `PackagesPending` are convention rather than documentation, and
    are asked as well, because asking them can only hold more back. `PendingFileRenameOperations` is
    documented but routinely non-empty on a healthy machine, so it is asked per folder: an entry
-   inside the folder holds that folder back, and nothing else does. The servicing stack and Setup
+   inside the folder holds that folder back, compared with 8.3 aliases expanded, and so does an
+   entry whose alias cannot be expanded. Nothing else does. The servicing stack and Setup
    running is the third check. Every unreadable answer reads as "not finished". See §6.
 4. **Should Deguffer control services at all?** It gates the search index, and possibly nothing else.
    If nothing else, the answer is probably no, and the index belongs in §9.

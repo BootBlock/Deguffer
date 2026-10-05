@@ -22,7 +22,7 @@ public interface IWindowsServicing
 
     /// <summary>
     /// Whether a restart will rename or delete something inside <paramref name="directory"/>, or the
-    /// list of what it will could not be read.
+    /// list of what it will, or where the folder or one of the list's entries is, could not be read.
     ///
     /// <para>Asked per folder rather than as a yes or no for the machine, because Windows keeps this
     /// list for anything that could not be replaced while it was in use, and an installer or an
@@ -98,11 +98,9 @@ public sealed class WindowsServicing : IWindowsServicing
         {
             using var key = machine.OpenSubKey(SessionManager);
 
-            var within = LongPath.Display(directory);
-
-            return Operations(key?.GetValue("PendingFileRenameOperations"))
-                .Concat(Operations(key?.GetValue("PendingFileRenameOperations2")))
-                .Any(path => LongPath.Contains(within, path));
+            return AnyIn(
+                directory,
+                [key?.GetValue("PendingFileRenameOperations"), key?.GetValue("PendingFileRenameOperations2")]);
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException)
         {
@@ -161,6 +159,15 @@ public sealed class WindowsServicing : IWindowsServicing
             return true;
         }
     }
+
+    /// <summary>
+    /// Whether a path in any of the pending-operations <paramref name="values"/> may be inside
+    /// <paramref name="directory"/>. Compared through <see cref="LongPath.MayContainAny"/>, because
+    /// Windows stores each path as its caller spelled it, so an entry may name a folder by its 8.3
+    /// alias, and an entry whose alias cannot be expanded may be inside the folder.
+    /// </summary>
+    internal static bool AnyIn(string directory, IReadOnlyList<object?> values) =>
+        LongPath.MayContainAny(directory, values.SelectMany(Operations));
 
     /// <summary>
     /// The paths in one pending-operations value: pairs of source and destination, each in the NT form
