@@ -42,6 +42,7 @@ internal sealed class FragmentedMftVolume
     /// <param name="listOutside">Whether the list is kept in clusters of its own rather than in record 0.</param>
     /// <param name="extensionBase">The owner every extension record names, or null for record 0 as it is.</param>
     /// <param name="extensionSequence">The sequence number every extension record carries.</param>
+    /// <param name="extensionsCarryTheList">Whether every extension record carries a copy of record 0's list.</param>
     public FragmentedMftVolume(
         IReadOnlyList<DataRun> layout,
         long dataSize,
@@ -49,7 +50,8 @@ internal sealed class FragmentedMftVolume
         IReadOnlyList<ListedAttribute>? list = null,
         bool listOutside = false,
         ulong? extensionBase = null,
-        ushort extensionSequence = MftRecordBytes.Sequence)
+        ushort extensionSequence = MftRecordBytes.Sequence,
+        bool extensionsCarryTheList = false)
     {
         _layout = new MftExtentMap(dataSize, layout);
 
@@ -75,7 +77,10 @@ internal sealed class FragmentedMftVolume
                 extensionBase ?? self,
                 extensionSequence,
                 BytesPerRecord,
-                [.. PiecesIn(holder, pieces, dataSize)]));
+                [
+                    .. extensionsCarryTheList ? [t => MftAttributeBytes.WriteAttributeList(t, list)] : Array.Empty<AttributeWriter>(),
+                    .. PiecesIn(holder, pieces, dataSize),
+                ]));
         }
     }
 
@@ -127,7 +132,7 @@ internal sealed class FragmentedMftVolume
         value.CopyTo(padded, 0);
         Write(ListCluster, padded);
 
-        return MftAttributeBytes.WriteNonResidentAttributeList(target, ListCluster, clusters, value.Length);
+        return MftAttributeBytes.WriteNonResidentAttributeList(target, ListCluster, clusters, value.Length, BytesPerCluster);
     }
 
     private static IEnumerable<AttributeWriter> PiecesIn(long holder, IReadOnlyList<MftPiece> pieces, long dataSize) =>

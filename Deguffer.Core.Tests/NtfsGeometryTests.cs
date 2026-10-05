@@ -244,6 +244,59 @@ public class MftExtentMapTests
         Assert.Equal(expectedRemaining, contiguous);
     }
 
+    /// <summary>
+    /// A 2,048-byte record on a volume of 512-byte clusters, whose four clusters lie in three
+    /// extents. Every one of them has to be found, in order: reading the tail as though it were
+    /// contiguous with the second extent would splice in a cluster of something else.
+    /// </summary>
+    [Fact]
+    public void ReadsARecordSpreadAcrossThreeExtents()
+    {
+        const int ClusterBytes = 512;
+
+        var map = new MftExtentMap(DataSize: 4 * 2048, Runs: [new DataRun(100, 1), new DataRun(200, 1), new DataRun(300, 6)]);
+        var clusters = new Dictionary<long, byte[]>();
+
+        foreach (var cluster in new long[] { 100, 200, 201, 300, 301, 302, 303, 304, 305 })
+        {
+            clusters[cluster] = Enumerable.Repeat((byte)(cluster % 251), ClusterBytes).ToArray();
+        }
+
+        var record = new byte[2048];
+        Assert.True(map.TryReadRecord(0, ClusterBytes, (first, destination) =>
+        {
+            for (var i = 0; i < destination.Length / ClusterBytes; i++)
+            {
+                if (!clusters.TryGetValue(first + i, out var bytes))
+                {
+                    return false;
+                }
+
+                bytes.CopyTo(destination[(i * ClusterBytes)..]);
+            }
+
+            return true;
+        }, record));
+
+        Assert.Equal(
+            new long[] { 100, 200, 300, 301 }.SelectMany(c => clusters[c]),
+            record);
+    }
+
+    /// <summary>
+    /// The extents run on past the table's end, as an allocation can. A record there is not one of
+    /// the table's records, whatever the clusters hold.
+    /// </summary>
+    [Fact]
+    public void RefusesToReadARecordPastTheEndOfTheTable()
+    {
+        var map = new MftExtentMap(DataSize: 4 * 1024, Runs: [new DataRun(100, 8)]);
+        ClusterReader everything = static (_, _) => true;
+
+        Assert.True(map.TryReadRecord(3, bytesPerCluster: 1024, everything, new byte[1024]));
+        Assert.False(map.TryReadRecord(4, bytesPerCluster: 1024, everything, new byte[1024]));
+    }
+
     [Fact]
     public void RefusesAClusterPastTheEndOfTheTable() =>
         Assert.False(Map.TryTranslate(8, out _, out _));

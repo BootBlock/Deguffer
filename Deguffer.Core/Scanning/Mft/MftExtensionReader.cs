@@ -71,7 +71,6 @@ internal static class MftExtensionReader
     internal static IReadOnlyList<MftAttributeListEntry>? TryReadList(
         ClusterReader read, int clusterBytes, IReadOnlyList<DataRun> runs, int length)
     {
-
         // Neither product can overflow: the length is capped at MftAttributeList.MaximumLength,
         // and a cluster is at most 2 MiB.
         var wanted = (length + clusterBytes - 1) / clusterBytes * clusterBytes;

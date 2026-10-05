@@ -112,7 +112,9 @@ internal static class MftExtentMapReader
             pieces.Sort(static (a, b) => a.LowestVcn.CompareTo(b.LowestVcn));
             var known = new MftExtentMap(dataSize, Join(pieces).Runs);
 
-            if (!TryReadRecord(known, segment.Record, bytesPerCluster, read, record)
+            // Only the extents read so far: a record they do not reach cannot be found, and the map
+            // cannot be completed without it.
+            if (!known.TryReadRecord(segment.Record, bytesPerCluster, read, record)
                 || MftRecordHeader.ReadExtension(record, out var header) != MftParseOutcome.Parsed
                 || header.BaseReference != self
                 || header.Sequence != segment.Sequence
@@ -129,56 +131,6 @@ internal static class MftExtentMapReader
         // mid-change, matches nothing.
         return pieces.Count == listed.Count
             && pieces.TrueForAll(p => listed.Contains((p.Segment, p.LowestVcn)));
-    }
-
-    /// <summary>
-    /// Read record <paramref name="number"/> of the table into <paramref name="destination"/>
-    /// through <paramref name="known"/>, the extents read so far. False where any of its clusters
-    /// lies outside them: the map cannot be completed without a record it cannot find.
-    ///
-    /// <para>Read in whole clusters, as a raw volume read must be, and assembled from as many
-    /// extents as the record spans. On a volume whose clusters are smaller than its records, a
-    /// record can begin in one extent and end in another.</para>
-    /// </summary>
-    private static bool TryReadRecord(
-        MftExtentMap known, long number, int bytesPerCluster, ClusterReader read, Span<byte> destination)
-    {
-        var bytesPerRecord = destination.Length;
-
-        // Bounded by division before the offset is formed: the number comes off the disk, and a
-        // record past the table's end is not one of its records.
-        if (number >= known.DataSize / bytesPerRecord)
-        {
-            return false;
-        }
-
-        var offset = number * bytesPerRecord;
-        var firstCluster = offset / bytesPerCluster;
-        var clusterCount = (int)(((offset + bytesPerRecord - 1) / bytesPerCluster) - firstCluster + 1);
-
-        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
-        using var buffer = new VolumeReadBuffer(clusterCount * bytesPerCluster);
-        var filled = 0;
-
-        while (filled < clusterCount)
-        {
-            if (!known.TryTranslate(firstCluster + filled, out var physical, out var contiguous))
-            {
-                return false;
-            }
-
-            var take = (int)Math.Min(contiguous, clusterCount - filled);
-
-            if (!read(physical, buffer.Span.Slice(filled * bytesPerCluster, take * bytesPerCluster)))
-            {
-                return false;
-            }
-
-            filled += take;
-        }
-
-        buffer.Span.Slice((int)(offset - (firstCluster * bytesPerCluster)), bytesPerRecord).CopyTo(destination);
-        return true;
     }
 
     /// <summary>
@@ -220,7 +172,7 @@ internal static class MftExtentMapReader
                 continue;
             }
 
-            if (attributes.CurrentType != MftRecordParser.AttributeData || attribute[0x09] != 0)
+            if (attributes.CurrentType != MftRecordParser.AttributeData || !MftRecordParser.IsUnnamed(attribute))
             {
                 continue;
             }

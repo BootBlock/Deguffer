@@ -50,4 +50,52 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
 
         return false;
     }
+
+    /// <summary>
+    /// Read record <paramref name="number"/> of the table into <paramref name="destination"/>,
+    /// one record long. False where any of its clusters lies outside these extents, or a read fails.
+    ///
+    /// <para>Read in whole clusters, as a raw volume read must be, and assembled from as many
+    /// extents as the record spans. On a volume whose clusters are smaller than its records, a
+    /// record can begin in one extent and end in another, or in one past that.</para>
+    /// </summary>
+    internal bool TryReadRecord(long number, int bytesPerCluster, ClusterReader read, Span<byte> destination)
+    {
+        var bytesPerRecord = destination.Length;
+
+        // Bounded by division before the offset is formed: the number can come off the disk, and a
+        // record past the table's end is not one of its records.
+        if (number < 0 || number >= DataSize / bytesPerRecord)
+        {
+            return false;
+        }
+
+        var offset = number * bytesPerRecord;
+        var firstCluster = offset / bytesPerCluster;
+        var clusterCount = (int)(((offset + bytesPerRecord - 1) / bytesPerCluster) - firstCluster + 1);
+
+        // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
+        using var buffer = new VolumeReadBuffer(clusterCount * bytesPerCluster);
+        var filled = 0;
+
+        while (filled < clusterCount)
+        {
+            if (!TryTranslate(firstCluster + filled, out var physical, out var contiguous))
+            {
+                return false;
+            }
+
+            var take = (int)Math.Min(contiguous, clusterCount - filled);
+
+            if (!read(physical, buffer.Span.Slice(filled * bytesPerCluster, take * bytesPerCluster)))
+            {
+                return false;
+            }
+
+            filled += take;
+        }
+
+        buffer.Span.Slice((int)(offset - (firstCluster * bytesPerCluster)), bytesPerRecord).CopyTo(destination);
+        return true;
+    }
 }

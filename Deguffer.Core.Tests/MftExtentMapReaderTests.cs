@@ -65,6 +65,29 @@ public class MftExtentMapReaderTests
     }
 
     /// <summary>
+    /// Record 16 holds two pieces, VCN 36 to 39 and 40 to 43, and the list names both. The record is
+    /// read once, and both pieces are part of the map.
+    /// </summary>
+    [Fact]
+    public void ReadsAnExtensionRecordHoldingTwoListedPieces()
+    {
+        MftPiece[] pieces =
+        [
+            Pieces[0],
+            new MftPiece(Holder: 16, LowestVcn: 36, [new DataRun(3_000, 4)]),
+            new MftPiece(Holder: 16, LowestVcn: 40, [new DataRun(3_004, 4)]),
+            Pieces[2],
+        ];
+        var volume = new FragmentedMftVolume(Layout, DataSize, pieces);
+
+        Assert.True(TryRead(volume, out var map));
+
+        Assert.True(map.TryTranslate(41, out var physical, out var contiguous));
+        Assert.Equal(3_005, physical);
+        Assert.Equal(3, contiguous);
+    }
+
+    /// <summary>
     /// Record 25 lies in the extent its own piece describes, so nothing read before it says where it
     /// is. The map cannot be completed, and the refusal is the reader's: no read was refused.
     /// </summary>
@@ -199,6 +222,36 @@ public class MftExtentMapReaderTests
         volume.Lose(FragmentedMftVolume.ListCluster);
 
         Assert.False(TryRead(volume, out _));
+        Assert.True(volume.RefusedARead);
+    }
+
+    /// <summary>Only a base record has a list. One in an extension record is damage.</summary>
+    [Fact]
+    public void RefusesAnExtensionRecordCarryingAList()
+    {
+        var volume = new FragmentedMftVolume(Layout, DataSize, Pieces, extensionsCarryTheList: true);
+
+        Assert.False(TryRead(volume, out _));
+        Assert.False(volume.RefusedARead);
+    }
+
+    /// <summary>A record has one list, so a second one in record 0 is damage, whichever is right.</summary>
+    [Fact]
+    public void RefusesARecordZeroWithTwoLists()
+    {
+        DataRun[] runs = [new DataRun(786_432, 16)];
+        ListedAttribute[] list = [new ListedAttribute(0x80, FragmentedMftVolume.Reference(0, MftRecordBytes.Sequence))];
+
+        var record = MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            MftRecordBytes.BytesPerRecord,
+            t => MftAttributeBytes.WriteAttributeList(t, list),
+            t => MftAttributeBytes.WriteAttributeList(t, list),
+            t => MftAttributeBytes.WriteMftData(t, runs, dataSize: 16 * 4096));
+
+        Assert.False(MftExtentMapReader.TryRead(record, bytesPerCluster: 4096, MftExtentMapTests.NoClusters, out _));
     }
 
     /// <summary>The second half of record 16, the half in the second extent, is a bad sector.</summary>

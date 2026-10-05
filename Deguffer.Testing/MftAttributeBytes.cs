@@ -188,7 +188,9 @@ internal static class MftAttributeBytes
     /// Null for a sparse run: clusters with no place on the disk, which read as zeroes and so hold
     /// none of the list's entries.
     /// </param>
-    public static int WriteNonResidentAttributeList(Span<byte> target, long? startCluster, int clusterCount, int length)
+    /// <param name="bytesPerCluster">The volume's cluster size, which the allocated size is counted in.</param>
+    public static int WriteNonResidentAttributeList(
+        Span<byte> target, long? startCluster, int clusterCount, int length, int bytesPerCluster = MftRecordBytes.BytesPerCluster)
     {
         const int RunsOffset = 0x40;
         const int Length = RunsOffset + 16;
@@ -198,7 +200,7 @@ internal static class MftAttributeBytes
         target[0x08] = 1;
         BinaryPrimitives.WriteInt64LittleEndian(target[0x18..], clusterCount - 1);
         BinaryPrimitives.WriteUInt16LittleEndian(target[0x20..], RunsOffset);
-        BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], (long)clusterCount * MftRecordBytes.BytesPerCluster);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], (long)clusterCount * bytesPerCluster);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], length);
         BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], length);
 
