@@ -523,6 +523,37 @@ public class MftVolumeIndexTests
         Assert.Equal(1000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
     }
 
+    /// <summary>
+    /// An extension record refused for lacking what it was read for counts for nothing, whatever
+    /// else it holds. Here it holds a better-ranked name in the volume root and a link's reparse
+    /// point: believed, they would move the file out of its cache and make it a link that occupies
+    /// nothing, and the cache would total short with nothing to say so.
+    /// </summary>
+    [Fact]
+    public void BelievesNothingFromAnExtensionRecordItRefused()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddLongNamedFileWhoseSizeRecordHoldsSomethingElse(21, Cache, "fragmented-archive.tgz", "FRAGME~1.TGZ", extension: 22));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
+    /// <summary>
+    /// A junction whose own record holds its reparse point is a link however unreadable its list
+    /// is, so its folder still totals and only a question about the link itself goes to the walk.
+    /// </summary>
+    [Fact]
+    public void KeepsALinkItsOwnRecordProvesWhenItsListCannotBeRead()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddDirectoryLinkWithAMalformedAttributeList(30, Cache, "moved"));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "moved"]));
+    }
+
     public static TheoryData<ListMismatch> EveryMismatch() => [.. Enum.GetValues<ListMismatch>()];
 
     /// <summary>Every way the extension record itself can be stale, as opposed to the list naming it.</summary>

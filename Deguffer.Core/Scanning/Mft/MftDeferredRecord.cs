@@ -115,14 +115,23 @@ internal sealed class MftDeferredRecord
     /// <param name="record">The record's bytes, which the update sequence fixup modifies in place.</param>
     public void Absorb(Span<byte> record, int bytesPerSector, MftSegmentReference expected, MftAttributeKinds needs)
     {
+        // Folded into a copy, kept only once the record is accepted. A record rejected for lacking
+        // what it was read for can still hold a better-ranked name or a reparse point, and either
+        // left in the draft would place the file, or mark it a link, on the word of a record this
+        // has just refused to believe.
+        var trial = _draft;
+
         if (MftRecordHeader.ReadExtension(record, bytesPerSector, out var header) != MftParseOutcome.Parsed
             || header.BaseReference != Self
             || header.Sequence != expected.Sequence
-            || !_draft.TryAbsorb(record[..header.UsedLength], header.FirstAttributeOffset, isBase: false, out var supplied, out _)
+            || !trial.TryAbsorb(record[..header.UsedLength], header.FirstAttributeOffset, isBase: false, out var supplied, out _)
             || (needs & ~supplied) != MftAttributeKinds.None)
         {
             Fail(needs);
+            return;
         }
+
+        _draft = trial;
     }
 
     /// <summary>
@@ -138,12 +147,13 @@ internal sealed class MftDeferredRecord
         _draft.Finish(_isDirectory, new MftListFindings(_declaresUnnamedData, Lost), out result);
 
     /// <summary>
-    /// The list itself could not be trusted, so anything could have been anywhere: the size, a
-    /// reparse point, and a name — unless the base record's own name is one nothing can displace.
+    /// The list itself could not be trusted, so anything the base record did not settle could have
+    /// been anywhere. A file has one reparse point, and the piece of its stream starting at cluster 0
+    /// states the whole stream's sizes, so either one held by the base record is settled; a name
+    /// is settled only where nothing could displace it.
     /// </summary>
     private void FailList() =>
-        Fail(MftAttributeKinds.DataStart
-            | MftAttributeKinds.ReparsePoint
+        Fail(((MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint) & ~_draft.BaseSupplied)
             | (_draft.BaseRank != 0 ? MftAttributeKinds.Name : MftAttributeKinds.None));
 
     /// <summary>

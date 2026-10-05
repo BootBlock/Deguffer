@@ -20,6 +20,61 @@ public static class MftListedFiles
     private const uint ReparsePoint = 0xC0;
 
     /// <summary>
+    /// A long-named file whose list says its size is in <paramref name="extension"/>, while that
+    /// record — its own, current, and well formed — holds instead a better-ranked name in the volume
+    /// root and a symbolic link's reparse point. The record is refused for lacking the size, and
+    /// nothing else it holds may count either: believed, it would move the file to the root and
+    /// make it a link that occupies nothing.
+    /// </summary>
+    public static MftFixture AddLongNamedFileWhoseSizeRecordHoldsSomethingElse(
+        this MftFixture fixture, uint number, uint parent, string name, string alias, uint extension)
+    {
+        var self = MftFixture.Reference(number);
+
+        return fixture.Add(number, MftRecordBytes.Compose(
+                isDirectory: false,
+                baseReference: 0,
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+                t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0, nameSpace: 1),
+                t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), alias, 0, 0, nameSpace: 2),
+                t => MftAttributeBytes.WriteAttributeList(t,
+                [
+                    new ListedAttribute(StandardInformation, self),
+                    new ListedAttribute(FileName, self),
+                    new ListedAttribute(FileName, self),
+                    new ListedAttribute(Data, MftFixture.Reference(extension)),
+                ])))
+            .Add(extension, MftRecordBytes.Compose(
+                isDirectory: false,
+                self,
+                MftRecordBytes.Sequence,
+                t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(MftRecord.RootRecordNumber), "elsewhere.tgz", 0, 0),
+                t => MftAttributeBytes.WriteReparsePoint(t, MftRecordBytes.SymbolicLinkTag)));
+    }
+
+    /// <summary>
+    /// A junction whose own record holds its reparse point, and whose <c>$ATTRIBUTE_LIST</c>
+    /// cannot be read. A file has one reparse point, so the list could not have put another
+    /// anywhere: the junction is a link however unreadable the list is.
+    /// </summary>
+    public static MftFixture AddDirectoryLinkWithAMalformedAttributeList(
+        this MftFixture fixture, uint number, uint parent, string name)
+    {
+        var value = MftAttributeBytes.AttributeListValue([new ListedAttribute(ReparsePoint, MftFixture.Reference(number))]);
+        value[0x04] = 0xFF;
+
+        return fixture.Add(number, MftRecordBytes.Compose(
+            isDirectory: true,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
+            t => MftAttributeBytes.WriteAttributeListValue(t, value),
+            t => MftAttributeBytes.WriteReparsePoint(t, MftRecordBytes.MountPointTag)));
+    }
+
+    /// <summary>
     /// A file whose list names more extension records than the table can hold, each for one of its
     /// names: a table NTFS never wrote, and one a reader must not hold every want of.
     /// </summary>

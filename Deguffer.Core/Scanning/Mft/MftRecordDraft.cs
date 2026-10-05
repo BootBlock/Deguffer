@@ -53,6 +53,9 @@ internal struct MftRecordDraft
     /// </summary>
     public int BaseRank { get; private set; }
 
+    /// <summary>The kinds of attribute the base record held on its own.</summary>
+    public MftAttributeKinds BaseSupplied { get; private set; }
+
     /// <summary>
     /// Fold one record's attributes into what is known, saying which kinds it supplied. Returns
     /// false where the attributes are malformed, and a record that fails here must be rejected
@@ -141,6 +144,7 @@ internal struct MftRecordDraft
         if (isBase)
         {
             BaseRank = _bestRank;
+            BaseSupplied = supplied;
         }
 
         return !walk.IsMalformed;
