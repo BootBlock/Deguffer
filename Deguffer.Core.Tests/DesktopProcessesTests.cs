@@ -56,7 +56,7 @@ public sealed class DesktopProcessesTests
         var desktop = Of(
             machine,
             ShellOwner.Is(Shell),
-            Windows(Living(Shell, ShellCreated), Living(Compositor, CompositorCreated)));
+            Windows(Living(Shell, ShellCreated), Refusing(Compositor, CompositorCreated)));
 
         Assert.Equal([Shell, Compositor], desktop.Processes.Select(p => p.ProcessId));
         Assert.Empty(desktop.Unestablished);
@@ -75,7 +75,7 @@ public sealed class DesktopProcessesTests
         var desktop = Of(
             machine,
             ShellOwner.Is(Shell),
-            Windows(Living(Shell, ShellCreated + 900), Living(Compositor, CompositorCreated)));
+            Windows(Living(Shell, ShellCreated + 900), Refusing(Compositor, CompositorCreated)));
 
         Assert.DoesNotContain(desktop.Processes, p => p.ProcessId == Shell);
         Assert.Contains("shell window", Assert.Single(desktop.Unestablished), StringComparison.Ordinal);
@@ -99,7 +99,7 @@ public sealed class DesktopProcessesTests
             shell,
             Windows(
                 new FakeProcess { ProcessId = Shell, CreatedAt = ShellCreated, OpenRefused = true },
-                Living(Compositor, CompositorCreated)));
+                Refusing(Compositor, CompositorCreated)));
 
         Assert.DoesNotContain(desktop.Processes, p => p.ProcessId == Shell);
         Assert.Contains("shell window", Assert.Single(desktop.Unestablished), StringComparison.Ordinal);
@@ -114,7 +114,7 @@ public sealed class DesktopProcessesTests
     {
         var machine = Machine();
 
-        var desktop = Of(machine, ShellOwner.None, Windows(Living(Compositor, CompositorCreated)));
+        var desktop = Of(machine, ShellOwner.None, Windows(Refusing(Compositor, CompositorCreated)));
 
         Assert.Equal([Compositor], desktop.Processes.Select(p => p.ProcessId));
         Assert.Empty(desktop.Unestablished);
@@ -128,7 +128,7 @@ public sealed class DesktopProcessesTests
             .Process(OtherCompositor, 1, "dwm.exe", 90, OtherCompositorCreated, FakeProcessCalls.OtherSession)
             .Build();
 
-    /// <summary>A compositor as an unelevated Deguffer meets one: it will not open (§7.2's measurement).</summary>
+    /// <summary>A compositor as an unelevated Deguffer meets one: it will not open (measured in docs/todo/memory-view.md).</summary>
     private static FakeProcess Refusing(int processId, long created) =>
         new() { ProcessId = processId, CreatedAt = created, OpenRefused = true };
 

@@ -119,8 +119,9 @@ internal static class DesktopProcesses
     /// <summary>
     /// Whether the read says outright that this process belongs to another session.
     ///
-    /// <para>The session is the read's, never one asked of the process. Every compositor refuses an
-    /// unelevated Deguffer a handle, so asking it would make "will not answer" the ordinary case, and
+    /// <para>The session is the read's, never one asked of the process. The compositor refused an
+    /// unelevated Deguffer a handle where it was measured (<c>docs/todo/memory-view.md</c>), so asking
+    /// it would make "will not answer" the ordinary case, and
     /// every other session's compositor would enter the survivor set. A sign-out in that session
     /// during a watch with no deadline would then fail a run in which nothing went wrong.</para>
     ///

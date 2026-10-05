@@ -38,7 +38,10 @@ public sealed class ProcessCloserTests
     private static readonly IReadOnlyList<ProcessWindow> OneWindow = Confirmed(TargetWindow);
 
     /// <summary>The machine as the close is asked for: a desktop, Deguffer, a host, and the target.</summary>
-    private static MemorySnapshot Before() =>
+    private static MemorySnapshot Before() => Machine().Build();
+
+    /// <summary><see cref="Before"/> still open, so a test can add to the machine it describes.</summary>
+    private static MemorySnapshotBuilder Machine() =>
         new MemorySnapshotBuilder()
             .Process(Shell, 1, "explorer.exe", 200, ShellCreated)
             .Process(Compositor, 1, "dwm.exe", 150, CompositorCreated)
@@ -46,8 +49,7 @@ public sealed class ProcessCloserTests
             .Process(Host, 1, "svchost.exe", 60, HostCreated)
             .Process(TargetId, Shell, "editor.exe", 300, TargetCreated)
             .Process(Child, TargetId, "editor-helper.exe", 50, ChildCreated)
-            .Service("Thing", Host)
-            .Build();
+            .Service("Thing", Host);
 
     /// <summary>The machine when the watch ends, holding only what <paramref name="running"/> names.</summary>
     private static MemorySnapshot After(params int[] running)
@@ -72,7 +74,7 @@ public sealed class ProcessCloserTests
 
     /// <summary>
     /// Windows as it answers about a machine nothing has changed: the target holds its window, and the
-    /// compositor will not open, as no compositor does to an unelevated Deguffer.
+    /// compositor will not open, as it did not to an unelevated Deguffer where that was measured.
     /// </summary>
     private static FakeProcessCalls Processes(FakeProcess? target = null) =>
         new FakeProcessCalls()
@@ -180,21 +182,8 @@ public sealed class ProcessCloserTests
     {
         const int OtherCompositor = 121;
 
-        var builder = new MemorySnapshotBuilder();
-
-        foreach (var process in Before().Processes.Processes)
-        {
-            builder.Process(
-                process.ProcessId,
-                process.ParentProcessId,
-                process.Name,
-                process.PrivateWorkingSet!.Value / MemorySnapshotBuilder.MiB,
-                process.CreationTime!.Value);
-        }
-
-        var before = builder
+        var before = Machine()
             .Process(OtherCompositor, 1, "dwm.exe", 90, created: 7, FakeProcessCalls.OtherSession)
-            .Service("Thing", Host)
             .Build();
         var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
         var processes = Processes(target).With(new FakeProcess { ProcessId = OtherCompositor, CreatedAt = 7, OpenRefused = true });
