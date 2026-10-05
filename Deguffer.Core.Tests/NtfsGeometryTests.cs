@@ -67,6 +67,35 @@ public class NtfsGeometryTests
     }
 
     /// <summary>
+    /// A cluster count past what NTFS formats: 2^20 sectors of 4,096 bytes and 2^23 of 512 wrap the
+    /// cluster size to zero, and 0xA0 asks for a shift C# would take modulo 32. Each has to refuse
+    /// the volume rather than throw from the open or read it with the wrong cluster size.
+    /// </summary>
+    [Theory]
+    [InlineData(4096, 0xEC)]
+    [InlineData(512, 0xE9)]
+    [InlineData(512, 0xA0)]
+    [InlineData(512, 0x81)]
+    [InlineData(4096, 0xF6)]
+    public void RejectsAClusterLargerThanNtfsFormats(ushort bytesPerSector, byte sectorsPerCluster) =>
+        Assert.False(NtfsBootSector.TryParse(
+            BootSector(bytesPerSector, sectorsPerCluster, clustersPerRecord: -12),
+            out _));
+
+    /// <summary>The largest cluster Windows formats, 2 MiB, encoded as the negative exponent form.</summary>
+    [Theory]
+    [InlineData(4096, 0xF7)]
+    [InlineData(512, 0xF4)]
+    public void ReadsTheLargestClusterNtfsFormats(ushort bytesPerSector, byte sectorsPerCluster)
+    {
+        Assert.True(NtfsBootSector.TryParse(
+            BootSector(bytesPerSector, sectorsPerCluster, clustersPerRecord: -12),
+            out var geometry));
+
+        Assert.Equal(NtfsBootSector.MaximumBytesPerCluster, geometry.BytesPerCluster);
+    }
+
+    /// <summary>
     /// A record smaller than one fixup stride has no room for the array that protects it, so not
     /// one record of the table could be read. Refused here, the volume reports itself as not NTFS
     /// rather than as a table that could not be read.
