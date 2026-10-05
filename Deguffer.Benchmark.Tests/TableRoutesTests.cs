@@ -1,4 +1,5 @@
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 
 namespace Deguffer.Benchmark.Tests;
@@ -78,7 +79,7 @@ public sealed class TableRoutesTests
     [Fact]
     public void AVolumeThatCannotBeOpenedAgainStopsTheBenchmark() =>
         Assert.Throws<IOException>(() => TableRoutes.Run(
-            Route.Table, FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable), Drive, CancellationToken.None));
+            Route.Table, FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable), Drive, TableTuning.Default, CancellationToken.None));
 
     [Fact]
     public void TheProbeGivesTheReasonAVolumeCannotBeRead() =>
@@ -94,5 +95,5 @@ public sealed class TableRoutesTests
 
     private static RunTally Run(string route, MftFixture volume) =>
         TableRoutes.Run(
-            Enum.Parse<Route>(route), FakeMftSourceFactory.Serving(Drive, volume), Drive, CancellationToken.None);
+            Enum.Parse<Route>(route), FakeMftSourceFactory.Serving(Drive, volume), Drive, TableTuning.Default, CancellationToken.None);
 }

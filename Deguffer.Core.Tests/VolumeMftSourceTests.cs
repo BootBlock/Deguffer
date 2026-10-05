@@ -41,7 +41,7 @@ public class VolumeMftSourceTests
         Assert.Equal(FallbackReason.None, reason);
         Assert.NotNull(source);
         Assert.Equal(23, source.RecordCount);
-        Assert.True(MftVolumeIndexBuilder.TryBuild(source, out var index));
+        Assert.True(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out var index));
 
         Assert.Equal(AcrossStride + 8192, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Allocated);

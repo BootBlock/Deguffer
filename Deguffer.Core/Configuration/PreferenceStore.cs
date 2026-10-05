@@ -17,6 +17,10 @@ public sealed class PreferenceStore
     {
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() },
+
+        // A hand-edited null in a group of settings, such as "Scanning", would otherwise arrive as a
+        // null the type says cannot be there. Refused here, it is a corrupt file like any other.
+        RespectNullableAnnotations = true,
     };
 
     private readonly string _directory;

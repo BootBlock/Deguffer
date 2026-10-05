@@ -75,19 +75,30 @@ public sealed class CleanupPlanner
     /// already under way sees, and reusing them would say where a command was the first time anything
     /// looked for it after the last Storage pass.
     /// </param>
+    /// <param name="tuning">
+    /// The route and the read sizes the user chose on the Settings page, which every provider's
+    /// measurement runs with. Without it every provider shares <see cref="DirectoryScanner.Default"/>
+    /// at the shipped values, as a test or the Explore page's provider list wants.
+    /// </param>
     public static CleanupPlanner CreateDefault(
         ICurrentPreferences? preferences = null,
         ILiveTreeInspector? liveTrees = null,
-        IUserEnvironment? environment = null)
+        IUserEnvironment? environment = null,
+        ScanTuner? tuning = null)
     {
         environment ??= UserEnvironment.Current;
         var roots = new SourceRootStore(environment);
+
+        // One scanner for every provider, as DirectoryScanner.Default is one: its volume index is the
+        // whole cost of the fast path, and an unshared scanner per provider would rebuild it for each.
+        var scanner = tuning is null ? DirectoryScanner.Default : DirectoryScanner.CreateDefault(environment, tuning);
+        var hardLinks = tuning is null ? HardLinkAwareScanner.Default : new HardLinkAwareScanner(tuning);
 
         // One discovery for every provider that searches the user's own folders, and one live-tree
         // inspector beside it. Shared deliberately rather than defaulted per provider: six unshared
         // passes would each walk the developer's whole disk on an unelevated run, and the names each
         // provider registers on the way in are what make the one pass answer for all of them.
-        var sourceTrees = new SourceDirectoryDiscovery(DirectoryScanner.Default);
+        var sourceTrees = new SourceDirectoryDiscovery(scanner);
         liveTrees ??= LiveTreeInspector.Default;
 
         // One sweep of %LOCALAPPDATA% for both Squirrel providers, on the reasoning above: they ask
@@ -119,13 +130,13 @@ public sealed class CleanupPlanner
 
         return new CleanupPlanner(
         [
-            new DotNetObjProvider(roots, sourceTrees, liveTrees, environment),
-            new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment),
-            new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment),
-            new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment),
-            new CargoTargetProvider(roots, sourceTrees, liveTrees, environment),
-            new NodeModulesProvider(roots, sourceTrees, liveTrees, environment),
-            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment),
+            new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
             .. CacheProviders(
                 environment,
                 squirrel,
@@ -135,7 +146,10 @@ public sealed class CleanupPlanner
                 claudeProjects,
                 liveTrees,
                 preferences ?? DefaultPreferences.Instance,
-                declarations),
+                declarations,
+                scanner,
+                hardLinks,
+                tuning ?? ScanTuner.Shipped),
         ],
         declarations);
     }
@@ -149,16 +163,19 @@ public sealed class CleanupPlanner
         ClaudeCodeProjectsDiscovery claudeProjects,
         ILiveTreeInspector liveTrees,
         ICurrentPreferences preferences,
-        RowDeclarations declarations)
+        RowDeclarations declarations,
+        IDirectoryScanner scanner,
+        IDirectoryScanner hardLinks,
+        ScanTuner tuning)
     {
         // Every row that offers an entry of a temporary folder under the name of the tool that wrote
         // it, built first so the "Temporary files" row can leave those entries to them.
-        var nuget = new NuGetCacheProvider(environment);
-        var toolCaches = new TempToolCacheProvider(environment, liveTrees: liveTrees);
-        var installerDownloads = new TempInstallerDownloadProvider(environment, liveTrees: liveTrees);
-        var toolLogs = new TempToolLogProvider(environment, liveTrees: liveTrees);
-        var testBrowsers = new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences);
-        var afterEffects = new AfterEffectsDiskCacheProvider(environment);
+        var nuget = new NuGetCacheProvider(environment, scanner: scanner);
+        var toolCaches = new TempToolCacheProvider(environment, liveTrees: liveTrees, scanner: scanner);
+        var installerDownloads = new TempInstallerDownloadProvider(environment, liveTrees: liveTrees, scanner: scanner);
+        var toolLogs = new TempToolLogProvider(environment, liveTrees: liveTrees, scanner: scanner);
+        var testBrowsers = new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences, scanner: scanner);
+        var afterEffects = new AfterEffectsDiskCacheProvider(environment, scanner: scanner);
 
         // The routes that hand Windows a whole volume or a cloud account are given here and nowhere else
         // in the product. A provider takes each as a required argument, so a test builds one only by
@@ -172,88 +189,91 @@ public sealed class CleanupPlanner
         // One walk for the two rows inside every Chromium user-data folder, on the same reasoning: each
         // lists every directory below both application-data roots to find the folders, and the folders
         // are the same for both.
-        var chromium = new ChromiumUserDataDiscovery(environment);
+        var chromium = new ChromiumUserDataDiscovery(environment, tuning);
 
         return
         [
             nuget,
-            new GradleCacheProvider(environment, declarations: declarations),
-            new NpmCacheProvider(environment),
-            new PnpmStoreProvider(environment),
-            new VsCodeCppToolsCacheProvider(environment),
-            new DartAnalysisServerProvider(environment, declarations: declarations),
-            new RoslynCacheProvider(environment),
+            new GradleCacheProvider(environment, declarations: declarations, scanner: scanner),
+            new NpmCacheProvider(environment, scanner: scanner),
+            new PnpmStoreProvider(environment, scanner: hardLinks),
+            new VsCodeCppToolsCacheProvider(environment, scanner: scanner),
+            new DartAnalysisServerProvider(environment, declarations: declarations, scanner: scanner),
+            new RoslynCacheProvider(environment, scanner: scanner),
             toolCaches,
-            new UvCacheProvider(environment),
-            new PipCacheProvider(environment),
-            new PoetryCacheProvider(environment, declarations: declarations),
-            new CondaCacheProvider(environment),
-            new CargoCacheProvider(environment),
-            new GoCacheProvider(environment),
-            new ZigCacheProvider(environment),
-            new MavenRepositoryProvider(environment),
-            new VcpkgCacheProvider(environment),
-            new GpuShaderCacheProvider(environment),
-            new ChromiumCacheProvider(environment, liveTrees: liveTrees, discovery: chromium, declarations: declarations),
+            new UvCacheProvider(environment, scanner: scanner),
+            new PipCacheProvider(environment, scanner: scanner),
+            new PoetryCacheProvider(environment, declarations: declarations, scanner: scanner),
+            new CondaCacheProvider(environment, scanner: scanner),
+            new CargoCacheProvider(environment, scanner: scanner),
+            new GoCacheProvider(environment, scanner: scanner),
+            new ZigCacheProvider(environment, scanner: scanner),
+            new MavenRepositoryProvider(environment, scanner: scanner),
+            new VcpkgCacheProvider(environment, scanner: scanner),
+            new GpuShaderCacheProvider(environment, scanner: scanner),
+            new ChromiumCacheProvider(environment, liveTrees: liveTrees, discovery: chromium, declarations: declarations, scanner: scanner),
             new ChromiumServiceWorkerStorageProvider(
-                environment, liveTrees: liveTrees, discovery: chromium, declarations: declarations),
-            new VsCodeCacheProvider(environment, declarations: declarations),
-            new FirefoxCacheProvider(environment),
-            new EpicLauncherWebCacheProvider(environment, declarations: declarations),
-            new EpicLauncherContentCacheProvider(environment),
-            new BattleNetCacheProvider(environment),
-            new SteamCacheProvider(environment, discovery: steam),
-            new SteamLibraryArtworkProvider(environment, discovery: steam),
-            new SteamShaderCacheProvider(environment, discovery: steam),
-            new EmulatorShaderCacheProvider(environment),
-            new RetroArchDownloadProvider(environment, discovery: retroArch),
-            new RetroArchThumbnailProvider(environment, discovery: retroArch),
-            new UnrealDerivedDataCacheProvider(environment),
-            new SpotifyCacheProvider(environment),
-            new PlexTranscodeProvider(environment),
-            new JellyfinTranscodeProvider(environment),
-            new EmbyTranscodeProvider(environment),
-            new AffinityModelCacheProvider(environment),
-            new CaptureOneCacheProvider(environment, liveTrees: liveTrees),
-            new ResolveRenderCacheProvider(environment),
+                environment, liveTrees: liveTrees, discovery: chromium, declarations: declarations,
+                scanner: scanner),
+            new VsCodeCacheProvider(environment, declarations: declarations, scanner: scanner),
+            new FirefoxCacheProvider(environment, scanner: scanner),
+            new EpicLauncherWebCacheProvider(environment, declarations: declarations, scanner: scanner),
+            new EpicLauncherContentCacheProvider(environment, scanner: scanner),
+            new BattleNetCacheProvider(environment, scanner: scanner),
+            new SteamCacheProvider(environment, discovery: steam, scanner: scanner),
+            new SteamLibraryArtworkProvider(environment, discovery: steam, scanner: scanner),
+            new SteamShaderCacheProvider(environment, discovery: steam, scanner: scanner),
+            new EmulatorShaderCacheProvider(environment, scanner: scanner),
+            new RetroArchDownloadProvider(environment, discovery: retroArch, scanner: scanner),
+            new RetroArchThumbnailProvider(environment, discovery: retroArch, scanner: scanner),
+            new UnrealDerivedDataCacheProvider(environment, scanner: scanner),
+            new SpotifyCacheProvider(environment, scanner: scanner),
+            new PlexTranscodeProvider(environment, scanner: scanner),
+            new JellyfinTranscodeProvider(environment, scanner: scanner),
+            new EmbyTranscodeProvider(environment, scanner: scanner),
+            new AffinityModelCacheProvider(environment, scanner: scanner),
+            new CaptureOneCacheProvider(environment, liveTrees: liveTrees, scanner: scanner),
+            new ResolveRenderCacheProvider(environment, scanner: scanner),
             afterEffects,
-            new AdobeMediaCacheProvider(environment),
-            new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees),
-            new PlatformIoCacheProvider(environment),
-            new PlaywrightBrowsersProvider(environment),
-            new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees),
-            new LmStudioRuntimeProvider(environment),
+            new AdobeMediaCacheProvider(environment, scanner: scanner),
+            new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
+            new PlatformIoCacheProvider(environment, scanner: scanner),
+            new PlaywrightBrowsersProvider(environment, scanner: scanner),
+            new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
+            new LmStudioRuntimeProvider(environment, scanner: scanner),
             testBrowsers,
-            new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees),
-            new AzureFunctionsToolsProvider(environment),
-            new GraphicsDriverInstallerProvider(environment, liveTrees: liveTrees),
-            new AutodeskInstallerProvider(environment, liveTrees: liveTrees),
+            new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
+            new AzureFunctionsToolsProvider(environment, scanner: scanner),
+            new GraphicsDriverInstallerProvider(environment, liveTrees: liveTrees, scanner: scanner),
+            new AutodeskInstallerProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new ClaudeCodeDerivedStateProvider(
-                environment, projects: claudeProjects, sessions: claudeSessions, declarations: declarations),
-            new RecycleBinProvider(ShellRecycleBinEmptier.Default, environment, preferences: preferences),
-            new FileHistoryProvider(environment, preferences: preferences),
-            new CloudLocalCopiesProvider(CloudFiles.Default, environment),
+                environment, projects: claudeProjects, sessions: claudeSessions, declarations: declarations,
+                scanner: scanner),
+            new RecycleBinProvider(ShellRecycleBinEmptier.Default, environment, preferences: preferences, scanner: scanner),
+            new FileHistoryProvider(environment, preferences: preferences, scanner: scanner),
+            new CloudLocalCopiesProvider(CloudFiles.Default, environment, scanner: scanner),
             new TempDirectoryProvider(
                 environment,
                 liveTrees: liveTrees,
                 preferences: preferences,
-                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects]),
+                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects],
+                scanner: scanner),
             installerDownloads,
-            new DeliveryOptimizationProvider(environment),
-            new PreviousWindowsInstallationProvider(handlers, environment),
-            new WindowsUpdateLeftoverProvider(environment),
-            new DriverStoreProvider(handlers, environment),
-            new ComponentStoreCleanupProvider(environment, analysis: componentStore),
-            new ComponentStoreResetBaseProvider(environment, analysis: componentStore),
-            new CrashDumpProvider(environment),
-            new WindowsServicingLogProvider(handlers, environment),
-            new EpicLauncherLogProvider(environment),
-            new BattleNetLogProvider(environment),
-            new VsCodeLogProvider(environment, declarations: declarations),
-            new ClaudeCodeMcpLogProvider(environment),
+            new DeliveryOptimizationProvider(environment, scanner: scanner),
+            new PreviousWindowsInstallationProvider(handlers, environment, scanner: scanner),
+            new WindowsUpdateLeftoverProvider(environment, scanner: scanner),
+            new DriverStoreProvider(handlers, environment, scanner: hardLinks),
+            new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner),
+            new ComponentStoreResetBaseProvider(environment, analysis: componentStore, scanner: scanner),
+            new CrashDumpProvider(environment, scanner: scanner),
+            new WindowsServicingLogProvider(handlers, environment, scanner: scanner),
+            new EpicLauncherLogProvider(environment, scanner: scanner),
+            new BattleNetLogProvider(environment, scanner: scanner),
+            new VsCodeLogProvider(environment, declarations: declarations, scanner: scanner),
+            new ClaudeCodeMcpLogProvider(environment, scanner: scanner),
             toolLogs,
-            new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions),
-            new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions),
+            new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions, scanner: scanner),
+            new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions, scanner: scanner),
         ];
     }
 

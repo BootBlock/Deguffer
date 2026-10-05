@@ -23,6 +23,7 @@ internal static class WalkExploreReader
     /// </summary>
     public static ExploreTree Read(
         string root,
+        WalkTuning tuning,
         Action<ExploreTreeBuilder, long, long>? onProgress,
         TimeProvider clock,
         CancellationToken ct)
@@ -43,7 +44,7 @@ internal static class WalkExploreReader
         BoundedFileWalk.Visit(
             LongPath.Extended(root),
             ExploreTreeBuilder.RootNode,
-            WalkTuning.Default,
+            tuning,
             (parent, contents, descend) =>
             {
                 if (contents.WasRefused)

@@ -1,12 +1,16 @@
 using Deguffer.Core.Providers;
+using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Configuration;
 
 /// <summary>
 /// The whole number a setting stores, from the number a person typed into the box that sets it.
 ///
-/// <para>Here rather than behind the settings page, because two of the three decide what gets
-/// deleted, and one of those has a value that switches a safety rule off. A clamp that exists only
+/// <para>Here rather than behind the settings page, because two of the age settings decide what
+/// gets deleted, and one of those has a value that switches a safety rule off. The scan values
+/// decide only how fast a scan is, and their reader clamps them as well, in
+/// <see cref="Scanning.VolumeTuning.Resolve"/>. A clamp that exists only
 /// inside a view-model is one nothing can hold Deguffer to. The providers clamp again as they read,
 /// because nothing validates <c>preferences.json</c> on the way in; this is the entry point, as
 /// <see cref="Safety.MinimumAge.WithinHours"/> is for the hours.</para>
@@ -52,6 +56,32 @@ public static class EnteredSetting
             AppPreferences.Default.FileHistoryRetentionDays,
             FileHistoryProvider.MinimumRetentionDays,
             FileHistoryProvider.MaximumRetentionDays);
+
+    /// <summary>How many folders the walk lists at once, or null for Auto.</summary>
+    public static int? WalkThreads(double entered) =>
+        WholeOrAuto(entered, WalkTuning.MinimumThreads, WalkTuning.MaximumThreads);
+
+    /// <summary>How many KiB of entries each listing asks Windows for, or null for Auto.</summary>
+    public static int? ListingBufferKiB(double entered) =>
+        WholeOrAuto(entered, WalkTuning.MinimumListingBuffer / 1024, WalkTuning.MaximumListingBuffer / 1024);
+
+    /// <summary>How many KiB of records each read of the file table asks for, or null for Auto.</summary>
+    public static int? TableReadKiB(double entered) =>
+        WholeOrAuto(entered, TableTuning.MinimumReadBytes / 1024, TableTuning.MaximumReadBytes / 1024);
+
+    /// <summary>
+    /// <paramref name="entered"/> as a whole number between <paramref name="minimum"/> and
+    /// <paramref name="maximum"/>, or null where the box was emptied.
+    ///
+    /// <para>For a scan value, emptying the box is how a person goes back to Auto, so the emptied
+    /// box's <see cref="double.NaN"/> is Auto here rather than the shipped default. None of these can
+    /// change what a scan finds, so no value of them needs the care <see cref="Whole"/> takes over
+    /// zero, and every minimum is at least one.</para>
+    /// </summary>
+    private static int? WholeOrAuto(double entered, int minimum, int maximum) =>
+        double.IsNaN(entered)
+            ? null
+            : (int)Math.Clamp(Math.Round(entered, MidpointRounding.AwayFromZero), minimum, maximum);
 
     /// <summary>
     /// <paramref name="entered"/> as a whole number between <paramref name="minimum"/> and

@@ -13,10 +13,16 @@ public sealed partial class SettingsPage : Page
     {
         ViewModel = new SettingsViewModel(
             App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current);
+        Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current);
         InitializeComponent();
+
+        // At each visit rather than once, so a drive attached while the app was open is listed.
+        Loaded += async (_, _) => await Scanning.RefreshDrivesAsync();
     }
 
     public SettingsViewModel ViewModel { get; }
+
+    public ScanSettingsViewModel Scanning { get; }
 
     /// <summary>
     /// Approving a folder goes through the system picker rather than a text box, so the path is one

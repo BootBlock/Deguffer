@@ -1,4 +1,5 @@
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark.Tests;
 
@@ -68,6 +69,31 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(new WalkTuning(4, 256 * 1024), request!.Walk);
         Assert.Equal(2, request.Runs);
     }
+
+    [Fact]
+    public void TheTablesReadSizeCanBeChosen() =>
+        Assert.Equal(
+            new TableTuning(4096 * 1024),
+            BenchmarkRequest.Parse(["table", "C", "--read-size", "4096"], out _)!.Table);
+
+    [Fact]
+    public void ATableReadNotToldOtherwiseRunsAsAScanOfAnUnknownDriveDoes() =>
+        Assert.Equal(TableTuning.Default, BenchmarkRequest.Parse(["table", "C"], out _)!.Table);
+
+    [Theory]
+    [InlineData("3")]
+    [InlineData("16385")]
+    [InlineData("big")]
+    public void AReadSizeOutsideItsBoundsIsRefused(string kib)
+    {
+        Assert.Null(BenchmarkRequest.Parse(["table", "C", "--read-size", kib], out var error));
+        Assert.NotNull(error);
+    }
+
+    /// <summary>The walk does not read the table, so a read size given to it would be reported unused.</summary>
+    [Fact]
+    public void TheWalkTakesNoReadSize() =>
+        Assert.Null(BenchmarkRequest.Parse(["walk", @"C:\", "--read-size", "1024"], out _));
 
     [Fact]
     public void AWalkNotToldOtherwiseRunsAsAScanDoes() =>

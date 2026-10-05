@@ -3,6 +3,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -374,11 +375,11 @@ public class RouteAgreementTests
 
         using var source = fixture.Build();
 
-        var walked = WalkExploreReader.Read(path, onProgress: null, TimeProvider.System, default);
+        var walked = WalkExploreReader.Read(path, WalkTuning.Default, onProgress: null, TimeProvider.System, default);
         // The whole volume, then descended to the tree — rather than a scoped read, which would
         // root the table at the same folder the walk was handed and hide any disagreement about
         // where that folder sits.
-        var indexed = MftExploreReader.Read(source, path[..3], [], onProgress: null, default).Tree!;
+        var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, onProgress: null, default).Tree!;
 
         var walkedDates = DatesByPath(walked, walked.RootNode);
         var indexedDates = DatesByPath(indexed, NodeAt(indexed, path));

@@ -21,23 +21,40 @@ namespace Deguffer.Core.Scanning;
 /// </summary>
 public sealed class ParallelEnumerationScanner : IDirectoryScanner
 {
-    /// <summary>
-    /// One instance per reason, built once. G5: this type is stateless apart from the reason it
-    /// stamps on results, and <see cref="Because"/> sits on the fallback path — which §6.3 makes
-    /// the *ordinary* path — so constructing one per measurement would allocate per directory
-    /// scanned for no benefit.
-    /// </summary>
-    private static readonly ParallelEnumerationScanner[] ByReason =
-        [.. Enum.GetValues<FallbackReason>().Order().Select(r => new ParallelEnumerationScanner(r))];
+    /// <summary>The walk at the shipped values, for a scanner built outside the app.</summary>
+    public static readonly ParallelEnumerationScanner Default = new(ScanTuner.Shipped);
 
-    public static readonly ParallelEnumerationScanner Default = ByReason[(int)FallbackReason.None];
+    /// <summary>
+    /// One instance per reason, built once with the scanner and sharing its tuner. G5: this type is
+    /// stateless apart from the reason it stamps on results, and <see cref="Because"/> sits on the
+    /// fallback path — which §6.3 makes the *ordinary* path — so constructing one per measurement
+    /// would allocate per directory scanned for no benefit.
+    /// </summary>
+    private readonly ParallelEnumerationScanner[] _byReason;
+
+    private readonly ScanTuner _tuner;
 
     private readonly FallbackReason _reason;
 
-    private ParallelEnumerationScanner(FallbackReason reason) => _reason = reason;
+    /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>
+    public ParallelEnumerationScanner(ScanTuner tuner)
+        : this(tuner, FallbackReason.None, new ParallelEnumerationScanner[Enum.GetValues<FallbackReason>().Length])
+    {
+        foreach (var reason in Enum.GetValues<FallbackReason>())
+        {
+            _byReason[(int)reason] = reason is FallbackReason.None ? this : new(tuner, reason, _byReason);
+        }
+    }
+
+    private ParallelEnumerationScanner(ScanTuner tuner, FallbackReason reason, ParallelEnumerationScanner[] byReason)
+    {
+        _tuner = tuner;
+        _reason = reason;
+        _byReason = byReason;
+    }
 
     /// <summary>Same walk, attributed to whichever reason sent the caller here.</summary>
-    public ParallelEnumerationScanner Because(FallbackReason reason) => ByReason[(int)reason];
+    public ParallelEnumerationScanner Because(FallbackReason reason) => _byReason[(int)reason];
 
     /// <summary>
     /// A file is sized in one read and reported as <see cref="ScanStrategy.DirectRead"/>, dropping
@@ -61,7 +78,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         new(Task.Run(
             () => TryMeasureFile(path, keep) is { } file
                 ? ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores }
-                : Slow(Measure(path, keep, progress, ct)),
+                : Slow(Measure(path, keep, _tuner.For(path).Walk, progress, ct)),
             ct));
 
     /// <summary>
@@ -104,6 +121,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     private static Walked Measure(
         string path,
         MinimumAge keep,
+        WalkTuning tuning,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
@@ -135,7 +153,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         BoundedFileWalk.Visit<VisitedFolder?>(
             LongPath.Extended(path),
             rootState: null,
-            WalkTuning.Default,
+            tuning,
             (holder, contents, descend) =>
             {
                 var folder = new VisitedFolder(holder);

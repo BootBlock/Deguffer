@@ -26,7 +26,7 @@ internal static class TableRoutes
         return reason;
     }
 
-    public static RunTally Run(Route route, IMftSourceFactory volumes, char drive, CancellationToken ct)
+    public static RunTally Run(Route route, IMftSourceFactory volumes, char drive, TableTuning tuning, CancellationToken ct)
     {
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
         using var source = new CountingMftSource(
@@ -37,9 +37,9 @@ internal static class TableRoutes
 
         var complete = route switch
         {
-            Route.Table => ReadOnly(source, count, ct),
-            Route.Index => MftVolumeIndexBuilder.TryBuild(source, out _, ct),
-            Route.Explore => MftExploreReader.Read(source, $"{drive}:\\", [], onProgress: null, ct).Tree is not null,
+            Route.Table => ReadOnly(source, count, tuning, ct),
+            Route.Index => MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct),
+            Route.Explore => MftExploreReader.Read(source, $"{drive}:\\", [], tuning, onProgress: null, ct).Tree is not null,
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
 
@@ -49,6 +49,6 @@ internal static class TableRoutes
     /// <summary>
     /// Read and parse every record and keep none of them: the floor the two structures are built on.
     /// </summary>
-    private static bool ReadOnly(IMftSource source, int count, CancellationToken ct) =>
-        MftRecordStream.TryReadAll(source, count, static (_, _, in _) => true, ct);
+    private static bool ReadOnly(IMftSource source, int count, TableTuning tuning, CancellationToken ct) =>
+        MftRecordStream.TryReadAll(source, count, tuning, static (_, _, in _) => true, ct);
 }

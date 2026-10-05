@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -63,8 +64,11 @@ public sealed record ChromiumUserData(
 /// <c>GPUCache</c> does not qualify, and an application that has somehow never written the file is
 /// invisible here — reclaiming nothing being the safe direction to be wrong in.</para>
 /// </summary>
-public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environment)
+/// <param name="tuning">What each walk runs with. <see cref="ScanTuner.Shipped"/> where none is given.</param>
+public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environment, ScanTuner? tuning = null)
 {
+    private readonly ScanTuner _tuning = tuning ?? ScanTuner.Shipped;
+
     /// <summary>
     /// A Chromium host's additional profiles. A known word <em>and</em> a number, on Playwright's
     /// pattern: <c>Profile 1</c> qualifies, and <c>Profile backup</c> is not a profile this looks
@@ -131,7 +135,7 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
 
         foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
         {
-            var walk = ChromiumUserDataWalk.Under(root, notEntered, ct);
+            var walk = ChromiumUserDataWalk.Under(root, notEntered, _tuning.For(root).Walk, ct);
 
             if (walk.RootUnreadable)
             {

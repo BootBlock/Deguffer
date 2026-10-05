@@ -8,7 +8,7 @@ namespace Deguffer.Core.Scanning;
 /// differ by drive: concurrent reads compete for the head of a spinning disk, an NVMe drive needs many
 /// in flight to reach its speed, and a network share pays a round trip per call.</para>
 /// </summary>
-internal sealed record WalkTuning
+public sealed record WalkTuning
 {
     public const int MinimumThreads = 1;
 

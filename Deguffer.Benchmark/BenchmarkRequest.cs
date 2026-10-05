@@ -1,5 +1,6 @@
 using System.Globalization;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark;
 
@@ -12,7 +13,8 @@ namespace Deguffer.Benchmark;
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
 /// <param name="Walk">The values the walk runs with. The table routes take none.</param>
-internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, WalkTuning Walk)
+/// <param name="Table">The values a route that reads the table runs with. The walk takes none.</param>
+internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, WalkTuning Walk, TableTuning Table)
 {
     public const int DefaultRuns = 5;
 
@@ -21,6 +23,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
     public const string Usage =
         """
         Usage: Deguffer.Benchmark <route> <target> [--runs N] [--threads N] [--listing-buffer KiB]
+                                     [--read-size KiB]
 
         Routes:
           table <drive>     Read the volume's file table end to end, parse only. Elevated.
@@ -34,6 +37,9 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                                default is what a scan uses.
         --listing-buffer KiB   Walk only. How many KiB of entries each listing asks Windows for,
                                4 to 1024. The default is what a scan uses.
+        --read-size KiB        Table routes only. How many KiB of records each read of the
+                               file table asks for, 4 to 16384. The default is what a scan
+                               uses on a drive of unknown kind.
 
         It only reads. Nothing on the drive is written, moved or deleted.
         """;
@@ -71,6 +77,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
         var runs = DefaultRuns;
         var threads = WalkTuning.Default.Threads;
         var bufferKiB = WalkTuning.Default.ListingBufferBytes / 1024;
+        var readKiB = TableTuning.Default.ReadBytes / 1024;
 
         for (var i = 2; i < args.Count; i += 2)
         {
@@ -83,6 +90,8 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                     TryNumber(value, WalkTuning.MinimumThreads, WalkTuning.MaximumThreads, out threads),
                 "--listing-buffer" when !route.ReadsTable() => TryNumber(
                     value, WalkTuning.MinimumListingBuffer / 1024, WalkTuning.MaximumListingBuffer / 1024, out bufferKiB),
+                "--read-size" when route.ReadsTable() => TryNumber(
+                    value, TableTuning.MinimumReadBytes / 1024, TableTuning.MaximumReadBytes / 1024, out readKiB),
                 _ => false,
             };
 
@@ -91,7 +100,9 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                 error =
                     $"--runs takes a number from 1 to {MaximumRuns}. For the walk, --threads takes a number from " +
                     $"{WalkTuning.MinimumThreads} to {WalkTuning.MaximumThreads} and --listing-buffer from " +
-                    $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. " +
+                    $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. For a route " +
+                    $"that reads the table, --read-size takes a number from {TableTuning.MinimumReadBytes / 1024} to " +
+                    $"{TableTuning.MaximumReadBytes / 1024}. " +
                     "Nothing else is accepted after the target.";
                 return null;
             }
@@ -106,7 +117,8 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
             return null;
         }
 
-        return new BenchmarkRequest(route, path, runs, new WalkTuning(threads, bufferKiB * 1024));
+        return new BenchmarkRequest(
+            route, path, runs, new WalkTuning(threads, bufferKiB * 1024), new TableTuning(readKiB * 1024));
     }
 
     private static bool TryNumber(string? text, int minimum, int maximum, out int number) =>

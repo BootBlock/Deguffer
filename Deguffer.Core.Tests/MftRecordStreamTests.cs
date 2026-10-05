@@ -26,7 +26,7 @@ public sealed class MftRecordStreamTests
             .Build();
 
         Assert.True(source.RecordCount < 24, "the fixture's list must name more records than the table holds");
-        Assert.False(MftRecordStream.TryReadAll(source, (int)source.RecordCount, static (_, _, in _) => true, default));
+        Assert.False(MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _) => true, default));
     }
 
     /// <summary>
@@ -42,7 +42,7 @@ public sealed class MftRecordStreamTests
             .Build();
         var handed = new List<long>();
 
-        MftRecordStream.TryReadAll(source, (int)source.RecordCount, (number, _, in _) =>
+        MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, (number, _, in _) =>
         {
             handed.Add(number);
             return true;
@@ -60,6 +60,6 @@ public sealed class MftRecordStreamTests
             .AddFileWithDataInAnExtensionRecord(20, MftRecord.RootRecordNumber, "fragmented.tgz", allocated: 8192, logical: 8000, extension: 21)
             .Build();
 
-        Assert.True(MftRecordStream.TryReadAll(source, (int)source.RecordCount, static (_, _, in _) => true, default));
+        Assert.True(MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _) => true, default));
     }
 }

@@ -91,6 +91,9 @@ public static class ExploreRouteText
             // picture never asks for a reading taken across a change to the disk.
             FallbackReason.FreshReadingRequired => null,
 
+            FallbackReason.WalkChosen =>
+                "Scanned by walking directories, because Settings asks for the walk only.",
+
             _ => throw new ArgumentOutOfRangeException(nameof(reason)),
         };
     }

@@ -224,7 +224,10 @@ Measuring a handful of profile subtrees with naive recursive directory enumerati
 must:
 
 - Read the **NTFS Master File Table** directly (or the USN journal) rather than walking directories.
-- Fall back to parallel enumeration with a bounded worker pool only where MFT access is unavailable.
+- Fall back to parallel enumeration with a bounded worker pool only where MFT access is unavailable,
+  or where the user chose the walk on the Settings page, and say which.
+- Let the user tune how hard each route drives each kind of drive, with Auto chosen by measurement.
+  No value may change what a scan finds.
 - Cache results with invalidation, so re-opening the tool is instant.
 - Stream partial results to the UI — never block on a complete scan.
 

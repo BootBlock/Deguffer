@@ -17,17 +17,24 @@ public sealed class DirectoryScanner : IDirectoryScanner
     private readonly MftVolumeIndexCache _volumes;
     private readonly ScanEstimateCache? _estimates;
     private readonly ParallelEnumerationScanner _fallback;
+    private readonly ScanTuner _tuner;
     private readonly Dictionary<(char Volume, string Name), IReadOnlyList<string>> _searches = [];
     private readonly Lock _searchGate = new();
 
+    /// <param name="tuning">
+    /// The route the user allows and the values each read runs with, asked as each measurement
+    /// starts. <see cref="ScanTuner.Shipped"/> where none is given.
+    /// </param>
     public DirectoryScanner(
         IMftSourceFactory? sources = null,
         ScanEstimateCache? estimates = null,
-        ParallelEnumerationScanner? fallback = null)
+        ParallelEnumerationScanner? fallback = null,
+        ScanTuner? tuning = null)
     {
-        _volumes = new MftVolumeIndexCache(sources ?? VolumeMftSourceFactory.Default);
+        _tuner = tuning ?? ScanTuner.Shipped;
+        _volumes = new MftVolumeIndexCache(sources ?? VolumeMftSourceFactory.Default, _tuner);
         _estimates = estimates;
-        _fallback = fallback ?? ParallelEnumerationScanner.Default;
+        _fallback = fallback ?? new ParallelEnumerationScanner(_tuner);
     }
 
     /// <summary>
@@ -40,8 +47,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// </summary>
     public static DirectoryScanner Default { get; } = CreateDefault(UserEnvironment.Current);
 
-    public static DirectoryScanner CreateDefault(IUserEnvironment environment) =>
-        new(VolumeMftSourceFactory.Default, new ScanEstimateCache(environment));
+    public static DirectoryScanner CreateDefault(IUserEnvironment environment, ScanTuner? tuning = null) =>
+        new(VolumeMftSourceFactory.Default, new ScanEstimateCache(environment), tuning: tuning);
 
     public async ValueTask<ScanResult> MeasureAsync(
         string path,
@@ -123,7 +130,9 @@ public sealed class DirectoryScanner : IDirectoryScanner
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
 
-        if (!VolumePath.TryParse(root, out var volumeRoot))
+        // Null under the walk-only setting, so a caller searches by walking as it does unelevated.
+        // Answering from the table here would be the table's answer the user asked not to be given.
+        if (_tuner.WalkOnly || !VolumePath.TryParse(root, out var volumeRoot))
         {
             return new((IReadOnlyList<string>?)null);
         }
@@ -203,6 +212,11 @@ public sealed class DirectoryScanner : IDirectoryScanner
                 .MeasureAsync(path, keep, progress, ct);
         }
 
+        if (_tuner.WalkOnly)
+        {
+            return _fallback.Because(FallbackReason.WalkChosen).MeasureAsync(path, keep, progress, ct);
+        }
+
         var index = _volumes.Get(volumePath.DriveLetter, out var reason, ct);
 
         // A path the index cannot answer for is not the same as an empty one. The tree changed
@@ -248,6 +262,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
     public void Invalidate()
     {
         _volumes.Invalidate();
+        _tuner.Invalidate();
 
         // Derived from the indexes just dropped, so it goes with them. Unlike the remembered
         // estimates — which are a display convenience — a stale entry here would name a directory

@@ -3,6 +3,8 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Microsoft.UI.Xaml;
 
 namespace Deguffer.App;
@@ -31,6 +33,14 @@ public partial class App : Application
     /// </summary>
     public static PreferenceService Preferences { get; } =
         new(new PreferenceStore(UserEnvironment.Current));
+
+    /// <summary>
+    /// What each scan runs with, shared by the Storage page, the Explore page and Settings. One
+    /// instance, so each drive's kind is asked of its device once for all three, and Settings
+    /// describes the values the scans will actually use.
+    /// </summary>
+    public static ScanTuner ScanTuning { get; } =
+        new(Preferences, new VolumeMediaCache(StorageQueries.Machine), VolumeInventory.Current);
 
     /// <summary>
     /// The approved source folders, shared for the same reason <see cref="Preferences"/> is: a

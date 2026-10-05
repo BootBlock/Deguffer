@@ -36,7 +36,7 @@ public class VolumeReadTests
     {
         using var source = new AddressRecordingSource();
 
-        MftRecordStream.TryReadAll(source, count: 1, (_, _, in _) => true, CancellationToken.None);
+        MftRecordStream.TryReadAll(source, count: 1, TableTuning.Default, (_, _, in _) => true, CancellationToken.None);
 
         Assert.NotNull(source.Address);
         Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);
@@ -54,7 +54,7 @@ public class VolumeReadTests
                 20, MftRecord.RootRecordNumber, "fragmented.tgz", allocated: 8192, logical: 8000, extension: 21, listCluster: 500)
             .Build());
 
-        MftRecordStream.TryReadAll(source, (int)source.RecordCount, (_, _, in _) => true, CancellationToken.None);
+        MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, (_, _, in _) => true, CancellationToken.None);
 
         Assert.NotNull(source.Address);
         Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);

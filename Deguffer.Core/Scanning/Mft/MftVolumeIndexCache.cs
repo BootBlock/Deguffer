@@ -8,7 +8,8 @@ namespace Deguffer.Core.Scanning.Mft;
 /// it replaces. Failures are remembered too — an unelevated process would otherwise attempt, and
 /// lose, a volume open for every path measured.
 /// </summary>
-public sealed class MftVolumeIndexCache(IMftSourceFactory factory)
+/// <param name="tuning">What each build reads the table with, asked as the build starts.</param>
+public sealed class MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tuning)
 {
     private readonly Dictionary<char, Lazy<Entry>> _byVolume = [];
     private readonly Lock _gate = new();
@@ -54,7 +55,7 @@ public sealed class MftVolumeIndexCache(IMftSourceFactory factory)
         {
             try
             {
-                return MftVolumeIndexBuilder.TryBuild(source, out var index, ct)
+                return MftVolumeIndexBuilder.TryBuild(source, tuning.ForVolume(driveLetter).Table, out var index, ct)
                     ? new Entry(index, FallbackReason.None)
                     : new Entry(null, FallbackReason.MasterFileTableIncomplete);
             }

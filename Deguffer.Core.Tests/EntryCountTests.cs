@@ -37,7 +37,7 @@ public sealed class EntryCountTests : IDisposable
     {
         using var source = fixture.Build();
 
-        Assert.True(MftVolumeIndexBuilder.TryBuild(source, out var index));
+        Assert.True(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out var index));
         return index;
     }
 

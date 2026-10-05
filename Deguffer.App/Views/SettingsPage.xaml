@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:views="using:Deguffer.App.Views"
+    xmlns:viewModels="using:Deguffer.App.ViewModels"
     xmlns:configuration="using:Deguffer.Core.Configuration"
     Background="Transparent">
 
@@ -383,6 +384,116 @@
                     </DataTemplate>
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
+
+            <!-- Every value here changes how fast a scan reads the disk, never what it finds: the
+                 table is still read whole, the walk still never follows a link, and a refused
+                 folder is still reported, whatever is set. So these come last, after the settings
+                 that decide what may be deleted. A value is held per kind of drive because one
+                 machine often has several kinds, and emptying a box puts it back to Auto. -->
+            <TextBlock Text="Scanning" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+
+            <InfoBar IsOpen="{x:Bind Scanning.SaveFailed, Mode=OneWay}"
+                     IsClosable="False"
+                     Severity="Warning"
+                     Title="Not saved"
+                     Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
+
+            <!-- Indexed against ScanRoute. -->
+            <views:SettingsRow Glyph="&#xE721;"
+                               Title="How to scan"
+                               Description="Auto reads a volume's file table where it can, which needs Deguffer to run as administrator on an NTFS volume, and walks folders everywhere else. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. Neither changes what is found.">
+                <views:SettingsRow.Control>
+                    <ComboBox SelectedIndex="{x:Bind Scanning.RouteIndex, Mode=TwoWay}"
+                              MinWidth="150"
+                              ToolTipService.ToolTip="Auto reads the file table wherever Deguffer can, and walks folders where it cannot."
+                              AutomationProperties.Name="How to scan">
+                        <ComboBoxItem Content="Auto" />
+                        <ComboBoxItem Content="Walk folders only" />
+                    </ComboBox>
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <views:SettingsRow Glyph="&#xEDA2;"
+                               Title="Kind of drive"
+                               Description="Each kind of drive has its own values, because a value that suits one kind can slow another. Choose a kind to see or change its values below.">
+                <views:SettingsRow.Control>
+                    <ComboBox ItemsSource="{x:Bind Scanning.KindNames}"
+                              SelectedIndex="{x:Bind Scanning.KindIndex, Mode=TwoWay}"
+                              MinWidth="150"
+                              AutomationProperties.Name="Kind of drive" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <views:SettingsRow Glyph="&#xE8B7;"
+                               Title="Folders read at once"
+                               Description="How many folders a walk reads at the same time on this kind of drive. Empty the box to go back to Auto.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind Scanning.WalkThreads, Mode=TwoWay}"
+                               PlaceholderText="{x:Bind Scanning.AutoWalkThreads, Mode=OneWay}"
+                               Minimum="{x:Bind Scanning.MinimumWalkThreads}"
+                               Maximum="{x:Bind Scanning.MaximumWalkThreads}"
+                               SmallChange="1"
+                               LargeChange="4"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="Threads"
+                               ToolTipService.ToolTip="Auto uses the number measured as fastest for this kind of drive, or the number scans have always used where this kind has not been measured."
+                               AutomationProperties.Name="Folders read at once" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <views:SettingsRow Glyph="&#xE8FD;"
+                               Title="Listing buffer"
+                               Description="How much of a folder's list of contents Windows hands over in each call, on this kind of drive. A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds. Empty the box to go back to Auto.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind Scanning.ListingBufferKiB, Mode=TwoWay}"
+                               PlaceholderText="{x:Bind Scanning.AutoListingBufferKiB, Mode=OneWay}"
+                               Minimum="{x:Bind Scanning.MinimumListingBufferKiB}"
+                               Maximum="{x:Bind Scanning.MaximumListingBufferKiB}"
+                               SmallChange="4"
+                               LargeChange="64"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="KiB"
+                               ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
+                               AutomationProperties.Name="Listing buffer in KiB" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <views:SettingsRow Glyph="&#xE9F5;"
+                               Title="File table read size"
+                               Description="How much of a volume's file table each read asks for, on this kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                <views:SettingsRow.Control>
+                    <NumberBox Value="{x:Bind Scanning.TableReadKiB, Mode=TwoWay}"
+                               PlaceholderText="{x:Bind Scanning.AutoTableReadKiB, Mode=OneWay}"
+                               Minimum="{x:Bind Scanning.MinimumTableReadKiB}"
+                               Maximum="{x:Bind Scanning.MaximumTableReadKiB}"
+                               SmallChange="64"
+                               LargeChange="1024"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               MinWidth="150"
+                               Header="KiB"
+                               ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
+                               AutomationProperties.Name="File table read size in KiB" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <TextBlock Style="{StaticResource SecondaryText}"
+                       Margin="4,6,0,0"
+                       Text="What each drive is scanned with:" />
+
+            <ItemsControl ItemsSource="{x:Bind Scanning.Drives, Mode=OneWay}"
+                          Margin="4,0,0,0"
+                          AutomationProperties.Name="What each drive is scanned with">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:DriveLine">
+                        <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <TextBlock Style="{StaticResource SecondaryText}"
                        FontSize="12"

@@ -174,7 +174,7 @@ public class MftExploreReaderTests
         Assert.False(tree.HasUnknownSizes, "every record was placed and the total was still called a lower bound");
 
         using var strict = fixture.Build();
-        Assert.True(MftVolumeIndexBuilder.TryBuild(strict, out var index));
+        Assert.True(MftVolumeIndexBuilder.TryBuild(strict, TableTuning.Default, out var index));
         Assert.Equal(7000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
     }
 
@@ -198,7 +198,7 @@ public class MftExploreReaderTests
         Assert.True(tree.HasUnknownSizes, "a real file was skipped and the total was called exact");
 
         using var strict = fixture.Build();
-        Assert.False(MftVolumeIndexBuilder.TryBuild(strict, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(strict, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -222,7 +222,7 @@ public class MftExploreReaderTests
             .Build();
         var reported = new List<long>();
 
-        var tree = MftExploreReader.Read(source, Root, [], reported.Add, default).Tree!;
+        var tree = MftExploreReader.Read(source, Root, [], TableTuning.Default, reported.Add, default).Tree!;
 
         Assert.Equal(7000, tree.TotalBytes);
         Assert.Contains(2 * Interval, reported);
@@ -256,7 +256,7 @@ public class MftExploreReaderTests
         Assert.Equal(1500, tree.SizeOf((int)Nested));
 
         using var again = fixture.Build();
-        Assert.True(MftVolumeIndexBuilder.TryBuild(again, out var index));
+        Assert.True(MftVolumeIndexBuilder.TryBuild(again, TableTuning.Default, out var index));
 
         Assert.NotEmpty(index.FindDirectoriesNamed("content-v2"));
         Assert.Empty(index.FindDirectoriesNamed("a.tgz"));
@@ -284,7 +284,7 @@ public class MftExploreReaderTests
             .AddRecordWithNoIdentityAtAll(21);
 
         using var strict = fixture.Build();
-        Assert.False(MftVolumeIndexBuilder.TryBuild(strict, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(strict, TableTuning.Default, out _));
 
         using var source = fixture.Build();
         var tree = WholeVolume(source);
@@ -312,7 +312,7 @@ public class MftExploreReaderTests
             .UnreadableFrom(21);
 
         using var strict = fixture.Build();
-        Assert.False(MftVolumeIndexBuilder.TryBuild(strict, out _));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(strict, TableTuning.Default, out _));
 
         using var source = fixture.Build();
         var tree = WholeVolume(source);
@@ -460,7 +460,7 @@ public class MftExploreReaderTests
 
         var reports = new List<long>();
 
-        MftExploreReader.Read(source, Root, [], reports.Add, default);
+        MftExploreReader.Read(source, Root, [], TableTuning.Default, reports.Add, default);
 
         Assert.Equal([0, 65_536], reports);
     }
@@ -537,7 +537,7 @@ public class MftExploreReaderTests
             .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
             .Build();
 
-        var read = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default);
+        var read = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default);
         var tree = read.Tree!;
 
         Assert.Equal(FallbackReason.None, read.Reason);
@@ -568,7 +568,7 @@ public class MftExploreReaderTests
             .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
             .Build();
 
-        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default).Tree!;
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
         var reachable = Reachable(tree);
 
         Assert.DoesNotContain((int)MftRecord.RootRecordNumber, reachable);
@@ -609,7 +609,7 @@ public class MftExploreReaderTests
 
         var itself = MftExploreReader.Read(
             source, @"C:\Users\testuser\linked-cache", ["Users", "testuser", "linked-cache"],
-            onProgress: null, default);
+            TableTuning.Default, onProgress: null, default);
 
         Assert.Null(itself.Tree);
         Assert.Equal(FallbackReason.None, itself.Reason);
@@ -617,7 +617,7 @@ public class MftExploreReaderTests
         var below = MftExploreReader.Read(
             source, @"C:\Users\testuser\linked-cache\_cacache",
             ["Users", "testuser", "linked-cache", "_cacache"],
-            onProgress: null, default);
+            TableTuning.Default, onProgress: null, default);
 
         Assert.Null(below.Tree);
         Assert.Equal(FallbackReason.None, below.Reason);
@@ -641,14 +641,14 @@ public class MftExploreReaderTests
 
         var missing = MftExploreReader.Read(
             source, @"C:\Users\testuser\.pnpm-store", ["Users", "testuser", ".pnpm-store"],
-            onProgress: null, default);
+            TableTuning.Default, onProgress: null, default);
 
         Assert.Null(missing.Tree);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, missing.Reason);
 
         var file = MftExploreReader.Read(
             source, CachePath + @"\a.tgz", ["Users", "testuser", ".npm-cache", "a.tgz"],
-            onProgress: null, default);
+            TableTuning.Default, onProgress: null, default);
 
         Assert.Null(file.Tree);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, file.Reason);
@@ -685,14 +685,14 @@ public class MftExploreReaderTests
 
         var lower = MftExploreReader.Read(
             source, @"C:\Users\testuser\cache", ["Users", "testuser", "cache"],
-            onProgress: null, default).Tree!;
+            TableTuning.Default, onProgress: null, default).Tree!;
 
         Assert.Equal((int)LowerCache, lower.RootNode);
         Assert.Equal(1000, lower.TotalBytes);
 
         var upper = MftExploreReader.Read(
             source, @"C:\Users\testuser\Cache", ["Users", "testuser", "Cache"],
-            onProgress: null, default).Tree!;
+            TableTuning.Default, onProgress: null, default).Tree!;
 
         Assert.Equal((int)UpperCache, upper.RootNode);
         Assert.Equal(8000, upper.TotalBytes);
@@ -700,7 +700,7 @@ public class MftExploreReaderTests
         // No exact match, so the case-insensitive one still answers rather than the path failing.
         var neither = MftExploreReader.Read(
             source, @"C:\Users\testuser\CACHE", ["Users", "testuser", "CACHE"],
-            onProgress: null, default).Tree!;
+            TableTuning.Default, onProgress: null, default).Tree!;
 
         Assert.Equal((int)UpperCache, neither.RootNode);
     }
@@ -722,7 +722,7 @@ public class MftExploreReaderTests
                 21, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: 22, ListMismatch.OwnerNumber)
             .Build();
 
-        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, onProgress: null, default).Tree!;
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
 
         Assert.Equal(4000, tree.TotalBytes);
         Assert.True(tree.HasUnknownSizes, "a folder's total was called exact after a record went unplaced");
@@ -734,7 +734,7 @@ public class MftExploreReaderTests
     /// they can produce instead is the point of them.
     /// </summary>
     private static ExploreTree WholeVolume(IMftSource source) =>
-        MftExploreReader.Read(source, Root, [], onProgress: null, default).Tree!;
+        MftExploreReader.Read(source, Root, [], TableTuning.Default, onProgress: null, default).Tree!;
 
     private static List<int> Reachable(ExploreTree tree)
     {

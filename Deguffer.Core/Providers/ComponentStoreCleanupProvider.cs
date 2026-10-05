@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -22,8 +23,9 @@ public sealed class ComponentStoreCleanupProvider(
     IProcessInspector? inspector = null,
     ISystemDirectories? system = null,
     IWindowsServicing? servicing = null,
-    ComponentStoreAnalysis? analysis = null)
-    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis)
+    ComponentStoreAnalysis? analysis = null,
+    IDirectoryScanner? scanner = null)
+    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis, scanner)
 {
     public override string Id => "component-store";
 

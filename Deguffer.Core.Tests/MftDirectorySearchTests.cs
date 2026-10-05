@@ -38,7 +38,7 @@ public class MftDirectorySearchTests
     {
         using var source = fixture.Build();
 
-        Assert.True(MftVolumeIndexBuilder.TryBuild(source, out var index));
+        Assert.True(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out var index));
         return index;
     }
 

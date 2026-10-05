@@ -30,12 +30,13 @@ namespace Deguffer.Core.Scanning;
 /// </summary>
 public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 {
-    /// <summary>Stateless, so a single instance serves the process (G5).</summary>
-    public static readonly HardLinkAwareScanner Default = new();
+    /// <summary>The walk at the shipped values, for a scanner built outside the app (G5).</summary>
+    public static readonly HardLinkAwareScanner Default = new(ScanTuner.Shipped);
 
-    private HardLinkAwareScanner()
-    {
-    }
+    private readonly ScanTuner _tuner;
+
+    /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>
+    public HardLinkAwareScanner(ScanTuner tuner) => _tuner = tuner;
 
     public ValueTask<ScanResult> MeasureAsync(
         string path,
@@ -50,7 +51,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     /// the same way whichever kind is asked for, so a refused file is answered here as a refused
     /// directory would be.
     /// </summary>
-    private static ScanResult MeasureNow(
+    private ScanResult MeasureNow(
         string path,
         MinimumAge keep,
         IProgress<ScanSize>? progress,
@@ -60,7 +61,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var walked = Measure(path, keep, progress, ct);
+            var walked = Measure(path, keep, _tuner.For(path).Walk, progress, ct);
 
             return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
             {
@@ -106,6 +107,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root) Measure(
         string path,
         MinimumAge keep,
+        WalkTuning tuning,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
@@ -120,7 +122,7 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
 
         var listed = BoundedFileWalk.Visit(
             LongPath.Extended(path),
-            WalkTuning.Default,
+            tuning,
             file =>
             {
                 // §9, named rather than only left out: a store inside a tool's own folder is what

@@ -334,4 +334,14 @@ public sealed record AppPreferences(
     bool BackUpInstalledAppEntries = true)
 {
     public static readonly AppPreferences Default = new();
+
+    /// <summary>
+    /// How a scan reads the disk. Read by Core when a scan starts, and it changes how fast a scan
+    /// is, never what it finds or what a plan may remove. See <see cref="ScanPreferences"/>.
+    ///
+    /// <para>A property rather than a parameter because its default is an object, which a
+    /// parameter's default cannot be. A settings file written before it existed reads with every
+    /// value on Auto.</para>
+    /// </summary>
+    public ScanPreferences Scanning { get; init; } = ScanPreferences.Default;
 }
