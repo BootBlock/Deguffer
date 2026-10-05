@@ -236,7 +236,8 @@ internal static class MftRecordParser
         var valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
         var valueLength = (int)BinaryPrimitives.ReadUInt32LittleEndian(attribute[0x10..]);
 
-        if (valueLength < 0x42 || valueOffset + valueLength > attribute.Length)
+        // Subtracted rather than added, for the reason ReadTimestamps gives.
+        if (valueLength < 0x42 || valueOffset > attribute.Length - valueLength)
         {
             return false;
         }

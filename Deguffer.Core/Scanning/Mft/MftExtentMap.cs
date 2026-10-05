@@ -16,7 +16,7 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
     /// Read the extent map out of <paramref name="record0"/>, which is modified in place by the
     /// update sequence fixup.
     /// </summary>
-    public static bool TryRead(Span<byte> record0, int bytesPerSector, out MftExtentMap map)
+    public static bool TryRead(Span<byte> record0, int bytesPerSector, int bytesPerCluster, out MftExtentMap map)
     {
         map = default!;
 
@@ -48,13 +48,13 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
                 continue;
             }
 
-            return TryReadRuns(attributes.Current, out map);
+            return TryReadRuns(attributes.Current, bytesPerCluster, out map);
         }
 
         return false;
     }
 
-    private static bool TryReadRuns(ReadOnlySpan<byte> attribute, out MftExtentMap map)
+    private static bool TryReadRuns(ReadOnlySpan<byte> attribute, int bytesPerCluster, out MftExtentMap map)
     {
         map = default!;
 
@@ -72,12 +72,33 @@ public sealed record MftExtentMap(long DataSize, IReadOnlyList<DataRun> Runs)
         }
 
         var runs = DataRuns.Parse(attribute[mappingPairsOffset..]);
-        if (runs.Count == 0)
+        if (runs.Count == 0 || !IsAddressable(runs, bytesPerCluster))
         {
             return false;
         }
 
         map = new MftExtentMap(dataSize, runs);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether every cluster a run names has a byte offset a <c>long</c> can hold. A run list can
+    /// state a start cluster up to 2^63, and the reader multiplies it by the cluster size: a corrupt
+    /// one wraps negative there and throws out of the volume read rather than falling back to the
+    /// walk. Bounding each run's end bounds every offset and contiguous length read from it.
+    /// </summary>
+    private static bool IsAddressable(IReadOnlyList<DataRun> runs, int bytesPerCluster)
+    {
+        var lastAddressableCluster = long.MaxValue / bytesPerCluster;
+
+        foreach (var run in runs)
+        {
+            if (!run.IsSparse && run.StartCluster > lastAddressableCluster - run.ClusterCount)
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 

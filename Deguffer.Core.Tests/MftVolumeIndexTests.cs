@@ -645,6 +645,36 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
+    /// A corrupt length is the same event as a torn write and must end the same way: a refused
+    /// index, so the volume falls back to the walk. Throwing instead escapes every handler on the
+    /// scan path, which expects only I/O failures, and the cache keeps rethrowing it for the volume.
+    /// </summary>
+    [Fact]
+    public void RefusesToBuildAnIndexFromARecordWhoseAttributeOverrunsIt()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "good.tgz", allocated: 4096, logical: 4096)
+            .AddFile(21, Cache, "corrupt.tgz", allocated: 8192, logical: 8192)
+            .CorruptAttributeLength(21)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>The same corruption one level down, in the length of the name's value.</summary>
+    [Fact]
+    public void RefusesToBuildAnIndexFromARecordWhoseNameOverrunsItsAttribute()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "good.tgz", allocated: 4096, logical: 4096)
+            .AddFile(21, Cache, "corrupt.tgz", allocated: 8192, logical: 8192)
+            .CorruptFileNameValueLength(21)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, out _));
+    }
+
+    /// <summary>
     /// The refusal above must not fire on the records a healthy volume is full of. An extension
     /// record holds attributes belonging to another record's file, and skipping it is correct
     /// rather than a loss — the base record carries the identity and the size.

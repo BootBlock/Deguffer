@@ -78,6 +78,20 @@ public class NtfsGeometryTests
     public void RejectsAVolumeClaimingItsTableStartsAtClusterZero() =>
         Assert.False(NtfsBootSector.TryParse(BootSector(mftStart: 0), out _));
 
+    /// <summary>
+    /// The start cluster is multiplied by the cluster size to find record 0. One past the last
+    /// cluster a long can address wraps that offset negative, and the read then throws rather than
+    /// letting the volume fall back to the walk. The last addressable cluster is still a volume.
+    /// </summary>
+    [Fact]
+    public void RejectsATableStartPastAnyAddressableByte()
+    {
+        const long LastAddressableCluster = long.MaxValue / 4096;
+
+        Assert.False(NtfsBootSector.TryParse(BootSector(mftStart: LastAddressableCluster + 1), out _));
+        Assert.True(NtfsBootSector.TryParse(BootSector(mftStart: LastAddressableCluster), out _));
+    }
+
     [Fact]
     public void RejectsATruncatedSector() =>
         Assert.False(NtfsBootSector.TryParse(new byte[64], out _));
@@ -202,7 +216,7 @@ public class MftExtentMapTests
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64), new DataRun(900_000, 32)], dataSize: 98_304);
 
-        Assert.True(MftExtentMap.TryRead(record, bytesPerSector: 512, out var map));
+        Assert.True(MftExtentMap.TryRead(record, bytesPerSector: 512, bytesPerCluster: 4096, out var map));
 
         Assert.Equal(98_304, map.DataSize);
         Assert.Equal([new DataRun(786_432, 64), new DataRun(900_000, 32)], map.Runs);
@@ -219,10 +233,41 @@ public class MftExtentMapTests
     {
         var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536, withAttributeList: true);
 
-        Assert.False(MftExtentMap.TryRead(record, bytesPerSector: 512, out _));
+        Assert.False(MftExtentMap.TryRead(record, bytesPerSector: 512, bytesPerCluster: 4096, out _));
     }
 
     [Fact]
     public void RefusesARecordThatIsNotARecord() =>
-        Assert.False(MftExtentMap.TryRead(new byte[1024], bytesPerSector: 512, out _));
+        Assert.False(MftExtentMap.TryRead(new byte[1024], bytesPerSector: 512, bytesPerCluster: 4096, out _));
+
+    /// <summary>
+    /// Record 0 is read while the volume is being opened, so a throw here would escape before the
+    /// volume could fall back to the walk. A corrupt length has to refuse like any other damage.
+    /// </summary>
+    [Fact]
+    public void RefusesRecordZeroWhenAnAttributeOverrunsIt()
+    {
+        var record = MftRecordBytes.SelfRecord([new DataRun(786_432, 64)], dataSize: 65_536);
+        MftRecordBytes.DeclareFirstAttributeLength(record, MftRecordBytes.LengthJustUnderIntMax);
+
+        Assert.False(MftExtentMap.TryRead(record, bytesPerSector: 512, bytesPerCluster: 4096, out _));
+    }
+
+    /// <summary>
+    /// A run list can name a cluster up to 2^63, and the reader multiplies each cluster by the
+    /// cluster size. A run ending past the last addressable byte wraps that offset negative, and
+    /// the read throws out of the index build rather than refusing it. A run ending exactly at the
+    /// limit is still a run.
+    /// </summary>
+    [Fact]
+    public void RefusesARunEndingPastAnyAddressableByte()
+    {
+        const long LastAddressableCluster = long.MaxValue / 4096;
+
+        var past = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 63, 64)], dataSize: 65_536);
+        var atTheLimit = MftRecordBytes.SelfRecord([new DataRun(LastAddressableCluster - 64, 64)], dataSize: 65_536);
+
+        Assert.False(MftExtentMap.TryRead(past, bytesPerSector: 512, bytesPerCluster: 4096, out _));
+        Assert.True(MftExtentMap.TryRead(atTheLimit, bytesPerSector: 512, bytesPerCluster: 4096, out _));
+    }
 }

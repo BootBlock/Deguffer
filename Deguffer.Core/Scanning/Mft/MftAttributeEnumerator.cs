@@ -49,7 +49,10 @@ internal ref struct MftAttributeEnumerator
         var length = (int)BinaryPrimitives.ReadUInt32LittleEndian(_record[(_offset + 4)..]);
 
         // A zero length would spin here forever; an overrunning one would read past the record.
-        if (length < 0x10 || _offset + length > _record.Length)
+        // Subtracted rather than added: a corrupt length just under int.MaxValue makes the sum wrap
+        // negative, pass, and throw out of the slice below instead of rejecting the record. The
+        // guard above keeps the offset inside the record, so the subtraction cannot wrap.
+        if (length < 0x10 || length > _record.Length - _offset)
         {
             IsMalformed = true;
             return false;
