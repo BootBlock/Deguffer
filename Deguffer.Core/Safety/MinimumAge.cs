@@ -125,8 +125,32 @@ public readonly record struct MinimumAge
     /// <para><see cref="Within"/> cannot express it, because a window of zero is <see cref="Off"/>.
     /// Anchoring at the evidence rather than at the end of planning keeps a file written while the
     /// plan was being built, which is written after the evidence all the same.</para>
+    ///
+    /// <para><b>The cut-off is <see cref="StampTolerance"/> before the instant.</b> A clock read in
+    /// this process runs ahead of the stamp the file system gives a write made just after it, so a
+    /// cut-off at the instant itself reads a file written after the evidence as one written before
+    /// it, and the removal deletes it. See <see cref="StampTolerance"/>.</para>
     /// </summary>
-    public static MinimumAge Since(DateTime lookedUtc) => new(TimeSpan.Zero, lookedUtc.ToUniversalTime());
+    public static MinimumAge Since(DateTime lookedUtc) =>
+        new(TimeSpan.Zero, lookedUtc.ToUniversalTime() - StampTolerance);
+
+    /// <summary>
+    /// How far before the instant <see cref="Since"/> puts its cut-off, so that a stamp from the file
+    /// system's clock is never read as older than an instant from this process's.
+    ///
+    /// <para>NTFS stamps a write with the system time as of the last clock interrupt, up to a timer
+    /// tick (15.625 ms at the default resolution) behind <see cref="DateTime.UtcNow"/>. On Windows 11
+    /// that put the stamp of a third or more of the writes made straight after the clock was read
+    /// before it, by up to 2.2 ms. Reading the coarse system time (<c>GetSystemTimeAsFileTime</c>)
+    /// instead does not close the gap: under parallel file I/O a write was still stamped up to 81 µs
+    /// before it. A second is far
+    /// beyond both, and the cost falls in the safe direction: a file written in the second before the
+    /// evidence was read waits for the next clean.</para>
+    ///
+    /// <para>A window of hours or days needs no tolerance, because its edge is not an event a file is
+    /// written after.</para>
+    /// </summary>
+    internal static readonly TimeSpan StampTolerance = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// The stricter of two guards: whichever of them protects more.

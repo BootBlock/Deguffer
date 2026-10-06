@@ -169,7 +169,7 @@ public sealed class ClaudeCodeCleanRecheckTests : IDisposable
         Assert.Contains(rewritten, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(stale, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        _claude.EditorLock(51234, processId: 4999);
+        _claude.EditorLockRewrittenNow(51234, processId: 4999);
         _inspector.WithProcess(4999, ProcessLiveness.Running(null));
 
         var result = await provider.ExecuteAsync(plan);
