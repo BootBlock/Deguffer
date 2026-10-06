@@ -32,8 +32,8 @@ public sealed record ExploreFileRow(
 
     public bool IsRefused => Refusal is not null;
 
-    /// <summary>The page glyph from Segoe Fluent Icons, by code point for the reason <see cref="ExploreRow.Icon"/> gives.</summary>
-    public string Icon => "\uE7C3";
+    /// <summary>A file's glyph, the one the folder list gives a file. See <see cref="ExploreRow.Icon"/>.</summary>
+    public string Icon => ExploreRow.FileGlyph;
 
     /// <summary>What the row identifies, for matching it against the rows already on screen.</summary>
     public (int Node, string Path) Key => (Node, Path);
@@ -63,9 +63,6 @@ public sealed record ExploreFileRow(
     /// <param name="verdict">What Explore would say about removing a path. See <see cref="ExploreActions.Verdict"/>.</param>
     public static ExploreFileRow For(ExploreTree tree, int node, DateTime now, Func<string, ExploreVerdict> verdict)
     {
-        ArgumentNullException.ThrowIfNull(tree);
-        ArgumentNullException.ThrowIfNull(verdict);
-
         var path = tree.PathOf(node);
         var answer = verdict(path);
 

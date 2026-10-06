@@ -126,8 +126,11 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
         // from nothing at all, in most tooling.
         (true, _) => "\uE71B",   // Link
         (_, true) => "\uE8B7",   // Folder
-        _ => "\uE7C3",           // Page
+        _ => FileGlyph,
     };
+
+    /// <summary>The page glyph a file is drawn with, in this list and in the Files layout's.</summary>
+    internal const string FileGlyph = "\uE7C3";
 
     /// <summary>
     /// What a screen reader should say instead of reading a bar graphic.

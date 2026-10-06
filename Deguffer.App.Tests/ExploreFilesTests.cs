@@ -211,6 +211,47 @@ public sealed class ExploreFilesTests : IDisposable
     });
 
     /// <summary>
+    /// §7.1: a row is a node number, and a click selects that number in the tree on screen. A row
+    /// left standing from another tree while the new one is searched would select, and offer to
+    /// delete, whatever the number means there. So a new tree takes away every row it does not put
+    /// at the same path, before anything else can happen, and the snapshots of one walk keep theirs.
+    /// </summary>
+    [Fact]
+    public void ARowFromAnotherTreeIsGoneBeforeTheSearchAnswers() => UiThread.Run(async () =>
+    {
+        var files = new ExploreFiles(
+            new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, _explore.Running),
+            _ => false,
+            _explore.Time)
+        {
+            IsActive = true,
+        };
+
+        var first = Flat(("a.iso", 400), ("b.bin", 300));
+        files.Show(first, first.RootNode);
+        await Eventually.HoldsAsync(() => files.Rows.Count == 2, "the first tree listed");
+
+        // The same names in the same order is the same walk measured again: every row keeps its
+        // number and its path, and nothing moves under the reader.
+        var continued = Flat(("a.iso", 450), ("b.bin", 300));
+        files.Show(continued, continued.RootNode);
+
+        Assert.Equal(2, files.Rows.Count);
+        Assert.All(files.Rows, row => Assert.Equal(continued.PathOf(row.Node), row.Path));
+        await Eventually.HoldsAsync(() => files.Rows[0].SizeLabel == "450 B", "the continued tree listed");
+
+        // Another scan numbers its nodes afresh: the number that was a.iso is x.iso here.
+        var other = Flat(("x.iso", 500), ("a.iso", 100));
+        files.Show(other, other.RootNode);
+
+        Assert.Empty(files.Rows);
+        Assert.Equal(string.Empty, files.Summary);
+
+        await Eventually.HoldsAsync(() => files.Rows.Count == 2, "the other tree listed");
+        Assert.All(files.Rows, row => Assert.Equal(other.PathOf(row.Node), row.Path));
+    });
+
+    /// <summary>
     /// A scanned folder on the disk, so a removal has something to remove:
     /// <code>
     /// scan
@@ -259,6 +300,15 @@ public sealed class ExploreFilesTests : IDisposable
         builder.AddChildren(old, [Written("game.iso", 400, now.AddYears(-3))]);
 
         return (builder.Build(ExploreChildOrder.BySize), root);
+    }
+
+    /// <summary>Files directly under one invented root, numbered in the order given.</summary>
+    private static ExploreTree Flat(params (string Name, long Size)[] files)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\Users\testuser\Data");
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [.. files.Select(file => ExploreFixture.File(file.Name, file.Size))]);
+
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
     private static ExploreChild Written(string name, long size, DateTime when) =>

@@ -76,10 +76,27 @@ public static class FileCategories
         _ => throw new ArgumentOutOfRangeException(nameof(category), category, null),
     };
 
-    private static bool IsInstallerProgram(string name, int dot) =>
-        dot >= 0
-        && name.AsSpan(dot).Equals(".exe", StringComparison.OrdinalIgnoreCase)
-        && Array.Exists(InstallerWords, word => name.AsSpan(0, dot).Contains(word, StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// A loop rather than a predicate over <see cref="InstallerWords"/>. A lambda capturing the name
+    /// would be allocated on every call, and this is asked of most names in a pass over a volume.
+    /// </summary>
+    private static bool IsInstallerProgram(string name, int dot)
+    {
+        if (dot < 0 || !name.AsSpan(dot).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        foreach (var word in InstallerWords)
+        {
+            if (name.AsSpan(0, dot).Contains(word, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static IEnumerable<(string Extension, FileCategory Category)> Table() =>
     [

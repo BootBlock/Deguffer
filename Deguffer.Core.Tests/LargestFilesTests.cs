@@ -11,20 +11,22 @@ public sealed class LargestFilesTests
 {
     private const string Root = @"C:\Users\testuser\Data";
 
+    private static readonly FileFilter Everything = new();
+
     /// <summary>On a minute, because the tree keeps its dates to the minute.</summary>
     private static readonly DateTime Now = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 
     /// <summary>
-    /// The three largest files are three levels apart, and every folder above them is larger than
-    /// any of them. A list that took sizes from the tree without asking what each node is would be
-    /// headed by the folders.
+    /// The three largest files are three levels apart, and the root and the videos folder are larger
+    /// than any of them. A list that took sizes from the tree without asking what each node is would
+    /// be headed by those two folders.
     /// </summary>
     [Fact]
     public void TheLargestFilesAreFoundAtEveryDepthAndNoFolderIsListed()
     {
         var tree = Tree();
 
-        var ranking = LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now, limit: 3);
+        var ranking = LargestFiles.Find(tree, tree.RootNode, Everything, Now, limit: 3);
 
         Assert.Equal(["big.vhdx", "game.iso", "trip.mp4"], Names(tree, ranking));
         Assert.DoesNotContain(ranking.Files, tree.IsDirectory);
@@ -37,7 +39,7 @@ public sealed class LargestFilesTests
     {
         var tree = Tree();
 
-        var ranking = LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now);
+        var ranking = LargestFiles.Find(tree, tree.RootNode, Everything, Now);
 
         Assert.Equal(
             ["big.vhdx", "game.iso", "trip.mp4", "clip.mkv", "setup.exe", "save.dat", "notes.txt"],
@@ -52,7 +54,7 @@ public sealed class LargestFilesTests
         var tree = Tree();
         var videos = Child(tree, tree.RootNode, "Videos");
 
-        var ranking = LargestFiles.Find(tree, videos, FileFilter.Everything, Now);
+        var ranking = LargestFiles.Find(tree, videos, Everything, Now);
 
         Assert.Equal(["trip.mp4", "clip.mkv"], Names(tree, ranking));
     }
@@ -187,7 +189,7 @@ public sealed class LargestFilesTests
 
         var tree = builder.Build(ExploreChildOrder.BySize);
 
-        var ranking = LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now, limit: 4);
+        var ranking = LargestFiles.Find(tree, tree.RootNode, Everything, Now, limit: 4);
 
         Assert.Equal([first, first + 1, first + 2, first + 3], ranking.Files);
     }
@@ -235,7 +237,7 @@ public sealed class LargestFilesTests
     public void AHigherMinimumThatDropsAListedFileReusesACutAnswer()
     {
         var tree = ManyFiles(10_000);
-        var cut = LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now, limit: 100);
+        var cut = LargestFiles.Find(tree, tree.RootNode, Everything, Now, limit: 100);
         var raised = new FileFilter(MinimumBytes: 9_950);
 
         var reused = LargestFiles.Find(tree, tree.RootNode, raised, Now, limit: 100, previous: cut, ct: Cancelled());
@@ -254,7 +256,7 @@ public sealed class LargestFilesTests
     public void AHigherMinimumThatDropsNothingFromACutAnswerMakesAPass()
     {
         var tree = ManyFiles(10_000);
-        var cut = LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now, limit: 100);
+        var cut = LargestFiles.Find(tree, tree.RootNode, Everything, Now, limit: 100);
         var raised = new FileFilter(MinimumBytes: 5_000);
 
         Assert.Throws<OperationCanceledException>(
@@ -274,7 +276,7 @@ public sealed class LargestFilesTests
     public void ANarrowerTypeOverACutAnswerMakesAPass()
     {
         var tree = ManyFiles(10_000);
-        var cut = LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now, limit: 100);
+        var cut = LargestFiles.Find(tree, tree.RootNode, Everything, Now, limit: 100);
         var archives = new FileFilter(Category: FileCategory.Archives);
 
         var answered = LargestFiles.Find(tree, tree.RootNode, archives, Now, limit: 100, previous: cut);
@@ -305,6 +307,44 @@ public sealed class LargestFilesTests
             () => LargestFiles.Find(tree, tree.RootNode, later, Now, limit: 20_000, previous: complete, ct: Cancelled()));
     }
 
+    /// <summary>
+    /// A name typed a letter at a time narrows as it goes: every name holding "12" holds "1", so the
+    /// answer for "1" is filtered rather than found again. A wildcard is not compared with another:
+    /// "*1*" holds the text "*1" and lets through names "*1" does not.
+    /// </summary>
+    [Fact]
+    public void LongerTextOverACompleteAnswerMakesNoPassAndAWildcardDoes()
+    {
+        var tree = ManyFiles(10_000);
+        var one = LargestFiles.Find(tree, tree.RootNode, new FileFilter(Name: "1"), Now, limit: 20_000);
+        var twelve = new FileFilter(Name: "12");
+
+        var reused = LargestFiles.Find(tree, tree.RootNode, twelve, Now, limit: 20_000, previous: one, ct: Cancelled());
+
+        Assert.True(one.IsComplete);
+        Assert.Equal(LargestFiles.Find(tree, tree.RootNode, twelve, Now, limit: 20_000).Files, reused.Files);
+        Assert.NotEmpty(reused.Files);
+
+        var wildcard = LargestFiles.Find(tree, tree.RootNode, new FileFilter(Name: "*1"), Now, limit: 20_000);
+
+        Assert.Throws<OperationCanceledException>(
+            () => LargestFiles.Find(
+                tree, tree.RootNode, new FileFilter(Name: "*1*"), Now, limit: 20_000, previous: wildcard, ct: Cancelled()));
+    }
+
+    /// <summary>
+    /// The name is settled when the filter is made, by <c>with</c> as much as by the constructor, so
+    /// the space round a typed name and an empty box are the same filter as none.
+    /// </summary>
+    [Fact]
+    public void TheNameIsSettledWhenTheFilterIsMade()
+    {
+        Assert.Equal(new FileFilter(Name: "iso"), new FileFilter(Name: "  iso "));
+        Assert.Equal("iso", (new FileFilter() with { Name = " iso\t" }).Name);
+        Assert.Null(new FileFilter(Name: "   ").Name);
+        Assert.True(new FileFilter(Name: "").IsEverything);
+    }
+
     /// <summary>A longer age is stricter, so it is applied to a complete answer for a shorter one.</summary>
     [Fact]
     public void ALongerAgeOverACompleteAnswerMakesNoPass()
@@ -329,7 +369,7 @@ public sealed class LargestFilesTests
         var narrow = LargestFiles.Find(tree, tree.RootNode, new FileFilter(MinimumBytes: 9_000), Now, limit: 20_000);
 
         Assert.Throws<OperationCanceledException>(
-            () => LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now, limit: 20_000, previous: narrow, ct: Cancelled()));
+            () => LargestFiles.Find(tree, tree.RootNode, Everything, Now, limit: 20_000, previous: narrow, ct: Cancelled()));
     }
 
     /// <summary>An answer about another tree, or another folder of this one, is never reused.</summary>
@@ -338,12 +378,12 @@ public sealed class LargestFilesTests
     {
         var tree = Tree();
         var other = Tree();
-        var first = LargestFiles.Find(tree, tree.RootNode, FileFilter.Everything, Now);
+        var first = LargestFiles.Find(tree, tree.RootNode, Everything, Now);
 
-        Assert.NotSame(first, LargestFiles.Find(other, other.RootNode, FileFilter.Everything, Now, previous: first));
+        Assert.NotSame(first, LargestFiles.Find(other, other.RootNode, Everything, Now, previous: first));
         Assert.NotSame(
             first,
-            LargestFiles.Find(tree, Child(tree, tree.RootNode, "Videos"), FileFilter.Everything, Now, previous: first));
+            LargestFiles.Find(tree, Child(tree, tree.RootNode, "Videos"), Everything, Now, previous: first));
     }
 
     /// <summary>

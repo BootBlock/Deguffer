@@ -275,7 +275,7 @@ public abstract class ExploreSurface
                 tree, root, width, height, limits, colours,
                 IcicleLayout.Compute(tree, root, width, height, limits)),
 
-            // Including List and Tree, neither of which draws a map at all. A page hides the map
+            // Including List, Tree and Files, none of which draws a map at all. A page hides the map
             // rather than telling it to stop, so this is the drawing it will be showing again when
             // the user switches back, and it is the one they last saw.
             _ => new TiledSurface(

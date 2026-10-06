@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Exploring;
@@ -50,6 +51,18 @@ public sealed partial class ExploreFiles : ObservableObject
     /// <summary>The last answer, which the next question is compared with. About <see cref="_tree"/> only.</summary>
     private FileRanking? _ranking;
 
+    /// <summary>
+    /// Every row built for <see cref="_tree"/> under the policy there is now, by node, so a filter
+    /// typed a letter at a time asks the policy about each file once rather than once per keystroke.
+    /// A row's refusal is read from the machine, where each of its paths is mounted, and that is kept
+    /// for the operation's life (G4).
+    ///
+    /// <para>Replaced rather than cleared when the tree or the policy changes, so a search still
+    /// running for the old one fills a dictionary nothing reads. Concurrent because the search that
+    /// fills it runs off the window's thread, and one being cancelled can overlap the next.</para>
+    /// </summary>
+    private ConcurrentDictionary<int, ExploreFileRow> _built = new();
+
     /// <summary>The search in flight, cancelled when another replaces it.</summary>
     private CancellationTokenSource? _finding;
 
@@ -72,8 +85,13 @@ public sealed partial class ExploreFiles : ObservableObject
         _time = time;
 
         // A refusal on a row is the one thing here whose answer can arrive late: until the policy is
-        // built every path is refused with a sentence saying why. Asked again once it is.
-        _actions.Ready += (_, _) => Find();
+        // built every path is refused with a sentence saying why. Asked again once it is, so the rows
+        // built against the last policy are let go.
+        _actions.Ready += (_, _) =>
+        {
+            _built = new();
+            Find();
+        };
     }
 
     /// <summary>
@@ -150,17 +168,47 @@ public sealed partial class ExploreFiles : ObservableObject
 
             // An answer holds its tree, and a tree is a volume's worth of arrays.
             _ranking = null;
+            _built = new();
 
-            if (!IsActive)
-            {
-                ShowRows([]);
-            }
+            Carry(tree);
         }
 
         _tree = tree;
         _root = root;
 
         Find();
+    }
+
+    /// <summary>
+    /// Keep only the rows that still name what they named, now <paramref name="arriving"/> is the
+    /// tree on screen, and do it before anything can be clicked.
+    ///
+    /// <para><b>§7.1, and the reason this cannot wait for the search.</b> A row holds a node number,
+    /// and a click sends that number to <see cref="ExploreSelection"/>, which reads it against the tree
+    /// on screen. The search for the arriving tree takes as long as a pass over it, and a row left
+    /// standing from the last tree for that long would select, and offer to delete, whatever its
+    /// number means in this one: another file, or a number past the end that throws. So a row stays
+    /// only where the arriving tree puts its number at the same path, which is
+    /// <see cref="ExplorePlace.TryCarry"/>'s rule and the selection's own. The snapshots of one walk
+    /// keep their rows, and a scan of anything else keeps none.</para>
+    ///
+    /// <para>Off screen nothing is kept, because nothing is looking at the rows.</para>
+    /// </summary>
+    private void Carry(ExploreTree? arriving)
+    {
+        ExploreFileRow[] kept = IsActive && arriving is not null
+            ? [.. Rows.Where(row => string.Equals(arriving.TryPathOf(row.Node), row.Path, StringComparison.OrdinalIgnoreCase))]
+            : [];
+
+        if (kept.Length == Rows.Count)
+        {
+            return;
+        }
+
+        ShowRows(kept);
+
+        // The sentence counted what is no longer listed, and says nothing until the search answers.
+        Summary = string.Empty;
     }
 
     partial void OnNameFilterChanged(string value) => Find();
@@ -201,7 +249,7 @@ public sealed partial class ExploreFiles : ObservableObject
         var finding = new CancellationTokenSource();
         _finding = finding;
 
-        var (root, filter, now, previous) = (_root, Filter, _now, _ranking);
+        var (root, filter, now, previous, built) = (_root, Filter, _now, _ranking, _built);
 
         try
         {
@@ -209,8 +257,17 @@ public sealed partial class ExploreFiles : ObservableObject
                 () =>
                 {
                     var found = LargestFiles.Find(tree, root, filter, now, LargestFiles.Limit, previous, finding.Token);
+                    var listed = new ExploreFileRow[found.Files.Count];
 
-                    return (found, found.Files.Select(node => ExploreFileRow.For(tree, node, now, _actions.Verdict)).ToArray());
+                    for (var at = 0; at < listed.Length; at++)
+                    {
+                        finding.Token.ThrowIfCancellationRequested();
+
+                        listed[at] = built.GetOrAdd(
+                            found.Files[at], node => ExploreFileRow.For(tree, node, now, _actions.Verdict));
+                    }
+
+                    return (found, listed);
                 },
                 finding.Token);
 

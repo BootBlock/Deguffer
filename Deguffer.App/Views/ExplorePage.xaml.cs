@@ -439,10 +439,9 @@ public sealed partial class ExplorePage : Page
                 // without misstating it. Several picked in the folder list stay picked, and the line
                 // under the card names them.
                 //
-                // Written through SelectedItem alone. A single-selection ListView refuses a write to
-                // SelectedItems with E_UNEXPECTED, Clear included, and a removal ends by emptying the
-                // selection - so clearing it here took the app down after every removal from the
-                // Files layout.
+                // Written through SelectedItem alone. A single-selection ListView refuses any write to
+                // SelectedItems with E_UNEXPECTED, Clear included, and every removal ends here with
+                // an emptied selection.
                 RowsList.SelectedItem = picked.Count == 1 && shown is [var only] ? only : null;
             }
             else
