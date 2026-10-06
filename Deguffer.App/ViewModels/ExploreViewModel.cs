@@ -5,6 +5,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
@@ -141,9 +142,12 @@ public sealed partial class ExploreViewModel : ObservableObject
         Selection = new ExploreSelection(actions);
         Growth = new ExploreGrowth(history);
         Files = new ExploreFiles(actions, Selection.WasRemoved, time);
+        Types = new ExploreTypes();
 
-        // A comparison that arrives, or stops, recolours a map coloured by growth.
+        // A comparison that arrives, or stops, recolours a map coloured by growth, and the kinds of a
+        // finished scan arriving recolour a map coloured by type.
         Growth.Changed += (_, _) => ViewChanged?.Invoke(this, EventArgs.Empty);
+        Types.Changed += (_, _) => ViewChanged?.Invoke(this, EventArgs.Empty);
 
         // A clean or a removal on another page ends with this process as surely as one here.
         _running.Changed += (_, _) => ElevateAndRescanCommand.NotifyCanExecuteChanged();
@@ -183,6 +187,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>The largest files below the folder on screen, for the Files layout. See <see cref="ExploreFiles"/>.</summary>
     public ExploreFiles Files { get; }
+
+    /// <summary>What kind of file fills the folder on screen, for a map coloured by type. See <see cref="ExploreTypes"/>.</summary>
+    public ExploreTypes Types { get; }
 
     /// <summary>The volumes offered in the picker, each with what it is called and how full it is.</summary>
     public ObservableCollection<DriveEntry> Drives => _drives.Entries;
@@ -362,6 +369,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
     [NotifyPropertyChangedFor(nameof(ShowsLegend))]
     [NotifyPropertyChangedFor(nameof(ShowsGrowth))]
+    [NotifyPropertyChangedFor(nameof(ShowsTypes))]
     [NotifyPropertyChangedFor(nameof(ShowsFileFilters))]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
@@ -395,15 +403,20 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// exactly as a finished one is — an age is a fact about a node rather than about the ordering
     /// of its siblings — so a scan in progress needs no sentence explaining this one away. Growth is
     /// compared only once a scan has finished, and until then the map paints every shape as not
-    /// compared, which its legend names.</para>
+    /// compared, which its legend names. A folder's kind of file is measured only once a scan has
+    /// finished too, on the same terms; see <see cref="ExploreTypes.Dominant"/>.</para>
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowsLegend))]
     [NotifyPropertyChangedFor(nameof(ShowsGrowth))]
+    [NotifyPropertyChangedFor(nameof(ShowsTypes))]
     public partial ExploreColouring SelectedColouring { get; set; }
 
-    partial void OnSelectedColouringChanged(ExploreColouring value) =>
+    partial void OnSelectedColouringChanged(ExploreColouring value)
+    {
         LiveList.Rewrite(Legend, ExploreLegendBand.For(value, SelectedScheme));
+        Types.IsActive = value == ExploreColouring.Type;
+    }
 
     /// <summary>
     /// Which set of colours the picture on screen is drawn in. See <see cref="ExploreScheme"/>.
@@ -445,6 +458,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// a reader in the list view has asked the same question.
     /// </summary>
     public bool ShowsGrowth => SelectedColouring == ExploreColouring.Growth && HasTree;
+
+    /// <summary>
+    /// Whether to show the panel of what kind of file fills the folder on screen: whenever the colours
+    /// are types and something has been scanned, in the lists as well as the pictures, as
+    /// <see cref="ShowsGrowth"/> is.
+    /// </summary>
+    public bool ShowsTypes => SelectedColouring == ExploreColouring.Type && HasTree;
 
     /// <summary>
     /// How what is on screen differs from what the View box names, or null when it does not.
@@ -656,6 +676,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             Growth.Clear();
             Selection.Show(null);
             Files.Show(null, 0);
+            Types.Show(null, 0);
             Rows.Clear();
             Trail.Clear();
             ViewChanged?.Invoke(this, EventArgs.Empty);
@@ -980,6 +1001,15 @@ public sealed partial class ExploreViewModel : ObservableObject
             figures += $", {GrowthText.Change(change, growth.Earlier.UnrecordedAtMost)} since the last scan";
         }
 
+        // The kind the shape is painted, where the map is coloured by type, so the colour is never the
+        // only thing saying it (§6.5). A folder not measured yet says nothing rather than guess.
+        if (SelectedColouring == ExploreColouring.Type && DominantTypes.KindOf(tree, node, Types.Dominant) is { } category)
+        {
+            var kind = FileCategories.Label(category).ToLowerInvariant();
+
+            figures += tree.IsDirectory(node) ? $", largest kind: {kind}" : $", {kind}";
+        }
+
         return (path, figures, Joined(_guide.DescribeNearest(path)?.Tip(), HiddenSpaceNote.For(tree, node, Volume)));
     }
 
@@ -1046,6 +1076,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         ShowRows(tree, position.Node, redraw.KeepsRows);
         Files.Show(tree, position.Node);
+        Types.Show(tree, position.Node);
         BuildTrail(tree);
 
         // What the pointer is over is the map's to say, and it says it again for the drawing this

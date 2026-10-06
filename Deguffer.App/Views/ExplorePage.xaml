@@ -339,6 +339,7 @@
                 <ComboBoxItem Content="Branch" />
                 <ComboBoxItem Content="Age" />
                 <ComboBoxItem Content="Growth" />
+                <ComboBoxItem Content="Type" />
             </ComboBox>
 
             <!-- Beside the two boxes that decide what the picture shows, because this decides how it
@@ -999,6 +1000,98 @@
                     </ListView>
                 </Grid>
             </Border>
+
+            <!--
+                What kind of file fills the folder on screen, beside the picture it colours (#262). In
+                the growth panel's place, and on the same terms: only while the colours are types,
+                because it is the answer to that one question.
+
+                §7.1: a kind says what the files are and never that they can go, and the order is by
+                size alone. Nothing here is offered or selected. Choosing a kind lists its files in
+                the Files layout, where each is still picked out by hand.
+
+                Each row names its colour, so the panel is the legend in the list views, and the
+                swatch is never the only carrier of the kind (§6.5).
+            -->
+            <Border Grid.Column="1"
+                    Width="340"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Visibility="{x:Bind ViewModel.ShowsTypes, Mode=OneWay}">
+                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,*">
+                    <TextBlock Grid.Row="0"
+                               Text="What kind of files"
+                               Style="{StaticResource SubtitleTextBlockStyle}"
+                               FontSize="16" />
+
+                    <TextBlock Grid.Row="1"
+                               Text="{x:Bind ViewModel.Types.Summary, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap" />
+
+                    <!-- Largest first. A click lists that kind's files below this folder. -->
+                    <ListView Grid.Row="2"
+                              Margin="-12,0,-12,0"
+                              SelectionMode="None"
+                              IsItemClickEnabled="True"
+                              ItemClick="OnTypeRowClicked"
+                              ItemsSource="{x:Bind ViewModel.Types.Rows}"
+                              AutomationProperties.Name="Kinds of file in this folder, largest first">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExploreTypeRow">
+                                <Grid ColumnSpacing="8" RowSpacing="2" Padding="0,4"
+                                      Background="Transparent"
+                                      ColumnDefinitions="Auto,*,Auto"
+                                      RowDefinitions="Auto,Auto,Auto"
+                                      ToolTipService.ToolTip="List these files"
+                                      AutomationProperties.Name="{x:Bind Description}">
+                                    <Border Grid.Column="0"
+                                            Width="12" Height="12" CornerRadius="2"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AccessibilityView="Raw">
+                                        <Border.Background>
+                                            <SolidColorBrush Color="{x:Bind Swatch}" />
+                                        </Border.Background>
+                                    </Border>
+
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind Label}"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Column="2"
+                                               Text="{x:Bind Size}"
+                                               TextAlignment="Right" />
+
+                                    <!-- Against the folder, as the folder list's bars are. -->
+                                    <ProgressBar Grid.Row="1"
+                                                 Grid.Column="1"
+                                                 VerticalAlignment="Center"
+                                                 Maximum="100"
+                                                 Value="{x:Bind Share}"
+                                                 AutomationProperties.AccessibilityView="Raw" />
+
+                                    <TextBlock Grid.Row="1"
+                                               Grid.Column="2"
+                                               Text="{x:Bind Files}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="12"
+                                               TextAlignment="Right" />
+
+                                    <TextBlock Grid.Row="2"
+                                               Grid.Column="1"
+                                               Grid.ColumnSpan="2"
+                                               Text="{x:Bind Extensions}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="12"
+                                               TextWrapping="Wrap" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
         </Grid>
 
         <StackPanel Grid.Row="5" Spacing="6">
@@ -1057,9 +1150,9 @@
                            TextWrapping="NoWrap" />
             </Grid>
 
-            <!-- What the colours mean, when they mean an age or a growth. A hue per branch needs
-                 no legend, because the branch it names is the shape it is inside; a band of either
-                 scale means nothing at all without the scale beside it. -->
+            <!-- What the colours mean, when they mean an age, a growth or a kind of file. A hue per
+                 branch needs no legend, because the branch it names is the shape it is inside; a
+                 band of any of the others means nothing at all without the list beside it. -->
             <!-- One row that scrolls rather than a wrapping one. ItemsWrapGrid gives every cell
                  the width of the first, so "Today" sized the whole legend and clipped every band
                  after it; the panels that size each item to its own content are not in the

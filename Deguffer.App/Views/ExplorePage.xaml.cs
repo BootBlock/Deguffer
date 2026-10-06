@@ -385,7 +385,8 @@ public sealed partial class ExplorePage : Page
             ViewModel.SelectedScheme,
             _appearance.Look.Spacing,
             ViewModel.VolumeBeside,
-            ViewModel.Growth.Comparison);
+            ViewModel.Growth.Comparison,
+            ViewModel.Types.Dominant);
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the
@@ -566,6 +567,19 @@ public sealed partial class ExplorePage : Page
         if (e.ClickedItem is ExploreGrowthRow row)
         {
             ViewModel.ShowFolder(row);
+        }
+    }
+
+    /// <summary>
+    /// List the files of the kind a row of the breakdown names, in the Files layout. The filter is the
+    /// view-model's, and the view box is this page's, so the two are set here in that order.
+    /// </summary>
+    private void OnTypeRowClicked(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is ExploreTypeRow row)
+        {
+            ViewModel.Files.ListOnly(row.Category);
+            ShowAs(ExploreView.Files);
         }
     }
 
