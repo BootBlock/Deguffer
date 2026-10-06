@@ -31,7 +31,7 @@ internal static class ContentDialogCompletionCountdown
 
         var sentence = new TextBlock
         {
-            Text = countdown.Sentence(running.Current),
+            Text = countdown.Sentence(running),
             TextWrapping = TextWrapping.WrapWholeWords,
         };
 
@@ -45,7 +45,7 @@ internal static class ContentDialogCompletionCountdown
             Content = sentence,
             PrimaryButtonText = countdown.ActNowLabel,
             CloseButtonText = countdown.CancelLabel,
-            IsPrimaryButtonEnabled = CompletionCountdown.MayActNow(running.Current),
+            IsPrimaryButtonEnabled = running.MayEndProcess,
 
             // Cancel is the default, so a keystroke meant for something else leaves the machine alone.
             DefaultButton = ContentDialogButton.Close,
@@ -56,9 +56,7 @@ internal static class ContentDialogCompletionCountdown
 
         timer.Tick += (_, _) =>
         {
-            var now = running.Current;
-
-            if (countdown.Tick(now))
+            if (countdown.Tick(running))
             {
                 due = true;
                 timer.Stop();
@@ -66,8 +64,8 @@ internal static class ContentDialogCompletionCountdown
                 return;
             }
 
-            sentence.Text = countdown.Sentence(now);
-            dialog.IsPrimaryButtonEnabled = CompletionCountdown.MayActNow(now);
+            sentence.Text = countdown.Sentence(running);
+            dialog.IsPrimaryButtonEnabled = running.MayEndProcess;
         };
 
         timer.Start();
@@ -79,7 +77,7 @@ internal static class ContentDialogCompletionCountdown
             // Asked again as it closes. An action can begin between the last tick and a press of the
             // button, and acting then would end the process under it.
             return (due || result == ContentDialogResult.Primary)
-                && CompletionCountdown.MayActNow(running.Current);
+                && running.MayEndProcess;
         }
         finally
         {

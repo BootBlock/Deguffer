@@ -62,7 +62,7 @@ public sealed class WhenCleanCompleteTests
     [InlineData(RunVerdict.RemovedFromOutside)]
     public void FollowsACleanThatRanToTheEnd(RunVerdict verdict)
     {
-        Assert.True(WhenCleanComplete.Follows(CompletionAction.ShutDown, new RunOutcome("Cleaned.", verdict, Cancelled: false)));
+        Assert.True(WhenCleanComplete.Follows(CompletionAction.ShutDown, new RunOutcome("Cleaned.", verdict, Cancelled: false), cancelPressed: false));
     }
 
     /// <summary>The one sentence on the screen that must be read before the next run.</summary>
@@ -71,7 +71,8 @@ public sealed class WhenCleanCompleteTests
     {
         Assert.False(WhenCleanComplete.Follows(
             CompletionAction.ShutDown,
-            new RunOutcome("Cleaned, but verification failed.", RunVerdict.VerificationFailed, Cancelled: false)));
+            new RunOutcome("Cleaned, but verification failed.", RunVerdict.VerificationFailed, Cancelled: false),
+            cancelPressed: false));
     }
 
     /// <summary>Whoever cancelled it is at the machine.</summary>
@@ -80,7 +81,21 @@ public sealed class WhenCleanCompleteTests
     {
         Assert.False(WhenCleanComplete.Follows(
             CompletionAction.ShutDown,
-            new RunOutcome("Clean cancelled part-way.", RunVerdict.AllSurvived, Cancelled: true)));
+            new RunOutcome("Clean cancelled part-way.", RunVerdict.AllSurvived, Cancelled: true),
+            cancelPressed: true));
+    }
+
+    /// <summary>
+    /// A Cancel pressed once the deletions were over leaves the run's own outcome uninterrupted, and
+    /// still means somebody is at the machine.
+    /// </summary>
+    [Fact]
+    public void DoesNotFollowACleanWhoseCancelCameAfterTheLastDeletion()
+    {
+        Assert.False(WhenCleanComplete.Follows(
+            CompletionAction.ShutDown,
+            new RunOutcome("All protected paths survived.", RunVerdict.AllSurvived, Cancelled: false),
+            cancelPressed: true));
     }
 
     [Fact]
@@ -88,7 +103,8 @@ public sealed class WhenCleanCompleteTests
     {
         Assert.False(WhenCleanComplete.Follows(
             CompletionAction.Nothing,
-            new RunOutcome("All protected paths survived.", RunVerdict.AllSurvived, Cancelled: false)));
+            new RunOutcome("All protected paths survived.", RunVerdict.AllSurvived, Cancelled: false),
+            cancelPressed: false));
     }
 
     [Fact]

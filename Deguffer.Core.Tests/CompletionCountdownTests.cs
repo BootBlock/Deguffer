@@ -8,7 +8,7 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class CompletionCountdownTests
 {
-    private static readonly IReadOnlyList<RunningAction> Idle = [];
+    private static readonly RunningActions Idle = new();
 
     [Fact]
     public void IsDueOnlyOnceTheWholeCountHasRun()
@@ -36,10 +36,15 @@ public sealed class CompletionCountdownTests
             countdown.Tick(Idle);
         }
 
-        Assert.False(countdown.Tick([RunningAction.ExploreRemoval]));
-        Assert.Equal(CompletionCountdown.Seconds, countdown.SecondsLeft);
-        Assert.False(CompletionCountdown.MayActNow([RunningAction.ExploreRemoval]));
-        Assert.True(CompletionCountdown.MayActNow(Idle));
+        var running = new RunningActions();
+        using (running.Begin(RunningAction.ExploreRemoval))
+        {
+            Assert.False(countdown.Tick(running));
+            Assert.Equal(CompletionCountdown.Seconds, countdown.SecondsLeft);
+        }
+
+        Assert.False(countdown.Tick(running));
+        Assert.Equal(CompletionCountdown.Seconds - 1, countdown.SecondsLeft);
     }
 
     [Fact]
@@ -63,13 +68,18 @@ public sealed class CompletionCountdownTests
     public void SaysWhatItIsWaitingFor()
     {
         var countdown = new CompletionCountdown(CompletionAction.ShutDown);
+        var running = new RunningActions();
+        using var removal = running.Begin(RunningAction.ExploreRemoval);
 
         Assert.Equal(
             "Deguffer will shut down this PC 30 seconds after a removal on the Explore page finishes.",
-            countdown.Sentence([RunningAction.ExploreRemoval]));
+            countdown.Sentence(running));
+
+        using var uninstall = running.Begin(RunningAction.Uninstall);
+
         Assert.Equal(
             "Deguffer will shut down this PC 30 seconds after a removal on the Explore page and an uninstall finish.",
-            countdown.Sentence([RunningAction.ExploreRemoval, RunningAction.Uninstall]));
+            countdown.Sentence(running));
     }
 
     /// <summary>Only the choices that close every program on the machine ask for work to be saved.</summary>

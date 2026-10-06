@@ -646,7 +646,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Last, once the page shows everything the run has to say: the countdown is put over it, and
         // a locked or sleeping machine comes back to it.
-        if (finished is not null && await WhenComplete.FollowAsync(finished) is { } refusal)
+        if (finished is not null && await WhenComplete.FollowAsync(finished, ct) is { } refusal)
         {
             Report(refusal, InfoBarSeverity.Error);
         }

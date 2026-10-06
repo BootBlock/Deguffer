@@ -52,16 +52,16 @@ public sealed class CompletionCountdown
     /// <summary>The button that stops the action. Leaving the machine as it is, is the safe default.</summary>
     public string CancelLabel => "Cancel";
 
-    /// <summary>Whether the action may be carried out now, because nothing else in Deguffer is running.</summary>
-    public static bool MayActNow(IReadOnlyList<RunningAction> running) => running.Count == 0;
-
     /// <summary>
-    /// One second has passed while <paramref name="running"/> runs. Returns whether the action is now
-    /// due. While anything runs, the count goes back to the top rather than on down.
+    /// One second has passed. Returns whether the action is now due. While anything in
+    /// <paramref name="running"/> runs, the count goes back to the top rather than on down.
+    ///
+    /// <para>Asked through <see cref="RunningActions.MayEndProcess"/>, the answer the close button
+    /// and elevation read, because ending the session ends this process as surely as they do.</para>
     /// </summary>
-    public bool Tick(IReadOnlyList<RunningAction> running)
+    public bool Tick(RunningActions running)
     {
-        if (!MayActNow(running))
+        if (!running.MayEndProcess)
         {
             SecondsLeft = Seconds;
             return false;
@@ -73,15 +73,16 @@ public sealed class CompletionCountdown
     }
 
     /// <summary>What the dialog says, for the state of <paramref name="running"/> now.</summary>
-    public string Sentence(IReadOnlyList<RunningAction> running)
+    public string Sentence(RunningActions running)
     {
         var doing = WhenCleanComplete.Doing(Action);
 
-        if (!MayActNow(running))
+        if (!running.MayEndProcess)
         {
-            var (_, finishes) = RunningActionText.Agreement(running);
+            var current = running.Current;
+            var (_, finishes) = RunningActionText.Agreement(current);
 
-            return $"Deguffer will {doing} {Seconds} seconds after {RunningActionText.List(running)} {finishes}.";
+            return $"Deguffer will {doing} {Seconds} seconds after {RunningActionText.List(current)} {finishes}.";
         }
 
         var when = SecondsLeft == 1 ? "1 second" : $"{SecondsLeft} seconds";

@@ -99,15 +99,22 @@ public sealed partial class CloseMessageTests
         Assert.Contains("private const uint ExitReboot = 0x2;", source, StringComparison.Ordinal);
         Assert.Contains("private const uint ExitPowerOff = 0x8;", source, StringComparison.Ordinal);
 
-        // The declaration and its three calls. A call whose flags are anything but one of the
-        // constants above, an expression combining one with a force flag included, does not match
-        // the call pattern and leaves the two counts apart.
-        var calls = SessionEndCall().Matches(source);
+        // Every line of code that names the call is the declaration or a call with one plain flag.
+        // Anything else, a flag combined with a force flag or the call taken as a delegate included,
+        // is a line here that matches neither. Comments are left out, because they name it in prose.
+        var code = source
+            .Split('\n')
+            .Where(line => SessionEndMention().IsMatch(line) && !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+            .ToList();
 
-        Assert.Equal(SessionEndMention().Count(source) - 1, calls.Count);
+        Assert.Equal(4, code.Count);
+        Assert.Single(code, line => SessionEndDeclaration().IsMatch(line));
         Assert.Equal(
             ["ExitLogOff", "ExitPowerOff", "ExitReboot"],
-            calls.Select(call => call.Groups["flags"].Value).Order(StringComparer.Ordinal));
+            code.Select(line => SessionEndCall().Match(line))
+                .Where(call => call.Success)
+                .Select(call => call.Groups["flags"].Value)
+                .Order(StringComparer.Ordinal));
     }
 
     private static string Core =>
@@ -164,9 +171,12 @@ public sealed partial class CloseMessageTests
     [GeneratedRegex(@"\bPostMessage\(\s*\w+\s*,\s*(?<message>\w+)")]
     private static partial Regex PostCall();
 
-    [GeneratedRegex(@"\bExitWindowsEx\(\s*(?<flags>Exit(?:LogOff|Reboot|PowerOff))\s*,")]
+    [GeneratedRegex(@"\bExitWindowsEx\s*\(\s*(?<flags>Exit(?:LogOff|Reboot|PowerOff))\s*,\s*ReasonPlanned\s*\)")]
     private static partial Regex SessionEndCall();
 
-    [GeneratedRegex(@"\bExitWindowsEx\(")]
+    [GeneratedRegex(@"\bstatic\s+partial\s+bool\s+ExitWindowsEx\s*\(\s*uint\s+flags\s*,\s*uint\s+reason\s*\)\s*;")]
+    private static partial Regex SessionEndDeclaration();
+
+    [GeneratedRegex(@"\bExitWindowsEx\b")]
     private static partial Regex SessionEndMention();
 }

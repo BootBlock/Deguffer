@@ -77,16 +77,17 @@ public sealed partial class WhenCompleteViewModel : ObservableObject
     /// <summary>
     /// Carry out the chosen action after a clean that ended with <paramref name="outcome"/>, where
     /// the rules allow it and the countdown runs out. Returns a sentence for the user where Windows
-    /// refused it, or null.
+    /// refused it, or null. <paramref name="ct"/> is the clean's own, so a Cancel pressed at any
+    /// point in it is a reason not to follow it.
     ///
     /// <para>The choice is read here, when the clean ends, and not when it starts. Choosing to shut
     /// down part-way through a long clean is the ordinary way to use this.</para>
     /// </summary>
-    public async Task<string?> FollowAsync(RunOutcome outcome)
+    public async Task<string?> FollowAsync(RunOutcome outcome, CancellationToken ct)
     {
         var action = Selected;
 
-        if (!WhenCleanComplete.Follows(action, outcome) || ConfirmAsync is not { } confirm)
+        if (!WhenCleanComplete.Follows(action, outcome, ct.IsCancellationRequested) || ConfirmAsync is not { } confirm)
         {
             return null;
         }

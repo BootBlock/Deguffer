@@ -4,12 +4,15 @@ using System.Runtime.InteropServices;
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// This machine's Windows session, through the calls the Start menu's own power and account
-/// commands make.
+/// This machine's Windows session, through the documented Win32 calls for each action.
+///
+/// <para>Shut down is a full shutdown, as Windows' own <c>shutdown /s</c> is, and not the hybrid
+/// one the Start menu makes when Fast Startup is on: the machine comes back from it cold.</para>
 ///
 /// <para>Restart, shut down, sleep and hibernate need <c>SeShutdownPrivilege</c> enabled in the
-/// process token. Every interactive account holds it on a workstation, disabled until a program
-/// enables it, so it is enabled here for the call that needs it. Lock and log off need nothing.</para>
+/// process token. Windows grants it to interactive accounts on a workstation by default, disabled
+/// until a program enables it, so it is enabled here for the call that needs it. A policy can take it
+/// away, and then the call is refused and the user is told why. Lock and log off need nothing.</para>
 ///
 /// <para>Restart, shut down and log off go through <c>ExitWindowsEx</c> without
 /// <c>EWX_FORCE</c>: Windows asks every program to close, and a program with unsaved work may hold the

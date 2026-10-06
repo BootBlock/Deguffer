@@ -49,13 +49,16 @@ public static class WhenCleanComplete
     /// Whether a clean that ended with <paramref name="outcome"/> is followed by
     /// <paramref name="action"/>.
     ///
-    /// <para>Not after a cancelled clean, because whoever cancelled it is at the machine. And not
+    /// <para>Not after a cancelled clean, because whoever cancelled it is at the machine. That covers
+    /// a Cancel pressed once the deletions were over, while the changed rows were planned again: the
+    /// run itself was not interrupted, so <paramref name="outcome"/> does not say so, and
+    /// <paramref name="cancelPressed"/> does. And not
     /// after a §5.6 verification failure: that is the one sentence the user must read before the next
     /// run, and a closed window or a machine that is off would take it with it. A clean that never
     /// ran, because nothing was confirmed or it failed, has no outcome and never reaches here.</para>
     /// </summary>
-    public static bool Follows(CompletionAction action, RunOutcome outcome) =>
-        action != CompletionAction.Nothing && !outcome.Cancelled && !outcome.VerificationFailed;
+    public static bool Follows(CompletionAction action, RunOutcome outcome, bool cancelPressed) =>
+        action != CompletionAction.Nothing && !outcome.Cancelled && !cancelPressed && !outcome.VerificationFailed;
 
     /// <summary>What the box on the Storage page is for, and what keeps it from surprising anybody.</summary>
     public static string Explanation =>

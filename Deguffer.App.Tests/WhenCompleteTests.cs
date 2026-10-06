@@ -102,6 +102,28 @@ public sealed class WhenCompleteTests
         Assert.Empty(page.Session.Performed);
     }
 
+    /// <summary>
+    /// Cancel is still on screen while the rows the run changed are planned again, and pressing it
+    /// there interrupts no deletion, so the run's own outcome is not a cancelled one.
+    /// </summary>
+    [Fact]
+    public void ACancelPressedWhileTheRowsArePlannedAgainIsNotFollowed()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        cache.Steps = [page.Cache("taken", 1024)];
+        cache.AfterCleaning = () => cache.WhilePlanning = () => page.ViewModel.CancelCommand.Execute(null);
+        page.Scan();
+        var countdowns = Answer(page, true);
+        Choose(page, CompletionAction.ShutDown);
+
+        page.Clean();
+
+        Assert.True(page.ViewModel.HasRunResult);
+        Assert.Empty(countdowns);
+        Assert.Empty(page.Session.Performed);
+    }
+
     /// <summary>A clean nobody confirmed never ran, so there is nothing to follow.</summary>
     [Fact]
     public void ADeclinedCleanIsNotFollowed()
