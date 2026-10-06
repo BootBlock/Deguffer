@@ -202,7 +202,7 @@ public readonly record struct ExploreRowKey(int Node, bool IsDirectory, bool IsL
 /// </param>
 public sealed record ExploreCrumb(ExplorePosition Position, string Name, bool FollowsAnother = false);
 
-/// <summary>One band of the age or growth legend, ready to draw.</summary>
+/// <summary>One band of the age, growth or type legend, ready to draw.</summary>
 /// <param name="Swatch">
 /// The band's colour, in the platform's colour type so the view can paint it without converting.
 /// A colour rather than a brush, because a brush is a XAML object: it cannot be made without the
@@ -228,6 +228,10 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
     private static readonly IReadOnlyList<ExploreLegendBand> Growth =
         [.. GrowthPalette.Bands.Select(band => Band(band.Label, band.Colour))];
 
+    /// <summary>The kinds of file, which are the same in every scheme (see <see cref="TypePalette"/>).</summary>
+    private static readonly IReadOnlyList<ExploreLegendBand> Types =
+        [.. TypePalette.Bands.Select(band => Band(band.Label, band.Colour))];
+
     /// <summary>
     /// The bands a map coloured by <paramref name="colouring"/> in <paramref name="scheme"/> needs
     /// explained, ready to bind, and none for branches, whose colours explain themselves.
@@ -236,6 +240,7 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
     {
         ExploreColouring.Age => Schemes[(int)scheme],
         ExploreColouring.Growth => Growth,
+        ExploreColouring.Type => Types,
         _ => [],
     };
 

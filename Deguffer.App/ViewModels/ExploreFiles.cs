@@ -211,6 +211,24 @@ public sealed partial class ExploreFiles : ObservableObject
         Summary = string.Empty;
     }
 
+    /// <summary>
+    /// List only the files of <paramref name="category"/>, from a kind chosen in the breakdown of the
+    /// folder on screen. The other filters stay as the reader set them, because they are on screen
+    /// above the list and say what it is narrowed by.
+    /// </summary>
+    public void ListOnly(FileCategory category)
+    {
+        // The inverse of Filter's reading of the box, which offers "any type" first.
+        for (var at = 0; at < FileCategories.All.Count; at++)
+        {
+            if (FileCategories.All[at] == category)
+            {
+                TypeIndex = at + 1;
+                return;
+            }
+        }
+    }
+
     partial void OnNameFilterChanged(string value) => Find();
 
     partial void OnTypeIndexChanged(int value) => Find();

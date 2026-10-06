@@ -104,14 +104,14 @@ public class ScanGrowthTests
         Assert.Equal("Grew 1 GB or more", GrowthPalette.BandOf(growth.BytesAt(file)).Label);
 
         var grew = GrowthPalette.BandOf(growth.BytesAt(file)).Colour;
-        var colours = ShapeColours.For(after, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth);
+        var colours = ShapeColours.For(after, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth, types: null);
         var surface = ExploreSurface.Create(
             after, after.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, ExploreSpacing.Comfortable, VolumeSpace.None);
         Assert.Equal(grew, colours.For(surface, file, depth: 2));
 
         // A comparison of one tree describes nothing in another, even one with the same shape.
         var another = Tree(@"C:\", ("Logs", 2000 * Megabyte));
-        var stale = ShapeColours.For(another, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth);
+        var stale = ShapeColours.For(another, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth, types: null);
         var unrelated = ExploreSurface.Create(
             another, another.RootNode, ExploreView.Icicle, 200, 200, 1, 1, stale, ExploreSpacing.Comfortable, VolumeSpace.None);
         Assert.Equal(GrowthPalette.BandOf((long?)null).Colour, stale.For(unrelated, file, depth: 2));
