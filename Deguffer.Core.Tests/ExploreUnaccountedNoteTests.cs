@@ -69,7 +69,7 @@ public sealed class ExploreUnaccountedNoteTests
         var note = ExploreUnaccountedNote.For(isElevated: true, stated, Scanned);
 
         Assert.Contains($"Restore points and shadow copies: {FreeSpace.Format(1_000)}.", note);
-        Assert.Contains($"Reserved storage: {FreeSpace.Format(500)}.", note);
+        Assert.Contains($"Reserved storage: {FreeSpace.Format(500)}.\nIt can include:", note);
         Assert.DoesNotContain("which Windows keeps in System Volume Information", note);
         Assert.DoesNotContain("(reserved storage)", note);
     }

@@ -63,7 +63,8 @@ public static class ExploreUnaccountedNote
             Figure(parts.Reserved, "Reserved storage");
         }
 
-        note.Append(" It can include:");
+        // After a list, on a line of its own: run on, it reads as part of the last figure.
+        note.Append(parts.ShadowCopies > 0 || parts.Reserved > 0 ? "\nIt can include:" : " It can include:");
         note.Append(isElevated ? Elevated : Unelevated);
 
         if (parts.ShadowCopies == 0 && !volume.CountedSystemVolumeInformation)
