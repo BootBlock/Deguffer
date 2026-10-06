@@ -24,7 +24,7 @@ public class RunningProcessTableTests
             .With(FakeProcessTableCalls.Own)
             .With(Shell(FakeProcessMemory.Wow64(Project + @"\", Stale, ShellLine)));
 
-        var findings = new LiveTreeInspector(calls).FindLive([Build]);
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLive([Build]);
 
         Assert.True(findings.Complete);
         Assert.True(findings.IsLive(Build.Directory));
@@ -49,7 +49,7 @@ public class RunningProcessTableTests
                 Memory = FakeProcessMemory.Native(Other + @"\", "msbuild.exe"),
             });
 
-        var findings = new LiveTreeInspector(calls).FindOccupiedDirectories();
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectories();
 
         Assert.False(findings.Complete);
         Assert.DoesNotContain(findings.Live, place => place.Holders.Any(h => h.StartsWith("cmd ", StringComparison.Ordinal)));
@@ -67,7 +67,7 @@ public class RunningProcessTableTests
             .With(FakeProcessTableCalls.Own)
             .With(new FakeListedProcess { Id = 4323, Name = "elevated", CommandLine = "elevated.exe" });
 
-        var findings = new LiveTreeInspector(calls).FindOccupiedDirectories();
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectories();
 
         Assert.True(findings.Complete);
         Assert.Empty(findings.Live);
@@ -98,7 +98,7 @@ public class RunningProcessTableTests
                 ImagePath = Path.Combine(Build.Directory, "app.exe"),
             });
 
-        var findings = new LiveTreeInspector(calls).FindLive([Build, otherBuild]);
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLive([Build, otherBuild]);
 
         Assert.True(findings.Complete);
         Assert.True(findings.IsLive(Build.Directory));
@@ -122,7 +122,7 @@ public class RunningProcessTableTests
             })
             .With(Shell(FakeProcessMemory.Native(Project + @"\", ShellLine)));
 
-        var findings = new LiveTreeInspector(calls).FindLive([Build]);
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLive([Build]);
 
         Assert.False(findings.Complete);
         Assert.False(findings.IsLive(Build.Directory));
@@ -154,7 +154,7 @@ public class RunningProcessTableTests
 
         using var denied = new DeniedDirectory(Path.Combine(scratch, "Locked"));
 
-        var findings = new LiveTreeInspector(calls).FindLiveChildren([scratch]);
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([scratch]);
 
         Assert.False(findings.Complete);
     }
@@ -174,7 +174,7 @@ public class RunningProcessTableTests
 
         using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
 
-        var findings = new LiveTreeInspector(calls).FindOccupiedDirectories();
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectories();
 
         Assert.False(findings.Complete);
         Assert.Empty(findings.Live);
@@ -195,7 +195,7 @@ public class RunningProcessTableTests
 
         using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
 
-        var inspector = new LiveTreeInspector(calls);
+        var inspector = new LiveTreeInspector(calls, new FakeVolumeInventory());
 
         Assert.False(inspector.FindLive([new LiveTreeQuery(hidden, hidden)]).Complete);
         Assert.False(inspector.FindOccupiedDirectories().Complete);
@@ -214,7 +214,7 @@ public class RunningProcessTableTests
 
         using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
 
-        var findings = new LiveTreeInspector(calls).FindLiveChildren([hidden]);
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([hidden]);
 
         Assert.False(findings.Complete);
     }

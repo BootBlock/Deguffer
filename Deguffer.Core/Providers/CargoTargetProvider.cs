@@ -56,8 +56,9 @@ public sealed class CargoTargetProvider : BuildDirectoryProvider
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
-        : base(CargoTarget, roots, discovery, liveTrees, environment, runner, inspector, scanner)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
+        : base(CargoTarget, roots, discovery, liveTrees, environment, runner, inspector, scanner, volumes)
     {
     }
 

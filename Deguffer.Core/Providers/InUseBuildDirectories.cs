@@ -55,6 +55,7 @@ internal static class InUseBuildDirectories
     /// The rule that builds what the plan asks the veto, whose
     /// <see cref="LiveTreeQuestion.NamedProjects"/> are candidates as well.
     /// </param>
+    /// <param name="volumes">Asked every other path a root and a place a program is are reachable at.</param>
     public static IReadOnlyList<ToolRoot> Declare(
         ILiveTreeInspector inspector,
         SourceDirectoryDiscovery discovery,
@@ -62,6 +63,7 @@ internal static class InUseBuildDirectories
         IReadOnlyList<string> names,
         Func<string, string?> recognise,
         Func<CancellationToken, LiveTreeQuestion> questions,
+        IVolumeInventory volumes,
         CancellationToken ct)
     {
         if (roots.Count == 0)
@@ -69,10 +71,17 @@ internal static class InUseBuildDirectories
             return [];
         }
 
-        var occupied = inspector.FindOccupiedDirectories(ct).Live;
+        // Resolved first, because the process table holds whatever form a program was started with:
+        // a path with '..' in it would otherwise be followed to somewhere it is not.
+        var occupied = inspector.FindOccupiedDirectories(ct).Live
+            .Select(place => LongPath.Configured(place.Directory))
+            .OfType<string>()
+            .Select(directory => ReachedFolder.At(directory, volumes))
+            .ToList();
 
         // Built once, so the projects it names and the question the veto asks come from one reading.
         var question = questions(ct);
+        var named = question.NamedProjects.Select(project => ReachedFolder.At(project, volumes)).ToList();
 
         // A set, because approved roots may nest, and a directory below both would otherwise be
         // asked about twice and declared twice.
@@ -88,16 +97,19 @@ internal static class InUseBuildDirectories
                 continue;
             }
 
+            var folder = ReachedFolder.At(root.Path, volumes);
+
             // Asked of the name and the boundary before the disk, because most places a program is
             // are nowhere near a build directory and a string answers that for free.
             candidates.UnionWith(discovery.WithinTheSearch(
                 [
-                    .. Candidates(root.Path, occupied, names, ct),
+                    .. Candidates(root.Path, folder, occupied, names, ct),
 
                     // Only those below this root, because the boundary is asked of a candidate
                     // already known to be inside it, and a named project may be anywhere.
-                    .. question.NamedProjects
-                        .Where(project => LongPath.Contains(root.Path, project))
+                    .. named
+                        .Select(project => folder.Naming(project, root.Path))
+                        .OfType<string>()
                         .SelectMany(project => names.Select(name => Path.Combine(project, name))),
                 ],
                 root.Path));
@@ -153,9 +165,11 @@ internal static class InUseBuildDirectories
     /// the first one already visited, because everything between that one and the root has been
     /// visited too.</para>
     /// </summary>
+    /// <param name="folder"><paramref name="root"/>, at every path it is reachable at.</param>
     private static List<string> Candidates(
         string root,
-        IReadOnlyList<LiveTree> occupied,
+        ReachedFolder folder,
+        IReadOnlyList<ReachedFolder> occupied,
         IReadOnlyList<string> names,
         CancellationToken ct)
     {
@@ -166,10 +180,7 @@ internal static class InUseBuildDirectories
         {
             ct.ThrowIfCancellationRequested();
 
-            // Resolved first, because the process table holds whatever form a program was started
-            // with and the approved roots have been resolved (§6.3): a path with '..' in it, or an
-            // extended-length prefix, would otherwise compare as lying outside the root.
-            if (LongPath.Configured(place.Directory) is not { } directory || !LongPath.Contains(root, directory))
+            if (folder.Naming(place, root) is not { } directory)
             {
                 continue;
             }

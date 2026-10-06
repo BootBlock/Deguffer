@@ -63,6 +63,7 @@ public sealed class DotNetObjProviderTests : IDisposable
         IVolumeInventory? volumes = null)
     {
         scanner ??= new FakeDirectoryScanner();
+        volumes ??= new FakeVolumeInventory();
 
         return new(
             _roots,
@@ -71,7 +72,8 @@ public sealed class DotNetObjProviderTests : IDisposable
             _environment,
             runner ?? new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
-            scanner);
+            scanner,
+            volumes);
     }
 
     /// <summary>
@@ -909,6 +911,75 @@ public sealed class DotNetObjProviderTests : IDisposable
         Assert.False(refusal.IsAllowed);
         Assert.Contains("devenv is working in Solution", refusal.Reason, StringComparison.Ordinal);
         Assert.False(policy.MayRemove(project).IsAllowed);
+    }
+
+    /// <summary>
+    /// Visual Studio open on a solution through <c>S:</c>, a letter <c>subst</c> made for the approved
+    /// root, is working in the solution's folder below the root. The plan holds back the <c>obj</c> of
+    /// the project the solution names, and §5.6 proves it survived the run. The project beside it that
+    /// the solution does not name is still offered.
+    /// </summary>
+    [Fact]
+    public async Task AnObjOfAProjectASolutionOpenThroughASubstitutedLetterNamesIsNotATargetAndSurvivesTheRun()
+    {
+        var root = ApproveRoot();
+        var solution = Path.Combine(root, "Solution");
+        var named = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectA"), "ProjectA");
+        var unnamed = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectB"), "ProjectB");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: false, Path.Combine(solution, "ProjectA", "ProjectA.csproj"));
+
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", root);
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector().WithVolumes(volumes).WithProgram("devenv", workingDirectory: @"S:\Solution\"),
+            volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([unnamed], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == named);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("devenv is working in Solution", StringComparison.Ordinal));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(LongPath.DirectoryExists(named));
+        Assert.False(LongPath.DirectoryExists(unnamed));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// §7.1 through an alias. A solution open through <c>S:</c>, a letter standing for the approved
+    /// root, and a build working in another project through the same letter, each make Explore refuse
+    /// the <c>obj</c> the plan holds back. The project neither is using stays Explore's to offer.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAnObjAProgramIsUsingThroughASubstitutedLetter()
+    {
+        var root = ApproveRootInProfile();
+        var solution = Path.Combine(root, "Solution");
+        var named = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectA"), "ProjectA");
+        var building = ProjectFixture.CreateProject(Path.Combine(root, "Building"), "Building");
+        var idle = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectB"), "ProjectB");
+        ProjectFixture.CreateSolution(solution, "Solution", xml: true, Path.Combine(solution, "ProjectA", "ProjectA.csproj"));
+
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", root);
+        var provider = CreateProvider(
+            liveTrees: new FakeLiveTreeInspector()
+                .WithVolumes(volumes)
+                .WithProgram("devenv", workingDirectory: @"S:\Solution\")
+                .WithProgram("dotnet", workingDirectory: @"S:\Building\"),
+            volumes: volumes);
+
+        var policy = await ExplorePolicy(provider);
+
+        Assert.True(policy.MayRemove(idle).IsAllowed);
+
+        var solutionRefusal = policy.MayRemove(named);
+
+        Assert.False(solutionRefusal.IsAllowed);
+        Assert.Contains("devenv is working in Solution", solutionRefusal.Reason, StringComparison.Ordinal);
+
+        var buildRefusal = policy.MayRemove(building);
+
+        Assert.False(buildRefusal.IsAllowed);
+        Assert.Contains("dotnet is working in Building", buildRefusal.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>

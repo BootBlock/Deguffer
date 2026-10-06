@@ -41,18 +41,20 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         ArgumentNullException.ThrowIfNull(roots);
 
         _roots = roots;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
-        _discovery = discovery ?? new SourceDirectoryDiscovery(Scanner);
+        _discovery = discovery ?? new SourceDirectoryDiscovery(Scanner, Volumes);
         _discovery.Include(DirectoryNames);
         _tracked = new TrackedFileCheck(Environment, Runner);
     }
@@ -146,6 +148,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
             Questions,
+            Volumes,
             ct));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -273,7 +276,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// </summary>
     private LiveTreeQuestion Questions(CancellationToken ct)
     {
-        var solutions = SolutionWorkspaces.Read(_liveTrees.FindOccupiedDirectories(ct).Live, ApprovedRoots, ct);
+        var solutions = SolutionWorkspaces.Read(_liveTrees.FindOccupiedDirectories(ct).Live, ApprovedRoots, Volumes, ct);
 
         return new LiveTreeQuestion(candidate => new LiveTreeQuery(candidate.Path, candidate.Project)
         {

@@ -35,26 +35,43 @@ internal sealed class SolutionWorkspaces
 
     /// <summary>
     /// The solutions in each place of <paramref name="occupied"/> that lies inside one of
-    /// <paramref name="roots"/>.
+    /// <paramref name="roots"/>, at any path either is reachable at.
+    ///
+    /// <para><b>Each place is named below the root as the root names itself.</b> A program working at
+    /// <c>S:\app</c>, with <c>S:</c> substituted for the root <c>C:\Source</c>, is working in
+    /// <c>C:\Source\app</c>. The plan names a project below the root, and a solution's projects are
+    /// named below the place it was read from, so read through <c>S:</c> they named no project the
+    /// plan asks about.</para>
     /// </summary>
+    /// <param name="volumes">Asked every other path a root and a place a program is are reachable at.</param>
     public static SolutionWorkspaces Read(
         IReadOnlyList<LiveTree> occupied,
         IReadOnlyList<SourceRoot> roots,
+        IVolumeInventory volumes,
         CancellationToken ct)
     {
         var places = new Dictionary<string, Solutions>(StringComparer.OrdinalIgnoreCase);
+        var folders = roots.Select(root => (root.Path, Folder: ReachedFolder.At(root.Path, volumes))).ToList();
 
         foreach (var place in occupied)
         {
             ct.ThrowIfCancellationRequested();
 
             // Resolved first, because the process table holds whatever form a program was started
-            // with, and a working directory is read with a trailing separator.
-            if (LongPath.Configured(place.Directory) is { } folder
-                && roots.Any(root => LongPath.Contains(root.Path, folder))
-                && !places.ContainsKey(folder))
+            // with: a path with '..' in it would otherwise be followed to somewhere it is not.
+            if (LongPath.Configured(place.Directory) is not { } directory)
             {
-                places[folder] = SolutionsIn(folder);
+                continue;
+            }
+
+            var reached = ReachedFolder.At(directory, volumes);
+
+            foreach (var (root, folder) in folders)
+            {
+                if (folder.Naming(reached, root) is { } named && !places.ContainsKey(named))
+                {
+                    places[named] = SolutionsIn(named);
+                }
             }
         }
 

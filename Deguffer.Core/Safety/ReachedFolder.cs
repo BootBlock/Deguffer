@@ -30,8 +30,9 @@ public sealed class ReachedFolder
     public IReadOnlyList<string> Places { get; }
 
     /// <summary>
-    /// Whether the folder is the top of a drive, a share or a volume wherever it is reached, where
-    /// <see cref="Places"/> holds only the path asked about.
+    /// Whether the path asked about is the top of a drive, a share or a volume, which is never removed
+    /// however else it is reached. Its other <see cref="Places"/> are the other places its volume is
+    /// mounted, and the folder its letter stands for where <c>subst</c> made the letter.
     /// </summary>
     public bool IsVolumeTop { get; }
 
@@ -42,14 +43,59 @@ public sealed class ReachedFolder
         var comparable = Comparable(path);
 
         // The first place is the path itself, which is comparable already.
-        return VolumeRoot.Places(volumes, comparable) is { } places
-            ? new ReachedFolder([comparable, .. places.Skip(1).Select(place => Comparable(place.Path))], false)
-            : new ReachedFolder([comparable], true);
+        if (VolumeRoot.Places(volumes, comparable) is { } places)
+        {
+            return new ReachedFolder([comparable, .. places.Skip(1).Select(place => Comparable(place.Path))], false);
+        }
+
+        List<string> tops = [comparable];
+        AddTopPlaces(tops, comparable, volumes);
+
+        return new ReachedFolder(tops, true);
     }
 
     /// <summary>Whether this folder is <paramref name="inner"/> or holds it, at any path either is reachable at.</summary>
-    public bool Holds(ReachedFolder inner) =>
-        Places.Any(outer => inner.Places.Any(place => LongPath.Contains(outer, place)));
+    public bool Holds(ReachedFolder inner) => PathTo(inner) is not null;
+
+    /// <summary>
+    /// Where <paramref name="inner"/> lies below this folder, as a path relative to it, at the first
+    /// pair of their places where one holds the other: <c>.</c> where the two are one folder, and null
+    /// where this folder does not hold it at any of them.
+    ///
+    /// <para>For a caller that has to name <paramref name="inner"/> the way it names this folder. A
+    /// program working at <c>S:\app\src</c>, with <c>S:</c> substituted for <c>C:\Source</c>, is at
+    /// <c>app\src</c> below <c>C:\Source</c>, which its own text does not say.</para>
+    /// </summary>
+    public string? PathTo(ReachedFolder inner)
+    {
+        foreach (var outer in Places)
+        {
+            foreach (var place in inner.Places)
+            {
+                if (LongPath.Contains(outer, place))
+                {
+                    return Path.GetRelativePath(outer, place);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// <paramref name="inner"/> named below this folder the way <paramref name="named"/> names this
+    /// folder, or null where this folder does not hold it at any path either is reachable at.
+    ///
+    /// <para>For a check whose next rule is asked of text: the boundary of a search, a recogniser, or
+    /// a list of projects a solution names, each written in the form the root was configured in.</para>
+    /// </summary>
+    /// <param name="named">How this folder is named, which may be a form <see cref="Places"/> does not use.</param>
+    public string? Naming(ReachedFolder inner, string named) => PathTo(inner) switch
+    {
+        null => null,
+        "." => named,
+        var relative => Path.Combine(named, relative),
+    };
 
     /// <summary>Whether this folder and <paramref name="other"/> are one folder reached two ways.</summary>
     public bool IsSameAs(ReachedFolder other) =>
@@ -64,4 +110,59 @@ public sealed class ReachedFolder
     /// </summary>
     public static string Comparable(string path) =>
         Path.TrimEndingDirectorySeparator(LongPath.Display(LongPath.Unaliased(path)));
+
+    /// <summary>
+    /// Adds to <paramref name="places"/> every other place the top of a volume or a letter,
+    /// <paramref name="top"/>, is reachable at: the other places its volume is mounted, and the folder
+    /// <c>subst</c> made its letter stand for, at every path that folder is reachable at in turn.
+    ///
+    /// <para><b>A program working at <c>S:\</c> is working in the folder the letter stands for.</b>
+    /// <see cref="VolumeRoot.Places"/> answers nothing for a top, because a top is never removed, and
+    /// read as itself alone the program was not using a folder below the one <c>S:</c> stands
+    /// for.</para>
+    ///
+    /// <para>A folder is followed only the first time it is found, because two letters may stand for
+    /// each other.</para>
+    /// </summary>
+    private static void AddTopPlaces(List<string> places, string top, IVolumeInventory volumes)
+    {
+        foreach (var mountPoint in volumes.MountPointsOf(top))
+        {
+            Add(places, Comparable(mountPoint));
+        }
+
+        if (!string.Equals(Path.GetPathRoot(top), top, StringComparison.OrdinalIgnoreCase)
+            || volumes.SubstituteOf(top) is not { } substitute
+            || !Add(places, Comparable(substitute)))
+        {
+            return;
+        }
+
+        var folder = places[^1];
+
+        if (VolumeRoot.Places(volumes, folder) is { } below)
+        {
+            foreach (var place in below.Skip(1))
+            {
+                Add(places, Comparable(place.Path));
+            }
+        }
+        else
+        {
+            AddTopPlaces(places, folder, volumes);
+        }
+    }
+
+    /// <summary>Adds <paramref name="place"/> where it is not there already, and says whether it was not.</summary>
+    private static bool Add(List<string> places, string place)
+    {
+        if (places.Contains(place, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        places.Add(place);
+
+        return true;
+    }
 }
