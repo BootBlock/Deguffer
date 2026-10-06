@@ -343,19 +343,21 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         CaptureOneExamination examination,
         CancellationToken ct)
     {
-        // A session file at or above the profile would make everything it holds a session to walk.
+        // A session file at or above the profile would make everything it holds a session to walk,
+        // and one at the top of a volume, a folder the volume is mounted at included, the whole volume.
         // One anywhere in an application-data folder is no photographer's session either, and a walk
         // there would reach Capture One's own styles and presets. Asked at every path each is
-        // reachable at, because Capture One records a session as it was opened, S:\ included.
+        // reachable at, because Capture One records a session by the path it was opened at.
         var folder = ReachedFolder.At(session, Volumes);
 
-        if (Array.Exists(profile, folder.Holds)
+        if (folder.IsVolumeTop
+            || Array.Exists(profile, folder.Holds)
             || Array.Exists(applicationData, data => folder.Holds(data) || data.Holds(folder)))
         {
             examination.Decline(
                 session,
-                "Capture One lists a session here, but the folder holds your profile or its application "
-                + "data, so it is not searched and nothing in it is offered.");
+                "Capture One lists a session here, but the folder is a whole volume or holds your profile "
+                + "or its application data, so it is not searched and nothing in it is offered.");
             return;
         }
 

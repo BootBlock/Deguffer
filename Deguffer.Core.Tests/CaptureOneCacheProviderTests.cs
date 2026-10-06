@@ -383,10 +383,36 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
         foreach (var session in new[] { profile, styles })
         {
             Assert.Contains(plan.Notes, n => n.Message.Equals(
-                $"Leaving '{session}' alone. Capture One lists a session here, but the folder holds your profile "
-                + "or its application data, so it is not searched and nothing in it is offered.",
+                $"Leaving '{session}' alone. Capture One lists a session here, but the folder is a whole volume "
+                + "or holds your profile or its application data, so it is not searched and nothing in it is offered.",
                 StringComparison.OrdinalIgnoreCase));
         }
+    }
+
+    /// <summary>
+    /// A session file at the top of a volume mounted at a folder would make the whole volume a session
+    /// to walk. Its folder's text names a folder like any other, so only asking the machine finds it.
+    /// A session inside that volume is still offered (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task ASessionAtAFolderAVolumeIsMountedAtIsNotSearchedAndOneInsideItIs()
+    {
+        var mount = Path.Combine(ShootDrive, "Mounted");
+        _volumes.With(Path.GetPathRoot(_temp.Path)!).With(mount + Path.DirectorySeparatorChar);
+        var shoot = Session(Path.Combine("Mounted", "Shoot"));
+        WriteFile(Path.Combine(mount, "Stray.cosessiondb"));
+        List(Path.Combine(mount, "Stray.cosessiondb"), Path.Combine(shoot, "Shoot.cosessiondb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal(
+            [
+                CacheOf(Path.Combine(shoot, "Capture", "CaptureOne")),
+                CacheOf(Path.Combine(shoot, "Selects", "CaptureOne")),
+            ],
+            plan.Steps.OfType<DeleteStep>().Select(s => s.Path).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(mount, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith($"Leaving '{mount}' alone.", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
