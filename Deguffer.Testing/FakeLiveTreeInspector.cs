@@ -17,6 +17,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     private bool _complete;
     private readonly List<RunningProgram> _programs = [];
     private readonly Dictionary<string, string> _heldFiles = new(StringComparer.OrdinalIgnoreCase);
+    private LiveTreeMatch _match = new(new FakeVolumeInventory());
 
     public FakeLiveTreeInspector(bool complete, params string[] live)
     {
@@ -70,6 +71,17 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         IReadOnlyList<string>? arguments = null)
     {
         _programs.Add(new RunningProgram(name, executable, workingDirectory, arguments ?? []));
+        return this;
+    }
+
+    /// <summary>
+    /// Follow each program's places and each candidate to every path <paramref name="volumes"/> says
+    /// they are reachable at, as the real inspector does with the machine's. Without it, nothing is
+    /// reachable anywhere but where it is named.
+    /// </summary>
+    public FakeLiveTreeInspector WithVolumes(IVolumeInventory volumes)
+    {
+        _match = new LiveTreeMatch(volumes);
         return this;
     }
 
@@ -131,25 +143,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
         foreach (var program in _programs)
         {
-            if (program.Executable is { } executable && LongPath.Contains(candidate.Directory, executable))
-            {
-                holders.Add($"{program.Name} is running from inside it");
-            }
-
-            if (program.WorkingDirectory is not { } working)
-            {
-                continue;
-            }
-
-            if (LongPath.Contains(candidate.Project, working))
-            {
-                holders.Add($"{program.Name} is working in {Path.GetFileName(candidate.Project)}");
-            }
-
-            if (LiveTreeInspector.WorkspaceAt(candidate, working) is { } workspace)
-            {
-                holders.Add($"{program.Name} is working in {Path.GetFileName(workspace)}");
-            }
+            holders.AddRange(_match.Holders(candidate, program.Name, program.Executable, program.WorkingDirectory));
         }
 
         return holders;
@@ -175,38 +169,23 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                     .Where(child => directories.Any(root => IsImmediateChild(root, child)))
                     .Select(child => new LiveTree(child, ["a test says something is using it"])),
                 .. FindOccupiedDirectories(ct).Live
-                    .SelectMany(place => directories
-                        .Select(root => ChildHolding(root, place.Directory))
-                        .OfType<string>()
-                        .Select(child => new LiveTree(child, place.Holders))),
+                    .Select(place => (Child: _match.ChildHolding(directories, place.Directory), place.Holders))
+                    .Where(found => found.Child is not null)
+                    .Select(found => new LiveTree(found.Child!, found.Holders)),
                 .. _programs
                     .SelectMany(program => program.Arguments
-                        .SelectMany(argument => directories.Select(root => ChildHolding(root, argument)))
+                        .Select(argument => _match.ChildHolding(directories, argument))
                         .OfType<string>()
                         .Select(child => new LiveTree(child, [$"{program.Name} was started with it"]))),
             ],
             _complete);
 
-    /// <summary>The immediate child of <paramref name="root"/> holding <paramref name="place"/>, or null where it is not below.</summary>
-    private static string? ChildHolding(string root, string place)
-    {
-        var parent = Path.TrimEndingDirectorySeparator(root);
-
-        if (place.Length <= parent.Length + 1 || !LongPath.Contains(parent, place))
-        {
-            return null;
-        }
-
-        var below = place[(parent.Length + 1)..];
-        var separator = below.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
-
-        return Path.Combine(parent, separator < 0 ? below : below[..separator]);
-    }
-
     private static bool IsImmediateChild(string root, string child) =>
         Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(child)) is { } parent
         && parent.Equals(
             Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
+
+    public ReachedFolder Reach(string path) => _match.Reach(path);
 
     public void Invalidate() => InvalidateCount++;
 

@@ -188,6 +188,17 @@ public interface ILiveTreeInspector
     LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default);
 
     /// <summary>
+    /// The folder at <paramref name="path"/>, at every path it is reachable at, as the rule that
+    /// matches programs against directories follows it, and kept until <see cref="Invalidate"/>.
+    ///
+    /// <para>For a caller that compares a place <see cref="FindOccupiedDirectories"/> reported with
+    /// folders of its own. Every build provider asks about the same places in one planning pass, and
+    /// following a path asks the machine where its volume is mounted, so each is followed once
+    /// (G4).</para>
+    /// </summary>
+    ReachedFolder Reach(string path);
+
+    /// <summary>
     /// Discard any cached snapshot, so every provider in one planning pass sees the same machine.
     /// The same contract as <see cref="IProcessInspector.Invalidate"/>.
     /// </summary>

@@ -35,13 +35,19 @@ public sealed record SpotifyInstall(SpotifyEdition Edition, SpotifySettings Sett
 /// <para>A record so that each answer is computed from <see cref="Installs"/> when asked. There are
 /// two editions and a few locations, so there is nothing worth storing.</para>
 /// </summary>
-public sealed record SpotifyStorage(IReadOnlyList<SpotifyInstall> Installs)
+/// <param name="Volumes">
+/// Asked every other path a location and a cache are reachable at, because a settings file may name
+/// a location through a letter <c>subst</c> made, or another mount of its volume.
+/// </param>
+public sealed record SpotifyStorage(IReadOnlyList<SpotifyInstall> Installs, IVolumeInventory Volumes)
 {
-    public static SpotifyStorage Find(IUserEnvironment environment) =>
-        new([
-            .. SpotifyEdition.In(environment).Select(
-                edition => new SpotifyInstall(edition, SpotifySettings.Read(edition.SettingsFile))),
-        ]);
+    public static SpotifyStorage Find(IUserEnvironment environment, IVolumeInventory volumes) =>
+        new(
+            [
+                .. SpotifyEdition.In(environment).Select(
+                    edition => new SpotifyInstall(edition, SpotifySettings.Read(edition.SettingsFile))),
+            ],
+            volumes);
 
     /// <summary>Every storage location any settings file names, once each.</summary>
     public IReadOnlyList<string> Locations =>
@@ -62,8 +68,12 @@ public sealed record SpotifyStorage(IReadOnlyList<SpotifyInstall> Installs)
     ];
 
     /// <summary>The locations that are the cache, sit inside it, or hold it.</summary>
-    public IReadOnlyList<string> Overlapping(SpotifyEdition edition) =>
-        [.. Locations.Where(location => Overlaps(location, edition.Cache))];
+    public IReadOnlyList<string> Overlapping(SpotifyEdition edition)
+    {
+        var cache = ReachedFolder.At(edition.Cache, Volumes);
+
+        return [.. Locations.Where(location => Overlaps(ReachedFolder.At(location, Volumes), cache))];
+    }
 
     /// <summary>
     /// Whether <paramref name="edition"/>'s cache may be offered: every settings file was read, and
@@ -71,6 +81,6 @@ public sealed record SpotifyStorage(IReadOnlyList<SpotifyInstall> Installs)
     /// </summary>
     public bool MayOffer(SpotifyEdition edition) => Unsettled is null && Overlapping(edition).Count == 0;
 
-    private static bool Overlaps(string location, string cache) =>
-        LongPath.Contains(location, cache) || LongPath.Contains(cache, location);
+    private static bool Overlaps(ReachedFolder location, ReachedFolder cache) =>
+        location.Holds(cache) || cache.Holds(location);
 }

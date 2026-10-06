@@ -28,23 +28,29 @@ public static class PlanVerifier
     /// What lists the restore points, shadow copies and storage a <see cref="RemoveRestorePointsStep"/>
     /// must leave, on the terms <paramref name="cloud"/> is given: it only reads.
     /// </param>
+    /// <param name="volumes">
+    /// Asked every other path a protected path and each of the run's paths are reachable at, because a
+    /// step may name a folder through a letter <c>subst</c> made, or another mount of its volume, that
+    /// the protected path does not. The machine's own where none is given.
+    /// </param>
     public static VerificationResult Verify(
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default,
         ICloudFiles? cloud = null,
-        ISystemProtection? protection = null)
+        ISystemProtection? protection = null,
+        IVolumeInventory? volumes = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        var reach = runReach ?? RunReach.Of([plan]);
+        var places = new RunPlaces(runReach ?? RunReach.Of([plan]), volumes ?? VolumeInventory.Current);
         var checks = new List<VerificationCheck>(plan.ProtectedPaths.Count);
 
         foreach (var protectedPath in plan.ProtectedPaths)
         {
             ct.ThrowIfCancellationRequested();
-            checks.Add(Check(protectedPath, reach, residue));
+            checks.Add(Check(protectedPath, places, residue));
         }
 
         foreach (var release in plan.Steps.OfType<ReleaseLocalCopiesStep>())
@@ -52,7 +58,7 @@ public static class PlanVerifier
             foreach (var file in release.Files)
             {
                 ct.ThrowIfCancellationRequested();
-                checks.Add(CheckReleased(file.Path, release.SyncApp, cloud ?? CloudFiles.Default, reach, residue));
+                checks.Add(CheckReleased(file.Path, release.SyncApp, cloud ?? CloudFiles.Default, places, residue));
             }
         }
 
@@ -82,7 +88,7 @@ public static class PlanVerifier
         string path,
         string syncApp,
         ICloudFiles cloud,
-        RunReach reach,
+        RunPlaces places,
         RunResidue? residue)
     {
         var reason = $"A file {syncApp} was asked to keep only in the cloud. The file itself must stay.";
@@ -100,11 +106,11 @@ public static class PlanVerifier
 
             // Measured while the plan was made, so it was there then: the claim NarrowedTo makes about a
             // declined step, for the reason it gives.
-            _ => Check(new ProtectedPath(path, reason, PathPresence.Present), reach, residue),
+            _ => Check(new ProtectedPath(path, reason, PathPresence.Present), places, residue),
         };
     }
 
-    private static VerificationCheck Check(ProtectedPath protectedPath, RunReach reach, RunResidue? residue)
+    private static VerificationCheck Check(ProtectedPath protectedPath, RunPlaces places, RunResidue? residue)
     {
         // A path that was never there cannot be evidence of survival. Recording it with an honest
         // detail keeps the report from overstating what the run actually established.
@@ -121,7 +127,7 @@ public static class PlanVerifier
 
         if (after is PathPresence.Refused)
         {
-            return Unmeasured(protectedPath, residue);
+            return Unmeasured(protectedPath, places, residue);
         }
 
         if (after is PathPresence.Present)
@@ -130,7 +136,7 @@ public static class PlanVerifier
             // Deguffer's own removal as the one that went inside, where an emptied folder may still be
             // a tool's doing in a run that holds a command. And it does not depend on what the folder
             // still holds, which is the thing a refusal hides.
-            if (residue?.Entered(protectedPath.Path) == true)
+            if (WasEntered(protectedPath.Path, places, residue))
             {
                 return new VerificationCheck(
                     protectedPath.Path,
@@ -165,7 +171,7 @@ public static class PlanVerifier
                 }
             }
 
-            return WasEmptied(protectedPath, reach)
+            return WasEmptied(protectedPath, places)
                 ? new VerificationCheck(
                     protectedPath.Path,
                     protectedPath.Reason,
@@ -176,7 +182,7 @@ public static class PlanVerifier
                     protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
         }
 
-        if (WasBeyondThisRunsReach(protectedPath.Path, reach))
+        if (WasBeyondThisRunsReach(protectedPath.Path, places))
         {
             return new VerificationCheck(
                 protectedPath.Path,
@@ -187,7 +193,7 @@ public static class PlanVerifier
                 + "scan ran.");
         }
 
-        return WasLeftAloneByEveryRemovalReachingIt(protectedPath.Path, reach, residue)
+        return WasLeftAloneByEveryRemovalReachingIt(protectedPath.Path, places, residue)
             ? new VerificationCheck(
                 protectedPath.Path,
                 protectedPath.Reason,
@@ -217,8 +223,8 @@ public static class PlanVerifier
     /// <see cref="RunResidue"/> records that from the removal itself rather than from the disk, so a
     /// refusal afterwards hides nothing it knows.</para>
     /// </summary>
-    private static VerificationCheck Unmeasured(ProtectedPath protectedPath, RunResidue? residue) =>
-        residue?.Entered(protectedPath.Path) == true
+    private static VerificationCheck Unmeasured(ProtectedPath protectedPath, RunPlaces places, RunResidue? residue) =>
+        WasEntered(protectedPath.Path, places, residue)
             ? new VerificationCheck(
                 protectedPath.Path,
                 protectedPath.Reason,
@@ -289,11 +295,11 @@ public static class PlanVerifier
     /// Asked only of a directory that held something, so nothing here reads a path that was empty to
     /// begin with, and nothing reads a file.</para>
     /// </summary>
-    private static bool WasEmptied(ProtectedPath protectedPath, RunReach reach) =>
+    private static bool WasEmptied(ProtectedPath protectedPath, RunPlaces places) =>
         protectedPath.HeldContentBefore
-        && !StillHoldsContent(protectedPath.Path, reach)
-        && !HoldsAnyOf(protectedPath.Path, reach.TargetedPaths)
-        && !HoldsAnyOf(protectedPath.Path, reach.ProbedPaths);
+        && !StillHoldsContent(protectedPath.Path, places.Reach)
+        && !HoldsAnyOf(places.At(protectedPath.Path), places.Targets.Select(target => target.Folder))
+        && !HoldsAnyOf(places.At(protectedPath.Path), places.Probed);
 
     /// <summary>The question <see cref="WasEmptied"/> asks after the run, at the depth what ran calls for.</summary>
     private static bool StillHoldsContent(string path, RunReach reach) =>
@@ -325,21 +331,25 @@ public static class PlanVerifier
     /// from here, so this answers false for it. Only the run's own record can say otherwise: see
     /// <see cref="WasLeftAloneByEveryRemovalReachingIt"/>.</para>
     ///
-    /// <para><b>What it cannot see.</b> The comparison is textual, and
-    /// <see cref="LongPath.Extended"/> resolves no links, so a step whose <em>ancestry</em> passes
-    /// through a junction deletes a physically different tree — and a protected path destroyed that
-    /// way has a parent no target textually contains. That case reads as an outside removal and is
-    /// not detected here. It is not the same as a link at or below a step's own root, which
-    /// <see cref="DirectoryRemover"/> removes rather than descends into, and which therefore cannot
-    /// destroy anything's parent at all.</para>
+    /// <para><b>A target holds a path at any place either is reachable at.</b> A step naming
+    /// <c>T:\run-1</c>, with <c>T:</c> substituted for the temporary folder, removes the same tree as one
+    /// naming that folder's <c>run-1</c>, and so does one naming it through another mount of the
+    /// volume. See <see cref="RunPlaces"/>.</para>
+    ///
+    /// <para><b>What it cannot see.</b> <see cref="LongPath.Extended"/> resolves no junction, so a
+    /// step whose <em>ancestry</em> passes through one deletes a physically different tree, and a
+    /// protected path destroyed that way has a parent no target reaches. That case reads as an outside
+    /// removal and is not detected here. It is not the same as a link at or below a step's own root,
+    /// which <see cref="DirectoryRemover"/> removes rather than descends into, and which therefore
+    /// cannot destroy anything's parent at all.</para>
     ///
     /// <para>Every other branch that cannot establish the outside removal answers false, which
     /// leaves the alarming reading in place. That is the direction to fail in: a false alarm costs
     /// the user a look at the folder, and a missed one costs them the folder.</para>
     /// </summary>
-    private static bool WasBeyondThisRunsReach(string path, RunReach reach)
+    private static bool WasBeyondThisRunsReach(string path, RunPlaces places)
     {
-        if (reach.Unbounded || IsTargeted(path, reach.TargetedPaths))
+        if (places.Reach.Unbounded || IsTargeted(places.At(path), places))
         {
             return false;
         }
@@ -354,7 +364,7 @@ public static class PlanVerifier
         // it went, and reading it as gone would grant the outside reading on nothing.
         return Path.GetDirectoryName(Display(path)) is { Length: > 0 } parent
             && LongPath.ProbeDirectory(parent) is PathPresence.Absent
-            && !HoldsAnyOf(parent, reach.TargetedPaths);
+            && !HoldsAnyOf(places.At(parent), places.Targets.Select(target => target.Folder));
     }
 
     /// <summary>
@@ -386,27 +396,58 @@ public static class PlanVerifier
     /// records: a later removal in the same plan that reaches the entry through a junction in its
     /// root's ancestry is not among the targets that hold it, so it is not asked.</para>
     /// </summary>
-    private static bool WasLeftAloneByEveryRemovalReachingIt(string path, RunReach reach, RunResidue? residue)
+    private static bool WasLeftAloneByEveryRemovalReachingIt(string path, RunPlaces places, RunResidue? residue)
     {
-        if (residue is null || reach.Unbounded)
+        if (residue is null || places.Reach.Unbounded)
         {
             return false;
         }
 
-        var holding = reach.TargetedPaths.Where(target => LongPath.Contains(Display(target), Display(path))).ToList();
+        var folder = places.At(path);
 
-        return holding.Count > 0 && holding.TrueForAll(target => residue.LeftAlone(target, path));
+        // Each removal recorded what it left alone below its root as the root was named, so the path is
+        // asked about in that form, whatever form the plan protected it in.
+        var holding = places.Targets
+            .Select(target => (target.Path, Named: target.Folder.Naming(folder, target.Path)))
+            .Where(target => target.Named is not null)
+            .ToList();
+
+        return holding.Count > 0 && holding.TrueForAll(target => residue.LeftAlone(target.Path, target.Named!));
     }
 
     /// <summary>
-    /// Whether this run's own deletion could have reached <paramref name="path"/>.
-    ///
-    /// A step's path may carry the extended-length prefix (§6.3) where a protected path does not, so
-    /// both sides are put into display form rather than compared as they arrive. A prefix on one
-    /// side alone would make a containment test answer no about a path the run deleted outright.
+    /// Whether a removal in this run went inside <paramref name="path"/> and left something standing
+    /// there: <see cref="RunResidue.Entered"/>, asked as the path is named and as each removal's root
+    /// names it, because a removal records what it left in the form its root was named in.
     /// </summary>
-    private static bool IsTargeted(string path, IReadOnlyList<string> targets) =>
-        targets.Any(target => LongPath.Contains(Display(target), Display(path)));
+    private static bool WasEntered(string path, RunPlaces places, RunResidue? residue)
+    {
+        if (residue is null)
+        {
+            return false;
+        }
+
+        if (residue.Entered(path))
+        {
+            return true;
+        }
+
+        var folder = places.At(path);
+
+        return residue.EnteredRoots.Any(root => places.At(root).Naming(folder, root) is { } named && residue.Entered(named));
+    }
+
+    /// <summary>
+    /// Whether this run's own deletion could have reached <paramref name="folder"/>: whether a target
+    /// is it or holds it, at any path either is reachable at.
+    ///
+    /// <para>A step's path may carry the extended-length prefix (§6.3) where a protected path does
+    /// not, and either may name the folder through an alias. <see cref="ReachedFolder"/> compares the
+    /// folders rather than how they were named, because a containment test that answers no about a
+    /// path the run deleted outright reads its loss as somebody else's.</para>
+    /// </summary>
+    private static bool IsTargeted(ReachedFolder folder, RunPlaces places) =>
+        places.Targets.Any(target => target.Folder.Holds(folder));
 
     /// <summary>
     /// Whether any of <paramref name="paths"/> sits inside <paramref name="folder"/>, which is the
@@ -419,12 +460,12 @@ public static class PlanVerifier
     /// missing, its folder missing, and neither of them under any target — every condition for
     /// "something else did it", about a directory this run was working inside.</para>
     /// </summary>
-    private static bool HoldsAnyOf(string folder, IReadOnlyList<string> paths) =>
-        paths.Any(path => LongPath.Contains(Display(folder), Display(path)));
+    private static bool HoldsAnyOf(ReachedFolder folder, IEnumerable<ReachedFolder> paths) =>
+        paths.Any(folder.Holds);
 
     /// <summary>
-    /// A path in the one form the comparisons above are valid in: no extended-length prefix, and no
-    /// trailing separator to make a folder and its own name compare unequal.
+    /// A path without an extended-length prefix or a trailing separator, so its parent is the folder
+    /// that holds it rather than the path itself.
     /// </summary>
     private static string Display(string path) =>
         Path.TrimEndingDirectorySeparator(LongPath.Display(path));

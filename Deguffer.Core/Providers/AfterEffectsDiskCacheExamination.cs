@@ -31,7 +31,15 @@ internal sealed record AfterEffectsDiskCache(string Path, string VersionFolder, 
 /// </summary>
 internal sealed class AfterEffectsDiskCacheExamination
 {
-    private IReadOnlyList<string> _temporaryFolders = [];
+    private readonly IReadOnlyList<ReachedFolder> _temporaryFolders;
+    private readonly IVolumeInventory _volumes;
+
+    private AfterEffectsDiskCacheExamination(string cacheName, IReadOnlyList<string> temporaryFolders, IVolumeInventory volumes)
+    {
+        CacheName = cacheName;
+        _volumes = volumes;
+        _temporaryFolders = [.. temporaryFolders.Select(folder => ReachedFolder.At(folder, volumes))];
+    }
 
     public List<AfterEffectsDiskCache> Caches { get; } = [];
 
@@ -48,21 +56,23 @@ internal sealed class AfterEffectsDiskCacheExamination
     public bool Unreadable { get; private set; }
 
     /// <summary>The name of this computer's cache, the one child of a version folder that is a target.</summary>
-    public string CacheName { get; private set; } = "";
+    public string CacheName { get; }
 
     /// <param name="folders">Each folder After Effects' preferences name for the disk cache.</param>
     /// <param name="temporaryFolders">The folders the temporary-files row empties, where the survivors are not this row's to name.</param>
+    /// <param name="volumes">
+    /// Asked every other path a survivor and a temporary folder are reachable at, because the
+    /// preferences may name the cache folder through an alias the temporary folder's setting does not.
+    /// </param>
     public static AfterEffectsDiskCacheExamination Of(
         IReadOnlyList<string> folders,
         string machineName,
         IReadOnlyList<string> temporaryFolders,
+        IVolumeInventory volumes,
         CancellationToken ct)
     {
-        var examination = new AfterEffectsDiskCacheExamination
-        {
-            CacheName = AfterEffectsDiskCacheLayout.CacheName(machineName),
-            _temporaryFolders = [.. temporaryFolders.Select(folder => LongPath.Unaliased(folder))],
-        };
+        var examination = new AfterEffectsDiskCacheExamination(
+            AfterEffectsDiskCacheLayout.CacheName(machineName), temporaryFolders, volumes);
 
         foreach (var folder in folders)
         {
@@ -176,9 +186,9 @@ internal sealed class AfterEffectsDiskCacheExamination
 
     private void Survive(string path, string reason)
     {
-        var unaliased = LongPath.Unaliased(path);
+        var reached = ReachedFolder.At(path, _volumes);
 
-        if (!_temporaryFolders.Any(folder => LongPath.Contains(folder, unaliased))
+        if (!_temporaryFolders.Any(folder => folder.Holds(reached))
             && !Survivors.Any(survivor => survivor.Path.Equals(path, StringComparison.OrdinalIgnoreCase)))
         {
             Survivors.Add((path, reason));

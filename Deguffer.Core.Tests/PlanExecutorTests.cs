@@ -986,7 +986,7 @@ public sealed class PlanExecutorTests : IDisposable
         // The program finishing, after the removal and before the check.
         Directory.Delete(live, recursive: true);
 
-        var verification = PlanVerifier.Verify(plan, runReach: null, residue);
+        var verification = PlanVerifier.Verify(plan, runReach: null, residue, volumes: new FakeVolumeInventory());
         var check = Assert.Single(verification.Checks);
 
         Assert.Equal(VerificationOutcome.RemovedFromOutside, check.Outcome);

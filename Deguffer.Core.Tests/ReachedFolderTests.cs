@@ -41,4 +41,36 @@ public sealed class ReachedFolderTests
         Assert.True(At(@"\\?\Q:\SysMount\Users\testuser\").IsSameAs(At(@"C:\Users\testuser")));
         Assert.False(At(@"Q:\Users\testuser").IsSameAs(At(@"C:\Users\testuser")));
     }
+    /// <summary>
+    /// The top of a letter <c>subst</c> made is the folder it stands for as well, so a program working
+    /// at <c>S:\</c> is in that folder. A folder beside it is not held (§5.6), and the top is still a
+    /// top, which is never removed.
+    /// </summary>
+    [Fact]
+    public void FollowsTheTopOfASubstitutedLetterToItsFolder()
+    {
+        _volumes.Substituting(@"S:\", @"C:\Source\app").Substituting(@"T:\", @"S:\");
+
+        var top = At(@"T:\");
+
+        Assert.True(top.IsVolumeTop);
+        Assert.True(At(@"C:\Source").Holds(top));
+        Assert.True(At(@"C:\Source\app").IsSameAs(top));
+        Assert.False(At(@"C:\Source\other").Holds(top));
+    }
+
+    /// <summary>
+    /// A folder reached through an alias is named below another the way that other is named, so a
+    /// rule asked of text sees it where it is. One beside it is named nowhere (§5.6).
+    /// </summary>
+    [Fact]
+    public void NamesAFolderReachedThroughAnAliasBelowAnother()
+    {
+        _volumes.Substituting(@"S:\", @"C:\Source");
+
+        Assert.Equal(@"C:\Source\app\src", At(@"C:\Source").Naming(At(@"S:\app\src"), @"C:\Source"));
+        Assert.Equal(@"C:\Source", At(@"C:\Source").Naming(At(@"S:\"), @"C:\Source"));
+        Assert.Equal(@"S:\app", At(@"S:\").Naming(At(@"C:\Source\app"), @"S:\"));
+        Assert.Null(At(@"C:\Source").Naming(At(@"C:\Elsewhere\app"), @"C:\Source"));
+    }
 }

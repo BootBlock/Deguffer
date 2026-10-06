@@ -568,10 +568,14 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// </summary>
     private bool IsToolsOwn(string path, VcpkgLocations located)
     {
+        // At every path each is reachable at, because a variable may name the clone through a letter
+        // subst made for it, or through another mount of its volume.
+        var folder = Reach(path);
+
         foreach (var (directory, protectedNames) in ToolDirectories(located))
         {
-            if (LongPath.Contains(path, directory)
-                || protectedNames.Any(n => LongPath.Contains(Path.Combine(directory, n.RelativePath), path)))
+            if (folder.Holds(Reach(directory))
+                || protectedNames.Any(n => Reach(Path.Combine(directory, n.RelativePath)).Holds(folder)))
             {
                 return true;
             }

@@ -402,7 +402,12 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         // survives. '${user.home}/.m2' is a plausible typo for the correct
         // '${user.home}/.m2/repository', and a settings file arrives from a dotfiles repository as
         // often as it is typed, so this is refused rather than trusted.
-        if (LongPath.Contains(repository, Home))
+        //
+        // Asked at every path each is reachable at, because the value may name the home through a
+        // letter subst made for the profile, or through another mount of its volume.
+        var folder = Reach(repository);
+
+        if (folder.Holds(Reach(Home)))
         {
             return $"Your Maven settings.xml points the local repository at {repository}, which holds "
                 + "your Maven configuration rather than sitting inside it. Deguffer is leaving it alone.";
@@ -411,7 +416,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         // The same refusal, one level in. A value naming one of the things this provider promises to
         // leave standing would otherwise be targeted and asserted to survive by the same plan, which
         // is the contradiction the check above exists to stop.
-        return ProtectedNames.FirstOrDefault(n => LongPath.Contains(Path.Combine(Home, n.RelativePath), repository))
+        return ProtectedNames.FirstOrDefault(n => Reach(Path.Combine(Home, n.RelativePath)).Holds(folder))
             is { RelativePath.Length: > 0 } named
                 ? $"Your Maven settings.xml points the local repository at {repository}, which is "
                   + $"'{named.RelativePath}' in your Maven home. Deguffer never removes that, so it is "

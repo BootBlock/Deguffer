@@ -108,6 +108,17 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <summary>What the machine has mounted. See the constructor's parameter.</summary>
     protected IVolumeInventory Volumes { get; }
 
+    private readonly ConcurrentDictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The folder at <paramref name="path"/>, at every path it is reachable at, followed the first time
+    /// a planning pass asks about it and kept until <see cref="InvalidateCaches"/> (G4). Following a
+    /// path asks the machine where its volume is mounted, and a provider asks about its own folders
+    /// once for every setting it checks.
+    /// </summary>
+    protected ReachedFolder Reach(string path) =>
+        _reached.GetOrAdd(path, static (key, volumes) => ReachedFolder.At(key, volumes), Volumes);
+
     /// <summary>Where Windows is in servicing itself. See the constructor's parameter.</summary>
     protected IWindowsServicing Servicing { get; }
 
@@ -153,6 +164,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Environment.Invalidate();
         Inspector.Invalidate();
         Scanner.Invalidate();
+        _reached.Clear();
     }
 
     /// <summary>
@@ -249,7 +261,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, Volumes));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()

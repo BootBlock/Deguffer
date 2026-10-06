@@ -62,12 +62,14 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
     }
 
@@ -124,7 +126,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     /// The settings files are read once per planning pass (G4). Presence, planning and the §5.2
     /// declarations all ask the same question of them.
     /// </summary>
-    private SpotifyStorage Storage => _storage ??= SpotifyStorage.Find(Environment);
+    private SpotifyStorage Storage => _storage ??= SpotifyStorage.Find(Environment, Volumes);
 
     public override void InvalidateCaches()
     {

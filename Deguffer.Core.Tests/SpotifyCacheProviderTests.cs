@@ -34,8 +34,8 @@ public sealed class SpotifyCacheProviderTests : IDisposable
 
     private string StoreSettingsFolder => Path.Combine(Package, "LocalState", "Spotify");
 
-    private SpotifyCacheProvider CreateProvider(FakeDirectoryScanner? scanner = null) =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+    private SpotifyCacheProvider CreateProvider(FakeDirectoryScanner? scanner = null, IVolumeInventory? volumes = null) =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, volumes ?? new FakeVolumeInventory());
 
     /// <summary>A directory with a file in it, so it measures above zero and is selectable.</summary>
     private static string Populate(string path)
@@ -307,6 +307,27 @@ public sealed class SpotifyCacheProviderTests : IDisposable
         // One sentence for the location. The one about the cache already names it, and a second
         // saying it was moved would read as two different folders.
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not measure or remove", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The refusal above where the settings name the storage through <c>S:</c>, a letter <c>subst</c>
+    /// made for Spotify's folder: <c>S:\Data</c> is the cache, though its text names nothing there. A
+    /// location beside the cache reached the same way leaves the cache offered (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\Data", false)]
+    [InlineData(@"S:\Data\offline", false)]
+    [InlineData(@"S:\", false)]
+    [InlineData(@"S:\Music", true)]
+    public async Task AStorageLocationOverlappingTheCacheThroughASubstitutedLetterWithholdsIt(string location, bool offered)
+    {
+        var cache = Populate(Path.Combine(LocalFolder, "Data"));
+        WriteSettings(RoamingFolder, $"{SpotifySettings.LocationKey}={Quoted(location)}");
+
+        var plan = await CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", LocalFolder)).PlanAsync();
+
+        Assert.Equal(offered, plan.TargetedPaths.Contains(cache, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(!offered, plan.Notes.Any(n => n.Message.Contains("left the cache alone", StringComparison.Ordinal)));
     }
 
     /// <summary>

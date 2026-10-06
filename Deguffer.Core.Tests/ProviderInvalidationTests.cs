@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
@@ -112,6 +113,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : EmptyOfElementType(field.FieldType)
         ?? Completed(field.FieldType)
         ?? Constructed(field.FieldType)
+        ?? Uninitialised(field.FieldType)
         ?? throw new XunitException(
             $"{field.DeclaringType?.Name}.{field.Name} is a {field.FieldType.Name}, which this test " +
             "cannot fabricate a value for. Extend Sentinel so the field is still covered.");
@@ -172,6 +174,17 @@ public sealed class ProviderInvalidationTests : IDisposable
 
         return constructor.Invoke(arguments);
     }
+
+    /// <summary>
+    /// An instance of a class whose only constructor is its own, for a provider that memoises the
+    /// result of one pass whose collaborators that pass supplied, the After Effects examination being
+    /// the first. No constructor runs, because none can be called from here with values it accepts,
+    /// and the instance is never read: this test asserts only that the reference was discarded.
+    /// </summary>
+    private static object? Uninitialised(Type fieldType) =>
+        fieldType is { IsClass: true, IsAbstract: false } && fieldType.GetConstructors().Length == 0
+            ? RuntimeHelpers.GetUninitializedObject(fieldType)
+            : null;
 
     /// <summary>
     /// Through the fakes, so this proves the invalidation rule without npm, NuGet or PlatformIO

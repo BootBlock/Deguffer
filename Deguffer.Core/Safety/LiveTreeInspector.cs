@@ -6,15 +6,22 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     public static readonly LiveTreeInspector Default = new();
 
     private readonly IProcessTableCalls _calls;
+    private readonly IVolumeInventory _volumes;
     private readonly Lock _gate = new();
     private ProcessTable? _snapshot;
+    private LiveTreeMatch? _match;
 
     public LiveTreeInspector()
-        : this(ProcessTableCalls.Instance)
+        : this(ProcessTableCalls.Instance, VolumeInventory.Current)
     {
     }
 
-    internal LiveTreeInspector(IProcessTableCalls calls) => _calls = calls;
+    /// <param name="volumes">Asked every other path a program's place and a directory are reachable at.</param>
+    internal LiveTreeInspector(IProcessTableCalls calls, IVolumeInventory volumes)
+    {
+        _calls = calls;
+        _volumes = volumes;
+    }
 
     public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
     {
@@ -25,7 +32,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             return LiveTreeFindings.Nothing;
         }
 
-        var table = Snapshot(ct);
+        var (table, match) = Snapshot(ct);
         var live = new List<LiveTree>();
         var complete = table.ImagePathsReadable && table.CurrentDirectoriesReadable;
 
@@ -37,24 +44,9 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
             foreach (var process in table.Processes)
             {
-                if (process.ImagePath is { } image && LongPath.Contains(candidate.Directory, image))
+                foreach (var holder in match.Holders(candidate, process.Name, process.ImagePath, process.CurrentDirectory))
                 {
-                    Add(holders, $"{process.Name} is running from inside it");
-                }
-
-                if (process.CurrentDirectory is not { } working)
-                {
-                    continue;
-                }
-
-                if (LongPath.Contains(candidate.Project, working))
-                {
-                    Add(holders, $"{process.Name} is working in {Path.GetFileName(candidate.Project)}");
-                }
-
-                if (WorkspaceAt(candidate, working) is { } workspace)
-                {
-                    Add(holders, $"{process.Name} is working in {Path.GetFileName(workspace)}");
+                    Add(holders, holder);
                 }
             }
 
@@ -91,7 +83,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default)
     {
-        var table = Snapshot(ct);
+        var (table, _) = Snapshot(ct);
 
         // Keyed by the directory, because one program is several processes and a browser leaves
         // four of them in one folder. Four rows naming the same folder would be read as four folders.
@@ -130,14 +122,12 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             return LiveTreeFindings.Nothing;
         }
 
-        // Each folder as asked, for naming its children, and canonical, for comparing them: every
-        // path read from the process table is canonical already. A folder that cannot be made so is
-        // still compared as well as it can be, and the answer says it may have missed something.
-        var canonical = directories.Select(asked => (Asked: asked, Compared: LongPath.Canonical(asked))).ToList();
-        var foldersWhole = canonical.TrueForAll(folder => folder.Compared is not null);
-        var folders = canonical.ConvertAll(folder => (folder.Asked, folder.Compared ?? LongPath.Unaliased(folder.Asked)));
+        // Every path read from the process table is canonical already. A folder asked about that
+        // cannot be made so is still compared as well as it can be, and the answer says it may have
+        // missed something.
+        var foldersWhole = directories.All(asked => LongPath.Canonical(asked) is not null);
         var occupied = FindOccupiedDirectories(ct);
-        var table = Snapshot(ct);
+        var (table, match) = Snapshot(ct);
 
         // Keyed by the child, because programs in two folders below one scratch entry are both
         // using that entry, and two rows naming it would be read as two entries.
@@ -145,7 +135,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
         foreach (var place in occupied.Live)
         {
-            if (ChildHolding(folders, place.Directory) is not { } child)
+            if (match.ChildHolding(directories, place.Directory) is not { } child)
             {
                 continue;
             }
@@ -162,7 +152,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
             foreach (var argument in process.PathArguments)
             {
-                Record(holders, ChildHolding(folders, argument), $"{process.Name} was started with it");
+                Record(holders, match.ChildHolding(directories, argument), $"{process.Name} was started with it");
             }
         }
 
@@ -194,51 +184,38 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     private static LiveTreeFindings Findings(Dictionary<string, List<string>> holders, bool complete) =>
         new([.. holders.Select(entry => new LiveTree(entry.Key, entry.Value))], complete);
 
-    /// <summary>
-    /// The immediate child of one of <paramref name="directories"/> that <paramref name="inside"/>
-    /// is at or below, or null where it is below none of them.
-    ///
-    /// <para>Null for a directory that <em>is</em> one of them, which is a program running from a
-    /// scratch folder's top level or sitting in it. There is no child to spare in that case, and
-    /// the folder itself is never removed — so the honest answer is that this evidence names
-    /// nothing, rather than the whole folder.</para>
-    /// </summary>
-    private static string? ChildHolding(IReadOnlyList<(string Asked, string Compared)> directories, string inside)
-    {
-        foreach (var (asked, directory) in directories)
-        {
-            if (!LongPath.Contains(directory, inside)
-                || Path.TrimEndingDirectorySeparator(inside).Length
-                    <= Path.TrimEndingDirectorySeparator(directory).Length)
-            {
-                continue;
-            }
-
-            // The first segment below the directory, however deep the path runs. Taken as a
-            // relative path rather than by string offset so that both separators and a trailing one
-            // are the framework's problem rather than three off-by-one risks here.
-            var relative = Path.GetRelativePath(directory, inside);
-            var separator = relative.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
-
-            return Path.Combine(asked, separator < 0 ? relative : relative[..separator]);
-        }
-
-        return null;
-    }
+    public ReachedFolder Reach(string path) => Match.Reach(path);
 
     public void Invalidate()
     {
         lock (_gate)
         {
             _snapshot = null;
+            _match = null;
         }
     }
 
-    private ProcessTable Snapshot(CancellationToken ct)
+    /// <summary>
+    /// The rule that matches the process table, which keeps where each path it follows is reachable
+    /// until the reading is discarded.
+    /// </summary>
+    private LiveTreeMatch Match
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _match ??= new LiveTreeMatch(_volumes);
+            }
+        }
+    }
+
+    /// <summary>One reading of the process table, and the rule that matches it.</summary>
+    private (ProcessTable Table, LiveTreeMatch Match) Snapshot(CancellationToken ct)
     {
         lock (_gate)
         {
-            return _snapshot ??= Filtered(RunningProcessTable.Read(_calls, ct));
+            return (_snapshot ??= Filtered(RunningProcessTable.Read(_calls, ct)), _match ??= new LiveTreeMatch(_volumes));
         }
     }
 
@@ -314,18 +291,6 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         }
 
         return present;
-    }
-
-    /// <summary>
-    /// The one of <paramref name="candidate"/>'s workspaces that <paramref name="working"/> is, or
-    /// null. Compared without a trailing separator, because a working directory is read with one.
-    /// </summary>
-    internal static string? WorkspaceAt(LiveTreeQuery candidate, string working)
-    {
-        var place = Path.TrimEndingDirectorySeparator(working);
-
-        return candidate.Workspaces.FirstOrDefault(workspace =>
-            Path.TrimEndingDirectorySeparator(workspace).Equals(place, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void Add(List<string> holders, string holder)

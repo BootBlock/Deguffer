@@ -436,6 +436,8 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default) =>
             live.FindLiveChildren(directories, ct);
 
+        public ReachedFolder Reach(string path) => live.Reach(path);
+
         public void Invalidate()
         {
             _occupied = null;

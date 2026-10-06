@@ -919,7 +919,7 @@ public sealed class CleanupPlannerTests
             {
                 ProviderId = id,
                 ProviderName = id,
-                Verification = PlanVerifier.Verify(plan, runReach, residue, ct),
+                Verification = PlanVerifier.Verify(plan, runReach, residue, ct, volumes: new FakeVolumeInventory()),
             });
         }
 

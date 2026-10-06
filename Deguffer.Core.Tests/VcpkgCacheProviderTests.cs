@@ -25,8 +25,8 @@ public sealed class VcpkgCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private VcpkgCacheProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+    private VcpkgCacheProvider CreateProvider(IVolumeInventory? volumes = null) =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory());
 
     private string ProfileDirectory => Path.Combine(_environment.LocalAppData, "vcpkg");
 
@@ -386,6 +386,30 @@ public sealed class VcpkgCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(kept, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(plan.Notes, n => n.Message.Contains(kept, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Both refusals above, with the variable naming the clone through <c>S:</c>, a letter <c>subst</c>
+    /// made for the folder holding it. The text names nothing of vcpkg's, and the folder is the clone
+    /// or something in it the plan promises to leave alone. A cache named through the same letter
+    /// beside the clone is not refused as vcpkg's own (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\vcpkg", true)]
+    [InlineData(@"S:\", true)]
+    [InlineData(@"S:\vcpkg\installed", true)]
+    [InlineData(@"S:\binary-cache", false)]
+    public async Task RefusesACacheVariableThatNamesTheCloneThroughASubstitutedLetter(string configured, bool refused)
+    {
+        var root = CreateClone();
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, configured);
+
+        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", Path.GetDirectoryName(root)!)).PlanAsync();
+
+        Assert.Equal(refused, plan.Notes.Any(n => n.Message.Contains($"Leaving '{configured}' alone: that is vcpkg's own directory", StringComparison.Ordinal)));
+        Assert.True(Directory.Exists(Path.Combine(root, "installed")));
     }
 
     /// <summary>

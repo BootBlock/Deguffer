@@ -32,8 +32,8 @@ public sealed class PlexTranscodeProviderTests : IDisposable
 
     private string PhotoTranscoder => Path.Combine(Data, "Cache", "PhotoTranscoder");
 
-    private PlexTranscodeProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning);
+    private PlexTranscodeProvider CreateProvider(FakeProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
+        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory());
 
     private FakeUserEnvironment WithSetting(string value, string folder) =>
         _environment.WithRegistryValue(PlexServerLayout.RegistryKey, value, folder);
@@ -240,6 +240,51 @@ public sealed class PlexTranscodeProviderTests : IDisposable
         await CreateProvider().ExecuteAsync(plan);
 
         Assert.True(File.Exists(download), "a download waiting to go to a phone was deleted.");
+    }
+
+    /// <summary>
+    /// A transcoder setting naming Plex's own <c>Cache</c> folder through another mount of its volume
+    /// moves nothing, so the sessions folder is offered once. One naming a folder beside it reached the
+    /// same way is a moved folder, and its sessions are offered as well.
+    /// </summary>
+    [Theory]
+    [InlineData("Cache", 1)]
+    [InlineData("Elsewhere", 2)]
+    public async Task ATranscoderSettingNamingPlexsOwnCacheThroughAnotherMountMovesNothing(string transcoder, int offered)
+    {
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var volumes = new FakeVolumeInventory().With(Data + @"\", alsoMountedAt: [mirror + @"\"]);
+        var moved = Path.Combine(mirror, transcoder);
+        Write(Path.Combine(Sessions, "session-1", "segment.ts"), Old);
+        Write(Path.Combine(moved, "Transcode", "Sessions", "session-1", "segment.ts"), Old);
+        WithSetting(PlexServerLayout.TranscoderValue, moved);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal(offered, plan.TargetedPaths.Count(path => Path.GetFileName(path) == "Sessions"));
+    }
+
+    /// <summary>
+    /// The refusal above where the downloads setting names the transcoder's folder through another
+    /// mount of its volume: <c>B\PlexShared</c> is <c>A\PlexShared</c>, though the two texts differ.
+    /// A downloads folder beside it reached the same way leaves the transcoder's folder offered (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData("PlexShared", false)]
+    [InlineData("PlexDownloads", true)]
+    public async Task WithholdsATranscoderFolderThatOverlapsTheDownloadsFolderThroughAnotherMountOfItsVolume(string downloads, bool offered)
+    {
+        var shared = Path.Combine(_temp.Path, "A", "PlexShared");
+        var volumes = new FakeVolumeInventory().With(
+            Path.Combine(_temp.Path, "A") + @"\", alsoMountedAt: [Path.Combine(_temp.Path, "B") + @"\"]);
+        Write(Path.Combine(shared, "Transcode", "Sessions", "session-1", "segment.ts"), Old);
+        WithSetting(PlexServerLayout.TranscoderValue, shared);
+        WithSetting(PlexServerLayout.DownloadsValue, Path.Combine(_temp.Path, "B", downloads));
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal(offered, plan.TargetedPaths.Any(path => LongPath.Contains(shared, path)));
+        Assert.Equal(!offered, plan.Notes.Any(n => n.Message.Contains("prepares downloads", StringComparison.Ordinal)));
     }
 
     /// <summary>

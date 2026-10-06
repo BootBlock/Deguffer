@@ -34,27 +34,43 @@ internal sealed class SolutionWorkspaces
     public IReadOnlyList<string> NamedProjects { get; }
 
     /// <summary>
-    /// The solutions in each place of <paramref name="occupied"/> that lies inside one of
-    /// <paramref name="roots"/>.
+    /// The solutions in each place <paramref name="liveTrees"/> finds a program that lies inside one
+    /// of <paramref name="roots"/>, at any path either is reachable at, followed through the inspector
+    /// so each is followed once in a planning pass.
+    ///
+    /// <para><b>Each place is named below the root as the root names itself.</b> A program working at
+    /// <c>S:\app</c>, with <c>S:</c> substituted for the root <c>C:\Source</c>, is working in
+    /// <c>C:\Source\app</c>. The plan names a project below the root, and a solution's projects are
+    /// named below the place it was read from, so read through <c>S:</c> they named no project the
+    /// plan asks about.</para>
     /// </summary>
     public static SolutionWorkspaces Read(
-        IReadOnlyList<LiveTree> occupied,
+        ILiveTreeInspector liveTrees,
         IReadOnlyList<SourceRoot> roots,
         CancellationToken ct)
     {
         var places = new Dictionary<string, Solutions>(StringComparer.OrdinalIgnoreCase);
+        var folders = roots.Select(root => (root.Path, Folder: liveTrees.Reach(root.Path))).ToList();
 
-        foreach (var place in occupied)
+        foreach (var place in liveTrees.FindOccupiedDirectories(ct).Live)
         {
             ct.ThrowIfCancellationRequested();
 
             // Resolved first, because the process table holds whatever form a program was started
-            // with, and a working directory is read with a trailing separator.
-            if (LongPath.Configured(place.Directory) is { } folder
-                && roots.Any(root => LongPath.Contains(root.Path, folder))
-                && !places.ContainsKey(folder))
+            // with: a path with '..' in it would otherwise be followed to somewhere it is not.
+            if (LongPath.Configured(place.Directory) is not { } directory)
             {
-                places[folder] = SolutionsIn(folder);
+                continue;
+            }
+
+            var reached = liveTrees.Reach(directory);
+
+            foreach (var (root, folder) in folders)
+            {
+                if (folder.Naming(reached, root) is { } named && !places.ContainsKey(named))
+                {
+                    places[named] = SolutionsIn(named);
+                }
             }
         }
 

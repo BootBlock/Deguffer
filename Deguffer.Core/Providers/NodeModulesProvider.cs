@@ -40,8 +40,9 @@ public sealed class NodeModulesProvider : BuildDirectoryProvider
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
-        : base(NodeModules, roots, discovery, liveTrees, environment, runner, inspector, scanner)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
+        : base(NodeModules, roots, discovery, liveTrees, environment, runner, inspector, scanner, volumes)
     {
     }
 

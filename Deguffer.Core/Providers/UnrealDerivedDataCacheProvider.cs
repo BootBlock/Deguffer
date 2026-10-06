@@ -66,12 +66,14 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
     }
@@ -353,19 +355,25 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
             Path.Combine(_system.ProgramData, "Epic"),
         ];
 
+        // At every path each is reachable at, because a setting may name a store through a letter subst
+        // made for Unreal's folders, or through another mount of their volume.
+        var owned = unrealsOwn.Select(own => Reach(own)).ToList();
+
         var named = UnrealCacheLocations.ConfiguredStores(Environment)
-            .Where(store => !unrealsOwn.Any(own => Overlap(own, store.Path)) && IsZensAlone(store.Path))
+            .Select(store => (Store: store, Folder: Reach(store.Path)))
+            .Where(store => !owned.Exists(own => Overlap(own, store.Folder)) && IsZensAlone(store.Store.Path))
             .ToList();
 
         return
         [
             .. UnrealCacheLocations.DefaultStores(Environment, _system),
-            .. named.Where(store => !named.Any(other => other != store && Overlap(other.Path, store.Path))),
+            .. named
+                .Where(store => !named.Exists(other => other.Store != store.Store && Overlap(other.Folder, store.Folder)))
+                .Select(store => store.Store),
         ];
     }
 
-    private static bool Overlap(string one, string other) =>
-        LongPath.Contains(one, other) || LongPath.Contains(other, one);
+    private static bool Overlap(ReachedFolder one, ReachedFolder other) => one.Holds(other) || other.Holds(one);
 
     /// <summary>
     /// Whether <paramref name="store"/> carries Zen's marker and holds nothing at its top that Zen
@@ -452,20 +460,24 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     /// store of its own. A named store is left out of <see cref="Stores"/> where it sits inside
     /// something else, and while a server runs that something else must be held back with it.
     /// </summary>
-    private IReadOnlyList<string> ZenLocations() =>
+    private IReadOnlyList<ReachedFolder> ZenLocations() =>
     [
         .. UnrealCacheLocations.DefaultStores(Environment, _system)
             .Concat(UnrealCacheLocations.ConfiguredStores(Environment))
-            .Select(store => store.Path),
+            .Select(store => Reach(store.Path)),
     ];
 
     /// <summary>
     /// Whether removing <paramref name="path"/> could take a store a running server is writing:
-    /// it is one of <paramref name="named"/>, or holds one. A local cache path set inside the
-    /// filesystem cache puts a store there.
+    /// it is one of <paramref name="named"/>, or holds one, at any path either is reachable at. A
+    /// local cache path set inside the filesystem cache puts a store there.
     /// </summary>
-    private static bool MayHoldAStore(string path, IReadOnlyList<string> named) =>
-        named.Any(store => LongPath.Contains(path, store));
+    private bool MayHoldAStore(string path, IReadOnlyList<ReachedFolder> named)
+    {
+        var folder = Reach(path);
+
+        return named.Any(folder.Holds);
+    }
 
     /// <summary>
     /// Whether <paramref name="path"/> was listed and holds nothing at any depth. False where it

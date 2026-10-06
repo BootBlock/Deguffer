@@ -207,7 +207,8 @@ public sealed class PlanExecutor(
                 runResidue,
                 CancellationToken.None,
                 _cloud,
-                _protection),
+                _protection,
+                _volumes),
         };
     }
 

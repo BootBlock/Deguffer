@@ -26,8 +26,11 @@ public sealed class PoetryCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private PoetryCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
-        new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+    private PoetryCacheProvider CreateProvider(FakeProcessRunner? runner = null, IVolumeInventory? volumes = null) =>
+        new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory());
+
+    /// <summary>A letter <c>subst</c> made for the cache directory, as an inventory says it.</summary>
+    private FakeVolumeInventory CacheThroughS => new FakeVolumeInventory().Substituting(@"S:\", CacheRoot);
 
     /// <summary>Poetry's default cache directory, without creating anything in it.</summary>
     private string CacheRoot => Path.Combine(_environment.LocalAppData, "pypoetry", "Cache");
@@ -434,6 +437,48 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
             && n.Message.Contains("same tree as its own repository cache", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Each of the three refusals above, with <c>virtualenvs.path</c> naming its folder through
+    /// <c>S:</c>, a letter <c>subst</c> made for the cache directory. Its text names nothing in the
+    /// cache, and the folder it names is the same.
+    /// </summary>
+    [Fact]
+    public async Task RefusesEnvironmentsNamedThroughASubstitutedLetterAsSurelyAsByTheirOwnPath()
+    {
+        var (artifacts, _, _) = CreateCache();
+        Directory.CreateDirectory(Path.Combine(artifacts, "envs"));
+
+        var whole = await CreateProvider(Poetry(environments: @"S:\"), CacheThroughS).PlanAsync();
+
+        Assert.Empty(whole.Steps);
+        Assert.Contains(whole.Notes, n => n.Message.Contains("leaving the whole of", StringComparison.Ordinal));
+
+        var child = await CreateProvider(Poetry(environments: @"S:\artifacts\envs"), CacheThroughS).PlanAsync();
+
+        Assert.DoesNotContain(artifacts, child.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(child.ProtectedPaths, p => p.Path.Equals(artifacts, StringComparison.OrdinalIgnoreCase));
+
+        var repositories = await CreateProvider(Poetry(environments: @"S:\cache"), CacheThroughS).PlanAsync();
+
+        Assert.Empty(repositories.Steps.OfType<RunCommandStep>());
+        Assert.Contains(repositories.Notes, n => n.Message.Contains("same tree as its own repository cache", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The negative beside the refusals above: environments named through the same letter, beside the
+    /// artefacts and the repository cache rather than around them, leave both offered (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task OffersTheCacheWhereEnvironmentsNamedThroughASubstitutedLetterAreBesideIt()
+    {
+        var (artifacts, _, _) = CreateCache();
+
+        var plan = await CreateProvider(Poetry(environments: @"S:\virtualenvs"), CacheThroughS).PlanAsync();
+
+        Assert.Contains(artifacts, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.NotEmpty(plan.Steps.OfType<RunCommandStep>());
     }
 
     [Fact]

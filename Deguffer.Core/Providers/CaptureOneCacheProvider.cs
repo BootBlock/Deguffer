@@ -274,7 +274,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     }
 
     /// <summary>The folder at <paramref name="path"/>, or none where the environment names no such folder.</summary>
-    private ReachedFolder[] Reached(string path) => path.Length > 0 ? [ReachedFolder.At(path, Volumes)] : [];
+    private ReachedFolder[] Reached(string path) => path.Length > 0 ? [Reach(path)] : [];
 
     private static string Count(int count) => count == 1 ? "a catalog or session" : $"{count} catalogs and sessions";
 
@@ -348,7 +348,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         // One anywhere in an application-data folder is no photographer's session either, and a walk
         // there would reach Capture One's own styles and presets. Asked at every path each is
         // reachable at, because Capture One records a session by the path it was opened at.
-        var folder = ReachedFolder.At(session, Volumes);
+        var folder = Reach(session);
 
         if (folder.IsVolumeTop
             || Array.Exists(profile, folder.Holds)

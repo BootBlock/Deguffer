@@ -40,8 +40,13 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
 
     private string OlderStore => Path.Combine(EpicRoot, "Zen", "Data");
 
-    private UnrealDerivedDataCacheProvider CreateProvider(IProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, system: _system);
+    private UnrealDerivedDataCacheProvider CreateProvider(IProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
+        new(
+            _environment,
+            new FakeProcessRunner(),
+            inspector ?? FakeProcessInspector.NothingRunning,
+            system: _system,
+            volumes: volumes ?? new FakeVolumeInventory());
 
     /// <summary>A directory with one file in it, so it measures above zero.</summary>
     private static string Populate(string directory, int bytes = 4096, string name = "0123abcd.udd")
@@ -287,6 +292,50 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
         Assert.True(File.Exists(marker), "a store was removed with the cache around it under a server started after the preview");
         Assert.Equal("Nothing was removed: zenserver is running now.", Assert.Single(result.Steps).Message);
         AssertProvedStanding(result, LegacyCache);
+    }
+
+    /// <summary>
+    /// A local cache path naming the filesystem cache through <c>S:</c>, a letter <c>subst</c> made for
+    /// Unreal's folder, puts a store inside it as surely as its own path does, so a running server
+    /// holds the cache back. One naming a folder beside it through the same letter does not, and the
+    /// cache is offered (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\Common\DerivedDataCache", false)]
+    [InlineData(@"S:\Elsewhere", true)]
+    public async Task AStoreNamedInsideTheFilesystemCacheThroughASubstitutedLetterHoldsItBack(string configured, bool offered)
+    {
+        Populate(LegacyCache);
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", configured);
+
+        var plan = await CreateProvider(
+            new FakeProcessInspector("zenserver"),
+            new FakeVolumeInventory().Substituting(@"S:\", EngineRoot)).PlanAsync();
+
+        Assert.Equal(offered, plan.TargetedPaths.Contains(LegacyCache, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(!offered, plan.ProtectedPaths.Any(p => p.Path.Equals(LegacyCache, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// A local cache path naming <c>Common</c> through another mount of its volume is not followed, as
+    /// one naming it by its own path is not: the store it would make takes the server's installation
+    /// with it. A store a setting names beside Unreal's folder, reached the same way, is followed
+    /// (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@"UnrealEngine\Common", false)]
+    [InlineData(@"Caches", true)]
+    public async Task ASettingNamingUnrealsFolderThroughAnotherMountIsNotFollowed(string relative, bool followed)
+    {
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var volumes = new FakeVolumeInventory().With(_environment.LocalAppData + @"\", alsoMountedAt: [mirror + @"\"]);
+        var chosen = Path.Combine(mirror, relative);
+        var store = PopulateStore(Path.Combine(chosen, "Zen"));
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", chosen);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal(followed, plan.TargetedPaths.Contains(store, StringComparer.OrdinalIgnoreCase));
     }
 
     private static void AssertProvedStanding(CleanupResult result, string path)

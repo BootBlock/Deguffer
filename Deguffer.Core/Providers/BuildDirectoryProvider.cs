@@ -42,12 +42,14 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         ArgumentNullException.ThrowIfNull(kind);
         ArgumentNullException.ThrowIfNull(roots);
@@ -59,7 +61,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         // An unshared discovery is correct but pays for its own pass, which is what a test wants
         // and what production must not have. Either way this provider's own names go in, so the
         // shared one ends up holding the union of what every provider looks for.
-        _discovery = discovery ?? new SourceDirectoryDiscovery(Scanner);
+        _discovery = discovery ?? new SourceDirectoryDiscovery(Scanner, Volumes);
         _discovery.Include(Kind.DirectoryNames);
     }
 

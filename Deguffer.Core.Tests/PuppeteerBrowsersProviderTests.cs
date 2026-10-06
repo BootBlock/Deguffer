@@ -20,9 +20,10 @@ public sealed class PuppeteerBrowsersProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private PuppeteerBrowsersProvider CreateProvider(ILiveTreeInspector? liveTrees = null) =>
+    private PuppeteerBrowsersProvider CreateProvider(ILiveTreeInspector? liveTrees = null, IVolumeInventory? volumes = null) =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning,
-            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive);
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
+            volumes: volumes ?? new FakeVolumeInventory());
 
     private string DefaultRoot => Path.Combine(_environment.UserProfile, ".cache", "puppeteer");
 
@@ -212,6 +213,32 @@ public sealed class PuppeteerBrowsersProviderTests : IDisposable
 
         Assert.Equal([build], plan.TargetedPaths);
         Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path == Path.Combine(_environment.UserProfile, ".cache"));
+    }
+
+    /// <summary>
+    /// A variable naming the default cache through another mount of the profile's volume names the
+    /// default place, so the shared <c>.cache</c> around it is still asserted to survive, as it is
+    /// named. A cache relocated beside it, reached the same way, is not in <c>.cache</c>, and
+    /// <c>.cache</c> is not named (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@".cache\puppeteer", true)]
+    [InlineData("browsers", false)]
+    public async Task NamesTheSharedFolderWhereTheVariableNamesTheDefaultCacheThroughAnotherMount(string relative, bool shared)
+    {
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var volumes = new FakeVolumeInventory().With(_environment.UserProfile + @"\", alsoMountedAt: [mirror + @"\"]);
+        var named = Path.Combine(mirror, relative);
+        var build = Path.Combine(named, "chrome", "win64-127.0.6533.88");
+        Directory.CreateDirectory(build);
+        File.WriteAllBytes(Path.Combine(build, "payload.bin"), new byte[4096]);
+
+        _environment.WithEnvironmentVariable(PuppeteerBrowsersProvider.LocationVariable, named);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal([build], plan.TargetedPaths);
+        Assert.Equal(shared, plan.ProtectedPaths.Any(p => p.Path == Path.GetDirectoryName(named)));
     }
 
     /// <summary>
