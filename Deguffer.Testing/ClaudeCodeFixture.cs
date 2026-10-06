@@ -39,6 +39,13 @@ public sealed class ClaudeCodeFixture
     /// <summary>Old enough to be past every provider's floor on recent content.</summary>
     public static readonly TimeSpan Old = TimeSpan.FromDays(30);
 
+    /// <summary>
+    /// How long ago a file was written by a process that ran before the plan: a handshake file, a
+    /// messaging key, spilled output. A file written in the second before a plan reads its evidence is
+    /// kept by <see cref="MinimumAge.StampTolerance"/>, so one written as the test starts would be too.
+    /// </summary>
+    public static readonly TimeSpan WrittenAtStart = TimeSpan.FromMinutes(1);
+
     public ClaudeCodeFixture(FakeUserEnvironment environment)
         : this(Path.Combine(environment.UserProfile, ".claude"))
     {
@@ -212,14 +219,15 @@ public sealed class ClaudeCodeFixture
 
     /// <summary>
     /// Tool output spilled beside a session's transcript. Dated by the folders, never by the file inside,
-    /// which is how a provider has to date it too.
+    /// which is how a provider has to date it too. The file is recent to anything that dated it, and was
+    /// still written before any plan read its evidence, as a session's output always is.
     /// </summary>
     public string SpilledOutput(string session, string folder = ProjectFolder, TimeSpan? age = null)
     {
         var sidecar = Path.Combine(Project(folder), session);
         var output = Path.Combine(sidecar, "tool-results");
 
-        CreateFile(Path.Combine(output, "output.txt"), 512);
+        TempDirectory.Age(CreateFile(Path.Combine(output, "output.txt"), 512), WrittenAtStart);
 
         AgeFolder(output, age);
         AgeFolder(sidecar, age);
@@ -291,12 +299,20 @@ public sealed class ClaudeCodeFixture
             fields["pidDomain"] = domain;
         }
 
-        return WriteText(
-            Path.Combine(Sessions, $"{processId}.{new string('a', 64)}.key"), JsonSerializer.Serialize(fields));
+        return TempDirectory.Age(
+            WriteText(Path.Combine(Sessions, $"{processId}.{new string('a', 64)}.key"), JsonSerializer.Serialize(fields)),
+            WrittenAtStart);
     }
 
     /// <summary>An editor's handshake file, carrying a connection token the way a real one does.</summary>
     public string EditorLock(int port, int processId, bool runningInWindows = true) =>
+        TempDirectory.Age(EditorLockRewrittenNow(port, processId, runningInWindows), WrittenAtStart);
+
+    /// <summary>
+    /// The same file written this moment, by an editor that has just taken <paramref name="port"/>. A
+    /// file already there keeps its creation time, so only this write's own stamp is new.
+    /// </summary>
+    public string EditorLockRewrittenNow(int port, int processId, bool runningInWindows = true) =>
         WriteText(
             Path.Combine(Ide, $"{port}.lock"),
             JsonSerializer.Serialize(new Dictionary<string, object>

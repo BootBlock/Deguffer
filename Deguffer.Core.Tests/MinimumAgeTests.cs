@@ -195,20 +195,23 @@ public class MinimumAgeTests
 
     /// <summary>
     /// A guard anchored at the instant a plan read its evidence keeps everything written from then on,
-    /// however soon after, and nothing written before it, however recently. A window cannot say that:
-    /// a window of zero is off, and any longer one keeps files the preview offered.
+    /// however soon after, and nothing written more than the stamp tolerance before it. A window cannot
+    /// say that: a window of zero is off, and any longer one keeps files the preview offered.
     /// </summary>
     [Theory]
-    [InlineData(-1, false)]
-    [InlineData(0, true)]
-    [InlineData(1, true)]
-    [InlineData(60 * 24 * 30, true)]
-    public void SinceKeepsWhatWasWrittenFromTheInstantOnAndNothingBefore(int minutesAfter, bool kept)
+    [InlineData(-60_000.0, false)]
+    [InlineData(-1_001.0, false)]
+    [InlineData(-1_000.0, true)]
+    [InlineData(-1.0, true)]
+    [InlineData(0.0, true)]
+    [InlineData(60_000.0, true)]
+    [InlineData(30 * 24 * 60 * 60_000.0, true)]
+    public void SinceKeepsWhatWasWrittenFromTheInstantOnAndNothingBefore(double millisecondsAfter, bool kept)
     {
         var guard = MinimumAge.Since(Now);
 
         Assert.True(guard.IsOn);
-        Assert.Equal(kept, guard.Protects(Now.AddMinutes(minutesAfter).ToFileTimeUtc()));
+        Assert.Equal(kept, guard.Protects(Now.AddMilliseconds(millisecondsAfter).ToFileTimeUtc()));
     }
 
     /// <summary>
@@ -222,7 +225,7 @@ public class MinimumAgeTests
         var looked = offsetAt ?? Now;
         var local = looked.ToLocalTime();
 
-        Assert.Equal(looked, MinimumAge.Since(local).KeepFromUtc);
+        Assert.Equal(looked - MinimumAge.StampTolerance, MinimumAge.Since(local).KeepFromUtc);
         Assert.Equal(offsetAt is not null, local.Ticks != looked.Ticks);
     }
 
