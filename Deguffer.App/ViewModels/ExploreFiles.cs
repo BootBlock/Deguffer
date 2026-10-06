@@ -25,6 +25,14 @@ public sealed partial class ExploreFiles : ObservableObject
     /// <summary>The minimum sizes offered, in the binary units every size on the page is stated in.</summary>
     private static readonly long[] Minimums = [0, 10L << 20, 100L << 20, 1L << 30, 10L << 30];
 
+    /// <summary>The three boxes' entries, built once for the life of the app (G5).</summary>
+    private static readonly IReadOnlyList<string> Types = ["Any type", .. FileCategories.All.Select(FileCategories.Label)];
+
+    private static readonly IReadOnlyList<string> MinimumSizes =
+        ["Any size", "10 MB or more", "100 MB or more", "1 GB or more", "10 GB or more"];
+
+    private static readonly IReadOnlyList<string> Ages = [.. FileAges.All.Select(FileAges.Label)];
+
     private readonly ExploreActions _actions;
     private readonly Func<int, bool> _wasRemoved;
     private readonly TimeProvider _time;
@@ -75,15 +83,13 @@ public sealed partial class ExploreFiles : ObservableObject
     public ObservableCollection<ExploreFileRow> Rows { get; } = [];
 
     /// <summary>The types the type box offers, "any type" first.</summary>
-    public IReadOnlyList<string> TypeLabels { get; } =
-        ["Any type", .. FileCategories.All.Select(FileCategories.Label)];
+    public IReadOnlyList<string> TypeLabels => Types;
 
     /// <summary>The minimum sizes the size box offers. See <see cref="Minimums"/>.</summary>
-    public IReadOnlyList<string> MinimumLabels { get; } =
-        ["Any size", "10 MB or more", "100 MB or more", "1 GB or more", "10 GB or more"];
+    public IReadOnlyList<string> MinimumLabels => MinimumSizes;
 
     /// <summary>The ages the age box offers.</summary>
-    public IReadOnlyList<string> AgeLabels { get; } = [.. FileAges.All.Select(FileAges.Label)];
+    public IReadOnlyList<string> AgeLabels => Ages;
 
     /// <summary>Text a file's name contains, or a wildcard it matches. See <see cref="FileFilter.Name"/>.</summary>
     [ObservableProperty]
@@ -123,7 +129,7 @@ public sealed partial class ExploreFiles : ObservableObject
     /// The filter the four boxes describe, with an index no box offers read as that box's first
     /// entry: a combo box reports -1 while it has no selection.
     /// </summary>
-    public FileFilter Filter => new(
+    private FileFilter Filter => new(
         NameFilter,
         TypeIndex > 0 && TypeIndex <= FileCategories.All.Count ? FileCategories.All[TypeIndex - 1] : null,
         MinimumIndex > 0 && MinimumIndex < Minimums.Length ? Minimums[MinimumIndex] : 0,
