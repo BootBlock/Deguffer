@@ -162,12 +162,12 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
     {
         ArgumentNullException.ThrowIfNull(folders);
 
-        var caches = Examine(ct).Caches.Select(cache => ReachedFolder.At(cache.Path, Volumes)).ToList();
+        var caches = Examine(ct).Caches.Select(cache => Reach(cache.Path)).ToList();
 
         return Task.FromResult<IReadOnlyList<string>>(
         [
             .. from folder in folders
-               let reached = ReachedFolder.At(folder, Volumes)
+               let reached = Reach(folder)
                from cache in caches
                let relative = reached.PathTo(cache)
                where relative is not null and not "."

@@ -39,13 +39,21 @@ public sealed class PlanVerifierTests : IDisposable
             ProtectedPaths = protectedPaths,
         };
 
+    /// <summary>
+    /// <see cref="PlanVerifier.Verify"/> over volumes a test states, so a missing path is never followed
+    /// through the mounts and letters of the machine running the suite.
+    /// </summary>
+    private static VerificationResult Verify(
+        CleanupPlan plan, RunReach? runReach = null, RunResidue? residue = null, IVolumeInventory? volumes = null) =>
+        PlanVerifier.Verify(plan, runReach, residue, volumes: volumes ?? new FakeVolumeInventory());
+
     private static ProtectedPath Protect(string path) => new(path, "It must survive.", PresenceBefore: PathPresence.Present);
 
     private static ProtectedPath ProtectRefused(string path) =>
         new(path, "It must survive.", PresenceBefore: PathPresence.Refused);
 
     private static VerificationOutcome OutcomeFor(CleanupPlan plan, string path, RunReach? reach = null) =>
-        PlanVerifier.Verify(plan, reach).Checks.Single(c => c.Subject == path).Outcome;
+        Verify(plan, reach).Checks.Single(c => c.Subject == path).Outcome;
 
     /// <summary>
     /// A volume root this machine has not mounted, chosen rather than written down. A literal drive
@@ -65,7 +73,7 @@ public sealed class PlanVerifierTests : IDisposable
         var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")], Protect(kept));
 
         Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
-        Assert.True(PlanVerifier.Verify(plan).Passed);
+        Assert.True(Verify(plan).Passed);
     }
 
     /// <summary>
@@ -81,7 +89,7 @@ public sealed class PlanVerifierTests : IDisposable
             new ProtectedPath(absent, "It must survive.", PresenceBefore: PathPresence.Absent));
 
         Assert.Equal(VerificationOutcome.NotPresentBefore, OutcomeFor(plan, absent));
-        Assert.True(PlanVerifier.Verify(plan).Passed);
+        Assert.True(Verify(plan).Passed);
     }
 
     /// <summary>
@@ -98,7 +106,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Directory.Delete(vanished);
 
-        var verification = PlanVerifier.Verify(plan);
+        var verification = Verify(plan);
         var check = Assert.Single(verification.Checks);
 
         Assert.Equal(VerificationOutcome.Failed, check.Outcome);
@@ -117,7 +125,7 @@ public sealed class PlanVerifierTests : IDisposable
         var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("project", "obj"), "Output")], ProtectRefused(kept));
 
         Assert.Equal(VerificationOutcome.Survived, OutcomeFor(plan, kept));
-        Assert.True(PlanVerifier.Verify(plan).Passed);
+        Assert.True(Verify(plan).Passed);
     }
 
     /// <summary>
@@ -137,7 +145,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(survivor);
 
-        var verification = PlanVerifier.Verify(plan);
+        var verification = Verify(plan);
         var check = Assert.Single(verification.Checks);
 
         Assert.Equal(VerificationOutcome.Unverified, check.Outcome);
@@ -164,7 +172,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         using var denied = DeniedDirectory.WithUnreadableFile(marker);
 
-        var verification = PlanVerifier.Verify(plan);
+        var verification = Verify(plan);
         var check = Assert.Single(verification.Checks);
 
         Assert.Equal(VerificationOutcome.Unverified, check.Outcome);
@@ -190,7 +198,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(live);
 
-        var verification = PlanVerifier.Verify(plan, runReach: null, residue);
+        var verification = Verify(plan, runReach: null, residue);
 
         Assert.Equal(VerificationOutcome.Entered, Assert.Single(verification.Checks).Outcome);
         Assert.Equal(live, Assert.Single(verification.Failures).Subject);
@@ -231,7 +239,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Directory.Delete(vanished);
 
-        var verification = PlanVerifier.Verify(plan);
+        var verification = Verify(plan);
 
         Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, vanished));
         Assert.False(verification.Passed);
@@ -254,7 +262,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Directory.Delete(checkout, recursive: true);
 
-        var verification = PlanVerifier.Verify(plan);
+        var verification = Verify(plan);
 
         Assert.Equal(VerificationOutcome.RemovedFromOutside, OutcomeFor(plan, vanished));
         Assert.Empty(verification.Failures);
@@ -431,7 +439,7 @@ public sealed class PlanVerifierTests : IDisposable
         File.Delete(settings);
 
         Assert.Equal(VerificationOutcome.Emptied, OutcomeFor(plan, config));
-        Assert.False(PlanVerifier.Verify(plan).Passed);
+        Assert.False(Verify(plan).Passed);
     }
 
     /// <summary>
@@ -571,7 +579,7 @@ public sealed class PlanVerifierTests : IDisposable
         var residue = new RunResidue();
         residue.Record(scratch, [working, Path.GetDirectoryName(working)!, live]);
 
-        var verification = PlanVerifier.Verify(plan, runReach: null, residue);
+        var verification = Verify(plan, runReach: null, residue);
 
         Assert.Equal(VerificationOutcome.Entered, Assert.Single(verification.Checks).Outcome);
         Assert.Equal(live, Assert.Single(verification.Failures).Subject);
@@ -590,12 +598,12 @@ public sealed class PlanVerifierTests : IDisposable
         var live = Path.Combine(scratch, "kitprobe");
         var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] }], Protect(live));
 
-        Assert.Equal(VerificationOutcome.Failed, PlanVerifier.Verify(plan, runReach: null, new RunResidue()).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Failed, Verify(plan, runReach: null, new RunResidue()).Checks.Single().Outcome);
 
         var residue = new RunResidue();
         residue.RecordLeftAlone(scratch, [live]);
 
-        Assert.Equal(VerificationOutcome.RemovedFromOutside, PlanVerifier.Verify(plan, runReach: null, residue).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, Verify(plan, runReach: null, residue).Checks.Single().Outcome);
     }
 
     /// <summary>
@@ -615,8 +623,8 @@ public sealed class PlanVerifierTests : IDisposable
         var named = new RunReach([scratch, live], [], Unbounded: false);
         var unbounded = new RunReach([scratch], [], Unbounded: true);
 
-        Assert.Equal(VerificationOutcome.Failed, PlanVerifier.Verify(plan, named, residue).Checks.Single().Outcome);
-        Assert.Equal(VerificationOutcome.Failed, PlanVerifier.Verify(plan, unbounded, residue).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Failed, Verify(plan, named, residue).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Failed, Verify(plan, unbounded, residue).Checks.Single().Outcome);
     }
 
     /// <summary>
@@ -634,7 +642,7 @@ public sealed class PlanVerifierTests : IDisposable
         var residue = new RunResidue();
         residue.Record(scratch, [live]);
 
-        Assert.Equal(VerificationOutcome.Entered, PlanVerifier.Verify(plan, runReach: null, residue).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Entered, Verify(plan, runReach: null, residue).Checks.Single().Outcome);
     }
 
     /// <summary>
@@ -661,7 +669,7 @@ public sealed class PlanVerifierTests : IDisposable
         var residue = new RunResidue();
         residue.Record(cache, [entry, cache]);
 
-        var outcomes = PlanVerifier.Verify(plan, runReach: null, residue).Checks.ToDictionary(c => c.Subject, c => c.Outcome);
+        var outcomes = Verify(plan, runReach: null, residue).Checks.ToDictionary(c => c.Subject, c => c.Outcome);
 
         Assert.Equal(VerificationOutcome.Survived, outcomes[tool]);
         Assert.Equal(VerificationOutcome.Survived, outcomes[cache]);
@@ -693,8 +701,8 @@ public sealed class PlanVerifierTests : IDisposable
         var fromAbove = new RunResidue();
         fromAbove.Record(outer, [inBin]);
 
-        Assert.Equal(VerificationOutcome.Survived, PlanVerifier.Verify(plan, runReach: null, fromTheTarget).Checks.Single().Outcome);
-        Assert.Equal(VerificationOutcome.Entered, PlanVerifier.Verify(plan, runReach: null, fromAbove).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Survived, Verify(plan, runReach: null, fromTheTarget).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.Entered, Verify(plan, runReach: null, fromAbove).Checks.Single().Outcome);
     }
 
     /// <summary>A protected directory recorded as holding something, as a provider's capture records it.</summary>
@@ -737,7 +745,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Directory.Delete(checkout, recursive: true);
 
-        var summary = PlanVerifier.Verify(plan).Summary;
+        var summary = Verify(plan).Summary;
 
         Assert.Contains("removed from outside this run", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("did not survive", summary, StringComparison.Ordinal);
@@ -843,13 +851,13 @@ public sealed class PlanVerifierTests : IDisposable
         Directory.Delete(project, recursive: true);
         Directory.Delete(Path.Combine(_temp.Path, "checkout"), recursive: true);
 
-        var checks = PlanVerifier.Verify(plan, volumes: volumes).Checks;
+        var checks = Verify(plan, volumes: volumes).Checks;
 
         Assert.Equal(VerificationOutcome.Failed, checks.Single(c => c.Subject == lost).Outcome);
         Assert.Equal(VerificationOutcome.RemovedFromOutside, checks.Single(c => c.Subject == vanished).Outcome);
         Assert.Equal(
             VerificationOutcome.RemovedFromOutside,
-            PlanVerifier.Verify(plan, volumes: new FakeVolumeInventory()).Checks.Single(c => c.Subject == lost).Outcome);
+            Verify(plan, volumes: new FakeVolumeInventory()).Checks.Single(c => c.Subject == lost).Outcome);
     }
 
     /// <summary>
@@ -868,7 +876,7 @@ public sealed class PlanVerifierTests : IDisposable
             ProtectHolding(tool),
             ProtectHolding(other));
 
-        var checks = PlanVerifier.Verify(plan, volumes: volumes).Checks;
+        var checks = Verify(plan, volumes: volumes).Checks;
 
         Assert.Equal(VerificationOutcome.Survived, checks.Single(c => c.Subject == tool).Outcome);
         Assert.Equal(VerificationOutcome.Emptied, checks.Single(c => c.Subject == other).Outcome);
@@ -893,7 +901,7 @@ public sealed class PlanVerifierTests : IDisposable
         var residue = new RunResidue();
         residue.Record(root, [Path.Combine(root, "live", "session", "work")]);
 
-        var checks = PlanVerifier.Verify(plan, runReach: null, residue, volumes: volumes).Checks;
+        var checks = Verify(plan, runReach: null, residue, volumes: volumes).Checks;
 
         Assert.Equal(VerificationOutcome.Entered, checks.Single(c => c.Subject == live).Outcome);
         Assert.Equal(VerificationOutcome.Survived, checks.Single(c => c.Subject == beside).Outcome);
@@ -920,9 +928,9 @@ public sealed class PlanVerifierTests : IDisposable
 
         Assert.Equal(
             VerificationOutcome.RemovedFromOutside,
-            PlanVerifier.Verify(plan, runReach: null, residue, volumes: volumes).Checks.Single().Outcome);
+            Verify(plan, runReach: null, residue, volumes: volumes).Checks.Single().Outcome);
         Assert.Equal(
             VerificationOutcome.Failed,
-            PlanVerifier.Verify(plan, runReach: null, other, volumes: volumes).Checks.Single().Outcome);
+            Verify(plan, runReach: null, other, volumes: volumes).Checks.Single().Outcome);
     }
 }

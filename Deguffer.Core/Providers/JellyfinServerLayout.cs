@@ -117,7 +117,8 @@ public static class JellyfinServerLayout
         var known = new List<string>();
 
         // One folder however it is named, so the installer's record naming the default folder through
-        // an alias does not make it two installs.
+        // an alias does not make it two installs. Explore still refuses it at each name, because it
+        // compares a folder it is asked about with each tool root as that root is named.
         var distinct = new List<ReachedFolder>();
 
         foreach (var data in candidates)
@@ -126,6 +127,11 @@ public static class JellyfinServerLayout
 
             if (distinct.Exists(reached.IsSameAs))
             {
+                if (LongPath.ProbeDirectory(data) is not PathPresence.Absent)
+                {
+                    toolRoots.Add(ToolRoot.Of(data, ExploreReason, new DisposableChildSet([])));
+                }
+
                 continue;
             }
 
@@ -194,13 +200,6 @@ public static class JellyfinServerLayout
             {
                 var reached = ReachedFolder.At(folder, volumes);
 
-                if (seen.Exists(reached.IsSameAs))
-                {
-                    continue;
-                }
-
-                seen.Add(reached);
-
                 var presence = LongPath.ProbeDirectory(folder);
 
                 if (presence is PathPresence.Absent)
@@ -210,10 +209,19 @@ public static class JellyfinServerLayout
 
                 var isMoved = !folder.Equals(standard, StringComparison.OrdinalIgnoreCase);
 
+                // Refused in Explore at each name it is reached by, for the reason a data folder is,
+                // and offered once.
                 if (isMoved)
                 {
                     toolRoots.AddRange(MediaServerLayout.Refusing(folder, TranscodeExploreReason));
                 }
+
+                if (seen.Exists(reached.IsSameAs))
+                {
+                    continue;
+                }
+
+                seen.Add(reached);
 
                 if (Path.GetDirectoryName(folder) is not { } parent)
                 {

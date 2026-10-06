@@ -413,6 +413,35 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The installer recording the default data folder through another mount of its volume names one
+    /// install, so its transcoder folder is offered once. Explore still refuses the folder at both
+    /// names, because it compares what it is asked about with each tool root as that root is named.
+    /// </summary>
+    [Fact]
+    public async Task ADataFolderRecordedThroughAnotherMountOfItsVolumeIsOneInstallRefusedAtBothNames()
+    {
+        var standard = Path.Combine(_environment.LocalAppData, "jellyfin");
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var recorded = Path.Combine(mirror, "jellyfin");
+        var volumes = new FakeVolumeInventory().With(_environment.LocalAppData + @"\", alsoMountedAt: [mirror + @"\"]);
+
+        foreach (var data in new[] { recorded, standard })
+        {
+            CreateData(data);
+            Transcoding(Path.Combine(data, "cache", "transcodes"));
+        }
+
+        Record(JellyfinServerLayout.DataFolderValue, recorded);
+
+        var provider = CreateProvider(volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.TargetedPaths, path => Path.GetFileName(path) == "transcodes");
+        Assert.Contains(provider.ToolRoots, root => root.Path.Equals(recorded, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(provider.ToolRoots, root => root.Path.Equals(standard, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// A data folder Windows would not describe still counts. A transcoder folder that holds it would
     /// take it along, and nothing here could say what was in it.
     /// </summary>

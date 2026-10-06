@@ -316,6 +316,28 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
         Assert.Equal(!offered, plan.ProtectedPaths.Any(p => p.Path.Equals(LegacyCache, StringComparison.OrdinalIgnoreCase)));
     }
 
+    /// <summary>
+    /// A local cache path naming <c>Common</c> through another mount of its volume is not followed, as
+    /// one naming it by its own path is not: the store it would make takes the server's installation
+    /// with it. A store a setting names beside Unreal's folder, reached the same way, is followed
+    /// (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@"UnrealEngine\Common", false)]
+    [InlineData(@"Caches", true)]
+    public async Task ASettingNamingUnrealsFolderThroughAnotherMountIsNotFollowed(string relative, bool followed)
+    {
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var volumes = new FakeVolumeInventory().With(_environment.LocalAppData + @"\", alsoMountedAt: [mirror + @"\"]);
+        var chosen = Path.Combine(mirror, relative);
+        var store = PopulateStore(Path.Combine(chosen, "Zen"));
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", chosen);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal(followed, plan.TargetedPaths.Contains(store, StringComparer.OrdinalIgnoreCase));
+    }
+
     private static void AssertProvedStanding(CleanupResult result, string path)
     {
         var check = Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(path, StringComparison.OrdinalIgnoreCase));

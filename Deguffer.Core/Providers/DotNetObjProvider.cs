@@ -148,7 +148,6 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
             Questions,
-            Volumes,
             ct));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -276,7 +275,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// </summary>
     private LiveTreeQuestion Questions(CancellationToken ct)
     {
-        var solutions = SolutionWorkspaces.Read(_liveTrees.FindOccupiedDirectories(ct).Live, ApprovedRoots, Volumes, ct);
+        var solutions = SolutionWorkspaces.Read(_liveTrees, ApprovedRoots, ct);
 
         return new LiveTreeQuestion(candidate => new LiveTreeQuery(candidate.Path, candidate.Project)
         {

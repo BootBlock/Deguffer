@@ -252,7 +252,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             (root, "Puppeteer's cache folder must survive; only whole browser builds inside it are removed."),
         };
 
-        if (ReachedFolder.At(root, Volumes).IsSameAs(ReachedFolder.At(DefaultRoot, Volumes))
+        if (Reach(root).IsSameAs(Reach(DefaultRoot))
             && Path.GetDirectoryName(root) is { } shared)
         {
             survivors.Add((shared, "The folder other tools share with Puppeteer is never touched."));

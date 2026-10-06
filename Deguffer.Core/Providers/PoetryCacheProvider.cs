@@ -263,7 +263,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         // cache directory itself, or anything above it, would make everything under it part of the
         // environment tree — and the name-based rule would not see it. Asked at every path each is
         // reachable at, because either may name the folder through an alias the other does not.
-        if (ReachedFolder.At(environments, Volumes).Holds(ReachedFolder.At(cacheRoot, Volumes)))
+        if (Reach(environments).Holds(Reach(cacheRoot)))
         {
             return UnexaminedPlan(
                 $"Poetry keeps its virtual environments at {LongPath.Display(environments)}, which "
@@ -418,7 +418,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
         var targets = new List<DeletionTarget>();
         var withheld = new List<(string Path, string Reason)>();
-        var environmentsFolder = ReachedFolder.At(environments, Volumes);
+        var environmentsFolder = Reach(environments);
 
         // Poetry nests an artefact under four levels of its URL hash before it reaches a file, so the
         // top level moves only when a hash prefix is first seen. A cache filled every day would
@@ -430,7 +430,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             // The same §5.2 check the whole-root case makes, one level in. A virtualenvs.path
             // configured inside a recognised child would otherwise be deleted by a step that named a
             // cache.
-            if (ReachedFolder.At(target.Path, Volumes).Holds(environmentsFolder))
+            if (Reach(target.Path).Holds(environmentsFolder))
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Warning,
@@ -492,8 +492,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         // as readily as one inside it, and {cache-dir}\cache is exactly the value neither other
         // guard sees: it is not the cache root, so BuildPlanAsync's whole-root refusal passes it,
         // and it is a Tier 4 child, so CollectTargets skips it before reaching its own check.
-        var repositoriesFolder = ReachedFolder.At(repositories, Volumes);
-        var environmentsFolder = ReachedFolder.At(environments, Volumes);
+        var repositoriesFolder = Reach(repositories);
+        var environmentsFolder = Reach(environments);
 
         if (repositoriesFolder.Holds(environmentsFolder) || environmentsFolder.Holds(repositoriesFolder))
         {

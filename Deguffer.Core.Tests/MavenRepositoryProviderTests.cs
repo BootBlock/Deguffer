@@ -380,8 +380,8 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     /// <summary>
     /// §5.2 through an alias. With <c>S:</c> substituted for the profile, <c>S:\.m2</c> is the Maven
     /// home and <c>S:\.m2\wrapper</c> is a folder in it the plan promises to leave alone, though neither
-    /// text names the home. A repository in the home reached the same way is still a repository, and
-    /// the home's own files are still asserted to survive beside it (§5.6).
+    /// text names the home. The negative, a repository reached the same way, is the test after this
+    /// one (§5.6).
     /// </summary>
     [Theory]
     [InlineData(@"S:\.m2", "holds your Maven configuration")]

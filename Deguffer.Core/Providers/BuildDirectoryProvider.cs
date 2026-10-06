@@ -136,7 +136,6 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Kind.DirectoryNames,
             candidate => BuildDirectorySignature.TryRecognise(Kind, candidate, ct)?.Project,
             Questions,
-            Volumes,
             ct));
 
     /// <summary>

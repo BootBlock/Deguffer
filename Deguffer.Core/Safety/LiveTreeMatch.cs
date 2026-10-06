@@ -85,6 +85,7 @@ internal sealed class LiveTreeMatch(IVolumeInventory volumes)
         return null;
     }
 
-    private ReachedFolder Reach(string path) =>
+    /// <summary>The folder at <paramref name="path"/>, followed the first time it is asked about.</summary>
+    public ReachedFolder Reach(string path) =>
         _reached.GetOrAdd(path, static (key, inventory) => ReachedFolder.At(key, inventory), volumes);
 }

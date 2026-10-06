@@ -55,7 +55,6 @@ internal static class InUseBuildDirectories
     /// The rule that builds what the plan asks the veto, whose
     /// <see cref="LiveTreeQuestion.NamedProjects"/> are candidates as well.
     /// </param>
-    /// <param name="volumes">Asked every other path a root and a place a program is are reachable at.</param>
     public static IReadOnlyList<ToolRoot> Declare(
         ILiveTreeInspector inspector,
         SourceDirectoryDiscovery discovery,
@@ -63,7 +62,6 @@ internal static class InUseBuildDirectories
         IReadOnlyList<string> names,
         Func<string, string?> recognise,
         Func<CancellationToken, LiveTreeQuestion> questions,
-        IVolumeInventory volumes,
         CancellationToken ct)
     {
         if (roots.Count == 0)
@@ -72,16 +70,17 @@ internal static class InUseBuildDirectories
         }
 
         // Resolved first, because the process table holds whatever form a program was started with:
-        // a path with '..' in it would otherwise be followed to somewhere it is not.
+        // a path with '..' in it would otherwise be followed to somewhere it is not. Each is followed
+        // through the inspector, which keeps the answer for the planning pass every build provider shares.
         var occupied = inspector.FindOccupiedDirectories(ct).Live
             .Select(place => LongPath.Configured(place.Directory))
             .OfType<string>()
-            .Select(directory => ReachedFolder.At(directory, volumes))
+            .Select(inspector.Reach)
             .ToList();
 
         // Built once, so the projects it names and the question the veto asks come from one reading.
         var question = questions(ct);
-        var named = question.NamedProjects.Select(project => ReachedFolder.At(project, volumes)).ToList();
+        var named = question.NamedProjects.Select(inspector.Reach).ToList();
 
         // A set, because approved roots may nest, and a directory below both would otherwise be
         // asked about twice and declared twice.
@@ -97,7 +96,7 @@ internal static class InUseBuildDirectories
                 continue;
             }
 
-            var folder = ReachedFolder.At(root.Path, volumes);
+            var folder = inspector.Reach(root.Path);
 
             // Asked of the name and the boundary before the disk, because most places a program is
             // are nowhere near a build directory and a string answers that for free.

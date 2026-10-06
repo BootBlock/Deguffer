@@ -34,8 +34,9 @@ internal sealed class SolutionWorkspaces
     public IReadOnlyList<string> NamedProjects { get; }
 
     /// <summary>
-    /// The solutions in each place of <paramref name="occupied"/> that lies inside one of
-    /// <paramref name="roots"/>, at any path either is reachable at.
+    /// The solutions in each place <paramref name="liveTrees"/> finds a program that lies inside one
+    /// of <paramref name="roots"/>, at any path either is reachable at, followed through the inspector
+    /// so each is followed once in a planning pass.
     ///
     /// <para><b>Each place is named below the root as the root names itself.</b> A program working at
     /// <c>S:\app</c>, with <c>S:</c> substituted for the root <c>C:\Source</c>, is working in
@@ -43,17 +44,15 @@ internal sealed class SolutionWorkspaces
     /// named below the place it was read from, so read through <c>S:</c> they named no project the
     /// plan asks about.</para>
     /// </summary>
-    /// <param name="volumes">Asked every other path a root and a place a program is are reachable at.</param>
     public static SolutionWorkspaces Read(
-        IReadOnlyList<LiveTree> occupied,
+        ILiveTreeInspector liveTrees,
         IReadOnlyList<SourceRoot> roots,
-        IVolumeInventory volumes,
         CancellationToken ct)
     {
         var places = new Dictionary<string, Solutions>(StringComparer.OrdinalIgnoreCase);
-        var folders = roots.Select(root => (root.Path, Folder: ReachedFolder.At(root.Path, volumes))).ToList();
+        var folders = roots.Select(root => (root.Path, Folder: liveTrees.Reach(root.Path))).ToList();
 
-        foreach (var place in occupied)
+        foreach (var place in liveTrees.FindOccupiedDirectories(ct).Live)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -64,7 +63,7 @@ internal sealed class SolutionWorkspaces
                 continue;
             }
 
-            var reached = ReachedFolder.At(directory, volumes);
+            var reached = liveTrees.Reach(directory);
 
             foreach (var (root, folder) in folders)
             {

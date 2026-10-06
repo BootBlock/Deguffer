@@ -499,8 +499,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         // Either of the user's vcpkg directories, because the documented search order falls through
         // from the local profile to the roaming one — and a cache found under the second still has
         // that second directory's own records sitting beside it.
-        var inProfile = _discovery.ProfileDirectories.Any(
-            profile => ReachedFolder.At(profile, Volumes).IsSameAs(ReachedFolder.At(container, Volumes)));
+        var inProfile = _discovery.ProfileDirectories.Contains(container, StringComparer.OrdinalIgnoreCase);
 
         return new DeclaredRoot(
             container,
@@ -571,12 +570,12 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     {
         // At every path each is reachable at, because a variable may name the clone through a letter
         // subst made for it, or through another mount of its volume.
-        var folder = ReachedFolder.At(path, Volumes);
+        var folder = Reach(path);
 
         foreach (var (directory, protectedNames) in ToolDirectories(located))
         {
-            if (folder.Holds(ReachedFolder.At(directory, Volumes))
-                || protectedNames.Any(n => ReachedFolder.At(Path.Combine(directory, n.RelativePath), Volumes).Holds(folder)))
+            if (folder.Holds(Reach(directory))
+                || protectedNames.Any(n => Reach(Path.Combine(directory, n.RelativePath)).Holds(folder)))
             {
                 return true;
             }

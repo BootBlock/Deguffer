@@ -243,6 +243,28 @@ public sealed class PlexTranscodeProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A transcoder setting naming Plex's own <c>Cache</c> folder through another mount of its volume
+    /// moves nothing, so the sessions folder is offered once. One naming a folder beside it reached the
+    /// same way is a moved folder, and its sessions are offered as well.
+    /// </summary>
+    [Theory]
+    [InlineData("Cache", 1)]
+    [InlineData("Elsewhere", 2)]
+    public async Task ATranscoderSettingNamingPlexsOwnCacheThroughAnotherMountMovesNothing(string transcoder, int offered)
+    {
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var volumes = new FakeVolumeInventory().With(Data + @"\", alsoMountedAt: [mirror + @"\"]);
+        var moved = Path.Combine(mirror, transcoder);
+        Write(Path.Combine(Sessions, "session-1", "segment.ts"), Old);
+        Write(Path.Combine(moved, "Transcode", "Sessions", "session-1", "segment.ts"), Old);
+        WithSetting(PlexServerLayout.TranscoderValue, moved);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal(offered, plan.TargetedPaths.Count(path => Path.GetFileName(path) == "Sessions"));
+    }
+
+    /// <summary>
     /// The refusal above where the downloads setting names the transcoder's folder through another
     /// mount of its volume: <c>B\PlexShared</c> is <c>A\PlexShared</c>, though the two texts differ.
     /// A downloads folder beside it reached the same way leaves the transcoder's folder offered (§5.6).

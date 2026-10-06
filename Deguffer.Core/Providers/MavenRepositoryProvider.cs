@@ -405,9 +405,9 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         //
         // Asked at every path each is reachable at, because the value may name the home through a
         // letter subst made for the profile, or through another mount of its volume.
-        var folder = ReachedFolder.At(repository, Volumes);
+        var folder = Reach(repository);
 
-        if (folder.Holds(ReachedFolder.At(Home, Volumes)))
+        if (folder.Holds(Reach(Home)))
         {
             return $"Your Maven settings.xml points the local repository at {repository}, which holds "
                 + "your Maven configuration rather than sitting inside it. Deguffer is leaving it alone.";
@@ -416,7 +416,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         // The same refusal, one level in. A value naming one of the things this provider promises to
         // leave standing would otherwise be targeted and asserted to survive by the same plan, which
         // is the contradiction the check above exists to stop.
-        return ProtectedNames.FirstOrDefault(n => ReachedFolder.At(Path.Combine(Home, n.RelativePath), Volumes).Holds(folder))
+        return ProtectedNames.FirstOrDefault(n => Reach(Path.Combine(Home, n.RelativePath)).Holds(folder))
             is { RelativePath.Length: > 0 } named
                 ? $"Your Maven settings.xml points the local repository at {repository}, which is "
                   + $"'{named.RelativePath}' in your Maven home. Deguffer never removes that, so it is "
@@ -450,9 +450,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             // level moves only when a whole new group first appears — see DeclaredLocation.ReportsAge.
             ReportsAge: false);
 
-        // One folder however the setting names it, so a repository in the home reached through an alias
-        // keeps the home's own files among what it protects.
-        var inHome = ReachedFolder.At(container, Volumes).IsSameAs(ReachedFolder.At(Home, Volumes));
+        var inHome = container.Equals(Home, StringComparison.OrdinalIgnoreCase);
 
         var repositoryRoot = new DeclaredRoot(
             container,

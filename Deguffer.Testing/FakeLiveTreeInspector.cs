@@ -185,6 +185,8 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         && parent.Equals(
             Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
 
+    public ReachedFolder Reach(string path) => _match.Reach(path);
+
     public void Invalidate() => InvalidateCount++;
 
     private sealed record RunningProgram(

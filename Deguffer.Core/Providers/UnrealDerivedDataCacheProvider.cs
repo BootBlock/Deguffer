@@ -357,10 +357,10 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
 
         // At every path each is reachable at, because a setting may name a store through a letter subst
         // made for Unreal's folders, or through another mount of their volume.
-        var owned = unrealsOwn.Select(own => ReachedFolder.At(own, Volumes)).ToList();
+        var owned = unrealsOwn.Select(own => Reach(own)).ToList();
 
         var named = UnrealCacheLocations.ConfiguredStores(Environment)
-            .Select(store => (Store: store, Folder: ReachedFolder.At(store.Path, Volumes)))
+            .Select(store => (Store: store, Folder: Reach(store.Path)))
             .Where(store => !owned.Exists(own => Overlap(own, store.Folder)) && IsZensAlone(store.Store.Path))
             .ToList();
 
@@ -464,7 +464,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     [
         .. UnrealCacheLocations.DefaultStores(Environment, _system)
             .Concat(UnrealCacheLocations.ConfiguredStores(Environment))
-            .Select(store => ReachedFolder.At(store.Path, Volumes)),
+            .Select(store => Reach(store.Path)),
     ];
 
     /// <summary>
@@ -474,7 +474,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     /// </summary>
     private bool MayHoldAStore(string path, IReadOnlyList<ReachedFolder> named)
     {
-        var folder = ReachedFolder.At(path, Volumes);
+        var folder = Reach(path);
 
         return named.Any(folder.Holds);
     }

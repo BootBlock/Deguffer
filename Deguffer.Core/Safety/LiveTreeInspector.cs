@@ -8,7 +8,8 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     private readonly IProcessTableCalls _calls;
     private readonly IVolumeInventory _volumes;
     private readonly Lock _gate = new();
-    private (ProcessTable Table, LiveTreeMatch Match)? _snapshot;
+    private ProcessTable? _snapshot;
+    private LiveTreeMatch? _match;
 
     public LiveTreeInspector()
         : this(ProcessTableCalls.Instance, VolumeInventory.Current)
@@ -183,23 +184,38 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     private static LiveTreeFindings Findings(Dictionary<string, List<string>> holders, bool complete) =>
         new([.. holders.Select(entry => new LiveTree(entry.Key, entry.Value))], complete);
 
+    public ReachedFolder Reach(string path) => Match.Reach(path);
+
     public void Invalidate()
     {
         lock (_gate)
         {
             _snapshot = null;
+            _match = null;
         }
     }
 
     /// <summary>
-    /// One reading of the process table, and the rule that matches it, which keeps where each path
-    /// it follows is reachable for as long as the reading is kept.
+    /// The rule that matches the process table, which keeps where each path it follows is reachable
+    /// until the reading is discarded.
     /// </summary>
+    private LiveTreeMatch Match
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _match ??= new LiveTreeMatch(_volumes);
+            }
+        }
+    }
+
+    /// <summary>One reading of the process table, and the rule that matches it.</summary>
     private (ProcessTable Table, LiveTreeMatch Match) Snapshot(CancellationToken ct)
     {
         lock (_gate)
         {
-            return _snapshot ??= (Filtered(RunningProcessTable.Read(_calls, ct)), new LiveTreeMatch(_volumes));
+            return (_snapshot ??= Filtered(RunningProcessTable.Read(_calls, ct)), _match ??= new LiveTreeMatch(_volumes));
         }
     }
 
