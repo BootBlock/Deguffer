@@ -2,7 +2,8 @@
 
 > **Status:** 🟢 ACTIVE — the agreed order of work following the §5.5 scanner. Items 0 to 3 and 4b
 > are done; item 4 records what was deferred and why, and item 5 what is still undecided. Items 6
-> to 8 came later, from watching the fast path actually run, and are done.
+> to 8 came later, from watching the fast path actually run, and are done. Item 9 was measured and
+> not built.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
 
@@ -559,3 +560,64 @@ Two further defects this work surfaced and did not fix, both needing a decision 
   this probe. **Fixed by #149:** each now asks `ProbeDirectory` first. `RefusalCheck` names a place
   it could not ask about in a warning and takes nothing out of the size, and Explore leaves a folder
   Windows will not describe out of the Recycle Bin.
+
+## 9. Keep the file-table index between runs, brought up to date from the change journal — not built
+
+**Outcome: measured, and not built, because the change journal does not reach back far enough on the
+one volume where the index is expensive.**
+[#254](https://github.com/BootBlock/Deguffer/issues/254) proposed saving each volume's index under
+`%LOCALAPPDATA%\Deguffer`, and on the next run reading only the records NTFS's change journal (the
+USN journal) says changed since the save. That only works where the journal still holds every change
+since the save. Where it has discarded the oldest of them, the index has to be read again in full,
+and the saved file has bought nothing.
+
+**What the journal holds.** Every NTFS volume on the machine measured, a Windows 11 workstation with
+seven volumes, keeps a journal limited to 32 MiB, the size Windows gives it by default, and the
+system volume's is trimmed 8 MiB at a time. Sampled ten minutes apart with
+`fsutil usn queryjournal`, which needs no elevation, while other development work was running:
+
+| Volume | Journal written | What the journal held | How far back that reached |
+| --- | --- | --- | --- |
+| NVMe system volume | 183 KiB a second | 37.4 MiB | about 3.5 minutes |
+| Source volume | 40 KiB a second | 36.0 MiB | about 15 minutes |
+| Five other volumes | nothing in ten minutes | 3 to 39 MiB | as far as their last change |
+
+#249 measured the system volume's index at about 4.4 seconds to build, and item 7 the source volume's
+at 3.5 to 4.7. Those builds are the cost the saved index would remove. A gap of a day, the case
+#254 asked to be measured, cannot be bridged there: the journal held minutes. The quiet volumes
+include the two #249 measured at 12 and 167 ms to read in full, so a saved index would save them
+almost nothing. **The volumes that change are the volumes worth saving, and their journals trim
+themselves first.**
+
+The rate was taken on a busy machine, and a quieter one writes less. A day of ordinary use on a system
+volume was not measured, and it may fit in 32 MiB. The table above is one machine on one morning,
+not a survey.
+
+**Why the journal is not made larger.** `FSCTL_CREATE_USN_JOURNAL` can raise the limit, but it needs
+administrator rights, and the journal belongs to the volume. Windows Search, backup and replication
+read the same one. A disk cleaner that changes a volume-wide setting to speed itself up is acting
+outside what it was asked to do. At 183 KiB a second, 1 GiB would still reach back only about an
+hour and a half.
+
+**What else #254 asked, and what the measurement leaves of it.**
+
+- **Reopening the tool is already quick for the cleanup view.** `ScanEstimateCache` shows the last
+  figures at once and measures afresh behind them (§5.5). Explore keeps nothing between runs, and on
+  the system volume it reads the table in about 5 seconds after #249.
+- **Within one run the journal does not help either.** Explore and the cleanup index each read the
+  table, and sharing one snapshot brought up to date from the journal would save the second read.
+  The snapshot would have to keep every file's name, which the index does not keep, and hold it in
+  memory, which #172 releases. The journal on the system volume still has to reach back to the
+  earlier read, and it held about 3.5 minutes.
+- **A changed record cannot always be found.** A volume written by a driver that does not log to the
+  journal keeps the same journal ID and no record of the change. The Linux `ntfs3` driver and ntfs-3g
+  both behave like this. No reliable sign on the volume says that it happened, so the index would
+  have to accept a gap it cannot see. A full read has no such gap.
+- **Elevated names.** An elevated read sees files the user cannot list. A saved file of them would
+  need access limited to Administrators and SYSTEM, and a check of that access before it is trusted.
+  Without the check, a process running as the user could replace the file for an elevated Deguffer
+  to read. This adds to the cost, and it is not the reason the item stops.
+
+**When to look at this again.** Look again if a measurement of an ordinary machine's system volume
+shows its journal reaching back over the usual time between two runs. Look again also if Windows
+starts to create a larger journal by default. The design questions #254 listed still apply then.
