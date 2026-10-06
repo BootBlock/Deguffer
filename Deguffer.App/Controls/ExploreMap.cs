@@ -388,6 +388,7 @@ public sealed class ExploreMap : UserControl
     /// covered the whole of, and <see cref="VolumeSpace.None"/> otherwise.
     /// </param>
     /// <param name="growth">What grew since the last scan, for a map coloured by growth, or null.</param>
+    /// <param name="types">The kind of file each node holds most of, for a map coloured by type, or null.</param>
     public void Show(
         ExploreTree? tree,
         int node,
@@ -396,14 +397,15 @@ public sealed class ExploreMap : UserControl
         ExploreScheme scheme,
         ExploreSpacing spacing,
         VolumeSpace volume,
-        Core.Exploring.History.ScanGrowth? growth) =>
+        Core.Exploring.History.ScanGrowth? growth,
+        Core.Exploring.Files.DominantTypes? types) =>
         Show(
             tree,
             node,
             view,
             tree is null
                 ? _ => ShapeColours.ByBranch(scheme)
-                : now => ShapeColours.For(tree, colouring, scheme, now, growth),
+                : now => ShapeColours.For(tree, colouring, scheme, now, growth, types),
             tree is null
                 ? _ => string.Empty
                 : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}",

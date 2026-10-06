@@ -115,7 +115,7 @@ public sealed class MemoryTreeLayoutTests
             [new ExploreChild("file", IsDirectory: false, IsLink: false, 1_000)]);
 
         var drive = builder.Build(ExploreChildOrder.BySize);
-        var dates = ShapeColours.For(drive, ExploreColouring.Age, ExploreScheme.Standard, new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc), growth: null);
+        var dates = ShapeColours.For(drive, ExploreColouring.Age, ExploreScheme.Standard, new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc), growth: null, types: null);
 
         Assert.Throws<ArgumentException>(() =>
             ExploreSurface.Create(Tree, Tree.RootNode, ExploreView.Treemap, (int)Width, (int)Height, scale: 1, textScale: 1, dates, ExploreSpacing.Comfortable, VolumeSpace.None));

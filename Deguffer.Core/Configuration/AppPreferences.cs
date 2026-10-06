@@ -79,7 +79,9 @@ public enum ExploreView
 /// instead — whether a toolchain is idle — which a size picture cannot show at all: an Android SDK
 /// and a working project look identical by size, and the whole difference is that nothing has
 /// written to one of them in two years. <see cref="Growth"/> answers "what filled the drive since I last
-/// looked", which a size picture shows only once the culprit is the largest thing on the disk.</para>
+/// looked", which a size picture shows only once the culprit is the largest thing on the disk.
+/// <see cref="Type"/> answers "what kind of thing is this space", which is often the quickest way to
+/// know what it is: a folder of video and a folder of disk images look alike by size.</para>
 /// </summary>
 public enum ExploreColouring
 {
@@ -101,6 +103,12 @@ public enum ExploreColouring
     /// See <c>GrowthPalette</c> and <c>ScanGrowth</c>.
     /// </summary>
     Growth = 2,
+
+    /// <summary>
+    /// A colour per kind of file, by the name: a file's own kind, and a folder's largest kind by bytes.
+    /// See <c>TypePalette</c> and <c>DominantTypes</c>.
+    /// </summary>
+    Type = 3,
 }
 
 /// <summary>
