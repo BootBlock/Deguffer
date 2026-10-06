@@ -564,7 +564,7 @@ Two further defects this work surfaced and did not fix, both needing a decision 
 ## 9. Keep the file-table index between runs, brought up to date from the change journal — not built
 
 **Outcome: measured, and not built, because the change journal does not reach back far enough on the
-one volume where the index is expensive.**
+volumes where the index is expensive.**
 [#254](https://github.com/BootBlock/Deguffer/issues/254) proposed saving each volume's index under
 `%LOCALAPPDATA%\Deguffer`, and on the next run reading only the records NTFS's change journal (the
 USN journal) says changed since the save. That only works where the journal still holds every change
@@ -572,9 +572,11 @@ since the save. Where it has discarded the oldest of them, the index has to be r
 and the saved file has bought nothing.
 
 **What the journal holds.** Every NTFS volume on the machine measured, a Windows 11 workstation with
-seven volumes, keeps a journal limited to 32 MiB, the size Windows gives it by default, and the
-system volume's is trimmed 8 MiB at a time. Sampled ten minutes apart with
-`fsutil usn queryjournal`, which needs no elevation, while other development work was running:
+seven volumes, keeps a journal whose maximum size is 32 MiB, the size Windows gives it by default.
+That is where trimming starts rather than a cap: a journal grows past it and then loses its oldest
+records, 8 MiB at a time on the system volume, so a full one held 33 to 39 MiB. Sampled ten minutes
+apart with `fsutil usn queryjournal`, which needs no elevation, while other development work was
+running:
 
 | Volume | Journal written | What the journal held | How far back that reached |
 | --- | --- | --- | --- |
@@ -590,7 +592,7 @@ almost nothing. **The volumes that change are the volumes worth saving, and thei
 themselves first.**
 
 The rate was taken on a busy machine, and a quieter one writes less. A day of ordinary use on a system
-volume was not measured, and it may fit in 32 MiB. The table above is one machine on one morning,
+volume was not measured, and it may fit in a journal of this size. The table above is one machine on one morning,
 not a survey.
 
 **Why the journal is not made larger.** `FSCTL_CREATE_USN_JOURNAL` can raise the limit, but it needs
@@ -606,9 +608,9 @@ hour and a half.
   the system volume it reads the table in about 5 seconds after #249.
 - **Within one run the journal does not help either.** Explore and the cleanup index each read the
   table, and sharing one snapshot brought up to date from the journal would save the second read.
-  The snapshot would have to keep every file's name, which the index does not keep, and hold it in
-  memory, which #172 releases. The journal on the system volume still has to reach back to the
-  earlier read, and it held about 3.5 minutes.
+  The snapshot would have to keep every file's name, which the index does not keep, and stay in
+  memory between passes, which #172 asks the index not to do. The journal on the system volume
+  still has to reach back to the earlier read, and it held about 3.5 minutes.
 - **A changed record cannot always be found.** A volume written by a driver that does not log to the
   journal keeps the same journal ID and no record of the change. The Linux `ntfs3` driver and ntfs-3g
   both behave like this. No reliable sign on the volume says that it happened, so the index would
