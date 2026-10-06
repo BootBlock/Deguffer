@@ -50,12 +50,14 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ILiveTreeInspector? liveTrees = null)
+        ILiveTreeInspector? liveTrees = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
         => _liveTrees = liveTrees ?? LiveTreeInspector.Default;
 
     public override string Id => "capture-one-cache";
@@ -253,6 +255,8 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     private CaptureOneExamination Examine(CancellationToken ct)
     {
         var examination = new CaptureOneExamination();
+        var profile = Reached(Environment.UserProfile);
+        ReachedFolder[] applicationData = [.. Reached(Environment.LocalAppData), .. Reached(Environment.RoamingAppData)];
 
         foreach (var catalog in Documents.Catalogs)
         {
@@ -263,14 +267,14 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         foreach (var session in Documents.Sessions)
         {
             ct.ThrowIfCancellationRequested();
-            CollectSession(session, examination, ct);
+            CollectSession(session, profile, applicationData, examination, ct);
         }
 
         return examination;
     }
 
-    private static bool Overlaps(string folder, string other) =>
-        LongPath.Contains(folder, other) || LongPath.Contains(other, folder);
+    /// <summary>The folder at <paramref name="path"/>, or none where the environment names no such folder.</summary>
+    private ReachedFolder[] Reached(string path) => path.Length > 0 ? [ReachedFolder.At(path, Volumes)] : [];
 
     private static string Count(int count) => count == 1 ? "a catalog or session" : $"{count} catalogs and sessions";
 
@@ -330,14 +334,23 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// One session: prove it by its database, then walk it for the <c>CaptureOne</c> folder beside
     /// each folder of images, and offer the <c>Cache</c> in each.
     /// </summary>
-    private void CollectSession(string session, CaptureOneExamination examination, CancellationToken ct)
+    /// <param name="profile">The profile, or nothing where the environment names none.</param>
+    /// <param name="applicationData">The local and roaming application data the environment names.</param>
+    private void CollectSession(
+        string session,
+        ReachedFolder[] profile,
+        ReachedFolder[] applicationData,
+        CaptureOneExamination examination,
+        CancellationToken ct)
     {
         // A session file at or above the profile would make everything it holds a session to walk.
         // One anywhere in an application-data folder is no photographer's session either, and a walk
-        // there would reach Capture One's own styles and presets.
-        if (LongPath.Contains(session, Environment.UserProfile)
-            || Overlaps(session, Environment.LocalAppData)
-            || Overlaps(session, Environment.RoamingAppData))
+        // there would reach Capture One's own styles and presets. Asked at every path each is
+        // reachable at, because Capture One records a session as it was opened, S:\ included.
+        var folder = ReachedFolder.At(session, Volumes);
+
+        if (Array.Exists(profile, folder.Holds)
+            || Array.Exists(applicationData, data => folder.Holds(data) || data.Holds(folder)))
         {
             examination.Decline(
                 session,

@@ -104,7 +104,7 @@ public static class TempRoots
         ArgumentNullException.ThrowIfNull(volumes);
 
         var refused = new List<(string Path, string Reason)>();
-        var machineTemp = Path.Combine(system.WindowsDirectory, FolderName);
+        var machineTemp = ReachedFolder.At(Path.Combine(system.WindowsDirectory, FolderName), volumes);
 
         // Every candidate considered, whatever came of it. An exact repeat is the ordinary case
         // rather than a misconfiguration — all four settings name one folder on most machines — so
@@ -115,25 +115,31 @@ public static class TempRoots
         // than reasoned about: a %TMP% pointing somewhere Deguffer declines is also what
         // Path.GetTempPath answers with, so the preview named one folder twice and said "settings"
         // of what is one setting.
-        var seen = new HashSet<string>([machineTemp], StringComparer.OrdinalIgnoreCase);
-        var standing = new List<string>();
+        //
+        // A repeat is one folder however it is named: two settings naming it through different
+        // letters would otherwise offer it twice.
+        List<ReachedFolder> seen = [machineTemp];
+        var standing = new List<(string Path, ReachedFolder Folder)>();
 
         foreach (var candidate in Candidates(environment))
         {
             var trimmed = Path.TrimEndingDirectorySeparator(candidate);
+            var folder = ReachedFolder.At(trimmed, volumes);
 
-            if (!seen.Add(trimmed))
+            if (seen.Exists(folder.IsSameAs))
             {
                 continue;
             }
 
-            if (Refuse(trimmed, environment, system, volumes, machineTemp) is { } reason)
+            seen.Add(folder);
+
+            if (Refuse(trimmed, folder, environment, system, machineTemp) is { } reason)
             {
                 refused.Add((trimmed, reason));
                 continue;
             }
 
-            standing.Add(trimmed);
+            standing.Add((trimmed, folder));
         }
 
         // §5.3's nesting rule, decided over the whole set rather than as each candidate arrives.
@@ -144,7 +150,13 @@ public static class TempRoots
         // it and removes it. The folder Windows will not put back is then gone, which is the whole
         // thing ClearDirectoryStep exists to prevent — so the innermost wins, always. Clearing the
         // inner folder cannot destroy the outer, and clearing the outer always destroys the inner.
-        foreach (var outer in standing.Where(a => standing.Any(b => a != b && LongPath.Contains(a, b))))
+        // The repeats are gone, so a candidate holding another holds a different folder, and one
+        // nested through an alias is found at the path the two share.
+        var outers = standing
+            .Where(a => standing.Exists(b => !ReferenceEquals(a.Folder, b.Folder) && a.Folder.Holds(b.Folder)))
+            .ToList();
+
+        foreach (var (outer, _) in outers)
         {
             refused.Add((
                 outer,
@@ -154,7 +166,8 @@ public static class TempRoots
         }
 
         var account = standing
-            .Where(a => !standing.Any(b => a != b && LongPath.Contains(a, b)))
+            .Except(outers)
+            .Select(candidate => candidate.Path)
             .ToList();
 
         var roots = account
@@ -256,17 +269,18 @@ public static class TempRoots
     /// <param name="machineTemp">
     /// <c>C:\Windows\Temp</c>, which is always declared and is not one of these candidates.
     /// </param>
+    /// <param name="folder"><paramref name="candidate"/>, at every path it is reachable at.</param>
     private static string? Refuse(
         string candidate,
+        ReachedFolder folder,
         IUserEnvironment environment,
         ISystemDirectories system,
-        IVolumeInventory volumes,
-        string machineTemp)
+        ReachedFolder machineTemp)
     {
         // Asked before the name test, because it is the more specific answer where both apply: a
         // folder holding the profile is worth saying so about, where "we did not recognise it"
         // would be true and much less use.
-        var verdict = StandingFolders.Examine(candidate, environment, system, volumes);
+        var verdict = StandingFolders.Examine(folder, environment, system);
 
         if (verdict.WhyNotTaken is { } standing)
         {
@@ -289,7 +303,7 @@ public static class TempRoots
                 + "of a setting alone.";
         }
 
-        return LongPath.Contains(machineTemp, candidate)
+        return machineTemp.Holds(folder)
             ? "It sits inside the temporary folder Windows itself uses, which Deguffer already "
                 + "clears in full — so what is in here goes with it, under the administrator rights "
                 + "that folder needs."

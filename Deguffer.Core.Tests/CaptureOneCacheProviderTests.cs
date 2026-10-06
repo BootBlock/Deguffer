@@ -19,6 +19,9 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
 
+    /// <summary>What the machine has mounted, which names no other path to anything unless a test says so.</summary>
+    private readonly FakeVolumeInventory _volumes = new();
+
     public CaptureOneCacheProviderTests() => _environment = new FakeUserEnvironment(_temp.Path);
 
     public void Dispose() => _temp.Dispose();
@@ -33,7 +36,8 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
             _environment,
             new FakeProcessRunner(),
             inspector ?? FakeProcessInspector.NothingRunning,
-            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive);
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
+            volumes: _volumes);
 
     private static string Populate(string path)
     {
@@ -100,6 +104,10 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     }
 
     private static string CacheOf(string folder) => Path.Combine(folder, "Cache");
+
+    /// <summary><paramref name="path"/> reached through another mount of its volume at <paramref name="mountPoint"/>.</summary>
+    private static string Through(string mountPoint, string path) =>
+        Path.Join(mountPoint, path[Path.GetPathRoot(path)!.Length..]);
 
     /// <summary>
     /// The root of a drive letter nothing is mounted on, so a folder on it reads as a drive that is not
@@ -351,6 +359,70 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(folder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Capture One records a session as it was opened, so one opened through a letter <c>subst</c>
+    /// made for the folder holding the profile is listed at <c>S:\profile</c>, whose text names
+    /// nothing the profile check knows. Followed to the folder the letter stands for, it is the profile,
+    /// and a session listed inside the application data through the same letter is in it.
+    /// </summary>
+    [Fact]
+    public async Task ASessionThatIsTheProfileOrInItsDataThroughASubstitutedLetterIsNotSearched()
+    {
+        var letter = UnmountedDrive();
+        _volumes.Substituting(letter, _temp.Path);
+        var profile = Path.Join(letter, Path.GetRelativePath(_temp.Path, _environment.UserProfile));
+        var styles = Path.Join(letter, Path.GetRelativePath(_temp.Path, _environment.LocalAppData), "CaptureOne", "Styles");
+        List(Path.Join(profile, "Stray.cosessiondb"), Path.Join(styles, "Stray.cosessiondb"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+
+        foreach (var session in new[] { profile, styles })
+        {
+            Assert.Contains(plan.Notes, n => n.Message.Equals(
+                $"Leaving '{session}' alone. Capture One lists a session here, but the folder holds your profile "
+                + "or its application data, so it is not searched and nothing in it is offered.",
+                StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>
+    /// The same for a session listed through another mount of the profile's volume. A session of
+    /// images reached that way is still offered, and only its previews go (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task ASessionInTheApplicationDataThroughAnotherMountIsNotSearchedAndAnOrdinaryOneIs()
+    {
+        var mount = Path.Combine(_temp.Path, "SysMount") + Path.DirectorySeparatorChar;
+        _volumes.With(Path.GetPathRoot(_temp.Path)!, alsoMountedAt: [mount]);
+
+        var styles = Through(mount, Path.Combine(_environment.RoamingAppData, "Capture One", "Presets"));
+        WriteFile(Path.Combine(styles, "Stray.cosessiondb"));
+        WriteFile(Path.Combine(styles, "Pictures", "CaptureOne", "Settings166", "IMG_0001.CR3.cos"));
+        var presets = Populate(Path.Combine(styles, "Pictures", "CaptureOne", "Cache"));
+
+        var shoot = Through(mount, Path.Combine(ShootDrive, "Shoot"));
+        WriteFile(Path.Combine(shoot, "Shoot.cosessiondb"));
+        var image = WriteFile(Path.Combine(shoot, "Capture", "IMG_0001.CR3"));
+        var edits = WriteFile(Path.Combine(shoot, "Capture", "CaptureOne", "Settings166", "IMG_0001.CR3.cos"));
+        var cache = Populate(Path.Combine(shoot, "Capture", "CaptureOne", "Cache"));
+
+        List(Path.Combine(styles, "Stray.cosessiondb"), Path.Combine(shoot, "Shoot.cosessiondb"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([cache], plan.Steps.OfType<DeleteStep>().Select(s => s.Path));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(styles, StringComparison.OrdinalIgnoreCase));
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.False(LongPath.DirectoryExists(cache));
+        Assert.True(LongPath.FileExists(image));
+        Assert.True(LongPath.FileExists(edits));
+        Assert.True(LongPath.DirectoryExists(presets));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
     /// <summary>

@@ -21,7 +21,7 @@ namespace Deguffer.Core.Safety;
 /// Windows names them, and a path's text matches them only when it is reached the same way. With the
 /// system volume also mounted at <c>D:\SysMount\</c>, or <c>S:</c> substituted for the profile,
 /// <c>S:\Downloads</c> is the account's Downloads folder and its text names nothing here.
-/// <see cref="VolumeRoot.Places"/> gives each path the folder is at, and a refusal that holds at any of
+/// <see cref="ReachedFolder"/> gives each path the folder is at, and a refusal that holds at any of
 /// them holds.</para>
 /// </summary>
 public static class StandingFolders
@@ -42,36 +42,16 @@ public static class StandingFolders
     /// <param name="volumes">Asked every other path the folder is reachable at.</param>
     public static string? WhyNotTaken(
         string path, IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes) =>
-        WhyNotTaken(Reached(path, volumes), environment, system);
+        WhyNotTaken(ReachedFolder.At(path, volumes), environment, system);
 
     /// <summary>
-    /// <see cref="WhyNotTaken(string, IUserEnvironment, ISystemDirectories, IVolumeInventory)"/>, and
-    /// the account's own folder <paramref name="path"/> is in or is, from one look at where the folder
-    /// is reachable.
-    ///
-    /// <para>For a setting whose folder is emptied of whatever is in it rather than of what a tool
-    /// recognises, where being inside one of the account's own folders is as bad as being one.</para>
+    /// Why <paramref name="folder"/> may not be removed, or taken with something removed, as the end of
+    /// a sentence, or null where it may be.
     /// </summary>
-    /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
-    /// <param name="volumes">Asked every other path the folder is reachable at.</param>
-    public static StandingFolderVerdict Examine(
-        string path, IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes)
-    {
-        var folders = Reached(path, volumes);
-
-        // A volume's top is in no folder at the path it was asked at, and can still be at another
-        // place the volume is mounted, which only the folder's own text is left to say.
-        return new StandingFolderVerdict(
-            WhyNotTaken(folders, environment, system),
-            PersonalFolderHolding(folders ?? [Comparable(path)], environment));
-    }
-
-    /// <param name="folders">Every path the folder is reachable at, or null where it is a volume's top.</param>
-    private static string? WhyNotTaken(
-        IReadOnlyList<string>? folders, IUserEnvironment environment, ISystemDirectories system)
+    public static string? WhyNotTaken(ReachedFolder folder, IUserEnvironment environment, ISystemDirectories system)
     {
         // A folder a volume is mounted at is as much the top of that volume as its drive letter is.
-        if (folders is null)
+        if (folder.IsVolumeTop)
         {
             return "it is the root of a drive, a share or a volume.";
         }
@@ -92,21 +72,21 @@ public static class StandingFolders
         // them, and naming Desktop would be true and much less use.
         var held = structural
             .Where(inside => !string.IsNullOrEmpty(inside))
-            .Select(inside => Comparable(inside!))
+            .Select(inside => ReachedFolder.Comparable(inside!))
             .ToList();
 
-        if (folders.Any(folder => held.Exists(inside => LongPath.Contains(folder, inside))))
+        if (folder.Places.Any(place => held.Exists(inside => LongPath.Contains(place, inside))))
         {
             return "it is or holds your profile, the folders every program keeps its data in, or a folder Windows is built out of.";
         }
 
         var personalFolders = PersonalFolders(environment).ToList();
 
-        foreach (var folder in folders)
+        foreach (var place in folder.Places)
         {
-            if (personalFolders.Find(own => LongPath.Contains(folder, own)) is { } personal)
+            if (personalFolders.Find(own => LongPath.Contains(place, own)) is { } personal)
             {
-                return LongPath.Contains(personal, folder)
+                return LongPath.Contains(personal, place)
                     ? "it is one of your own folders, where you keep your files."
                     : $"it holds '{LongPath.Display(personal)}', one of your own folders, where you keep your files.";
             }
@@ -115,31 +95,24 @@ public static class StandingFolders
         return null;
     }
 
-    private static string? PersonalFolderHolding(IReadOnlyList<string> folders, IUserEnvironment environment)
+    /// <summary>
+    /// <see cref="WhyNotTaken(ReachedFolder, IUserEnvironment, ISystemDirectories)"/>, and the
+    /// account's own folder <paramref name="folder"/> is in or is.
+    ///
+    /// <para>For a setting whose folder is emptied of whatever is in it rather than of what a tool
+    /// recognises, where being inside one of the account's own folders is as bad as being one.</para>
+    /// </summary>
+    public static StandingFolderVerdict Examine(ReachedFolder folder, IUserEnvironment environment, ISystemDirectories system) =>
+        new(WhyNotTaken(folder, environment, system), PersonalFolderHolding(folder, environment));
+
+    /// <summary>The account's own folder <paramref name="folder"/> is in or is, at any path it is reachable at.</summary>
+    private static string? PersonalFolderHolding(ReachedFolder folder, IUserEnvironment environment)
     {
         var personalFolders = PersonalFolders(environment).ToList();
 
-        return folders
-            .Select(folder => personalFolders.Find(own => LongPath.Contains(own, folder)))
+        return folder.Places
+            .Select(place => personalFolders.Find(own => LongPath.Contains(own, place)))
             .FirstOrDefault(personal => personal is not null);
-    }
-
-    /// <summary>
-    /// Every path the folder at <paramref name="path"/> is reachable at, comparable with the
-    /// locations here, or null where it is the top of a drive, a share or a volume wherever it is
-    /// reached.
-    ///
-    /// <para>Each other place is made comparable as the path is. A letter <c>subst</c> made for a
-    /// folder named in its short form leads to that short form, which would match nothing here.</para>
-    /// </summary>
-    private static List<string>? Reached(string path, IVolumeInventory volumes)
-    {
-        var comparable = Comparable(path);
-
-        // The first place is the path itself, which is comparable already.
-        return VolumeRoot.Places(volumes, comparable) is { } places
-            ? [comparable, .. places.Skip(1).Select(place => Comparable(place.Path))]
-            : null;
     }
 
     /// <summary>Where Windows says each of the account's own folders is, and where each is by default.</summary>
@@ -149,12 +122,5 @@ public static class StandingFolders
                 ? DefaultPersonalNames.Select(name => Path.Combine(environment.UserProfile, name))
                 : [])
             .Where(own => own.Length > 0)
-            .Select(Comparable);
-
-    /// <summary>
-    /// Without an 8.3 alias, the extended-length prefix or a trailing separator, so a path from a step
-    /// and one from the environment compare as the same folder. A root keeps its separator.
-    /// </summary>
-    private static string Comparable(string path) =>
-        Path.TrimEndingDirectorySeparator(LongPath.Display(LongPath.Unaliased(path)));
+            .Select(ReachedFolder.Comparable);
 }
