@@ -5,6 +5,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
@@ -35,6 +36,10 @@ public sealed partial class ExploreViewModel : ObservableObject
 {
     private readonly IExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
+    private readonly TimeProvider _time;
+
+    /// <summary>The kept summaries a finished scan of a whole volume is compared with and added to.</summary>
+    private readonly ScanHistory _history;
 
     /// <summary>Whether this process holds administrator rights, which decides the elevation offer.</summary>
     private readonly bool _isElevated;
@@ -105,6 +110,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
     /// <param name="running">See <see cref="_running"/>.</param>
+    /// <param name="history">See <see cref="_history"/>.</param>
     public ExploreViewModel(
         IExploreScanner scanner,
         IVolumeInventory volumes,
@@ -113,10 +119,13 @@ public sealed partial class ExploreViewModel : ObservableObject
         ItemGuide guide,
         bool isElevated,
         Func<ExploreRequest, bool> relaunch,
-        RunningActions running)
+        RunningActions running,
+        ScanHistory history)
     {
         _scanner = scanner;
         _volumes = volumes;
+        _time = time;
+        _history = history;
         _drives = new DriveList(volumes, time);
         _guide = guide;
         _isElevated = isElevated;
@@ -124,6 +133,10 @@ public sealed partial class ExploreViewModel : ObservableObject
         _running = running;
 
         Selection = new ExploreSelection(actions);
+        Growth = new ExploreGrowth(history);
+
+        // A comparison that arrives, or stops, recolours a map coloured by growth.
+        Growth.Changed += (_, _) => ViewChanged?.Invoke(this, EventArgs.Empty);
 
         // A clean or a removal on another page ends with this process as surely as one here.
         _running.Changed += (_, _) => ElevateAndRescanCommand.NotifyCanExecuteChanged();
@@ -157,6 +170,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>What the user picked out by hand, and what §7.1 lets them do with it.</summary>
     public ExploreSelection Selection { get; }
+
+    /// <summary>What grew since the last scan of the volume on screen. See <see cref="ExploreGrowth"/>.</summary>
+    public ExploreGrowth Growth { get; }
 
     /// <summary>The volumes offered in the picker, each with what it is called and how full it is.</summary>
     public ObservableCollection<DriveEntry> Drives => _drives.Entries;
@@ -334,7 +350,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
     [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
-    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsGrowth))]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
@@ -351,7 +368,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
     [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
-    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsLegend))]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     public partial ExploreView SelectedView { get; set; }
@@ -361,11 +378,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     ///
     /// <para>Unlike <see cref="SelectedView"/> this is never substituted. A partial tree is coloured
     /// exactly as a finished one is — an age is a fact about a node rather than about the ordering
-    /// of its siblings — so a scan in progress needs no sentence explaining this one away.</para>
+    /// of its siblings — so a scan in progress needs no sentence explaining this one away. Growth is
+    /// compared only once a scan has finished, and until then the map paints every shape as not
+    /// compared, which its legend names.</para>
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowsAgeLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsGrowth))]
     public partial ExploreColouring SelectedColouring { get; set; }
+
+    partial void OnSelectedColouringChanged(ExploreColouring value) =>
+        LiveList.Rewrite(Legend, ExploreLegendBand.For(value, SelectedScheme));
 
     /// <summary>
     /// Which set of colours the picture on screen is drawn in. See <see cref="ExploreScheme"/>.
@@ -376,25 +399,32 @@ public sealed partial class ExploreViewModel : ObservableObject
     public partial ExploreScheme SelectedScheme { get; set; }
 
     partial void OnSelectedSchemeChanged(ExploreScheme value) =>
-        LiveList.Rewrite(AgeLegend, ExploreLegendBand.For(value));
+        LiveList.Rewrite(Legend, ExploreLegendBand.For(SelectedColouring, value));
 
     /// <summary>
     /// What each colour on the map means, or an empty list where the colours are branches.
     ///
-    /// <para>A legend is not decoration for this one. A hue per branch is self-explanatory, because
-    /// the branch it names is the rectangle it is inside — but an age band means nothing at all
-    /// without the scale beside it, and a picture whose colours the reader cannot decode is worse
-    /// than one with no colours in it.</para>
+    /// <para>A legend is not decoration for the other two. A hue per branch is self-explanatory,
+    /// because the branch it names is the rectangle it is inside — but an age band or a growth band
+    /// means nothing at all without the scale beside it, and a picture whose colours the reader
+    /// cannot decode is worse than one with no colours in it.</para>
     /// </summary>
-    public ObservableCollection<ExploreLegendBand> AgeLegend { get; } = [.. ExploreLegendBand.For(ExploreScheme.Standard)];
+    public ObservableCollection<ExploreLegendBand> Legend { get; } = [];
 
     /// <summary>
-    /// Whether to show that legend: only when the colours are ages, only when there is a picture
+    /// Whether to show that legend: only when the colours are a scale, only when there is a picture
     /// rather than a list, and only once something has been scanned into it. A scale beside an
     /// empty card explains nothing and reads as part of the empty state.
     /// </summary>
-    public bool ShowsAgeLegend =>
-        SelectedColouring == ExploreColouring.Age && SelectedView != ExploreView.List && HasTree;
+    public bool ShowsLegend =>
+        SelectedColouring != ExploreColouring.Branch && SelectedView != ExploreView.List && HasTree;
+
+    /// <summary>
+    /// Whether to show the panel of what grew: whenever the colours are growth and something has been
+    /// scanned, in the list view as well as the pictures, because the panel is a list of its own and
+    /// a reader in the list view has asked the same question.
+    /// </summary>
+    public bool ShowsGrowth => SelectedColouring == ExploreColouring.Growth && HasTree;
 
     /// <summary>
     /// How what is on screen differs from what the View box names, or null when it does not.
@@ -543,11 +573,15 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         // Read once, at the start. The scope can be changed while a scan runs, and a sentence
         // written afterwards would then describe the next scan rather than this one's result.
-        var what = IsScopedToFolder ? "folder" : "drive";
+        var scoped = IsScopedToFolder;
+        var what = scoped ? "folder" : "drive";
 
         IsBusy = true;
         Progress = null;
         RouteNote = null;
+
+        // What is on screen is about to be replaced, and a comparison describes one tree.
+        Growth.Clear();
 
         // Started with the scan and never awaited here. Part of §7.1's refusal set says what is
         // running right now, so it goes stale while the page is open, and a scan is the moment the
@@ -573,6 +607,8 @@ public sealed partial class ExploreViewModel : ObservableObject
             RouteNote = scan.RouteNote;
             OfferElevation(scan.Fallback);
 
+            await RecordAsync(scan, target, scoped);
+
             Status = scan.Tree.HasUnknownSizes
                 ? $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for. Some of this {what} could not "
                   + "be read, so the totals are lower bounds."
@@ -586,6 +622,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // the drive that is wrong by however much was left.
             Tree = null;
             Volume = VolumeSpace.None;
+            Growth.Clear();
             Selection.Show(null);
             Rows.Clear();
             Trail.Clear();
@@ -604,6 +641,48 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             IsBusy = false;
             Progress = null;
+        }
+    }
+
+    /// <summary>
+    /// Compare a finished scan with the last kept scan of its volume, and keep it for the next one.
+    /// Only a scan of a whole volume, because a summary of one folder says nothing about what else
+    /// on the drive grew.
+    ///
+    /// <para>Not cancellable. The scan has finished by now, the work is a pass over folders already
+    /// in memory and one small file, and a cancel arriving during it would otherwise throw away the
+    /// finished scan along with it.</para>
+    /// </summary>
+    /// <param name="scoped">Whether the scan was started on a folder rather than a drive.</param>
+    private async Task RecordAsync(ExploreScan scan, string target, bool scoped)
+    {
+        var volume = HostVolume.For(_volumes, target)?.VolumeName;
+        var space = Volume;
+        var taken = _time.GetUtcNow().UtcDateTime;
+
+        var record = await Task.Run(() => _history.Record(scan, volume, space, scoped, taken));
+
+        // A comparison describes one tree, and a removal on this page can have taken the page to
+        // another while this ran. Shown only for the tree it was taken from.
+        if (ReferenceEquals(Tree, scan.Tree))
+        {
+            Growth.Show(record);
+        }
+    }
+
+    /// <summary>
+    /// Show what is inside the folder <paramref name="row"/> names, from the list of what grew. Ignored
+    /// for a folder that was removed before this scan, which has nothing to show, and for one removed
+    /// from this page since.
+    /// </summary>
+    public void ShowFolder(ExploreGrowthRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (Tree is { } tree && row.CanOpen && ReferenceEquals(Growth.Comparison?.Tree, tree)
+            && !Selection.WasRemoved(row.Node))
+        {
+            Show(tree, ExplorePosition.Inside(row.Node), Volume);
         }
     }
 
@@ -846,12 +925,20 @@ public sealed partial class ExploreViewModel : ObservableObject
     private (string Path, string Figures, string Note) Over(ExploreTree tree, int node)
     {
         var path = tree.PathOf(node);
+        var figures = $"{FreeSpace.Format(tree.SizeOf(node))}, "
+            + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}";
 
-        return (
-            path,
-            $"{FreeSpace.Format(tree.SizeOf(node))}, "
-            + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}",
-            _guide.DescribeNearest(path)?.Tip() ?? string.Empty);
+        // The shape's own change, where the map is coloured by growth: compared, or settled by its
+        // dates. A shape painted by the folder above it has none of its own, and the readout says
+        // nothing rather than borrow that one.
+        if (SelectedColouring == ExploreColouring.Growth
+            && Growth.Comparison is { } growth && ReferenceEquals(growth.Tree, tree)
+            && growth.ChangeOf(node) is { } change)
+        {
+            figures += $", {GrowthText.Change(change, growth.Earlier.UnrecordedAtMost)} since the last scan";
+        }
+
+        return (path, figures, _guide.DescribeNearest(path)?.Tip() ?? string.Empty);
     }
 
     /// <summary>Say that what the notes hold has changed, whichever of the four it was.</summary>

@@ -196,7 +196,8 @@ public abstract class ExploreSurface
         ExploreSpacing spacing,
         VolumeSpace volume) =>
         Create(
-            tree, root, view, width, height, scale, textScale, ShapeColours.For(tree, colouring, scheme, nowUtc),
+            tree, root, view, width, height, scale, textScale,
+            ShapeColours.For(tree, colouring, scheme, nowUtc, growth: null),
             spacing, volume);
 
     /// <summary>

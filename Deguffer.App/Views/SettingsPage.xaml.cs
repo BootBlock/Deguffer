@@ -14,6 +14,7 @@ public sealed partial class SettingsPage : Page
         ViewModel = new SettingsViewModel(
             App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current);
         Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current);
+        History = new ScanHistorySettingsViewModel(App.ScanHistory);
         InitializeComponent();
 
         Loaded += OnLoaded;
@@ -34,7 +35,7 @@ public sealed partial class SettingsPage : Page
 
         try
         {
-            await Scanning.RefreshDrivesAsync(_visit.Token);
+            await Task.WhenAll(Scanning.RefreshDrivesAsync(_visit.Token), History.RefreshAsync(_visit.Token));
         }
         catch (OperationCanceledException)
         {
@@ -46,6 +47,18 @@ public sealed partial class SettingsPage : Page
     public SettingsViewModel ViewModel { get; }
 
     public ScanSettingsViewModel Scanning { get; }
+
+    public ScanHistorySettingsViewModel History { get; }
+
+    private void OnRemoveScanSummary(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: KeptScanRow row })
+        {
+            History.Remove(row);
+        }
+    }
+
+    private void OnRemoveAllScanSummaries(object sender, RoutedEventArgs e) => History.RemoveAll();
 
     /// <summary>
     /// Approving a folder goes through the system picker rather than a text box, so the path is one
