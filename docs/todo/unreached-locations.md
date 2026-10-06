@@ -5,7 +5,7 @@
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
 > servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins and older restore points, §8's Unreal Engine
-> derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies
+> derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies,
 > §11's virtual disk report and §12's Squirrel staging and superseded builds have shipped; everything
 > else is unstarted.
 > **Open questions 1, 2 and 3 are answered** — see the foot of this document.
@@ -1582,6 +1582,11 @@ running, and names the vendor's route in order. Its row reads *Report only* and 
 tick. The tier is 3 rather than the 2 proposed above, because the tier describes the disk, and a
 deleted disk is a distribution or every container and volume gone for good. Explore names each
 disk's owner and route on hover, and refuses to delete one.
+
+**Still open:** no run checks afterwards that a disk survived. The report has no step, so no run
+includes it, and no other provider's plan knows where the disks are, so a provider whose scope
+happened to hold an imported distribution's folder could remove it unnoticed. Explore's refusal is
+the only guard today. A run-wide refusal of the registered disks would close it.
 
 ---
 

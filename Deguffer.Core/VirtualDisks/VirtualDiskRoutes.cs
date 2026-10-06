@@ -6,8 +6,9 @@ namespace Deguffer.Core.VirtualDisks;
 ///
 /// <para>§5.4 is why every route is two steps and says so. Deleting inside the guest frees space inside
 /// the disk and none on the drive, and a user who prunes and sees no change stops trusting the figure.
-/// §11 is why every route is the vendor's and none is Deguffer's: compacting a disk that is in use or
-/// sparse can damage the whole disk, so Deguffer names the commands and runs none of them.</para>
+/// <c>unreached-locations.md</c> §11 is why every route is the vendor's and none is Deguffer's:
+/// compacting a disk that is in use or sparse can damage the whole disk, so Deguffer names the commands
+/// and runs none of them.</para>
 ///
 /// <para>Grounded in the vendors' own pages and release notes. WSL added
 /// <c>wsl --manage --compact</c> in 3.0.1, and put <c>--set-sparse</c> behind <c>--allow-unsafe</c> in
@@ -23,7 +24,7 @@ public static class VirtualDiskRoutes
         "Deleting files inside a virtual disk frees space inside it and none on this drive, until the disk is "
         + "compacted.";
 
-    /// <summary>What Deguffer does with these disks, which is nothing (§11).</summary>
+    /// <summary>What Deguffer does with these disks, which is nothing (<c>unreached-locations.md</c> §11).</summary>
     public const string ReportOnly =
         "Deguffer only reports these disks. It never prunes, compacts or deletes one, because compacting a disk "
         + "that is in use, or a sparse one, can damage everything in it.";

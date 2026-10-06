@@ -254,7 +254,7 @@ public sealed record CleanupPlan
     /// notes state what is there and the route the tool that owns it provides.
     ///
     /// <para>§5.4's virtual disks are the case. The space is real and large, and the only safe route to
-    /// it is the vendor's (§11), so the plan has no step and measures zero. A row with nothing to
+    /// it is the vendor's (<c>unreached-locations.md</c> §11), so the plan has no step and measures zero. A row with nothing to
     /// reclaim renders as "Already clear" and is hidden by default, which would say the opposite of
     /// what the report is for.</para>
     /// </summary>

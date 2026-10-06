@@ -12,9 +12,11 @@ public sealed record DockerInsideReading(DockerDiskUsage? Usage, string? Why);
 /// <summary>
 /// Asks the Docker engine for <c>docker system df</c>, and only when Docker Desktop is already running.
 ///
-/// <para>§11 puts starting the engine out of scope: measuring a disk must not start the virtual machine
-/// that holds it. So the engine's own process is looked for first, and a Docker Desktop that is not
-/// running gives no inside figure and says so. The command is sent to the <c>desktop-linux</c> context
+/// <para>Measuring a disk must not start the virtual machine that holds it. So the engine's own process
+/// is looked for first, and a Docker Desktop that is not running gives no inside figure and says so.
+/// Resource Saver is the case this cannot see: it pauses the engine and leaves the backend running. Docker
+/// documents that a command which runs no container, such as a listing, can be answered without waking
+/// it, and does not promise that it never is. The command is sent to the <c>desktop-linux</c> context
 /// by name, which Docker Desktop has created since 3.5, because the context the user last chose can be
 /// a remote engine whose figures describe a different machine.</para>
 ///

@@ -1,6 +1,7 @@
 using System.Globalization;
-using System.Text.Json;
+using System.Text;
 using System.Text.RegularExpressions;
+using Deguffer.Core.Providers;
 
 namespace Deguffer.Core.VirtualDisks;
 
@@ -52,29 +53,18 @@ public sealed partial record DockerDiskUsage(IReadOnlyList<DockerUsageRow> Rows)
 
     private static DockerUsageRow? Row(string line)
     {
-        try
-        {
-            using var document = JsonDocument.Parse(line);
-            var record = document.RootElement;
+        using var document = BoundedJsonFile.Parse(Encoding.UTF8.GetBytes(line));
 
-            if (record.ValueKind != JsonValueKind.Object
-                || Text(record, "Type") is not { Length: > 0 } type
-                || Bytes(Text(record, "Size")) is not { } size
-                || Bytes(Text(record, "Reclaimable")) is not { } reclaimable)
-            {
-                return null;
-            }
-
-            return new DockerUsageRow(type, size, reclaimable);
-        }
-        catch (JsonException)
+        if (document?.RootElement is not { } record
+            || BoundedJsonFile.StringProperty(record, "Type") is not { Length: > 0 } type
+            || Bytes(BoundedJsonFile.StringProperty(record, "Size")) is not { } size
+            || Bytes(BoundedJsonFile.StringProperty(record, "Reclaimable")) is not { } reclaimable)
         {
             return null;
         }
-    }
 
-    private static string? Text(JsonElement record, string name) =>
-        record.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        return new DockerUsageRow(type, size, reclaimable);
+    }
 
     /// <summary>
     /// A size as Docker's <c>HumanSize</c> writes it: a decimal number, an optional space, and a unit

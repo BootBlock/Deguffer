@@ -7,7 +7,7 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The virtual disks WSL and Docker Desktop keep their Linux file systems in, reported and never acted
-/// on (§5.4, §11).
+/// on (§5.4, and <c>docs/todo/unreached-locations.md</c> §11).
 ///
 /// <para><b>Found from the tools' own records.</b> WSL's registration names each distribution's disk,
 /// and Docker Desktop's settings name its data disk. A search for <c>.vhdx</c> files would find disks no
@@ -123,13 +123,9 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             ReportsOnly = true,
 
-            // §5.6: nothing here removes a disk, and a run that did would be a rule gone wrong elsewhere.
-            ProtectedPaths = Protect(
-            [
-                .. measured
-                    .Where(entry => entry.Size.Presence != PathPresence.Absent)
-                    .Select(entry => (entry.Disk.Path, $"The virtual disk of {entry.Disk.Owner}.")),
-            ]),
+            // No protected paths: a run leaves out a plan with no step and nothing withheld
+            // (CleanupPlan.HasSomethingToProve), so a list here would be verified by nothing. What keeps
+            // a disk from being deleted is Explore's refusal, declared in DiscoverToolRootsAsync.
             Notes = VirtualDiskReport.Notes(measured, inside, inventory.Problems),
         };
     }

@@ -1,7 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Providers;
-using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.VirtualDisks;
 using Deguffer.Testing;
@@ -10,7 +9,7 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The WSL and Docker virtual disks, found from the tools' own records, measured from outside, and
-/// reported with the vendor's route and no step (§5.4, §11).
+/// reported with the vendor's route and no step (§5.4, and <c>unreached-locations.md</c> §11).
 ///
 /// <para>Every test reads WSL's registration and Docker Desktop's settings through
 /// <see cref="FakeUserEnvironment"/>, and every disk is a file in the test's own folder. Docker is a
@@ -106,7 +105,6 @@ public sealed class VirtualDiskProviderTests : IDisposable
         Assert.Contains(disk, Text(plan), StringComparison.Ordinal);
         Assert.DoesNotContain(stray, Text(plan), StringComparison.Ordinal);
         Assert.Contains("The WSL distribution 'Ubuntu'", Text(plan), StringComparison.Ordinal);
-        Assert.Equal([disk], plan.ProtectedPaths.Select(p => p.Path));
     }
 
     /// <summary>
@@ -162,7 +160,6 @@ public sealed class VirtualDiskProviderTests : IDisposable
 
         Assert.Contains("would not let Deguffer read", Text(plan), StringComparison.Ordinal);
         Assert.DoesNotContain("missing", Text(plan), StringComparison.Ordinal);
-        Assert.Contains(disk, plan.ProtectedPaths.Select(p => p.Path));
     }
 
     [Fact]
@@ -349,26 +346,6 @@ public sealed class VirtualDiskProviderTests : IDisposable
         var call = Assert.Single(runner.Invocations);
         Assert.Equal(docker, call.FileName);
         Assert.Equal("--context desktop-linux system df --format \"{{json .}}\"", call.Arguments);
-    }
-
-    /// <summary>§5.6: nothing here removes a disk, and the run proves each one is still standing.</summary>
-    [Fact]
-    public async Task ARunLeavesEveryDiskStandingAndProvesIt()
-    {
-        var folder = Folder("wsl", "Ubuntu");
-        var disk = Disk(folder);
-        var beside = Disk(folder, "notes.txt");
-        Register(Ubuntu, "Ubuntu", folder);
-
-        var provider = Provider();
-        var plan = await provider.PlanAsync();
-        await provider.ExecuteAsync(plan);
-        var verified = await provider.VerifyAsync(plan);
-
-        Assert.True(File.Exists(disk));
-        Assert.True(File.Exists(beside));
-        Assert.Empty(verified.Failures);
-        Assert.Contains(verified.Checks, check => check.Subject == disk);
     }
 
     [Fact]
