@@ -27,7 +27,11 @@ public sealed class ExploreFilesTests : IDisposable
     {
         var (page, tree) = await ScannedAsync();
 
+        // Long enough for a search started by the scan to have finished and been shown, had one been.
+        await Task.Delay(TimeSpan.FromMilliseconds(250));
+
         Assert.Empty(page.Files.Rows);
+        Assert.Equal(string.Empty, page.Files.Summary);
 
         page.SelectedView = ExploreView.Files;
 

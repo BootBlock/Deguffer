@@ -284,6 +284,43 @@ public sealed class LargestFilesTests
         Assert.Equal(5_000, answered.Matched);
     }
 
+    /// <summary>
+    /// A filter that is not at least as strict in every criterion makes a pass, even over an answer
+    /// that listed everything it matched: another name, another type, or a shorter age lets through
+    /// files that answer never held.
+    /// </summary>
+    [Theory]
+    [InlineData("1", null, FileAge.Any, "2", null, FileAge.Any)]
+    [InlineData(null, FileCategory.Archives, FileAge.Any, null, FileCategory.Documents, FileAge.Any)]
+    [InlineData(null, null, FileAge.OneYear, null, null, FileAge.ThreeMonths)]
+    public void AFilterThatIsNotNarrowerMakesAPass(
+        string? name, FileCategory? category, FileAge age, string? laterName, FileCategory? laterCategory, FileAge laterAge)
+    {
+        var tree = ManyFiles(10_000);
+        var complete = LargestFiles.Find(tree, tree.RootNode, new FileFilter(name, category, 0, age), Now, limit: 20_000);
+        var later = new FileFilter(laterName, laterCategory, 0, laterAge);
+
+        Assert.True(complete.IsComplete);
+        Assert.Throws<OperationCanceledException>(
+            () => LargestFiles.Find(tree, tree.RootNode, later, Now, limit: 20_000, previous: complete, ct: Cancelled()));
+    }
+
+    /// <summary>A longer age is stricter, so it is applied to a complete answer for a shorter one.</summary>
+    [Fact]
+    public void ALongerAgeOverACompleteAnswerMakesNoPass()
+    {
+        var tree = ManyFiles(10_000);
+        var oneYear = LargestFiles.Find(tree, tree.RootNode, new FileFilter(UnwrittenFor: FileAge.OneYear), Now, limit: 20_000);
+        var twoYears = new FileFilter(UnwrittenFor: FileAge.TwoYears);
+
+        var reused = LargestFiles.Find(tree, tree.RootNode, twoYears, Now, limit: 20_000, previous: oneYear, ct: Cancelled());
+        var fresh = LargestFiles.Find(tree, tree.RootNode, twoYears, Now, limit: 20_000);
+
+        Assert.Equal(fresh.Files, reused.Files);
+        Assert.NotEmpty(reused.Files);
+        Assert.True(reused.Files.Count < oneYear.Files.Count);
+    }
+
     /// <summary>A wider filter can never be applied to a narrower answer, which lacks what it adds.</summary>
     [Fact]
     public void AWiderFilterMakesAPass()
@@ -355,7 +392,8 @@ public sealed class LargestFilesTests
 
     /// <summary>
     /// Enough files that a pass looks at the cancellation token: half archives and half documents,
-    /// sized 1 to <paramref name="count"/> bytes, the archives on the odd sizes.
+    /// sized 1 to <paramref name="count"/> bytes, the archives on the odd sizes, and last written up
+    /// to a thousand days ago.
     /// </summary>
     private static ExploreTree ManyFiles(int count)
     {
@@ -363,7 +401,7 @@ public sealed class LargestFilesTests
 
         builder.AddChildren(
             ExploreTreeBuilder.RootNode,
-            [.. Enumerable.Range(1, count).Select(size => File(size % 2 == 1 ? $"{size}.zip" : $"{size}.pdf", size, Now))]);
+            [.. Enumerable.Range(1, count).Select(size => File(size % 2 == 1 ? $"{size}.zip" : $"{size}.pdf", size, Now.AddDays(-(size % 1_000))))]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }
