@@ -88,16 +88,76 @@ public static class VolumeRoot
     /// A refusal that holds on either reading therefore holds, and the lookup can only add
     /// refusals to what the path's text alone gave.</para>
     /// </summary>
-    public static IReadOnlyList<string>? Readings(IVolumeInventory volumes, string path)
+    public static IReadOnlyList<string>? Readings(IVolumeInventory volumes, string path) =>
+        Read(volumes, path, out _, out _);
+
+    /// <summary>
+    /// Every path the item at <paramref name="path"/> is reachable at, each with its
+    /// <see cref="Readings"/>: <paramref name="path"/> itself first, then the same item below each
+    /// other place its volume is mounted. Null where <see cref="Readings"/> answers null.
+    ///
+    /// <para><b>For a caller that refuses, which has to ask every rule about every one of them.</b>
+    /// A rule is written about a path's text, and the system volume mounted at <c>D:\SysMount\</c>
+    /// as well as at <c>C:\</c> puts <c>C:\Windows</c> at <c>D:\SysMount\Windows</c> too. Asked
+    /// about that text alone, the region table and every §5.2 tool root answered it as unclassified,
+    /// and removing it removes the same folder. So a refusal that holds at any of these paths
+    /// holds, as one that holds on either reading does.</para>
+    ///
+    /// <para>The other places are asked of the machine at each call, for the reason
+    /// <see cref="IVolumeInventory.MountPointOf"/> is, and from the mount point the path's first
+    /// reading is taken below. That is the path's own root where the machine's answer is not a
+    /// prefix of the path, and a junction on that root's volume is reached at every other mount of
+    /// the volume as surely as at this one.</para>
+    /// </summary>
+    public static IReadOnlyList<VolumePlace>? Places(IVolumeInventory volumes, string path)
+    {
+        if (Read(volumes, path, out var display, out var top) is not { } readings)
+        {
+            return null;
+        }
+
+        var below = readings[0];
+        List<VolumePlace> places = [new(display, readings)];
+
+        foreach (var mountPoint in volumes.MountPointsOf(top))
+        {
+            if (HostVolume.IsMountPoint(top, mountPoint))
+            {
+                continue;
+            }
+
+            var elsewhere = Path.Join(mountPoint, below);
+            var root = Path.GetPathRoot(elsewhere.AsSpan()).ToString();
+
+            // Both readings where this mount point is a folder, for the reason Readings keeps both:
+            // the volume mounted inside another's Recycle Bin is in that bin read from the letter.
+            places.Add(new(
+                elsewhere,
+                mountPoint.Length > root.Length && Remainder(elsewhere, root) is { } belowRoot
+                    ? [below, belowRoot]
+                    : [below]));
+        }
+
+        return places;
+    }
+
+    /// <summary>
+    /// <see cref="Readings"/>, with the display form it read and the mount point its first reading
+    /// is below, for <see cref="Places"/> to find the volume's other mount points from.
+    /// </summary>
+    private static IReadOnlyList<string>? Read(
+        IVolumeInventory volumes, string path, out string display, out string top)
     {
         ArgumentNullException.ThrowIfNull(volumes);
+
+        display = top = string.Empty;
 
         if (!Path.IsPathFullyQualified(path))
         {
             return null;
         }
 
-        var display = LongPath.Display(path);
+        display = LongPath.Display(path);
 
         if (Path.GetPathRoot(display) is not { Length: > 0 } root
             || Remainder(display, root) is not { } belowRoot)
@@ -109,9 +169,11 @@ public static class VolumeRoot
             || mountPoint.Length <= root.Length
             || !HostVolume.Holds(mountPoint, display))
         {
+            top = root;
             return [belowRoot];
         }
 
+        top = mountPoint;
         return Remainder(display, mountPoint) is { } belowMountPoint ? [belowMountPoint, belowRoot] : null;
     }
 

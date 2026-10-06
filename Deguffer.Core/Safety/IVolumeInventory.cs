@@ -208,6 +208,20 @@ public interface IVolumeInventory
     string? MountPointOf(string path);
 
     /// <summary>
+    /// Every place the volume mounted at <paramref name="mountPoint"/> is mounted, that one among
+    /// them, asked of the machine at the moment of the call. Empty where Windows will not say, which
+    /// is a share, a letter standing for somewhere else, and a folder nothing is mounted at.
+    ///
+    /// <para>Live for the reason <see cref="MountPointOf"/> is. Its caller is
+    /// <see cref="VolumeRoot.Places"/>, which finds every other path an item is reachable at, so that
+    /// a refusal written about <c>C:\Windows</c> holds for the same folder reached through another
+    /// mount of the system volume. A list remembered from before that mount was made would name
+    /// nothing and refuse nothing.</para>
+    /// </summary>
+    /// <param name="mountPoint">A mount point, as <see cref="MountPointOf"/> answers one.</param>
+    IReadOnlyList<string> MountPointsOf(string mountPoint);
+
+    /// <summary>
     /// The capacity of the volume holding <paramref name="path"/>, and what is left of it for this
     /// user, asked of the machine at the moment of the call, or null where the volume will not say.
     ///
@@ -260,6 +274,15 @@ public sealed class VolumeInventory : IVolumeInventory
     }
 
     public string? MountPointOf(string path) => VolumeCalls.MountPointOf(path);
+
+    public IReadOnlyList<string> MountPointsOf(string mountPoint)
+    {
+        // GetVolumeNameForVolumeMountPoint answers only for a mount point named with its trailing
+        // separator, and a caller holding C:\Mount means the same directory.
+        var named = Path.EndsInDirectorySeparator(mountPoint) ? mountPoint : mountPoint + Path.DirectorySeparatorChar;
+
+        return VolumeCalls.VolumeNameOf(named, out _) is { } name ? Ordered(VolumeCalls.MountPointsOf(name)) : [];
+    }
 
     public (long Total, long Free)? SpaceOf(string path) =>
         VolumeCalls.MountPointOf(path) is { } mountPoint ? VolumeCalls.SpaceOf(mountPoint) : null;

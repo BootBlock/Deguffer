@@ -212,14 +212,17 @@ public sealed class ExploreActionPolicy
         // containing directory at all. None of them is a thing to remove, and asking where the volume
         // is mounted now rather than a list of drives means a volume mounted after this policy was
         // built is covered exactly as one mounted before it.
-        if (VolumeRoot.Readings(_volumes, target) is not { } readings)
+        if (VolumeRoot.Places(_volumes, target) is not { } places)
         {
             return ExploreVerdict.Refuse(
                 $"'{target}' is a whole drive. Explore removes things from a drive, never the drive itself.");
         }
 
-        // Each rule on every reading, because a refusal that holds on either holds: VolumeRoot says
-        // why the drive letter's reading is kept beside the mount point's.
+        // Each rule at every place the item is reachable and on every reading of each, because a
+        // refusal that holds at any of them holds: VolumeRoot says why the drive letter's reading is
+        // kept beside the mount point's, and why the volume's other mounts are asked about.
+        IReadOnlyList<string> readings = [.. places.SelectMany(place => place.Readings)];
+
         if (OnAnyReading(readings, ReservedByTheFilesystem) is { } filesystem)
         {
             return filesystem;
@@ -235,14 +238,48 @@ public sealed class ExploreActionPolicy
             return reserved;
         }
 
+        var children = new ToolRootChildren(_fileSystem);
+        ExploreVerdict? allowed = null;
+
+        foreach (var place in places)
+        {
+            var verdict = Above(place.Path, children);
+
+            if (!verdict.IsAllowed)
+            {
+                return verdict;
+            }
+
+            // The first place's, which is the path the user named, so what they are told about it
+            // is never a sentence written about another of its paths.
+            allowed ??= verdict;
+        }
+
+        // Last, and only of a path everything above allows at every place, because it reads every
+        // location the path holds. The tool roots read one entry each, and only of a path inside one.
+        foreach (var place in places)
+        {
+            if (_held.Refusal(place.Path) is { } held)
+            {
+                return held;
+            }
+        }
+
+        return allowed!;
+    }
+
+    /// <summary>
+    /// What everything that answers from above says about one place the item is reachable at: the
+    /// Outlook rule, the region table, and §5.2's declared and probed roots, in that order.
+    /// </summary>
+    private ExploreVerdict Above(string target, ToolRootChildren children)
+    {
         // Before the region table, because the table ends in a permission: a mail store inside the
         // signed-in profile would otherwise be answered by the profile's own entry and allowed.
         if (OutlookDataFiles.Refusal(target) is { } mail)
         {
             return mail;
         }
-
-        var children = new ToolRootChildren(_fileSystem);
 
         var verdict = _regions.FirstOrDefault(region => Covers(region, target)) is { Verdict.IsAllowed: false } refusing
             ? refusing.Verdict
@@ -252,14 +289,7 @@ public sealed class ExploreActionPolicy
         // refusal and never lift one. Its roots come from what a tool reports and what a setting
         // names, and pooled with the declared roots a Maven setting naming 'settings-security.xml'
         // made a root beside Maven's own that recognised the master-password file, and allowed it.
-        if (verdict.IsAllowed && ProbedRefusal(target, children) is { } probed)
-        {
-            verdict = probed;
-        }
-
-        // Last, and only of a path everything above allows, because it reads every location the
-        // path holds. The tool roots read one entry each, and only of a path inside one.
-        return verdict.IsAllowed ? _held.Refusal(target) ?? verdict : verdict;
+        return verdict.IsAllowed && ProbedRefusal(target, children) is { } probed ? probed : verdict;
     }
 
     /// <summary>

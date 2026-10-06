@@ -104,6 +104,16 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     }
 
     /// <summary>
+    /// Every mount point of the volume here that is mounted at <paramref name="mountPoint"/>, as the
+    /// volumes stand at the call, or none where no volume is mounted there.
+    /// </summary>
+    public IReadOnlyList<string> MountPointsOf(string mountPoint) =>
+        _volumes.FirstOrDefault(volume => volume.MountPoints.Any(known => HostVolume.IsMountPoint(known, mountPoint)))
+            is { RootPath: not null } held
+            ? [.. held.MountPoints]
+            : [];
+
+    /// <summary>
     /// Answer every <see cref="MountPointOf"/> with <paramref name="mountPoint"/>, whatever the path.
     /// Windows gives an answer that is not a prefix of the path for a path through a junction to
     /// another volume: it names the volume on the junction's far side.

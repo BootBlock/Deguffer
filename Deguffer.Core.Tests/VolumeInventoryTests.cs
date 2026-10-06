@@ -78,6 +78,31 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// Asked live at any of a volume's mount points, with or without its trailing separator, the
+    /// answer is every place the remembered list says the volume is mounted, in the same order. A
+    /// folder nothing is mounted at answers nothing, and so asks nothing more of a refusing caller.
+    /// Makes no claim that any volume here has more than one mount point, for the reason
+    /// <see cref="ReportsEveryPathEachVolumeIsMountedAt"/> gives.
+    /// </summary>
+    [Fact]
+    public void AnswersEveryMountPointOfTheVolumeMountedAtOne()
+    {
+        var volumes = VolumeInventory.Current.Volumes.Where(v => v.VolumeName is not null).ToList();
+
+        Assert.NotEmpty(volumes);
+
+        Assert.All(volumes, v => Assert.All(v.MountPoints, mountPoint =>
+        {
+            Assert.Equal(v.MountPoints, VolumeInventory.Current.MountPointsOf(mountPoint));
+            Assert.Equal(v.MountPoints, VolumeInventory.Current.MountPointsOf(mountPoint[..^1]));
+        }));
+
+        using var temp = new TempDirectory();
+
+        Assert.Empty(VolumeInventory.Current.MountPointsOf(temp.Path));
+    }
+
+    /// <summary>
     /// One entry per volume. The list is built from the volume enumeration and then topped up with
     /// the drive letters no volume claimed, so a letter counted twice would put the same volume in
     /// front of the picker twice and plan its Recycle Bin twice.

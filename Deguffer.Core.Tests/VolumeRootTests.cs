@@ -151,6 +151,51 @@ public sealed class VolumeRootTests
     }
 
     /// <summary>
+    /// The same item below every place its volume is mounted, the path asked about first and each
+    /// with its own readings. A refusing caller asks every rule about each, because a rule written
+    /// about <c>C:\Windows</c> is about <c>D:\SysMount\Windows</c> too. Asked in the extended-length
+    /// form as well, which is answered in display form (§6.3).
+    /// </summary>
+    [Fact]
+    public void PlacesNameTheSameItemBelowEveryMountOfItsVolume()
+    {
+        _volumes.With(@"C:\", alsoMountedAt: [@"D:\SysMount\"]).With(@"D:\");
+
+        AssertPlaces(
+            [(@"D:\SysMount\Windows", @"Windows|SysMount\Windows"), (@"C:\Windows", "Windows")],
+            VolumeRoot.Places(_volumes, @"D:\SysMount\Windows"));
+        AssertPlaces(
+            [(@"C:\Windows", "Windows"), (@"D:\SysMount\Windows", @"Windows|SysMount\Windows")],
+            VolumeRoot.Places(_volumes, @"\\?\C:\Windows"));
+        AssertPlaces([(@"D:\Data", "Data")], VolumeRoot.Places(_volumes, @"D:\Data"));
+        Assert.Null(VolumeRoot.Places(_volumes, @"D:\SysMount"));
+    }
+
+    /// <summary>
+    /// A path through a junction is answered with the volume on the junction's far side, so its
+    /// first reading is below its own root, and the other places are that root's volume's other
+    /// mounts. The junction is a folder of that volume, so it is reached at each of them.
+    /// </summary>
+    [Fact]
+    public void PlacesOfAPathThroughAJunctionAreBelowItsRootsOtherMounts()
+    {
+        _volumes.With(@"C:\", alsoMountedAt: [@"D:\SysMount\"]).Answering(@"E:\Far\");
+
+        AssertPlaces(
+            [(@"C:\Link\Windows", @"Link\Windows"), (@"D:\SysMount\Link\Windows", @"Link\Windows|SysMount\Link\Windows")],
+            VolumeRoot.Places(_volumes, @"C:\Link\Windows"));
+    }
+
+    /// <summary>
+    /// A share is mounted nowhere else that the machine names, so it is its own one place.
+    /// </summary>
+    [Fact]
+    public void APathOnAShareHasOnePlace() =>
+        AssertPlaces(
+            [(@"\\server\share\folder", "folder")],
+            VolumeRoot.Places(_volumes, @"\\server\share\folder"));
+
+    /// <summary>
     /// A folder whose name starts with a mount point's is not inside it. <c>C:\Mountains</c> is a
     /// folder of <c>C:</c>, whatever is mounted at <c>C:\Mount</c>.
     /// </summary>
@@ -227,4 +272,15 @@ public sealed class VolumeRootTests
     [MemberData(nameof(DriveTops))]
     public void OnlyTheTopOfADriveInDisplayFormIsADriveTop(string? path, bool driveTop) =>
         Assert.Equal(driveTop, VolumeRoot.IsDriveTop(path));
+
+    /// <summary>
+    /// Compared by path and by readings joined, because a record holding a list compares the list by
+    /// reference.
+    /// </summary>
+    private static void AssertPlaces(
+        IReadOnlyList<(string Path, string Readings)> expected, IReadOnlyList<VolumePlace>? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.Equal(expected, actual.Select(place => (place.Path, string.Join('|', place.Readings))).ToList());
+    }
 }
