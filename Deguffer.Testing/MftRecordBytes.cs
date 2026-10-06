@@ -58,6 +58,12 @@ internal static class MftRecordBytes
     public const uint WindowsOverlayFilterTag = 0x8000_0017;
 
     /// <summary>
+    /// A cloud sync app's placeholder, OneDrive's among them. Not a name surrogate: the content is
+    /// the file's own, wherever it currently is.
+    /// </summary>
+    public const uint CloudFilesTag = 0x9000_001A;
+
+    /// <summary>
     /// Whether a record's header says it is in use, which is what NTFS keeps <c>$MFT</c>'s
     /// <c>$BITMAP</c> in step with. A blank record is not.
     /// </summary>
@@ -101,6 +107,55 @@ internal static class MftRecordBytes
         }
 
         offset += MftAttributeBytes.WriteData(span[offset..], allocated, logical, placement);
+
+        return Close(record, offset);
+    }
+
+    /// <summary>
+    /// A file stored other than as its length: compressed, sparse, held in the cloud, or compressed
+    /// by CompactOS, laid out as NTFS lays out each.
+    /// </summary>
+    /// <param name="attributes">What <c>$STANDARD_INFORMATION</c> says, which is what a listing reports.</param>
+    /// <param name="flags">The unnamed stream's compressed or sparse flags, or none.</param>
+    /// <param name="occupied">What the unnamed stream holds on the disk, where a flag is set.</param>
+    /// <param name="wofOccupied">
+    /// Where CompactOS compressed the file, the clusters its compressed stream holds. Null for any
+    /// other file.
+    /// </param>
+    public static byte[] Stored(
+        ulong parentReference,
+        string name,
+        long logical,
+        FileAttributes attributes,
+        ushort flags,
+        long occupied,
+        uint reparseTag = 0,
+        long? wofOccupied = null,
+        int bytesPerRecord = BytesPerRecord)
+    {
+        var record = new byte[bytesPerRecord];
+        var span = record.AsSpan();
+        var offset = WriteHeader(span, 0x0001, baseReference: 0, Sequence);
+
+        // The length rounded up to a cluster is what NTFS states as allocated, even for a stream that
+        // holds none of them.
+        var reserved = (logical + BytesPerCluster - 1) / BytesPerCluster * BytesPerCluster;
+
+        offset += MftAttributeBytes.WriteStandardInformation(span[offset..], 0, 0, attributes);
+        offset += MftAttributeBytes.WriteFileName(span[offset..], parentReference, name, reserved, logical);
+
+        if (reparseTag != 0)
+        {
+            offset += MftAttributeBytes.WriteReparsePoint(span[offset..], reparseTag);
+        }
+
+        offset += MftAttributeBytes.WriteStream(span[offset..], name: null, reserved, logical, flags, occupied);
+
+        if (wofOccupied is { } compressed)
+        {
+            offset += MftAttributeBytes.WriteStream(
+                span[offset..], MftRecordParser.WofStreamName, compressed, compressed);
+        }
 
         return Close(record, offset);
     }

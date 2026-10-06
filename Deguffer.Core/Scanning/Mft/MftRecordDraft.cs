@@ -14,6 +14,12 @@ internal enum MftAttributeKinds
 
     /// <summary>A <c>$REPARSE_POINT</c>, which can make the file a link rather than content.</summary>
     ReparsePoint = 4,
+
+    /// <summary>
+    /// The piece of CompactOS's stream starting at cluster 0, which states what a file Windows has
+    /// compressed occupies. See <see cref="MftRecordParser.WofStreamName"/>.
+    /// </summary>
+    WofDataStart = 8,
 }
 
 /// <summary>
@@ -36,6 +42,9 @@ internal struct MftRecordDraft
     private int _bestRank;
     private ScanSize? _size;
     private bool _sawUnnamedData;
+    private ScanSize? _wofSize;
+    private bool _sawWofData;
+    private FileAttributes _attributes;
     private bool _isReparsePoint;
     private long _created;
     private long _lastWritten;
@@ -92,6 +101,7 @@ internal struct MftRecordDraft
                 // not one to trust.
                 case MftRecordParser.AttributeStandardInformation when isBase:
                     (_created, _lastWritten) = MftRecordParser.ReadTimestamps(walk.Current);
+                    _attributes = MftRecordParser.ReadAttributes(walk.Current);
                     break;
 
                 case MftRecordParser.AttributeFileName when MftRecordParser.TryReadFileName(walk.Current, out var candidate):
@@ -133,6 +143,18 @@ internal struct MftRecordDraft
                     {
                         supplied |= MftAttributeKinds.DataStart;
                         _size ??= size;
+                    }
+
+                    break;
+
+                // Kept by the same rule as the unnamed stream: only its first piece states its sizes.
+                case MftRecordParser.AttributeData when MftRecordParser.IsWofStream(walk.Current):
+                    _sawWofData = true;
+
+                    if (MftRecordParser.ReadDataSize(walk.Current) is { } compressed)
+                    {
+                        supplied |= MftAttributeKinds.WofDataStart;
+                        _wofSize ??= compressed;
                     }
 
                     break;
@@ -180,8 +202,26 @@ internal struct MftRecordDraft
         // walk.
         var isReparsePoint = _isReparsePoint && list?.Lost.HasFlag(MftAttributeKinds.ReparsePoint) != true;
 
-        result = new MftRecord(_parent, _name, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten);
+        result = new MftRecord(
+            _parent, _name, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten, StorageOf(isDirectory));
         return MftParseOutcome.Parsed;
+    }
+
+    /// <summary>
+    /// How the file is stored, as its attributes say, and compressed wherever CompactOS's stream was
+    /// found. Such a file's own stream is sparse only because the filter emptied it, so calling it
+    /// sparse would explain its size by the wrong cause.
+    /// </summary>
+    private readonly FileStorage StorageOf(bool isDirectory)
+    {
+        if (isDirectory)
+        {
+            return FileStorage.Plain;
+        }
+
+        var storage = StorageAttributes.Of(_attributes);
+
+        return _sawWofData ? (storage & ~FileStorage.Sparse) | FileStorage.Compressed : storage;
     }
 
     private readonly ScanSize? SizeFor(bool isDirectory, MftListFindings? list)
@@ -208,6 +248,16 @@ internal struct MftRecordDraft
         if (lost != MftAttributeKinds.None)
         {
             return null;
+        }
+
+        // A file CompactOS compressed keeps its length in its own stream, which holds nothing, and
+        // occupies the clusters of the stream the filter moved its content to. That stream seen and
+        // not sized is as unknown as the file's own: without it the file is drawn as empty.
+        if (_sawWofData)
+        {
+            return _size is { } own && _wofSize is { } compressed
+                ? own with { Allocated = own.Allocated + compressed.Allocated }
+                : null;
         }
 
         if (_size is { } size)

@@ -153,7 +153,7 @@ internal sealed class MftDeferredRecord
     /// is settled only where nothing could displace it.
     /// </summary>
     private void FailList() =>
-        Fail(((MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint) & ~_draft.BaseSupplied)
+        Fail(((MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint | MftAttributeKinds.WofDataStart) & ~_draft.BaseSupplied)
             | (_draft.BaseRank != 0 ? MftAttributeKinds.Name : MftAttributeKinds.None));
 
     /// <summary>
@@ -177,6 +177,9 @@ internal sealed class MftDeferredRecord
             case MftRecordParser.AttributeData when !entry.IsNamed:
                 _declaresUnnamedData = true;
                 return entry.LowestVcn == 0 && !_isDirectory ? MftAttributeKinds.DataStart : MftAttributeKinds.None;
+
+            case MftRecordParser.AttributeData when entry.IsWofStream:
+                return entry.LowestVcn == 0 && !_isDirectory ? MftAttributeKinds.WofDataStart : MftAttributeKinds.None;
 
             case MftRecordParser.AttributeReparsePoint:
                 return MftAttributeKinds.ReparsePoint;

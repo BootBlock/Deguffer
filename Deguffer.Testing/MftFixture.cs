@@ -133,15 +133,42 @@ public sealed class MftFixture
             bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
-    /// A file compressed in place by the Windows Overlay Filter. It carries a reparse point and is
-    /// not a link: the content is there, and a walk counts it because the filter hides the reparse
-    /// attribute from an ordinary enumeration.
+    /// A file compressed in place by the Windows Overlay Filter, laid out as the filter leaves it:
+    /// its own stream sparse and holding nothing, and its content in the named stream the filter
+    /// moved it to, which occupies <paramref name="allocated"/>. It carries a reparse point and is
+    /// not a link, and a walk counts it at its length because the filter hides both from a listing.
     /// </summary>
     public MftFixture AddOverlayCompressedFile(uint number, uint parent, string name, long allocated, long logical) =>
-        Add(number, MftRecordBytes.Build(
-            Reference(parent), name, isDirectory: false, allocated, logical, DataPlacement.NonResident,
-            MftRecordBytes.WindowsOverlayFilterTag,
+        Add(number, MftRecordBytes.Stored(
+            Reference(parent), name, logical,
+            FileAttributes.Archive | FileAttributes.SparseFile | FileAttributes.ReparsePoint,
+            MftAttributeBytes.SparseFlag, occupied: 0, MftRecordBytes.WindowsOverlayFilterTag,
+            wofOccupied: allocated, bytesPerRecord: _bytesPerRecord));
+
+    /// <summary>
+    /// A cloud file with only <paramref name="onDisk"/> of its <paramref name="logical"/> bytes on
+    /// this PC, as a sync app's placeholder is stored: sparse, marked for recall and offline, and
+    /// carrying a reparse point that is not a link. Zero is OneDrive's "online-only".
+    /// </summary>
+    public MftFixture AddCloudFile(uint number, uint parent, string name, long logical, long onDisk = 0) =>
+        Add(number, MftRecordBytes.Stored(
+            Reference(parent), name, logical,
+            FileAttributes.Archive | FileAttributes.SparseFile | FileAttributes.ReparsePoint
+                | FileAttributes.Offline | (FileAttributes)0x0040_0000,
+            MftAttributeBytes.SparseFlag, onDisk, MftRecordBytes.CloudFilesTag,
             bytesPerRecord: _bytesPerRecord));
+
+    /// <summary>A file NTFS compressed into <paramref name="onDisk"/> bytes of clusters.</summary>
+    public MftFixture AddCompressedFile(uint number, uint parent, string name, long logical, long onDisk) =>
+        Add(number, MftRecordBytes.Stored(
+            Reference(parent), name, logical, FileAttributes.Archive | FileAttributes.Compressed,
+            MftAttributeBytes.CompressedFlag, onDisk, bytesPerRecord: _bytesPerRecord));
+
+    /// <summary>A sparse file whose written ranges hold <paramref name="onDisk"/> bytes of clusters.</summary>
+    public MftFixture AddSparseFile(uint number, uint parent, string name, long logical, long onDisk) =>
+        Add(number, MftRecordBytes.Stored(
+            Reference(parent), name, logical, FileAttributes.Archive | FileAttributes.SparseFile,
+            MftAttributeBytes.SparseFlag, onDisk, bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
     /// A file whose allocated and logical sizes may differ — the compressed or sparse case that a

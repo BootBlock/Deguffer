@@ -41,6 +41,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// file does, so a file written every day since it was renamed once reports the date of the
 /// rename — the same trap the reparse-point flag beside the name sets, and the same answer.</para>
 /// </param>
+/// <param name="Storage">
+/// Why the file occupies less than its length, as far as anything says. Explains
+/// <paramref name="Size"/> and never decides it.
+/// </param>
 public readonly record struct MftRecord(
     uint ParentRecordNumber,
     string Name,
@@ -48,7 +52,8 @@ public readonly record struct MftRecord(
     bool IsDirectory,
     bool IsReparsePoint,
     long CreatedFileTime,
-    long LastWrittenFileTime)
+    long LastWrittenFileTime,
+    FileStorage Storage = FileStorage.Plain)
 {
     /// <summary>
     /// The root directory always occupies record 5. Path resolution starts here, and the root is
