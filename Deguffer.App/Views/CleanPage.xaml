@@ -598,6 +598,20 @@
                 <Button Content="Cancel"
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                         Command="{x:Bind ViewModel.CancelCommand}" />
+                <!-- Beside Clean, because it is part of starting one: what Deguffer does once the clean
+                     it is about to start has finished. Read when the clean ends, so it can be changed
+                     while one runs. -->
+                <TextBlock x:Name="WhenCompleteLabel"
+                           Text="When complete"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0" />
+                <ComboBox MinWidth="140"
+                          VerticalAlignment="Center"
+                          ItemsSource="{x:Bind ViewModel.WhenComplete.Labels}"
+                          SelectedIndex="{x:Bind ViewModel.WhenComplete.SelectedIndex, Mode=TwoWay}"
+                          AutomationProperties.LabeledBy="{x:Bind WhenCompleteLabel}"
+                          AutomationProperties.HelpText="{x:Bind ViewModel.WhenComplete.Explanation}"
+                          ToolTipService.ToolTip="{x:Bind ViewModel.WhenComplete.Explanation}" />
                 <Button Content="Clean"
                         Command="{x:Bind ViewModel.CleanCommand}" />
                 <Button Content="Scan"

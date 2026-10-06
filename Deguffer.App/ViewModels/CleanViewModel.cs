@@ -80,6 +80,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// not exist while the view-model is being constructed.
     /// </param>
     /// <param name="appVersion">Deguffer's own version, which a run's diagnostic report names.</param>
+    /// <param name="whenComplete">What follows a finished clean, chosen beside the Clean button.</param>
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,
@@ -89,7 +90,8 @@ public sealed partial class CleanViewModel : ObservableObject
         KeepService keeps,
         RunningActions running,
         Func<IConfirmationPrompt> prompt,
-        string appVersion)
+        string appVersion,
+        WhenCompleteViewModel whenComplete)
     {
         _planner = planner;
         _environment = environment;
@@ -99,6 +101,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _keeps = keeps;
         _running = running;
         _prompt = prompt;
+        WhenComplete = whenComplete;
         _origin = new ReportOrigin(
             appVersion,
             $"{RuntimeInformation.OSDescription} ({RuntimeInformation.ProcessArchitecture})",
@@ -178,6 +181,8 @@ public sealed partial class CleanViewModel : ObservableObject
     public partial bool ShowAlreadyClear { get; set; }
 
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
+
+    public WhenCompleteViewModel WhenComplete { get; }
 
     /// <summary>
     /// The row whose items are listed in place of the rows, or null while the rows are shown.
@@ -530,6 +535,10 @@ public sealed partial class CleanViewModel : ObservableObject
 
         var freeBefore = FreeSpaceOfProfile();
 
+        // Set only by a run that reached its §5.6 verdict. A clean that was declined, cancelled
+        // before it started or failed has nothing for the choice beside the button to follow.
+        RunOutcome? finished = null;
+
         try
         {
             // §7's confirmation is collected here, on the UI thread and before any work starts:
@@ -610,6 +619,7 @@ public sealed partial class CleanViewModel : ObservableObject
             // Last, so a re-plan's per-provider progress lines cannot be what the bar is left
             // showing. See ReportOutcome for which of the two sentences wins it.
             ReportOutcome(outcome);
+            finished = outcome;
         }
         catch (OperationCanceledException)
         {
@@ -632,6 +642,13 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             IsBusy = false;
             FreeSpaceNow = FreeSpaceOfProfile();
+        }
+
+        // Last, once the page shows everything the run has to say: the countdown is put over it, and
+        // a locked or sleeping machine comes back to it.
+        if (finished is not null && await WhenComplete.FollowAsync(finished, ct) is { } refusal)
+        {
+            Report(refusal, InfoBarSeverity.Error);
         }
     }
 

@@ -101,6 +101,12 @@ public partial class App : Application
     /// </summary>
     internal static void RememberWindowPlacement() => _shell?.RememberPlacement();
 
+    /// <summary>
+    /// Close the window as its own close button does once nothing is running, without asking: the
+    /// user has already chosen it. See <see cref="Deguffer.App.MainWindow.CloseWhenIdle"/>.
+    /// </summary>
+    internal static void CloseWhenIdle() => _shell?.CloseWhenIdle();
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         _shell = new MainWindow();
