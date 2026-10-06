@@ -442,6 +442,36 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A moved transcoder folder the settings of one folder name two ways, through another mount of
+    /// its volume, is offered once and refused in Explore at both names.
+    /// </summary>
+    [Fact]
+    public async Task AMovedTranscoderFolderNamedTwoWaysIsOfferedOnceAndRefusedAtBothNames()
+    {
+        var standard = Path.Combine(_environment.LocalAppData, "jellyfin");
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var recorded = Path.Combine(mirror, "jellyfin");
+        var volumes = new FakeVolumeInventory().With(_environment.LocalAppData + @"\", alsoMountedAt: [mirror + @"\"]);
+        string[] transcoders = [Path.Combine(mirror, "Transcoding"), Path.Combine(_environment.LocalAppData, "Transcoding")];
+
+        foreach (var (data, transcoder) in new[] { recorded, standard }.Zip(transcoders))
+        {
+            CreateData(data);
+            Transcoding(transcoder);
+            Write(Path.Combine(data, "config", "encoding.xml"), Old, Settings("TranscodingTempPath", transcoder));
+        }
+
+        Record(JellyfinServerLayout.DataFolderValue, recorded);
+
+        var provider = CreateProvider(volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.TargetedPaths, path => Path.GetFileName(path) == "Transcoding");
+        Assert.All(transcoders, transcoder => Assert.Contains(
+            provider.ToolRoots, root => root.Path.Equals(transcoder, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
     /// A data folder Windows would not describe still counts. A transcoder folder that holds it would
     /// take it along, and nothing here could say what was in it.
     /// </summary>
