@@ -39,6 +39,7 @@ internal sealed class StoragePage : IDisposable
 
         Keeps = new KeepService(new KeepStore(Environment));
         Selections = new SelectionService(new SelectionStore(Environment));
+        Preferences = new PreferenceService(new PreferenceStore(Environment));
 
         ViewModel = new CleanViewModel(
             new CleanupPlanner(providers),
@@ -53,7 +54,8 @@ internal sealed class StoragePage : IDisposable
                 PromptsBuilt++;
                 return Prompt;
             },
-            appVersion: "0.0.0-test");
+            appVersion: "0.0.0-test",
+            new WhenCompleteViewModel(Preferences, Session));
     }
 
     public CleanViewModel ViewModel { get; }
@@ -67,6 +69,12 @@ internal sealed class StoragePage : IDisposable
     public KeepService Keeps { get; }
 
     public SelectionService Selections { get; }
+
+    /// <summary>The stored settings, in this test's own profile.</summary>
+    public PreferenceService Preferences { get; }
+
+    /// <summary>The Windows session a finished clean may lock, log off, sleep or shut down.</summary>
+    public FakeWindowsSession Session { get; } = new();
 
     /// <summary>What is running on every page, which a test can add to as another page would.</summary>
     public RunningActions Running { get; } = new();

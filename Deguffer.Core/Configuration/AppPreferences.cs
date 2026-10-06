@@ -333,6 +333,15 @@ public enum ExploreScheme
 /// Whether Installed apps exports an entry with <c>reg.exe</c> before removing it (§7.3). On by
 /// default, and an entry whose backup fails is not removed while it is on.
 /// </param>
+/// <param name="WhenCleanComplete">
+/// What Deguffer does once a clean on the Storage page has finished. Nothing by default.
+///
+/// <para>Stored rather than held for the session, because a long clean is the kind of thing
+/// somebody starts the same way each time. It
+/// changes nothing about what a clean removes. What stops a stored choice from ending a session
+/// nobody expected to end is the countdown it is carried out behind, which says what is about to
+/// happen and can be cancelled. See <see cref="Execution.CompletionCountdown"/>.</para>
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Compact,
@@ -352,7 +361,8 @@ public sealed record AppPreferences(
     int KeepFilesChangedWithinHours = 0,
     int FileHistoryRetentionDays = 365,
     int MinimumTemporaryFileAgeDays = 7,
-    bool BackUpInstalledAppEntries = true)
+    bool BackUpInstalledAppEntries = true,
+    Execution.CompletionAction WhenCleanComplete = Execution.CompletionAction.Nothing)
 {
     public static readonly AppPreferences Default = new();
 

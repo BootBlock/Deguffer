@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
 
@@ -36,7 +37,8 @@ public class PreferenceStoreTests
             KeepFilesChangedWithinHours: 8,
             FileHistoryRetentionDays: 30,
             MinimumTemporaryFileAgeDays: 2,
-            BackUpInstalledAppEntries: false)));
+            BackUpInstalledAppEntries: false,
+            WhenCleanComplete: CompletionAction.Hibernate)));
 
         var loaded = store.Load();
 
@@ -91,6 +93,25 @@ public class PreferenceStoreTests
         // Not the default: off is the value a missing key would also read back as, so only a
         // round trip of false shows the value was written and read rather than defaulted.
         Assert.False(loaded.BackUpInstalledAppEntries);
+
+        // Not the default, which is Nothing and zero, so the assertion fails with the preference gone.
+        Assert.Equal(CompletionAction.Hibernate, loaded.WhenCleanComplete);
+    }
+
+    /// <summary>
+    /// Stored by name, as every other choice is, so reordering the list on the Storage page can never
+    /// turn a stored Lock into a stored Shut down.
+    /// </summary>
+    [Fact]
+    public void StoresWhatFollowsACleanByName()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+
+        Assert.True(new PreferenceStore(environment).Save(AppPreferences.Default with { WhenCleanComplete = CompletionAction.ShutDown }));
+
+        var json = File.ReadAllText(Path.Combine(environment.LocalAppData, "Deguffer", "preferences.json"));
+        Assert.Contains("\"WhenCleanComplete\": \"ShutDown\"", json);
     }
 
     /// <summary>
@@ -161,6 +182,9 @@ public class PreferenceStoreTests
         // On. A missing key deserialises to false, and false would remove Installed apps entries
         // with no backup on every machine that upgrades, without anybody choosing it (§7.3).
         Assert.True(loaded.BackUpInstalledAppEntries);
+
+        // Nothing. An upgraded machine must never start ending its session after a clean.
+        Assert.Equal(CompletionAction.Nothing, loaded.WhenCleanComplete);
     }
 
     /// <summary>

@@ -22,11 +22,8 @@ public sealed record ClosePrompt(string Title, string Consequence, string CloseW
         // dialog that should never have been built.
         ArgumentOutOfRangeException.ThrowIfZero(running.Count);
 
-        var what = running.Count == 1
-            ? Name(running[0])
-            : string.Join(", ", running.Take(running.Count - 1).Select(Name)) + " and " + Name(running[^1]);
-
-        var (it, finishes) = running.Count == 1 ? ("it", "finishes") : ("they", "finish");
+        var what = RunningActionText.List(running);
+        var (it, finishes) = RunningActionText.Agreement(running);
 
         return new ClosePrompt(
             $"Close Deguffer while {what} {(running.Count == 1 ? "is" : "are")} running?",
@@ -37,14 +34,4 @@ public sealed record ClosePrompt(string Title, string Consequence, string CloseW
             $"Close when {it} {finishes}",
             "Keep Deguffer open");
     }
-
-    private static string Name(RunningAction action) => action switch
-    {
-        RunningAction.StorageClean => "a clean on the Storage page",
-        RunningAction.ExploreRemoval => "a removal on the Explore page",
-        RunningAction.EntryRemoval => "a removal of installed app entries",
-        RunningAction.BackupRestore => "a restore of a registry backup",
-        RunningAction.Uninstall => "an uninstall",
-        _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
-    };
 }

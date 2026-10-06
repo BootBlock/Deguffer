@@ -19,19 +19,27 @@ public sealed partial class CloseMessageTests
     /// <summary>
     /// Everything that would put a message in another program's queue, end a process, or push its
     /// pages out. Each is refused by §7.2.1 or by §2, and none of them is declared.
+    ///
+    /// <para><c>ExitWindowsEx</c> is not here: §7 lets the user choose to log off, restart or shut
+    /// down once a clean has finished. It is held to one file and to Windows asking every program to
+    /// close, by <see cref="TheOnlySessionEndIsAskedOfWindowsAndNeverForced"/>.</para>
     /// </summary>
     private static readonly string[] NeverDeclared =
     [
         "SendMessage", "SendMessageW", "SendMessageTimeout", "SendMessageTimeoutW", "SendNotifyMessage",
         "SendNotifyMessageW", "PostThreadMessage", "PostThreadMessageW", "SendInput", "keybd_event",
         "mouse_event", "EndTask", "TerminateProcess", "NtTerminateProcess", "TerminateJobObject",
-        "ExitWindowsEx", "InitiateShutdown", "GenerateConsoleCtrlEvent", "AttachConsole",
+        "InitiateShutdown", "InitiateShutdownW", "InitiateSystemShutdown", "InitiateSystemShutdownW",
+        "InitiateSystemShutdownEx", "InitiateSystemShutdownExW", "GenerateConsoleCtrlEvent", "AttachConsole",
         "RmShutdown", "RmRestart", "EmptyWorkingSet", "SetProcessWorkingSetSize",
         "SetProcessWorkingSetSizeEx", "NtSetSystemInformation", "NtSuspendProcess", "DebugActiveProcess",
     ];
 
     /// <summary>The one call Deguffer makes into another program's message queue.</summary>
     private const string TheOnlyPost = "PostMessageW";
+
+    /// <summary>The one call that ends the Windows session, which the user chooses to follow a clean.</summary>
+    private const string TheOnlySessionEnd = "ExitWindowsEx";
 
     [Fact]
     public void NoCallThatEndsOrCommandsAnotherProgramIsDeclared()
@@ -69,6 +77,44 @@ public sealed partial class CloseMessageTests
         var post = Assert.Single(PostCall().Matches(source));
 
         Assert.Equal("WindowClose", post.Groups["message"].Value);
+    }
+
+    /// <summary>
+    /// Logging off, restarting and shutting down go through one declaration, in one file, and every
+    /// call names one plain flag: <c>EWX_LOGOFF</c>, <c>EWX_REBOOT</c> or <c>EWX_POWEROFF</c>, never
+    /// combined with <c>EWX_FORCE</c> or <c>EWX_FORCEIFHUNG</c>. Without those, Windows asks every
+    /// program to close and any of them may refuse, which is the line §7.2.1 draws for its own verb.
+    /// </summary>
+    [Fact]
+    public void TheOnlySessionEndIsAskedOfWindowsAndNeverForced()
+    {
+        var declared = Imports();
+        var file = Path.Combine("Deguffer.Core", "Execution", "WindowsSession.cs");
+
+        Assert.Equal(file, Assert.Single(declared[TheOnlySessionEnd]));
+
+        var source = File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, file));
+
+        Assert.Contains("private const uint ExitLogOff = 0x0;", source, StringComparison.Ordinal);
+        Assert.Contains("private const uint ExitReboot = 0x2;", source, StringComparison.Ordinal);
+        Assert.Contains("private const uint ExitPowerOff = 0x8;", source, StringComparison.Ordinal);
+
+        // Every line of code that names the call is the declaration or a call with one plain flag.
+        // Anything else, a flag combined with a force flag or the call taken as a delegate included,
+        // is a line here that matches neither. Comments are left out, because they name it in prose.
+        var code = source
+            .Split('\n')
+            .Where(line => SessionEndMention().IsMatch(line) && !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Equal(4, code.Count);
+        Assert.Single(code, line => SessionEndDeclaration().IsMatch(line));
+        Assert.Equal(
+            ["ExitLogOff", "ExitPowerOff", "ExitReboot"],
+            code.Select(line => SessionEndCall().Match(line))
+                .Where(call => call.Success)
+                .Select(call => call.Groups["flags"].Value)
+                .Order(StringComparer.Ordinal));
     }
 
     private static string Core =>
@@ -124,4 +170,13 @@ public sealed partial class CloseMessageTests
 
     [GeneratedRegex(@"\bPostMessage\(\s*\w+\s*,\s*(?<message>\w+)")]
     private static partial Regex PostCall();
+
+    [GeneratedRegex(@"\bExitWindowsEx\s*\(\s*(?<flags>Exit(?:LogOff|Reboot|PowerOff))\s*,\s*ReasonPlanned\s*\)")]
+    private static partial Regex SessionEndCall();
+
+    [GeneratedRegex(@"\bstatic\s+partial\s+bool\s+ExitWindowsEx\s*\(\s*uint\s+flags\s*,\s*uint\s+reason\s*\)\s*;")]
+    private static partial Regex SessionEndDeclaration();
+
+    [GeneratedRegex(@"\bExitWindowsEx\b")]
+    private static partial Regex SessionEndMention();
 }

@@ -68,6 +68,13 @@ public sealed partial class MainWindow : Window
     public void RememberPlacement() => _sizing.Remember();
 
     /// <summary>
+    /// Close once nothing is running, through the same guard the close button goes through, so a
+    /// close chosen ahead of time cannot end a run on another page that the close button would have
+    /// held for.
+    /// </summary>
+    public void CloseWhenIdle() => _closeGuard.CloseWhenIdle();
+
+    /// <summary>
     /// Open on the destination this instance was started for: Storage ordinarily, and Explore or
     /// Installed apps where an elevated replacement was told to resume there.
     ///

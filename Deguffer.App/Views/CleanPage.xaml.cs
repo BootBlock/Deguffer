@@ -39,8 +39,11 @@ public sealed partial class CleanPage : Page
             App.Keeps,
             App.Running,
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme),
-            AppVersion.Current);
+            AppVersion.Current,
+            new WhenCompleteViewModel(App.Preferences, WindowsSession.Current));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
+        ViewModel.WhenComplete.ConfirmAsync = CountDownAsync;
+        ViewModel.WhenComplete.ExitRequested += (_, _) => App.CloseWhenIdle();
         InitializeComponent();
 
         // Read once, here, and never again. Re-reading it whenever the page came back on screen
@@ -198,6 +201,17 @@ public sealed partial class CleanPage : Page
         ViewModel.RequireTypedConfirmation = preferences.RequireTypedConfirmation;
         ViewModel.KeepFilesChangedWithinHours = preferences.KeepFilesChangedWithinHours;
     }
+
+    /// <summary>
+    /// The countdown before what follows a clean, over the whole window rather than this page: a
+    /// clean goes on running while the user is on another page, and this page has no
+    /// <see cref="XamlRoot"/> while it is off screen. Nothing is carried out where there is no window
+    /// to warn the user in.
+    /// </summary>
+    private Task<bool> CountDownAsync(CompletionCountdown countdown) =>
+        App.MainWindow?.Content is FrameworkElement { XamlRoot: { } root } window
+            ? ContentDialogCompletionCountdown.AskAsync(countdown, App.Running, root, window.ActualTheme)
+            : Task.FromResult(false);
 
     private async Task<bool> ConfirmCleanAsync(CleanConfirmation confirmation)
     {
