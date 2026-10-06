@@ -47,6 +47,11 @@ public enum ViewDensity
 /// goes several levels deep and a reader following one down a flat list loses the rest of the
 /// machine at the first step.</para>
 ///
+/// <para><see cref="Files"/> is the one that ignores the folders: the largest files at any depth
+/// under the node on screen, filtered by name, type, size and age. An ISO in a forgotten folder is
+/// hard to find by drilling into a map and is the first row here. Explore offers it, and Memory has
+/// no files to list.</para>
+///
 /// <para>The values are ordinal, and a view picker lists them in this order. A destination offers
 /// the views that suit what it draws rather than all of them. They are stored by name rather than
 /// by number, so the order is a presentation decision and not a compatibility one.</para>
@@ -58,6 +63,7 @@ public enum ExploreView
     Sunburst = 2,
     List = 3,
     Tree = 4,
+    Files = 5,
 }
 
 /// <summary>

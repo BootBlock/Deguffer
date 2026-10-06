@@ -16,7 +16,7 @@ namespace Deguffer.App.ViewModels;
 /// mid-scan update the list in place instead of rebuilding it — a rebuild is a Reset for the bound
 /// <c>ListView</c>, which throws away the scroll position and the selection with it.</para>
 /// </summary>
-public sealed partial class ExploreRow : ObservableObject
+public sealed partial class ExploreRow : ObservableObject, IExploreListed
 {
     /// <summary>
     /// What Deguffer knows about this entry, or null where it is an ordinary file or folder — which
@@ -126,8 +126,11 @@ public sealed partial class ExploreRow : ObservableObject
         // from nothing at all, in most tooling.
         (true, _) => "\uE71B",   // Link
         (_, true) => "\uE8B7",   // Folder
-        _ => "\uE7C3",           // Page
+        _ => FileGlyph,
     };
+
+    /// <summary>The page glyph a file is drawn with, in this list and in the Files layout's.</summary>
+    internal const string FileGlyph = "\uE7C3";
 
     /// <summary>
     /// What a screen reader should say instead of reading a bar graphic.

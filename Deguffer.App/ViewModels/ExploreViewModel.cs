@@ -140,6 +140,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Selection = new ExploreSelection(actions);
         Growth = new ExploreGrowth(history);
+        Files = new ExploreFiles(actions, Selection.WasRemoved, time);
 
         // A comparison that arrives, or stops, recolours a map coloured by growth.
         Growth.Changed += (_, _) => ViewChanged?.Invoke(this, EventArgs.Empty);
@@ -179,6 +180,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>What grew since the last scan of the volume on screen. See <see cref="ExploreGrowth"/>.</summary>
     public ExploreGrowth Growth { get; }
+
+    /// <summary>The largest files below the folder on screen, for the Files layout. See <see cref="ExploreFiles"/>.</summary>
+    public ExploreFiles Files { get; }
 
     /// <summary>The volumes offered in the picker, each with what it is called and how full it is.</summary>
     public ObservableCollection<DriveEntry> Drives => _drives.Entries;
@@ -358,6 +362,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
     [NotifyPropertyChangedFor(nameof(ShowsLegend))]
     [NotifyPropertyChangedFor(nameof(ShowsGrowth))]
+    [NotifyPropertyChangedFor(nameof(ShowsFileFilters))]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
@@ -375,9 +380,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
     [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
     [NotifyPropertyChangedFor(nameof(ShowsLegend))]
+    [NotifyPropertyChangedFor(nameof(ShowsFileFilters))]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     public partial ExploreView SelectedView { get; set; }
+
+    /// <summary>The Files layout searches only while it is on screen. See <see cref="ExploreFiles.IsActive"/>.</summary>
+    partial void OnSelectedViewChanged(ExploreView value) => Files.IsActive = value == ExploreView.Files;
 
     /// <summary>
     /// What the colours on the map are to say. See <see cref="ExploreColouring"/>.
@@ -423,7 +432,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// empty card explains nothing and reads as part of the empty state.
     /// </summary>
     public bool ShowsLegend =>
-        SelectedColouring != ExploreColouring.Branch && SelectedView != ExploreView.List && HasTree;
+        SelectedColouring != ExploreColouring.Branch
+        && SelectedView is not (ExploreView.List or ExploreView.Files)
+        && HasTree;
+
+    /// <summary>Whether to show the Files layout's filters: while it is on screen and has something to filter.</summary>
+    public bool ShowsFileFilters => SelectedView == ExploreView.Files && HasTree;
 
     /// <summary>
     /// Whether to show the panel of what grew: whenever the colours are growth and something has been
@@ -445,10 +459,16 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>The list gets the sentence as much as the pictures do. It reorders itself alphabetically
     /// and back again, which is a substitution too, and one nobody is told about is the kind a user
     /// reads as a bug.</para>
+    ///
+    /// <para>The Files layout is ordered by size whatever the tree is, so what it has to say is that
+    /// the scan has not reached everything yet: a larger file may still be found.</para>
     /// </summary>
     public string? ViewNote => Tree is { ChildOrder: not ExploreChildOrder.BySize } tree
         ? SelectedView switch
         {
+            ExploreView.Files =>
+                "The largest files found so far. A larger one may still turn up before the scan "
+                + "finishes.",
             ExploreView.Treemap when ExploreSurface.Drawn(tree, ExploreView.Treemap) == ExploreView.Icicle =>
                 "Drawing the icicle, in name order, while the scan runs. A treemap reorders every "
                 + "folder as it grows, so it follows when the scan finishes.",
@@ -548,7 +568,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool HasNoTree => Tree is null;
 
     /// <summary>
-    /// Whether the rows are being rewritten from here.
+    /// Whether the rows are being rewritten from here: this folder's, or the Files layout's.
     ///
     /// <para>Read by the page, because a bound <c>ListView</c> drops an item from its own
     /// selection when the collection under it stops holding that item where it was, and reports
@@ -556,7 +576,10 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// whatever the rewrite happened to leave behind — on a rescan that is a node number belonging
     /// to the tree before it, and asking the arriving tree for its path throws.</para>
     /// </summary>
-    public bool IsShowingRows { get; private set; }
+    public bool IsShowingRows => _showingRows || Files.IsShowingRows;
+
+    /// <summary>Whether <see cref="ShowRows"/> is rewriting <see cref="Rows"/>. Half of <see cref="IsShowingRows"/>.</summary>
+    private bool _showingRows;
 
     /// <summary>
     /// Raised once the tree, the current node or the rows have changed, so the map redraws and the
@@ -632,6 +655,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             Volume = VolumeSpace.None;
             Growth.Clear();
             Selection.Show(null);
+            Files.Show(null, 0);
             Rows.Clear();
             Trail.Clear();
             ViewChanged?.Invoke(this, EventArgs.Empty);
@@ -1021,6 +1045,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
 
         ShowRows(tree, position.Node, redraw.KeepsRows);
+        Files.Show(tree, position.Node);
         BuildTrail(tree);
 
         // What the pointer is over is the map's to say, and it says it again for the drawing this
@@ -1037,6 +1062,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // The same directory of the same tree, with something taken out of it, so the rows are
             // brought up to date rather than rebuilt and the list stays where the user left it.
             ShowRows(tree, CurrentNode, reconcile: true);
+            Files.Show(tree, CurrentNode);
         }
 
         ViewChanged?.Invoke(this, EventArgs.Empty);
@@ -1061,7 +1087,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private void ShowRows(ExploreTree tree, int node, bool reconcile)
     {
-        IsShowingRows = true;
+        _showingRows = true;
 
         try
         {
@@ -1069,7 +1095,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
         finally
         {
-            IsShowingRows = false;
+            _showingRows = false;
         }
     }
 

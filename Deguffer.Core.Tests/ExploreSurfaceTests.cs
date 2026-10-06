@@ -31,6 +31,7 @@ public sealed class ExploreSurfaceTests
     [InlineData(ExploreView.Icicle)]
     [InlineData(ExploreView.List)]
     [InlineData(ExploreView.Tree)]
+    [InlineData(ExploreView.Files)]
     public void EveryViewDrawnInRectanglesAsksForTheSameSurface(ExploreView view)
     {
         var tree = FlatTree(10);

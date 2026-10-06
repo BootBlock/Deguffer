@@ -74,10 +74,163 @@
         <controls:DriveEntryTemplates x:Key="DriveEntry"
                                       Chosen="{StaticResource DriveChosen}"
                                       Listed="{StaticResource DriveListed}" />
+
+        <!--
+            A row of the List layout: one child of the folder on screen. The list is shared with the
+            Files layout below, which swaps the template and the rows it is given, so that the rules
+            guarding the list's selection are written once.
+        -->
+        <DataTemplate x:Key="FolderRow" x:DataType="vm:ExploreRow">
+            <!-- Transparent rather than unset, so the whole row carries the
+                 tooltip. A panel with no background is not hit-tested, so the
+                 gaps between the columns fall through and the exact dates are
+                 reachable only by landing on a word — which is precisely where a
+                 reader is not pointing when they are reading the age column. -->
+            <Grid ColumnSpacing="12" Padding="0,4"
+                  Background="Transparent"
+                  ColumnDefinitions="16,*,120,90,150"
+                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
+                  AutomationProperties.HelpText="{x:Bind Tip, Mode=OneWay}">
+                <!--
+                    The two dates, and where the app knows the name, what the thing
+                    is and whether deleting it recovers anything.
+
+                    Wrapped by hand, because a tooltip's default presenter does not
+                    wrap: an explanation set on it as a plain string is one line as
+                    wide as the sentence, off the side of the window.
+
+                    Said again as help text above, because a tooltip is not an
+                    accessible surface here. Measured: a plain-string tooltip
+                    elsewhere on this page reports no HelpText either, so this is not
+                    a WPF-style fallback that templating the content took away —
+                    WinUI simply does not carry a tooltip into the automation tree,
+                    and the same row of text has to be given twice. It is the rule
+                    ExploreRowText already states for the size column: what only the
+                    eye can reach gets said in words as well.
+                -->
+                <ToolTipService.ToolTip>
+                    <ToolTip MaxWidth="420" Content="{x:Bind Tip, Mode=OneWay}">
+                        <ToolTip.ContentTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ToolTip.ContentTemplate>
+                    </ToolTip>
+                </ToolTipService.ToolTip>
+
+                <FontIcon Grid.Column="0"
+                          FontSize="14"
+                          Glyph="{x:Bind Icon}"
+                          AutomationProperties.AccessibilityView="Raw" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind Name}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+
+                <!-- The bar is scaled against the containing folder, so the row
+                     answers "how much of this folder is that" rather than "how does
+                     it compare with the biggest thing here". -->
+                <ProgressBar Grid.Column="2"
+                             VerticalAlignment="Center"
+                             Maximum="100"
+                             Value="{x:Bind Share, Mode=OneWay}"
+                             AutomationProperties.AccessibilityView="Raw" />
+
+                <TextBlock Grid.Column="3"
+                           Text="{x:Bind SizeLabel, Mode=OneWay}"
+                           TextAlignment="Right"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource SecondaryText}" />
+
+                <!-- The newest write at or below the row, not the row's own
+                     timestamp — a folder's own date moves when its layout changes
+                     and stands still while its contents are rewritten. The exact
+                     dates, and which is which, are on the row's tooltip. -->
+                <TextBlock Grid.Column="4"
+                           Text="{x:Bind AgeLabel, Mode=OneWay}"
+                           TextAlignment="Right"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource SecondaryText}" />
+            </Grid>
+        </DataTemplate>
+
+        <!--
+            A row of the Files layout: a file at any depth below the folder on screen. The name and
+            the folder it is in, because a flat list of names cannot otherwise tell two copies of
+            setup.exe apart; then the size and the newest write, as the folder rows state them.
+
+            A file Explore will not remove is listed all the same, with the reason under its folder
+            (§7.1), wrapped rather than cut short, because the part of a refusal that says what to do
+            instead is its end. Dropping the row would order the list by removability after all, and
+            greying it out would say nothing about why. The glyph is never the only carrier: the line says it in
+            words, and the row's name says it to a screen reader.
+        -->
+        <DataTemplate x:Key="FileRow" x:DataType="vm:ExploreFileRow">
+            <Grid ColumnSpacing="12" Padding="0,4"
+                  Background="Transparent"
+                  ColumnDefinitions="16,*,90,150"
+                  AutomationProperties.Name="{x:Bind Description}"
+                  AutomationProperties.HelpText="{x:Bind Tip}">
+                <ToolTipService.ToolTip>
+                    <ToolTip MaxWidth="420" Content="{x:Bind Tip}">
+                        <ToolTip.ContentTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ToolTip.ContentTemplate>
+                    </ToolTip>
+                </ToolTipService.ToolTip>
+
+                <FontIcon Grid.Column="0"
+                          FontSize="14"
+                          VerticalAlignment="Top"
+                          Margin="0,2,0,0"
+                          Glyph="{x:Bind Icon}"
+                          AutomationProperties.AccessibilityView="Raw" />
+
+                <StackPanel Grid.Column="1" Spacing="1">
+                    <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
+
+                    <TextBlock Text="{x:Bind Folder}"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Style="{StaticResource SecondaryText}" />
+
+                    <Grid ColumnSpacing="4" ColumnDefinitions="Auto,*" Visibility="{x:Bind IsRefused}">
+                        <FontIcon Grid.Column="0"
+                                  Glyph="&#xE7BA;"
+                                  FontSize="12"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.AccessibilityView="Raw" />
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{x:Bind RefusalLine}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource SecondaryText}" />
+                    </Grid>
+                </StackPanel>
+
+                <TextBlock Grid.Column="2"
+                           Text="{x:Bind SizeLabel}"
+                           TextAlignment="Right"
+                           VerticalAlignment="Top"
+                           Style="{StaticResource SecondaryText}" />
+
+                <TextBlock Grid.Column="3"
+                           Text="{x:Bind AgeLabel}"
+                           TextAlignment="Right"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Top"
+                           Style="{StaticResource SecondaryText}" />
+            </Grid>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="20,12,20,16" RowSpacing="10"
-          RowDefinitions="Auto,Auto,Auto,*,Auto">
+          RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
         <!--
             What to scan, the actions, and how to draw it, on one line. The drive and the folder sit
@@ -158,9 +311,9 @@
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateAndRescanCommand}" />
 
-            <!-- These are indexed against ExploreView, so the order here is the order of that
-                 enum. The three pictures come before the list because that is the order they are
-                 read in, not because the numbers demand it. -->
+            <!-- Mapped to ExploreView by ExplorePage.Views, so the order here is the order of that
+                 array. The three pictures come before the lists because that is the order they are
+                 read in, and the tree is Memory's alone. -->
             <ComboBox x:Name="ViewSelector"
                       Grid.Column="6"
                       MinWidth="120"
@@ -171,6 +324,7 @@
                 <ComboBoxItem Content="Icicle" />
                 <ComboBoxItem Content="Sunburst" />
                 <ComboBoxItem Content="List" />
+                <ComboBoxItem Content="Files" />
             </ComboBox>
 
             <!-- Beside the View box because the two are one decision to the reader — what is on
@@ -265,6 +419,58 @@
         </Grid>
 
         <!--
+            The Files layout's filters, applied together, and how many files they leave. Above the
+            card rather than on it, so the list starts at the top of its card as the folder list
+            does.
+
+            Nothing here selects anything, and there is no action over what is listed (§7.1): a
+            filter narrows what the list shows, and only a row picked out by hand is acted on.
+
+            The age is by the last write, and says so. The tree holds no other date for a file, and
+            Windows stops keeping last-access times by default.
+        -->
+        <Grid Grid.Row="3" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*"
+              Visibility="{x:Bind ViewModel.ShowsFileFilters, Mode=OneWay}">
+            <TextBox Grid.Column="0"
+                     Width="220"
+                     Header="Name"
+                     PlaceholderText="Text, or a wildcard such as *.iso"
+                     Text="{x:Bind ViewModel.Files.NameFilter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.Name="Name contains this text, or matches this wildcard" />
+
+            <ComboBox Grid.Column="1"
+                      MinWidth="150"
+                      Header="Type"
+                      ItemsSource="{x:Bind ViewModel.Files.TypeLabels}"
+                      SelectedIndex="{x:Bind ViewModel.Files.TypeIndex, Mode=TwoWay}"
+                      AutomationProperties.Name="Type of file" />
+
+            <ComboBox Grid.Column="2"
+                      MinWidth="130"
+                      Header="Size"
+                      ItemsSource="{x:Bind ViewModel.Files.MinimumLabels}"
+                      SelectedIndex="{x:Bind ViewModel.Files.MinimumIndex, Mode=TwoWay}"
+                      AutomationProperties.Name="Smallest size to list" />
+
+            <ComboBox Grid.Column="3"
+                      MinWidth="130"
+                      Header="Not written for"
+                      ItemsSource="{x:Bind ViewModel.Files.AgeLabels}"
+                      SelectedIndex="{x:Bind ViewModel.Files.AgeIndex, Mode=TwoWay}"
+                      ToolTipService.ToolTip="By the last write. Windows does not keep last-access times by default, so Deguffer does not use them."
+                      AutomationProperties.Name="Not written for at least"
+                      AutomationProperties.HelpText="By the last write. Windows does not keep last-access times by default, so Deguffer does not use them." />
+
+            <TextBlock Grid.Column="4"
+                       VerticalAlignment="Bottom"
+                       Margin="4,0,0,6"
+                       Text="{x:Bind ViewModel.Files.Summary, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}"
+                       TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite" />
+        </Grid>
+
+        <!--
             The map and the list are the same data, so exactly one is on screen at a time and both
             are bound to the same current node. Kept as two controls rather than one that switches
             its own template: a list is a list, and rebuilding a bitmap through a ListView's item
@@ -276,7 +482,7 @@
             over the one action that cannot be undone. The menu below names all five, which is where
             somebody looks for them.
         -->
-        <Grid Grid.Row="3" ColumnSpacing="10" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="4" ColumnSpacing="10" ColumnDefinitions="*,Auto">
         <Border Grid.Column="0"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -333,8 +539,7 @@
                           SelectionMode="Extended"
                           KeyboardAcceleratorPlacementMode="Hidden"
                           SelectionChanged="OnRowSelectionChanged"
-                          DoubleTapped="OnRowsDoubleTapped"
-                          ItemsSource="{x:Bind ViewModel.Rows}">
+                          DoubleTapped="OnRowsDoubleTapped">
                     <ListView.ContextFlyout>
                         <!--
                         One menu, opened by hand from the list and from the map. Two things forced
@@ -422,83 +627,6 @@
                         <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
                         <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnRevealInvoked" />
                     </ListView.KeyboardAccelerators>
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ExploreRow">
-                            <!-- Transparent rather than unset, so the whole row carries the
-                                 tooltip. A panel with no background is not hit-tested, so the
-                                 gaps between the columns fall through and the exact dates are
-                                 reachable only by landing on a word — which is precisely where a
-                                 reader is not pointing when they are reading the age column. -->
-                            <Grid ColumnSpacing="12" Padding="0,4"
-                                  Background="Transparent"
-                                  ColumnDefinitions="16,*,120,90,150"
-                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}"
-                                  AutomationProperties.HelpText="{x:Bind Tip, Mode=OneWay}">
-                                <!--
-                                    The two dates, and where the app knows the name, what the thing
-                                    is and whether deleting it recovers anything.
-
-                                    Wrapped by hand, because a tooltip's default presenter does not
-                                    wrap: an explanation set on it as a plain string is one line as
-                                    wide as the sentence, off the side of the window.
-
-                                    Said again as help text above, because a tooltip is not an
-                                    accessible surface here. Measured: a plain-string tooltip
-                                    elsewhere on this page reports no HelpText either, so this is not
-                                    a WPF-style fallback that templating the content took away —
-                                    WinUI simply does not carry a tooltip into the automation tree,
-                                    and the same row of text has to be given twice. It is the rule
-                                    ExploreRowText already states for the size column: what only the
-                                    eye can reach gets said in words as well.
-                                -->
-                                <ToolTipService.ToolTip>
-                                    <ToolTip MaxWidth="420" Content="{x:Bind Tip, Mode=OneWay}">
-                                        <ToolTip.ContentTemplate>
-                                            <DataTemplate x:DataType="x:String">
-                                                <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
-                                            </DataTemplate>
-                                        </ToolTip.ContentTemplate>
-                                    </ToolTip>
-                                </ToolTipService.ToolTip>
-
-                                <FontIcon Grid.Column="0"
-                                          FontSize="14"
-                                          Glyph="{x:Bind Icon}"
-                                          AutomationProperties.AccessibilityView="Raw" />
-
-                                <TextBlock Grid.Column="1"
-                                           Text="{x:Bind Name}"
-                                           TextTrimming="CharacterEllipsis"
-                                           VerticalAlignment="Center" />
-
-                                <!-- The bar is scaled against the containing folder, so the row
-                                     answers "how much of this folder is that" rather than "how does
-                                     it compare with the biggest thing here". -->
-                                <ProgressBar Grid.Column="2"
-                                             VerticalAlignment="Center"
-                                             Maximum="100"
-                                             Value="{x:Bind Share, Mode=OneWay}"
-                                             AutomationProperties.AccessibilityView="Raw" />
-
-                                <TextBlock Grid.Column="3"
-                                           Text="{x:Bind SizeLabel, Mode=OneWay}"
-                                           TextAlignment="Right"
-                                           VerticalAlignment="Center"
-                                           Style="{StaticResource SecondaryText}" />
-
-                                <!-- The newest write at or below the row, not the row's own
-                                     timestamp — a folder's own date moves when its layout changes
-                                     and stands still while its contents are rewritten. The exact
-                                     dates, and which is which, are on the row's tooltip. -->
-                                <TextBlock Grid.Column="4"
-                                           Text="{x:Bind AgeLabel, Mode=OneWay}"
-                                           TextAlignment="Right"
-                                           TextTrimming="CharacterEllipsis"
-                                           VerticalAlignment="Center"
-                                           Style="{StaticResource SecondaryText}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
                 </ListView>
 
                 <!-- The empty state. A large blank card reads as a screen that has failed rather
@@ -873,7 +1001,7 @@
             </Border>
         </Grid>
 
-        <StackPanel Grid.Row="4" Spacing="6">
+        <StackPanel Grid.Row="5" Spacing="6">
             <!-- What the pointer is over. A status line rather than a floating tooltip: over tens
                  of thousands of rectangles a popup that follows the pointer never settles.
 

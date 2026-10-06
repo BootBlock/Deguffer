@@ -10,6 +10,12 @@ public sealed class FakeVolumeInventory : IVolumeInventory
 {
     private readonly List<LocalVolume> _volumes = [];
 
+    /// <summary>
+    /// Guards <see cref="MountPointQueries"/>. The policy is asked from a background thread as well
+    /// as the window's, because the Explore page's Files layout states a refusal on every row.
+    /// </summary>
+    private readonly Lock _gate = new();
+
     private readonly Dictionary<string, string> _substitutes = new(StringComparer.OrdinalIgnoreCase);
 
     private string? _answer;
@@ -90,7 +96,10 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// </summary>
     public string? MountPointOf(string path)
     {
-        MountPointQueries.Add(path);
+        lock (_gate)
+        {
+            MountPointQueries.Add(path);
+        }
 
         if (_answer is { } answer)
         {
