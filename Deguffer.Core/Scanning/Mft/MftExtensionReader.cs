@@ -55,7 +55,8 @@ internal static class MftExtensionReader
 
             if (budget < 0)
             {
-                record.Fail(MftAttributeKinds.Name | MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint);
+                record.Fail(
+                    MftAttributeKinds.Name | MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint | MftAttributeKinds.WofDataStart);
                 continue;
             }
 

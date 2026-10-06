@@ -79,7 +79,12 @@ internal static class MftAttributeBytes
     /// <para><b>Deliberately the first attribute of the record</b>, which is where NTFS puts it —
     /// see <see cref="StandardInformationLength"/> for what depends on that.</para>
     /// </summary>
-    public static int WriteStandardInformation(Span<byte> target, long created, long lastWritten)
+    /// <param name="attributes">
+    /// The file attributes NTFS keeps beside the times: the same bits a directory listing reports,
+    /// cloud, compressed and sparse among them.
+    /// </param>
+    public static int WriteStandardInformation(
+        Span<byte> target, long created, long lastWritten, FileAttributes attributes = default)
     {
         const int ValueLength = 0x48;
 
@@ -100,6 +105,7 @@ internal static class MftAttributeBytes
         // produce a date no test asked for rather than one that happens to match.
         BinaryPrimitives.WriteInt64LittleEndian(value[0x10..], RecordChangedFileTime);
         BinaryPrimitives.WriteInt64LittleEndian(value[0x18..], LastReadFileTime);
+        BinaryPrimitives.WriteUInt32LittleEndian(value[0x20..], (uint)attributes);
 
         return StandardInformationLength;
     }
@@ -360,6 +366,56 @@ internal static class MftAttributeBytes
         BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], logical);
 
         return Length;
+    }
+
+    /// <summary>The flag NTFS sets on a compressed attribute: its compression unit's format.</summary>
+    public const ushort CompressedFlag = 0x0001;
+
+    /// <summary>The flag NTFS sets on a sparse attribute.</summary>
+    public const ushort SparseFlag = 0x8000;
+
+    /// <summary>
+    /// A non-resident <c>$DATA</c> starting at cluster 0, named or not, compressed or sparse or
+    /// neither, as NTFS writes each.
+    ///
+    /// <para>A compressed or sparse one has a longer header: the clusters it actually holds follow
+    /// the three sizes, and its run list moves along to make room. That field, and not the
+    /// allocated size, is what such a stream occupies. NTFS states the allocated size of a fully
+    /// sparse 2 MB file as 2 MB.</para>
+    /// </summary>
+    /// <param name="occupied">The clusters held, in bytes. Written only where a flag is set.</param>
+    public static int WriteStream(
+        Span<byte> target, string? name, long allocated, long logical, ushort flags = 0, long occupied = 0)
+    {
+        var header = flags == 0 ? 0x40 : 0x48;
+        var nameBytes = (name?.Length ?? 0) * 2;
+        var runs = Align8(header + nameBytes);
+        var length = runs + 8;
+
+        BinaryPrimitives.WriteUInt32LittleEndian(target, 0x80);
+        BinaryPrimitives.WriteUInt32LittleEndian(target[0x04..], (uint)length);
+        target[0x08] = 1;
+        target[0x09] = (byte)(name?.Length ?? 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x0A..], (ushort)header);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x0C..], flags);
+        BinaryPrimitives.WriteUInt16LittleEndian(target[0x20..], (ushort)runs);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x28..], allocated);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x30..], logical);
+        BinaryPrimitives.WriteInt64LittleEndian(target[0x38..], logical);
+
+        if (flags != 0)
+        {
+            BinaryPrimitives.WriteInt64LittleEndian(target[0x40..], occupied);
+        }
+
+        if (name is not null)
+        {
+            Encoding.Unicode.GetBytes(name, target.Slice(header, nameBytes));
+        }
+
+        target.Slice(runs, 8).Clear();
+
+        return length;
     }
 
     /// <summary>

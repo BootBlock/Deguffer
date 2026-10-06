@@ -19,19 +19,44 @@ namespace Deguffer.Core.Scanning.Mft;
 /// How much of the data has been written. NTFS reads anything past it as zeroes without reading the
 /// disk, so the clusters there can hold anything.
 /// </param>
+/// <param name="IsCompressedOrSparse">
+/// Whether the attribute is compressed or sparse, which is when <paramref name="AllocatedSize"/>
+/// stops being what it occupies.
+/// </param>
+/// <param name="CompressedSize">
+/// The clusters a compressed or sparse attribute actually holds, in bytes. Zero for any other.
+/// </param>
 internal readonly record struct MftNonResidentHeader(
     long LowestVcn,
     long HighestVcn,
     int MappingPairsOffset,
     long AllocatedSize,
     long DataSize,
-    long InitializedSize)
+    long InitializedSize,
+    bool IsCompressedOrSparse = false,
+    long CompressedSize = 0)
 {
     /// <summary>
     /// The header's length as NTFS writes it for an uncompressed attribute. A compressed attribute's
     /// is longer, which its mapping pair offset allows for.
     /// </summary>
     public const int Length = 0x40;
+
+    /// <summary>
+    /// The header's length where the attribute is compressed or sparse: NTFS adds the size it
+    /// occupies after the other three.
+    /// </summary>
+    public const int CompressedLength = 0x48;
+
+    private const ushort CompressionMask = 0x00FF;
+    private const ushort Sparse = 0x8000;
+
+    /// <summary>
+    /// What the attribute occupies on the disk. For a compressed or sparse attribute that is not
+    /// <see cref="AllocatedSize"/>, which there is the length rounded up to a compression unit:
+    /// a fully sparse 2 MB file states 2 MB allocated and holds no clusters at all.
+    /// </summary>
+    public long OccupiedSize => IsCompressedOrSparse ? CompressedSize : AllocatedSize;
 
     public static bool TryRead(ReadOnlySpan<byte> attribute, out MftNonResidentHeader header)
     {
@@ -54,13 +79,26 @@ internal readonly record struct MftNonResidentHeader(
             return false;
         }
 
+        var flags = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x0C..]);
+        var compressedOrSparse = (flags & (CompressionMask | Sparse)) != 0;
+
+        // The field that says what such an attribute occupies sits where an ordinary attribute's
+        // run list starts. A run list that starts there anyway is a header that is damaged, and
+        // reading the size from it would read the runs as a size.
+        if (compressedOrSparse && mappingPairsOffset < CompressedLength)
+        {
+            return false;
+        }
+
         header = new MftNonResidentHeader(
             lowestVcn,
             BinaryPrimitives.ReadInt64LittleEndian(attribute[0x18..]),
             mappingPairsOffset,
             BinaryPrimitives.ReadInt64LittleEndian(attribute[0x28..]),
             BinaryPrimitives.ReadInt64LittleEndian(attribute[0x30..]),
-            BinaryPrimitives.ReadInt64LittleEndian(attribute[0x38..]));
+            BinaryPrimitives.ReadInt64LittleEndian(attribute[0x38..]),
+            compressedOrSparse,
+            compressedOrSparse ? BinaryPrimitives.ReadInt64LittleEndian(attribute[0x40..]) : 0);
         return true;
     }
 

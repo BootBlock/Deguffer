@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
 
@@ -113,5 +114,45 @@ public class ExploreTreeBuilderTests
         Assert.Equal(4096, snapshot.TotalBytes);
         Assert.Equal(2, snapshot.NodeCount);
         Assert.Equal(12_288, builder.Build(ExploreChildOrder.BySize).TotalBytes);
+    }
+
+    /// <summary>
+    /// A folder's length is its files' lengths added up, beside its space on disk, and it holds every
+    /// kind of storage found under it. A child that names no length is one whose length is its size,
+    /// which is every file a listing alone describes.
+    /// </summary>
+    [Fact]
+    public void RollsLengthsAndStorageUpBesideTheSpaceOnDisk()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+        var folder = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("OneDrive", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("plain.tgz", IsDirectory: false, IsLink: false, Size: 4096),
+        ]);
+        builder.AddChildren(folder, [
+            new ExploreChild("film.mkv", IsDirectory: false, IsLink: false, Size: 0, Length: 5_000_000, Storage: FileStorage.CloudOnly),
+            new ExploreChild("log.txt", IsDirectory: false, IsLink: false, Size: 1024, Length: 8192, Storage: FileStorage.Compressed),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.Equal(1024, tree.SizeOf(folder));
+        Assert.Equal(5_008_192, tree.LengthOf(folder));
+        Assert.Equal(FileStorage.CloudOnly | FileStorage.Compressed, tree.StorageOf(folder));
+        Assert.Equal(4096, tree.LengthOf(folder + 1));
+        Assert.Equal(5_012_288, tree.TotalLength);
+        Assert.Equal(5120, tree.TotalBytes);
+    }
+
+    /// <summary>A file the file system would not measure makes every total above it a lower bound.</summary>
+    [Fact]
+    public void CarriesAFileItCouldNotMeasureAsALowerBound()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("gone.mkv", IsDirectory: false, IsLink: false, Size: 0, Length: 5_000_000, SizeUnknown: true),
+        ]);
+
+        Assert.True(builder.Build(ExploreChildOrder.BySize).HasUnknownSizes);
     }
 }

@@ -28,7 +28,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         _temp.CreateFile(2048, "cache", "content-v2", "sha512", "c.tgz");
         _temp.CreateDirectory("cache", "empty");
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(
@@ -71,7 +71,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(4608, tree.TotalBytes);
@@ -97,7 +97,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         using var denied = new DeniedDirectory(refused);
 
         ExploreTree? tree = null;
-        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default));
+        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default));
 
         Assert.Empty(thrown);
         Assert.Equal(4096, tree!.TotalBytes);
@@ -124,7 +124,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         DirectoryLink.Create(kind, Path.Combine(root, "shortcut"), real);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
         var link = byPath[Path.Combine(root, "shortcut")];
 
@@ -156,7 +156,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         var file = _temp.CreateFile(64, "cache", "content-v2", "sha512", "a.tgz");
 
-        var tree = WalkExploreReader.Read(LongPath.Extended(root), ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(LongPath.Extended(root), ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         var deepest = ByPath(tree)[file];
 
         Assert.Equal(root, tree.RootPath);
@@ -186,7 +186,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var reports = new List<(long Items, long Bytes)>();
 
         WalkExploreReader.Read(
-            root, ScanTuner.Shipped,
+            root, ScanTuner.Shipped, OccupancyProbe.Default,
             (_, items, bytes) =>
             {
                 reports.Add((items, bytes));
@@ -226,7 +226,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         // layout was settled long before its contents were last rewritten.
         Directory.SetLastWriteTimeUtc(root, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         var node = byPath[Path.Combine(root, "a.tgz")];
@@ -252,7 +252,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         Directory.SetCreationTimeUtc(root, made);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
 
         Assert.Equal(made, tree.CreatedOf(tree.RootNode).Utc);
     }
@@ -277,11 +277,186 @@ public sealed class WalkExploreReaderTests : IDisposable
         DirectoryLink.Create(kind, link, target);
         Directory.SetCreationTimeUtc(link, made);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         var node = ByPath(tree)[link];
 
         Assert.True(tree.IsLink(node));
         Assert.Equal(made, tree.CreatedOf(node).Utc);
+    }
+
+    /// <summary>
+    /// #257 against Windows itself, as Deguffer meets it: a sync app not this process. Windows lists
+    /// an online-only placeholder at its full length and disguises it as an ordinary file, leaving
+    /// only the recall attribute: no reparse point and no sparse bit. The walk draws it at what it
+    /// occupies, which is nothing, and a copy kept on this PC in full.
+    /// </summary>
+    [Fact]
+    public void DrawsAFileHeldOnlyOnlineAtWhatItOccupies()
+    {
+        using var synced = new ScratchSyncRoot(_temp.CreateDirectory("Synced"));
+        synced.OnlineOnly("film.mkv", 5_000_000);
+        synced.LocalCopy("kept.bin", 300_000);
+        synced.PlainFile("plain.bin", 300_000);
+        synced.Disconnect();
+
+        var listed = new DirectoryInfo(LongPath.Extended(synced.Path))
+            .EnumerateFiles("film.mkv").Single().Attributes;
+        Assert.True((listed & RecallOnDataAccess) != 0);
+        Assert.False(listed.HasFlag(FileAttributes.ReparsePoint));
+        Assert.False(listed.HasFlag(FileAttributes.SparseFile));
+
+        var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var byPath = ByPath(tree);
+        var film = byPath[synced.At("film.mkv")];
+
+        Assert.Equal(0, tree.SizeOf(film));
+        Assert.Equal(5_000_000, tree.LengthOf(film));
+        Assert.Equal(FileStorage.CloudOnly, tree.StorageOf(film));
+        Assert.False(tree.IsLink(film));
+
+        Assert.Equal(300_000, tree.SizeOf(byPath[synced.At("kept.bin")]));
+        Assert.Equal(600_000, tree.TotalBytes);
+        Assert.Equal(5_600_000, tree.TotalLength);
+        Assert.False(tree.HasUnknownSizes);
+    }
+
+    /// <summary>
+    /// Measuring a placeholder fetches none of it. Walked while the scratch root is connected,
+    /// because only a connected sync app is asked for data, so its count of requests is the
+    /// evidence. Connected, this process is the sync app and sees the placeholder's reparse point,
+    /// so the walk reads the tag before it measures. The read that follows proves the count is live.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresAPlaceholderWithoutFetchingIt()
+    {
+        using var synced = new ScratchSyncRoot(_temp.CreateDirectory("Synced"));
+        var online = synced.OnlineOnly("film.mkv", 5_000_000);
+
+        var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+
+        Assert.Equal(0, synced.FetchRequests);
+        Assert.Equal(0, tree.TotalBytes);
+        Assert.Equal(5_000_000, tree.TotalLength);
+        Assert.False(tree.HasUnknownSizes);
+
+        _ = Task.Run(() => File.ReadAllBytes(online));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        while (synced.FetchRequests == 0 && clock.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            await Task.Delay(50);
+        }
+
+        Assert.True(synced.FetchRequests > 0, "Reading the file's data asked the sync app for nothing.");
+    }
+
+    /// <summary>
+    /// The walk's half of #257 through the listing seam: a file carrying a reparse point that is not
+    /// a link is drawn at what it occupies, where the walk used to leave it out of the tree. A
+    /// symbolic link to a file is drawn as a link holding nothing, as the file table draws it.
+    /// </summary>
+    [Fact]
+    public void DrawsAReparsePointFileAtWhatItOccupiesAndAFileLinkAsALink()
+    {
+        var probe = new FakeOccupancyProbe().Occupying("deduplicated.vhdx", 4096).Linking("shortcut.txt");
+        var contents = Listing(
+            Entry("plain.tgz", FileAttributes.Archive, 1000),
+            ReparseFile("deduplicated.vhdx", FileAttributes.SparseFile, 1_000_000),
+            ReparseFile("shortcut.txt", FileAttributes.None, 0));
+
+        var tree = Tree(contents, probe);
+
+        var deduplicated = Named(tree, "deduplicated.vhdx");
+        Assert.Equal(4096, tree.SizeOf(deduplicated));
+        Assert.Equal(1_000_000, tree.LengthOf(deduplicated));
+        Assert.Equal(FileStorage.Sparse, tree.StorageOf(deduplicated));
+        Assert.False(tree.IsLink(deduplicated));
+
+        var shortcut = Named(tree, "shortcut.txt");
+        Assert.True(tree.IsLink(shortcut));
+        Assert.False(tree.IsDirectory(shortcut));
+        Assert.Equal(0, tree.SizeOf(shortcut));
+
+        Assert.Equal(1000 + 4096, tree.TotalBytes);
+        Assert.False(tree.HasUnknownSizes);
+    }
+
+    /// <summary>
+    /// Only a file whose attributes say its length may not be what it occupies is measured. Every
+    /// other one is taken at its length, which is what keeps the walk to one listing per directory.
+    /// </summary>
+    [Fact]
+    public void MeasuresOnlyTheFilesItsListingCannotSize()
+    {
+        var probe = new FakeOccupancyProbe().Occupying("online.mkv", 0).Occupying("log.txt", 131_072);
+        var contents = Listing(
+            Entry("plain.tgz", FileAttributes.Archive, 1000),
+            Entry("online.mkv", FileAttributes.Archive | RecallOnDataAccess, 5_000_000),
+            Entry("log.txt", FileAttributes.Compressed, 2_097_152));
+
+        var tree = Tree(contents, probe);
+
+        Assert.Equal([Path.Join(Listed, "online.mkv"), Path.Join(Listed, "log.txt")], probe.Asked);
+        Assert.Equal(1000 + 131_072, tree.TotalBytes);
+        Assert.Equal(1000 + 5_000_000 + 2_097_152, tree.TotalLength);
+        Assert.Equal(FileStorage.CloudOnly | FileStorage.Compressed, tree.StorageOf(tree.RootNode));
+    }
+
+    /// <summary>
+    /// A file Windows would not measure is drawn at nothing and the totals above it say they are
+    /// lower bounds. Drawing it at its length would be the overcount the measurement is there to stop.
+    /// </summary>
+    [Fact]
+    public void MarksAFileWindowsWouldNotMeasureAsALowerBound()
+    {
+        var contents = Listing(Entry("gone.mkv", FileAttributes.Archive | FileAttributes.Offline, 5_000_000));
+
+        var tree = Tree(contents, new FakeOccupancyProbe());
+
+        Assert.Equal(0, tree.TotalBytes);
+        Assert.Equal(5_000_000, tree.TotalLength);
+        Assert.True(tree.HasUnknownSizes);
+    }
+
+    /// <summary>The directory the synthesised listings were made in, in the extended form the walk lists in.</summary>
+    private const string Listed = @"\\?\C:\cache";
+
+    private const FileAttributes RecallOnDataAccess = (FileAttributes)0x0040_0000;
+
+    private static readonly DateTime Written = new(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
+
+    private static WalkEntry Entry(string name, FileAttributes attributes, long length) =>
+        new(Listed, name, attributes, length, Written, Written);
+
+    private static WalkEntry ReparseFile(string name, FileAttributes attributes, long length) =>
+        Entry(name, attributes | FileAttributes.ReparsePoint, length);
+
+    /// <summary>A directory's listing sorted as the walk sorts it, reparse-point files apart.</summary>
+    private static DirectoryContents Listing(params WalkEntry[] entries) => new(
+        [.. entries.Where(e => !e.IsReparsePoint)],
+        [],
+        [.. entries.Where(e => e.IsReparsePoint)],
+        WasRefused: false);
+
+    private static ExploreTree Tree(DirectoryContents contents, IOccupancyProbe probe)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\cache");
+        builder.AddChildren(ExploreTreeBuilder.RootNode, WalkExploreReader.Describe(contents, probe));
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    private static int Named(ExploreTree tree, string name)
+    {
+        foreach (var child in tree.ChildrenOf(tree.RootNode))
+        {
+            if (tree.NameOf(child) == name)
+            {
+                return child;
+            }
+        }
+
+        throw new InvalidOperationException($"No child is named {name}.");
     }
 
     private static int CountNamed(ExploreTree tree, string name)

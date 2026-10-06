@@ -1,5 +1,5 @@
-using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.VirtualDisks;
 
@@ -29,10 +29,8 @@ public sealed record VirtualDiskSize(PathPresence Presence, long Length, long? O
 /// <para>Its output is sizes and a flag, so no test can show from its result whether the path it asked
 /// with carried the <c>\\?\</c> prefix; it asks with <see cref="LongPath.Extended"/> regardless.</para>
 /// </summary>
-public static partial class VirtualDiskFile
+public static class VirtualDiskFile
 {
-    private const uint InvalidFileSize = 0xFFFFFFFF;
-
     public static VirtualDiskSize Measure(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -64,27 +62,7 @@ public static partial class VirtualDiskFile
         return new VirtualDiskSize(
             PathPresence.Present,
             file.Length,
-            OnDiskSize(extended),
+            OccupancyProbe.OnDisk(extended),
             file.Attributes.HasFlag(FileAttributes.SparseFile));
     }
-
-    /// <summary>
-    /// The space the file takes on the drive, which for a sparse or compressed file is less than its
-    /// length. Null where Windows would not say.
-    /// </summary>
-    private static long? OnDiskSize(string extended)
-    {
-        var low = GetCompressedFileSize(extended, out var high);
-
-        // The low half can be all ones legitimately, so only the error code says it failed.
-        if (low == InvalidFileSize && Marshal.GetLastPInvokeError() != 0)
-        {
-            return null;
-        }
-
-        return ((long)high << 32) | low;
-    }
-
-    [LibraryImport("kernel32.dll", EntryPoint = "GetCompressedFileSizeW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial uint GetCompressedFileSize(string fileName, out uint fileSizeHigh);
 }

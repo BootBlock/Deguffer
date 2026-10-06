@@ -1,10 +1,13 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Exploring;
 
 /// <summary>One entry to record, as the thing that found it saw it.</summary>
 /// <param name="Name">The leaf name, with no path.</param>
 /// <param name="Size">
-/// Bytes, for a file. Zero for a directory: a directory's own bytes are its children's, and they
-/// are recorded separately, so anything counted here would be counted twice.
+/// The bytes a file occupies on the disk, which is what the picture draws. Zero for a directory: a
+/// directory's own bytes are its children's, and they are recorded separately, so anything counted
+/// here would be counted twice.
 /// </param>
 /// <param name="Created">When the entry was made, or unknown where nothing established it.</param>
 /// <param name="LastWritten">
@@ -12,13 +15,25 @@ namespace Deguffer.Core.Exploring;
 /// contents' — <see cref="ExploreTree.ModifiedOf"/> is what combines the two, and it can only do
 /// that if what it is given is the node's own.
 /// </param>
+/// <param name="Length">
+/// The file's length, where it is not <paramref name="Size"/>. Null where the two are one figure,
+/// which is every file a listing alone describes.
+/// </param>
+/// <param name="Storage">Why <paramref name="Size"/> is less than the length, where anything says.</param>
+/// <param name="SizeUnknown">
+/// Whether the file system would not say what the file occupies, so <paramref name="Size"/> is a
+/// lower bound and so is every total above it.
+/// </param>
 public readonly record struct ExploreChild(
     string Name,
     bool IsDirectory,
     bool IsLink,
     long Size,
     ExploreTimestamp Created = default,
-    ExploreTimestamp LastWritten = default);
+    ExploreTimestamp LastWritten = default,
+    long? Length = null,
+    FileStorage Storage = FileStorage.Plain,
+    bool SizeUnknown = false);
 
 /// <summary>
 /// Accumulates nodes as something discovers them, then hands over the finished
@@ -37,6 +52,8 @@ public sealed class ExploreTreeBuilder
     private readonly List<string> _names;
     private readonly List<int> _parents;
     private readonly List<long> _sizes;
+    private readonly List<long> _lengths;
+    private readonly List<FileStorage> _storage;
     private readonly List<bool> _isDirectory;
     private readonly List<bool> _isLink;
     private readonly List<bool> _sizeUnknown;
@@ -67,6 +84,8 @@ public sealed class ExploreTreeBuilder
         _names = [rootPath];
         _parents = [RootNode];
         _sizes = [0];
+        _lengths = [0];
+        _storage = [FileStorage.Plain];
         _isDirectory = [true];
         _isLink = [false];
         _sizeUnknown = [false];
@@ -97,9 +116,11 @@ public sealed class ExploreTreeBuilder
                 _names.Add(child.Name);
                 _parents.Add(parent);
                 _sizes.Add(child.Size);
+                _lengths.Add(child.Length ?? child.Size);
+                _storage.Add(child.Storage);
                 _isDirectory.Add(child.IsDirectory);
                 _isLink.Add(child.IsLink);
-                _sizeUnknown.Add(false);
+                _sizeUnknown.Add(child.SizeUnknown);
                 _created.Add(child.Created);
                 _modified.Add(child.LastWritten);
             }
@@ -149,6 +170,8 @@ public sealed class ExploreTreeBuilder
                 [.. _names],
                 [.. _parents],
                 [.. _sizes],
+                [.. _lengths],
+                [.. _storage],
                 [.. _isDirectory],
                 [.. _isLink],
                 [.. _sizeUnknown],

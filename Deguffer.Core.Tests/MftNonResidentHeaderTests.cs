@@ -82,6 +82,51 @@ public class MftNonResidentHeaderTests
     }
 
     /// <summary>
+    /// A compressed or sparse attribute states its length rounded up as allocated, and the clusters
+    /// it holds in a field after the three sizes. That field is what it occupies, and a file's size
+    /// is read from it.
+    /// </summary>
+    [Theory]
+    [InlineData(0x0001)]
+    [InlineData(0x8000)]
+    public void ReadsWhatACompressedOrSparseAttributeOccupies(int flags)
+    {
+        var attribute = new byte[0x50];
+        Attribute().CopyTo(attribute, 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(attribute.AsSpan(0x0C), (ushort)flags);
+        BinaryPrimitives.WriteUInt16LittleEndian(attribute.AsSpan(0x20), 0x48);
+        BinaryPrimitives.WriteInt64LittleEndian(attribute.AsSpan(0x40), 0x0400);
+        BinaryPrimitives.WriteInt64LittleEndian(attribute.AsSpan(0x10), 0);
+
+        Assert.True(MftNonResidentHeader.TryRead(attribute, out var header));
+        Assert.Equal(0x3300, header.AllocatedSize);
+        Assert.Equal(0x0400, header.OccupiedSize);
+
+        Assert.Equal(new Scanning.ScanSize(Allocated: 0x0400, Logical: 0x2200), MftRecordParser.ReadDataSize(attribute));
+    }
+
+    /// <summary>An attribute with neither flag occupies what it states as allocated.</summary>
+    [Fact]
+    public void ReadsAnOrdinaryAttributeAsOccupyingWhatItAllocates()
+    {
+        Assert.True(MftNonResidentHeader.TryRead(Attribute(), out var header));
+        Assert.Equal(header.AllocatedSize, header.OccupiedSize);
+    }
+
+    /// <summary>
+    /// A compressed attribute whose run list starts where the size it occupies should be has no such
+    /// size. Read anyway, the runs would be taken for one.
+    /// </summary>
+    [Fact]
+    public void RefusesACompressedAttributeWhoseRunListLeavesNoRoomForWhatItOccupies()
+    {
+        var attribute = Attribute();
+        BinaryPrimitives.WriteUInt16LittleEndian(attribute.AsSpan(0x0C), 0x0001);
+
+        Assert.False(MftNonResidentHeader.TryRead(attribute, out _));
+    }
+
+    /// <summary>
     /// A 0x48-byte non-resident <c>$DATA</c> with its run list at 0x40, and every field a distinct
     /// value, so a field read from its neighbour's offset disagrees rather than coinciding.
     /// </summary>

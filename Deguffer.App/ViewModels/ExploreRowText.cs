@@ -32,6 +32,70 @@ internal static class ExploreRowText
             : FreeSpace.Format(tree.SizeOf(node));
 
     /// <summary>
+    /// What a node's space on disk leaves out: its length, where that reads differently, and why the
+    /// two part. Empty where there is nothing to add, which is most files.
+    ///
+    /// <para>The length is compared as it is shown rather than to the byte. On the file table every
+    /// file's space on disk is rounded up to whole clusters, and "4.0 KB on disk, 4.0 KB long" tells
+    /// the reader nothing.</para>
+    ///
+    /// <para>A folder holds the reasons found anywhere under it, so it says it holds such files
+    /// rather than that it is one.</para>
+    /// </summary>
+    public static string Storage(ExploreTree tree, int node)
+    {
+        var parts = new List<string>(2);
+
+        var length = FreeSpace.Format(tree.LengthOf(node));
+        if (length != FreeSpace.Format(tree.SizeOf(node)))
+        {
+            parts.Add($"{length} long");
+        }
+
+        if (Kinds(tree.StorageOf(node)) is { } kinds)
+        {
+            parts.Add(tree.IsDirectory(node) ? $"holds {kinds} files" : kinds);
+        }
+
+        return string.Join(", ", parts);
+    }
+
+    /// <summary>
+    /// What a row's tooltip says before anything else about it: the space on disk with the length
+    /// and its explanation where there is one, then the two dates.
+    /// </summary>
+    public static string Details(string size, string storage, string dates) =>
+        storage.Length > 0 ? $"{size} on disk, {storage}{Environment.NewLine}{dates}" : dates;
+
+    /// <summary>The kinds of storage <paramref name="storage"/> names, in words, or null for none.</summary>
+    private static string? Kinds(FileStorage storage)
+    {
+        var kinds = new List<string>(3);
+
+        if (storage.HasFlag(FileStorage.CloudOnly))
+        {
+            kinds.Add("online-only");
+        }
+
+        if (storage.HasFlag(FileStorage.Compressed))
+        {
+            kinds.Add("compressed");
+        }
+
+        if (storage.HasFlag(FileStorage.Sparse))
+        {
+            kinds.Add("sparse");
+        }
+
+        return kinds.Count switch
+        {
+            0 => null,
+            1 => kinds[0],
+            _ => $"{string.Join(", ", kinds[..^1])} and {kinds[^1]}",
+        };
+    }
+
+    /// <summary>
     /// A row's age, marked where the scan could not see under it.
     ///
     /// <para>A directory the walk was refused contributes only its own timestamp to the roll-up,

@@ -34,10 +34,15 @@ public static class ExploreUnaccountedNote
 
     private const string Reserved = "\n• Space Windows keeps back for updates (reserved storage).";
 
+    private const string Records =
+        "\n• The file system's own records: the file table, its journals and the free-space map.";
+
+    // Only a walk misses it. The file table states what each file occupies, whole clusters included.
+    private const string Rounding =
+        "\n• Rounding: each file takes whole clusters, so many small files use more than their sizes.";
+
     private const string Causes =
-        "\n• The file system's own records: the file table, its journals and the free-space map."
-        + "\n• Rounding: each file takes whole clusters, so many small files use more than their sizes."
-        + "\n• Files deleted while a program still has them open. The space comes back when it closes them."
+        "\n• Files deleted while a program still has them open. The space comes back when it closes them."
         + "\n• A disk quota, which makes Windows report less free space to this account.";
 
     /// <summary>
@@ -46,8 +51,12 @@ public static class ExploreUnaccountedNote
     ///
     /// <para>Two versions of the first cause, because it is the one an elevated scan fixes. Offering
     /// that fix to a scan that is already elevated would send the reader round in a circle.</para>
+    ///
+    /// <para>Rounding is a cause only on a walk, which takes most files at their length. The file
+    /// table draws what each file occupies, so naming it there would send the reader after space the
+    /// map already shows.</para>
     /// </summary>
-    public static string For(bool isElevated, VolumeSpace volume, long scannedBytes)
+    public static string For(bool isElevated, VolumeSpace volume, long scannedBytes, ScanStrategy strategy)
     {
         var parts = volume.Parts(scannedBytes);
         var note = new StringBuilder(Opening);
@@ -74,6 +83,13 @@ public static class ExploreUnaccountedNote
             note.Append(Cause(volume.Hidden.Reserved.Statement, volume.Hidden.Reserved.Bytes, Reserved));
         }
 
+        note.Append(Records);
+
+        if (strategy != ScanStrategy.MasterFileTable)
+        {
+            note.Append(Rounding);
+        }
+
         return note.Append(Causes).ToString();
 
         void Figure(long bytes, string what)
@@ -83,6 +99,31 @@ public static class ExploreUnaccountedNote
                 note.Append($"\n• {what}: {FreeSpace.Format(bytes)}.");
             }
         }
+    }
+
+    /// <summary>
+    /// What to say where the scan counted more than <paramref name="volume"/> has in use, so no
+    /// unaccounted block is drawn, or null where it did not.
+    ///
+    /// <para>The causes depend on the route. A walk counts a file with several names once for each
+    /// and a file Windows compressed itself at its length. The file table counts each file once at
+    /// what it occupies, so only a drive that changed during the scan is left to explain it.</para>
+    /// </summary>
+    public static string? Overcount(VolumeSpace volume, long scannedBytes, ScanStrategy strategy)
+    {
+        var over = volume == VolumeSpace.None ? 0 : volume.Parts(scannedBytes).Overcounted;
+        if (over <= 0)
+        {
+            return null;
+        }
+
+        var causes = strategy == ScanStrategy.MasterFileTable
+            ? "Files written while the scan ran can do this."
+            : "A walk counts a file with several names once for each, and a file Windows compressed "
+              + "itself (CompactOS) at its full length.";
+
+        return $"The scan counted {FreeSpace.Format(over)} more than Windows says is in use, so none "
+            + $"of the drive is shown as not accounted for. {causes}";
     }
 
     /// <summary>

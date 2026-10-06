@@ -130,6 +130,17 @@ internal static class MftRecordParser
     }
 
     /// <summary>
+    /// The file attributes a <c>$STANDARD_INFORMATION</c> declares, or none where it does not
+    /// declare them: the same bits a directory listing hands the walk, which is what lets the two
+    /// routes describe a file's storage alike. None is the safe reading, because these only explain a
+    /// size and never decide one.
+    /// </summary>
+    internal static FileAttributes ReadAttributes(ReadOnlySpan<byte> attribute) =>
+        TryReadResidentValue(attribute, out var value) && value.Length >= 0x24
+            ? (FileAttributes)BinaryPrimitives.ReadUInt32LittleEndian(value[0x20..])
+            : default;
+
+    /// <summary>
     /// The value of a resident attribute, or false where the attribute is not resident or its
     /// header does not fit it. Every resident value is read through here.
     ///
@@ -177,18 +188,36 @@ internal static class MftRecordParser
     {
         const uint NameSurrogateBit = 0x2000_0000;
 
+        return ReadReparseTag(attribute) is { } tag && (tag & NameSurrogateBit) != 0;
+    }
+
+    /// <summary>
+    /// Whether a <c>$REPARSE_POINT</c> is CompactOS's, which is the only kind whose file keeps its
+    /// content in <see cref="WofStreamName"/>. A file whose reparse point is anything else has no such
+    /// stream to wait for.
+    /// </summary>
+    internal static bool IsWofReparsePoint(ReadOnlySpan<byte> attribute)
+    {
+        const uint WofTag = 0x8000_0017;
+
+        return ReadReparseTag(attribute) == WofTag;
+    }
+
+    /// <summary>The tag a <c>$REPARSE_POINT</c> declares, or null where it is too short to declare one.</summary>
+    private static uint? ReadReparseTag(ReadOnlySpan<byte> attribute)
+    {
         if (attribute.Length < 0x18)
         {
-            return false;
+            return null;
         }
 
         var valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
         if (valueOffset + 4 > attribute.Length)
         {
-            return false;
+            return null;
         }
 
-        return (BinaryPrimitives.ReadUInt32LittleEndian(attribute[valueOffset..]) & NameSurrogateBit) != 0;
+        return BinaryPrimitives.ReadUInt32LittleEndian(attribute[valueOffset..]);
     }
 
     /// <summary>
@@ -197,6 +226,37 @@ internal static class MftRecordParser
     /// in Explorer, and they are vanishingly rare in the cache trees this tool targets.
     /// </summary>
     internal static bool IsUnnamed(ReadOnlySpan<byte> attribute) => attribute[0x09] == 0;
+
+    /// <summary>
+    /// The stream CompactOS moves a file's content into. The file's unnamed <c>$DATA</c> is left
+    /// sparse and holding nothing, so without this stream a compressed Windows folder is drawn as
+    /// almost empty. The filter hides the stream from every listing, which is why the walk cannot
+    /// see it.
+    /// </summary>
+    internal const string WofStreamName = "WofCompressedData";
+
+    /// <summary>Whether this <c>$DATA</c> is <see cref="WofStreamName"/>.</summary>
+    internal static bool IsWofStream(ReadOnlySpan<byte> attribute)
+    {
+        int nameLength = attribute[0x09];
+        if (nameLength != WofStreamName.Length || attribute.Length < 0x10)
+        {
+            return false;
+        }
+
+        int nameOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x0A..]);
+        return nameOffset <= attribute.Length - (nameLength * 2)
+            && IsWofStreamName(attribute.Slice(nameOffset, nameLength * 2));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="name"/>, a name as NTFS stores it in UTF-16, is
+    /// <see cref="WofStreamName"/>. Ordinal, because NTFS compares stream names by its own case
+    /// table and the filter only ever writes this one spelling.
+    /// </summary>
+    internal static bool IsWofStreamName(ReadOnlySpan<byte> name) =>
+        name.Length == WofStreamName.Length * 2
+        && System.Runtime.InteropServices.MemoryMarshal.Cast<byte, char>(name).SequenceEqual(WofStreamName);
 
     /// <summary>
     /// The sizes an unnamed <c>$DATA</c> declares, or null where this attribute does not declare
@@ -225,9 +285,12 @@ internal static class MftRecordParser
             return null;
         }
 
-        return header.AllocatedSize < 0 || header.DataSize < 0
+        // What the stream occupies rather than what it reserves. The two part for a compressed or
+        // sparse file, and the reserved figure there is the length again: a cloud file held only
+        // online would be drawn as though every byte of it were on this disk.
+        return header.OccupiedSize < 0 || header.DataSize < 0
             ? null
-            : new ScanSize(header.AllocatedSize, header.DataSize);
+            : new ScanSize(header.OccupiedSize, header.DataSize);
     }
 
     internal static bool TryReadFileName(

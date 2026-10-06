@@ -15,7 +15,12 @@ namespace Deguffer.Core.Scanning.Mft;
 /// lists one entry per piece, and only the piece at 0 states the attribute's sizes.
 /// </param>
 /// <param name="Segment">The record holding this piece, and the sequence number it must still have.</param>
-internal readonly record struct MftAttributeListEntry(uint Type, bool IsNamed, long LowestVcn, MftSegmentReference Segment);
+/// <param name="IsWofStream">
+/// Whether the attribute is CompactOS's stream, which states what a compressed file occupies. See
+/// <see cref="MftRecordParser.WofStreamName"/>.
+/// </param>
+internal readonly record struct MftAttributeListEntry(
+    uint Type, bool IsNamed, long LowestVcn, MftSegmentReference Segment, bool IsWofStream = false);
 
 /// <summary>
 /// Reads an <c>$ATTRIBUTE_LIST</c>: the index NTFS writes when a file's attributes no longer fit in
@@ -83,7 +88,8 @@ internal static class MftAttributeList
                 BinaryPrimitives.ReadUInt32LittleEndian(entry),
                 nameLength > 0,
                 lowestVcn,
-                MftSegmentReference.FromRaw(BinaryPrimitives.ReadUInt64LittleEndian(entry[0x10..]))));
+                MftSegmentReference.FromRaw(BinaryPrimitives.ReadUInt64LittleEndian(entry[0x10..])),
+                nameLength > 0 && MftRecordParser.IsWofStreamName(entry.Slice(nameOffset, nameLength * 2))));
 
             offset += length;
         }

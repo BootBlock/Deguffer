@@ -169,7 +169,7 @@ public class MftExploreReaderTests
         using var source = fixture.Build();
         var tree = WholeVolume(source);
 
-        Assert.Equal(7000, tree.TotalBytes);
+        Assert.Equal(7000, tree.TotalLength);
         Assert.Equal(@"C:\Users\testuser\.npm-cache\linked.dll", tree.PathOf(21));
         Assert.False(tree.HasUnknownSizes, "every record was placed and the total was still called a lower bound");
 
@@ -194,7 +194,7 @@ public class MftExploreReaderTests
         using var source = fixture.Build();
         var tree = WholeVolume(source);
 
-        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(4000, tree.TotalLength);
         Assert.True(tree.HasUnknownSizes, "a real file was skipped and the total was called exact");
 
         using var strict = fixture.Build();
@@ -224,7 +224,7 @@ public class MftExploreReaderTests
 
         var tree = MftExploreReader.Read(source, Root, [], new TableTuning(64 * 1024, 8, 4), reported.Add, default).Tree!;
 
-        Assert.Equal(7000, tree.TotalBytes);
+        Assert.Equal(7000, tree.TotalLength);
         Assert.Contains(reported, done => done >= 2 * Interval);
         Assert.Equal(reported.Order(), reported);
     }
@@ -252,8 +252,8 @@ public class MftExploreReaderTests
         Assert.Equal("a.tgz", tree.NameOf(20));
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
         Assert.Equal(@"C:\Users\testuser\.npm-cache\content-v2\sha512.tgz", tree.PathOf(21));
-        Assert.Equal(5500, tree.TotalBytes);
-        Assert.Equal(1500, tree.SizeOf((int)Nested));
+        Assert.Equal(5500, tree.TotalLength);
+        Assert.Equal(1500, tree.LengthOf((int)Nested));
 
         using var again = fixture.Build();
         Assert.True(MftVolumeIndexBuilder.TryBuild(again, TableTuning.Default, out var index));
@@ -289,7 +289,7 @@ public class MftExploreReaderTests
         using var source = fixture.Build();
         var tree = WholeVolume(source);
 
-        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(4000, tree.TotalLength);
         Assert.Equal("a.tgz", tree.NameOf(20));
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
 
@@ -317,7 +317,7 @@ public class MftExploreReaderTests
         using var source = fixture.Build();
         var tree = WholeVolume(source);
 
-        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(4000, tree.TotalLength);
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
         Assert.DoesNotContain("unreachable.tgz", Reachable(tree).Select(tree.NameOf));
 
@@ -341,7 +341,7 @@ public class MftExploreReaderTests
         var tree = WholeVolume(source);
 
         Assert.Equal(@"C:\Users\testuser\.npm-cache\fragmented.tgz", tree.PathOf(20));
-        Assert.Equal(8000, tree.TotalBytes);
+        Assert.Equal(8000, tree.TotalLength);
         Assert.False(tree.HasUnknownSizeBelow(20));
         Assert.True(tree.HasUnknownSizes, "the table stopped short and the total was called exact");
     }
@@ -374,8 +374,8 @@ public class MftExploreReaderTests
 
         Assert.False(tree.HasUnknownSizeBelow((int)Sibling));
 
-        Assert.Equal(4000, tree.SizeOf((int)Nested));
-        Assert.Equal(5000, tree.TotalBytes);
+        Assert.Equal(4000, tree.LengthOf((int)Nested));
+        Assert.Equal(5000, tree.TotalLength);
     }
 
     /// <summary>
@@ -393,7 +393,7 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(4000, tree.TotalLength);
         Assert.DoesNotContain("orphan.tgz", Reachable(tree).Select(tree.NameOf));
     }
 
@@ -421,7 +421,7 @@ public class MftExploreReaderTests
         Assert.Equal(tree.RootNode, tree.ParentOf(tree.RootNode));
         Assert.True(tree.IsDirectory(tree.RootNode));
 
-        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(4000, tree.TotalLength);
         Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
     }
 
@@ -555,7 +555,7 @@ public class MftExploreReaderTests
         Assert.Equal(CachePath, tree.PathOf(tree.RootNode));
         Assert.Equal(CachePath + @"\content-v2\sha512.tgz", tree.PathOf(21));
 
-        Assert.Equal(5500, tree.TotalBytes);
+        Assert.Equal(5500, tree.TotalLength);
         Assert.False(tree.HasUnknownSizes);
     }
 
@@ -586,7 +586,7 @@ public class MftExploreReaderTests
         Assert.DoesNotContain((int)Sibling, reachable);
         Assert.DoesNotContain(22, reachable);
 
-        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(4000, tree.TotalLength);
         Assert.Equal(tree.RootNode, tree.ParentOf(tree.RootNode));
         Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf((int)Sibling));
 
@@ -697,14 +697,14 @@ public class MftExploreReaderTests
             TableTuning.Default, onProgress: null, default).Tree!;
 
         Assert.Equal((int)LowerCache, lower.RootNode);
-        Assert.Equal(1000, lower.TotalBytes);
+        Assert.Equal(1000, lower.TotalLength);
 
         var upper = MftExploreReader.Read(
             source, @"C:\Users\testuser\Cache", ["Users", "testuser", "Cache"],
             TableTuning.Default, onProgress: null, default).Tree!;
 
         Assert.Equal((int)UpperCache, upper.RootNode);
-        Assert.Equal(8000, upper.TotalBytes);
+        Assert.Equal(8000, upper.TotalLength);
 
         // No exact match, so the case-insensitive one still answers rather than the path failing.
         var neither = MftExploreReader.Read(
@@ -733,8 +733,134 @@ public class MftExploreReaderTests
 
         var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
 
-        Assert.Equal(4000, tree.TotalBytes);
+        Assert.Equal(4000, tree.TotalLength);
         Assert.True(tree.HasUnknownSizes, "a folder's total was called exact after a record went unplaced");
+    }
+
+    /// <summary>
+    /// #257: a cloud file held only online is its full length and occupies nothing here, so it adds
+    /// what it occupies to its folder and keeps its length beside it. Drawn by length, a cloud
+    /// library is the largest block on a drive it takes none of.
+    /// </summary>
+    [Fact]
+    public void DrawsAFileHeldOnlyInTheCloudAtWhatItOccupiesHere()
+    {
+        using var source = Tree()
+            .AddCloudFile(20, Cache, "film.mkv", logical: 200_000_000_000)
+            .AddCloudFile(21, Cache, "partly.zip", logical: 9_000_000, onDisk: 65_536)
+            .AddFile(22, Cache, "kept.tgz", allocated: 8192, logical: 8000)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(0, tree.SizeOf(20));
+        Assert.Equal(200_000_000_000, tree.LengthOf(20));
+        Assert.Equal(65_536 + 8192, tree.SizeOf((int)Cache));
+        Assert.Equal(200_000_000_000 + 9_000_000 + 8000, tree.LengthOf((int)Cache));
+        Assert.Equal(65_536 + 8192, tree.TotalBytes);
+
+        // One cause, the cloud, though the placeholder is sparse too: the walk sees only the one.
+        Assert.Equal(FileStorage.CloudOnly, tree.StorageOf(20));
+        Assert.Equal(FileStorage.Plain, tree.StorageOf(22));
+        Assert.Equal(FileStorage.CloudOnly, tree.StorageOf((int)Cache));
+
+        // A placeholder is content, never a link, whatever its reparse point.
+        Assert.False(tree.IsLink(20));
+
+        // Ordered by what it occupies, so the empty film is last rather than first.
+        Assert.Equal(20, tree.ChildrenOf((int)Cache)[^1]);
+    }
+
+    /// <summary>
+    /// A compressed or sparse file states its length rounded up as allocated, and what it holds in a
+    /// field of its own. That field is the one drawn.
+    /// </summary>
+    [Fact]
+    public void DrawsACompressedOrSparseFileAtTheClustersItHolds()
+    {
+        using var source = Tree()
+            .AddCompressedFile(20, Cache, "log.txt", logical: 2_097_152, onDisk: 131_072)
+            .AddSparseFile(21, Cache, "disk.vhdx", logical: 2_097_152, onDisk: 0)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(131_072, tree.SizeOf(20));
+        Assert.Equal(FileStorage.Compressed, tree.StorageOf(20));
+        Assert.Equal(0, tree.SizeOf(21));
+        Assert.Equal(FileStorage.Sparse, tree.StorageOf(21));
+        Assert.Equal(2 * 2_097_152, tree.LengthOf((int)Cache));
+        Assert.Equal(FileStorage.Compressed | FileStorage.Sparse, tree.StorageOf((int)Cache));
+    }
+
+    /// <summary>
+    /// CompactOS empties a file's own stream and keeps its content in a stream it hides from every
+    /// listing. That stream is what the file occupies, so without it a compressed Windows folder is
+    /// drawn as almost empty.
+    /// </summary>
+    [Fact]
+    public void DrawsAFileCompactOsCompressedAtItsCompressedStream()
+    {
+        using var source = Tree()
+            .AddOverlayCompressedFile(20, Cache, "setup.exe", allocated: 139_264, logical: 2_097_152)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(139_264, tree.SizeOf(20));
+        Assert.Equal(2_097_152, tree.LengthOf(20));
+        Assert.Equal(FileStorage.Compressed, tree.StorageOf(20));
+        Assert.False(tree.IsLink(20));
+        Assert.False(tree.HasUnknownSizes);
+    }
+
+    /// <summary>
+    /// NTFS moves CompactOS's stream to an extension record once its runs outgrow the base record,
+    /// and the attribute list names it there. Followed, it sizes the file. Caught mid-change, it
+    /// leaves the size unknown, because the file's own stream holds nothing and drawing that would
+    /// draw the file as empty.
+    /// </summary>
+    [Fact]
+    public void FollowsCompactOsStreamIntoAnExtensionRecord()
+    {
+        using var followed = Tree()
+            .AddOverlayCompressedFileWithItsStreamInAnExtensionRecord(
+                20, Cache, "setup.exe", logical: 2_097_152, compressed: 139_264, extension: 21)
+            .Build();
+
+        var tree = WholeVolume(followed);
+
+        Assert.Equal(139_264, tree.SizeOf(20));
+        Assert.Equal(FileStorage.Compressed, tree.StorageOf(20));
+        Assert.False(tree.HasUnknownSizes);
+
+        using var changing = Tree()
+            .AddOverlayCompressedFileWithItsStreamInAnExtensionRecord(
+                20, Cache, "setup.exe", logical: 2_097_152, compressed: 139_264, extension: 21,
+                ListMismatch.ItsOwnSequence)
+            .Build();
+
+        Assert.True(WholeVolume(changing).HasUnknownSizeBelow(20));
+    }
+
+    /// <summary>
+    /// A list that cannot be read could have hidden CompactOS's stream only for a file that is
+    /// CompactOS's. A cloud file whose base record holds its stream and its reparse point keeps its
+    /// size, as it did before CompactOS was read at all, and a CompactOS file's size is unknown.
+    /// </summary>
+    [Fact]
+    public void WaitsForCompactOsStreamOnlyWhereTheFileIsCompactOs()
+    {
+        using var source = Tree()
+            .AddReparsePointFileWithAMalformedAttributeList(20, Cache, "synced.docx", 8192, MftRecordBytes.CloudFilesTag)
+            .AddReparsePointFileWithAMalformedAttributeList(21, Cache, "setup.exe", 0, MftRecordBytes.WindowsOverlayFilterTag)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(8192, tree.SizeOf(20));
+        Assert.False(tree.HasUnknownSizeBelow(20));
+        Assert.True(tree.HasUnknownSizeBelow(21));
     }
 
     /// <summary>

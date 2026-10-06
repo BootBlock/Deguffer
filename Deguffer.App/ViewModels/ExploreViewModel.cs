@@ -50,6 +50,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     private readonly bool _isElevated;
 
     /// <summary>
+    /// Which route measured the tree on screen, which decides what the unaccounted block can be made
+    /// of: a walk misses cluster rounding, and the file table does not.
+    /// </summary>
+    private ScanStrategy _strategy = ScanStrategy.ParallelEnumeration;
+
+    /// <summary>
     /// Starts an elevated replacement pointed where this page is, and says whether one started. A
     /// real relaunch raises the UAC prompt, which is why it is handed in.
     /// </summary>
@@ -653,6 +659,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             var volume = await VolumeSpace.ReadAsync(_volumes, _hidden, target, scan.Tree, ct);
 
+            // Before the tree is shown, because the pointer can describe the new map from then on.
+            _strategy = scan.Strategy;
+
             Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), volume);
 
             RouteNote = scan.RouteNote;
@@ -660,10 +669,18 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             await RecordAsync(scan, target, scoped);
 
-            Status = scan.Tree.HasUnknownSizes
-                ? $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for. Some of this {what} could not "
-                  + "be read, so the totals are lower bounds."
-                : $"{FreeSpace.Format(scan.Tree.TotalBytes)} accounted for.";
+            // Which figure the map draws, said once where the total is, with the length beside it so
+            // a gap between the two is something the reader was told about rather than found.
+            Status = string.Join(" ", new[]
+            {
+                $"{FreeSpace.Format(scan.Tree.TotalBytes)} on disk accounted for, in files whose lengths "
+                    + $"add up to {FreeSpace.Format(scan.Tree.TotalLength)}.",
+                scan.Tree.HasUnknownSizes
+                    ? $"Some of this {what} could not be read, so the totals are lower bounds."
+                    : null,
+                ExploreRouteText.Sizing(scan.Strategy),
+                ExploreUnaccountedNote.Overcount(volume, scan.Tree.TotalBytes, scan.Strategy),
+            }.Where(sentence => sentence is not null));
         }
         catch (OperationCanceledException)
         {
@@ -955,7 +972,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             ({ } tree, { IsUnaccounted: true } unaccounted) => (
                 "In use, but not accounted for by this scan",
                 FreeSpace.Format(unaccounted.Bytes),
-                ExploreUnaccountedNote.For(_isElevated, Volume, tree.TotalBytes)),
+                ExploreUnaccountedNote.For(_isElevated, Volume, tree.TotalBytes, _strategy)),
 
             (_, { IsShadowCopies: true } shadowCopies) => (
                 "Restore points and shadow copies, by Windows' own figure",
@@ -988,7 +1005,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     private (string Path, string Figures, string Note) Over(ExploreTree tree, int node)
     {
         var path = tree.PathOf(node);
-        var figures = $"{FreeSpace.Format(tree.SizeOf(node))}, "
+        var storage = ExploreRowText.Storage(tree, node);
+        var figures = $"{FreeSpace.Format(tree.SizeOf(node))} on disk, "
+            + (storage.Length > 0 ? $"{storage}, " : string.Empty)
             + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}";
 
         // The shape's own change, where the map is coloured by growth: compared, or settled by its

@@ -377,7 +377,7 @@ public class RouteAgreementTests
 
         using var source = fixture.Build();
 
-        var walked = WalkExploreReader.Read(path, ScanTuner.Shipped, onProgress: null, TimeProvider.System, default);
+        var walked = WalkExploreReader.Read(path, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         // The whole volume, then descended to the tree — rather than a scoped read, which would
         // root the table at the same folder the walk was handed and hide any disagreement about
         // where that folder sits.
@@ -431,6 +431,84 @@ public class RouteAgreementTests
         }
 
         return dates;
+    }
+
+    /// <summary>
+    /// #257: one folder of cloud, compressed, sparse and plain files, drawn by both routes, comes to
+    /// the same space on disk and the same length, and explains itself the same way. Before, the
+    /// table drew every one at its length and the walk drew the placeholders' lengths too, so an
+    /// elevated run and an unelevated one disagreed with the drive rather than with each other.
+    ///
+    /// <para>Each side is given what it really meets. The table gets records laid out as NTFS lays
+    /// them out. The walk gets the listing Windows hands a process that is not the sync app, in
+    /// which a placeholder shows only its recall attribute, and a file system that answers what each
+    /// marked file occupies. <see cref="WalkExploreReaderTests.DrawsAFileHeldOnlyOnlineAtWhatItOccupies"/>
+    /// shows that listing against a real sync root.</para>
+    /// </summary>
+    [Fact]
+    public void TheTwoRoutesDrawOneFolderOfStoredFilesAlike()
+    {
+        const uint Cache = 20;
+
+        using var source = new MftFixture()
+            .AddDirectory(Cache, MftRecord.RootRecordNumber, "cache")
+            .AddCloudFile(21, Cache, "film.mkv", logical: 5_000_000)
+            .AddCloudFile(22, Cache, "partly.zip", logical: 900_000, onDisk: 65_536)
+            .AddCompressedFile(23, Cache, "log.txt", logical: 2_097_152, onDisk: 131_072)
+            .AddSparseFile(24, Cache, "disk.vhdx", logical: 2_097_152, onDisk: 8192)
+            .AddFile(25, Cache, "plain.tgz", allocated: 4096, logical: 4096)
+            .Build();
+
+        var indexed = MftExploreReader.Read(
+            source, @"C:\cache", ["cache"], TableTuning.Default, onProgress: null, default).Tree!;
+
+        const FileAttributes Recall = (FileAttributes)0x0040_0000;
+        const string Listed = @"\\?\C:\cache";
+        var when = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
+
+        var listing = new DirectoryContents(
+            [
+                new WalkEntry(Listed, "film.mkv", FileAttributes.Archive | Recall, 5_000_000, when, when),
+                new WalkEntry(Listed, "partly.zip", FileAttributes.Archive | Recall, 900_000, when, when),
+                new WalkEntry(Listed, "log.txt", FileAttributes.Archive | FileAttributes.Compressed, 2_097_152, when, when),
+                new WalkEntry(Listed, "disk.vhdx", FileAttributes.Archive | FileAttributes.SparseFile, 2_097_152, when, when),
+                new WalkEntry(Listed, "plain.tgz", FileAttributes.Archive, 4096, when, when),
+            ],
+            [],
+            [],
+            WasRefused: false);
+
+        var probe = new FakeOccupancyProbe()
+            .Occupying("film.mkv", 0)
+            .Occupying("partly.zip", 65_536)
+            .Occupying("log.txt", 131_072)
+            .Occupying("disk.vhdx", 8192);
+
+        var builder = new ExploreTreeBuilder(@"C:\cache");
+        builder.AddChildren(ExploreTreeBuilder.RootNode, WalkExploreReader.Describe(listing, probe));
+        var walked = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.Equal(65_536 + 131_072 + 8192 + 4096, indexed.TotalBytes);
+        Assert.Equal(indexed.TotalBytes, walked.TotalBytes);
+        Assert.Equal(indexed.TotalLength, walked.TotalLength);
+        Assert.Equal(indexed.StorageOf(indexed.RootNode), walked.StorageOf(walked.RootNode));
+
+        Assert.Equal(StoredByName(indexed), StoredByName(walked));
+        Assert.False(indexed.HasUnknownSizes);
+        Assert.False(walked.HasUnknownSizes);
+    }
+
+    /// <summary>Each file directly under the root, with its space on disk, its length and its storage.</summary>
+    private static Dictionary<string, (long Size, long Length, FileStorage Storage)> StoredByName(ExploreTree tree)
+    {
+        var stored = new Dictionary<string, (long, long, FileStorage)>(StringComparer.Ordinal);
+
+        foreach (var child in tree.ChildrenOf(tree.RootNode))
+        {
+            stored.Add(tree.NameOf(child), (tree.SizeOf(child), tree.LengthOf(child), tree.StorageOf(child)));
+        }
+
+        return stored;
     }
 
     /// <summary>The node an absolute path names, found by descending from the tree's own root.</summary>
