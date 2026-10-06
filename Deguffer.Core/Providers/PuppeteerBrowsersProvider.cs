@@ -47,12 +47,14 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ILiveTreeInspector? liveTrees = null)
+        ILiveTreeInspector? liveTrees = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
         => _liveTrees = liveTrees ?? LiveTreeInspector.Default;
 
     public override string Id => "puppeteer";
@@ -236,7 +238,9 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
     /// and the removed are siblings, which is when an over-broad rule takes one with the other.
     ///
     /// <c>%USERPROFILE%\.cache</c> is asserted to survive when the cache is in its default place,
-    /// since the models beside Puppeteer's folder are the costliest mistake this row could make.
+    /// since the models beside Puppeteer's folder are the costliest mistake this row could make. The
+    /// default place however the setting names it, because one naming it through a letter <c>subst</c>
+    /// made for the profile still has those models beside it.
     /// </summary>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         string root,
@@ -248,7 +252,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             (root, "Puppeteer's cache folder must survive; only whole browser builds inside it are removed."),
         };
 
-        if (root.Equals(DefaultRoot, StringComparison.OrdinalIgnoreCase)
+        if (ReachedFolder.At(root, Volumes).IsSameAs(ReachedFolder.At(DefaultRoot, Volumes))
             && Path.GetDirectoryName(root) is { } shared)
         {
             survivors.Add((shared, "The folder other tools share with Puppeteer is never touched."));

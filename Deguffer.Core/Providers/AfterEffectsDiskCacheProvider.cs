@@ -99,6 +99,7 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
             Settings.Folders,
             Environment.MachineName,
             TempRoots.Resolve(Environment, _system, Volumes).Folders,
+            Volumes,
             ct);
 
     public override void InvalidateCaches()
@@ -152,21 +153,25 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
     /// <summary>
     /// Each cache inside one of <paramref name="folders"/>, at any depth, spelled from that folder, so
     /// the temporary-files row leaves it to this row whether or not this row would take it today.
+    ///
+    /// <para>At every path each is reachable at, because the preferences may name the cache folder
+    /// through a letter <c>subst</c> made for the temporary folder, and a claim the temporary-files row
+    /// cannot see is a cache it empties.</para>
     /// </summary>
     public Task<IReadOnlyList<string>> ClaimedEntriesAsync(IReadOnlyList<string> folders, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(folders);
 
-        var caches = Examine(ct).Caches;
+        var caches = Examine(ct).Caches.Select(cache => ReachedFolder.At(cache.Path, Volumes)).ToList();
 
         return Task.FromResult<IReadOnlyList<string>>(
         [
             .. from folder in folders
-               let canonical = LongPath.Unaliased(Path.TrimEndingDirectorySeparator(folder))
+               let reached = ReachedFolder.At(folder, Volumes)
                from cache in caches
-               let path = LongPath.Unaliased(cache.Path)
-               where LongPath.Contains(canonical, path) && !path.Equals(canonical, StringComparison.OrdinalIgnoreCase)
-               select Path.Combine(folder, Path.GetRelativePath(canonical, path)),
+               let relative = reached.PathTo(cache)
+               where relative is not null and not "."
+               select Path.Combine(folder, relative),
         ]);
     }
 

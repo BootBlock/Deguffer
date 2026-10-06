@@ -95,12 +95,14 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        RowDeclarations? declarations = null)
+        RowDeclarations? declarations = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _discovery = new PoetryDiscovery(Runner);
         _declarations = declarations ?? new RowDeclarations();
@@ -259,8 +261,9 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         // §5.2, and the reason this is a check on the resolved paths rather than on the child names
         // below. cache-dir and virtualenvs.path are configured independently, so a value naming the
         // cache directory itself, or anything above it, would make everything under it part of the
-        // environment tree — and the name-based rule would not see it.
-        if (LongPath.Contains(environments, cacheRoot))
+        // environment tree — and the name-based rule would not see it. Asked at every path each is
+        // reachable at, because either may name the folder through an alias the other does not.
+        if (ReachedFolder.At(environments, Volumes).Holds(ReachedFolder.At(cacheRoot, Volumes)))
         {
             return UnexaminedPlan(
                 $"Poetry keeps its virtual environments at {LongPath.Display(environments)}, which "
@@ -415,6 +418,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
         var targets = new List<DeletionTarget>();
         var withheld = new List<(string Path, string Reason)>();
+        var environmentsFolder = ReachedFolder.At(environments, Volumes);
 
         // Poetry nests an artefact under four levels of its URL hash before it reaches a file, so the
         // top level moves only when a hash prefix is first seen. A cache filled every day would
@@ -426,7 +430,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             // The same §5.2 check the whole-root case makes, one level in. A virtualenvs.path
             // configured inside a recognised child would otherwise be deleted by a step that named a
             // cache.
-            if (LongPath.Contains(target.Path, environments))
+            if (ReachedFolder.At(target.Path, Volumes).Holds(environmentsFolder))
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Warning,
@@ -488,8 +492,10 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         // as readily as one inside it, and {cache-dir}\cache is exactly the value neither other
         // guard sees: it is not the cache root, so BuildPlanAsync's whole-root refusal passes it,
         // and it is a Tier 4 child, so CollectTargets skips it before reaching its own check.
-        if (LongPath.Contains(repositories, environments)
-            || LongPath.Contains(environments, repositories))
+        var repositoriesFolder = ReachedFolder.At(repositories, Volumes);
+        var environmentsFolder = ReachedFolder.At(environments, Volumes);
+
+        if (repositoriesFolder.Holds(environmentsFolder) || environmentsFolder.Holds(repositoriesFolder))
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,

@@ -14,12 +14,14 @@ public sealed class PlexTranscodeProvider : MediaServerTranscodeProvider
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes)
     {
     }
 
@@ -51,5 +53,5 @@ public sealed class PlexTranscodeProvider : MediaServerTranscodeProvider
 
     protected override IReadOnlyList<string> ConflictingProcessNames => PlexServerLayout.ProcessNames;
 
-    protected override MediaServerLayout FindLayout() => PlexServerLayout.Find(Environment);
+    protected override MediaServerLayout FindLayout() => PlexServerLayout.Find(Environment, Volumes);
 }

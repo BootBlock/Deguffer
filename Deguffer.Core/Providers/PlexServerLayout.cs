@@ -66,7 +66,11 @@ public static class PlexServerLayout
         "This is Plex Media Server's own folder. Its transcoder's leftovers are removed from the "
         + "Storage page, which leaves a film playing now alone, and nothing else here is a cache.";
 
-    public static MediaServerLayout Find(IUserEnvironment environment)
+    /// <param name="volumes">
+    /// Asked every other path a folder and the downloads folder are reachable at, because a setting may
+    /// name either through a letter <c>subst</c> made, or another mount of its volume.
+    /// </param>
+    public static MediaServerLayout Find(IUserEnvironment environment, IVolumeInventory volumes)
     {
         var notes = new List<PlanNote>();
         var withheld = false;
@@ -74,6 +78,7 @@ public static class PlexServerLayout
         var data = Path.Combine(Setting(DataFolderValue, "its data").Folder ?? environment.LocalAppData, FolderName);
         var transcoder = Setting(TranscoderValue, "its transcoder");
         var downloads = Setting(DownloadsValue, "preparing downloads");
+        var downloadFolder = downloads.Folder is { } named ? ReachedFolder.At(named, volumes) : null;
 
         var survivors = new List<(string Path, string Reason)>();
         var toolRoots = new List<ToolRoot> { ToolRoot.Of(data, ExploreReason, new DisposableChildSet([])) };
@@ -109,7 +114,8 @@ public static class PlexServerLayout
 
             toolRoots.AddRange(MediaServerLayout.Refusing(Path.Combine(moved, "Transcode"), MovedReason));
 
-            if (!movedSessions.Equals(defaultSessions, StringComparison.OrdinalIgnoreCase) && Offers(movedSessions))
+            if (!ReachedFolder.At(movedSessions, volumes).IsSameAs(ReachedFolder.At(defaultSessions, volumes))
+                && Offers(movedSessions))
             {
                 roots.Add(new DeclaredRoot(
                     moved,
@@ -134,10 +140,12 @@ public static class PlexServerLayout
         //
         // A downloads setting that names no full path could be anywhere, so every folder is withheld
         // then: the overlap cannot be ruled out.
+        //
+        // Asked at every path each is reachable at, because either setting may name its folder through
+        // an alias the other does not.
         bool Offers(string folder)
         {
-            if (!downloads.Unplaced && (downloads.Folder is not { } downloadFolder
-                || !(LongPath.Contains(downloadFolder, folder) || LongPath.Contains(folder, downloadFolder))))
+            if (!downloads.Unplaced && (downloadFolder is null || !Overlaps(ReachedFolder.At(folder, volumes), downloadFolder)))
             {
                 return true;
             }
@@ -154,6 +162,8 @@ public static class PlexServerLayout
 
             return false;
         }
+
+        static bool Overlaps(ReachedFolder one, ReachedFolder other) => one.Holds(other) || other.Holds(one);
 
         // One of Plex's folder settings. A value that is not a full path is said out loud, because Plex
         // may be using a folder nobody here can name.

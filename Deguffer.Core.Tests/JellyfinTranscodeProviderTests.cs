@@ -33,8 +33,13 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
 
     private string Transcodes => Path.Combine(Data, "cache", "transcodes");
 
-    private JellyfinTranscodeProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, system: _system);
+    private JellyfinTranscodeProvider CreateProvider(FakeProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
+        new(
+            _environment,
+            new FakeProcessRunner(),
+            inspector ?? FakeProcessInspector.NothingRunning,
+            system: _system,
+            volumes: volumes ?? new FakeVolumeInventory());
 
     private void Record(string value, string text, RegistryView view = RegistryView.Registry32) =>
         _environment.WithMachineRegistryValue(JellyfinServerLayout.RegistryKey, value, text, view);
@@ -380,6 +385,31 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(file), "a moved cache was emptied on another tool's cache tag.");
+    }
+
+    /// <summary>
+    /// The refusal above where the setting names the transcoder folder through another mount of the
+    /// volume holding the data folder: <c>B\Media</c> is <c>A\Media</c>, which holds the data folder,
+    /// though its text holds nothing. A folder beside it reached the same way is still offered (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData("Media", false)]
+    [InlineData("Elsewhere", true)]
+    public async Task NeverEmptiesATranscoderFolderThatHoldsADataFolderThroughAnotherMountOfItsVolume(string transcoder, bool offered)
+    {
+        var data = Path.Combine(_temp.Path, "A", "Media", "JellyfinData");
+        var volumes = new FakeVolumeInventory().With(
+            Path.Combine(_temp.Path, "A") + @"\", alsoMountedAt: [Path.Combine(_temp.Path, "B") + @"\"]);
+        var named = Path.Combine(_temp.Path, "B", transcoder);
+        CreateData(data);
+        Transcoding(named);
+        Write(Path.Combine(data, "config", "encoding.xml"), Old, Settings("TranscodingTempPath", named));
+        Record(JellyfinServerLayout.DataFolderValue, data);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal(offered, plan.TargetedPaths.Any(path => LongPath.Contains(named, path)));
+        Assert.Equal(!offered, plan.Notes.Any(n => n.Message.Contains("overlaps", StringComparison.Ordinal)));
     }
 
     /// <summary>

@@ -24,8 +24,8 @@ public sealed class MavenRepositoryProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private MavenRepositoryProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+    private MavenRepositoryProvider CreateProvider(IVolumeInventory? volumes = null) =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory());
 
     private string Home => Path.Combine(_environment.UserProfile, ".m2");
 
@@ -375,6 +375,48 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.Contains("'wrapper'", StringComparison.Ordinal));
         Assert.True(plan.WasNotExamined);
+    }
+
+    /// <summary>
+    /// §5.2 through an alias. With <c>S:</c> substituted for the profile, <c>S:\.m2</c> is the Maven
+    /// home and <c>S:\.m2\wrapper</c> is a folder in it the plan promises to leave alone, though neither
+    /// text names the home. A repository in the home reached the same way is still a repository, and
+    /// the home's own files are still asserted to survive beside it (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\.m2", "holds your Maven configuration")]
+    [InlineData(@"S:\", "holds your Maven configuration")]
+    [InlineData(@"S:\.m2\wrapper", "'wrapper'")]
+    public async Task RefusesALocalRepositoryThatNamesTheMavenHomeThroughASubstitutedLetter(string configured, string refusal)
+    {
+        Populate(DefaultRepository);
+        Populate(Path.Combine(Home, "wrapper", "dists"));
+        WriteSettings(configured);
+
+        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", _environment.UserProfile)).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(refusal, StringComparison.Ordinal));
+        Assert.True(plan.WasNotExamined);
+    }
+
+    /// <summary>
+    /// The negative beside the refusal above: a repository named through the same letter, in the home
+    /// or beside it, is not refused as the home's own (§5.6). The letter stands for nothing on disk, so
+    /// nothing is measured there, and only the refusal is asked about.
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\.m2\repository")]
+    [InlineData(@"S:\maven-repository")]
+    public async Task DoesNotRefuseARepositoryNamedThroughASubstitutedLetterAsTheMavenHome(string configured)
+    {
+        Populate(DefaultRepository);
+        WriteSettings(configured);
+
+        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", _environment.UserProfile)).PlanAsync();
+
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("holds your Maven configuration", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("in your Maven home", StringComparison.Ordinal));
     }
 
     /// <summary>

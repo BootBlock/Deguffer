@@ -85,7 +85,11 @@ public static class JellyfinServerLayout
         ("root", "How your libraries are defined."),
     ];
 
-    public static MediaServerLayout Find(IUserEnvironment environment, ISystemDirectories system)
+    /// <param name="volumes">
+    /// Asked every other path a data folder and a transcoder folder are reachable at, because a setting
+    /// may name either through a letter <c>subst</c> made, or another mount of its volume.
+    /// </param>
+    public static MediaServerLayout Find(IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes)
     {
         var recorded = LongPath.Configured(
             environment.ReadLocalMachineRegistryValue(RegistryKey, DataFolderValue, RegistryView.Registry32));
@@ -104,7 +108,7 @@ public static class JellyfinServerLayout
         var notes = new List<PlanNote>();
         var toolRoots = new List<ToolRoot>();
         var withheld = false;
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new List<ReachedFolder>();
 
         var present = new List<string>();
 
@@ -112,8 +116,21 @@ public static class JellyfinServerLayout
         // folder that overlaps it is withheld all the same.
         var known = new List<string>();
 
-        foreach (var data in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        // One folder however it is named, so the installer's record naming the default folder through
+        // an alias does not make it two installs.
+        var distinct = new List<ReachedFolder>();
+
+        foreach (var data in candidates)
         {
+            var reached = ReachedFolder.At(data, volumes);
+
+            if (distinct.Exists(reached.IsSameAs))
+            {
+                continue;
+            }
+
+            distinct.Add(reached);
+
             switch (LongPath.ProbeDirectory(data))
             {
                 case PathPresence.Present:
@@ -175,10 +192,14 @@ public static class JellyfinServerLayout
             // server left its segments there until the setting was changed.
             foreach (var folder in new[] { transcodeSetting.Folder, fallback }.OfType<string>())
             {
-                if (!seen.Add(folder))
+                var reached = ReachedFolder.At(folder, volumes);
+
+                if (seen.Exists(reached.IsSameAs))
                 {
                     continue;
                 }
+
+                seen.Add(reached);
 
                 var presence = LongPath.ProbeDirectory(folder);
 
@@ -200,7 +221,7 @@ public static class JellyfinServerLayout
                     continue;
                 }
 
-                if (Why(folder, presence, isMoved) is { } why)
+                if (Why(folder, reached, presence, isMoved) is { } why)
                 {
                     Withhold(folder, why);
                     continue;
@@ -216,14 +237,15 @@ public static class JellyfinServerLayout
 
             // Why a transcoder folder is not offered, or null where it is. A folder Windows would not
             // describe is offered all the same, so the scan names it rather than this guessing at it.
-            string? Why(string folder, PathPresence presence, bool isMoved)
+            string? Why(string folder, ReachedFolder reached, PathPresence presence, bool isMoved)
             {
                 // What a data folder keeps would be emptied with a transcoder folder that overlaps it, and
                 // a transcoder folder holding a whole data folder overlaps all of it. Jellyfin refuses to
                 // start that way, so only settings nothing runs can say so. The data folder itself is not
-                // asked about, because the default folder sits inside its cache.
-                if (known.SelectMany(other => DataNames, (other, name) => Path.Combine(other, name.RelativePath))
-                    .Any(kept => LongPath.Contains(folder, kept) || LongPath.Contains(kept, folder)))
+                // asked about, because the default folder sits inside its cache. Asked at every path each
+                // is reachable at, because a setting may name either through an alias.
+                if (known.SelectMany(other => DataNames, (other, name) => ReachedFolder.At(Path.Combine(other, name.RelativePath), volumes))
+                    .Any(kept => reached.Holds(kept) || kept.Holds(reached)))
                 {
                     return "it overlaps a folder Jellyfin keeps its own data in";
                 }

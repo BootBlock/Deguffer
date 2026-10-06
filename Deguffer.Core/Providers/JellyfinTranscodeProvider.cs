@@ -16,12 +16,14 @@ public sealed class JellyfinTranscodeProvider : MediaServerTranscodeProvider
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes)
     {
         _system = system ?? SystemDirectories.Current;
     }
@@ -52,5 +54,5 @@ public sealed class JellyfinTranscodeProvider : MediaServerTranscodeProvider
 
     protected override IReadOnlyList<string> ConflictingProcessNames => JellyfinServerLayout.ProcessNames;
 
-    protected override MediaServerLayout FindLayout() => JellyfinServerLayout.Find(Environment, _system);
+    protected override MediaServerLayout FindLayout() => JellyfinServerLayout.Find(Environment, _system, Volumes);
 }

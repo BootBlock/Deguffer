@@ -49,7 +49,11 @@ public static class EmbyServerLayout
     public static string ProgramData(IUserEnvironment environment) =>
         Path.Combine(environment.RoamingAppData, "Emby-Server", "programdata");
 
-    public static MediaServerLayout Find(IUserEnvironment environment)
+    /// <param name="volumes">
+    /// Asked every other path the data folder and a moved transcoder folder are reachable at, so a
+    /// setting naming the data folder through an alias is not read as a second folder.
+    /// </param>
+    public static MediaServerLayout Find(IUserEnvironment environment, IVolumeInventory volumes)
     {
         var data = ProgramData(environment);
         var setting = MediaServerSetting.Read(Path.Combine(data, "config", "encoding.xml"), "TranscodingTempPath");
@@ -74,7 +78,7 @@ public static class EmbyServerLayout
         };
 
         if (setting.Folder is { } moved
-            && !moved.Equals(data, StringComparison.OrdinalIgnoreCase))
+            && !ReachedFolder.At(moved, volumes).IsSameAs(ReachedFolder.At(data, volumes)))
         {
             roots.Add(new DeclaredRoot(
                 moved,

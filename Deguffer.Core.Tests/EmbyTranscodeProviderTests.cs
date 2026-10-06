@@ -28,8 +28,8 @@ public sealed class EmbyTranscodeProviderTests : IDisposable
 
     private string TranscodingTemp => Path.Combine(Data, EmbyServerLayout.TranscodeFolderName);
 
-    private EmbyTranscodeProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning);
+    private EmbyTranscodeProvider CreateProvider(FakeProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
+        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory());
 
     private static string Write(string file, TimeSpan age, string text = "")
     {
@@ -134,6 +134,27 @@ public sealed class EmbyTranscodeProviderTests : IDisposable
         Assert.False(File.Exists(segment));
         Assert.True(File.Exists(beside), "a file in the folder Emby's settings name was deleted.");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A setting naming Emby's own folder through <c>S:</c>, a letter <c>subst</c> made for it, moves
+    /// nothing: the folder is declared once, as Emby's, and nothing is declared or refused a second
+    /// time under the letter. A folder beside it named the same way is a moved folder (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\", false)]
+    [InlineData(@"S:\Scratch", true)]
+    public async Task ASettingNamingEmbysOwnFolderThroughASubstitutedLetterMovesNothing(string configured, bool moved)
+    {
+        CreateData();
+        Write(Path.Combine(TranscodingTemp, "old.ts"), Old);
+        MoveTranscoder(configured);
+
+        var provider = CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", Data));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([TranscodingTemp], plan.TargetedPaths);
+        Assert.Equal(moved, provider.ToolRoots.Any(root => root.Path.StartsWith(@"S:\", StringComparison.OrdinalIgnoreCase)));
     }
 
     /// <summary>The unrecognised case: a moved folder with no <c>transcoding-temp</c> in it offers nothing.</summary>

@@ -13,12 +13,14 @@ public sealed class EmbyTranscodeProvider : MediaServerTranscodeProvider
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes)
     {
     }
 
@@ -48,5 +50,5 @@ public sealed class EmbyTranscodeProvider : MediaServerTranscodeProvider
 
     protected override IReadOnlyList<string> ConflictingProcessNames => EmbyServerLayout.ProcessNames;
 
-    protected override MediaServerLayout FindLayout() => EmbyServerLayout.Find(Environment);
+    protected override MediaServerLayout FindLayout() => EmbyServerLayout.Find(Environment, Volumes);
 }

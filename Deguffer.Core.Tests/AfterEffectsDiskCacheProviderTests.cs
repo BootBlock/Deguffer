@@ -38,8 +38,13 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
 
     private static string CacheName => AfterEffectsDiskCacheLayout.CacheName(FakeUserEnvironment.Machine);
 
-    private AfterEffectsDiskCacheProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, system: _system);
+    private AfterEffectsDiskCacheProvider CreateProvider(FakeProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
+        new(
+            _environment,
+            new FakeProcessRunner(),
+            inspector ?? FakeProcessInspector.NothingRunning,
+            system: _system,
+            volumes: volumes ?? new FakeVolumeInventory());
 
     private static string WriteFile(string path, int bytes = 4096)
     {
@@ -442,6 +447,38 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
 
         Assert.Equal([cache], plan.TargetedPaths);
         Assert.DoesNotContain(plan.ProtectedPaths, p => LongPath.Contains(folder, p.Path));
+    }
+
+    /// <summary>
+    /// The claim above where the preferences name the temporary folder through another mount of its
+    /// volume: the cache is claimed from the temporary folder as that row names it, and nothing else
+    /// reached that way is named as this row's survivor. A folder the cache is not in claims nothing
+    /// (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task ClaimsItsCacheFromATemporaryFolderItsPreferencesNameThroughAnotherMountOfItsVolume()
+    {
+        var temp = _environment.TempPath;
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var volumes = new FakeVolumeInventory().With(
+            Path.GetDirectoryName(temp) + @"\", alsoMountedAt: [mirror + @"\"]);
+        var named = Path.Combine(mirror, Path.GetFileName(temp));
+        Directory.CreateDirectory(temp);
+        Preferences(Version, named);
+        var cache = Cache(named, Version, CacheName);
+        WriteFile(Path.Combine(Path.GetDirectoryName(cache)!, "notes.txt"));
+
+        var provider = CreateProvider(volumes: volumes);
+
+        Assert.Equal(
+            [Path.Combine(temp, Path.GetRelativePath(named, cache))],
+            await provider.ClaimedEntriesAsync([temp]));
+        Assert.Empty(await provider.ClaimedEntriesAsync([Path.Combine(_temp.Path, "unrelated")]));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([cache], plan.TargetedPaths);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => LongPath.Contains(named, p.Path));
     }
 
     /// <summary>
