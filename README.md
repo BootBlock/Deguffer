@@ -76,6 +76,10 @@ class of error is invisible until it is irreversible.
   targeted; anything unrecognised is Tier 4 by construction.
 - **Nothing is deleted until you have seen what it is.** Scanning is the primary action; cleaning
   is a separate, explicit step.
+- **What follows a clean can always be stopped.** A clean can be set to exit Deguffer, lock the PC,
+  log off, sleep, hibernate, restart or shut down once it has finished. Each one waits behind a
+  30-second countdown you can cancel, never follows a clean whose verification failed, and never
+  forces a program closed.
 - **Verify the negative.** After acting, assert that the things that should have survived did —
   config files, protected directories — and report it. This turns "I think it worked" into
   evidence, and catches an over-broad rule on the first run rather than the hundredth.
