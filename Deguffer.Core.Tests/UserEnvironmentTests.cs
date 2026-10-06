@@ -307,4 +307,23 @@ public sealed class UserEnvironmentTests : IDisposable
             UserEnvironment.Current.ReadCurrentUserRegistrySubKeyNames(scratch.Path).Order(StringComparer.Ordinal));
         Assert.Empty(UserEnvironment.Current.ReadCurrentUserRegistrySubKeyNames(scratch.Path + @"\Missing"));
     }
+
+    /// <summary>
+    /// That the number read answers for a <c>REG_DWORD</c> and for nothing else, so a string of digits
+    /// is not taken for WSL's <c>Flags</c> and a number is not taken for a path. Written for the reason
+    /// <see cref="TheRegistryReadTellsTheTwoValueKindsApart"/> gives.
+    /// </summary>
+    [Fact]
+    public void TheNumberReadAnswersOnlyForADword()
+    {
+        using var scratch = new ScratchKey();
+
+        scratch.Key.SetValue("Flags", 15, RegistryValueKind.DWord);
+        scratch.Key.SetValue("Digits", "15", RegistryValueKind.String);
+
+        Assert.Equal(15, UserEnvironment.Current.ReadCurrentUserRegistryNumber(scratch.Path, "Flags"));
+        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryNumber(scratch.Path, "Digits"));
+        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryNumber(scratch.Path, "Missing"));
+        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryValue(scratch.Path, "Flags"));
+    }
 }

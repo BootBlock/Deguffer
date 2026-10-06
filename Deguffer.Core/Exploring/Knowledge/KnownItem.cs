@@ -76,6 +76,16 @@ public enum KnownPlace
     /// makes, so any entry written about the path itself wins over it.</para>
     /// </summary>
     AnywhereByExtension,
+
+    /// <summary>
+    /// One file or folder on this machine, at the full path a tool's own records give it, carried in
+    /// <see cref="KnownItem.RelativePath"/>.
+    ///
+    /// <para>For what is not at any address a place can describe: a WSL distribution's disk sits wherever
+    /// it was installed or imported, and only WSL's registration says where. Built when the guide is,
+    /// never written into the catalogue, which stays true of every machine.</para>
+    /// </summary>
+    Discovered,
 }
 
 /// <summary>

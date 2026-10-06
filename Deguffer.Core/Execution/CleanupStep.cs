@@ -24,9 +24,9 @@ public abstract record CleanupStep
     /// What this step is expected to reclaim, measured at plan time.
     ///
     /// A <see cref="ScanSize"/> rather than a bare count because allocated and logical bytes are
-    /// legitimately different numbers on compressed and sparse trees, and because this is where
-    /// §5.4's second pair — reclaimed inside a virtual disk versus on the host — will belong when a
-    /// container provider arrives.
+    /// legitimately different numbers on compressed and sparse trees. §5.4's second pair, reclaimed
+    /// inside a virtual disk versus on the host, is not here: no step reclaims either, and
+    /// <see cref="Providers.VirtualDiskProvider"/> reports both in its notes instead.
     /// </summary>
     public ScanSize Estimated { get; init; }
 

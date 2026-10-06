@@ -15,7 +15,7 @@ namespace Deguffer.Core.Tests;
 public sealed class FindingStatusTests
 {
     /// <summary>
-    /// The dangerous direction: exactly one state may claim the folder is clear. The seven
+    /// The dangerous direction: exactly one state may claim the folder is clear. The eight
     /// neighbouring states measure zero as well, and telling the user a folder is clear when
     /// Deguffer never read it is the whole of issue #38 — or when Windows would not let it take what
     /// is there, which is issue #117.
@@ -30,6 +30,7 @@ public sealed class FindingStatusTests
     [InlineData(FindingStatus.OnKeepList)]
     [InlineData(FindingStatus.MailStoresHeldBack)]
     [InlineData(FindingStatus.UpdateInProgress)]
+    [InlineData(FindingStatus.ReportOnly)]
     [InlineData(FindingStatus.ReadyToClean)]
     [InlineData(FindingStatus.NeedsElevation)]
     public void OnlyTheClearStateSaysAlreadyClear(FindingStatus status)
@@ -123,6 +124,7 @@ public sealed class FindingStatusTests
         var refused = Folder(0) with { Refused = new Refusals(new RefusalTally(1, 10), default) };
         var everything = Plan(recent, refused) with
         {
+            ReportsOnly = true,
             HasUnreadableRoot = true,
             WasNotExamined = true,
             ProtectedPaths =
@@ -133,10 +135,15 @@ public sealed class FindingStatusTests
             ],
         };
 
-        Assert.Equal(FindingStatus.UnreadableRoot, Found(everything).ToStatus(false));
-        Assert.Equal(FindingStatus.NotExamined, Found(everything with { HasUnreadableRoot = false }).ToStatus(false));
+        // A report is never a row Deguffer looked through and found wanting: its subject is a location
+        // only its own tool may act in, so what the plan would say of a cache does not apply to it.
+        Assert.Equal(FindingStatus.ReportOnly, Found(everything).ToStatus(false));
 
-        var examined = everything with { HasUnreadableRoot = false, WasNotExamined = false };
+        var reports = everything with { ReportsOnly = false };
+        Assert.Equal(FindingStatus.UnreadableRoot, Found(reports).ToStatus(false));
+        Assert.Equal(FindingStatus.NotExamined, Found(reports with { HasUnreadableRoot = false }).ToStatus(false));
+
+        var examined = reports with { HasUnreadableRoot = false, WasNotExamined = false };
         Assert.Equal(FindingStatus.RecentContentHeldBack, Found(examined).ToStatus(false));
 
         var notRecent = examined with { Steps = [refused] };

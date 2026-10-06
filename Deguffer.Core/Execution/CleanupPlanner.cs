@@ -279,6 +279,7 @@ public sealed class CleanupPlanner
             toolLogs,
             new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions, scanner: scanner),
             new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions, scanner: scanner),
+            new VirtualDiskProvider(SystemDirectories.Current, environment, scanner: scanner),
         ];
     }
 

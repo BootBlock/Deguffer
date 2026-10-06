@@ -169,8 +169,9 @@ meaningfully larger piece of UI than anything the shell does today.
 
 - **§5.4's second pair** — space freed *inside* a VHDX versus on the host. Not a scanner concern:
   it cannot be measured from the filesystem and comes from the container tool's own accounting.
-  `CleanupStep.Estimated` is already a `ScanSize` rather than a scalar, so it has a home when a
-  Docker provider needs one.
+  ✅ **taken up, outside the scanner.** `VirtualDiskProvider` reports both figures in its notes and
+  has no step, so `CleanupStep.Estimated` was not the home for it after all: there is nothing for a
+  step to reclaim.
 - **USN journal for cache invalidation.** Considered and rejected for now. It shares the MFT's
   elevation requirement, so it would only work where the fast path already works — leaving the
   fallback path with a second, different invalidation strategy. It also carries no sizes: a record

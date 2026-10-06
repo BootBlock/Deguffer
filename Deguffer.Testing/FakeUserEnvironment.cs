@@ -11,7 +11,9 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 {
     private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _registry = new(StringComparer.OrdinalIgnoreCase);
+    // Holds a string or an int, as the registry holds REG_SZ and REG_DWORD, so a read of the wrong
+    // type is told nothing, as it would be on a real machine.
+    private readonly Dictionary<string, object> _registry = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _machineRegistry = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _movedPersonalFolders = [];
 
@@ -178,6 +180,13 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
+    /// <summary>Pretend the <c>REG_DWORD</c> <paramref name="valueName"/> is recorded under <paramref name="keyPath"/>.</summary>
+    public FakeUserEnvironment WithRegistryNumber(string keyPath, string valueName, int value)
+    {
+        _registry[keyPath + "\\" + valueName] = value;
+        return this;
+    }
+
     /// <summary>
     /// Pretend <paramref name="valueName"/> is recorded under <paramref name="keyPath"/> in the machine
     /// hive's <paramref name="view"/>. Keyed by the view, so a provider that asks the wrong one is
@@ -199,7 +208,14 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     {
         RegistryReads++;
 
-        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value : null;
+        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value as string : null;
+    }
+
+    public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName)
+    {
+        RegistryReads++;
+
+        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) && value is int number ? number : null;
     }
 
     /// <summary>

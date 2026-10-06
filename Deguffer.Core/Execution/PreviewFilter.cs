@@ -18,8 +18,8 @@ namespace Deguffer.Core.Execution;
 /// largest reclaimable thing on the disk is one setting away (§7).
 /// </param>
 /// <param name="ShowAlreadyClear">
-/// Whether to draw a row saying "Already clear". The seven neighbouring states measure zero as well
-/// and are not clear at all, and each is a thing the user may want to act on, so all seven stay
+/// Whether to draw a row saying "Already clear". The eight neighbouring states measure zero as well
+/// and are not clear at all, and each is a thing the user may want to act on, so all eight stay
 /// drawn.
 /// </param>
 public readonly record struct PreviewFilter(bool ShowNotInstalled, bool ShowAlreadyClear)

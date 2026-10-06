@@ -12,7 +12,7 @@ namespace Deguffer.Core.Scanning;
 ///
 /// This is *not* §5.4's pair. That one — space freed inside a VHDX versus on the host — cannot be
 /// measured from the filesystem at all; it comes from the container tool's own accounting, so it
-/// belongs to a provider, not to scanning.
+/// belongs to a provider, not to scanning. <see cref="Providers.VirtualDiskProvider"/> reports it.
 /// </summary>
 /// <param name="IsApproximate">
 /// True when the number reported is a prediction rather than a measurement:

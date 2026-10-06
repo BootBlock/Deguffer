@@ -5955,6 +5955,65 @@ left behind.
 
 ---
 
+## WSL and Docker virtual disks
+
+**Tier 3 — reported only.** Shown with a *Report only* status, and never offered: there is nothing
+to tick.
+
+| | |
+| --- | --- |
+| **Location** | Each WSL 2 distribution's disk, at the `BasePath` WSL records under `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` (usually `ext4.vhdx`), and Docker Desktop's data disk where its settings put it: `%LOCALAPPDATA%\Docker\wsl\disk\docker_data.vhdx` by default, `DockerDesktop.vhdx` under the Hyper-V backend, or the `docker-desktop-data` distribution an installation from before 4.30 keeps using |
+| **Method** | None. Deguffer reports each disk's size on the drive, whether it is sparse, and, where Docker Desktop is already running, Docker's own `docker system df` figures. It names the vendor's commands and runs none of them |
+| **Typical size** | 8.5 GB of container data disk on the audited machine. One public write-up found more than 500 GB of these files holding 30 to 35 GB of data |
+
+### What it is
+
+WSL and Docker Desktop keep a Linux file system in one virtual disk file. The file grows as Linux
+writes and does not shrink by itself when files inside are deleted, so pruning images or deleting
+files inside a distribution frees space *inside* the disk and none on the drive. That is §5.4, and
+it is why the two figures are reported separately: a user who prunes and sees no change on the
+drive stops trusting the number.
+
+### What Deguffer does
+
+It finds each disk from the tools' own records, never by searching for `.vhdx` files: a copied disk
+or a Hyper-V machine's disk looks the same, and only the record says whose it is and which route
+applies. A WSL 1 distribution has no disk and is left out. A disk a record names that is not there
+is reported as missing, not as an empty disk, and one Windows will not describe is reported as
+unreadable.
+
+For each disk the row states:
+
+- **The size on the drive**, read from the file system without opening the file, so a disk in use
+  is measured too. A sparse disk is said to be sparse, with what it takes against the size it can
+  address.
+- **What is reclaimable inside**, for Docker's data disk only, from `docker system df` sent to the
+  `desktop-linux` context, and only when Docker Desktop's backend is already running. Otherwise the
+  row says why there is no inside figure. Unused volumes are named as holding data.
+- **The route, in order.** For a WSL distribution: delete what is no longer needed inside it, then
+  compact the disk with `wsl --manage <distribution> --compact` (WSL 3.0.1 and later), or on an
+  older WSL run `wsl --shutdown` and then `Optimize-VHD` from the Hyper-V module. A sparse disk gives
+  space back by itself once Linux discards it (`sudo fstrim -a`), and `Optimize-VHD` refuses a sparse
+  file. For Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and
+  later give freed space back to the drive by themselves, which 4.59 turned off for the time being,
+  and Docker Desktop's *Clean up data* resets the disk and removes every container and image.
+
+Explore says the same thing when you hover a disk, and refuses to delete one or the folder it is in.
+
+### Why nothing is run
+
+Compacting a disk that is in use, or a sparse one, risks everything in it, and sparse disks were put
+behind `--allow-unsafe` in WSL 2.5.6 after reports of corruption (see
+[unreached-locations.md §11](todo/unreached-locations.md)). Deguffer never prunes, compacts,
+converts or deletes a disk, and never starts WSL or the Docker engine to measure one.
+
+### Why Tier 3
+
+The tier describes the disk. A deleted disk is a whole Linux distribution, or every Docker image,
+container and volume, gone for good.
+
+---
+
 ## Locations deliberately not offered
 
 Being large is not a reason to clean something. These were investigated and left out, and the
@@ -6188,7 +6247,7 @@ says what the folder is and which uninstaller owns it.
 `docker system prune` reclaims space *inside* `docker_data.vhdx`, while the host file stays exactly
 the same size. Reporting one number would be actively misleading. This needs the two figures
 reported separately, and the second cannot be measured from the filesystem — it comes from the
-container tool's own accounting. See §5.4.
+container tool's own accounting. See §5.4, and [WSL and Docker virtual disks](#wsl-and-docker-virtual-disks), which reports both.
 
 ### Outlook's offline mailbox (`.ost`) — the vendor's own route stops short on purpose
 

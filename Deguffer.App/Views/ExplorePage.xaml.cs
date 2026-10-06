@@ -106,9 +106,10 @@ public sealed partial class ExplorePage : Page
                 () => new ContentDialogExploreConfirmation(XamlRoot, ActualTheme), App.Faults, App.Running),
 
             // Built synchronously, where the policy above is built in the background: that one
-            // constructs every provider and runs their probes, and this one reads four environment
-            // variables. It is asked about every row of every directory the page opens, so it has to
-            // exist before the first scan finishes.
+            // constructs every provider and runs their probes, and this one reads a few environment
+            // variables, WSL's registration and Docker Desktop's small settings file. It is asked about
+            // every row of every directory the page opens, so it has to exist before the first scan
+            // finishes.
             ItemGuide.ForThisMachine(),
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,

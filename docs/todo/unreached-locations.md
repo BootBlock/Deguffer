@@ -5,8 +5,9 @@
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
 > servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins and older restore points, §8's Unreal Engine
-> derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies
-> and §12's Squirrel staging and superseded builds have shipped; everything else is unstarted.
+> derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies,
+> §11's virtual disk report and §12's Squirrel staging and superseded builds have shipped; everything
+> else is unstarted.
 > **Open questions 1, 2 and 3 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
@@ -40,7 +41,7 @@ form throughout this document.
 | Location | Observed | Proposed tier | Why the current providers miss it |
 | --- | ---: | --- | --- |
 | `%LOCALAPPDATA%\Packages\<pkg>\LocalCache\Roaming` | 10.7 GB | mixed | MSIX redirects an app's `%APPDATA%` here. Nothing looks under `Packages` |
-| Container data disk (`*.vhdx`) | 8.5 GB | 2 | Known (§5.4), still unbuilt. Needs the two-number report |
+| Container data disk (`*.vhdx`) | 8.5 GB | 2 | Known (§5.4). **Reported, never acted on — see §11** |
 | Unity per-project `Library\` (7 projects) | 5.4 GB | 2 | Per-project build output; only `obj\` had a provider. **Shipped — see §2** |
 | Store-Python `LocalCache\local-packages` | 5.4 GB | 3 | Same redirection blind spot; it is installed packages, not cache |
 | `$Recycle.Bin` on non-system volumes | 3.6 GB | 3 | Cleaners empty `C:` only. `C:` held 0 bytes here. **Shipped — see §7** |
@@ -1573,6 +1574,19 @@ What has changed since §5.4 was written is that the compaction half is now hard
 **The safe scope is reporting, not acting.** Measure the host file, ask the container tool for its
 internal reclaimable figure, show both, and name the vendor command. Anything past that is
 compaction, and compaction on a live or sparse virtual disk risks the whole image. Do not run it.
+
+**Shipped as a report.** `VirtualDiskProvider` finds each WSL 2 distribution's disk from WSL's
+`Lxss` registration and Docker Desktop's data disk from its settings, reports each disk's size on
+the drive and whether it is sparse, asks `docker system df` only when Docker Desktop is already
+running, and names the vendor's route in order. Its row reads *Report only* and offers nothing to
+tick. The tier is 3 rather than the 2 proposed above, because the tier describes the disk, and a
+deleted disk is a distribution or every container and volume gone for good. Explore names each
+disk's owner and route on hover, and refuses to delete one.
+
+**Still open:** no run checks afterwards that a disk survived. The report has no step, so no run
+includes it, and no other provider's plan knows where the disks are, so a provider whose scope
+happened to hold an imported distribution's folder could remove it unnoticed. Explore's refusal is
+the only guard today. A run-wide refusal of the registered disks would close it.
 
 ---
 
