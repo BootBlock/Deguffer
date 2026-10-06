@@ -136,8 +136,16 @@ public sealed class RunResidue
     }
 
     /// <summary>
+    /// The root of every removal that left something standing below it, in the one form compared here,
+    /// so a caller can name a folder below each root as the root names itself before asking
+    /// <see cref="Entered"/> about it.
+    /// </summary>
+    public IEnumerable<string> EnteredRoots => _byRoot.Keys;
+
+    /// <summary>
     /// Whether a removal rooted above <paramref name="folder"/> went into it, and left something
-    /// standing at or below it.
+    /// standing at or below it. Asked of the folder as it is named here, and a removal records what it
+    /// left as its root was named.
     /// </summary>
     public bool Entered(string folder)
     {

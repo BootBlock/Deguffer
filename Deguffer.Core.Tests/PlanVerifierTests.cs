@@ -804,4 +804,125 @@ public sealed class PlanVerifierTests : IDisposable
 
     private static VerificationCheck Check(VerificationOutcome outcome) =>
         new($@"C:\Users\testuser\src\{outcome}", "It must survive.", outcome, "Whatever was found.");
+
+    /// <summary>
+    /// A letter that is not mounted here, made by a fake <c>subst</c> to stand for the scratch tree,
+    /// and the inventory that says so.
+    /// </summary>
+    private (string Letter, FakeVolumeInventory Volumes) Substituted()
+    {
+        var letter = UnmountedVolumeRoot();
+
+        return (letter, new FakeVolumeInventory().Substituting(letter, _temp.Path));
+    }
+
+    /// <summary>
+    /// A step naming the folder through a letter <c>subst</c> made for the tree removed the protected
+    /// path with its folder. The run did it, so it is a failure rather than an outside removal. Read
+    /// as text, nothing in the run held it. A folder that went with no step reaching it, even through
+    /// the same letter, is still an outside removal (§5.6).
+    ///
+    /// <para>Two levels below the step, so the folder holding the path holds no target, and only the
+    /// target holding the path itself can answer.</para>
+    /// </summary>
+    [Fact]
+    public void APathWhoseFolderAStepRemovedThroughASubstitutedLetterIsAFailure()
+    {
+        var (letter, volumes) = Substituted();
+        var project = _temp.CreateDirectory("project");
+        var lost = _temp.CreateDirectory("project", "obj", "Debug");
+        var vanished = _temp.CreateDirectory("checkout", "project", "obj");
+        var plan = Plan(
+            [
+                new DeleteDirectoryStep(Path.Combine(letter, "project"), "Output"),
+                new DeleteDirectoryStep(Path.Combine(letter, "elsewhere"), "Output"),
+            ],
+            Protect(lost),
+            Protect(vanished));
+
+        Directory.Delete(project, recursive: true);
+        Directory.Delete(Path.Combine(_temp.Path, "checkout"), recursive: true);
+
+        var checks = PlanVerifier.Verify(plan, volumes: volumes).Checks;
+
+        Assert.Equal(VerificationOutcome.Failed, checks.Single(c => c.Subject == lost).Outcome);
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, checks.Single(c => c.Subject == vanished).Outcome);
+        Assert.Equal(
+            VerificationOutcome.RemovedFromOutside,
+            PlanVerifier.Verify(plan, volumes: new FakeVolumeInventory()).Checks.Single(c => c.Subject == lost).Outcome);
+    }
+
+    /// <summary>
+    /// A protected folder holding a target named through a substituted letter can end the run empty,
+    /// because the run said it would work there. One holding nothing the run named is still emptied,
+    /// whatever letter the run named its targets through (§5.6).
+    /// </summary>
+    [Fact]
+    public void AFolderHoldingATargetNamedThroughASubstitutedLetterIsNotEmptied()
+    {
+        var (letter, volumes) = Substituted();
+        var tool = _temp.CreateDirectory("tool");
+        var other = _temp.CreateDirectory("other");
+        var plan = Plan(
+            [new DeleteDirectoryStep(Path.Combine(letter, "tool", "cache"), "Cache")],
+            ProtectHolding(tool),
+            ProtectHolding(other));
+
+        var checks = PlanVerifier.Verify(plan, volumes: volumes).Checks;
+
+        Assert.Equal(VerificationOutcome.Survived, checks.Single(c => c.Subject == tool).Outcome);
+        Assert.Equal(VerificationOutcome.Emptied, checks.Single(c => c.Subject == other).Outcome);
+    }
+
+    /// <summary>
+    /// A removal rooted at a substituted letter that went into a protected folder and left something
+    /// standing there entered it, though it recorded what it left under the letter. A protected folder
+    /// beside it, which the removal did not enter, survived (§5.6).
+    /// </summary>
+    [Fact]
+    public void AProtectedFolderARemovalThroughASubstitutedLetterWentIntoWasEntered()
+    {
+        var (letter, volumes) = Substituted();
+        var live = _temp.CreateDirectory("scratch", "live");
+        var beside = _temp.CreateDirectory("scratch", "beside");
+        _temp.CreateDirectory("scratch", "live", "session", "work");
+        _temp.CreateDirectory("scratch", "beside", "kept");
+        var root = Path.Combine(letter, "scratch");
+        var plan = Plan([new ClearDirectoryStep(root, "Scratch files")], ProtectHolding(live), ProtectHolding(beside));
+
+        var residue = new RunResidue();
+        residue.Record(root, [Path.Combine(root, "live", "session", "work")]);
+
+        var checks = PlanVerifier.Verify(plan, runReach: null, residue, volumes: volumes).Checks;
+
+        Assert.Equal(VerificationOutcome.Entered, checks.Single(c => c.Subject == live).Outcome);
+        Assert.Equal(VerificationOutcome.Survived, checks.Single(c => c.Subject == beside).Outcome);
+    }
+
+    /// <summary>
+    /// A spared entry gone from a folder a clear named through a substituted letter, where the clear
+    /// recorded leaving it alone under that letter: something else removed it. A removal that recorded
+    /// leaving something else alone keeps the alarm.
+    /// </summary>
+    [Fact]
+    public void ASparedEntryAClearThroughASubstitutedLetterLeftAloneThatWentWasRemovedFromOutside()
+    {
+        var (letter, volumes) = Substituted();
+        var live = Path.Combine(_temp.CreateDirectory("scratch"), "kitprobe");
+        var root = Path.Combine(letter, "scratch");
+        var plan = Plan([new ClearDirectoryStep(root, "Scratch files") { Spared = [Path.Combine(root, "kitprobe")] }], Protect(live));
+
+        var residue = new RunResidue();
+        residue.RecordLeftAlone(root, [Path.Combine(root, "kitprobe")]);
+
+        var other = new RunResidue();
+        other.RecordLeftAlone(root, [Path.Combine(root, "other")]);
+
+        Assert.Equal(
+            VerificationOutcome.RemovedFromOutside,
+            PlanVerifier.Verify(plan, runReach: null, residue, volumes: volumes).Checks.Single().Outcome);
+        Assert.Equal(
+            VerificationOutcome.Failed,
+            PlanVerifier.Verify(plan, runReach: null, other, volumes: volumes).Checks.Single().Outcome);
+    }
 }

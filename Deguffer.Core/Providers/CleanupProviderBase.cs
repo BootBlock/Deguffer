@@ -249,7 +249,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, Volumes));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()

@@ -50,6 +50,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// <summary>Thrown by the next plan instead of returning one: a provider failing, or a scan cancelled under it.</summary>
     public Exception? PlanFailure { get; set; }
 
+    /// <summary>
+    /// Asked by its §5.6 verification every other path a protected path and the run's targets are
+    /// reachable at, so a test states the mounts and letters rather than reading the machine's.
+    /// </summary>
+    public IVolumeInventory Volumes { get; init; } = new FakeVolumeInventory();
+
     /// <summary>The fractions of its own work a clean reports, in order, as a removal of a large tree does.</summary>
     public IReadOnlyList<double> Fractions { get; set; } = [];
 
@@ -140,7 +146,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
             ProviderName = Name,
             Steps = outcomes,
             Interrupted = interrupted,
-            Verification = PlanVerifier.Verify(plan, runReach, residue, CancellationToken.None),
+            Verification = PlanVerifier.Verify(plan, runReach, residue, CancellationToken.None, volumes: Volumes),
         });
     }
 
@@ -149,5 +155,5 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, volumes: Volumes));
 }
