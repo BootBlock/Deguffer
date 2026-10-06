@@ -216,6 +216,160 @@ public sealed class VolumeReservationTests : IDisposable
         Assert.True(policy.MayRemove(@"Q:\AMD").IsAllowed);
     }
 
+    /// <summary>
+    /// Everything the region table refuses on the drive Windows is installed on, reached through
+    /// another mount of that volume: a second letter, and a folder on another drive. The table is
+    /// written about the system drive's own paths, and asked about the text alone each of these was
+    /// unclassified and offered for removal, while removing it removes the same folder.
+    /// </summary>
+    [Theory]
+    [InlineData(@"R:\", "Windows")]
+    [InlineData(@"R:\", @"Windows\System32")]
+    [InlineData(@"R:\", "Program Files")]
+    [InlineData(@"R:\", "inetpub")]
+    [InlineData(@"R:\", @"Users\another account")]
+    [InlineData(@"Q:\SysMount", "Windows")]
+    [InlineData(@"Q:\SysMount", @"Windows\System32")]
+    [InlineData(@"Q:\SysMount", "Program Files")]
+    [InlineData(@"Q:\SysMount", "INETPUB")]
+    [InlineData(@"Q:\SysMount", @"Users\another account")]
+    public void WhatTheSystemDriveRefusesIsRefusedThroughAnotherMountOfIt(string mount, string relative)
+    {
+        using var drive = new TempDirectory();
+        var policy = SystemVolumePolicy(drive, []);
+
+        Assert.False(policy.MayRemove(Path.Combine(mount, relative)).IsAllowed);
+    }
+
+    /// <summary>
+    /// The §5.2 half. The graphics driver installer provider's tool root is the system drive's
+    /// <c>AMD</c> folder, and through another mount of that volume its refusal of the folder and of
+    /// what it does not recognise holds, while the driver packages it removes stay removable there.
+    /// </summary>
+    [Theory]
+    [InlineData(@"R:\")]
+    [InlineData(@"Q:\SysMount")]
+    public void TheSystemDrivesToolRootsHoldThroughAnotherMountOfIt(string mount)
+    {
+        using var drive = new TempDirectory();
+        var environment = new FakeUserEnvironment(Path.Combine(drive.Path, "Users"));
+        var amd = Path.Combine(drive.Path, "AMD");
+        Directory.CreateDirectory(Path.Combine(amd, "Chipset_Software", "Packages"));
+        Directory.CreateDirectory(Path.Combine(amd, "AMD-Software-Installer"));
+        Directory.CreateDirectory(Path.Combine(amd, "Radeon Recordings"));
+
+        var provider = new GraphicsDriverInstallerProvider(
+            environment, new FakeProcessRunner(), system: new FakeSystemDirectories(drive.Path));
+        var policy = SystemVolumePolicy(drive, provider.ToolRoots);
+
+        Assert.False(policy.MayRemove(Path.Combine(mount, "AMD")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(mount, "AMD", "Chipset_Software")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(mount, "AMD", "Radeon Recordings")).IsAllowed);
+
+        Assert.True(policy.MayRemove(Path.Combine(mount, "AMD", "AMD-Software-Installer")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The §5.6 half. An ordinary folder on another mount of the system volume stays removable, as
+    /// it is on the system drive, and so does what is inside <c>inetpub</c>. <c>Q:\</c>'s own folders
+    /// are not the system volume's, and its <c>AMD</c> is not the tool's.
+    /// </summary>
+    [Theory]
+    [InlineData(@"R:\Holiday photos")]
+    [InlineData(@"R:\inetpub\logs")]
+    [InlineData(@"R:\Users\profile\Documents")]
+    [InlineData(@"Q:\SysMount\Holiday photos")]
+    [InlineData(@"Q:\SysMount\Holiday photos\Windows")]
+    [InlineData(@"Q:\Windows")]
+    [InlineData(@"Q:\AMD\Radeon Recordings")]
+    public void AnOrdinaryFolderOnAnotherMountOfTheSystemVolumeStaysRemovable(string path)
+    {
+        using var drive = new TempDirectory();
+        var environment = new FakeUserEnvironment(Path.Combine(drive.Path, "Users"));
+        var provider = new GraphicsDriverInstallerProvider(
+            environment, new FakeProcessRunner(), system: new FakeSystemDirectories(drive.Path));
+        var policy = SystemVolumePolicy(drive, provider.ToolRoots);
+
+        Assert.True(policy.MayRemove(path).IsAllowed);
+    }
+
+    /// <summary>
+    /// A folder that holds something refused, reached through another mount. The profile's
+    /// <c>AppData</c> is ordinary and the local application data inside it is not, so removing it
+    /// would take the refused folder with it at any of the volume's paths.
+    /// </summary>
+    [Fact]
+    public void AFolderHoldingWhatTheSystemDriveRefusesIsRefusedThroughAnotherMountOfIt()
+    {
+        using var drive = new TempDirectory();
+        Directory.CreateDirectory(new FakeUserEnvironment(Path.Combine(drive.Path, "Users")).LocalAppData);
+        var policy = SystemVolumePolicy(drive, []);
+
+        Assert.False(policy.MayRemove(@"R:\Users\profile\AppData").IsAllowed);
+        Assert.False(policy.MayRemove(@"Q:\SysMount\Users\profile\AppData").IsAllowed);
+    }
+
+    /// <summary>
+    /// A drive letter <c>subst</c> made for the system drive, or for the profile on it, reaches
+    /// what the region table refuses there. Windows names no volume for such a letter, so only
+    /// following it to its folder finds the rule. The §5.6 half: an ordinary folder through the
+    /// same letters stays removable.
+    /// </summary>
+    [Fact]
+    public void ASubstitutedLetterReachesWhatTheSystemDriveRefuses()
+    {
+        using var drive = new TempDirectory();
+        var policy = SystemVolumePolicy(drive, []);
+        _volumes
+            .Substituting(@"S:\", Path.Combine(drive.Path, "Users", "profile"))
+            .Substituting(@"T:\", drive.Path);
+
+        Assert.False(policy.MayRemove(@"S:\AppData\Local").IsAllowed);
+        Assert.False(policy.MayRemove(@"T:\Windows").IsAllowed);
+        Assert.False(policy.MayRemove(@"T:\Users\another account").IsAllowed);
+
+        Assert.True(policy.MayRemove(@"S:\Documents\Holiday photos").IsAllowed);
+        Assert.True(policy.MayRemove(@"S:\AppData\Local\SomeTool\Cache").IsAllowed);
+        Assert.True(policy.MayRemove(@"T:\Holiday photos").IsAllowed);
+    }
+
+    /// <summary>
+    /// A mount of the system volume made after the policy was built is covered, because the policy
+    /// asks the machine where the volume is mounted at each question.
+    /// </summary>
+    [Fact]
+    public void AMountOfTheSystemVolumeMadeAfterThePolicyWasBuiltIsCovered()
+    {
+        using var drive = new TempDirectory();
+        var system = new FakeSystemDirectories(drive.Path);
+        var environment = new FakeUserEnvironment(Path.Combine(drive.Path, "Users"));
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [drive.Path + Path.DirectorySeparatorChar]);
+        var policy = new ExploreActionPolicy(ProtectedRegions.For(system, environment), [], _volumes);
+
+        Assert.True(policy.MayRemove(@"Q:\SysMount\Windows").IsAllowed);
+
+        _volumes
+            .Without(@"R:\")
+            .With(@"R:\", alsoMountedAt: [drive.Path + Path.DirectorySeparatorChar, @"Q:\SysMount\"]);
+
+        Assert.False(policy.MayRemove(@"Q:\SysMount\Windows").IsAllowed);
+    }
+
+    /// <summary>
+    /// A policy over a synthetic system volume, its own drive as <paramref name="drive"/> with the
+    /// profile inside it, that is also mounted at <c>R:\</c> and at <c>Q:\SysMount\</c>.
+    /// </summary>
+    private ExploreActionPolicy SystemVolumePolicy(TempDirectory drive, IEnumerable<ToolRoot> toolRoots)
+    {
+        var system = new FakeSystemDirectories(drive.Path);
+        var environment = new FakeUserEnvironment(Path.Combine(drive.Path, "Users"));
+        _volumes
+            .With(@"Q:\")
+            .With(@"R:\", alsoMountedAt: [drive.Path + Path.DirectorySeparatorChar, @"Q:\SysMount\"]);
+
+        return new ExploreActionPolicy(ProtectedRegions.For(system, environment), toolRoots, _volumes);
+    }
+
     private ExploreActionPolicy Policy() =>
         new(ProtectedRegions.For(_system, _environment), [], _volumes);
 }
