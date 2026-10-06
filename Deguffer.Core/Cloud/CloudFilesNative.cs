@@ -50,6 +50,7 @@ internal static unsafe partial class CloudFilesNative
     private const uint BackupSemantics = 0x0200_0000;
     private const uint OpenReparsePoint = 0x0020_0000;
     private const int FileBasicInfoClass = 0;
+    private const int FileAttributeTagInfoClass = 9;
 
     /// <summary><c>PHCM_EXPOSE_PLACEHOLDERS</c>.</summary>
     public const sbyte ExposePlaceholders = 2;
@@ -79,6 +80,24 @@ internal static unsafe partial class CloudFilesNative
 
     public static bool TryBasicInfo(SafeFileHandle handle, out FileBasicInfo info) =>
         GetFileInformationByHandleEx(handle, FileBasicInfoClass, out info, sizeof(FileBasicInfo));
+
+    /// <summary>
+    /// The reparse tag of what <paramref name="handle"/> is open on, which is the link itself where
+    /// it was opened by <see cref="OpenForState"/>. Zero for an entry that carries none.
+    /// </summary>
+    public static bool TryReparseTag(SafeFileHandle handle, out uint tag)
+    {
+        var read = GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out FileAttributeTagInfo info, sizeof(FileAttributeTagInfo));
+        tag = info.ReparseTag;
+        return read;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FileAttributeTagInfo
+    {
+        public uint FileAttributes;
+        public uint ReparseTag;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct FileBasicInfo
@@ -143,6 +162,14 @@ internal static unsafe partial class CloudFilesNative
         SafeFileHandle file,
         int informationClass,
         out FileBasicInfo information,
+        int bufferSize);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetFileInformationByHandleEx(
+        SafeFileHandle file,
+        int informationClass,
+        out FileAttributeTagInfo information,
         int bufferSize);
 
     /// <summary>

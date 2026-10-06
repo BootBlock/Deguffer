@@ -844,6 +844,26 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
+    /// A list that cannot be read could have hidden CompactOS's stream only for a file that is
+    /// CompactOS's. A cloud file whose base record holds its stream and its reparse point keeps its
+    /// size, as it did before CompactOS was read at all, and a CompactOS file's size is unknown.
+    /// </summary>
+    [Fact]
+    public void WaitsForCompactOsStreamOnlyWhereTheFileIsCompactOs()
+    {
+        using var source = Tree()
+            .AddReparsePointFileWithAMalformedAttributeList(20, Cache, "synced.docx", 8192, MftRecordBytes.CloudFilesTag)
+            .AddReparsePointFileWithAMalformedAttributeList(21, Cache, "setup.exe", 0, MftRecordBytes.WindowsOverlayFilterTag)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(8192, tree.SizeOf(20));
+        Assert.False(tree.HasUnknownSizeBelow(20));
+        Assert.True(tree.HasUnknownSizeBelow(21));
+    }
+
+    /// <summary>
     /// The whole volume: no components below the root, so there is nothing to resolve and a tree
     /// always comes back. The folder-rooted reads above ask for their own outcome, because what
     /// they can produce instead is the point of them.

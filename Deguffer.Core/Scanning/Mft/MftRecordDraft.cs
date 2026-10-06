@@ -66,6 +66,13 @@ internal struct MftRecordDraft
     public MftAttributeKinds BaseSupplied { get; private set; }
 
     /// <summary>
+    /// Whether the base record's reparse point is CompactOS's, so the file's content is in a stream
+    /// that may be in another record. False for a file whose base record holds any other reparse
+    /// point, which therefore has no such stream however its list reads.
+    /// </summary>
+    public bool BaseIsCompactOs { get; private set; }
+
+    /// <summary>
     /// Fold one record's attributes into what is known, saying which kinds it supplied. Returns
     /// false where the attributes are malformed, and a record that fails here must be rejected
     /// whole rather than kept in part: a partly read record reports a plausible wrong size.
@@ -130,6 +137,7 @@ internal struct MftRecordDraft
                 case MftRecordParser.AttributeReparsePoint:
                     supplied |= MftAttributeKinds.ReparsePoint;
                     _isReparsePoint |= MftRecordParser.IsNameSurrogate(walk.Current);
+                    BaseIsCompactOs |= isBase && MftRecordParser.IsWofReparsePoint(walk.Current);
                     break;
 
                 case MftRecordParser.AttributeData when MftRecordParser.IsUnnamed(walk.Current):

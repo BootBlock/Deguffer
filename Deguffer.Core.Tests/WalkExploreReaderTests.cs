@@ -285,22 +285,25 @@ public sealed class WalkExploreReaderTests : IDisposable
     }
 
     /// <summary>
-    /// #257 against Windows itself: a placeholder held only online is listed at its full length,
-    /// and the walk draws it at what it occupies, which is nothing, without fetching a byte of it.
-    /// A copy kept on this PC counts in full.
-    ///
-    /// <para>A real sync root rather than a fake, because the shape under test is Windows' own:
-    /// it disguises a placeholder as an ordinary file to every process but its sync app, and
-    /// leaves only the recall attribute to say the content is elsewhere.</para>
+    /// #257 against Windows itself, as Deguffer meets it: a sync app not this process. Windows lists
+    /// an online-only placeholder at its full length and disguises it as an ordinary file, leaving
+    /// only the recall attribute: no reparse point and no sparse bit. The walk draws it at what it
+    /// occupies, which is nothing, and a copy kept on this PC in full.
     /// </summary>
     [Fact]
-    public void DrawsAFileHeldOnlyOnlineAtWhatItOccupiesWithoutFetchingIt()
+    public void DrawsAFileHeldOnlyOnlineAtWhatItOccupies()
     {
         using var synced = new ScratchSyncRoot(_temp.CreateDirectory("Synced"));
         synced.OnlineOnly("film.mkv", 5_000_000);
         synced.LocalCopy("kept.bin", 300_000);
         synced.PlainFile("plain.bin", 300_000);
         synced.Disconnect();
+
+        var listed = new DirectoryInfo(LongPath.Extended(synced.Path))
+            .EnumerateFiles("film.mkv").Single().Attributes;
+        Assert.True((listed & RecallOnDataAccess) != 0);
+        Assert.False(listed.HasFlag(FileAttributes.ReparsePoint));
+        Assert.False(listed.HasFlag(FileAttributes.SparseFile));
 
         var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
@@ -315,7 +318,36 @@ public sealed class WalkExploreReaderTests : IDisposable
         Assert.Equal(600_000, tree.TotalBytes);
         Assert.Equal(5_600_000, tree.TotalLength);
         Assert.False(tree.HasUnknownSizes);
+    }
+
+    /// <summary>
+    /// Measuring a placeholder fetches none of it. Walked while the scratch root is connected,
+    /// because only a connected sync app is asked for data, so its count of requests is the
+    /// evidence. Connected, this process is the sync app and sees the placeholder's reparse point,
+    /// so the walk reads the tag before it measures. The read that follows proves the count is live.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresAPlaceholderWithoutFetchingIt()
+    {
+        using var synced = new ScratchSyncRoot(_temp.CreateDirectory("Synced"));
+        var online = synced.OnlineOnly("film.mkv", 5_000_000);
+
+        var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+
         Assert.Equal(0, synced.FetchRequests);
+        Assert.Equal(0, tree.TotalBytes);
+        Assert.Equal(5_000_000, tree.TotalLength);
+        Assert.False(tree.HasUnknownSizes);
+
+        _ = Task.Run(() => File.ReadAllBytes(online));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        while (synced.FetchRequests == 0 && clock.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            await Task.Delay(50);
+        }
+
+        Assert.True(synced.FetchRequests > 0, "Reading the file's data asked the sync app for nothing.");
     }
 
     /// <summary>
@@ -359,7 +391,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var probe = new FakeOccupancyProbe().Occupying("online.mkv", 0).Occupying("log.txt", 131_072);
         var contents = Listing(
             Entry("plain.tgz", FileAttributes.Archive, 1000),
-            Entry("online.mkv", FileAttributes.Archive | (FileAttributes)0x0040_0000, 5_000_000),
+            Entry("online.mkv", FileAttributes.Archive | RecallOnDataAccess, 5_000_000),
             Entry("log.txt", FileAttributes.Compressed, 2_097_152));
 
         var tree = Tree(contents, probe);
@@ -388,6 +420,8 @@ public sealed class WalkExploreReaderTests : IDisposable
 
     /// <summary>The directory the synthesised listings were made in, in the extended form the walk lists in.</summary>
     private const string Listed = @"\\?\C:\cache";
+
+    private const FileAttributes RecallOnDataAccess = (FileAttributes)0x0040_0000;
 
     private static readonly DateTime Written = new(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
 

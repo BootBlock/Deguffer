@@ -639,14 +639,15 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             var volume = await VolumeSpace.ReadAsync(_volumes, _hidden, target, scan.Tree, ct);
 
+            // Before the tree is shown, because the pointer can describe the new map from then on.
+            _strategy = scan.Strategy;
+
             Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), volume);
 
             RouteNote = scan.RouteNote;
             OfferElevation(scan.Fallback);
 
             await RecordAsync(scan, target, scoped);
-
-            _strategy = scan.Strategy;
 
             // Which figure the map draws, said once where the total is, with the length beside it so
             // a gap between the two is something the reader was told about rather than found.

@@ -394,6 +394,31 @@ public static class MftListedFiles
             .Add(extension, MftRecordBytes.Compose(isDirectory: true, MftFixture.Reference(number), MftRecordBytes.Sequence, fixture.BytesPerRecord));
 
     /// <summary>
+    /// A file whose base record holds its own stream, which states
+    /// <paramref name="allocated"/>, and a reparse point tagged <paramref name="reparseTag"/>, beside
+    /// an <c>$ATTRIBUTE_LIST</c> that cannot be read. Both are settled by the base record, so the list
+    /// can only have hidden something more, and whether it could have depends on the tag: only
+    /// CompactOS keeps content in a further stream.
+    /// </summary>
+    public static MftFixture AddReparsePointFileWithAMalformedAttributeList(
+        this MftFixture fixture, uint number, uint parent, string name, long allocated, uint reparseTag)
+    {
+        var value = MftAttributeBytes.AttributeListValue([new ListedAttribute(Data, MftFixture.Reference(number))]);
+        value[0x04] = 0xFF;
+
+        return fixture.Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteFileName(t, MftFixture.Reference(parent), name, 0, 0),
+            t => MftAttributeBytes.WriteAttributeListValue(t, value),
+            t => MftAttributeBytes.WriteReparsePoint(t, reparseTag),
+            t => MftAttributeBytes.WriteStream(t, name: null, allocated, allocated)));
+    }
+
+    /// <summary>
     /// A file CompactOS compressed whose compressed stream NTFS moved to <paramref name="extension"/>,
     /// as it does once the stream's runs outgrow the base record. The base record keeps the file's
     /// own stream, sparse and holding nothing, so the file occupies only what the extension states.

@@ -151,10 +151,22 @@ internal sealed class MftDeferredRecord
     /// been anywhere. A file has one reparse point, and the piece of its stream starting at cluster 0
     /// states the whole stream's sizes, so either one held by the base record is settled; a name
     /// is settled only where nothing could displace it.
+    ///
+    /// <para>CompactOS's stream is in doubt only where the file could be CompactOS's: its reparse
+    /// point is unsettled, which loses the size already, or the base record holds CompactOS's own.
+    /// Any other reparse point settles that there is no such stream, so the file keeps its size.</para>
     /// </summary>
-    private void FailList() =>
-        Fail(((MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint | MftAttributeKinds.WofDataStart) & ~_draft.BaseSupplied)
-            | (_draft.BaseRank != 0 ? MftAttributeKinds.Name : MftAttributeKinds.None));
+    private void FailList()
+    {
+        var unsettled = (MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint) & ~_draft.BaseSupplied;
+
+        if (_draft.BaseIsCompactOs && !_draft.BaseSupplied.HasFlag(MftAttributeKinds.WofDataStart))
+        {
+            unsettled |= MftAttributeKinds.WofDataStart;
+        }
+
+        Fail(unsettled | (_draft.BaseRank != 0 ? MftAttributeKinds.Name : MftAttributeKinds.None));
+    }
 
     /// <summary>
     /// What one entry would have to supply, judged by what the base record already settled.

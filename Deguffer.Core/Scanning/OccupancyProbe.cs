@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
+using Deguffer.Core.Cloud;
 
 namespace Deguffer.Core.Scanning;
 
@@ -47,13 +47,6 @@ public sealed partial class OccupancyProbe : IOccupancyProbe
     private const uint InvalidFileSize = 0xFFFF_FFFF;
     private const uint NameSurrogateBit = 0x2000_0000;
 
-    private const uint FileReadAttributes = 0x0080;
-    private const uint ShareAll = 0x0007;
-    private const uint OpenExisting = 3;
-    private const uint BackupSemantics = 0x0200_0000;
-    private const uint OpenReparsePoint = 0x0020_0000;
-    private const int FileAttributeTagInfoClass = 9;
-
     private OccupancyProbe()
     {
     }
@@ -97,44 +90,11 @@ public sealed partial class OccupancyProbe : IOccupancyProbe
     /// <summary>The reparse tag of the entry itself, never its target's, or null where it would not open.</summary>
     private static uint? ReparseTagOf(string path)
     {
-        using var handle = CreateFile(
-            path, FileReadAttributes, ShareAll, 0, OpenExisting, BackupSemantics | OpenReparsePoint, 0);
+        using var handle = CloudFilesNative.OpenForState(path);
 
-        if (handle.IsInvalid)
-        {
-            return null;
-        }
-
-        return GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out var info, Marshal.SizeOf<AttributeTagInfo>())
-            ? info.ReparseTag
-            : null;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct AttributeTagInfo
-    {
-        public uint FileAttributes;
-        public uint ReparseTag;
+        return !handle.IsInvalid && CloudFilesNative.TryReparseTag(handle, out var tag) ? tag : null;
     }
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetCompressedFileSizeW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial uint GetCompressedFileSize(string fileName, out uint fileSizeHigh);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial SafeFileHandle CreateFile(
-        string fileName,
-        uint desiredAccess,
-        uint shareMode,
-        nint securityAttributes,
-        uint creationDisposition,
-        uint flagsAndAttributes,
-        nint templateFile);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetFileInformationByHandleEx(
-        SafeFileHandle file,
-        int informationClass,
-        out AttributeTagInfo information,
-        int bufferSize);
 }

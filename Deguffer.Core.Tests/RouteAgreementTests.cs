@@ -433,7 +433,6 @@ public class RouteAgreementTests
         return dates;
     }
 
-    /// <summary>The node an absolute path names, found by descending from the tree's own root.</summary>
     /// <summary>
     /// #257: one folder of cloud, compressed, sparse and plain files, drawn by both routes, comes to
     /// the same space on disk and the same length, and explains itself the same way. Before, the
@@ -443,8 +442,8 @@ public class RouteAgreementTests
     /// <para>Each side is given what it really meets. The table gets records laid out as NTFS lays
     /// them out. The walk gets the listing Windows hands a process that is not the sync app, in
     /// which a placeholder shows only its recall attribute, and a file system that answers what each
-    /// marked file occupies. <see cref="WalkExploreReaderTests"/> shows that listing against a real
-    /// sync root.</para>
+    /// marked file occupies. <see cref="WalkExploreReaderTests.DrawsAFileHeldOnlyOnlineAtWhatItOccupies"/>
+    /// shows that listing against a real sync root.</para>
     /// </summary>
     [Fact]
     public void TheTwoRoutesDrawOneFolderOfStoredFilesAlike()
@@ -512,6 +511,7 @@ public class RouteAgreementTests
         return stored;
     }
 
+    /// <summary>The node an absolute path names, found by descending from the tree's own root.</summary>
     private static int NodeAt(ExploreTree tree, string path)
     {
         var node = tree.RootNode;
