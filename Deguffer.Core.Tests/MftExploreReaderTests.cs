@@ -815,6 +815,35 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
+    /// NTFS moves CompactOS's stream to an extension record once its runs outgrow the base record,
+    /// and the attribute list names it there. Followed, it sizes the file. Caught mid-change, it
+    /// leaves the size unknown, because the file's own stream holds nothing and drawing that would
+    /// draw the file as empty.
+    /// </summary>
+    [Fact]
+    public void FollowsCompactOsStreamIntoAnExtensionRecord()
+    {
+        using var followed = Tree()
+            .AddOverlayCompressedFileWithItsStreamInAnExtensionRecord(
+                20, Cache, "setup.exe", logical: 2_097_152, compressed: 139_264, extension: 21)
+            .Build();
+
+        var tree = WholeVolume(followed);
+
+        Assert.Equal(139_264, tree.SizeOf(20));
+        Assert.Equal(FileStorage.Compressed, tree.StorageOf(20));
+        Assert.False(tree.HasUnknownSizes);
+
+        using var changing = Tree()
+            .AddOverlayCompressedFileWithItsStreamInAnExtensionRecord(
+                20, Cache, "setup.exe", logical: 2_097_152, compressed: 139_264, extension: 21,
+                ListMismatch.ItsOwnSequence)
+            .Build();
+
+        Assert.True(WholeVolume(changing).HasUnknownSizeBelow(20));
+    }
+
+    /// <summary>
     /// The whole volume: no components below the root, so there is nothing to resolve and a tree
     /// always comes back. The folder-rooted reads above ask for their own outcome, because what
     /// they can produce instead is the point of them.
