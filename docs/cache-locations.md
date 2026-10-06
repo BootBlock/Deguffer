@@ -2661,8 +2661,8 @@ marker outlives the server that wrote it, and a folder you once pointed Jellyfin
 use again. Deguffer also leaves alone any transcoder folder that holds Jellyfin's data folder, or
 overlaps one of the folders in the table below. Both are asked at every path each folder is
 reachable at, so a setting naming one through a `subst` letter or a second mount of the volume is
-caught as surely as one naming the path it stands for, and a data folder named two ways is one
-install, not two.
+caught as surely as one naming the path it stands for, and a transcoder folder named two ways is
+offered once.
 
 **It leaves anything written in the last 24 hours alone**, which is Jellyfin's own rule, so a film
 playing now keeps its files. Jellyfin's clean-up task is the route §5.1 prefers, but starting it

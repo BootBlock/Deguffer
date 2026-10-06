@@ -414,7 +414,7 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
 
     /// <summary>
     /// The installer recording the default data folder through another mount of its volume names one
-    /// install, so its transcoder folder is offered once. Explore still refuses the folder at both
+    /// folder, so its transcoder folder is offered once. Explore still refuses the data folder at both
     /// names, because it compares what it is asked about with each tool root as that root is named.
     /// </summary>
     [Fact]

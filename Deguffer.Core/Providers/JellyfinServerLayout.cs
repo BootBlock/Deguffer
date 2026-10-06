@@ -116,27 +116,11 @@ public static class JellyfinServerLayout
         // folder that overlaps it is withheld all the same.
         var known = new List<string>();
 
-        // One folder however it is named, so the installer's record naming the default folder through
-        // an alias does not make it two installs. Explore still refuses it at each name, because it
-        // compares a folder it is asked about with each tool root as that root is named.
-        var distinct = new List<ReachedFolder>();
-
-        foreach (var data in candidates)
+        // Each name a data folder is given is kept, alias or not, because Explore compares what it is
+        // asked about with each tool root as that root is named. A transcoder folder two names share is
+        // offered once, below.
+        foreach (var data in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var reached = ReachedFolder.At(data, volumes);
-
-            if (distinct.Exists(reached.IsSameAs))
-            {
-                if (LongPath.ProbeDirectory(data) is not PathPresence.Absent)
-                {
-                    toolRoots.Add(ToolRoot.Of(data, ExploreReason, new DisposableChildSet([])));
-                }
-
-                continue;
-            }
-
-            distinct.Add(reached);
-
             switch (LongPath.ProbeDirectory(data))
             {
                 case PathPresence.Present:
