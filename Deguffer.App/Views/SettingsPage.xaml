@@ -385,6 +385,67 @@
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
 
+            <!-- What Explore keeps of each scan of a whole drive, so the next scan can say what
+                 grew. It names the folders on the drive, so the user decides how long it stays:
+                 each one can be removed here, or all of them at once. -->
+            <TextBlock Text="Scan history" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+
+            <InfoBar IsOpen="{x:Bind History.RemoveFailed, Mode=OneWay}"
+                     IsClosable="False"
+                     Severity="Warning"
+                     Title="Not all removed"
+                     Message="Deguffer could not remove every summary. Something may be holding one of the files open. Try again in a moment." />
+
+            <views:SettingsRow Glyph="&#xE823;"
+                               Title="Summaries of earlier scans"
+                               Description="After each scan of a whole drive, Explore keeps the sizes of its largest folders and how full the drive was, on this computer only, so the next scan can show what grew. The latest 20 of each drive are kept.">
+                <views:SettingsRow.Control>
+                    <Button Content="Remove all"
+                            Click="OnRemoveAllScanSummaries"
+                            IsEnabled="{x:Bind History.HasKept, Mode=OneWay}"
+                            AutomationProperties.Name="Remove every kept scan summary" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
+            <TextBlock Text="No scans are kept."
+                       Style="{StaticResource SecondaryText}"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Margin="4,0,0,0"
+                       Visibility="{x:Bind History.HasNoKept, Mode=OneWay}" />
+
+            <ItemsRepeater ItemsSource="{x:Bind History.Kept, Mode=OneWay}" Margin="0,2,0,0">
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="viewModels:KeptScanRow">
+                        <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
+                              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                              BorderThickness="1"
+                              CornerRadius="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind Detail}"
+                                           Style="{StaticResource SecondaryText}"
+                                           FontSize="12"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Content="Remove"
+                                    Tag="{x:Bind}"
+                                    Click="OnRemoveScanSummary"
+                                    AutomationProperties.Name="Remove"
+                                    AutomationProperties.HelpText="{x:Bind Title}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+
             <!-- Every value here changes how fast a scan reads the disk, never what it finds: the
                  table is still read whole, the walk still never follows a link, and a refused
                  folder is still reported, whatever is set. So these come last, after the settings

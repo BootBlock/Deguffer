@@ -93,6 +93,12 @@ public enum VolumeReadiness
 /// Every other path this volume is reachable at, or null where there is none — which is the
 /// ordinary case, since most volumes wear one drive letter and nothing else.
 /// </param>
+/// <param name="VolumeName">
+/// The <c>\?\Volume{GUID}\</c> name Windows knows the volume by wherever it is mounted, or null for
+/// a letter that stands for somewhere else, such as a mapped share. What tells one disk from another
+/// when a drive letter moves between them, which is what keeps a scan of one from being compared
+/// with a scan of the other.
+/// </param>
 public readonly record struct LocalVolume(
     string RootPath,
     DriveType Kind,
@@ -101,7 +107,8 @@ public readonly record struct LocalVolume(
     long? TotalBytes = null,
     long? FreeBytes = null,
     VolumeFeatures Features = VolumeFeatures.None,
-    IReadOnlyList<string>? AlsoMountedAt = null)
+    IReadOnlyList<string>? AlsoMountedAt = null,
+    string? VolumeName = null)
 {
     /// <summary>Whether the volume answers. See <see cref="Readiness"/>.</summary>
     public bool IsReady => Readiness is VolumeReadiness.Ready;
@@ -299,7 +306,7 @@ public sealed class VolumeInventory : IVolumeInventory
             var ordered = Ordered(mountPoints);
 
             claimed.UnionWith(ordered);
-            volumes.Add(Describe(ordered));
+            volumes.Add(Describe(ordered) with { VolumeName = name });
         }
 
         string[] letters;

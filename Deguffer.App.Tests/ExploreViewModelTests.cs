@@ -44,7 +44,7 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.True(page.ScanCommand.CanExecute(null));
         Assert.True(page.CanElevate);
         Assert.Equal(ElevationOffer.Label(hasScanned: false), page.ElevateLabel);
-        Assert.NotEmpty(page.AgeLegend);
+        Assert.Empty(page.Legend);
         Assert.Empty(_explore.Relaunches);
     }
 
@@ -530,31 +530,36 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
-    /// The age legend is on screen only where the colours are ages, the picture is a map rather than
-    /// the list, and something has been scanned into it.
+    /// The legend is on screen only where the colours are a scale, ages or growth, the picture is a
+    /// map rather than the list, and something has been scanned into it.
     /// </summary>
     [Fact]
-    public void TheAgeLegendShowsOnlyBesideAMapColouredByAge() => UiThread.Run(async () =>
+    public void TheLegendShowsOnlyBesideAMapColouredByAScale() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
         var page = _explore.Page();
 
         page.SelectedColouring = ExploreColouring.Age;
 
-        Assert.False(page.ShowsAgeLegend);
+        Assert.False(page.ShowsLegend);
 
         await _explore.ScanAsync(page, ExploreScan.Fast(Drive(ExploreFixture.Folder("Users"))));
 
-        Assert.True(page.ShowsAgeLegend);
+        Assert.True(page.ShowsLegend);
 
         page.SelectedView = ExploreView.List;
 
-        Assert.False(page.ShowsAgeLegend);
+        Assert.False(page.ShowsLegend);
 
         page.SelectedView = ExploreView.Icicle;
+        page.SelectedColouring = ExploreColouring.Growth;
+
+        Assert.True(page.ShowsLegend);
+
         page.SelectedColouring = ExploreColouring.Branch;
 
-        Assert.False(page.ShowsAgeLegend);
+        Assert.False(page.ShowsLegend);
+        Assert.Empty(page.Legend);
     });
 
     /// <summary>
@@ -567,18 +572,19 @@ public sealed class ExploreViewModelTests : IDisposable
     {
         _explore.Volumes.With(@"C:\");
         var page = _explore.Page();
-        var changes = Watch(page.AgeLegend);
+        page.SelectedColouring = ExploreColouring.Age;
+        var changes = Watch(page.Legend);
 
         page.SelectedScheme = ExploreScheme.Vivid;
 
         var bands = AgePalette.Bands(ExploreScheme.Vivid);
 
         Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, changes);
-        Assert.Equal(bands.Select(band => band.Label), page.AgeLegend.Select(band => band.Label));
+        Assert.Equal(bands.Select(band => band.Label), page.Legend.Select(band => band.Label));
         Assert.Equal(
             bands.Select(band => (band.Colour.Red, band.Colour.Green, band.Colour.Blue)),
-            page.AgeLegend.Select(band => (band.Swatch.R, band.Swatch.G, band.Swatch.B)));
-        Assert.All(page.AgeLegend, band => Assert.Equal(255, band.Swatch.A));
+            page.Legend.Select(band => (band.Swatch.R, band.Swatch.G, band.Swatch.B)));
+        Assert.All(page.Legend, band => Assert.Equal(255, band.Swatch.A));
     }
 
     /// <summary>

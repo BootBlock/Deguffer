@@ -72,7 +72,8 @@ public enum ExploreView
 /// question a map of a drive is opened with. <see cref="Age"/> answers §8's first open question
 /// instead — whether a toolchain is idle — which a size picture cannot show at all: an Android SDK
 /// and a working project look identical by size, and the whole difference is that nothing has
-/// written to one of them in two years.</para>
+/// written to one of them in two years. <see cref="Growth"/> answers "what filled the drive since I last
+/// looked", which a size picture shows only once the culprit is the largest thing on the disk.</para>
 /// </summary>
 public enum ExploreColouring
 {
@@ -88,6 +89,12 @@ public enum ExploreColouring
     /// shape's own date.
     /// </summary>
     Age = 1,
+
+    /// <summary>
+    /// A band per change in bytes since the last scan of the same volume, through grey for no change.
+    /// See <c>GrowthPalette</c> and <c>ScanGrowth</c>.
+    /// </summary>
+    Growth = 2,
 }
 
 /// <summary>
