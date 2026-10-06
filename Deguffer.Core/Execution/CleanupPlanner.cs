@@ -3,6 +3,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.SystemProtection;
 
 namespace Deguffer.Core.Execution;
 
@@ -268,6 +269,7 @@ public sealed class CleanupPlanner
             new DriverStoreProvider(handlers, environment, scanner: hardLinks),
             new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner),
             new ComponentStoreResetBaseProvider(environment, analysis: componentStore, scanner: scanner),
+            new RestorePointProvider(WindowsSystemProtection.Default, environment, scanner: scanner),
             new CrashDumpProvider(environment, scanner: scanner),
             new WindowsServicingLogProvider(handlers, environment, scanner: scanner),
             new EpicLauncherLogProvider(environment, scanner: scanner),

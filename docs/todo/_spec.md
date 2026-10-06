@@ -317,8 +317,8 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
   [the evaluation](aot-and-single-file-evaluation.md) for what was measured and tried.
 - MFT reading requires **administrator**; the app should run unelevated by default, scan what it
   can, and request elevation only for the fast scanner, for `C:\Windows\Temp`, for the figures
-  Windows states only to an administrator about the space no folder holds (§7.1), and for changing a
-  machine-wide entry in Installed apps (§7.3).
+  Windows states only to an administrator about the space no folder holds (§7.1), for listing and
+  removing restore points (§9), and for changing a machine-wide entry in Installed apps (§7.3).
 - Enable **long path** support (`\\?\` prefixes or the manifest opt-in). Node and NuGet trees
   routinely exceed `MAX_PATH`, and this is the most likely source of silent partial deletions.
 - Deletion should be genuinely parallel — these trees are hundreds of thousands of small files, and
@@ -1006,6 +1006,27 @@ Tier 3 row of its own rather than a switch on the first. Both are sized by DISM'
 what a clean freed is DISM's figure immediately before and after the command. Neither is planned or
 run while an update is unfinished. Deleting from the store by path, and everything else in this
 section, stays excluded.
+
+**Restore points are offered on the component store's terms: only through Windows' own route, and
+never by path.** They are kept as shadow copies in `System Volume Information`, which no folder shows
+and Explore refuses, and System Protection lets them
+grow to a share of the drive. Deguffer offers every restore point but the newest as one Tier 3 row,
+because a restore point removed is a way back that is gone for good, and the newest stays so the
+machine keeps one. The route is System Restore's own `SRRemoveRestorePoint`, one restore point at a
+time, listed through its `SystemRestore` class, both of which answer only an administrator. Disk
+Cleanup's "System Restore and Shadow Copies" button keeps the newest too, but it is no handler Windows
+registers, and its own text says it also removes file shadow copies and backup images. `vssadmin delete
+shadows` names shadow copies rather than restore points, and Windows documents no link from one to the
+other, so choosing which to delete would be a guess about another program's data. Deguffer never names
+a shadow copy or a path here. The row is sized by Windows' own shadow copy storage, offered as the most
+the removal could free, and what a clean freed is Windows' figure immediately before and after. §5.6
+is answered without a path: afterwards the newest restore point is still listed, every shadow copy
+that cannot be a restore point's is still listed, and System Protection's limit on each volume is
+unchanged. A shadow copy is ruled out when it comes from another provider, is not client-accessible,
+or was made without writers, because only Windows' own provider makes the kind System Restore keeps.
+Nothing can rule one in, so a copy Windows shares between a restore point and its own backup goes with
+the restore point, and the row says so. Lowering System Protection's limit is a setting, which
+Deguffer names and never changes.
 
 **The installer package caches are two directories, and both are named here rather than implied.**
 `C:\ProgramData\Package Cache` and `C:\ProgramData\Microsoft\VisualStudio\Packages` sit apart, hold

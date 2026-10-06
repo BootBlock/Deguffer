@@ -4,7 +4,7 @@
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
 > providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
-> servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins, §8's Unreal Engine
+> servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins and older restore points, §8's Unreal Engine
 > derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies
 > and §12's Squirrel staging and superseded builds have shipped; everything else is unstarted.
 > **Open questions 1, 2 and 3 are answered** — see the foot of this document.
@@ -1416,7 +1416,7 @@ Four further things the work settled that this section did not anticipate:
 Tier 3 without argument: the contents are files a user deleted and can still restore, which is the
 definition of recoverable user data. Per-volume rows with an age fit the existing selection model.
 
-### Shadow copies and restore points — Tier 3, unmeasurable unelevated
+### Shadow copies and restore points — Tier 3, shipped as *Older restore points*
 
 Volume Shadow Copy storage is allocated per volume up to a configured maximum, commonly a
 substantial share of the volume. `vssadmin list shadowstorage` reports allocated, used and maximum,
@@ -1426,6 +1426,12 @@ size is then unknowable on the app's default unelevated run.
 The honest treatment is probably to report it and not offer it. Shrinking the maximum is the safe
 lever, deleting shadow copies destroys restore points and any previous-versions history, and both
 are already exposed by the vendor's own tooling. **This likely belongs in §9 beside `WinSxS`.**
+
+**Shipped.** The spec's §9 now offers restore points on the component store's terms:
+every restore point but the newest, removed by System Restore's own `SRRemoveRestorePoint` as
+administrator, with no shadow copy or path ever named. Lowering the limit stays the user's to do.
+[../cache-locations.md](../cache-locations.md#older-restore-points) records the route and what it
+protects.
 
 ---
 

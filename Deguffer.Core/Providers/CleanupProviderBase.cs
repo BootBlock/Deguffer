@@ -3,6 +3,7 @@ using Deguffer.Core.Cloud;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.SystemProtection;
 
 namespace Deguffer.Core.Providers;
 
@@ -39,6 +40,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     private readonly PlanExecutor _executor;
     private readonly RefusalRecord _refusals;
     private readonly ICloudFiles? _cloud;
+    private readonly ISystemProtection? _protection;
 
     /// <param name="emptier">
     /// How an <see cref="EmptyRecycleBinStep"/> is carried out, given by the one provider that plans one
@@ -65,6 +67,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// The clock a command step waits on while its tool marks what it will remove later. See
     /// <see cref="PlanExecutor"/>.
     /// </param>
+    /// <param name="protection">
+    /// How a <see cref="RemoveRestorePointsStep"/> is carried out and proved, on the terms
+    /// <paramref name="emptier"/> is given: the real one removes the machine's restore points.
+    /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
         IProcessRunner runner,
@@ -74,15 +80,18 @@ public abstract class CleanupProviderBase : ICleanupProvider
         ICloudFiles? cloud = null,
         IDiskCleanupHandlers? handlers = null,
         IWindowsServicing? servicing = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        ISystemProtection? protection = null)
     {
         Environment = environment;
         Inspector = inspector;
         Scanner = scanner;
         _refusals = RefusalRecord.For(environment);
         _cloud = cloud;
+        _protection = protection;
         Servicing = servicing ?? WindowsServicing.Current;
-        _executor = new PlanExecutor(runner, scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment);
+        _executor = new PlanExecutor(
+            runner, scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment, protection: protection);
         Runner = runner;
     }
 
@@ -229,7 +238,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()
