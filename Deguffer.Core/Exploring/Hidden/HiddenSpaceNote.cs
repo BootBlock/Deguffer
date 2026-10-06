@@ -8,13 +8,15 @@ namespace Deguffer.Core.Exploring.Hidden;
 ///
 /// <para>The route is Windows' own and never an offer. Explore never classifies and acts on nothing
 /// it did not draw as a thing on the disk (§7.1), and neither block is one: restore points go
-/// through System Protection's limit and reserved storage through its setting.</para>
+/// through System Protection's limit and reserved storage through its setting. The Storage page's row
+/// for older restore points is named, because that is where Deguffer does offer them (§9).</para>
 /// </summary>
 public static class HiddenSpaceNote
 {
     private const string ShadowCopiesReduced =
         "\nWindows reduces it through System Protection's limit on how much of the drive restore "
-        + "points may use. Lowering it can delete older restore points.";
+        + "points may use. Lowering it can delete older restore points. Deguffer's clean list offers every "
+        + "restore point but the newest, as 'Older restore points'.";
 
     private const string Reserved =
         "Space Windows keeps back so that updates can still be downloaded and installed when the drive "

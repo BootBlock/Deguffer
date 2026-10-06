@@ -1,5 +1,6 @@
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Safety;
+using Deguffer.Core.SystemProtection;
 
 namespace Deguffer.Core.Execution;
 
@@ -23,12 +24,17 @@ public static class PlanVerifier
     /// What describes the files a <see cref="ReleaseLocalCopiesStep"/> named. Asked only of a plan that
     /// holds one, and the machine's own where none is given.
     /// </param>
+    /// <param name="protection">
+    /// What lists the restore points, shadow copies and storage a <see cref="RemoveRestorePointsStep"/>
+    /// must leave, on the terms <paramref name="cloud"/> is given: it only reads.
+    /// </param>
     public static VerificationResult Verify(
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default,
-        ICloudFiles? cloud = null)
+        ICloudFiles? cloud = null,
+        ISystemProtection? protection = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -48,6 +54,12 @@ public static class PlanVerifier
                 ct.ThrowIfCancellationRequested();
                 checks.Add(CheckReleased(file.Path, release.SyncApp, cloud ?? CloudFiles.Default, reach, residue));
             }
+        }
+
+        foreach (var removal in plan.Steps.OfType<RemoveRestorePointsStep>())
+        {
+            ct.ThrowIfCancellationRequested();
+            checks.AddRange(RestorePointProof.Checks(removal, protection ?? WindowsSystemProtection.Default));
         }
 
         return new VerificationResult { Checks = checks };

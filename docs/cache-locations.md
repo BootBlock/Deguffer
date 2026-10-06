@@ -5411,6 +5411,80 @@ The confirmation states the loss without calling it user data.
 
 ---
 
+## Older restore points
+
+**Tier 3 — permanent loss.** Offered, **never pre-selected**, and confirmed on its own.
+
+| | |
+| --- | --- |
+| **Location** | Shadow copies in each protected drive's `System Volume Information`, which no folder shows |
+| **Method** | System Restore's own `SRRemoveRestorePoint`, one restore point at a time, run as administrator. Nothing is deleted by path, and no shadow copy is ever named |
+| **Typical size** | Up to System Protection's limit, a share of each protected drive. One reported case had it set to 20% of the drive |
+
+### What it is
+
+Windows makes a restore point before updates, driver installations and some program installations,
+so System Restore can return Windows to how it was. Each restore point is kept as a shadow copy of the
+drive. They grow until System Protection's limit, and Windows then removes the oldest. None of this
+appears in any folder, so on a drive that looks full for no reason it is often the answer.
+
+### What Deguffer does
+
+It asks System Restore to remove every restore point except the newest, one at a time, which is the
+shape Disk Cleanup's *System Restore and Shadow Copies* clean-up takes. The plan names each restore
+point, by its description and date, and the run removes those and no others. A restore point made
+after the scan stays. Whatever restore point is newest when the clean runs also stays, so the machine
+keeps one way back even if the one the scan kept has gone since.
+
+It is not Disk Cleanup's own button, which nothing outside Disk Cleanup can run, and whose own text
+says it also removes file shadow copies and older backup images. It is not `vssadmin delete shadows`
+either. That command names shadow copies, and Windows does not say which shadow copies belong to which
+restore point, so choosing which to delete would be a guess about another program's data.
+
+The figure is all the space Windows' shadow copies take, as Windows states it, and the row says "up
+to". It includes the restore point that stays and any shadow copy another program made, and Windows
+gives no figure for a single restore point, so the clean frees less. What the clean freed is Windows'
+own figure immediately before and after it.
+
+Nothing is offered:
+
+- **without administrator rights.** Windows lists restore points and shadow copies only for an
+  administrator, so an unelevated scan says so, and a scan as administrator lets Deguffer ask.
+- **where Windows would not list its shadow copies or state their storage.** Without them the clean
+  could not check afterwards that other programs' shadow copies survived.
+- **where there is only one restore point**, because the newest is never offered.
+
+### What is protected
+
+The run checks afterwards, by asking Windows again, that the newest restore point is still listed,
+that every shadow copy that cannot be a restore point's is still listed, and that System Protection's
+limit on each drive is what it was. A shadow copy is ruled out as a restore point's when another
+provider made it, when it is not client-accessible, or when it was made without writers, because only
+Windows' own provider makes the kind System Restore keeps.
+
+Nothing can rule a shadow copy *in*. On some editions of Windows a shadow copy that holds a restore
+point also holds earlier versions of files, or a Windows backup, and it goes with the restore point.
+
+### What it costs you
+
+**Windows can no longer be returned to any of the removed restore points.** The newest stays, so
+System Restore can still undo whatever changed since it was made, and Windows goes on making new ones
+as before.
+
+### Why not lower the limit instead
+
+Lowering System Protection's limit is how Windows keeps less space for restore points in future, and
+it is a setting rather than a removal. Deguffer does not change settings on your behalf (see
+[Why not Disk Cleanup or Storage Sense](#why-not-disk-cleanup-or-storage-sense)), so the row names the
+limit on each drive and leaves it to you: Control Panel, System, System Protection, Configure.
+
+### Why Tier 3
+
+Nothing you made is deleted, but a way back that is removed cannot be had back, which is what Tier 3
+exists to say.
+
+---
+
 ## Windows temporary folders
 
 **Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and it needs an extra

@@ -11,8 +11,9 @@ namespace Deguffer.Core.Tests;
 /// the executor no longer default to these routes, so a test gets one only by naming it or by building
 /// the app's own provider list through <c>CleanupPlanner.CreateDefault</c>. This catches the name, and
 /// the name of the native call behind the Recycle Bin route, which a test could otherwise hand to the
-/// emptier's own constructor. The real Recycle Bin route empties the bin of whoever runs the suite, and the real Disk
-/// Cleanup host can delete the previous Windows installation. Either would sit one broken guard away
+/// emptier's own constructor. The real Recycle Bin route empties the bin of whoever runs the suite, the real Disk
+/// Cleanup host can delete the previous Windows installation, and the real System Protection route removes
+/// restore points. Either would sit one broken guard away
 /// from doing that.</para>
 /// </summary>
 public sealed partial class TestAssemblySeamTests
@@ -72,7 +73,7 @@ public sealed partial class TestAssemblySeamTests
         file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
         || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
-    [GeneratedRegex(@"\b(?:(?:ShellRecycleBinEmptier|DiskCleanupHandlers|CloudFiles|WindowsUninstallRegistry|ShellUninstallLauncher)\s*\.\s*Default|ShellNative\s*\.\s*SHEmptyRecycleBin)\b")]
+    [GeneratedRegex(@"\b(?:(?:ShellRecycleBinEmptier|DiskCleanupHandlers|CloudFiles|WindowsUninstallRegistry|ShellUninstallLauncher|WindowsSystemProtection)\s*\.\s*Default|ShellNative\s*\.\s*SHEmptyRecycleBin|RestorePointCalls\s*\.\s*Remove)\b")]
     private static partial Regex RealRoute();
 
     [GeneratedRegex(@"\s+")]

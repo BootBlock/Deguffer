@@ -5,6 +5,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.SystemProtection;
 using Deguffer.Testing;
 using Xunit.Sdk;
 
@@ -222,6 +223,7 @@ public sealed class ProviderInvalidationTests : IDisposable
 
         // Never the real one: it would remove the previous Windows installation of whoever ran the suite.
         : parameter == typeof(IDiskCleanupHandlers) ? FakeDiskCleanupHandlers.Windows()
+        : parameter == typeof(ISystemProtection) ? new FakeSystemProtection()
         : parameter == typeof(IWindowsServicing) ? FakeWindowsServicing.Settled
 
         // Never the real one: it would list the driver store of whoever ran the suite.
