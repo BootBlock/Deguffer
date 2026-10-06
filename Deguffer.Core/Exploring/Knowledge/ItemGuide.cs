@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.VirtualDisks;
 
 namespace Deguffer.Core.Exploring.Knowledge;
 
@@ -113,13 +114,20 @@ public sealed class ItemGuide
     /// <summary>
     /// The catalogue against the directories and volumes these seams name, which is what lets every
     /// entry be asserted against a synthetic profile rather than the developer's own.
+    ///
+    /// <para>With it, the virtual disks WSL and Docker Desktop record for this account, read once here
+    /// rather than on hover: each is a file the size picture draws as one of the largest on the drive,
+    /// and only those tools' records say whose it is.</para>
     /// </summary>
     public static ItemGuide For(ISystemDirectories system, IUserEnvironment environment, IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(environment);
 
-        return new ItemGuide(KnownItems.All, Anchors(system, environment), volumes);
+        return new ItemGuide(
+            [.. KnownItems.All, .. VirtualDiskItems.For(VirtualDiskInventory.Read(environment, system))],
+            Anchors(system, environment),
+            volumes);
     }
 
     /// <summary>
@@ -269,7 +277,8 @@ public sealed class ItemGuide
     /// </summary>
     private static string? Resolve(
         IReadOnlyDictionary<KnownPlace, string> anchors, KnownItem entry) =>
-        anchors.TryGetValue(entry.Place, out var anchor)
+        entry.Place == KnownPlace.Discovered ? LongPath.Configured(entry.RelativePath)
+        : anchors.TryGetValue(entry.Place, out var anchor)
             ? LongPath.Configured(
                 entry.RelativePath.Length == 0 ? anchor : Path.Combine(anchor, entry.RelativePath))
             : null;

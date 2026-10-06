@@ -156,6 +156,18 @@ public interface IUserEnvironment
     string? ReadCurrentUserRegistryValue(string keyPath, string valueName);
 
     /// <summary>
+    /// Read a <c>REG_DWORD</c> value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the value
+    /// or the permission to read it is missing, or the value is not a <c>REG_DWORD</c>.
+    ///
+    /// <para>Exists because WSL records whether a distribution runs in a virtual machine only as a bit
+    /// of its <c>Flags</c> number, and a distribution without that bit has no virtual disk at all. Read
+    /// as a string, the value would be null and the two kinds of distribution would look alike.</para>
+    /// </summary>
+    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
+    /// <param name="valueName">The value to read.</param>
+    int? ReadCurrentUserRegistryNumber(string keyPath, string valueName);
+
+    /// <summary>
     /// The names of the keys directly under a key in <c>HKEY_CURRENT_USER</c>, or none when the key
     /// or the permission to read it is missing.
     ///
@@ -368,6 +380,30 @@ public sealed partial class UserEnvironment : IUserEnvironment
             // A hive this account may not read, and a key already marked for deletion. Both are
             // ordinary on a long-lived machine, and both mean the same thing here: nothing said
             // where the tool is.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
+    /// </summary>
+    public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(valueName);
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
+
+            // A REG_DWORD arrives as an int and nothing else does, so a string holding digits is not
+            // read as a number.
+            return key?.GetValue(valueName) is int number ? number : null;
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // thing: the machine did not say.
             return null;
         }
     }

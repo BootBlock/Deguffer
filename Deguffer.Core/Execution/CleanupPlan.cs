@@ -250,6 +250,17 @@ public sealed record CleanupPlan
     public bool CountsLinksFromElsewhere { get; init; }
 
     /// <summary>
+    /// Whether this plan only reports: its provider offers nothing Deguffer could carry out, and its
+    /// notes state what is there and the route the tool that owns it provides.
+    ///
+    /// <para>§5.4's virtual disks are the case. The space is real and large, and the only safe route to
+    /// it is the vendor's (§11), so the plan has no step and measures zero. A row with nothing to
+    /// reclaim renders as "Already clear" and is hidden by default, which would say the opposite of
+    /// what the report is for.</para>
+    /// </summary>
+    public bool ReportsOnly { get; init; }
+
+    /// <summary>
     /// Whether any step here cannot be carried out without administrator rights.
     ///
     /// Separate from <see cref="Fallback"/> on purpose: that one is about how a size was arrived at,

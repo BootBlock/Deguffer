@@ -77,6 +77,13 @@ public enum FindingStatus
     /// </summary>
     UpdateInProgress,
 
+    /// <summary>
+    /// A location Deguffer reports on and never acts in, because the only safe route to its space is
+    /// the one its own tool provides. It measures zero and can be among the largest files on the drive.
+    /// See <see cref="CleanupPlan.ReportsOnly"/>.
+    /// </summary>
+    ReportOnly,
+
     /// <summary>Examined, and there is genuinely nothing in it.</summary>
     AlreadyClear,
 
@@ -136,6 +143,7 @@ public static class FindingStatusExtensions
 
         return offered.Plan switch
         {
+            { ReportsOnly: true } => FindingStatus.ReportOnly,
             { HasUnreadableRoot: true } => FindingStatus.UnreadableRoot,
             { WasNotExamined: true } => FindingStatus.NotExamined,
             { HasRecentContentHeldBack: true } => FindingStatus.RecentContentHeldBack,
@@ -150,12 +158,12 @@ public static class FindingStatusExtensions
     /// <summary>
     /// The two or three words the row states beside its size.
     ///
-    /// <para>"Already clear" is a claim about the folder, and the seven states above it must not be
+    /// <para>"Already clear" is a claim about the folder, and the eight states above it must not be
     /// reported as that: a folder Windows would not let Deguffer list, a location Deguffer declined
     /// to look at, a cache held back by the guard window, a folder whose contents Windows would not
     /// let a clean take, a location holding what the user keeps, a location holding Outlook data
-    /// files, and a location an unfinished update is holding back. Each of the seven measures zero
-    /// and none of them is clear.</para>
+    /// files, a location an unfinished update is holding back, and a location Deguffer only reports
+    /// on. Each of the eight measures zero and none of them is clear.</para>
     ///
     /// <para>A row that is absent for want of an approved folder needs its own words for the same
     /// reason. Saying "not installed" or "already clear" there names the wrong problem and offers
@@ -178,6 +186,7 @@ public static class FindingStatusExtensions
         FindingStatus.OnKeepList => "On your keep list",
         FindingStatus.MailStoresHeldBack => "Outlook data kept",
         FindingStatus.UpdateInProgress => "Update in progress",
+        FindingStatus.ReportOnly => "Report only",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",
         // "Ready to clean" beside a disabled checkbox would contradict itself.

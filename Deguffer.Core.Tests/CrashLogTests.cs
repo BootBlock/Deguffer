@@ -187,6 +187,8 @@ public class CrashLogTests
 
         public string? ReadCurrentUserRegistryValue(string keyPath, string valueName) => null;
 
+        public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName) => null;
+
         public IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath) => [];
 
         public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, Microsoft.Win32.RegistryView view) => null;
