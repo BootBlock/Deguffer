@@ -1,3 +1,4 @@
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -45,7 +46,7 @@ public sealed class ElevationOfferTests
     [Fact]
     public void OffersWhenAnExploreScanWalkedForWantOfRights()
     {
-        Assert.True(ElevationOffer.ShouldOffer(isElevated: false, FallbackReason.NotElevated));
+        Assert.True(ElevationOffer.ShouldOffer(isElevated: false, FallbackReason.NotElevated, HiddenSpace.None));
     }
 
     /// <summary>
@@ -59,14 +60,14 @@ public sealed class ElevationOfferTests
     [InlineData(FallbackReason.MasterFileTableIncomplete)]
     public void DoesNotOfferForAnExploreFallbackElevationCannotFix(FallbackReason reason)
     {
-        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, reason));
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, reason, HiddenSpace.None));
     }
 
     /// <summary>The relaunched instance must not be offered the relaunch it already performed.</summary>
     [Fact]
     public void DoesNotOfferForAnExploreScanWhenAlreadyElevated()
     {
-        Assert.False(ElevationOffer.ShouldOffer(isElevated: true, FallbackReason.NotElevated));
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: true, FallbackReason.NotElevated, HiddenSpace.None));
     }
 
     /// <summary>

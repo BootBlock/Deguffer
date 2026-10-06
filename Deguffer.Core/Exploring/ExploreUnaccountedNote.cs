@@ -1,39 +1,100 @@
+using System.Text;
+using Deguffer.Core.Exploring.Hidden;
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
 /// What the block for space in use that a scan did not count can be made of, most likely first. A
 /// block with a size and no explanation reads as a fault in the scan, and every item here is
 /// something the reader can check or act on.
+///
+/// <para>Where Windows stated the size of a part, the note says so rather than listing it as
+/// something the block might hold. A part taken out of this block is named as left out, with its
+/// figure, which is stated here whether or not its own block had room to be drawn. A part Windows
+/// refused to state is named with what would state it.</para>
 /// </summary>
 public static class ExploreUnaccountedNote
 {
     private const string Opening =
-        "Windows says this much of the drive is in use beyond what the scan counted. It can include:";
+        "Windows says this much of the drive is in use beyond what the scan counted.";
+
+    private const string Unelevated =
+        "\n• Folders this scan was not allowed to open, such as other accounts' files. Scan as "
+        + "administrator to count most of them.";
+
+    private const string Elevated = "\n• Folders even an administrator's scan cannot open.";
+
+    private const string ShadowCopies =
+        "\n• Restore points and shadow copies, which Windows keeps in System Volume Information.";
+
+    private const string ShadowCopiesRefused =
+        "\n• Restore points and shadow copies, which Windows keeps in System Volume Information. "
+        + "Windows states their size only to an administrator, so scan as administrator to see it.";
+
+    private const string Reserved = "\n• Space Windows keeps back for updates (reserved storage).";
 
     private const string Causes =
-        "\n• Restore points and shadow copies, which Windows keeps in System Volume Information."
-        + "\n• Space Windows keeps back for updates (reserved storage)."
-        + "\n• The file system's own records: the file table, its journals and the free-space map."
+        "\n• The file system's own records: the file table, its journals and the free-space map."
         + "\n• Rounding: each file takes whole clusters, so many small files use more than their sizes."
         + "\n• Files deleted while a program still has them open. The space comes back when it closes them."
         + "\n• A disk quota, which makes Windows report less free space to this account.";
 
-    private const string Unelevated =
-        Opening
-        + "\n• Folders this scan was not allowed to open, such as other accounts' files. Scan as "
-        + "administrator to count most of them."
-        + Causes;
+    /// <summary>
+    /// The note for the unaccounted block beside a scan that counted <paramref name="scannedBytes"/>
+    /// of <paramref name="volume"/>, made with or without administrator rights.
+    ///
+    /// <para>Two versions of the first cause, because it is the one an elevated scan fixes. Offering
+    /// that fix to a scan that is already elevated would send the reader round in a circle.</para>
+    /// </summary>
+    public static string For(bool isElevated, VolumeSpace volume, long scannedBytes)
+    {
+        var parts = volume.Parts(scannedBytes);
+        var note = new StringBuilder(Opening);
 
-    private const string Elevated =
-        Opening
-        + "\n• Folders even an administrator's scan cannot open."
-        + Causes;
+        if (parts.ShadowCopies > 0 || parts.Reserved > 0)
+        {
+            note.Append(" Not included, because Windows states their size:");
+            Figure(parts.ShadowCopies, "Restore points and shadow copies");
+            Figure(parts.Reserved, "Reserved storage");
+        }
+
+        // After a list, on a line of its own: run on, it reads as part of the last figure.
+        note.Append(parts.ShadowCopies > 0 || parts.Reserved > 0 ? "\nIt can include:" : " It can include:");
+        note.Append(isElevated ? Elevated : Unelevated);
+
+        if (parts.ShadowCopies == 0 && !volume.CountedSystemVolumeInformation)
+        {
+            note.Append(Cause(volume.Hidden.ShadowCopies.Statement, volume.ShadowCopiesBeside, ShadowCopies, ShadowCopiesRefused));
+        }
+
+        if (parts.Reserved == 0)
+        {
+            // No refused version: Windows gives the reserve to any process.
+            note.Append(Cause(volume.Hidden.Reserved.Statement, volume.Hidden.Reserved.Bytes, Reserved));
+        }
+
+        return note.Append(Causes).ToString();
+
+        void Figure(long bytes, string what)
+        {
+            if (bytes > 0)
+            {
+                note.Append($"\n• {what}: {FreeSpace.Format(bytes)}.");
+            }
+        }
+    }
 
     /// <summary>
-    /// The note for a scan made with or without administrator rights.
-    ///
-    /// <para>Two versions, because the first cause is the one an elevated scan fixes. Offering that
-    /// fix to a scan that is already elevated would send the reader round in a circle.</para>
+    /// A part Windows names that was not drawn on its own. Stated at zero, it is not a cause and is
+    /// left out. Stated and not drawn, it did not fit in the space the scan left over, and its
+    /// figure is given rather than a difference worked out from it.
     /// </summary>
-    public static string For(bool isElevated) => isElevated ? Elevated : Unelevated;
+    private static string Cause(Statement statement, long bytes, string cause, string? refused = null) => statement switch
+    {
+        Statement.NeedsElevation when refused is not null => refused,
+        Statement.Stated when bytes <= 0 => string.Empty,
+        Statement.Stated => $"{cause[..^1]}: Windows states {FreeSpace.Format(bytes)}.",
+        _ => cause,
+    };
 }

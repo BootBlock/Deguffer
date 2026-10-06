@@ -316,7 +316,8 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
   and a trimmed build dies at startup inside the XAML runtime — see
   [the evaluation](aot-and-single-file-evaluation.md) for what was measured and tried.
 - MFT reading requires **administrator**; the app should run unelevated by default, scan what it
-  can, and request elevation only for the fast scanner, for `C:\Windows\Temp`, and for changing a
+  can, and request elevation only for the fast scanner, for `C:\Windows\Temp`, for the figures
+  Windows states only to an administrator about the space no folder holds (§7.1), and for changing a
   machine-wide entry in Installed apps (§7.3).
 - Enable **long path** support (`\\?\` prefixes or the manifest opt-in). Node and NuGet trees
   routinely exceed `MAX_PATH`, and this is the most likely source of silent partial deletions.

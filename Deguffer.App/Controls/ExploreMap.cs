@@ -825,13 +825,15 @@ public sealed class ExploreMap : UserControl
         : new TileColour(243, 243, 243);
 
     /// <summary>
-    /// What to write on a labelled shape. The two blocks standing for the rest of the volume are the
+    /// What to write on a labelled shape. The blocks standing for the rest of the volume are the
     /// map's own, because they are not nodes of the page's tree.
     /// </summary>
     private string LabelText(ExploreLabel label) => label.Node switch
     {
         ExploreTile.FreeSpace => $"Free space  {FreeSpace.Format(label.Bytes)}",
         ExploreTile.Unaccounted => $"Not accounted for  {FreeSpace.Format(label.Bytes)}",
+        ExploreTile.ShadowCopies => $"Restore points and shadow copies  {FreeSpace.Format(label.Bytes)}",
+        ExploreTile.ReservedStorage => $"Reserved storage  {FreeSpace.Format(label.Bytes)}",
         _ => _labelText(label.Node),
     };
 

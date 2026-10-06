@@ -5,6 +5,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
@@ -82,6 +83,7 @@ public sealed partial class ExplorePage : Page
         ViewModel = new ExploreViewModel(
             new ExploreScanner(tuning: App.ScanTuning),
             VolumeInventory.Current,
+            WindowsHiddenSpace.Default,
             TimeProvider.System,
 
             // The dialog is built per ask, as the Storage page's is: a XamlRoot captured in this
