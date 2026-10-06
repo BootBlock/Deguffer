@@ -139,7 +139,10 @@ private package repository.
 The environments are checked twice over: by the name `virtualenvs`, which is what stops the folder
 being offered anywhere in the app, and separately by their **resolved path**. Both settings can be
 pointed anywhere, so a `virtualenvs.path` inside a folder Deguffer would otherwise clear takes that
-folder off the plan, with the reason shown.
+folder off the plan, with the reason shown. The path is compared at every place the folder is
+reachable at, so a `virtualenvs.path` that holds the cache, sits inside a folder Deguffer recognises
+or overlaps a repository cache through a `subst` letter or a second mount of the volume is seen as
+surely as one named at the path it stands for.
 
 Anything else inside the cache folder that Deguffer does not recognise is left alone, named, and
 asserted to have survived the run. So is a folder in there that is a link to somewhere else.
@@ -540,7 +543,9 @@ other property, or a relative path, leaves the value unreadable and Deguffer off
 than guessing. A value naming `.m2` itself, anything above it, or one of the things
 Deguffer promises to leave alone inside it, is refused outright — that would make the folder holding
 your credentials the thing being deleted, and `${user.home}/.m2` is a plausible typo for the correct
-`${user.home}/.m2/repository`.
+`${user.home}/.m2/repository`. The value is compared at every path the folder is reachable at, so
+one naming `.m2` or something in it through a `subst` letter or a second mount of the volume is
+refused as surely as one naming the path it stands for.
 
 Two other ways of moving it are out of reach, and both fail safe. Maven merges a global
 `settings.xml` from its own installation directory, which your file overrides anyway; and
@@ -622,7 +627,10 @@ answers, the plan says so in as many words rather than quietly reporting a quart
 
 `VCPKG_DOWNLOADS` is honoured where it has moved the downloads directory out of the clone. None of
 the three variables can point Deguffer at the clone itself, or at your own vcpkg folder: those say
-where a cache is, and they are not a way to ask for the directory holding the tool.
+where a cache is, and they are not a way to ask for the directory holding the tool. Each is asked at
+every path the folder is reachable at, so a variable naming the clone, or something protected in
+it, through a `subst` letter or a second mount of the volume is declined as surely as one naming
+the path it stands for.
 
 vcpkg ships no cache-eviction command. Its own answer to a cache that has grown is the
 `--clean-after-build` family of flags on `vcpkg install`, which cleans as it goes, and its
@@ -2375,7 +2383,9 @@ advice for clearing one by hand is to delete the folder and let it fill again.
 and Zen writes into whatever folder it is given. So Deguffer removes the store only where Zen's own
 `root_manifest` file is there and every entry at its top is one Zen writes. A single file of anybody
 else's, and the folder is left alone. A store inside or around Unreal's own folders, or inside or
-around another store a setting names, is never followed either. The filesystem cache an older
+around another store a setting names, is never followed either. Each is asked at every path the
+folder is reachable at, so a store named through a `subst` letter or a second mount of the volume is
+declined as surely as one named at the path it stands for. The filesystem cache an older
 engine wrote straight into a local cache path is not removed: nothing tells its entries apart from
 anything else in that folder, and the delete-only mode empties it anyway.
 
@@ -2466,7 +2476,9 @@ the cache cannot be moved at all. So Deguffer assumes neither:
   above Spotify's own is refused along with everything else in it, except what another row
   recognises in a folder of its own further down.
 - If that folder **is** a cache folder, sits inside one or holds one, that cache is **not offered**,
-  because your downloads may be in it.
+  because your downloads may be in it. That is asked at every path each folder is reachable at, so a
+  storage location named through a `subst` letter or a second mount of the volume holds the cache
+  back as surely as one named at the path it stands for.
 - If the settings file **cannot be read**, or names a location Deguffer cannot place, **no Spotify
   cache is offered**, for the same reason. A file that is not plain UTF-8 text counts as one Deguffer
   cannot place, and any location beside the one it cannot place is still protected.
@@ -2569,8 +2581,10 @@ is made, so a segment written while the preview is on screen is left alone too.
 
 **It never offers the downloads folder.** A download waiting to go to a phone is not a cache. Where
 one of these folders and the downloads folder overlap, Deguffer leaves that folder alone and says
-so, because neither setting says what Plex keeps where. If the downloads setting is not a full path,
-Deguffer cannot rule out an overlap, and leaves every folder alone.
+so, because neither setting says what Plex keeps where. The overlap is asked at every path each
+folder is reachable at, so a setting naming one through a `subst` letter or a second mount of the
+volume is caught as surely as one naming the path it stands for. If the downloads setting is not a
+full path, Deguffer cannot rule out an overlap, and leaves every folder alone.
 
 Plex's scheduled tasks clear old cache files, and an administrator's sign-in can start them over the
 network. Deguffer holds no sign-in, so this is the path-based case §5.2 governs rather than §5.1's
@@ -2645,7 +2659,10 @@ the folder is the default `transcodes` folder and the cache folder above it carr
 A moved folder is trusted only through the settings of the install the installer still records. A
 marker outlives the server that wrote it, and a folder you once pointed Jellyfin at may be one you
 use again. Deguffer also leaves alone any transcoder folder that holds Jellyfin's data folder, or
-overlaps one of the folders in the table below.
+overlaps one of the folders in the table below. Both are asked at every path each folder is
+reachable at, so a setting naming one through a `subst` letter or a second mount of the volume is
+caught as surely as one naming the path it stands for, and a data folder named two ways is one
+install, not two.
 
 **It leaves anything written in the last 24 hours alone**, which is Jellyfin's own rule, so a film
 playing now keeps its files. Jellyfin's clean-up task is the route §5.1 prefers, but starting it
@@ -2709,7 +2726,9 @@ starts, so the leftovers are those of a server that has run for a long time.
 makes inside the folder the setting names. Emby's help warns that it deletes everything in the folder
 it transcodes to, so the folder the setting names is never a target. The default folder is still
 offered when the transcoder has moved, because Emby left its segments there until the setting
-changed, and goes back to it when it cannot write to the new one.
+changed, and goes back to it when it cannot write to the new one. A setting that names Emby's
+program data folder through a `subst` letter or a second mount of the volume has moved nothing, so
+its `transcoding-temp` is offered once.
 
 **It leaves anything written in the last 24 hours alone**, so a film playing now keeps its files.
 
@@ -3254,7 +3273,9 @@ reached except what After Effects made. **The `Adobe\After Effects` folder insid
 folder, and everything in it but this computer's cache are named, checked after the run, and
 refused in Explore, whether or not this computer's cache is there.** Inside a temporary folder, the
 Temporary files row's own rules apply to everything except the cache, so nothing there is named or
-checked by this row.
+checked by this row. Both are asked at every path the folder is reachable at, so a cache the
+preferences name through a `subst` letter or a second mount of the volume is still claimed from the
+Temporary files row, and what sits beside it there is still left to that row.
 
 Your projects, your media and After Effects' auto-save folder, which holds the only copy of unsaved
 work, are never inside the cache folder, which is the only thing removed.
@@ -3863,9 +3884,10 @@ maps an alias such as `stable` to a build and records where each build's executa
 Puppeteer resolves a launch through it. Every folder Deguffer declined is checked after the clean
 to prove it survived.
 
-When the cache is in its default place, `%USERPROFILE%\.cache` itself is checked as well. Deguffer
-never lists that folder, and the models other tools keep beside Puppeteer's folder are never
-touched.
+When the cache is in its default place, `%USERPROFILE%\.cache` itself is checked as well, however
+the variable names that place: `S:\.cache\puppeteer` through a `subst` letter for the profile still
+has the same models beside it. Deguffer never lists that folder, and the models other tools keep
+beside Puppeteer's folder are never touched.
 
 ### What it costs you
 
@@ -4524,6 +4546,10 @@ evidence rather than a guess, with one cautious exception in the fourth:
   `obj`, the one build directory here whose editor opens its projects from above. Explore finds a
   project by the solution that names it, so it does not refuse one that only such an unreadable
   solution could name.
+
+Each of the last three is asked at every path the project is reachable at, so a program working in
+`S:\Game` through a `subst` letter or a second mount of the volume is using the project as surely
+as one at the path it stands for, and so is a solution opened that way.
 
 A held-back project is listed as something left alone, with what is using it named, so you can close
 it and scan again. The same question is asked again when you press Clean, immediately before each
