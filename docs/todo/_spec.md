@@ -450,7 +450,8 @@ not the shell asked.
   change into a running process — so between scans it answers from the machine as it was at the last
   of those.
   `%LOCALAPPDATA%`, `%APPDATA%`, `LocalLow` and `%TEMP%` are refused as folders
-  and are ordinary inside, as the profile is. **A folder holding any refused path is refused too**,
+  and are ordinary inside, as the profile is. So is `%SystemDrive%\inetpub`, whose existence and
+  permissions are part of a Windows Update security fix. **A folder holding any refused path is refused too**,
   because removing a folder removes what is in it — but only while that path is on disk, so the
   folder a tool leaves behind once its protected contents are gone stays removable.
 - **What Explore shows and what Explore will act on are different sets**, and the second is much
