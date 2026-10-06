@@ -143,6 +143,13 @@ public static class VolumeRoot
             }
 
             reached = Substituted(volumes, mounted[0].Path);
+
+            // Letters standing for each other come back to a path already read, and reading it
+            // again would ask the machine the same questions and add nothing.
+            if (reached is not null && places.Exists(known => known.Path.Equals(reached, StringComparison.OrdinalIgnoreCase)))
+            {
+                break;
+            }
         }
 
         return places;
@@ -152,15 +159,10 @@ public static class VolumeRoot
     /// The path <paramref name="display"/> names through the folder its drive letter stands for,
     /// or null where the letter stands for no folder.
     /// </summary>
-    private static string? Substituted(IVolumeInventory volumes, string display)
-    {
-        if (Path.GetPathRoot(display) is not { Length: > 0 } root || volumes.SubstituteOf(root) is not { } folder)
-        {
-            return null;
-        }
-
-        return Remainder(display, root) is { } below ? Path.Join(folder, below) : folder;
-    }
+    private static string? Substituted(IVolumeInventory volumes, string display) =>
+        Path.GetPathRoot(display) is { Length: > 0 } root && volumes.SubstituteOf(root) is { } folder
+            ? Path.Join(folder, Remainder(display, root))
+            : null;
 
     /// <summary>
     /// <paramref name="path"/> itself and the same item below each other place its volume is

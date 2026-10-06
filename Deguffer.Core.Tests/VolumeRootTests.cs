@@ -228,7 +228,8 @@ public sealed class VolumeRootTests
     }
 
     /// <summary>
-    /// Two letters standing for each other still answer, each place once.
+    /// Two letters standing for each other still answer, each place once, and the machine is asked
+    /// about each path once rather than round the loop until the letters run out.
     /// </summary>
     [Fact]
     public void LettersSubstitutedForEachOtherEnd()
@@ -236,6 +237,7 @@ public sealed class VolumeRootTests
         _volumes.Substituting(@"S:\", @"T:\").Substituting(@"T:\", @"S:\");
 
         AssertPlaces([(@"S:\Cache", "Cache"), (@"T:\Cache", "Cache")], VolumeRoot.Places(_volumes, @"S:\Cache"));
+        Assert.Equal([@"S:\Cache", @"T:\Cache"], _volumes.MountPointQueries);
     }
 
     /// <summary>

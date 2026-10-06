@@ -248,11 +248,21 @@ internal static partial class VolumeCalls
     /// rather than a folder. <c>subst</c> writes its target in the <c>\??\</c> namespace, as
     /// <c>\??\C:\Users\testuser</c> or <c>\??\UNC\server\share</c>, and a volume's own letter
     /// answers a device such as <c>\Device\HarddiskVolume3</c>.
+    ///
+    /// <para>A letter made for the top of a drive is written <c>\??\C:</c>, without the separator
+    /// that makes it the root rather than a drive-relative path, so the separator is put back.</para>
     /// </summary>
-    internal static string? Substitution(string? target) =>
-        target is { Length: > 4 } && target.StartsWith(@"\??\", StringComparison.Ordinal)
-            ? LongPath.Configured(@"\\?\" + target[4..])
-            : null;
+    internal static string? Substitution(string? target)
+    {
+        if (target is not { Length: > 4 } || !target.StartsWith(@"\??\", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var folder = target[4..];
+
+        return LongPath.Configured(@"\\?\" + (folder is [_, ':'] ? folder + Path.DirectorySeparatorChar : folder));
+    }
 
     /// <summary>
     /// Fixed, removable, network and so on, for a volume reached at <paramref name="mountPoint"/>.

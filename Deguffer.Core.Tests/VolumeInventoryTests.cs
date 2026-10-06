@@ -110,6 +110,7 @@ public sealed class VolumeInventoryTests
     [Theory]
     [InlineData(@"\??\C:\Users\testuser", @"C:\Users\testuser")]
     [InlineData(@"\??\C:\Users\testuser\", @"C:\Users\testuser")]
+    [InlineData(@"\??\C:", @"C:\")]
     [InlineData(@"\??\C:\", @"C:\")]
     [InlineData(@"\??\UNC\server\share\folder", @"\\server\share\folder")]
     [InlineData(@"\Device\HarddiskVolume3", null)]
