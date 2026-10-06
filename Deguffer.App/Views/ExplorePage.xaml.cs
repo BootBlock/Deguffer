@@ -33,8 +33,22 @@ namespace Deguffer.App.Views;
 /// </summary>
 public sealed partial class ExplorePage : Page
 {
+    /// <summary>
+    /// The views the View box offers, in its order: the box's index into this is the view. The tree
+    /// is the Memory page's alone, so the box and <see cref="ExploreView"/> do not line up by number.
+    /// </summary>
+    private static readonly ExploreView[] Views =
+        [ExploreView.Treemap, ExploreView.Icicle, ExploreView.Sunburst, ExploreView.List, ExploreView.Files];
+
     /// <summary>Whether <see cref="ShowSelectedRows"/> is writing the list's selection.</summary>
     private bool _showingSelectedRows;
+
+    /// <summary>
+    /// Whether <see cref="ShowRowsOf"/> is handing the list the other layout's rows. The list reports
+    /// every row it drops on the way, and none of that is the user's doing. See
+    /// <see cref="IsUserSelecting"/>.
+    /// </summary>
+    private bool _swappingRows;
 
     /// <summary>
     /// Whether the user has touched the list since it last settled on rows or containers it was
@@ -102,6 +116,14 @@ public sealed partial class ExplorePage : Page
             App.ScanHistory);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
+
+        // The Files layout's rows arrive on their own, after a search rather than with a redraw, so
+        // the highlight is put back on them the way a redraw puts it back on the folder's rows.
+        ViewModel.Files.Changed += (_, _) =>
+        {
+            ShowSelectedRows();
+            Settled();
+        };
         ViewModel.ViewChanged += (_, _) =>
         {
             ShowCurrentNode();
@@ -261,15 +283,27 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void ShowAs(ExploreView view)
     {
+        // A view the box does not offer, which only a hand-edited preferences file can ask for, is
+        // read as the shipped one rather than left with the box naming nothing.
+        if (Array.IndexOf(Views, view) < 0)
+        {
+            view = ExploreView.Treemap;
+        }
+
         ViewModel.SelectedView = view;
-        ViewSelector.SelectedIndex = (int)view;
+        ViewSelector.SelectedIndex = Array.IndexOf(Views, view);
 
         // Each picture keeps its own colours, so a change of view is a change of scheme as well, and
         // the appearance window's picker moves to speak for the new one.
         _appearance.View = view;
         ViewModel.SelectedScheme = _appearance.Look.SchemeFor(view);
 
-        var listed = view == ExploreView.List;
+        var listed = view is ExploreView.List or ExploreView.Files;
+
+        if (listed)
+        {
+            ShowRowsOf(view);
+        }
 
         RowsList.Visibility = listed ? Visibility.Visible : Visibility.Collapsed;
         Map.Visibility = listed ? Visibility.Collapsed : Visibility.Visible;
@@ -284,6 +318,46 @@ public sealed partial class ExplorePage : Page
 
         ShowCurrentNode();
     }
+
+    /// <summary>
+    /// Give the list the rows of <paramref name="view"/>: the folder's children for the List layout,
+    /// and the largest files below it for the Files layout.
+    ///
+    /// <para>One list for both, so the rules above guarding its selection are written once. The Files
+    /// layout takes one row at a time, which is what keeps "select all" off it: §7.1 allows a
+    /// selection of several things picked out by hand, and Ctrl+A or a Shift range over a filtered
+    /// list is the filter picking them.</para>
+    /// </summary>
+    private void ShowRowsOf(ExploreView view)
+    {
+        var files = view == ExploreView.Files;
+        object rows = files ? ViewModel.Files.Rows : ViewModel.Rows;
+
+        if (ReferenceEquals(RowsList.ItemsSource, rows))
+        {
+            return;
+        }
+
+        _swappingRows = true;
+
+        try
+        {
+            RowsList.ItemsSource = null;
+            RowsList.SelectionMode = files ? ListViewSelectionMode.Single : ListViewSelectionMode.Extended;
+            RowsList.ItemTemplate = (DataTemplate)Resources[files ? "FileRow" : "FolderRow"];
+            RowsList.ItemsSource = rows;
+        }
+        finally
+        {
+            _swappingRows = false;
+        }
+
+        ShowSelectedRows();
+    }
+
+    /// <summary>The rows the list is showing, whichever layout gave them.</summary>
+    private IEnumerable<IExploreListed> ListedRows =>
+        RowsList.ItemsSource as IEnumerable<IExploreListed> ?? [];
 
     /// <summary>
     /// Colour the map by <paramref name="colouring"/>, and leave that selector agreeing with what is
@@ -345,10 +419,12 @@ public sealed partial class ExplorePage : Page
         // over a million comparisons, on a path that runs at every click (G4).
         var picked = ViewModel.Selection.Nodes.ToHashSet();
 
-        if (RowsList.SelectedItems.OfType<ExploreRow>().Select(row => row.Node).ToHashSet().SetEquals(picked))
+        if (RowsList.SelectedItems.OfType<IExploreListed>().Select(row => row.Node).ToHashSet().SetEquals(picked))
         {
             return;
         }
+
+        var shown = ListedRows.Where(row => picked.Contains(row.Node)).ToList();
 
         // Writing these back raises SelectionChanged, once for the clear and once per row. That is
         // this method's own doing rather than the user's, and letting it round-trip would report a
@@ -359,9 +435,19 @@ public sealed partial class ExplorePage : Page
         {
             RowsList.SelectedItems.Clear();
 
-            foreach (var row in ViewModel.Rows.Where(row => picked.Contains(row.Node)))
+            if (RowsList.SelectionMode == ListViewSelectionMode.Single)
             {
-                RowsList.SelectedItems.Add(row);
+                // A list that holds one row at a time can show a selection of one, and nothing else
+                // without misstating it. Several picked in the folder list stay picked, and the line
+                // under the card names them.
+                RowsList.SelectedItem = picked.Count == 1 && shown is [var only] ? only : null;
+            }
+            else
+            {
+                foreach (var row in shown)
+                {
+                    RowsList.SelectedItems.Add(row);
+                }
             }
         }
         finally
@@ -431,7 +517,12 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var view = (ExploreView)ViewSelector.SelectedIndex;
+        if (ViewSelector.SelectedIndex is not (>= 0 and var index) || index >= Views.Length)
+        {
+            return;
+        }
+
+        var view = Views[index];
 
         ShowAs(view);
         App.Preferences.Update(current => current with { Explore = view });
@@ -509,7 +600,7 @@ public sealed partial class ExplorePage : Page
     {
         if (IsUserSelecting)
         {
-            ViewModel.Selection.Select([.. RowsList.SelectedItems.OfType<ExploreRow>().Select(r => r.Node)]);
+            ViewModel.Selection.Select([.. RowsList.SelectedItems.OfType<IExploreListed>().Select(r => r.Node)]);
 
             return;
         }
@@ -521,7 +612,7 @@ public sealed partial class ExplorePage : Page
         // the accelerators act on the view model, so the list would name a folder Delete is not
         // pointed at. Put back through the queue rather than here, so the list is not written to
         // from inside its own report.
-        if (!_showingSelectedRows && !ViewModel.IsShowingRows)
+        if (!_showingSelectedRows && !_swappingRows && !ViewModel.IsShowingRows)
         {
             DispatcherQueue.TryEnqueue(() =>
             {
@@ -610,7 +701,7 @@ public sealed partial class ExplorePage : Page
     /// the pointer both reach every row, so nothing is unreachable by that.</para>
     /// </summary>
     private bool IsUserSelecting =>
-        !_showingSelectedRows && !ViewModel.IsShowingRows && _touchedSinceSettled;
+        !_showingSelectedRows && !_swappingRows && !ViewModel.IsShowingRows && _touchedSinceSettled;
 
     /// <summary>
     /// Two clicks go in. A folder is descended into and a file is opened, which is what a double
@@ -623,7 +714,7 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnRowsDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (Container(e.OriginalSource) is not { Content: ExploreRow row })
+        if (Container(e.OriginalSource) is not { Content: IExploreListed row })
         {
             return;
         }
@@ -655,7 +746,7 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnRowsRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (Container(e.OriginalSource) is not { Content: ExploreRow row } container)
+        if (Container(e.OriginalSource) is not { Content: IExploreListed row } container)
         {
             // The gesture landed on the list's own background. Clearing is what the map does on the
             // same miss, and the alternative is a menu positioned at the pointer whose Delete is

@@ -42,8 +42,8 @@ public sealed record MapLook(
 
     /// <summary>
     /// The picture <paramref name="view"/> puts on screen: itself for the three pictures, and the
-    /// treemap for the list and the tree. Neither of those draws one, and the map behind them is left
-    /// holding the treemap's drawing — so that is the one a scheme chosen there changes.
+    /// treemap for the list, the tree and the files. None of those draws one, and the map behind them
+    /// is left holding the treemap's drawing — so that is the one a scheme chosen there changes.
     /// </summary>
     public static ExploreView Drawn(ExploreView view) =>
         view is ExploreView.Icicle or ExploreView.Sunburst ? view : ExploreView.Treemap;

@@ -27,12 +27,14 @@ public sealed class MapLookTests
     }
 
     /// <summary>
-    /// The list and the tree draw no picture, and the map behind them holds the treemap. A scheme
-    /// chosen while either is showing is the treemap's, which is the drawing the reader returns to.
+    /// The list, the tree and the files draw no picture, and the map behind them holds the treemap.
+    /// A scheme chosen while one is showing is the treemap's, which is the drawing the reader returns
+    /// to.
     /// </summary>
     [Theory]
     [InlineData(ExploreView.List)]
     [InlineData(ExploreView.Tree)]
+    [InlineData(ExploreView.Files)]
     public void AViewWithNoPictureStandsForTheTreemap(ExploreView view)
     {
         var look = Standard.WithScheme(view, ExploreScheme.Vivid);
