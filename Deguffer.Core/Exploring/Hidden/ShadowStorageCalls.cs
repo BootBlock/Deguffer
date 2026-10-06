@@ -8,8 +8,10 @@ namespace Deguffer.Core.Exploring.Hidden;
 ///
 /// <para>Chosen over <c>Win32_ShadowStorage</c>, which Microsoft keeps only in its archived
 /// documentation, would have been Core's first package, and refuses an unelevated caller with an
-/// "initialization failure" that cannot be told from any other. This interface refuses with
-/// <c>E_ACCESSDENIED</c>, which is the one answer the page acts on.</para>
+/// "initialization failure" that cannot be told from any other. This interface refused an
+/// unelevated process with <c>E_ACCESSDENIED</c>, observed on Windows 11, and the documentation
+/// lists that code for a caller without administrator or backup rights. It is the one answer the
+/// page acts on.</para>
 ///
 /// <para><b>Slot order is the header's.</b> A <c>ComImport</c> interface is a vtable, so every slot
 /// before the one called is declared, in <c>vsmgmt.h</c>'s order, even where it is never

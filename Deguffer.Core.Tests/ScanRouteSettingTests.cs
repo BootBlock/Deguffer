@@ -1,6 +1,7 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
@@ -72,7 +73,7 @@ public sealed class ScanRouteSettingTests : IDisposable
         Assert.Equal(ScanStrategy.ParallelEnumeration, walked.Strategy);
         Assert.Equal(FallbackReason.WalkAnsweredFirst, walked.Fallback);
         Assert.Null(walked.FallbackNote);
-        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, walked.Fallback));
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, walked.Fallback, HiddenSpace.None));
         Assert.Equal(4096, walked.Size.Logical);
 
         sources.Release();
@@ -201,7 +202,7 @@ public sealed class ScanRouteSettingTests : IDisposable
         Assert.Equal(4096, result.Size.Logical);
         Assert.Contains("Settings", result.FallbackNote!, StringComparison.Ordinal);
         Assert.Equal(0, factory.OpenCount);
-        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, result.Fallback));
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, result.Fallback, HiddenSpace.None));
     }
 
     /// <summary>

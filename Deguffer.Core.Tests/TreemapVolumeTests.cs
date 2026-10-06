@@ -76,8 +76,8 @@ public sealed class TreemapVolumeTests
     [Fact]
     public void AScanThatCountedMoreThanIsInUseLeavesNothingUnaccounted()
     {
-        Assert.Equal(0, new VolumeSpace(10_000, 6_000).UnaccountedBytes(5_000));
-        Assert.Equal(1_000, new VolumeSpace(10_000, 6_000).UnaccountedBytes(3_000));
+        Assert.Equal(0, new VolumeSpace(10_000, 6_000).Parts(5_000).Unaccounted);
+        Assert.Equal(1_000, new VolumeSpace(10_000, 6_000).Parts(3_000).Unaccounted);
     }
 
     [Fact]

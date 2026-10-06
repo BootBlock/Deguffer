@@ -120,7 +120,7 @@ public sealed class HiddenSpaceTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
         var hidden = new FakeHiddenSpaceSource { Answer = Shadow(allocated: 1_000) };
 
-        var volume = await VolumeSpace.ReadAsync(volumes, hidden, Tree(@"\\?\D:\", systemVolumeInformation: null), default);
+        var volume = await VolumeSpace.ReadAsync(volumes, hidden, Tree(@"\\?\D:\", Svi.Absent), default);
 
         Assert.Equal([@"D:\"], hidden.Asked);
         Assert.Equal(new VolumeSpace(12_000, 6_000, Shadow(allocated: 1_000)), volume);
@@ -132,25 +132,27 @@ public sealed class HiddenSpaceTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
         var hidden = new FakeHiddenSpaceSource { Answer = Shadow(allocated: 1_000) };
 
-        var volume = await VolumeSpace.ReadAsync(volumes, hidden, Tree(@"D:\work", systemVolumeInformation: null), default);
+        var volume = await VolumeSpace.ReadAsync(volumes, hidden, Tree(@"D:\work", Svi.Absent), default);
 
         Assert.Empty(hidden.Asked);
         Assert.Equal(VolumeSpace.None, volume);
     }
 
     /// <summary>
-    /// A walk is refused System Volume Information even as administrator, and marks it unknown. Only
-    /// a folder whose every size was established has had the storage inside it counted.
+    /// A walk is refused System Volume Information even as administrator, and marks it unknown with
+    /// nothing counted. A folder the scan read any of, or every size of, has had its storage counted,
+    /// and a part read is counted too, so what the scan read there is never drawn a second time.
     /// </summary>
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public async Task SystemVolumeInformationIsCountedOnlyWhereEverySizeInsideItWasEstablished(bool refused, bool counted)
+    [InlineData(Svi.Refused, false)]
+    [InlineData(Svi.Counted, true)]
+    [InlineData(Svi.PartlyRead, true)]
+    public async Task SystemVolumeInformationIsCountedWhereTheScanCountedAnythingInIt(Svi state, bool counted)
     {
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
 
         var volume = await VolumeSpace.ReadAsync(
-                volumes, new FakeHiddenSpaceSource(), Tree(@"D:\", systemVolumeInformation: refused), default);
+                volumes, new FakeHiddenSpaceSource(), Tree(@"D:\", state), default);
 
         Assert.Equal(counted, volume.CountedSystemVolumeInformation);
     }
@@ -161,7 +163,7 @@ public sealed class HiddenSpaceTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
 
         var volume = await VolumeSpace.ReadAsync(
-                volumes, new FakeHiddenSpaceSource(), Tree(@"D:\", systemVolumeInformation: null), default);
+                volumes, new FakeHiddenSpaceSource(), Tree(@"D:\", Svi.Absent), default);
 
         Assert.False(volume.CountedSystemVolumeInformation);
     }
@@ -170,7 +172,7 @@ public sealed class HiddenSpaceTests
     [Fact]
     public void SystemVolumeInformationStatesWindowsFigureWhereTheScanCountedTheStorageInIt()
     {
-        var tree = Tree(@"D:\", systemVolumeInformation: false);
+        var tree = Tree(@"D:\", Svi.Counted);
         var folder = Child(tree, VolumeSpace.SystemVolumeInformation);
         var counted = Volume with
         {
@@ -212,7 +214,7 @@ public sealed class HiddenSpaceTests
 
     private static IReadOnlyList<ExploreTile> Layout(VolumeSpace volume)
     {
-        var tree = Tree(@"C:\", systemVolumeInformation: null);
+        var tree = Tree(@"C:\", Svi.Absent);
 
         Assert.Equal(3_000, tree.TotalBytes);
 
@@ -225,11 +227,10 @@ public sealed class HiddenSpaceTests
     private static HiddenSpace Reserved(long bytes) => new(default, new ReservedStorage(Statement.Stated, bytes));
 
     /// <summary>
-    /// A folder of three 1,000-byte files below <paramref name="root"/>, with an empty System Volume
-    /// Information beside it, refused where <paramref name="systemVolumeInformation"/> is true, and
-    /// none where it is null.
+    /// A folder of three 1,000-byte files below <paramref name="root"/>, with System Volume
+    /// Information beside it in the given state.
     /// </summary>
-    private static ExploreTree Tree(string root, bool? systemVolumeInformation)
+    private static ExploreTree Tree(string root, Svi systemVolumeInformation)
     {
         var builder = new ExploreTreeBuilder(root);
 
@@ -242,13 +243,18 @@ public sealed class HiddenSpaceTests
             [.. Enumerable.Range(0, 3).Select(i =>
                 new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 1000))]);
 
-        if (systemVolumeInformation is { } refused)
+        if (systemVolumeInformation is not Svi.Absent)
         {
             var hidden = builder.AddChildren(
                 ExploreTreeBuilder.RootNode,
                 [new ExploreChild(VolumeSpace.SystemVolumeInformation, IsDirectory: true, IsLink: false, Size: 0)]);
 
-            if (refused)
+            if (systemVolumeInformation is Svi.PartlyRead)
+            {
+                builder.AddChildren(hidden, [new ExploreChild("read", IsDirectory: false, IsLink: false, Size: 100)]);
+            }
+
+            if (systemVolumeInformation is Svi.Refused or Svi.PartlyRead)
             {
                 builder.MarkSizeUnknown(hidden);
             }
@@ -268,5 +274,14 @@ public sealed class HiddenSpaceTests
         }
 
         throw new InvalidOperationException($"No {name} below the root.");
+    }
+
+    /// <summary>What a scan found of System Volume Information.</summary>
+    public enum Svi
+    {
+        Absent,
+        Counted,
+        Refused,
+        PartlyRead,
     }
 }

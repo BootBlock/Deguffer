@@ -51,13 +51,16 @@ public readonly record struct ShadowStorage(
 
 /// <summary>
 /// The space Windows keeps back on a volume for updates, temporary files and caches (reserved
-/// storage), in the figure <c>GetDiskSpaceInformation</c> gives for it.
+/// storage), in the figure <c>GetDiskSpaceInformation</c> gives for it. Never refused: Windows
+/// gives it to any process.
 ///
-/// <para>Windows counts it apart from the space in use. Its documented accounting is that a volume's
-/// capacity is its free space, the space in use, a pool share, and the space it reserves, with the
-/// storage reserve inside the last — and writing a file moves its size into the space in use and
-/// leaves this figure where it was. So it is never part of what a scan counts, and it is short of
-/// the free space the volume reports, which puts it in the space a scan cannot account for.</para>
+/// <para>Windows reports it apart from the space in use. <c>DISK_SPACE_INFORMATION</c> documents a
+/// volume's clusters as its free space, the space in use, a pool share and the space it reserves,
+/// with the storage reserve inside the last, and the free space the volume reports leaves it out.
+/// Writing an ordinary file was observed on Windows 11 to move its size into the space in use and
+/// leave this figure where it was. Whether a file Windows places inside the reserve itself leaves
+/// this figure too is not documented, which is one reason <see cref="Exploring.VolumeSpace.Parts"/>
+/// takes it out only where it fits in what the scan left over.</para>
 /// </summary>
 public readonly record struct ReservedStorage(Statement Statement, long Bytes = 0);
 
@@ -76,8 +79,8 @@ public readonly record struct HiddenSpace(ShadowStorage ShadowCopies, ReservedSt
     /// Whether a figure was refused for want of administrator rights, so that scanning as
     /// administrator would add it to the picture.
     /// </summary>
-    public bool NeedsElevation =>
-        ShadowCopies.Statement is Statement.NeedsElevation || Reserved.Statement is Statement.NeedsElevation;
+    /// <para>Only the shadow copy storage: Windows gives the reserve to any process.</para>
+    public bool NeedsElevation => ShadowCopies.Statement is Statement.NeedsElevation;
 }
 
 /// <summary>

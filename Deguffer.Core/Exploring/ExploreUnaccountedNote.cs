@@ -10,9 +10,9 @@ namespace Deguffer.Core.Exploring;
 /// something the reader can check or act on.
 ///
 /// <para>Where Windows stated the size of a part, the note says so rather than listing it as
-/// something the block might hold. A part drawn as a block of its own is named as left out of this
-/// one, with its figure, so the figure is still stated where its own block was too thin to draw. A
-/// part Windows refused to state is named with what would state it.</para>
+/// something the block might hold. A part taken out of this block is named as left out, with its
+/// figure, which is stated here whether or not its own block had room to be drawn. A part Windows
+/// refused to state is named with what would state it.</para>
 /// </summary>
 public static class ExploreUnaccountedNote
 {
@@ -34,10 +34,6 @@ public static class ExploreUnaccountedNote
 
     private const string Reserved = "\n• Space Windows keeps back for updates (reserved storage).";
 
-    private const string ReservedRefused =
-        "\n• Space Windows keeps back for updates (reserved storage). Windows states its size only "
-        + "to an administrator, so scan as administrator to see it.";
-
     private const string Causes =
         "\n• The file system's own records: the file table, its journals and the free-space map."
         + "\n• Rounding: each file takes whole clusters, so many small files use more than their sizes."
@@ -58,7 +54,7 @@ public static class ExploreUnaccountedNote
 
         if (parts.ShadowCopies > 0 || parts.Reserved > 0)
         {
-            note.Append(" Not included, because Windows states their size and they are drawn as blocks of their own:");
+            note.Append(" Not included, because Windows states their size:");
             Figure(parts.ShadowCopies, "Restore points and shadow copies");
             Figure(parts.Reserved, "Reserved storage");
         }
@@ -74,7 +70,8 @@ public static class ExploreUnaccountedNote
 
         if (parts.Reserved == 0)
         {
-            note.Append(Cause(volume.Hidden.Reserved.Statement, volume.Hidden.Reserved.Bytes, Reserved, ReservedRefused));
+            // No refused version: Windows gives the reserve to any process.
+            note.Append(Cause(volume.Hidden.Reserved.Statement, volume.Hidden.Reserved.Bytes, Reserved));
         }
 
         return note.Append(Causes).ToString();
@@ -93,9 +90,9 @@ public static class ExploreUnaccountedNote
     /// left out. Stated and not drawn, it did not fit in the space the scan left over, and its
     /// figure is given rather than a difference worked out from it.
     /// </summary>
-    private static string Cause(Statement statement, long bytes, string cause, string refused) => statement switch
+    private static string Cause(Statement statement, long bytes, string cause, string? refused = null) => statement switch
     {
-        Statement.NeedsElevation => refused,
+        Statement.NeedsElevation when refused is not null => refused,
         Statement.Stated when bytes <= 0 => string.Empty,
         Statement.Stated => $"{cause[..^1]}: Windows states {FreeSpace.Format(bytes)}.",
         _ => cause,

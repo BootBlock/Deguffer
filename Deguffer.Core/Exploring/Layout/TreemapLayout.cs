@@ -417,8 +417,8 @@ public static class TreemapLayout
     /// squarified row with one member: every part keeps the full length of the shorter side, so none
     /// becomes a sliver until another dwarfs it. A block whose slab would be thinner than the smallest
     /// tile is not drawn and the others share its room. A block too thin to point at says nothing:
-    /// the drive picker states the capacity and the free space anyway, and the unaccounted block's
-    /// note states each figure Windows gave.</para>
+    /// the drive picker states the capacity and the free space anyway, and wherever the unaccounted
+    /// block is drawn its note states each figure Windows gave.</para>
     /// </summary>
     private static Rectangle BesideTheVolume(
         long usedBytes,

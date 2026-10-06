@@ -3,12 +3,12 @@ using System.Runtime.InteropServices;
 namespace Deguffer.Core.Exploring.Hidden;
 
 /// <summary>
-/// <c>GetDiskSpaceInformation</c>, the one documented call that states the storage reserve's size.
+/// <c>GetDiskSpaceInformation</c>, the documented call that states the storage reserve's size.
 ///
-/// <para>The others refuse or say less. <c>fsutil storagereserve query</c> refuses an unelevated
-/// process, and the DISM call and its cmdlet report only whether reserved storage is on. This one
-/// answers an ordinary process, which was observed on Windows 11 and is why the reserve is drawn
-/// without elevation while the shadow copy storage is not.</para>
+/// <para>The alternatives refuse or say less. <c>fsutil storagereserve query</c> refused an
+/// unelevated process when this was written, and the DISM call and its cmdlet report only whether
+/// reserved storage is on. This one answered an ordinary process on Windows 11, which is why the
+/// reserve is drawn without elevation while the shadow copy storage is not.</para>
 /// </summary>
 internal static partial class DiskSpaceCalls
 {

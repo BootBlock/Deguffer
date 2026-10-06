@@ -56,7 +56,8 @@ public static class ElevationOffer
     /// <summary>
     /// What a finished Explore scan found. That page draws one volume by one route, so it has a
     /// single fallback reason rather than a plan per provider, and it removes nothing during the
-    /// scan — leaving the route as the whole of the question.
+    /// scan. Two things are improved by elevating, and both are read here: the route, and a figure
+    /// Windows states only to an administrator about the volume's space that no folder holds.
     /// </summary>
     /// <param name="fallback">Why <see cref="ExploreScan"/> walked, or
     /// <see cref="FallbackReason.None"/> where it did not.</param>
@@ -65,7 +66,7 @@ public static class ElevationOffer
     /// only to an administrator is the second thing elevating adds to the picture, and it does so
     /// whatever route the scan took.
     /// </param>
-    public static bool ShouldOffer(bool isElevated, FallbackReason fallback, HiddenSpace hidden = default) =>
+    public static bool ShouldOffer(bool isElevated, FallbackReason fallback, HiddenSpace hidden) =>
         !isElevated && (fallback is FallbackReason.NotElevated || hidden.NeedsElevation);
 
     /// <summary>

@@ -18,7 +18,7 @@ public static class HiddenSpaceNote
 
     private const string Reserved =
         "Space Windows keeps back so that updates can still be downloaded and installed when the drive "
-        + "is nearly full. Windows counts it apart from every file, so no folder holds it."
+        + "is nearly full. Windows reports it apart from the space files use."
         + "\nWindows reduces it through its reserved storage setting, which an administrator turns off "
         + "with 'DISM.exe /Online /Set-ReservedStorageState /State:Disabled'. Windows refuses while an "
         + "update is using the space.";

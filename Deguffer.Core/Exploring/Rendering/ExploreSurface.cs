@@ -292,9 +292,10 @@ public abstract class ExploreSurface
     public abstract ExploreHit? At(float x, float y);
 
     /// <summary>
-    /// Whether anything is drawn beside the root: the volume's free space, or its use the scan did
-    /// not account for. Only a treemap of a whole volume draws either, and only where it has room.
-    /// Said of the whole picture, so a zoom that has left both off the canvas still answers yes.
+    /// Whether anything is drawn beside the root: the volume's free space, its use the scan did not
+    /// account for, or a part of that use Windows states. Only a treemap of a whole volume draws
+    /// any of them, and only where it has room. Said of the whole picture, so a zoom that has left
+    /// them all off the canvas still answers yes.
     /// </summary>
     public abstract bool HasVolumeBeside { get; }
 

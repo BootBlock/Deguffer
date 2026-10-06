@@ -97,10 +97,10 @@ public readonly record struct VolumeSpace(
     /// never stated beside a label naming the one it did. It stays in the unaccounted block, whose
     /// note gives the figure.</para>
     ///
-    /// <para>The reserve is taken first, because Windows counts it apart from every file and no scan
-    /// can have counted it. The shadow copy storage is taken only where the scan did not count
-    /// <c>System Volume Information</c>, where it is kept, so the same bytes are never drawn
-    /// twice.</para>
+    /// <para>The reserve is taken first, because Windows reports it apart from the space in use
+    /// (see <see cref="ReservedStorage"/>). The shadow copy storage is taken only where the scan
+    /// counted nothing inside <c>System Volume Information</c>, where it is kept, so bytes the scan
+    /// counted there are never drawn a second time.</para>
     /// </summary>
     public VolumeParts Parts(long scannedBytes)
     {
@@ -133,16 +133,12 @@ public readonly record struct VolumeSpace(
             : 0;
 
     /// <summary>
-    /// What the volume says is in use and <paramref name="scannedBytes"/> does not include, less
-    /// what Windows names, or zero where the scan counted as much as that or more. A scan can count
-    /// more, because it adds up the length of every file, and a compressed or sparse file occupies
-    /// less than its length.
-    /// </summary>
-    public long UnaccountedBytes(long scannedBytes) => Parts(scannedBytes).Unaccounted;
-
-    /// <summary>
-    /// Whether the scan counted the contents of the volume's <c>System Volume Information</c>: it is
-    /// in the tree, right below the root, and every size inside it was established.
+    /// Whether the scan counted anything inside the volume's <c>System Volume Information</c>, right
+    /// below the root: some of its bytes, or every size in it, which an empty folder has.
+    ///
+    /// <para>Partly counted is counted. Taking the storage out beside a folder the scan read part of
+    /// could draw what it read twice, and leaving it in the unaccounted block only leaves Windows'
+    /// figure to that block's note and to the folder's own description.</para>
     /// </summary>
     private static bool Counted(ExploreTree tree)
     {
@@ -151,7 +147,7 @@ public readonly record struct VolumeSpace(
             if (tree.IsDirectory(child)
                 && string.Equals(tree.NameOf(child), SystemVolumeInformation, StringComparison.OrdinalIgnoreCase))
             {
-                return !tree.HasUnknownSizeBelow(child);
+                return tree.SizeOf(child) > 0 || !tree.HasUnknownSizeBelow(child);
             }
         }
 
