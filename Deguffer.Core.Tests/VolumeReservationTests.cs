@@ -18,8 +18,10 @@ public sealed class VolumeReservationTests : IDisposable
     /// <summary>
     /// The names the guide describes at a volume root that Explore allows, each on purpose. None of
     /// the guide's entries for them says the machine cannot start or repair itself without it.
-    /// <c>inetpub</c> and <c>AMD</c> carry "leave it" guidance
-    /// the policy does not yet enforce, and are listed here until that is decided.
+    /// <c>inetpub</c> and <c>AMD</c> are allowed here because what the guide says must stay is on the
+    /// drive Windows is installed on, and a rule for that drive refuses it there:
+    /// <see cref="InetpubIsRefusedOnTheSystemDriveAndWhatIsInsideItIsNot"/> and
+    /// <see cref="AmdIsRefusedOnTheSystemDriveExceptTheDriverPackagesInsideIt"/>.
     /// </summary>
     private static readonly HashSet<string> AllowedOnPurpose = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -154,6 +156,64 @@ public sealed class VolumeReservationTests : IDisposable
             .ToList();
 
         Assert.Empty(allowed);
+    }
+
+    /// <summary>
+    /// Windows Update's fix is the folder's existence and permissions at the top of its own drive, so
+    /// the folder is refused there. What a web server keeps inside it is that server's content, and
+    /// an <c>inetpub</c> on another drive, or one somebody keeps among their own files, is not the
+    /// fix at all.
+    /// </summary>
+    [Fact]
+    public void InetpubIsRefusedOnTheSystemDriveAndWhatIsInsideItIsNot()
+    {
+        using var drive = new TempDirectory();
+        var system = new FakeSystemDirectories(drive.Path);
+        var environment = new FakeUserEnvironment(Path.Combine(drive.Path, "Users"));
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [drive.Path + Path.DirectorySeparatorChar]);
+
+        var policy = new ExploreActionPolicy(ProtectedRegions.For(system, environment), [], _volumes);
+
+        Assert.False(policy.MayRemove(Path.Combine(system.SystemDrive, "inetpub")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(system.SystemDrive, "INETPUB")).IsAllowed);
+
+        Assert.True(policy.MayRemove(Path.Combine(system.SystemDrive, "inetpub", "logs")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(system.SystemDrive, "inetpub", "wwwroot", "index.html")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(system.SystemDrive, "inetpub.old")).IsAllowed);
+        Assert.True(policy.MayRemove(@"Q:\inetpub").IsAllowed);
+    }
+
+    /// <summary>
+    /// The guide says the AMD folder must stay for the chipset driver's install source, and that the
+    /// graphics driver packages inside it can go. On the drive Windows is installed on, the graphics
+    /// driver installer provider's own §5.2 declaration says exactly that, so no volume rule is
+    /// written over it: one would also refuse the packages it removes. Anything else in the folder is
+    /// unrecognised and refused, and an <c>AMD</c> on another drive is not a folder Deguffer
+    /// recognises, so it is ordinary there.
+    /// </summary>
+    [Fact]
+    public void AmdIsRefusedOnTheSystemDriveExceptTheDriverPackagesInsideIt()
+    {
+        using var drive = new TempDirectory();
+        var system = new FakeSystemDirectories(drive.Path);
+        var environment = new FakeUserEnvironment(Path.Combine(drive.Path, "Users"));
+        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [drive.Path + Path.DirectorySeparatorChar]);
+
+        var amd = Path.Combine(system.SystemDrive, "AMD");
+        Directory.CreateDirectory(Path.Combine(amd, "Chipset_Software", "Packages"));
+        Directory.CreateDirectory(Path.Combine(amd, "AMD-Software-Installer"));
+        Directory.CreateDirectory(Path.Combine(amd, "Radeon Recordings"));
+
+        var provider = new GraphicsDriverInstallerProvider(environment, new FakeProcessRunner(), system: system);
+        var policy = new ExploreActionPolicy(ProtectedRegions.For(system, environment), provider.ToolRoots, _volumes);
+
+        Assert.False(policy.MayRemove(amd).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(amd, "Chipset_Software")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(amd, "Chipset_Software", "Packages")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(amd, "Radeon Recordings")).IsAllowed);
+
+        Assert.True(policy.MayRemove(Path.Combine(amd, "AMD-Software-Installer")).IsAllowed);
+        Assert.True(policy.MayRemove(@"Q:\AMD").IsAllowed);
     }
 
     private ExploreActionPolicy Policy() =>

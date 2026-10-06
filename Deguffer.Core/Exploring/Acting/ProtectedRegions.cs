@@ -4,8 +4,9 @@ namespace Deguffer.Core.Exploring.Acting;
 
 /// <summary>
 /// The structural table <see cref="ExploreActionPolicy"/> decides from: Windows' own directories,
-/// the signed-in user's profile and the folders every program keeps its state in, and Outlook's own
-/// folder. Every entry says what it protects and why, because the reason is what the user is shown.
+/// the <c>inetpub</c> folder Windows Update relies on, the signed-in user's profile and the folders
+/// every program keeps its state in, and Outlook's own folder. Every entry says what it protects and
+/// why, because the reason is what the user is shown.
 ///
 /// <para>Data rather than decisions, which is why it stands apart from the policy that orders and
 /// reads it.</para>
@@ -39,6 +40,17 @@ internal static class ProtectedRegions
             "This is machine-wide application data, shared by every account on this computer. "
             + "Deguffer has classified none of it, and the caches it does know about in there are "
             + "offered on the Storage page instead, where a provider knows what they are.");
+
+        // The folder and not what is inside it, and on the system drive only. The April 2025 fix
+        // for a Windows Update privilege-escalation flaw is the folder's existence and permissions
+        // at %SystemDrive%\inetpub, where Windows Update looks for it. What a web server keeps
+        // inside is that server's content, and an inetpub elsewhere is not part of the fix.
+        yield return ProtectedRegion.Refusing(
+            Path.Combine(system.SystemDrive, "inetpub"),
+            RegionScope.PathOnly,
+            "Windows creates this folder on the drive it is installed on, even where there is no web "
+            + "server, as part of a security fix for Windows Update. Removing it reopens the flaw "
+            + "that fix closed, so Explore removes things from inside it, never the folder itself.");
 
         // The user's own profile, in three entries that read as one rule. The profile directory is
         // not a thing to remove and neither is the Users folder, but everything the user keeps

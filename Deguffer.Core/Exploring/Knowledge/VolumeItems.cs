@@ -175,24 +175,28 @@ internal static class VolumeItems
             KnownPlace.VolumeRoot,
             "inetpub",
             "Historically the folder Internet Information Services keeps websites in. Since the "
-            + "April 2025 security updates Windows also creates it, empty, on machines with no web "
-            + "server at all: its existence and its permissions are part of the fix for a "
-            + "privilege-escalation flaw in Windows Update.",
+            + "April 2025 security updates Windows also creates it, empty, at the top of the drive "
+            + "it is installed on, on machines with no web server at all: the existence and the "
+            + "permissions of that one folder are part of the fix for a privilege-escalation flaw in "
+            + "Windows Update.",
 
-            "On a machine with no web server there is nothing in it to recover and deleting it "
-            + "reopens the flaw, so it should be left where it is."),
+            "On the drive Windows is installed on, the folder itself should be left where it is, "
+            + "because deleting it reopens the flaw. What a web server keeps inside it is that "
+            + "server's own content, and an inetpub on any other drive is not part of the fix."),
 
         new(
             KnownPlace.VolumeRoot,
             "AMD",
-            "Where AMD's installers unpack themselves before installing. The graphics driver "
+            "Where AMD's installers unpack themselves before installing, by default at the top of "
+            + "the drive Windows is installed on. The graphics driver "
             + "installer removes its own copy when it finishes, and older releases left one folder "
             + "each. The chipset driver keeps its install source here too, and Windows Installer "
             + "reads that to repair, upgrade or remove the chipset driver.",
 
-            "The folder as a whole must stay, because the chipset driver's install source is in it. "
-            + "The graphics driver packages inside it can go, and the graphics driver installer "
-            + "files row removes those and nothing else."),
+            "On the drive Windows is installed on, the folder as a whole must stay, because the "
+            + "chipset driver's install source is in it. The graphics driver packages inside it can "
+            + "go, and the graphics driver installer files row removes those and nothing else. An "
+            + "AMD folder on any other drive is not one Deguffer recognises."),
 
         new(
             KnownPlace.VolumeRoot,
