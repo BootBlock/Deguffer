@@ -41,10 +41,37 @@ public static class StandingFolders
     /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
     /// <param name="volumes">Asked every other path the folder is reachable at.</param>
     public static string? WhyNotTaken(
+        string path, IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes) =>
+        WhyNotTaken(Reached(path, volumes), environment, system);
+
+    /// <summary>
+    /// <see cref="WhyNotTaken(string, IUserEnvironment, ISystemDirectories, IVolumeInventory)"/>, and
+    /// the account's own folder <paramref name="path"/> is in or is, from one look at where the folder
+    /// is reachable.
+    ///
+    /// <para>For a setting whose folder is emptied of whatever is in it rather than of what a tool
+    /// recognises, where being inside one of the account's own folders is as bad as being one.</para>
+    /// </summary>
+    /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
+    /// <param name="volumes">Asked every other path the folder is reachable at.</param>
+    public static StandingFolderVerdict Examine(
         string path, IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes)
     {
+        var folders = Reached(path, volumes);
+
+        // A volume's top is in no folder at the path it was asked at, and can still be at another
+        // place the volume is mounted, which only the folder's own text is left to say.
+        return new StandingFolderVerdict(
+            WhyNotTaken(folders, environment, system),
+            PersonalFolderHolding(folders ?? [Comparable(path)], environment));
+    }
+
+    /// <param name="folders">Every path the folder is reachable at, or null where it is a volume's top.</param>
+    private static string? WhyNotTaken(
+        IReadOnlyList<string>? folders, IUserEnvironment environment, ISystemDirectories system)
+    {
         // A folder a volume is mounted at is as much the top of that volume as its drive letter is.
-        if (Reached(path, volumes) is not { } folders)
+        if (folders is null)
         {
             return "it is the root of a drive, a share or a volume.";
         }
@@ -88,17 +115,8 @@ public static class StandingFolders
         return null;
     }
 
-    /// <summary>
-    /// The account's own folder <paramref name="path"/> is in, or is, or null where it is in none.
-    /// For a setting whose folder is emptied of whatever is in it rather than of what a tool
-    /// recognises, where being inside one of these is as bad as being one.
-    /// </summary>
-    /// <param name="volumes">Asked every other path the folder is reachable at.</param>
-    public static string? PersonalFolderHolding(string path, IUserEnvironment environment, IVolumeInventory volumes)
+    private static string? PersonalFolderHolding(IReadOnlyList<string> folders, IUserEnvironment environment)
     {
-        // A volume's top is in no folder at the path it was asked at, and still can be at another
-        // place the volume is mounted, which only the folder's own text is left to say.
-        var folders = Reached(path, volumes) ?? [Comparable(path)];
         var personalFolders = PersonalFolders(environment).ToList();
 
         return folders
@@ -110,11 +128,19 @@ public static class StandingFolders
     /// Every path the folder at <paramref name="path"/> is reachable at, comparable with the
     /// locations here, or null where it is the top of a drive, a share or a volume wherever it is
     /// reached.
+    ///
+    /// <para>Each other place is made comparable as the path is. A letter <c>subst</c> made for a
+    /// folder named in its short form leads to that short form, which would match nothing here.</para>
     /// </summary>
-    private static List<string>? Reached(string path, IVolumeInventory volumes) =>
-        VolumeRoot.Places(volumes, Comparable(path)) is { } places
-            ? [.. places.Select(place => Path.TrimEndingDirectorySeparator(place.Path))]
+    private static List<string>? Reached(string path, IVolumeInventory volumes)
+    {
+        var comparable = Comparable(path);
+
+        // The first place is the path itself, which is comparable already.
+        return VolumeRoot.Places(volumes, comparable) is { } places
+            ? [comparable, .. places.Skip(1).Select(place => Comparable(place.Path))]
             : null;
+    }
 
     /// <summary>Where Windows says each of the account's own folders is, and where each is by default.</summary>
     private static IEnumerable<string> PersonalFolders(IUserEnvironment environment) =>

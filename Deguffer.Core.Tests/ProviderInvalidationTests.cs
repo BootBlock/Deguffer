@@ -27,6 +27,12 @@ public sealed class ProviderInvalidationTests : IDisposable
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
 
+    /// <summary>
+    /// One for a provider and every collaborator built for it, so none of them asks the machine
+    /// running the suite where its volumes are.
+    /// </summary>
+    private readonly FakeVolumeInventory _volumes = new();
+
     public ProviderInvalidationTests() => _environment = new FakeUserEnvironment(_temp.Path);
 
     public void Dispose() => _temp.Dispose();
@@ -206,11 +212,11 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(ChromiumUserDataDiscovery) ? new ChromiumUserDataDiscovery(_environment)
         : parameter == typeof(RowDeclarations) ? new RowDeclarations()
         : parameter == typeof(RetroArchDiscovery)
-            ? new RetroArchDiscovery(_environment, system: new FakeSystemDirectories(_temp.Path))
+            ? new RetroArchDiscovery(_environment, system: new FakeSystemDirectories(_temp.Path), volumes: _volumes)
         : parameter == typeof(ClaudeCodeSessionRegistry)
-            ? new ClaudeCodeSessionRegistry(_environment, FakeProcessInspector.NothingRunning)
-        : parameter == typeof(ClaudeCodeProjectsDiscovery) ? new ClaudeCodeProjectsDiscovery(_environment)
-        : parameter == typeof(IVolumeInventory) ? new FakeVolumeInventory()
+            ? new ClaudeCodeSessionRegistry(_environment, FakeProcessInspector.NothingRunning, volumes: _volumes)
+        : parameter == typeof(ClaudeCodeProjectsDiscovery) ? new ClaudeCodeProjectsDiscovery(_environment, volumes: _volumes)
+        : parameter == typeof(IVolumeInventory) ? _volumes
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
         : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)
         : parameter == typeof(TimeProvider) ? new ManualTimeProvider()

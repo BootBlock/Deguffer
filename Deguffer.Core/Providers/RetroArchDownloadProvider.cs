@@ -48,8 +48,9 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        RetroArchDiscovery? discovery = null)
-        : base(environment, runner, inspector, scanner, discovery)
+        RetroArchDiscovery? discovery = null,
+        IVolumeInventory? volumes = null)
+        : base(environment, runner, inspector, scanner, discovery, volumes)
     {
     }
 

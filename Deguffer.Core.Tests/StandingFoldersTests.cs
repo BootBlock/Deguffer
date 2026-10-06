@@ -30,7 +30,8 @@ public sealed class StandingFoldersTests : IDisposable
 
     private string? WhyNotTaken(string path) => StandingFolders.WhyNotTaken(path, _environment, _system, _volumes);
 
-    private string? PersonalFolderHolding(string path) => StandingFolders.PersonalFolderHolding(path, _environment, _volumes);
+    private string? PersonalFolderHolding(string path) =>
+        StandingFolders.Examine(path, _environment, _system, _volumes).PersonalFolder;
 
     /// <summary>The folder at <paramref name="path"/>, reached below <paramref name="mountPoint"/> rather than its own root.</summary>
     private static string Through(string mountPoint, string path) =>
@@ -189,6 +190,20 @@ public sealed class StandingFoldersTests : IDisposable
         Assert.Null(WhyNotTaken(@"S:\shared-cache"));
         Assert.Null(PersonalFolderHolding(@"S:\shared-cache"));
         Assert.Null(PersonalFolderHolding(@"S:\AppData\Local\Temp"));
+    }
+
+    /// <summary>
+    /// <c>subst</c> keeps the folder it was given in the form it was typed, so a letter made for the
+    /// 8.3 alias of a folder holding the profile leads to a path that names the profile only in its
+    /// short form. The place is compared without the alias, as the path asked about is.
+    /// </summary>
+    [Fact]
+    public void RefusesTheAccountsFoldersReachedThroughALetterSubstitutedForAShortName()
+    {
+        _volumes.Substituting(@"S:\", ShortPath.Of(_temp.Path) ?? _temp.Path);
+
+        Assert.Equal("it is one of your own folders, where you keep your files.", WhyNotTaken(@"S:\profile\Downloads"));
+        Assert.Null(WhyNotTaken(@"S:\profile\shared-cache"));
     }
 
     /// <summary>

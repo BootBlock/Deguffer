@@ -266,7 +266,9 @@ public static class TempRoots
         // Asked before the name test, because it is the more specific answer where both apply: a
         // folder holding the profile is worth saying so about, where "we did not recognise it"
         // would be true and much less use.
-        if (StandingFolders.WhyNotTaken(candidate, environment, system, volumes) is { } standing)
+        var verdict = StandingFolders.Examine(candidate, environment, system, volumes);
+
+        if (verdict.WhyNotTaken is { } standing)
         {
             return $"Emptying it would take far more than temporary files, because {standing}";
         }
@@ -274,7 +276,7 @@ public static class TempRoots
         // Further than any other setting is held to, because this row empties whatever is in the
         // folder rather than what a tool recognises there. A 'Tmp' inside Documents passes the name
         // test below and is still somewhere the user keeps their files.
-        if (StandingFolders.PersonalFolderHolding(candidate, environment, volumes) is { } personal)
+        if (verdict.PersonalFolder is { } personal)
         {
             return $"It is inside '{LongPath.Display(personal)}', one of your own folders, and emptying "
                 + "it would delete your files rather than a program's scratch.";
