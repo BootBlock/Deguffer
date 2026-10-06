@@ -142,6 +142,11 @@ public static class JellyfinServerLayout
             }
         }
 
+        // What every data folder keeps, followed once rather than for each transcoder folder asked about.
+        var kept = known
+            .SelectMany(other => DataNames, (other, name) => ReachedFolder.At(Path.Combine(other, name.RelativePath), volumes))
+            .ToList();
+
         foreach (var data in present)
         {
             toolRoots.Add(ToolRoot.Of(data, ExploreReason, new DisposableChildSet([])));
@@ -236,8 +241,7 @@ public static class JellyfinServerLayout
                 // start that way, so only settings nothing runs can say so. The data folder itself is not
                 // asked about, because the default folder sits inside its cache. Asked at every path each
                 // is reachable at, because a setting may name either through an alias.
-                if (known.SelectMany(other => DataNames, (other, name) => ReachedFolder.At(Path.Combine(other, name.RelativePath), volumes))
-                    .Any(kept => reached.Holds(kept) || kept.Holds(reached)))
+                if (kept.Exists(own => reached.Holds(own) || own.Holds(reached)))
                 {
                     return "it overlaps a folder Jellyfin keeps its own data in";
                 }
