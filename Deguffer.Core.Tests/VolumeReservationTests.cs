@@ -310,6 +310,30 @@ public sealed class VolumeReservationTests : IDisposable
     }
 
     /// <summary>
+    /// A drive letter <c>subst</c> made for the system drive, or for the profile on it, reaches
+    /// what the region table refuses there. Windows names no volume for such a letter, so only
+    /// following it to its folder finds the rule. The §5.6 half: an ordinary folder through the
+    /// same letters stays removable.
+    /// </summary>
+    [Fact]
+    public void ASubstitutedLetterReachesWhatTheSystemDriveRefuses()
+    {
+        using var drive = new TempDirectory();
+        var policy = SystemVolumePolicy(drive, []);
+        _volumes
+            .Substituting(@"S:\", Path.Combine(drive.Path, "Users", "profile"))
+            .Substituting(@"T:\", drive.Path);
+
+        Assert.False(policy.MayRemove(@"S:\AppData\Local").IsAllowed);
+        Assert.False(policy.MayRemove(@"T:\Windows").IsAllowed);
+        Assert.False(policy.MayRemove(@"T:\Users\another account").IsAllowed);
+
+        Assert.True(policy.MayRemove(@"S:\Documents\Holiday photos").IsAllowed);
+        Assert.True(policy.MayRemove(@"S:\AppData\Local\SomeTool\Cache").IsAllowed);
+        Assert.True(policy.MayRemove(@"T:\Holiday photos").IsAllowed);
+    }
+
+    /// <summary>
     /// A mount of the system volume made after the policy was built is covered, because the policy
     /// asks the machine where the volume is mounted at each question.
     /// </summary>

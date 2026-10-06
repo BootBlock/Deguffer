@@ -103,6 +103,23 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// What a drive letter stands for, read from the target Windows keeps for it. <c>subst</c> writes
+    /// a folder in the <c>\??\</c> namespace, and a volume's own letter names a device, which is no
+    /// folder. Asked of the parsing rather than the machine, because no test may create a letter.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\??\C:\Users\testuser", @"C:\Users\testuser")]
+    [InlineData(@"\??\C:\Users\testuser\", @"C:\Users\testuser")]
+    [InlineData(@"\??\C:\", @"C:\")]
+    [InlineData(@"\??\UNC\server\share\folder", @"\\server\share\folder")]
+    [InlineData(@"\Device\HarddiskVolume3", null)]
+    [InlineData(@"\Device\LanmanRedirector\;Z:0000000000012345\server\share", null)]
+    [InlineData(@"\??\", null)]
+    [InlineData(null, null)]
+    public void ASubstitutedLetterStandsForTheFolderItsTargetNames(string? target, string? folder) =>
+        Assert.Equal(folder, VolumeCalls.Substitution(target));
+
+    /// <summary>
     /// One entry per volume. The list is built from the volume enumeration and then topped up with
     /// the drive letters no volume claimed, so a letter counted twice would put the same volume in
     /// front of the picker twice and plan its Recycle Bin twice.

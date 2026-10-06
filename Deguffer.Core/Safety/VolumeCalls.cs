@@ -214,6 +214,47 @@ internal static partial class VolumeCalls
     }
 
     /// <summary>
+    /// The folder the drive letter at the start of <paramref name="driveRoot"/> stands for, where
+    /// <c>subst</c> made it one, or null where it is a volume's own letter, a mapped share, or not a
+    /// letter at all.
+    ///
+    /// <para>Windows names no volume for a letter standing for a folder below a volume's top: both
+    /// <c>GetVolumePathName</c> and <c>GetVolumeNameForVolumeMountPoint</c> fail for it, so this is
+    /// the only call that says where the letter leads.</para>
+    /// </summary>
+    internal static string? SubstituteOf(string driveRoot)
+    {
+        if (driveRoot is not [var letter, ':', ..] || !char.IsAsciiLetter(letter))
+        {
+            return null;
+        }
+
+        var buffer = Marshal.AllocHGlobal((int)LongestPath * sizeof(char));
+
+        try
+        {
+            return QueryDosDevice($"{letter}:", buffer, LongestPath) > 0
+                ? Substitution(Marshal.PtrToStringUni(buffer))
+                : null;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    /// <summary>
+    /// The folder a DOS device target names, in display form, or null where it names a device
+    /// rather than a folder. <c>subst</c> writes its target in the <c>\??\</c> namespace, as
+    /// <c>\??\C:\Users\testuser</c> or <c>\??\UNC\server\share</c>, and a volume's own letter
+    /// answers a device such as <c>\Device\HarddiskVolume3</c>.
+    /// </summary>
+    internal static string? Substitution(string? target) =>
+        target is { Length: > 4 } && target.StartsWith(@"\??\", StringComparison.Ordinal)
+            ? LongPath.Configured(@"\\?\" + target[4..])
+            : null;
+
+    /// <summary>
     /// Fixed, removable, network and so on, for a volume reached at <paramref name="mountPoint"/>.
     /// <see cref="DriveType"/>'s members are the <c>DRIVE_</c> constants this returns.
     /// </summary>
@@ -298,6 +339,13 @@ internal static partial class VolumeCalls
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetVolumeNameForVolumeMountPoint(
         string volumeMountPoint, IntPtr volumeName, uint bufferLength);
+
+    [LibraryImport(
+        "kernel32.dll",
+        EntryPoint = "QueryDosDeviceW",
+        SetLastError = true,
+        StringMarshalling = StringMarshalling.Utf16)]
+    private static partial uint QueryDosDevice(string deviceName, IntPtr targetPath, uint bufferLength);
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetDriveTypeW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetDriveType(string rootPathName);

@@ -187,6 +187,58 @@ public sealed class VolumeRootTests
     }
 
     /// <summary>
+    /// A letter <c>subst</c> made for a folder is followed to that folder, and from there to every
+    /// mount of the folder's volume. Windows names no volume for such a letter, so nothing else
+    /// leads from it.
+    /// </summary>
+    [Fact]
+    public void PlacesFollowASubstitutedLetterToItsFolder()
+    {
+        _volumes
+            .With(@"C:\", alsoMountedAt: [@"D:\SysMount\"])
+            .With(@"D:\")
+            .Substituting(@"S:\", @"C:\Users\testuser")
+            .Substituting(@"T:\", @"C:\");
+
+        AssertPlaces(
+            [
+                (@"S:\AppData\Local", @"AppData\Local"),
+                (@"C:\Users\testuser\AppData\Local", @"Users\testuser\AppData\Local"),
+                (@"D:\SysMount\Users\testuser\AppData\Local", @"Users\testuser\AppData\Local|SysMount\Users\testuser\AppData\Local"),
+            ],
+            VolumeRoot.Places(_volumes, @"S:\AppData\Local"));
+        AssertPlaces(
+            [(@"T:\Windows", "Windows"), (@"C:\Windows", "Windows"), (@"D:\SysMount\Windows", @"Windows|SysMount\Windows")],
+            VolumeRoot.Places(_volumes, @"T:\Windows"));
+    }
+
+    /// <summary>
+    /// The folder a substituted letter leads to is the top of a volume mounted there, so the item is
+    /// that whole volume, however it is reached.
+    /// </summary>
+    [Fact]
+    public void ASubstitutedPathThatIsAVolumeRootHasNoPlaces()
+    {
+        _volumes
+            .With(@"C:\")
+            .With(@"E:\", alsoMountedAt: [@"C:\Users\testuser\Mount\"])
+            .Substituting(@"S:\", @"C:\Users\testuser");
+
+        Assert.Null(VolumeRoot.Places(_volumes, @"S:\Mount"));
+    }
+
+    /// <summary>
+    /// Two letters standing for each other still answer, each place once.
+    /// </summary>
+    [Fact]
+    public void LettersSubstitutedForEachOtherEnd()
+    {
+        _volumes.Substituting(@"S:\", @"T:\").Substituting(@"T:\", @"S:\");
+
+        AssertPlaces([(@"S:\Cache", "Cache"), (@"T:\Cache", "Cache")], VolumeRoot.Places(_volumes, @"S:\Cache"));
+    }
+
+    /// <summary>
     /// A share is mounted nowhere else that the machine names, so it is its own one place.
     /// </summary>
     [Fact]

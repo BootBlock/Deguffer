@@ -222,6 +222,18 @@ public interface IVolumeInventory
     IReadOnlyList<string> MountPointsOf(string mountPoint);
 
     /// <summary>
+    /// The folder the drive letter <paramref name="driveRoot"/> stands for, where <c>subst</c> made
+    /// it one, asked of the machine at the moment of the call, or null where the letter is a
+    /// volume's own, a mapped share, or not a letter at all.
+    ///
+    /// <para>For <see cref="VolumeRoot.Places"/>, for the reason <see cref="MountPointsOf"/> is: a
+    /// letter standing for <c>C:\Users\testuser</c> reaches that profile's application data, and
+    /// Windows names no volume for such a letter, so no mount point leads back to it.</para>
+    /// </summary>
+    /// <param name="driveRoot">The root of a path, as <see cref="Path.GetPathRoot(string)"/> answers it.</param>
+    string? SubstituteOf(string driveRoot);
+
+    /// <summary>
     /// The capacity of the volume holding <paramref name="path"/>, and what is left of it for this
     /// user, asked of the machine at the moment of the call, or null where the volume will not say.
     ///
@@ -283,6 +295,8 @@ public sealed class VolumeInventory : IVolumeInventory
 
         return VolumeCalls.VolumeNameOf(named, out _) is { } name ? Ordered(VolumeCalls.MountPointsOf(name)) : [];
     }
+
+    public string? SubstituteOf(string driveRoot) => VolumeCalls.SubstituteOf(driveRoot);
 
     public (long Total, long Free)? SpaceOf(string path) =>
         VolumeCalls.MountPointOf(path) is { } mountPoint ? VolumeCalls.SpaceOf(mountPoint) : null;
