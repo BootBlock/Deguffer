@@ -184,6 +184,7 @@
                       AutomationProperties.Name="What the colours on the map say">
                 <ComboBoxItem Content="Branch" />
                 <ComboBoxItem Content="Age" />
+                <ComboBoxItem Content="Growth" />
             </ComboBox>
 
             <!-- Beside the two boxes that decide what the picture shows, because this decides how it
@@ -275,7 +276,8 @@
             over the one action that cannot be undone. The menu below names all five, which is where
             somebody looks for them.
         -->
-        <Border Grid.Row="3"
+        <Grid Grid.Row="3" ColumnSpacing="10" ColumnDefinitions="*,Auto">
+        <Border Grid.Column="0"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
@@ -747,6 +749,130 @@
             </Grid>
         </Border>
 
+            <!--
+                What grew since the last scan of this drive, beside the picture it colours (#260).
+                A card of its own rather than a part of the map's card, so the map keeps its own
+                frame and the list here scrolls apart from it. Only while the colours are growth:
+                it is the answer to that one question, and the map is the larger answer to every
+                other.
+
+                §7.1: every figure here is a number against a date. Nothing in it is offered or
+                selected, and opening a row only shows what is in the folder.
+            -->
+            <Border Grid.Column="1"
+                    Width="340"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Visibility="{x:Bind ViewModel.ShowsGrowth, Mode=OneWay}">
+                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,*">
+                    <TextBlock Grid.Row="0"
+                               Text="What grew"
+                               Style="{StaticResource SubtitleTextBlockStyle}"
+                               FontSize="16" />
+
+                    <TextBlock Grid.Row="1"
+                               Text="{x:Bind ViewModel.Growth.Since, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock Grid.Row="2"
+                               Text="{x:Bind ViewModel.Growth.Note, Mode=OneWay}"
+                               TextWrapping="Wrap"
+                               Visibility="{x:Bind ViewModel.Growth.HasNote, Mode=OneWay}" />
+
+                    <!-- Used space at each kept scan: one series, so no legend, and the sentence
+                         under it names the first and last figures for a reader who cannot see the
+                         bars. Bars rise from a zero baseline against the volume's capacity, so a
+                         small change looks small. -->
+                    <StackPanel Grid.Row="3" Spacing="4">
+                        <Grid Height="33" VerticalAlignment="Bottom">
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.Growth.UsedSpace}"
+                                          VerticalAlignment="Bottom"
+                                          AutomationProperties.Name="Used space at each kept scan">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:UsedSpaceBar">
+                                        <!-- Transparent and full height, so the tooltip is reached
+                                             over the whole column rather than only over the bar. -->
+                                        <Grid Width="10" Height="32" Background="Transparent"
+                                              ToolTipService.ToolTip="{x:Bind Description}"
+                                              AutomationProperties.Name="{x:Bind Description}">
+                                            <Border Height="{x:Bind Height}"
+                                                    VerticalAlignment="Bottom"
+                                                    CornerRadius="2,2,0,0"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Border Height="1"
+                                    VerticalAlignment="Bottom"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                        </Grid>
+
+                        <TextBlock Text="{x:Bind ViewModel.Growth.UsedSpaceSummary, Mode=OneWay}"
+                                   Style="{StaticResource SecondaryText}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- Largest growth first and largest shrinkage last. A click opens the folder in
+                         the map and the list; a removed folder has nothing to open. -->
+                    <ListView Grid.Row="4"
+                              x:Name="GrowthList"
+                              Margin="-12,0,-12,0"
+                              SelectionMode="None"
+                              IsItemClickEnabled="True"
+                              ItemClick="OnGrowthRowClicked"
+                              ItemsSource="{x:Bind ViewModel.Growth.Rows}"
+                              AutomationProperties.Name="Folders by growth since the last scan">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExploreGrowthRow">
+                                <Grid ColumnSpacing="8" Padding="0,4"
+                                      Background="Transparent"
+                                      ColumnDefinitions="*,Auto"
+                                      RowDefinitions="Auto,Auto"
+                                      ToolTipService.ToolTip="{x:Bind Path}"
+                                      AutomationProperties.Name="{x:Bind Description}">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{x:Bind Name}"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Column="1"
+                                               MaxWidth="170"
+                                               Text="{x:Bind Change}"
+                                               TextAlignment="Right"
+                                               TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="1"
+                                               Grid.Column="0"
+                                               Text="{x:Bind Parent}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Row="1"
+                                               Grid.Column="1"
+                                               Text="{x:Bind Size}"
+                                               Style="{StaticResource SecondaryText}"
+                                               FontSize="12"
+                                               TextAlignment="Right" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
+        </Grid>
+
         <StackPanel Grid.Row="4" Spacing="6">
             <!-- What the pointer is over. A status line rather than a floating tooltip: over tens
                  of thousands of rectangles a popup that follows the pointer never settles.
@@ -803,9 +929,9 @@
                            TextWrapping="NoWrap" />
             </Grid>
 
-            <!-- What the colours mean, when they mean an age. A hue per branch needs no legend,
-                 because the branch it names is the shape it is inside; an age band means nothing
-                 at all without the scale beside it. -->
+            <!-- What the colours mean, when they mean an age or a growth. A hue per branch needs
+                 no legend, because the branch it names is the shape it is inside; a band of either
+                 scale means nothing at all without the scale beside it. -->
             <!-- One row that scrolls rather than a wrapping one. ItemsWrapGrid gives every cell
                  the width of the first, so "Today" sized the whole legend and clipped every band
                  after it; the panels that size each item to its own content are not in the
@@ -815,8 +941,8 @@
                           HorizontalScrollMode="Auto"
                           VerticalScrollBarVisibility="Disabled"
                           VerticalScrollMode="Disabled"
-                          Visibility="{x:Bind ViewModel.ShowsAgeLegend, Mode=OneWay}">
-            <ItemsControl ItemsSource="{x:Bind ViewModel.AgeLegend}"
+                          Visibility="{x:Bind ViewModel.ShowsLegend, Mode=OneWay}">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.Legend}"
                           AutomationProperties.Name="What the map's colours mean">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

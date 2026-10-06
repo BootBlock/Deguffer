@@ -2,6 +2,7 @@ using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
@@ -70,6 +71,13 @@ public partial class App : Application
     /// </summary>
     public static KeepService Keeps { get; } =
         new(new KeepStore(UserEnvironment.Current));
+
+    /// <summary>
+    /// The summaries of earlier scans, shared by the Explore page, which compares with them and adds
+    /// to them, and Settings, which removes them: two instances would disagree about what is kept.
+    /// </summary>
+    public static ScanHistory ScanHistory { get; } =
+        new(new ScanHistoryStore(UserEnvironment.Current));
 
     /// <summary>
     /// What is changing the machine, on every page. Shared because each page is kept alive between

@@ -199,7 +199,7 @@ public readonly record struct ExploreRowKey(int Node, bool IsDirectory, bool IsL
 /// </param>
 public sealed record ExploreCrumb(ExplorePosition Position, string Name, bool FollowsAnother = false);
 
-/// <summary>One band of the age legend, ready to draw.</summary>
+/// <summary>One band of the age or growth legend, ready to draw.</summary>
 /// <param name="Swatch">
 /// The band's colour, in the platform's colour type so the view can paint it without converting.
 /// A colour rather than a brush, because a brush is a XAML object: it cannot be made without the
@@ -217,12 +217,25 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
     [
         .. Enum.GetValues<ExploreScheme>().Select(scheme => (IReadOnlyList<ExploreLegendBand>)
         [
-            .. AgePalette.Bands(scheme).Select(band => new ExploreLegendBand(
-                band.Label,
-                new Color { A = 255, R = band.Colour.Red, G = band.Colour.Green, B = band.Colour.Blue })),
+            .. AgePalette.Bands(scheme).Select(band => Band(band.Label, band.Colour)),
         ]),
     ];
 
-    /// <summary>Every band of <paramref name="scheme"/>, newest first, ready to bind.</summary>
-    public static IReadOnlyList<ExploreLegendBand> For(ExploreScheme scheme) => Schemes[(int)scheme];
+    /// <summary>The growth scale's bands, which are the same in every scheme (see <see cref="GrowthPalette"/>).</summary>
+    private static readonly IReadOnlyList<ExploreLegendBand> Growth =
+        [.. GrowthPalette.Bands.Select(band => Band(band.Label, band.Colour))];
+
+    /// <summary>
+    /// The bands a map coloured by <paramref name="colouring"/> in <paramref name="scheme"/> needs
+    /// explained, ready to bind, and none for branches, whose colours explain themselves.
+    /// </summary>
+    public static IReadOnlyList<ExploreLegendBand> For(ExploreColouring colouring, ExploreScheme scheme) => colouring switch
+    {
+        ExploreColouring.Age => Schemes[(int)scheme],
+        ExploreColouring.Growth => Growth,
+        _ => [],
+    };
+
+    private static ExploreLegendBand Band(string label, TileColour colour) =>
+        new(label, new Color { A = 255, R = colour.Red, G = colour.Green, B = colour.Blue });
 }

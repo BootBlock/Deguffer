@@ -3,6 +3,7 @@ using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Testing;
 
@@ -67,7 +68,13 @@ internal sealed class ExploreFixture : IDisposable
                 Relaunches.Add(request);
                 return RelaunchStarts;
             },
-            Running);
+            Running,
+            History);
+
+    /// <summary>The kept scan summaries, stored under the fake profile's own local data.</summary>
+    public ScanHistory History => _history ??= new ScanHistory(new ScanHistoryStore(Environment));
+
+    private ScanHistory? _history;
 
     /// <summary>A policy that refuses each of <paramref name="refusing"/>, and everything under it, with <paramref name="reason"/>.</summary>
     public ExploreActionPolicy Policy(string reason = "Kept by a test.", params string[] refusing) =>

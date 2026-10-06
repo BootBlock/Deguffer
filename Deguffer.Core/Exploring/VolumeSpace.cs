@@ -63,26 +63,29 @@ public readonly record struct VolumeSpace(
     }
 
     /// <summary>
-    /// <see cref="Of"/> for <paramref name="tree"/>, with what Windows states about the space no
-    /// folder accounts for, read once from <paramref name="hidden"/>. Nothing is asked of Windows
-    /// where the scan did not cover a whole volume, because nothing is drawn beside it.
+    /// <see cref="Of"/> for a finished scan of <paramref name="scannedRoot"/>, with what Windows
+    /// states about the space no folder accounts for, read once from <paramref name="hidden"/>.
+    /// Nothing is asked of Windows where the scan did not cover a whole volume, because nothing is
+    /// drawn beside it.
     /// </summary>
+    /// <param name="tree">What the scan found, which says whether it counted the shadow copy storage.</param>
     public static async Task<VolumeSpace> ReadAsync(
         IVolumeInventory volumes,
         IHiddenSpaceSource hidden,
+        string scannedRoot,
         ExploreTree tree,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(hidden);
         ArgumentNullException.ThrowIfNull(tree);
 
-        var space = Of(volumes, tree.RootPath);
+        var space = Of(volumes, scannedRoot);
 
         return space == None
             ? None
             : space with
             {
-                Hidden = await hidden.ReadAsync(LongPath.Display(tree.RootPath), ct).ConfigureAwait(false),
+                Hidden = await hidden.ReadAsync(LongPath.Display(scannedRoot), ct).ConfigureAwait(false),
                 CountedSystemVolumeInformation = Counted(tree),
             };
     }

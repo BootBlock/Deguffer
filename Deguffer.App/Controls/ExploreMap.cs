@@ -387,6 +387,7 @@ public sealed class ExploreMap : UserControl
     /// The volume to draw beside <paramref name="node"/>, where the reader is on a volume the scan
     /// covered the whole of, and <see cref="VolumeSpace.None"/> otherwise.
     /// </param>
+    /// <param name="growth">What grew since the last scan, for a map coloured by growth, or null.</param>
     public void Show(
         ExploreTree? tree,
         int node,
@@ -394,14 +395,15 @@ public sealed class ExploreMap : UserControl
         ExploreColouring colouring,
         ExploreScheme scheme,
         ExploreSpacing spacing,
-        VolumeSpace volume) =>
+        VolumeSpace volume,
+        Core.Exploring.History.ScanGrowth? growth) =>
         Show(
             tree,
             node,
             view,
             tree is null
                 ? _ => ShapeColours.ByBranch(scheme)
-                : now => ShapeColours.For(tree, colouring, scheme, now),
+                : now => ShapeColours.For(tree, colouring, scheme, now, growth),
             tree is null
                 ? _ => string.Empty
                 : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}",

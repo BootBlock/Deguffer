@@ -120,7 +120,7 @@ public sealed class HiddenSpaceTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
         var hidden = new FakeHiddenSpaceSource { Answer = Shadow(allocated: 1_000) };
 
-        var volume = await VolumeSpace.ReadAsync(volumes, hidden, Tree(@"\\?\D:\", Svi.Absent), default);
+        var volume = await VolumeSpace.ReadAsync(volumes, hidden, @"\\?\D:\", Tree(@"\\?\D:\", Svi.Absent), default);
 
         Assert.Equal([@"D:\"], hidden.Asked);
         Assert.Equal(new VolumeSpace(12_000, 6_000, Shadow(allocated: 1_000)), volume);
@@ -132,7 +132,7 @@ public sealed class HiddenSpaceTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
         var hidden = new FakeHiddenSpaceSource { Answer = Shadow(allocated: 1_000) };
 
-        var volume = await VolumeSpace.ReadAsync(volumes, hidden, Tree(@"D:\work", Svi.Absent), default);
+        var volume = await VolumeSpace.ReadAsync(volumes, hidden, @"D:\work", Tree(@"D:\work", Svi.Absent), default);
 
         Assert.Empty(hidden.Asked);
         Assert.Equal(VolumeSpace.None, volume);
@@ -152,7 +152,7 @@ public sealed class HiddenSpaceTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
 
         var volume = await VolumeSpace.ReadAsync(
-                volumes, new FakeHiddenSpaceSource(), Tree(@"D:\", state), default);
+                volumes, new FakeHiddenSpaceSource(), @"D:\", Tree(@"D:\", state), default);
 
         Assert.Equal(counted, volume.CountedSystemVolumeInformation);
     }
@@ -163,7 +163,7 @@ public sealed class HiddenSpaceTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
 
         var volume = await VolumeSpace.ReadAsync(
-                volumes, new FakeHiddenSpaceSource(), Tree(@"D:\", Svi.Absent), default);
+                volumes, new FakeHiddenSpaceSource(), @"D:\", Tree(@"D:\", Svi.Absent), default);
 
         Assert.False(volume.CountedSystemVolumeInformation);
     }

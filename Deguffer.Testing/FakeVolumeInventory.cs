@@ -36,6 +36,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// </param>
     /// <param name="totalBytes">The volume's capacity, or null where it would not say.</param>
     /// <param name="freeBytes">What the volume says it has left, or null where it would not say.</param>
+    /// <param name="volumeName">The volume's <c>\\?\Volume{GUID}\</c> name, or null where it has none.</param>
     public FakeVolumeInventory With(
         string rootPath,
         DriveType kind = DriveType.Fixed,
@@ -43,7 +44,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         VolumeFeatures features = VolumeFeatures.ReparsePoints,
         IReadOnlyList<string>? alsoMountedAt = null,
         long? totalBytes = null,
-        long? freeBytes = null)
+        long? freeBytes = null,
+        string? volumeName = null)
     {
         _volumes.Add(new LocalVolume(
             rootPath,
@@ -52,7 +54,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
             TotalBytes: totalBytes,
             FreeBytes: freeBytes,
             Features: features,
-            AlsoMountedAt: alsoMountedAt));
+            AlsoMountedAt: alsoMountedAt,
+            VolumeName: volumeName));
 
         return this;
     }

@@ -98,7 +98,8 @@ public sealed partial class ExplorePage : Page
             ItemGuide.ForThisMachine(),
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
-            App.Running);
+            App.Running,
+            App.ScanHistory);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         ViewModel.ViewChanged += (_, _) =>
@@ -308,7 +309,8 @@ public sealed partial class ExplorePage : Page
             ViewModel.SelectedColouring,
             ViewModel.SelectedScheme,
             _appearance.Look.Spacing,
-            ViewModel.VolumeBeside);
+            ViewModel.VolumeBeside,
+            ViewModel.Growth.Comparison);
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the
@@ -460,6 +462,15 @@ public sealed partial class ExplorePage : Page
 
         ColourAs(colouring);
         App.Preferences.Update(current => current with { ExploreColours = colouring });
+    }
+
+    /// <summary>Open the folder a row of the list of what grew names. See <see cref="ExploreViewModel.ShowFolder"/>.</summary>
+    private void OnGrowthRowClicked(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is ExploreGrowthRow row)
+        {
+            ViewModel.ShowFolder(row);
+        }
     }
 
     /// <summary>
