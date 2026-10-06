@@ -8,4 +8,8 @@ namespace Deguffer.Core.Exploring;
 /// <param name="Reserved">Reserved storage, at Windows' figure, or zero.</param>
 /// <param name="Unaccounted">What is in use and neither counted by the scan nor named by Windows.</param>
 /// <param name="Free">The volume's free space.</param>
-public readonly record struct VolumeParts(long ShadowCopies, long Reserved, long Unaccounted, long Free);
+/// <param name="Overcounted">
+/// How much more the scan counted than the volume says is in use, which leaves no unaccounted
+/// block to draw. Zero wherever the scan counted no more than that.
+/// </param>
+public readonly record struct VolumeParts(long ShadowCopies, long Reserved, long Unaccounted, long Free, long Overcounted = 0);

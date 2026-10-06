@@ -18,12 +18,17 @@ namespace Deguffer.App.ViewModels;
 /// than by leaving it out (§7.1): a list that dropped what it would not act on would be ordered by
 /// removability after all.
 /// </param>
+/// <param name="SizeLabel">The space the file takes on the disk, which is what the list is ordered by.</param>
+/// <param name="StorageLabel">
+/// Its length and why that is not its size, or empty where it is. See <see cref="ExploreRowText.Storage"/>.
+/// </param>
 public sealed record ExploreFileRow(
     int Node,
     string Path,
     string Name,
     string Folder,
     string SizeLabel,
+    string StorageLabel,
     string AgeLabel,
     string DatesLabel,
     string? Refusal) : IExploreListed
@@ -41,8 +46,19 @@ public sealed record ExploreFileRow(
     /// <summary>The refusal as the row states it, under the folder, or null where there is none.</summary>
     public string? RefusalLine => Refusal is null ? null : $"Explore will not remove this. {Refusal}";
 
-    /// <summary>The two dates in full, then the refusal in full where there is one.</summary>
-    public string Tip => Refusal is null ? DatesLabel : $"{DatesLabel}{Environment.NewLine}{Environment.NewLine}{Refusal}";
+    /// <summary>
+    /// The length where it is not the size, the two dates in full, then the refusal in full where
+    /// there is one.
+    /// </summary>
+    public string Tip
+    {
+        get
+        {
+            var details = ExploreRowText.Details(SizeLabel, StorageLabel, DatesLabel);
+
+            return Refusal is null ? details : $"{details}{Environment.NewLine}{Environment.NewLine}{Refusal}";
+        }
+    }
 
     /// <summary>
     /// What a screen reader says for the row, the refusal included. A row is announced by this name
@@ -50,7 +66,8 @@ public sealed record ExploreFileRow(
     /// template).
     /// </summary>
     public string Description =>
-        $"{Name}, {SizeLabel}, in {Folder}, last written {AgeLabel}"
+        $"{Name}, {SizeLabel} on disk{(StorageLabel.Length > 0 ? $", {StorageLabel}" : string.Empty)}, "
+        + $"in {Folder}, last written {AgeLabel}"
         + (Refusal is null ? string.Empty : $". Explore will not remove this: {Refusal}");
 
     /// <summary>
@@ -72,6 +89,7 @@ public sealed record ExploreFileRow(
             tree.NameOf(node),
             tree.PathOf(tree.ParentOf(node)),
             ExploreRowText.Size(tree, node),
+            ExploreRowText.Storage(tree, node),
             ExploreRowText.Age(tree, node, now),
             ExploreRowText.Dates(tree, node),
             answer.IsAllowed ? null : answer.Reason);

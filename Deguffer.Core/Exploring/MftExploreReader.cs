@@ -84,6 +84,12 @@ internal static class MftExploreReader
         var names = new string[count];
         var parents = new int[count];
         var sizes = new long[count];
+
+        // Nine bytes a record more, and kept on purpose. The picture draws space on disk, and a
+        // length beside it is what explains a file the cloud holds — 200 GB long and nothing here —
+        // to a reader who would otherwise take the gap for a fault in the scan.
+        var lengths = new long[count];
+        var storage = new FileStorage[count];
         var isDirectory = new bool[count];
         var isLink = new bool[count];
         var sizeUnknown = new bool[count];
@@ -150,7 +156,9 @@ internal static class MftExploreReader
 
                 names[number] = record.Name;
                 parents[number] = (int)record.ParentRecordNumber;
-                sizes[number] = record.Size?.Logical ?? 0;
+                sizes[number] = record.Size?.Allocated ?? 0;
+                lengths[number] = record.Size?.Logical ?? 0;
+                storage[number] = record.Storage;
                 isDirectory[number] = record.IsDirectory;
                 isLink[number] = record.IsReparsePoint;
                 sizeUnknown[number] = record.Size is null;
@@ -198,8 +206,8 @@ internal static class MftExploreReader
         // size could rearrange.
         return new MftExploreRead(
             ExploreTree.Create(
-                rootPath, root, names, parents, sizes, isDirectory, isLink, sizeUnknown, created,
-                modified, present, ExploreChildOrder.BySize),
+                rootPath, root, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
+                created, modified, present, ExploreChildOrder.BySize),
             FallbackReason.None,
             !couldNotReadWholeTable);
     }

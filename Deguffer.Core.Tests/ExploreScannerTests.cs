@@ -46,7 +46,7 @@ public class ExploreScannerTests
         Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
         Assert.Equal(FallbackReason.None, scan.Fallback);
         Assert.Null(scan.RouteNote);
-        Assert.Equal(9000, scan.Tree.TotalBytes);
+        Assert.Equal(9000, scan.Tree.TotalLength);
         Assert.Equal($@"{letter}:\Users\testuser\.npm-cache\a.tgz", scan.Tree.PathOf(20));
     }
 
@@ -85,7 +85,7 @@ public class ExploreScannerTests
         Assert.Equal(FallbackReason.None, scan.Fallback);
         Assert.Null(scan.RouteNote);
         // 8000, not the volume's 9000: the sibling above the scope is outside what was read.
-        Assert.Equal(8000, scan.Tree.TotalBytes);
+        Assert.Equal(8000, scan.Tree.TotalLength);
         Assert.Equal($@"{letter}:\Users\testuser\.npm-cache", scan.Tree.RootPath);
         Assert.Equal($@"{letter}:\Users\testuser\.npm-cache\a.tgz", scan.Tree.PathOf(20));
     }

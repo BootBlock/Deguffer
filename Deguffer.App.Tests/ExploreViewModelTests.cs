@@ -337,12 +337,14 @@ public sealed class ExploreViewModelTests : IDisposable
         await _explore.ScanAsync(page, ExploreScan.Fast(builder.Build(ExploreChildOrder.BySize)));
 
         Assert.Equal(@"C:\", _explore.Scanner.Current.Root);
-        Assert.Equal($"{FreeSpace.Format(0)} accounted for.", page.Status);
+        Assert.Equal(
+            $"{FreeSpace.Format(0)} on disk accounted for, in files whose lengths add up to {FreeSpace.Format(0)}.",
+            page.Status);
 
         builder.MarkSizeUnknown(refused);
         await _explore.ScanAsync(page, ExploreScan.Walked(builder.Build(ExploreChildOrder.BySize), FallbackReason.NotElevated));
 
-        Assert.EndsWith("Some of this drive could not be read, so the totals are lower bounds.", page.Status);
+        Assert.Contains("Some of this drive could not be read, so the totals are lower bounds.", page.Status);
         Assert.True(page.HasRouteNote);
         Assert.True(page.CanElevate);
     });
@@ -647,7 +649,7 @@ public sealed class ExploreViewModelTests : IDisposable
         page.Hover(new ExploreHit(ExploreTile.Unaccounted, 2_500));
 
         Assert.Equal("In use, but not accounted for by this scan", page.Hovered);
-        Assert.Equal(ExploreUnaccountedNote.For(isElevated, page.Volume, tree.TotalBytes), page.HoveredNote);
+        Assert.Equal(ExploreUnaccountedNote.For(isElevated, page.Volume, tree.TotalBytes, ScanStrategy.MasterFileTable), page.HoveredNote);
         Assert.Contains("Reserved storage", page.HoveredNote);
     });
 
@@ -719,6 +721,58 @@ public sealed class ExploreViewModelTests : IDisposable
             HiddenSpaceNote.For(tree, Child(tree, VolumeSpace.SystemVolumeInformation), page.Volume),
             page.HoveredNote);
         Assert.Contains(FreeSpace.Format(1_000), page.HoveredNote);
+    });
+
+    /// <summary>
+    /// #257: pointing at a shape says its space on disk, and its length and why where those differ,
+    /// so a large file drawn as nothing is explained where the reader is looking.
+    /// </summary>
+    [Fact]
+    public void PointingAtAShapeSaysItsSpaceOnDiskAndWhyItIsNotItsLength() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
+        var page = _explore.Page();
+        var tree = Drive(
+            new ExploreChild("film.mkv", IsDirectory: false, IsLink: false, Size: 0, Length: 5_000_000, Storage: FileStorage.CloudOnly),
+            ExploreFixture.File("file", 3_000));
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+        page.Hover(new ExploreHit(Child(tree, "film.mkv"), 0));
+
+        Assert.StartsWith(
+            $"{FreeSpace.Format(0)} on disk, {FreeSpace.Format(5_000_000)} long, online-only, last written ",
+            page.HoveredFigures);
+
+        page.Hover(new ExploreHit(Child(tree, "file"), 3_000));
+
+        Assert.StartsWith($"{FreeSpace.Format(3_000)} on disk, last written ", page.HoveredFigures);
+    });
+
+    /// <summary>
+    /// The status line says which figure the map draws, with the length beside it. A walk says what
+    /// its figures leave out, and a scan that counted more than the drive has in use says so rather
+    /// than showing a drive that only appears to add up.
+    /// </summary>
+    [Fact]
+    public void TheStatusLineSaysWhatTheFiguresAreAndWhereTheyCountTooMuch() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
+        var page = _explore.Page();
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(
+            new ExploreChild("film.mkv", IsDirectory: false, IsLink: false, Size: 0, Length: 9_000, Storage: FileStorage.CloudOnly),
+            ExploreFixture.File("file", 3_000))));
+
+        Assert.Equal(
+            $"{FreeSpace.Format(3_000)} on disk accounted for, in files whose lengths add up to {FreeSpace.Format(12_000)}.",
+            page.Status);
+
+        await _explore.ScanAsync(page, ExploreScan.Walked(Drive(ExploreFixture.File("linked", 7_000)), FallbackReason.NotElevated));
+
+        Assert.Contains(ExploreRouteText.Sizing(ScanStrategy.ParallelEnumeration)!, page.Status);
+        Assert.EndsWith(
+            ExploreUnaccountedNote.Overcount(page.Volume, 7_000, ScanStrategy.ParallelEnumeration)!,
+            page.Status);
     });
 
     /// <summary>

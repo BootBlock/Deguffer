@@ -468,6 +468,13 @@ not the shell asked.
 - **Explore's numbers may be lower bounds, and must say so.** The measurement rules differ from
   Storage's on purpose: a total that is short is unacceptable where it decides a deletion, and
   acceptable where it draws a picture — provided the picture states which it is.
+- **Explore draws space on disk, not length**, because the question is where the space went. A file
+  held only in the cloud is its full length and occupies nothing here, and drawn by length it would
+  be the largest block on a drive it takes none of. The page says which figure it draws, keeps the
+  length beside it where the two differ, and says why: online-only, compressed or sparse. Both routes
+  draw the same file alike. The walk learns lengths alone, so it asks the file system only about a
+  file whose attributes mark it, and says that it counts a CompactOS file, whose mark the filter
+  hides, at its length. Where a scan still counts more than the volume has in use, the page says so.
 
 ### 7.2 Memory — where the memory goes
 

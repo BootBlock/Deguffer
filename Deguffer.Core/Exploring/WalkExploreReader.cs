@@ -14,7 +14,8 @@ namespace Deguffer.Core.Exploring;
 internal static class WalkExploreReader
 {
     /// <summary>
-    /// Walk <paramref name="root"/> and return everything under it.
+    /// Walk <paramref name="root"/> and return everything under it, asking <paramref name="probe"/>
+    /// what each file occupies where its listing cannot say.
     ///
     /// <paramref name="onProgress"/> is called with the running counts at the walk's
     /// <see cref="BoundedFileWalk.ProgressInterval"/> of <paramref name="clock"/>, which is the
@@ -24,6 +25,7 @@ internal static class WalkExploreReader
     public static ExploreTree Read(
         string root,
         ScanTuner tuning,
+        IOccupancyProbe probe,
         Action<ExploreTreeBuilder, long, long>? onProgress,
         TimeProvider clock,
         CancellationToken ct)
@@ -61,7 +63,7 @@ internal static class WalkExploreReader
                     builder.MarkSizeUnknown(parent);
                 }
 
-                var children = Describe(contents);
+                var children = Describe(contents, probe);
                 if (children.Count == 0)
                 {
                     return;
@@ -89,24 +91,24 @@ internal static class WalkExploreReader
 
     /// <summary>
     /// One directory's entries in the order the tree will hold them: the ordinary children first,
-    /// then the links.
+    /// then the links, then the files carrying a reparse point.
     ///
     /// <para>The order is load-bearing rather than cosmetic. <see cref="ExploreTreeBuilder.AddChildren"/>
     /// numbers what it is given consecutively, so an entry's index in
     /// <see cref="DirectoryContents.Entries"/> is its offset from the first node number — which is
     /// what lets the caller descend into a child directory without this having to hand back a map.
-    /// Putting the links first would silently shift every one of those numbers by the number of
-    /// junctions in the directory.</para>
+    /// Putting anything first would silently shift every one of those numbers.</para>
     /// </summary>
-    private static List<ExploreChild> Describe(DirectoryContents contents)
+    internal static List<ExploreChild> Describe(DirectoryContents contents, IOccupancyProbe probe)
     {
-        var children = new List<ExploreChild>(contents.Entries.Count + contents.Links.Count);
+        var children = new List<ExploreChild>(
+            contents.Entries.Count + contents.Links.Count + contents.ReparseFiles.Count);
 
         foreach (var entry in contents.Entries)
         {
-            children.Add(new ExploreChild(
-                entry.Name, entry.IsDirectory, IsLink: false, entry.Length,
-                ExploreTimestamp.FromUtc(entry.CreationTimeUtc), ExploreTimestamp.FromUtc(entry.LastWriteTimeUtc)));
+            children.Add(entry.IsDirectory
+                ? new ExploreChild(entry.Name, IsDirectory: true, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry))
+                : File(entry, probe));
         }
 
         foreach (var link in contents.Links)
@@ -119,12 +121,53 @@ internal static class WalkExploreReader
             // right answer for the same reason the size is zero: the target is somewhere else in
             // this tree, carrying its own.
             children.Add(new ExploreChild(
-                link.Name, IsDirectory: true, IsLink: true, Size: 0,
-                ExploreTimestamp.FromUtc(link.CreationTimeUtc), ExploreTimestamp.FromUtc(link.LastWriteTimeUtc)));
+                link.Name, IsDirectory: true, IsLink: true, Size: 0, CreatedOf(link), WrittenOf(link)));
+        }
+
+        // Drawn like any other file, as the file table draws them. Leaving them out drew nothing for
+        // a deduplicated file that holds its content, and only a symbolic link among them is a link.
+        foreach (var file in contents.ReparseFiles)
+        {
+            children.Add(File(file, probe));
         }
 
         return children;
     }
+
+    /// <summary>
+    /// A file, at what it occupies. Its listing's length is that figure for every file whose
+    /// attributes say nothing else, and those are asked nothing more, which keeps the walk to one
+    /// listing per directory. Only a cloud, compressed, sparse or reparse-point file is measured.
+    ///
+    /// <para>One Windows would not measure is drawn at nothing and marked unknown, so every total
+    /// above it says it is a lower bound. Drawing it at its length instead would be the overcount
+    /// this measurement exists to stop.</para>
+    /// </summary>
+    private static ExploreChild File(WalkEntry entry, IOccupancyProbe probe)
+    {
+        if (!StorageAttributes.MayDifferFromLength(entry.Attributes))
+        {
+            return new ExploreChild(entry.Name, IsDirectory: false, IsLink: false, entry.Length, CreatedOf(entry), WrittenOf(entry));
+        }
+
+        var storage = StorageAttributes.Of(entry.Attributes);
+
+        return probe.Measure(entry.FullName, entry.Attributes) switch
+        {
+            { IsLink: true } => new ExploreChild(
+                entry.Name, IsDirectory: false, IsLink: true, Size: 0, CreatedOf(entry), WrittenOf(entry), Length: 0),
+            { } occupied => new ExploreChild(
+                entry.Name, IsDirectory: false, IsLink: false, occupied.Bytes, CreatedOf(entry), WrittenOf(entry),
+                entry.Length, storage),
+            null => new ExploreChild(
+                entry.Name, IsDirectory: false, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
+                entry.Length, storage, SizeUnknown: true),
+        };
+    }
+
+    private static ExploreTimestamp CreatedOf(WalkEntry entry) => ExploreTimestamp.FromUtc(entry.CreationTimeUtc);
+
+    private static ExploreTimestamp WrittenOf(WalkEntry entry) => ExploreTimestamp.FromUtc(entry.LastWriteTimeUtc);
 
     /// <summary>When the root was made, or unknown where nothing could say.</summary>
     private static ExploreTimestamp Created(DirectoryInfo root) =>

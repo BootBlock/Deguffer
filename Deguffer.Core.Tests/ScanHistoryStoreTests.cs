@@ -61,6 +61,7 @@ public sealed class ScanHistoryStoreTests : IDisposable
     [InlineData("not gzip")]
     [InlineData("torn")]
     [InlineData("future format")]
+    [InlineData("lengths format")]
     [InlineData("parent after child")]
     [InlineData("path in a name")]
     [InlineData("negative size")]
@@ -82,7 +83,12 @@ public sealed class ScanHistoryStoreTests : IDisposable
                 File.WriteAllBytes(file, whole[..(whole.Length / 2)]);
                 break;
             case "future format":
-                WriteJson(file, json.Replace("\"Format\":1", "\"Format\":2", StringComparison.Ordinal));
+                WriteJson(file, json.Replace("\"Format\":2", "\"Format\":3", StringComparison.Ordinal));
+                break;
+            case "lengths format":
+                // Written before the map drew space on disk, so its figures are lengths, and compared
+                // with one they would report every cloud folder as shrunk.
+                WriteJson(file, json.Replace("\"Format\":2", "\"Format\":1", StringComparison.Ordinal));
                 break;
             case "parent after child":
                 WriteJson(file, json.Replace("[1,\"me\"", "[5,\"me\"", StringComparison.Ordinal));

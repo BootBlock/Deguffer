@@ -56,6 +56,19 @@ public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, Fallba
 /// </summary>
 public static class ExploreRouteText
 {
+    /// <summary>
+    /// What a route's figures leave out, for the line that states the scan's total, or null where
+    /// they leave nothing out.
+    ///
+    /// <para>Said for every walk, the one through a link included, because it is about the figures
+    /// rather than the route. A walk asks what a file occupies only where Windows marks it as in the
+    /// cloud, compressed or sparse, and CompactOS hides its mark from every listing.</para>
+    /// </summary>
+    public static string? Sizing(ScanStrategy strategy) => strategy == ScanStrategy.MasterFileTable
+        ? null
+        : "A walk takes most files at their length, so it counts a file Windows compressed itself "
+          + "(CompactOS) in full.";
+
     public static string? Describe(ScanStrategy strategy, FallbackReason reason)
     {
         if (strategy == ScanStrategy.MasterFileTable)

@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
 
@@ -237,6 +238,8 @@ public class ExploreTreeTests
             names: ["testuser", "cache", "a.tgz", "orphan", "orphan-parent", ""],
             parents: [0, 0, 1, 4, 3, 0],
             sizes: [0, 0, 100, 500, 700, 900],
+            lengths: [0, 0, 150, 500, 700, 900],
+            storage: new FileStorage[6],
             isDirectory: [true, true, false, true, true, false],
             isLink: [false, false, false, false, false, false],
             sizeUnknown: [false, false, false, false, false, false],
@@ -246,6 +249,7 @@ public class ExploreTreeTests
             childOrder: ExploreChildOrder.BySize);
 
         Assert.Equal(100, tree.TotalBytes);
+        Assert.Equal(150, tree.TotalLength);
         Assert.Equal(["cache"], NamesOfChildren(tree, tree.RootNode));
     }
 

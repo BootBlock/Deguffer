@@ -52,6 +52,7 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
         IsLink = tree.IsLink(node);
 
         SizeLabel = ExploreRowText.Size(tree, node);
+        StorageLabel = ExploreRowText.Storage(tree, node);
         Share = ShareOf(tree, node, parentTotal);
         IsApproximate = tree.HasUnknownSizeBelow(node);
         AgeLabel = ExploreRowText.Age(tree, node, now);
@@ -78,9 +79,21 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     [ObservableProperty]
     public partial double Share { get; set; }
 
+    /// <summary>The space this takes on the disk, which is the figure the map and the bar draw.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Description))]
+    [NotifyPropertyChangedFor(nameof(Tip))]
     public partial string SizeLabel { get; set; }
+
+    /// <summary>
+    /// The length beside <see cref="SizeLabel"/> and why the two differ, or empty where they do not.
+    /// For the tooltip and the screen reader, not a column: it explains the few rows where the size
+    /// looks wrong, and a column of it would be blank on nearly every row.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Description))]
+    [NotifyPropertyChangedFor(nameof(Tip))]
+    public partial string StorageLabel { get; set; }
 
     /// <summary>Whether the scan could not read everything below this row. See <see cref="Description"/>.</summary>
     [ObservableProperty]
@@ -105,14 +118,24 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     public partial string DatesLabel { get; set; }
 
     /// <summary>
-    /// What the row tells somebody who has stopped on it: what the thing is, its two dates in full,
-    /// and one line saying whether deleting it recovers any space.
+    /// What the row tells somebody who has stopped on it: what the thing is, its length where that
+    /// is not its size, its two dates in full, and one line saying whether deleting it recovers any
+    /// space.
     ///
-    /// <para>The dates alone where the name means nothing to Deguffer, which is nearly every row. A
-    /// tooltip is worth stopping for because it is rare, and one that appeared over everything with
-    /// nothing to add would teach the reader to ignore the ones that have something.</para>
+    /// <para>The dates alone where the name means nothing to Deguffer and the size needs no
+    /// explaining, which is nearly every row. A tooltip is worth stopping for because it is rare, and
+    /// one that appeared over everything with nothing to add would teach the reader to ignore the
+    /// ones that have something.</para>
     /// </summary>
-    public string Tip => _known?.Tip(DatesLabel) ?? DatesLabel;
+    public string Tip
+    {
+        get
+        {
+            var details = ExploreRowText.Details(SizeLabel, StorageLabel, DatesLabel);
+
+            return _known?.Tip(details) ?? details;
+        }
+    }
 
     /// <summary>
     /// A folder, a link or a file. Segoe Fluent Icons, and never the only thing carrying the
@@ -145,7 +168,8 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     /// actually happened is the only reading that stays true of both.</para>
     /// </summary>
     public string Description =>
-        $"{Name}, {SizeLabel}{(IsLink ? ", a link" : string.Empty)}, last written {AgeLabel}"
+        $"{Name}, {SizeLabel} on disk{(StorageLabel.Length > 0 ? $", {StorageLabel}" : string.Empty)}"
+        + $"{(IsLink ? ", a link" : string.Empty)}, last written {AgeLabel}"
         + (IsApproximate ? ", and some of this could not be read" : string.Empty);
 
     /// <summary>
@@ -175,6 +199,7 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
         ArgumentNullException.ThrowIfNull(tree);
 
         SizeLabel = ExploreRowText.Size(tree, Node);
+        StorageLabel = ExploreRowText.Storage(tree, Node);
         Share = ShareOf(tree, Node, parentTotal);
         IsApproximate = tree.HasUnknownSizeBelow(Node);
         AgeLabel = ExploreRowText.Age(tree, Node, now);

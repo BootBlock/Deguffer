@@ -23,8 +23,14 @@ namespace Deguffer.Core.Exploring.History;
 /// </summary>
 internal static class ScanSummaryFormat
 {
-    /// <summary>The format this build writes, and the only one it reads.</summary>
-    private const int Format = 1;
+    /// <summary>
+    /// The format this build writes, and the only one it reads.
+    ///
+    /// <para>2 since the map drew space on disk rather than length. The layout did not change, the
+    /// meaning of every figure in it did, and a comparison across the two would report a cloud folder
+    /// as having shrunk by everything it keeps online. A summary in format 1 is passed over.</para>
+    /// </summary>
+    private const int Format = 2;
 
     /// <summary>Write <paramref name="summary"/> to <paramref name="destination"/>, compressed.</summary>
     internal static void Write(Stream destination, ScanSummary summary)

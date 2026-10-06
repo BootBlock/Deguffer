@@ -18,10 +18,12 @@ namespace Deguffer.Core.Exploring;
 /// <para>The snapshot cadence is measured through <paramref name="time"/>, so a test decides when
 /// the interval has passed rather than spending real time for it.</para>
 /// </summary>
+/// <param name="occupancy">What the walk asks about a file whose listing cannot say what it occupies.</param>
 public sealed class ExploreScanner(
     IMftSourceFactory? sources = null,
     TimeProvider? time = null,
-    ScanTuner? tuning = null) : IExploreScanner
+    ScanTuner? tuning = null,
+    IOccupancyProbe? occupancy = null) : IExploreScanner
 {
     /// <summary>
     /// How often the walk publishes a tree to draw.
@@ -45,6 +47,7 @@ public sealed class ExploreScanner(
     private readonly IMftSourceFactory _sources = sources ?? VolumeMftSourceFactory.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly ScanTuner _tuning = tuning ?? ScanTuner.Shipped;
+    private readonly IOccupancyProbe _occupancy = occupancy ?? OccupancyProbe.Default;
 
     /// <summary>
     /// Scan everything at or below <paramref name="root"/>, which is a volume root or any folder
@@ -155,6 +158,7 @@ public sealed class ExploreScanner(
         var tree = WalkExploreReader.Read(
             root,
             _tuning,
+            _occupancy,
             (builder, items, bytes) =>
             {
                 if (progress is null)

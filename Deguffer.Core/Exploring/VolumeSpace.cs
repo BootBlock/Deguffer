@@ -104,15 +104,23 @@ public readonly record struct VolumeSpace(
     /// (see <see cref="ReservedStorage"/>). The shadow copy storage is taken only where the scan
     /// counted nothing inside <c>System Volume Information</c>, where it is kept, so bytes the scan
     /// counted there are never drawn a second time.</para>
+    ///
+    /// <para><b>A scan that counted more than is in use leaves nothing, and says by how much.</b>
+    /// Drawn by space on disk, the file table cannot count more than the volume holds. What can is a
+    /// walk, which counts a hard link once per name and a CompactOS file at its length, and files
+    /// written while the scan ran. The block is clamped at zero, and
+    /// <see cref="VolumeParts.Overcounted"/> keeps what the clamp hid, so the page can say so rather
+    /// than draw a picture that only appears to add up.</para>
     /// </summary>
     public VolumeParts Parts(long scannedBytes)
     {
-        var left = Math.Max(0, TotalBytes - FreeBytes - scannedBytes);
+        var inUse = TotalBytes - FreeBytes;
+        var left = Math.Max(0, inUse - scannedBytes);
 
         var reserved = Take(Hidden.Reserved is { Statement: Statement.Stated, Bytes: var bytes } ? bytes : 0);
         var shadowCopies = Take(ShadowCopiesBeside);
 
-        return new VolumeParts(shadowCopies, reserved, left, FreeBytes);
+        return new VolumeParts(shadowCopies, reserved, left, FreeBytes, Math.Max(0, scannedBytes - inUse));
 
         long Take(long part)
         {

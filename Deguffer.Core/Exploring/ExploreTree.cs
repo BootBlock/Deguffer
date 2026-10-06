@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
@@ -19,6 +21,8 @@ public sealed class ExploreTree : Layout.ISizedTree
     private readonly string[] _names;
     private readonly int[] _parents;
     private readonly long[] _sizes;
+    private readonly long[] _lengths;
+    private readonly FileStorage[] _storage;
     private readonly bool[] _isDirectory;
     private readonly bool[] _isLink;
     private readonly bool[] _sizeUnknown;
@@ -34,6 +38,8 @@ public sealed class ExploreTree : Layout.ISizedTree
         string[] names,
         int[] parents,
         long[] sizes,
+        long[] lengths,
+        FileStorage[] storage,
         bool[] isDirectory,
         bool[] isLink,
         bool[] sizeUnknown,
@@ -50,6 +56,8 @@ public sealed class ExploreTree : Layout.ISizedTree
         _names = names;
         _parents = parents;
         _sizes = sizes;
+        _lengths = lengths;
+        _storage = storage;
         _isDirectory = isDirectory;
         _isLink = isLink;
         _sizeUnknown = sizeUnknown;
@@ -81,8 +89,14 @@ public sealed class ExploreTree : Layout.ISizedTree
     /// </summary>
     public ExploreChildOrder ChildOrder { get; }
 
-    /// <summary>Total bytes under the root, as far as the scan established them.</summary>
+    /// <summary>
+    /// Bytes on the disk under the root, as far as the scan established them. See
+    /// <see cref="SizeOf"/> for why this is the figure rather than the length.
+    /// </summary>
     public long TotalBytes => _sizes[RootNode];
+
+    /// <summary>The length of every file under the root added up: what Explorer calls their size.</summary>
+    public long TotalLength => _lengths[RootNode];
 
     /// <summary>
     /// Whether any node has a size the scan could not establish, which makes every total above it
@@ -100,7 +114,28 @@ public sealed class ExploreTree : Layout.ISizedTree
 
     public string NameOf(int node) => _names[node];
 
+    /// <summary>
+    /// The bytes this node occupies on the disk, which is what every picture of the tree draws.
+    ///
+    /// <para><b>Space on disk rather than length</b>, because the question this page answers is where
+    /// the drive's space went (§7.1). A file kept only in the cloud is its full length and holds
+    /// nothing here, so drawn by length a cloud library is the largest block on a drive it occupies
+    /// none of, and freeing it frees nothing. On the file table this is exact, cluster rounding
+    /// included. The walk learns lengths alone, so there it is the length for every file nothing marks
+    /// as cloud, compressed or sparse, and what the file system states for the rest.</para>
+    /// </summary>
     public long SizeOf(int node) => _sizes[node];
+
+    /// <summary>
+    /// The length of this file, or of every file at or below this folder: what Explorer calls its
+    /// size, and what a download of it would cost.
+    /// </summary>
+    public long LengthOf(int node) => _lengths[node];
+
+    /// <summary>
+    /// Why this file occupies less than its length, or every reason found at or below this folder.
+    /// </summary>
+    public FileStorage StorageOf(int node) => _storage[node];
 
     public bool IsDirectory(int node) => _isDirectory[node];
 
@@ -246,6 +281,8 @@ public sealed class ExploreTree : Layout.ISizedTree
         string[] names,
         int[] parents,
         long[] sizes,
+        long[] lengths,
+        FileStorage[] storage,
         bool[] isDirectory,
         bool[] isLink,
         bool[] sizeUnknown,
@@ -257,11 +294,11 @@ public sealed class ExploreTree : Layout.ISizedTree
         var (childStart, children) = InvertParentLinks(parents, present);
         var order = DepthFirstOrder(childStart, children, rootNode);
 
-        RollUp(order, parents, sizes, sizeUnknown, modified, rootNode);
+        RollUp(order, parents, sizes, lengths, storage, sizeUnknown, modified, rootNode);
         SortChildren(childStart, children, sizes, names, childOrder);
 
         return new ExploreTree(
-            rootPath, rootNode, names, parents, sizes, isDirectory, isLink, sizeUnknown,
+            rootPath, rootNode, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
             created, modified, childStart, children, Placed(order, names.Length), childOrder);
     }
 
@@ -373,9 +410,9 @@ public sealed class ExploreTree : Layout.ISizedTree
     /// a size picture must not do.</para>
     ///
     /// <para>So does the last-written time, and it rides this pass rather than getting one of its
-    /// own precisely because the traversal is the cost. The three are combined by different
-    /// operations — sizes add, unknowns spread, times take the later — and the same single ordering
-    /// serves all three. See <see cref="ModifiedOf"/> for why a directory has to answer for its
+    /// own precisely because the traversal is the cost. Each is combined by its own operation — sizes
+    /// and lengths add, unknowns and storage spread, times take the later — and the same single
+    /// ordering serves them all. See <see cref="ModifiedOf"/> for why a directory has to answer for its
     /// contents rather than for itself, and note that a creation time is deliberately absent from
     /// this: it is the one of the three that means something on its own.</para>
     /// </summary>
@@ -383,6 +420,8 @@ public sealed class ExploreTree : Layout.ISizedTree
         int[] order,
         int[] parents,
         long[] sizes,
+        long[] lengths,
+        FileStorage[] storage,
         bool[] sizeUnknown,
         ExploreTimestamp[] modified,
         int rootNode)
@@ -397,6 +436,8 @@ public sealed class ExploreTree : Layout.ISizedTree
 
             var parent = parents[node];
             sizes[parent] += sizes[node];
+            lengths[parent] += lengths[node];
+            storage[parent] |= storage[node];
             sizeUnknown[parent] |= sizeUnknown[node];
 
             // Unknown is zero, so it loses to every real date without a case of its own — which is

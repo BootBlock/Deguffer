@@ -123,6 +123,39 @@ public sealed class ExploreRowTests : IDisposable
     }
 
     /// <summary>
+    /// #257: the row's size is space on disk, and where the length reads differently the row says
+    /// what it is and why, so a 5 MB file shown as nothing is explained rather than taken for a
+    /// fault. A file whose two figures read alike adds nothing, and its tooltip stays the dates.
+    /// </summary>
+    [Fact]
+    public void ARowExplainsASizeOnDiskThatIsNotItsLength()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\Users\testuser");
+        var folder = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            ExploreFixture.Folder("OneDrive"),
+            new ExploreChild("notes.txt", IsDirectory: false, IsLink: false, Size: 4096, Length: 4000),
+        ]);
+        var film = builder.AddChildren(folder, [
+            new ExploreChild("film.mkv", IsDirectory: false, IsLink: false, Size: 0, Length: 5_000_000, Storage: FileStorage.CloudOnly),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        var online = Row(tree, film);
+        Assert.Equal($"{FreeSpace.Format(5_000_000)} long, online-only", online.StorageLabel);
+        Assert.StartsWith($"film.mkv, {FreeSpace.Format(0)} on disk, {FreeSpace.Format(5_000_000)} long, online-only,", online.Description);
+        Assert.StartsWith($"{FreeSpace.Format(0)} on disk, {FreeSpace.Format(5_000_000)} long, online-only", online.Tip);
+        Assert.Contains(online.DatesLabel, online.Tip);
+
+        Assert.EndsWith("holds online-only files", Row(tree, folder).StorageLabel);
+
+        var notes = Row(tree, folder + 1);
+        Assert.Equal(string.Empty, notes.StorageLabel);
+        Assert.Equal(notes.DatesLabel, notes.Tip);
+        Assert.StartsWith($"notes.txt, {FreeSpace.Format(4096)} on disk,", notes.Description);
+    }
+
+    /// <summary>
     /// A later tree rewrites the same row rather than replacing it, which is what lets a snapshot
     /// landing mid-scan leave the list where the reader had it.
     /// </summary>
