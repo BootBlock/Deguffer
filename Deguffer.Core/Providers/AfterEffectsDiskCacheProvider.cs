@@ -50,12 +50,14 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
         _stillClosed = new RunningProcessCheck(Inspector, AfterEffectsDiskCacheLayout.ProcessNames);
@@ -96,7 +98,7 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
         _examination ??= AfterEffectsDiskCacheExamination.Of(
             Settings.Folders,
             Environment.MachineName,
-            TempRoots.Resolve(Environment, _system).Folders,
+            TempRoots.Resolve(Environment, _system, Volumes).Folders,
             ct);
 
     public override void InvalidateCaches()

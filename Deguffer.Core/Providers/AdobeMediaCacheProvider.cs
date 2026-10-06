@@ -41,7 +41,6 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
         "This is Adobe's shared folder. Your LUTs, motion graphics templates and Team Projects' auto-saves "
         + "are in it, and only the media cache folders in it may be removed.";
 
-    private readonly IVolumeInventory _volumes;
     private readonly RunningProcessCheck _stillClosed;
     private AdobeMediaCacheLayout? _layout;
     private DeclaredLocationScan? _scan;
@@ -56,9 +55,9 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
-        _volumes = volumes ?? VolumeInventory.Current;
         _stillClosed = new RunningProcessCheck(Inspector, AdobeMediaCacheLayout.ProcessNames);
     }
 
@@ -93,7 +92,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
     /// Where Adobe keeps its cache, read once per planning pass (G4). Presence, planning and Explore's
     /// refusals all ask the same question of the same settings.
     /// </summary>
-    private AdobeMediaCacheLayout Layout => _layout ??= AdobeMediaCacheLayout.Find(Environment, _volumes);
+    private AdobeMediaCacheLayout Layout => _layout ??= AdobeMediaCacheLayout.Find(Environment, Volumes);
 
     /// <summary>The one look at the disk presence and the plan both read, kept for a planning pass.</summary>
     private DeclaredLocationScan Scan(CancellationToken ct) => _scan ??= DeclaredLocations.Examine(Layout.Roots, ct);
@@ -102,7 +101,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
     {
         _layout = null;
         _scan = null;
-        _volumes.Invalidate();
+        Volumes.Invalidate();
         base.InvalidateCaches();
     }
 

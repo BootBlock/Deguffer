@@ -452,6 +452,41 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(0, result.BytesReclaimed);
     }
 
+    /// <summary>
+    /// The same last check for a step naming the folder through a letter <c>subst</c> made for the
+    /// profile. The executor asks about every path the folder is reachable at, so the step does not
+    /// run. With the same machine, a step naming an ordinary folder in the profile still runs (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task NeverRemovesOneOfTheAccountsOwnFoldersNamedThroughASubstitutedLetter()
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", environment.UserProfile);
+        var executor = new PlanExecutor(
+            new FakeProcessRunner(),
+            ParallelEnumerationScanner.Default,
+            RefusalLog,
+            environment: environment,
+            system: new FakeSystemDirectories(Path.Combine(_temp.Path, "machine")),
+            volumes: volumes);
+        var cache = _temp.CreateDirectory("profile", "cache");
+
+        var refused = await executor.ExecuteAsync(
+            PlanDeleting(new DeleteDirectoryStep(@"\\?\S:\Downloads", "A cache")),
+            runReach: null, residue: null, progress: null, default);
+
+        var outcome = Assert.Single(refused.Steps);
+        Assert.False(outcome.Succeeded);
+        Assert.Contains("one of your own folders", outcome.Message, StringComparison.Ordinal);
+
+        var removed = await executor.ExecuteAsync(
+            PlanDeleting(new DeleteDirectoryStep(cache, "A cache")),
+            runReach: null, residue: null, progress: null, default);
+
+        Assert.True(Assert.Single(removed.Steps).Succeeded);
+        Assert.False(Directory.Exists(cache));
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

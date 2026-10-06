@@ -5596,7 +5596,8 @@ A temporary folder is the one location Deguffer is *told* about rather than know
 `%TEMP%` is an environment variable anything on the machine may have written. Four settings are
 declined outright, with the reason shown on the row:
 
-- One pointing at the root of a drive or a share, where emptying it would take the whole volume.
+- One pointing at the root of a drive, a share or a volume mounted at a folder, where emptying it
+  would take the whole volume.
 - One that *contains* a directory Windows is built out of — the profile, either program directory,
   the Windows directory, or the machine-wide application data.
 - **One Deguffer does not recognise as a temporary folder at all.** This is the rule that does the
@@ -5612,6 +5613,11 @@ declined outright, with the reason shown on the row:
   inner folder rather than clearing it, and Windows does not put it back. A Remote Desktop session
   host produces exactly that by default, so the folder your programs actually resolve to is the one
   kept.
+
+The first two, and the refusal of a folder inside one of your own folders, are asked of every path
+the folder is reachable at, not only the one the setting names. A `subst` letter for the profile
+or a second mount of its volume reaches the same folders, so `S:\Documents\Temp` is refused as
+surely as the path it stands for.
 
 A temporary folder that turns out to be a link to somewhere else is declined too, on the rule that
 applies everywhere in Deguffer: it does not delete through a link, because what is on the far side

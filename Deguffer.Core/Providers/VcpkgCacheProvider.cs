@@ -91,13 +91,15 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
-        => _discovery = new VcpkgDiscovery(Environment, system ?? SystemDirectories.Current);
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
+        => _discovery = new VcpkgDiscovery(Environment, system ?? SystemDirectories.Current, Volumes);
 
     public override string Id => "vcpkg";
 

@@ -107,10 +107,11 @@ public sealed partial class ClaudeCodeCommandSnapshotProvider : TempMarkerProvid
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
-        ClaudeCodeSessionRegistry? sessions = null)
-        : base(environment, runner, inspector, scanner, system, liveTrees)
+        ClaudeCodeSessionRegistry? sessions = null,
+        IVolumeInventory? volumes = null)
+        : base(environment, runner, inspector, scanner, system, liveTrees, volumes)
     {
-        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, Machine);
+        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, Machine, Volumes);
     }
 
     public override string Id => "claude-code-command-snapshots";
@@ -165,7 +166,7 @@ public sealed partial class ClaudeCodeCommandSnapshotProvider : TempMarkerProvid
         var list = _sessions.Read();
 
         var why = !list.Complete
-            ? ClaudeCodeHome.WhyUnusable(Environment, Machine)
+            ? ClaudeCodeHome.WhyUnusable(Environment, Machine, Volumes)
                 ?? "Deguffer could not read Claude Code's list of running sessions."
             : !list.Kept
                 ? "Claude Code keeps no list of running sessions here."

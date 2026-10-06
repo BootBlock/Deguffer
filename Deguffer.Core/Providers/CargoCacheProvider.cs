@@ -140,12 +140,14 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
     }
@@ -454,5 +456,5 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         select Path.Combine(level.Resolve(home), name);
 
     private ConfiguredFolder.Setting Resolve() =>
-        ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system);
+        ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system, Volumes);
 }

@@ -30,7 +30,8 @@ internal static class ConfiguredFolder
         string variable,
         string defaultFolder,
         IUserEnvironment environment,
-        ISystemDirectories machine)
+        ISystemDirectories machine,
+        IVolumeInventory volumes)
     {
         var value = environment.GetEnvironmentVariable(variable)?.Trim();
 
@@ -44,7 +45,7 @@ internal static class ConfiguredFolder
             return new Setting(value, null, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
         }
 
-        return WhyNotOwned(configured, environment, machine, TempRoots.Resolve(environment, machine).AccountFolders) is { } declined
+        return WhyNotOwned(configured, environment, machine, volumes, TempRoots.Resolve(environment, machine, volumes).AccountFolders) is { } declined
             ? new Setting(value, configured, null, declined)
             : new Setting(value, configured, configured, null);
     }
@@ -54,14 +55,16 @@ internal static class ConfiguredFolder
     /// sentence, or null where it may be.
     /// </summary>
     /// <param name="configured">The folder, already through <see cref="LongPath.Configured"/>.</param>
+    /// <param name="volumes">Asked every other path the folder is reachable at.</param>
     /// <param name="accountTempFolders">This account's own temporary folders.</param>
     public static string? WhyNotOwned(
         string configured,
         IUserEnvironment environment,
         ISystemDirectories machine,
+        IVolumeInventory volumes,
         IReadOnlyList<string> accountTempFolders)
     {
-        if (StandingFolders.WhyNotTaken(configured, environment, machine) is { } standing)
+        if (StandingFolders.WhyNotTaken(configured, environment, machine, volumes) is { } standing)
         {
             return standing;
         }

@@ -34,6 +34,9 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
     private string MachineTemp => Path.Combine(_system.WindowsDirectory, "Temp");
 
+    /// <summary>What the machine has mounted, which names no other path to anything unless a test says so.</summary>
+    private readonly FakeVolumeInventory _volumes = new();
+
     private TempDirectoryProvider CreateProvider(
         ILiveTreeInspector? liveTrees = null,
         AppPreferences? preferences = null,
@@ -45,7 +48,8 @@ public sealed class TempDirectoryProviderTests : IDisposable
             system: _system,
             liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
             preferences: new FakePreferences(preferences ?? AppPreferences.Default),
-            tenants: tenants);
+            tenants: tenants,
+            volumes: _volumes);
 
     /// <summary>A file old enough for the provider to offer, returned so a test can name it.</summary>
     private string Abandoned(int bytes, params string[] segments) =>
@@ -669,6 +673,27 @@ public sealed class TempDirectoryProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(letter));
+    }
+
+    /// <summary>
+    /// The same refusal for a setting naming that folder through a letter <c>subst</c> made for the
+    /// profile, whose text names nothing the row knows. A temporary folder in the profile named the
+    /// same way is still not refused (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task RefusesATemporaryFolderInsideOneOfTheAccountsOwnFoldersNamedThroughASubstitutedLetter()
+    {
+        _volumes.Substituting(@"S:\", _environment.UserProfile);
+        _environment.WithEnvironmentVariable("TMP", @"S:\Documents\Temp");
+        _environment.WithEnvironmentVariable("TEMP", @"S:\Temp");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains(@"S:\Documents\Temp", StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("one of your own folders", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(@"S:\Temp'", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

@@ -71,6 +71,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// How a <see cref="RemoveRestorePointsStep"/> is carried out and proved, on the terms
     /// <paramref name="emptier"/> is given: the real one removes the machine's restore points.
     /// </param>
+    /// <param name="volumes">
+    /// Asked every other path a folder is reachable at, by the checks this provider makes of a folder a
+    /// setting names and by the executor's last check before a removal, the same instance for both.
+    /// Defaulted to the machine's own, because it only reads.
+    /// </param>
     protected CleanupProviderBase(
         IUserEnvironment environment,
         IProcessRunner runner,
@@ -81,9 +86,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
         IDiskCleanupHandlers? handlers = null,
         IWindowsServicing? servicing = null,
         TimeProvider? time = null,
-        ISystemProtection? protection = null)
+        ISystemProtection? protection = null,
+        IVolumeInventory? volumes = null)
     {
         Environment = environment;
+        Volumes = volumes ?? VolumeInventory.Current;
         Inspector = inspector;
         Scanner = scanner;
         _refusals = RefusalRecord.For(environment);
@@ -91,11 +98,15 @@ public abstract class CleanupProviderBase : ICleanupProvider
         _protection = protection;
         Servicing = servicing ?? WindowsServicing.Current;
         _executor = new PlanExecutor(
-            runner, scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment, protection: protection);
+            runner, scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
+            protection: protection, volumes: Volumes);
         Runner = runner;
     }
 
     protected IUserEnvironment Environment { get; }
+
+    /// <summary>What the machine has mounted. See the constructor's parameter.</summary>
+    protected IVolumeInventory Volumes { get; }
 
     /// <summary>Where Windows is in servicing itself. See the constructor's parameter.</summary>
     protected IWindowsServicing Servicing { get; }

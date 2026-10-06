@@ -68,14 +68,16 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
         IProcessRunner? runner,
         IProcessInspector? inspector,
         IDirectoryScanner? scanner,
-        RetroArchDiscovery? discovery)
+        RetroArchDiscovery? discovery,
+        IVolumeInventory? volumes)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
-        _discovery = discovery ?? new RetroArchDiscovery(Environment);
+        _discovery = discovery ?? new RetroArchDiscovery(Environment, volumes: Volumes);
         _stillClosed = new RunningProcessCheck(Inspector, RetroArchInstall.ProcessNames);
         _discovery.Enlist(this);
     }

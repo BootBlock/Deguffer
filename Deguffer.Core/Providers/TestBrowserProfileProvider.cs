@@ -86,12 +86,14 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
-        ICurrentPreferences? preferences = null)
+        ICurrentPreferences? preferences = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
@@ -335,7 +337,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     /// </summary>
     private IReadOnlyList<FolderScan> Scans => _scans ??=
     [
-        .. from root in TempRoots.Resolve(Environment, _system).Roots
+        .. from root in TempRoots.Resolve(Environment, _system, Volumes).Roots
            from location in root.Locations
            let folder = Path.Combine(root.Path, location.RelativePath)
            select new FolderScan(

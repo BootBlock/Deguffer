@@ -143,8 +143,9 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
-        INamedMutexes? mutexes = null)
-        : base(environment, runner, inspector, scanner, system, liveTrees)
+        INamedMutexes? mutexes = null,
+        IVolumeInventory? volumes = null)
+        : base(environment, runner, inspector, scanner, system, liveTrees, volumes)
     {
         _mutexes = mutexes ?? NamedMutexes.Default;
 
@@ -235,7 +236,7 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
             return default;
         }
 
-        return ConfiguredFolder.WhyNotOwned(configured, Environment, Machine, accountFolders) is { } declined
+        return ConfiguredFolder.WhyNotOwned(configured, Environment, Machine, Volumes, accountFolders) is { } declined
             ? new NodeCacheSetting(configured, null, declined)
             : new NodeCacheSetting(configured, configured, null);
     }

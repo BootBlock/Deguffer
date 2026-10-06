@@ -93,6 +93,7 @@ public sealed class ClaudeCodeProjectsDiscovery
 
     private readonly IUserEnvironment _environment;
     private readonly ISystemDirectories _system;
+    private readonly IVolumeInventory _volumes;
 
     private ClaudeCodeProjects? _projects;
 
@@ -100,12 +101,14 @@ public sealed class ClaudeCodeProjectsDiscovery
     /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
     /// be or hold. The machine's own by default.
     /// </param>
-    public ClaudeCodeProjectsDiscovery(IUserEnvironment environment, ISystemDirectories? system = null)
+    public ClaudeCodeProjectsDiscovery(
+        IUserEnvironment environment, ISystemDirectories? system = null, IVolumeInventory? volumes = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
         _environment = environment;
         _system = system ?? SystemDirectories.Current;
+        _volumes = volumes ?? VolumeInventory.Current;
     }
 
     /// <summary>
@@ -119,7 +122,7 @@ public sealed class ClaudeCodeProjectsDiscovery
 
     private ClaudeCodeProjects Walk(CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(_environment, _system) is not { } home)
+        if (ClaudeCodeHome.Resolve(_environment, _system, _volumes) is not { } home)
         {
             return new ClaudeCodeProjects([], NoTranscripts, [], [], Complete: false);
         }
