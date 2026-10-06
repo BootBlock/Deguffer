@@ -656,22 +656,17 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <param name="scoped">Whether the scan was started on a folder rather than a drive.</param>
     private async Task RecordAsync(ExploreScan scan, string target, bool scoped)
     {
-        if (Volume == VolumeSpace.None || HostVolume.For(_volumes, target)?.VolumeName is not { } volume)
-        {
-            Growth.Unavailable(scoped && Volume == VolumeSpace.None ? GrowthText.NotWholeDrive : GrowthText.NoVolumeName);
-            return;
-        }
-
+        var volume = HostVolume.For(_volumes, target)?.VolumeName;
         var space = Volume;
         var taken = _time.GetUtcNow().UtcDateTime;
 
-        var record = await Task.Run(() => _history.Record(scan, volume, space, taken));
+        var record = await Task.Run(() => _history.Record(scan, volume, space, scoped, taken));
 
         // A comparison describes one tree, and a removal on this page can have taken the page to
         // another while this ran. Shown only for the tree it was taken from.
         if (ReferenceEquals(Tree, scan.Tree))
         {
-            Growth.Show(record, volume);
+            Growth.Show(record);
         }
     }
 
@@ -933,8 +928,9 @@ public sealed partial class ExploreViewModel : ObservableObject
         var figures = $"{FreeSpace.Format(tree.SizeOf(node))}, "
             + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}";
 
-        // The shape's own change, where the map is coloured by growth. A shape painted by the folder
-        // above it has none of its own, and the readout says nothing rather than borrow that one.
+        // The shape's own change, where the map is coloured by growth: compared, or settled by its
+        // dates. A shape painted by the folder above it has none of its own, and the readout says
+        // nothing rather than borrow that one.
         if (SelectedColouring == ExploreColouring.Growth
             && Growth.Comparison is { } growth && ReferenceEquals(growth.Tree, tree)
             && growth.ChangeOf(node) is { } change)

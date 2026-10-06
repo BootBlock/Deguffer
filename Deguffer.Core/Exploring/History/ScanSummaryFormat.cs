@@ -223,9 +223,9 @@ internal static class ScanSummaryFormat
         foreach (var entry in listed.EnumerateArray())
         {
             if (entry.ValueKind != JsonValueKind.Array || entry.GetArrayLength() != 3
-                || !entry[0].TryGetInt32(out var parent)
+                || entry[0].ValueKind != JsonValueKind.Number || !entry[0].TryGetInt32(out var parent)
                 || entry[1].ValueKind != JsonValueKind.String || entry[1].GetString() is not { Length: > 0 } name
-                || !entry[2].TryGetInt64(out var bytes) || bytes < 0)
+                || entry[2].ValueKind != JsonValueKind.Number || !entry[2].TryGetInt64(out var bytes) || bytes < 0)
             {
                 return null;
             }

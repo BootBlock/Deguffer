@@ -1,12 +1,39 @@
 namespace Deguffer.Core.Exploring.History;
 
+/// <summary>Why a finished scan is neither kept nor compared, or that it is.</summary>
+public enum NotKept
+{
+    /// <summary>It is kept and compared.</summary>
+    None,
+
+    /// <summary>
+    /// It covered a folder rather than a whole volume. A summary of one folder says nothing about what
+    /// else on the drive grew, and comparing it with a summary of the drive would report everything
+    /// outside the folder as removed.
+    /// </summary>
+    NotWholeDrive,
+
+    /// <summary>
+    /// The volume did not give its <c>\\?\Volume{GUID}\</c> name or its size, so its scans could not
+    /// be told from another volume's that later wears the same letter.
+    /// </summary>
+    NoVolumeName,
+}
+
 /// <summary>What recording one scan produced.</summary>
+/// <param name="NotKept">Why the scan was neither kept nor compared, or <see cref="History.NotKept.None"/>.</param>
+/// <param name="Volume">The volume's name, or null where <paramref name="NotKept"/> is not None.</param>
 /// <param name="Growth">
 /// What grew since the newest earlier summary that could be read, or null where there was none.
 /// </param>
 /// <param name="Kept">The volume's kept summaries afterwards, oldest first, this scan's included where it was stored.</param>
 /// <param name="Saved">Whether this scan's summary was stored, so the next scan can be compared with it.</param>
-public sealed record ScanRecord(ScanGrowth? Growth, IReadOnlyList<KeptSummary> Kept, bool Saved);
+public sealed record ScanRecord(
+    NotKept NotKept, string? Volume, ScanGrowth? Growth, IReadOnlyList<KeptSummary> Kept, bool Saved)
+{
+    /// <summary>What a scan that is neither kept nor compared records.</summary>
+    public static ScanRecord Refused(NotKept why) => new(why, null, null, [], Saved: false);
+}
 
 /// <summary>
 /// The kept summaries of every volume, and the one place a finished scan is recorded and compared.
@@ -32,16 +59,39 @@ public sealed class ScanHistory(ScanHistoryStore store)
     public event EventHandler? Changed;
 
     /// <summary>
-    /// Compare <paramref name="scan"/>, a finished scan of the whole of <paramref name="volume"/>,
-    /// with the newest earlier summary of it, then store this one.
+    /// Compare <paramref name="scan"/> with the newest earlier summary of its volume, then store this
+    /// one, where it covered the whole of a volume that can be told from every other. See
+    /// <see cref="History.NotKept"/> for the scans that are not.
     ///
     /// <para>Compared before it is stored, so a scan is never compared with itself. The newest earlier
     /// summary that can be read is the one used, because a damaged one is nothing to compare with
     /// (<see cref="ScanHistoryStore"/>), and the one before it still describes the volume.</para>
     /// </summary>
-    public ScanRecord Record(ExploreScan scan, string volume, VolumeSpace space, DateTime takenUtc)
+    /// <param name="volume">
+    /// The <c>\\?\Volume{GUID}\</c> name of the volume holding what was scanned, or null where it
+    /// has none.
+    /// </param>
+    /// <param name="space">
+    /// The volume's size and free space where the scan covered the whole of it, and
+    /// <see cref="VolumeSpace.None"/> otherwise (<see cref="VolumeSpace.Of"/>).
+    /// </param>
+    /// <param name="scopedToFolder">Whether the scan was pointed at a folder rather than a drive.</param>
+    public ScanRecord Record(
+        ExploreScan scan, string? volume, VolumeSpace space, bool scopedToFolder, DateTime takenUtc)
     {
         ArgumentNullException.ThrowIfNull(scan);
+
+        // A folder that is the root of a volume mounted there covers that volume whole, and has its
+        // space, so the scope alone does not decide it.
+        if (space == VolumeSpace.None)
+        {
+            return ScanRecord.Refused(scopedToFolder ? NotKept.NotWholeDrive : NotKept.NoVolumeName);
+        }
+
+        if (volume is null)
+        {
+            return ScanRecord.Refused(NotKept.NoVolumeName);
+        }
 
         var now = ScanSummaries.Take(scan, volume, space, takenUtc);
 
@@ -61,7 +111,7 @@ public sealed class ScanHistory(ScanHistoryStore store)
             var saved = store.Save(now);
             _byVolume.Remove(volume);
 
-            return new ScanRecord(growth, KeptLocked(volume), saved);
+            return new ScanRecord(NotKept.None, volume, growth, KeptLocked(volume), saved);
         }
     }
 
@@ -72,6 +122,17 @@ public sealed class ScanHistory(ScanHistoryStore store)
         {
             return KeptLocked(volume);
         }
+    }
+
+    /// <summary>
+    /// Whether the summary <paramref name="growth"/> compares against is still kept. A comparison with
+    /// one the user has removed is to stop, because they asked for it to be gone.
+    /// </summary>
+    public bool StillKept(ScanGrowth growth)
+    {
+        ArgumentNullException.ThrowIfNull(growth);
+
+        return Kept(growth.Earlier.Volume).Any(summary => summary.TakenUtc == growth.SinceUtc);
     }
 
     /// <summary>Every summary kept for any volume, newest first. Read afresh, for Settings.</summary>

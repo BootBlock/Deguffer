@@ -37,7 +37,7 @@ public class ScanGrowthTests
 
         var same = growth.ChangeOf(Child(after, "Same"))!.Value;
         Assert.Equal(0, same.Bytes);
-        Assert.Equal("No change", GrowthPalette.BandOf(same).Label);
+        Assert.Equal("No change", GrowthPalette.BandOf(same.Bytes).Label);
 
         var listing = growth.Listing();
         Assert.Equal(@"C:\Logs", listing[0].Path);
@@ -101,9 +101,9 @@ public class ScanGrowthTests
         var file = after.ChildrenOf(logs)[0];
 
         Assert.Null(growth.ChangeOf(file));
-        Assert.Equal("Grew 1 GB or more", GrowthPalette.BandOf(growth.ChangeAt(file)).Label);
+        Assert.Equal("Grew 1 GB or more", GrowthPalette.BandOf(growth.BytesAt(file)).Label);
 
-        var grew = GrowthPalette.BandOf(growth.ChangeAt(file)).Colour;
+        var grew = GrowthPalette.BandOf(growth.BytesAt(file)).Colour;
         var colours = ShapeColours.For(after, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth);
         var surface = ExploreSurface.Create(
             after, after.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, ExploreSpacing.Comfortable, VolumeSpace.None);
@@ -114,7 +114,7 @@ public class ScanGrowthTests
         var stale = ShapeColours.For(another, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth);
         var unrelated = ExploreSurface.Create(
             another, another.RootNode, ExploreView.Icicle, 200, 200, 1, 1, stale, ExploreSpacing.Comfortable, VolumeSpace.None);
-        Assert.Equal(GrowthPalette.BandOf(null).Colour, stale.For(unrelated, file, depth: 2));
+        Assert.Equal(GrowthPalette.BandOf((long?)null).Colour, stale.For(unrelated, file, depth: 2));
     }
 
     /// <summary>
@@ -135,15 +135,105 @@ public class ScanGrowthTests
     {
         var change = new FolderChange(@"C:\Logs", FolderChangeKind.Measured, 4096 * Megabyte, (4096 + megabytes) * Megabyte, 1);
 
-        Assert.Equal(expected, GrowthPalette.BandOf(change).Label);
+        Assert.Equal(expected, GrowthPalette.BandOf(change.Bytes).Label);
 
         var mirrored = new FolderChange(@"C:\Logs", FolderChangeKind.Measured, 4096 * Megabyte, (4096 - megabytes) * Megabyte, 1);
-        Assert.Equal(megabytes == 0, GrowthPalette.For(change) == GrowthPalette.For(mirrored));
+        Assert.Equal(megabytes == 0, GrowthPalette.For(change.Bytes) == GrowthPalette.For(mirrored.Bytes));
     }
 
     [Fact]
     public void NothingComparedHasItsOwnBand() =>
-        Assert.Equal("Not compared", GrowthPalette.BandOf(null).Label);
+        Assert.Equal("Not compared", GrowthPalette.BandOf((long?)null).Label);
+
+    /// <summary>
+    /// The growth scale darkens away from the middle on each side, so its order reads in grey as well
+    /// as in colour.
+    /// </summary>
+    [Fact]
+    public void EachSideOfTheScaleDarkensAwayFromTheMiddle()
+    {
+        var luminance = GrowthPalette.Bands.Take(7).Select(band => band.Colour.RelativeLuminance).ToList();
+
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.True(luminance[i] < luminance[i + 1], $"{GrowthPalette.Bands[i].Label} is not darker than the band after it.");
+            Assert.True(luminance[6 - i] < luminance[5 - i], $"{GrowthPalette.Bands[6 - i].Label} is not darker than the band before it.");
+        }
+
+        Assert.True(GrowthPalette.Bands[^1].Colour.RelativeLuminance < luminance[3], "Not compared is not darker than no change.");
+    }
+
+    /// <summary>
+    /// A file's own dates settle its colour before the folder above it is asked: one made since the
+    /// earlier scan is growth by its whole size, one not written since is unchanged, and only one
+    /// written since with nothing to say how much takes the folder's colour. Without this, every old
+    /// file directly under a folder that grew is painted as having grown with it.
+    /// </summary>
+    [Fact]
+    public void AFilesOwnDatesSettleItsColourBeforeItsFolders()
+    {
+        var before = Tree(@"C:\", ("Logs", 10 * Megabyte));
+
+        var longAgo = ExploreTimestamp.FromUtc(Then.AddYears(-3));
+        var since = ExploreTimestamp.FromUtc(Then.AddDays(3));
+
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var logs = builder.AddChildren(ExploreTreeBuilder.RootNode,
+        [
+            new ExploreChild("Logs", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("old.mp4", IsDirectory: false, IsLink: false, Size: 900 * Megabyte, longAgo, longAgo),
+            new ExploreChild("new.bin", IsDirectory: false, IsLink: false, Size: 300 * Megabyte, since, since),
+        ]);
+        builder.AddChildren(logs, [new ExploreChild("app.log", IsDirectory: false, IsLink: false, Size: 2000 * Megabyte, longAgo, since)]);
+        var after = builder.Build(ExploreChildOrder.BySize);
+
+        var growth = Compare(before, after);
+        var old = Child(after, "old.mp4");
+        var made = Child(after, "new.bin");
+        var log = after.ChildrenOf(Child(after, "Logs"))[0];
+
+        // The root grew, which old.mp4 must not borrow.
+        Assert.True(growth.ChangeOf(after.RootNode)!.Value.Bytes > 0);
+
+        Assert.Equal(0, growth.BytesAt(old));
+        Assert.Equal("No change", GrowthPalette.BandOf(growth.BytesAt(old)).Label);
+        Assert.Equal(FolderChangeKind.Measured, growth.ChangeOf(old)!.Value.Kind);
+
+        Assert.Equal(300 * Megabyte, growth.BytesAt(made));
+        var created = growth.ChangeOf(made)!.Value;
+        Assert.Equal(FolderChangeKind.Created, created.Kind);
+        Assert.Equal("+300 MB, created since then", GrowthText.Change(created, growth.Earlier.UnrecordedAtMost));
+
+        // Written since, made long before: how much is not known, so it takes its folder's change.
+        Assert.Null(growth.ChangeOf(log));
+        Assert.Equal(growth.ChangeOf(Child(after, "Logs"))!.Value.Bytes, growth.BytesAt(log));
+    }
+
+    /// <summary>
+    /// A date is a whole minute, rounded down, so a file written in the minute the earlier scan
+    /// finished may have been written after it, and is not called unchanged.
+    /// </summary>
+    [Fact]
+    public void AWriteInTheMinuteTheEarlierScanFinishedIsNotCalledUnchanged()
+    {
+        var before = Tree(@"C:\", ("Logs", 10 * Megabyte));
+        var earlier = ScanSummaries.Take(ExploreScan.Fast(before), Volume, Space, Then.AddSeconds(30));
+
+        var created = ExploreTimestamp.FromUtc(Then.AddYears(-1));
+        var builder = new ExploreTreeBuilder(@"C:\");
+        builder.AddChildren(ExploreTreeBuilder.RootNode,
+        [
+            new ExploreChild("Logs", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("same-minute.txt", IsDirectory: false, IsLink: false, Size: Megabyte, created, ExploreTimestamp.FromUtc(Then.AddSeconds(50))),
+            new ExploreChild("minute-before.txt", IsDirectory: false, IsLink: false, Size: Megabyte, created, ExploreTimestamp.FromUtc(Then.AddSeconds(-10))),
+        ]);
+        var after = builder.Build(ExploreChildOrder.BySize);
+
+        var growth = ScanGrowth.Between(earlier, Summary(after, Now), after);
+
+        Assert.Null(growth.ChangeOf(Child(after, "same-minute.txt")));
+        Assert.Equal(0, growth.ChangeOf(Child(after, "minute-before.txt"))!.Value.Bytes);
+    }
 
     /// <summary>A walk counts less than the file table, so a comparison across the two says it is approximate.</summary>
     [Fact]
@@ -168,6 +258,26 @@ public class ScanGrowthTests
         var after = Tree(@"C:\", ("Logs", 20 * Megabyte), unknownUnder: "Logs");
 
         Assert.Equal(GrowthApproximation.LowerBound, Compare(before, after).Approximation);
+    }
+
+    /// <summary>
+    /// A change of route and a lower bound are wrong in different ways, so where both hold, both are
+    /// said: §7.1 asks a lower bound to say so whatever else is true.
+    /// </summary>
+    [Fact]
+    public void ARouteChangeAndALowerBoundAreBothStated()
+    {
+        var before = Tree(@"C:\", ("Logs", 10 * Megabyte), unknownUnder: "Logs");
+        var after = Tree(@"C:\", ("Logs", 20 * Megabyte));
+
+        var earlier = ScanSummaries.Take(ExploreScan.Walked(before, FallbackReason.NotElevated), Volume, Space, Then);
+        var growth = ScanGrowth.Between(earlier, Summary(after, Now), after);
+
+        Assert.Equal(GrowthApproximation.RouteChanged | GrowthApproximation.LowerBound, growth.Approximation);
+
+        var said = GrowthText.Approximate(growth.Approximation)!;
+        Assert.Contains("different ways", said, StringComparison.Ordinal);
+        Assert.Contains("lower bounds", said, StringComparison.Ordinal);
     }
 
     /// <summary>A disk scanned as E: and again as F: is compared with itself, by its folders rather than its letter.</summary>

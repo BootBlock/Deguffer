@@ -94,7 +94,7 @@ public enum VolumeReadiness
 /// ordinary case, since most volumes wear one drive letter and nothing else.
 /// </param>
 /// <param name="VolumeName">
-/// The <c>\?\Volume{GUID}\</c> name Windows knows the volume by wherever it is mounted, or null for
+/// The <c>\\?\Volume{GUID}\</c> name Windows knows the volume by wherever it is mounted, or null for
 /// a letter that stands for somewhere else, such as a mapped share. What tells one disk from another
 /// when a drive letter moves between them, which is what keeps a scan of one from being compared
 /// with a scan of the other.

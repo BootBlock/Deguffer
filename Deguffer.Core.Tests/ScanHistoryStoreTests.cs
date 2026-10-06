@@ -65,6 +65,7 @@ public sealed class ScanHistoryStoreTests : IDisposable
     [InlineData("path in a name")]
     [InlineData("negative size")]
     [InlineData("another volume")]
+    [InlineData("number as text")]
     public void AnUnreadableSummaryIsIgnoredRatherThanCompared(string damage)
     {
         Assert.True(_store.Save(Summary(Then)));
@@ -95,6 +96,9 @@ public sealed class ScanHistoryStoreTests : IDisposable
             case "another volume":
                 WriteJson(file, json.Replace("0b6f5c1e", "1b6f5c1e", StringComparison.Ordinal));
                 break;
+            case "number as text":
+                WriteJson(file, json.Replace("[1,\"me\"", "[\"1\",\"me\"", StringComparison.Ordinal));
+                break;
         }
 
         Assert.NotEqual(json, Json(file, quiet: true));
@@ -106,9 +110,10 @@ public sealed class ScanHistoryStoreTests : IDisposable
         }
 
         var history = new ScanHistory(_store);
-        var record = history.Record(ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), Then.AddDays(1));
+        var record = history.Record(ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), scopedToFolder: false, Then.AddDays(1));
 
         Assert.Null(record.Growth);
+        Assert.True(record.Saved);
     }
 
     /// <summary>A damaged newest summary gives way to the one before it, which still describes the volume.</summary>
@@ -122,7 +127,7 @@ public sealed class ScanHistoryStoreTests : IDisposable
         WriteJson(newest, Json(newest).Replace("\"Folders\":[[", "\"Folders\":[[\"x\",", StringComparison.Ordinal));
 
         var record = new ScanHistory(_store).Record(
-            ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), Then.AddDays(14));
+            ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), scopedToFolder: false, Then.AddDays(14));
 
         Assert.NotNull(record.Growth);
         Assert.Equal(Then, record.Growth.SinceUtc);
@@ -183,6 +188,66 @@ public sealed class ScanHistoryStoreTests : IDisposable
         Assert.True(File.Exists(stranger));
         Assert.True(File.Exists(beside));
         Assert.True(Directory.Exists(Folder));
+    }
+
+    /// <summary>
+    /// A folder that may hold summaries and cannot be listed is not reported as emptied: what nothing
+    /// could see was not removed, and the page says so rather than "No scans are kept."
+    /// </summary>
+    [Fact]
+    public void RemovingAllReportsAFolderItCouldNotList()
+    {
+        Assert.True(_store.Save(Summary(Then)));
+
+        using (new DeniedDirectory(Folder))
+        {
+            Assert.False(new ScanHistory(_store).RemoveAll());
+        }
+
+        Assert.Single(_store.List(Volume));
+        Assert.True(_store.RemoveAll());
+        Assert.Empty(_store.List(Volume));
+    }
+
+    /// <summary>
+    /// Only a scan of a whole volume that names itself is kept and compared: a folder's scan, and a
+    /// volume with no name or size, are refused with the reason, and nothing is written.
+    /// </summary>
+    [Fact]
+    public void OnlyAWholeNamedVolumeIsKept()
+    {
+        var history = new ScanHistory(_store);
+        var space = new VolumeSpace(1000 * Megabyte, 400 * Megabyte);
+
+        Assert.Equal(NotKept.NotWholeDrive, history.Record(ExploreScan.Fast(Tree()), Volume, VolumeSpace.None, scopedToFolder: true, Then).NotKept);
+        Assert.Equal(NotKept.NoVolumeName, history.Record(ExploreScan.Fast(Tree()), Volume, VolumeSpace.None, scopedToFolder: false, Then).NotKept);
+        Assert.Equal(NotKept.NoVolumeName, history.Record(ExploreScan.Fast(Tree()), volume: null, space, scopedToFolder: false, Then).NotKept);
+        Assert.Empty(history.All());
+
+        // A folder that is the root of a volume mounted there has that volume's space, and is kept.
+        var kept = history.Record(ExploreScan.Fast(Tree()), Volume, space, scopedToFolder: true, Then);
+        Assert.Equal(NotKept.None, kept.NotKept);
+        Assert.Equal(Volume, kept.Volume);
+        Assert.Single(history.All());
+    }
+
+    /// <summary>A comparison is still kept until the summary it compares against is removed.</summary>
+    [Fact]
+    public void AComparisonIsStillKeptUntilItsSummaryIsRemoved()
+    {
+        var history = new ScanHistory(_store);
+        var space = new VolumeSpace(1000 * Megabyte, 400 * Megabyte);
+
+        history.Record(ExploreScan.Fast(Tree()), Volume, space, scopedToFolder: false, Then);
+        var growth = history.Record(ExploreScan.Fast(Tree()), Volume, space, scopedToFolder: false, Then.AddDays(1)).Growth!;
+
+        Assert.True(history.StillKept(growth));
+
+        history.Remove(history.Kept(Volume)[^1]);
+        Assert.True(history.StillKept(growth));
+
+        history.Remove(history.Kept(Volume)[0]);
+        Assert.False(history.StillKept(growth));
     }
 
     /// <summary>A summary handed back for removal that names a file this store would not have written is refused.</summary>

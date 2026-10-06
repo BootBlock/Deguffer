@@ -89,12 +89,17 @@ public sealed partial class ExploreGrowth : ObservableObject
     /// <summary>Raised when <see cref="Comparison"/> changes, so the map is drawn again.</summary>
     public event EventHandler? Changed;
 
-    /// <summary>
-    /// Show what recording a scan of the whole of <paramref name="volume"/> produced.
-    /// </summary>
-    public void Show(ScanRecord record, string volume)
+    /// <summary>Show what recording a finished scan produced.</summary>
+    public void Show(ScanRecord record)
     {
-        _volume = volume;
+        if (GrowthText.Why(record.NotKept) is { } why)
+        {
+            Clear();
+            Note = why;
+            return;
+        }
+
+        _volume = record.Volume;
         Comparison = record.Growth;
 
         var notes = new List<string>();
@@ -107,6 +112,12 @@ public sealed partial class ExploreGrowth : ObservableObject
             {
                 notes.Add(approximate);
             }
+
+            // An empty list with nothing said reads as a panel that failed to fill.
+            if (growth.Listing().Count == 0)
+            {
+                notes.Add(GrowthText.NothingChanged);
+            }
         }
         else
         {
@@ -116,7 +127,7 @@ public sealed partial class ExploreGrowth : ObservableObject
 
         if (!record.Saved)
         {
-            notes.Add("This scan could not be kept, so the next one is compared with an earlier one.");
+            notes.Add(GrowthText.NotSaved);
         }
 
         Note = string.Join(" ", notes);
@@ -124,13 +135,6 @@ public sealed partial class ExploreGrowth : ObservableObject
         ShowUsedSpace(record.Kept);
 
         Changed?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>Show that nothing is compared, and why.</summary>
-    public void Unavailable(string why)
-    {
-        Clear();
-        Note = why;
     }
 
     /// <summary>Show nothing: a scan has started, or was cancelled, and nothing on screen is compared.</summary>
@@ -158,9 +162,7 @@ public sealed partial class ExploreGrowth : ObservableObject
             return;
         }
 
-        var kept = _history.Kept(volume);
-
-        if (Comparison is { } growth && !kept.Any(summary => summary.TakenUtc == growth.SinceUtc))
+        if (Comparison is { } growth && !_history.StillKept(growth))
         {
             Comparison = null;
             Since = string.Empty;
@@ -169,7 +171,7 @@ public sealed partial class ExploreGrowth : ObservableObject
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
-        ShowUsedSpace(kept);
+        ShowUsedSpace(_history.Kept(volume));
     }
 
     private void ShowRows()

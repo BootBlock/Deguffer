@@ -162,14 +162,20 @@ public sealed class ScanHistoryStore
         return removed;
     }
 
-    /// <summary>Remove every kept summary of every volume. Returns whether all of them are gone.</summary>
+    /// <summary>
+    /// Remove every kept summary of every volume. Returns whether all of them are gone, which is false
+    /// as well where a folder that may hold one could not be listed: a summary nothing could see is
+    /// not one that was removed.
+    /// </summary>
     public bool RemoveAll()
     {
-        var all = true;
+        var all = TryFolders(out var folders);
 
-        foreach (var folder in Folders())
+        foreach (var folder in folders)
         {
-            foreach (var name in Names(folder))
+            all &= TryNames(folder, out var names);
+
+            foreach (var name in names)
             {
                 all &= TryDelete(Path.Combine(folder, name));
             }
@@ -195,39 +201,71 @@ public sealed class ScanHistoryStore
             : null;
     }
 
-    /// <summary>Every folder under the root named as <see cref="FolderOf"/> names one.</summary>
+    /// <summary>Every folder under the root named as <see cref="FolderOf"/> names one, for reading.</summary>
     private IEnumerable<string> Folders()
     {
-        IEnumerable<string> folders;
+        // Whether it could be listed only matters to a removal. A reader that cannot see a summary
+        // has nothing to compare with either way.
+        TryFolders(out var folders);
+        return folders;
+    }
 
+    /// <summary>
+    /// Every folder under the root named as <see cref="FolderOf"/> names one, and whether the root
+    /// could be listed. A root that is not there is listed, and empty: nothing has been kept yet.
+    /// </summary>
+    private bool TryFolders(out IReadOnlyList<string> folders)
+    {
         try
         {
-            folders = [.. Directory.EnumerateDirectories(LongPath.Extended(_root))];
+            folders = [.. Directory.EnumerateDirectories(LongPath.Extended(_root))
+                .Select(LongPath.Display)
+                .Where(folder => Guid.TryParseExact(Path.GetFileName(folder), "B", out _))];
+            return true;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            folders = [];
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // No history yet, or a folder that cannot be listed: nothing kept that can be read.
-            return [];
+            // Held, or refused. What is in it is unknown.
+            folders = [];
+            return false;
         }
-
-        return folders
-            .Select(LongPath.Display)
-            .Where(folder => Guid.TryParseExact(Path.GetFileName(folder), "B", out _));
     }
 
-    /// <summary>The names of the summaries in <paramref name="folder"/>, by the name this store gives one.</summary>
+    /// <summary>The names of the summaries in <paramref name="folder"/>, by the name this store gives one, for reading.</summary>
     private static IEnumerable<string> Names(string folder)
+    {
+        TryNames(folder, out var names);
+        return names;
+    }
+
+    /// <summary>
+    /// The names of the summaries in <paramref name="folder"/>, and whether it could be listed. A
+    /// folder that has gone since the root was listed is listed, and empty.
+    /// </summary>
+    private static bool TryNames(string folder, out IReadOnlyList<string> names)
     {
         try
         {
-            return [.. Directory.EnumerateFiles(LongPath.Extended(folder), "*" + Extension)
+            names = [.. Directory.EnumerateFiles(LongPath.Extended(folder), "*" + Extension)
                 .Select(Path.GetFileName)
                 .OfType<string>()
                 .Where(IsStampName)];
+            return true;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            names = [];
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return [];
+            names = [];
+            return false;
         }
     }
 

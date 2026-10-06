@@ -86,12 +86,12 @@ public abstract class ShapeColours
 
     /// <summary>
     /// A shape painted by the change that speaks for it: its own, or its nearest folder's. See
-    /// <see cref="ScanGrowth.ChangeAt"/>.
+    /// <see cref="ScanGrowth.BytesAt"/>.
     /// </summary>
     private sealed class GrowthColours(ExploreTree tree, ScanGrowth? growth) : OneTreeColours(tree)
     {
         internal override TileColour For(ExploreSurface surface, int node, int depth) =>
-            GrowthPalette.For(growth?.ChangeAt(node));
+            GrowthPalette.For(growth?.BytesAt(node));
     }
 
     /// <summary>

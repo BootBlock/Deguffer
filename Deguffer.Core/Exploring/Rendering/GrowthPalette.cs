@@ -1,5 +1,3 @@
-using Deguffer.Core.Exploring.History;
-
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>One step of the growth scale: what it means, and what it is drawn in.</summary>
@@ -12,11 +10,11 @@ public readonly record struct GrowthBand(string Label, TileColour Colour);
 /// <para><b>Diverging, from purple through grey to orange.</b> Growth has a sign and a size, so the
 /// scale needs a neutral middle and two directions a reader can tell apart without the legend. Purple
 /// and orange stay apart under all three common colour-vision deficiencies, where red and green do
-/// not, and each side darkens as the change grows, so the order reads in grey as well. The hues are
-/// ColorBrewer's PuOr, darkened at the two ends. Each step was checked against the next for
-/// separation under normal vision and under each deficiency, and the middle grey is light enough to
-/// stand apart from the grey for "not compared" and dark enough not to vanish into the map's
-/// ground.</para>
+/// not, and each side darkens as the change grows, so the order reads in grey as well, which a test
+/// holds. The hues are ColorBrewer's PuOr, darkened at the two ends. The middle grey is lighter than
+/// the grey for "not compared", so the two greys are told apart by lightness. Against the light
+/// theme's ground it is faint, and what separates an unchanged shape from the ground there is the
+/// shading and the frame every shape is drawn with, and its label.</para>
 ///
 /// <para><b>Orange for growth.</b> Growth is what the user came to find, so it takes the warmer and
 /// louder side.</para>
@@ -59,15 +57,14 @@ public static class GrowthPalette
     /// <summary>Every band, in the order a legend lists them.</summary>
     public static IReadOnlyList<GrowthBand> Bands => Scale;
 
-    /// <summary>The band a change of <paramref name="change"/> falls in.</summary>
-    public static GrowthBand BandOf(FolderChange? change)
+    /// <summary>The band a growth of <paramref name="grew"/> bytes falls in, or "not compared" for null.</summary>
+    public static GrowthBand BandOf(long? grew)
     {
-        if (change is not { } known)
+        if (grew is not { } bytes)
         {
             return Scale[^1];
         }
 
-        var bytes = known.Bytes;
         var size = Math.Abs(bytes);
         var step = size >= Gigabyte ? 0 : size >= 100 * Megabyte ? 1 : 2;
 
@@ -79,6 +76,6 @@ public static class GrowthPalette
         };
     }
 
-    /// <summary>What to paint a shape whose change is <paramref name="change"/>.</summary>
-    public static TileColour For(FolderChange? change) => BandOf(change).Colour;
+    /// <summary>What to paint a shape that grew by <paramref name="grew"/> bytes, or that nothing compared.</summary>
+    public static TileColour For(long? grew) => BandOf(grew).Colour;
 }
