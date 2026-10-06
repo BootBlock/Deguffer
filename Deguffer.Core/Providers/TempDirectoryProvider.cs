@@ -110,12 +110,14 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
         ICurrentPreferences? preferences = null,
-        IReadOnlyList<ITemporaryFolderTenant>? tenants = null)
+        IReadOnlyList<ITemporaryFolderTenant>? tenants = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
@@ -201,7 +203,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// The folders this provider would reach into, and any that named themselves and were refused.
     /// Resolved once per planning pass, because both the presence probe and the plan ask for them.
     /// </summary>
-    private TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system);
+    private TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system, Volumes);
 
     /// <summary>
     /// Drops this row's answers and its tenants' with them.

@@ -71,8 +71,6 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// </summary>
     private const string BinDirectoryName = "$Recycle.Bin";
 
-    private readonly IVolumeInventory _volumes;
-
     /// <summary>
     /// Asked which route each bin takes, and given to the executor that takes it. See
     /// <see cref="CleanupProviderBase"/>'s <c>emptier</c>.
@@ -110,10 +108,10 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? DirectoryScanner.Default,
-            emptier)
+            emptier,
+            volumes: volumes)
     {
         _emptier = emptier;
-        _volumes = volumes ?? VolumeInventory.Current;
         _preferences = preferences ?? DefaultPreferences.Instance;
         _children = new DisposableChildSet(
             Environment.UserSecurityIdentifier is { } sid
@@ -196,7 +194,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         base.InvalidateCaches();
-        _volumes.Invalidate();
+        Volumes.Invalidate();
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -506,7 +504,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// is reported from, cannot drift apart.
     /// </summary>
     private IEnumerable<LocalVolume> FixedVolumes() =>
-        _volumes.Volumes.Where(v => v is { Kind: DriveType.Fixed, IsReady: true });
+        Volumes.Volumes.Where(v => v is { Kind: DriveType.Fixed, IsReady: true });
 
     /// <summary>The fixed volumes left out of <see cref="CandidateBins"/> because they are not local.</summary>
     private IEnumerable<LocalVolume> RemotelyStoredVolumes() =>
@@ -518,7 +516,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
     /// <see cref="VolumeReadiness"/>.
     /// </summary>
     private IEnumerable<LocalVolume> UnreadableVolumes() =>
-        _volumes.Volumes.Where(v => v is { Kind: DriveType.Fixed, Readiness: VolumeReadiness.Refused });
+        Volumes.Volumes.Where(v => v is { Kind: DriveType.Fixed, Readiness: VolumeReadiness.Refused });
 
     /// <summary>
     /// Every path this provider could ever target, by declaration rather than by enumeration — so

@@ -93,10 +93,15 @@ public static class TempRoots
     /// The scratch folders on this machine, in the order they are offered: the account's own first,
     /// then the machine's.
     /// </summary>
-    public static TempRootSet Resolve(IUserEnvironment environment, ISystemDirectories system)
+    /// <param name="volumes">
+    /// Asked every other path a candidate is reachable at, so a setting naming one of the account's own
+    /// folders through another drive letter is refused as surely as one naming it directly.
+    /// </param>
+    public static TempRootSet Resolve(IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(system);
+        ArgumentNullException.ThrowIfNull(volumes);
 
         var refused = new List<(string Path, string Reason)>();
         var machineTemp = Path.Combine(system.WindowsDirectory, FolderName);
@@ -122,7 +127,7 @@ public static class TempRoots
                 continue;
             }
 
-            if (Refuse(trimmed, environment, system, machineTemp) is { } reason)
+            if (Refuse(trimmed, environment, system, volumes, machineTemp) is { } reason)
             {
                 refused.Add((trimmed, reason));
                 continue;
@@ -255,12 +260,13 @@ public static class TempRoots
         string candidate,
         IUserEnvironment environment,
         ISystemDirectories system,
+        IVolumeInventory volumes,
         string machineTemp)
     {
         // Asked before the name test, because it is the more specific answer where both apply: a
         // folder holding the profile is worth saying so about, where "we did not recognise it"
         // would be true and much less use.
-        if (StandingFolders.WhyNotTaken(candidate, environment, system) is { } standing)
+        if (StandingFolders.WhyNotTaken(candidate, environment, system, volumes) is { } standing)
         {
             return $"Emptying it would take far more than temporary files, because {standing}";
         }
@@ -268,7 +274,7 @@ public static class TempRoots
         // Further than any other setting is held to, because this row empties whatever is in the
         // folder rather than what a tool recognises there. A 'Tmp' inside Documents passes the name
         // test below and is still somewhere the user keeps their files.
-        if (StandingFolders.PersonalFolderHolding(candidate, environment) is { } personal)
+        if (StandingFolders.PersonalFolderHolding(candidate, environment, volumes) is { } personal)
         {
             return $"It is inside '{LongPath.Display(personal)}', one of your own folders, and emptying "
                 + "it would delete your files rather than a program's scratch.";

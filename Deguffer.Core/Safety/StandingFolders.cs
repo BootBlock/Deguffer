@@ -16,6 +16,13 @@ namespace Deguffer.Core.Safety;
 /// <para><b>The folder and what holds it, never what is inside it.</b> A cache kept in
 /// <c>Documents\PCSX2</c> or <c>Downloads\vcpkg-cache</c> is a folder somebody chose to put there,
 /// and whether it is the tool's is for the provider's own evidence to decide.</para>
+///
+/// <para><b>Asked at every path the folder is reachable at.</b> The locations are named the way
+/// Windows names them, and a path's text matches them only when it is reached the same way. With the
+/// system volume also mounted at <c>D:\SysMount\</c>, or <c>S:</c> substituted for the profile,
+/// <c>S:\Downloads</c> is the account's Downloads folder and its text names nothing here.
+/// <see cref="VolumeRoot.Places"/> gives each path the folder is at, and a refusal that holds at any of
+/// them holds.</para>
 /// </summary>
 public static class StandingFolders
 {
@@ -32,13 +39,14 @@ public static class StandingFolders
     /// a sentence, or null where it may be.
     /// </summary>
     /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
-    public static string? WhyNotTaken(string path, IUserEnvironment environment, ISystemDirectories system)
+    /// <param name="volumes">Asked every other path the folder is reachable at.</param>
+    public static string? WhyNotTaken(
+        string path, IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes)
     {
-        var folder = Comparable(path);
-
-        if (string.IsNullOrEmpty(Path.GetDirectoryName(folder)))
+        // A folder a volume is mounted at is as much the top of that volume as its drive letter is.
+        if (Reached(path, volumes) is not { } folders)
         {
-            return "it is the root of a drive or a share.";
+            return "it is the root of a drive, a share or a volume.";
         }
 
         string?[] structural =
@@ -55,19 +63,29 @@ public static class StandingFolders
 
         // Asked before the account's own folders, because a folder holding the profile holds all of
         // them, and naming Desktop would be true and much less use.
-        if (structural.Any(inside => !string.IsNullOrEmpty(inside) && LongPath.Contains(folder, Comparable(inside))))
+        var held = structural
+            .Where(inside => !string.IsNullOrEmpty(inside))
+            .Select(inside => Comparable(inside!))
+            .ToList();
+
+        if (folders.Any(folder => held.Exists(inside => LongPath.Contains(folder, inside))))
         {
             return "it is or holds your profile, the folders every program keeps its data in, or a folder Windows is built out of.";
         }
 
-        if (PersonalFolders(environment).FirstOrDefault(own => LongPath.Contains(folder, own)) is not { } personal)
+        var personalFolders = PersonalFolders(environment).ToList();
+
+        foreach (var folder in folders)
         {
-            return null;
+            if (personalFolders.Find(own => LongPath.Contains(folder, own)) is { } personal)
+            {
+                return LongPath.Contains(personal, folder)
+                    ? "it is one of your own folders, where you keep your files."
+                    : $"it holds '{LongPath.Display(personal)}', one of your own folders, where you keep your files.";
+            }
         }
 
-        return LongPath.Contains(personal, folder)
-            ? "it is one of your own folders, where you keep your files."
-            : $"it holds '{LongPath.Display(personal)}', one of your own folders, where you keep your files.";
+        return null;
     }
 
     /// <summary>
@@ -75,12 +93,28 @@ public static class StandingFolders
     /// For a setting whose folder is emptied of whatever is in it rather than of what a tool
     /// recognises, where being inside one of these is as bad as being one.
     /// </summary>
-    public static string? PersonalFolderHolding(string path, IUserEnvironment environment)
+    /// <param name="volumes">Asked every other path the folder is reachable at.</param>
+    public static string? PersonalFolderHolding(string path, IUserEnvironment environment, IVolumeInventory volumes)
     {
-        var folder = Comparable(path);
+        // A volume's top is in no folder at the path it was asked at, and still can be at another
+        // place the volume is mounted, which only the folder's own text is left to say.
+        var folders = Reached(path, volumes) ?? [Comparable(path)];
+        var personalFolders = PersonalFolders(environment).ToList();
 
-        return PersonalFolders(environment).FirstOrDefault(own => LongPath.Contains(own, folder));
+        return folders
+            .Select(folder => personalFolders.Find(own => LongPath.Contains(own, folder)))
+            .FirstOrDefault(personal => personal is not null);
     }
+
+    /// <summary>
+    /// Every path the folder at <paramref name="path"/> is reachable at, comparable with the
+    /// locations here, or null where it is the top of a drive, a share or a volume wherever it is
+    /// reached.
+    /// </summary>
+    private static List<string>? Reached(string path, IVolumeInventory volumes) =>
+        VolumeRoot.Places(volumes, Comparable(path)) is { } places
+            ? [.. places.Select(place => Path.TrimEndingDirectorySeparator(place.Path))]
+            : null;
 
     /// <summary>Where Windows says each of the account's own folders is, and where each is by default.</summary>
     private static IEnumerable<string> PersonalFolders(IUserEnvironment environment) =>

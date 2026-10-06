@@ -41,6 +41,30 @@ public sealed class ConfiguredFolderTests : IDisposable
 
         Assert.Equal(
             "it holds a temporary folder, where other rows remove things.",
-            ConfiguredFolder.WhyNotOwned(configured, _environment, _system, [@"D:\shared\cache\Temp"]));
+            ConfiguredFolder.WhyNotOwned(configured, _environment, _system, new FakeVolumeInventory(), [@"D:\shared\cache\Temp"]));
+    }
+
+    /// <summary>
+    /// A setting naming one of the account's own folders through a letter <c>subst</c> made for the
+    /// profile names that folder, and is declined as one. A tool's folder reached the same way is
+    /// still the tool's (§5.6).
+    /// </summary>
+    [Fact]
+    public void DeclinesTheAccountsOwnFolderNamedThroughASubstitutedLetter()
+    {
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", _environment.UserProfile);
+        var fallback = Path.Combine(_environment.UserProfile, ".cargo");
+
+        _environment.WithEnvironmentVariable("CARGO_HOME", @"S:\Downloads");
+        var downloads = ConfiguredFolder.FromVariable("CARGO_HOME", fallback, _environment, _system, volumes);
+
+        Assert.Null(downloads.Folder);
+        Assert.Equal("it is one of your own folders, where you keep your files.", downloads.Declined);
+
+        _environment.WithEnvironmentVariable("CARGO_HOME", @"S:\.cargo");
+        var cargo = ConfiguredFolder.FromVariable("CARGO_HOME", fallback, _environment, _system, volumes);
+
+        Assert.Equal(@"S:\.cargo", cargo.Folder);
+        Assert.Null(cargo.Declined);
     }
 }

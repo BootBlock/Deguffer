@@ -37,13 +37,15 @@ public sealed class RetroArchDiscovery
     private readonly SteamDiscovery _steam;
     private readonly EmulatorFolderStore _folders;
     private readonly ISystemDirectories _system;
+    private readonly IVolumeInventory _volumes;
     private readonly List<RetroArchProviderBase> _rows = [];
     private RetroArchFinding? _finding;
 
     public RetroArchDiscovery(
         IUserEnvironment environment,
         SteamDiscovery? steam = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
@@ -51,6 +53,7 @@ public sealed class RetroArchDiscovery
         _steam = steam ?? new SteamDiscovery(environment);
         _folders = new EmulatorFolderStore(environment);
         _system = system ?? SystemDirectories.Current;
+        _volumes = volumes ?? VolumeInventory.Current;
     }
 
     /// <summary>
@@ -86,7 +89,8 @@ public sealed class RetroArchDiscovery
     /// program's to answer for, whatever is in it.
     /// </summary>
     internal string? WhyNotOwned(string folder) =>
-        ConfiguredFolder.WhyNotOwned(folder, _environment, _system, TempRoots.Resolve(_environment, _system).AccountFolders);
+        ConfiguredFolder.WhyNotOwned(
+            folder, _environment, _system, _volumes, TempRoots.Resolve(_environment, _system, _volumes).AccountFolders);
 
     private RetroArchFinding Search(CancellationToken ct)
     {

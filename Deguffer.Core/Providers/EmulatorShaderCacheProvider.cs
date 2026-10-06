@@ -50,12 +50,14 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         EmulatorFolderStore? folders = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _folders = folders ?? new EmulatorFolderStore(Environment);
         _system = system ?? SystemDirectories.Current;
@@ -108,7 +110,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     private static bool HoldsRetroArch(string folder) => RetroArchInstall.ProgramIn(folder) is not PathPresence.Absent;
 
     private string? WhyNotOwned(string folder) =>
-        ConfiguredFolder.WhyNotOwned(folder, Environment, _system, TempRoots.Resolve(Environment, _system).AccountFolders);
+        ConfiguredFolder.WhyNotOwned(folder, Environment, _system, Volumes, TempRoots.Resolve(Environment, _system, Volumes).AccountFolders);
 
     /// <summary>
     /// Present where a proven root holds a cache folder, or where the plan has something to say: a

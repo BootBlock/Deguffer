@@ -14,6 +14,12 @@ public sealed class StandingFoldersTests : IDisposable
     private readonly FakeUserEnvironment _environment;
     private readonly FakeSystemDirectories _system;
 
+    /// <summary>
+    /// What the machine has mounted. Empty unless a test mounts something, which is the machine
+    /// naming no other path to anything, so the rest of these read a path's own text.
+    /// </summary>
+    private readonly FakeVolumeInventory _volumes = new();
+
     public StandingFoldersTests()
     {
         _environment = new FakeUserEnvironment(_temp.Path);
@@ -22,7 +28,13 @@ public sealed class StandingFoldersTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private string? WhyNotTaken(string path) => StandingFolders.WhyNotTaken(path, _environment, _system);
+    private string? WhyNotTaken(string path) => StandingFolders.WhyNotTaken(path, _environment, _system, _volumes);
+
+    private string? PersonalFolderHolding(string path) => StandingFolders.PersonalFolderHolding(path, _environment, _volumes);
+
+    /// <summary>The folder at <paramref name="path"/>, reached below <paramref name="mountPoint"/> rather than its own root.</summary>
+    private static string Through(string mountPoint, string path) =>
+        Path.Join(mountPoint, path[Path.GetPathRoot(path)!.Length..]);
 
     [Theory]
     [InlineData("Desktop")]
@@ -51,12 +63,13 @@ public sealed class StandingFoldersTests : IDisposable
         var moved = Path.Combine(_temp.Path, "data", "Documents");
         var environment = new FakeUserEnvironment(Path.Combine(_temp.Path, "other")).WithNoDocuments().WithPersonalFolderAt(moved);
 
-        Assert.NotNull(StandingFolders.WhyNotTaken(moved, environment, _system));
+        Assert.NotNull(StandingFolders.WhyNotTaken(moved, environment, _system, _volumes));
         Assert.Contains(
             "one of your own folders",
-            StandingFolders.WhyNotTaken(Path.Combine(_temp.Path, "data"), environment, _system),
+            StandingFolders.WhyNotTaken(Path.Combine(_temp.Path, "data"), environment, _system, _volumes),
             StringComparison.Ordinal);
-        Assert.NotNull(StandingFolders.WhyNotTaken(Path.Combine(environment.UserProfile, "Documents"), environment, _system));
+        Assert.NotNull(
+            StandingFolders.WhyNotTaken(Path.Combine(environment.UserProfile, "Documents"), environment, _system, _volumes));
     }
 
     /// <summary>
@@ -70,9 +83,7 @@ public sealed class StandingFoldersTests : IDisposable
         var inside = Path.Combine(_environment.UserProfile, "Downloads", "vcpkg-archives");
 
         Assert.Null(WhyNotTaken(inside));
-        Assert.Equal(
-            Path.Combine(_environment.UserProfile, "Downloads"),
-            StandingFolders.PersonalFolderHolding(inside, _environment));
+        Assert.Equal(Path.Combine(_environment.UserProfile, "Downloads"), PersonalFolderHolding(inside));
     }
 
     /// <summary>
@@ -111,8 +122,73 @@ public sealed class StandingFoldersTests : IDisposable
     [Fact]
     public void RefusesADriveRoot()
     {
-        Assert.Equal("it is the root of a drive or a share.", WhyNotTaken(@"D:\"));
-        Assert.Equal("it is the root of a drive or a share.", WhyNotTaken(@"\\?\D:\"));
+        Assert.Equal("it is the root of a drive, a share or a volume.", WhyNotTaken(@"D:\"));
+        Assert.Equal("it is the root of a drive, a share or a volume.", WhyNotTaken(@"\\?\D:\"));
+    }
+
+    /// <summary>
+    /// A folder a volume is mounted at is the top of that volume, and taking it takes everything on
+    /// the volume. Its text names a folder like any other, so only asking the machine finds it.
+    /// </summary>
+    [Fact]
+    public void RefusesAFolderAVolumeIsMountedAt()
+    {
+        _volumes.With(Path.GetPathRoot(_temp.Path)!, alsoMountedAt: [@"Q:\SysMount\"]);
+
+        Assert.Equal("it is the root of a drive, a share or a volume.", WhyNotTaken(@"Q:\SysMount"));
+        Assert.Equal("it is the root of a drive, a share or a volume.", WhyNotTaken(@"\\?\Q:\SysMount\"));
+        Assert.Null(WhyNotTaken(@"Q:\Elsewhere"));
+    }
+
+    /// <summary>
+    /// The profile's volume also mounted at a folder puts every one of the account's folders there
+    /// too. Asked about that path's text alone, nothing here recognised them, and removing one
+    /// removes the account's files. An ordinary folder reached the same way stays removable (§5.6),
+    /// and so does a folder beside the mount point, which is on another volume.
+    /// </summary>
+    [Fact]
+    public void RefusesTheAccountsFoldersReachedThroughAnotherMountOfTheirVolume()
+    {
+        _volumes.With(Path.GetPathRoot(_temp.Path)!, alsoMountedAt: [@"Q:\SysMount\"]);
+        var downloads = Through(@"Q:\SysMount\", Path.Combine(_environment.UserProfile, "Downloads"));
+
+        Assert.Equal("it is one of your own folders, where you keep your files.", WhyNotTaken(downloads));
+        Assert.Equal(
+            "it is one of your own folders, where you keep your files.",
+            WhyNotTaken(LongPath.Extended(downloads)));
+        Assert.Contains(
+            "your profile", WhyNotTaken(Through(@"Q:\SysMount\", _environment.LocalAppData)), StringComparison.Ordinal);
+        Assert.Contains("your profile", WhyNotTaken(Through(@"Q:\SysMount\", _temp.Path)), StringComparison.Ordinal);
+        Assert.Equal(
+            Path.Combine(_environment.UserProfile, "Downloads"),
+            PersonalFolderHolding(Path.Combine(downloads, "vcpkg-archives")));
+
+        var ordinary = Through(@"Q:\SysMount\", Path.Combine(_temp.Path, "shared", "m2-repository"));
+        Assert.Null(WhyNotTaken(ordinary));
+        Assert.Null(PersonalFolderHolding(ordinary));
+        Assert.Null(WhyNotTaken(@"Q:\Downloads"));
+    }
+
+    /// <summary>
+    /// A letter <c>subst</c> made for the profile reaches every folder in it, and Windows names no
+    /// volume for the letter, so no mount point leads back. Followed to the folder it stands for,
+    /// <c>S:\Downloads</c> is Downloads and <c>S:\Documents\Temp</c> is inside Documents. An
+    /// ordinary folder in the profile reached the same way stays removable (§5.6).
+    /// </summary>
+    [Fact]
+    public void RefusesTheAccountsFoldersReachedThroughASubstitutedLetter()
+    {
+        _volumes.Substituting(@"S:\", _environment.UserProfile);
+
+        Assert.Equal("it is one of your own folders, where you keep your files.", WhyNotTaken(@"S:\Downloads"));
+        Assert.Equal("it is one of your own folders, where you keep your files.", WhyNotTaken(@"\\?\S:\Downloads\"));
+        Assert.Contains("your profile", WhyNotTaken(@"S:\AppData"), StringComparison.Ordinal);
+        Assert.Equal(Path.Combine(_environment.UserProfile, "Documents"), PersonalFolderHolding(@"S:\Documents\Temp"));
+
+        Assert.Null(WhyNotTaken(@"S:\Documents\Temp"));
+        Assert.Null(WhyNotTaken(@"S:\shared-cache"));
+        Assert.Null(PersonalFolderHolding(@"S:\shared-cache"));
+        Assert.Null(PersonalFolderHolding(@"S:\AppData\Local\Temp"));
     }
 
     /// <summary>

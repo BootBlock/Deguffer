@@ -40,12 +40,14 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
         IProcessInspector? inspector,
         IDirectoryScanner? scanner,
         ISystemDirectories? system,
-        ILiveTreeInspector? liveTrees)
+        ILiveTreeInspector? liveTrees,
+        IVolumeInventory? volumes)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
@@ -72,7 +74,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
 
     /// <summary>This account's own temporary folders, resolved once per planning pass.</summary>
     protected IReadOnlyList<string> AccountFolders =>
-        (_roots ??= TempRoots.Resolve(Environment, _system)).AccountFolders;
+        (_roots ??= TempRoots.Resolve(Environment, _system, Volumes)).AccountFolders;
 
     public override void InvalidateCaches()
     {

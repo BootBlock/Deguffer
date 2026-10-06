@@ -95,12 +95,14 @@ public sealed class ZigCacheProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
     }
@@ -344,5 +346,5 @@ public sealed class ZigCacheProvider : CleanupProviderBase
     }
 
     private ConfiguredFolder.Setting Resolve() =>
-        ConfiguredFolder.FromVariable(CacheVariable, DefaultRoot, Environment, _system);
+        ConfiguredFolder.FromVariable(CacheVariable, DefaultRoot, Environment, _system, Volumes);
 }

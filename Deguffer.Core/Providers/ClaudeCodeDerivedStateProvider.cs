@@ -156,12 +156,14 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         IDirectoryScanner? scanner = null,
         ClaudeCodeProjectsDiscovery? projects = null,
         ISystemDirectories? system = null,
-        RowDeclarations? declarations = null)
+        RowDeclarations? declarations = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
         _declarations = declarations ?? new RowDeclarations();
@@ -208,7 +210,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// never asked for one.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system) is not { } home || LongPath.DirectoryMayExist(home));
+        Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home || LongPath.DirectoryMayExist(home));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own
@@ -230,10 +232,10 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(Environment, _system) is not { } home)
+        if (ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home)
         {
             return EmptyPlan(
-                $"{ClaudeCodeHome.WhyUnusable(Environment, _system)} Deguffer is leaving Claude Code's leftovers alone.");
+                $"{ClaudeCodeHome.WhyUnusable(Environment, _system, Volumes)} Deguffer is leaving Claude Code's leftovers alone.");
         }
 
         if (NothingToPlanFor(
@@ -383,7 +385,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             // Nothing was classified. Where that is because Windows would not describe the folder, the
             // plan names it, so Explore is told about it too. The folder's own rule recognises none of
             // its children, so it refuses everything below without the per-folder roots a look adds.
-            return ClaudeCodeHome.Resolve(Environment, _system) is { } home
+            return ClaudeCodeHome.Resolve(Environment, _system, Volumes) is { } home
                 && LongPath.ProbeDirectory(home) is PathPresence.Refused
                     ? [ToolRoot.Of(home, HomeReason, HomeChildren), .. Neighbours()]
                     : [];
@@ -429,7 +431,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     private Survey? Examine(CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(Environment, _system) is not { } home
+        if (ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home
             || !LongPath.DirectoryExists(home)
             || LongPath.IsReparsePoint(home))
         {

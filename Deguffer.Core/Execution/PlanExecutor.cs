@@ -49,6 +49,10 @@ namespace Deguffer.Core.Execution;
 /// to the signed-in account, which is the one a provider's plan was made for.
 /// </param>
 /// <param name="system">The directories Windows is built out of, for the same check.</param>
+/// <param name="volumes">
+/// Asked every other path a step's folder is reachable at, for the same check. Defaulted to the
+/// machine's own, because it only reads.
+/// </param>
 /// <param name="protection">
 /// How a <see cref="RemoveRestorePointsStep"/> is carried out and proved. Null, and never defaulted, for
 /// the reasons <paramref name="emptier"/> is: the real one removes the machine's restore points.
@@ -65,7 +69,8 @@ public sealed class PlanExecutor(
     TimeProvider? time = null,
     IUserEnvironment? environment = null,
     ISystemDirectories? system = null,
-    ISystemProtection? protection = null)
+    ISystemProtection? protection = null,
+    IVolumeInventory? volumes = null)
 {
     /// <summary>
     /// How long a command's tool is given to mark the item it will remove later. LM Studio answers
@@ -86,6 +91,7 @@ public sealed class PlanExecutor(
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly IUserEnvironment _environment = environment ?? UserEnvironment.Current;
     private readonly ISystemDirectories _system = system ?? SystemDirectories.Current;
+    private readonly IVolumeInventory _volumes = volumes ?? VolumeInventory.Current;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -293,7 +299,7 @@ public sealed class PlanExecutor(
     /// </summary>
     private string? WhyNotTaken(DeleteStep step) =>
         step.Destroys
-            .Select(path => (Path: path, Why: StandingFolders.WhyNotTaken(path, _environment, _system)))
+            .Select(path => (Path: path, Why: StandingFolders.WhyNotTaken(path, _environment, _system, _volumes)))
             .FirstOrDefault(refused => refused.Why is not null) is { Why: { } why } found
                 ? $"Nothing was removed: '{LongPath.Display(found.Path)}' is never removed, because {why}"
                 : null;

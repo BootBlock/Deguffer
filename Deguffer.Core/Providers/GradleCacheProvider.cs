@@ -74,12 +74,14 @@ public sealed class GradleCacheProvider : CleanupProviderBase
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
-        RowDeclarations? declarations = null)
+        RowDeclarations? declarations = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
         _declarations = declarations ?? new RowDeclarations();
@@ -233,5 +235,5 @@ public sealed class GradleCacheProvider : CleanupProviderBase
         ]);
 
     private ConfiguredFolder.Setting Resolve() =>
-        ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system);
+        ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system, Volumes);
 }

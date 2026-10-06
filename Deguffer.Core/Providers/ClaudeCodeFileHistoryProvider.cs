@@ -85,12 +85,14 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
         _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system);
@@ -130,7 +132,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     /// plan can say what it declined.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system) is { } home
+        Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system, Volumes) is { } home
             && LongPath.DirectoryMayExist(Path.Combine(home, ClaudeCodeHome.FileHistory)));
 
     /// <summary>
@@ -149,10 +151,10 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(Environment, _system) is not { } home)
+        if (ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home)
         {
             return EmptyPlan(
-                $"{ClaudeCodeHome.WhyUnusable(Environment, _system)} Deguffer is leaving Claude Code's rewind snapshots alone.");
+                $"{ClaudeCodeHome.WhyUnusable(Environment, _system, Volumes)} Deguffer is leaving Claude Code's rewind snapshots alone.");
         }
 
         var folder = Path.Combine(home, ClaudeCodeHome.FileHistory);
@@ -248,7 +250,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             // Nothing was classified. Where that is because Windows would not describe the folder or
             // the way down to it, the plan names the place, so Explore is told about it too: the home
             // recognising nothing refuses everything below it, snapshots included.
-            return ClaudeCodeHome.Resolve(Environment, _system) is { } home
+            return ClaudeCodeHome.Resolve(Environment, _system, Volumes) is { } home
                 && ClaudeCodeHome.FirstObstacle(home, Path.Combine(home, ClaudeCodeHome.FileHistory)) is { IsLink: false }
                     ? [new ToolRoot(home, HomeReason, static _ => false)]
                     : [];
@@ -279,7 +281,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
     private Survey? Examine(CancellationToken ct)
     {
-        if (ClaudeCodeHome.Resolve(Environment, _system) is not { } home)
+        if (ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home)
         {
             return null;
         }

@@ -38,7 +38,6 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
         "DaVinci Resolve is running and writes its render cache while it is open, so the cache is left "
         + "alone. Close Resolve, and check it is not still running in the background, then scan again.";
 
-    private readonly IVolumeInventory _volumes;
     private readonly RunningProcessCheck _stillClosed;
     private ResolveCacheExamination? _examination;
 
@@ -52,9 +51,9 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
-        _volumes = volumes ?? VolumeInventory.Current;
         _stillClosed = new RunningProcessCheck(Inspector, ResolveCacheLayout.ProcessNames);
     }
 
@@ -89,12 +88,12 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
     /// that is cancelled throws before it is kept, so the next caller looks again.
     /// </summary>
     private ResolveCacheExamination Examine(CancellationToken ct) =>
-        _examination ??= ResolveCacheExamination.Of(ResolveCacheLayout.CandidateFolders(_volumes, Environment), ct);
+        _examination ??= ResolveCacheExamination.Of(ResolveCacheLayout.CandidateFolders(Volumes, Environment), ct);
 
     public override void InvalidateCaches()
     {
         _examination = null;
-        _volumes.Invalidate();
+        Volumes.Invalidate();
         base.InvalidateCaches();
     }
 

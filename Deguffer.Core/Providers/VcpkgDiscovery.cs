@@ -64,7 +64,7 @@ public sealed record VcpkgLocations(
 /// profile location to fall back on, so finding it is three probes with three different failure
 /// modes, and none of them may be assumed.</para>
 /// </summary>
-public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirectories system)
+public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes)
 {
     /// <summary>Moves the binary cache. The first entry in the documented search order.</summary>
     public const string BinaryCacheVariable = "VCPKG_DEFAULT_BINARY_CACHE";
@@ -147,7 +147,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
             yield break;
         }
 
-        var why = ConfiguredFolder.WhyNotOwned(folder, environment, system, TempRoots.Resolve(environment, system).AccountFolders)
+        var why = ConfiguredFolder.WhyNotOwned(folder, environment, system, volumes, TempRoots.Resolve(environment, system, volumes).AccountFolders)
             ?? (LongPath.DirectoryMayExist(folder) ? evidence(folder) : null);
 
         if (why is not null)

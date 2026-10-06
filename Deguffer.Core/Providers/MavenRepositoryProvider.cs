@@ -81,12 +81,14 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
         => _system = system ?? SystemDirectories.Current;
 
     public override string Id => "maven";
@@ -379,7 +381,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             return null;
         }
 
-        var why = ConfiguredFolder.WhyNotOwned(repository, Environment, _system, TempRoots.Resolve(Environment, _system).AccountFolders)
+        var why = ConfiguredFolder.WhyNotOwned(repository, Environment, _system, Volumes, TempRoots.Resolve(Environment, _system, Volumes).AccountFolders)
             ?? (LongPath.DirectoryMayExist(repository) ? MavenRepositoryEvidence.WhyNotARepository(repository) : null);
 
         return why is null
