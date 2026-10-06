@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
@@ -59,8 +60,13 @@ public static class ElevationOffer
     /// </summary>
     /// <param name="fallback">Why <see cref="ExploreScan"/> walked, or
     /// <see cref="FallbackReason.None"/> where it did not.</param>
-    public static bool ShouldOffer(bool isElevated, FallbackReason fallback) =>
-        !isElevated && fallback is FallbackReason.NotElevated;
+    /// <param name="hidden">
+    /// What Windows stated about the scanned volume's space that no folder holds. A figure it gives
+    /// only to an administrator is the second thing elevating adds to the picture, and it does so
+    /// whatever route the scan took.
+    /// </param>
+    public static bool ShouldOffer(bool isElevated, FallbackReason fallback, HiddenSpace hidden = default) =>
+        !isElevated && (fallback is FallbackReason.NotElevated || hidden.NeedsElevation);
 
     /// <summary>
     /// What the button says, given whether a scan has finished on the page showing it.

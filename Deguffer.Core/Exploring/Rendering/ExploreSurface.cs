@@ -5,11 +5,11 @@ namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
 /// What the pointer found: a node, the block standing in for items too small to draw, or one of the
-/// two blocks standing for the rest of the volume.
+/// blocks standing for the rest of the volume.
 /// </summary>
 /// <param name="Bytes">
-/// What was pointed at accounts for this much. Carried rather than looked up because neither block
-/// has a node to look it up from.
+/// What was pointed at accounts for this much. Carried rather than looked up because none of the
+/// blocks has a node to look it up from.
 /// </param>
 public readonly record struct ExploreHit(int Node, long Bytes)
 {
@@ -19,9 +19,13 @@ public readonly record struct ExploreHit(int Node, long Bytes)
 
     public bool IsUnaccounted => Node == ExploreTile.Unaccounted;
 
+    public bool IsShadowCopies => Node == ExploreTile.ShadowCopies;
+
+    public bool IsReservedStorage => Node == ExploreTile.ReservedStorage;
+
     /// <summary>
     /// Whether what was pointed at is a node of the tree, and so something a click may pick (§7.1).
-    /// Neither block is.
+    /// None of the blocks is.
     /// </summary>
     public bool IsNode => Node >= 0;
 }
@@ -333,7 +337,7 @@ public abstract class ExploreSurface
     /// labels cannot come out contrasted against a colour the shape underneath was not painted in.</para>
     ///
     /// <para>No block is ever coloured by either scheme. An aggregate stands for a run of siblings
-    /// too small to draw, and the other two for the rest of the volume, so none belongs to a branch
+    /// too small to draw, and the others for the rest of the volume, so none belongs to a branch
     /// or has a date. Giving one a colour that reads as a thing on the disk would invite the user to
     /// act on it.</para>
     /// </summary>
@@ -342,6 +346,8 @@ public abstract class ExploreSurface
         ExploreTile.Aggregated => TilePalette.Aggregate,
         ExploreTile.FreeSpace => TilePalette.FreeSpace,
         ExploreTile.Unaccounted => TilePalette.Unaccounted,
+        ExploreTile.ShadowCopies => TilePalette.ShadowCopies,
+        ExploreTile.ReservedStorage => TilePalette.ReservedStorage,
         _ => _colours.For(this, node, depth),
     };
 

@@ -5,6 +5,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
@@ -35,6 +36,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 {
     private readonly IExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
+
+    /// <summary>What Windows states about the space on a scanned volume that no folder holds.</summary>
+    private readonly IHiddenSpaceSource _hidden;
 
     /// <summary>Whether this process holds administrator rights, which decides the elevation offer.</summary>
     private readonly bool _isElevated;
@@ -108,6 +112,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     public ExploreViewModel(
         IExploreScanner scanner,
         IVolumeInventory volumes,
+        IHiddenSpaceSource hidden,
         TimeProvider time,
         ExploreActions actions,
         ItemGuide guide,
@@ -117,6 +122,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         _scanner = scanner;
         _volumes = volumes;
+        _hidden = hidden;
         _drives = new DriveList(volumes, time);
         _guide = guide;
         _isElevated = isElevated;
@@ -568,7 +574,9 @@ public sealed partial class ExploreViewModel : ObservableObject
             // the drive picker holds are from whenever it last opened.
             _volumes.Invalidate();
 
-            Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), VolumeSpace.Of(_volumes, target));
+            var volume = await VolumeSpace.ReadAsync(_volumes, _hidden, scan.Tree, ct);
+
+            Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), volume);
 
             RouteNote = scan.RouteNote;
             OfferElevation(scan.Fallback);
@@ -766,7 +774,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         _hasScanned = found is not null;
 
         CanElevate = found is { } fallback
-            ? ElevationOffer.ShouldOffer(_isElevated, fallback)
+            ? ElevationOffer.ShouldOffer(_isElevated, fallback, Volume.Hidden)
             : ElevationOffer.ShouldOffer(_isElevated);
 
         OnPropertyChanged(nameof(ElevateLabel));
@@ -820,10 +828,20 @@ public sealed partial class ExploreViewModel : ObservableObject
             (_, { IsFreeSpace: true } free) => (
                 "Free space available on this drive", FreeSpace.Format(free.Bytes), string.Empty),
 
-            (_, { IsUnaccounted: true } unaccounted) => (
+            ({ } tree, { IsUnaccounted: true } unaccounted) => (
                 "In use, but not accounted for by this scan",
                 FreeSpace.Format(unaccounted.Bytes),
-                ExploreUnaccountedNote.For(_isElevated)),
+                ExploreUnaccountedNote.For(_isElevated, Volume, tree.TotalBytes)),
+
+            (_, { IsShadowCopies: true } shadowCopies) => (
+                "Restore points and shadow copies, by Windows' own figure",
+                FreeSpace.Format(shadowCopies.Bytes),
+                HiddenSpaceNote.ShadowCopies(Volume.Hidden.ShadowCopies)),
+
+            (_, { IsReservedStorage: true } reserved) => (
+                "Reserved storage, by Windows' own figure",
+                FreeSpace.Format(reserved.Bytes),
+                HiddenSpaceNote.ReservedStorage()),
 
             ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 
@@ -851,8 +869,15 @@ public sealed partial class ExploreViewModel : ObservableObject
             path,
             $"{FreeSpace.Format(tree.SizeOf(node))}, "
             + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}",
-            _guide.DescribeNearest(path)?.Tip() ?? string.Empty);
+            Joined(_guide.DescribeNearest(path)?.Tip(), HiddenSpaceNote.For(tree, node, Volume)));
     }
+
+    /// <summary>
+    /// What the reference says about a shape, then what Windows states about it, either of which may
+    /// be absent.
+    /// </summary>
+    private static string Joined(string? described, string stated) =>
+        string.Join("\n\n", new[] { described, stated }.Where(part => !string.IsNullOrEmpty(part)));
 
     /// <summary>Say that what the notes hold has changed, whichever of the four it was.</summary>
     private void NotesChanged()

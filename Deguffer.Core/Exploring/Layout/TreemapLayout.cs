@@ -409,15 +409,16 @@ public static class TreemapLayout
     }
 
     /// <summary>
-    /// Share the whole picture between the root, the volume's use the scan did not account for, and
-    /// its free space, in proportion to their bytes, and add whichever of the two blocks' rectangles
-    /// reach the canvas. Returns what is left for the root.
+    /// Share the whole picture between the root, the parts of the volume's use the scan did not
+    /// account for, and its free space, in proportion to their bytes, and add whichever of the
+    /// blocks' rectangles reach the canvas. Returns what is left for the root.
     ///
     /// <para>Largest first, each taking a slab across the longer side of what is left, which is the
     /// squarified row with one member: every part keeps the full length of the shorter side, so none
     /// becomes a sliver until another dwarfs it. A block whose slab would be thinner than the smallest
-    /// tile is not drawn and the others share its room. A block too thin to point at says nothing,
-    /// and the drive picker states both figures anyway.</para>
+    /// tile is not drawn and the others share its room. A block too thin to point at says nothing:
+    /// the drive picker states the capacity and the free space anyway, and the unaccounted block's
+    /// note states each figure Windows gave.</para>
     /// </summary>
     private static Rectangle BesideTheVolume(
         long usedBytes,
@@ -431,13 +432,15 @@ public static class TreemapLayout
 
         // Dropped before anything is laid, so the parts that are drawn share the whole canvas between
         // them rather than leaving the dropped one's room empty.
-        var (unaccounted, free) = Kept(usedBytes, volume, canvas.Width, canvas.Height, limits);
+        var kept = Kept(usedBytes, volume, canvas.Width, canvas.Height, limits);
 
         Span<(int Node, long Bytes)> parts =
         [
             (Root, usedBytes),
-            (ExploreTile.Unaccounted, unaccounted),
-            (ExploreTile.FreeSpace, free),
+            (ExploreTile.ShadowCopies, kept.ShadowCopies),
+            (ExploreTile.ReservedStorage, kept.Reserved),
+            (ExploreTile.Unaccounted, kept.Unaccounted),
+            (ExploreTile.FreeSpace, kept.Free),
         ];
 
         parts.Sort((a, b) => b.Bytes.CompareTo(a.Bytes));
@@ -499,34 +502,30 @@ public static class TreemapLayout
     /// <paramref name="width"/> by <paramref name="height"/>, draws anything of
     /// <paramref name="volume"/> beside it. The same at every zoom, as what is dropped is.
     /// </summary>
-    public static bool DrawsBeside(long usedBytes, VolumeSpace volume, float width, float height, LayoutLimits limits)
-    {
-        var (unaccounted, free) = Kept(usedBytes, volume, width, height, limits);
-
-        return unaccounted > 0 || free > 0;
-    }
+    public static bool DrawsBeside(long usedBytes, VolumeSpace volume, float width, float height, LayoutLimits limits) =>
+        Kept(usedBytes, volume, width, height, limits) != default;
 
     /// <summary>
-    /// What of the volume's unaccounted use and free space is drawn beside the root: each as it is,
-    /// or zero where its slab would be thinner than the smallest tile.
+    /// What of the volume's parts (see <see cref="VolumeSpace.Parts"/>) is drawn beside the root:
+    /// each as it is, or zero where its slab would be thinner than the smallest tile.
     ///
     /// <para>Measured against the canvas rather than the magnified picture, so what is dropped is the
     /// same at every zoom. Deciding it at each zoom would let a block appear partway into one and take
     /// its share from the root, moving every shape in the picture a few pixels times the zoom.</para>
     /// </summary>
-    private static (long Unaccounted, long Free) Kept(
+    private static VolumeParts Kept(
         long usedBytes,
         VolumeSpace volume,
         double width,
         double height,
         LayoutLimits limits)
     {
-        var unaccounted = volume.UnaccountedBytes(usedBytes);
-        var free = volume.FreeBytes;
-        double whole = usedBytes + unaccounted + free;
+        var parts = volume.Parts(usedBytes);
+        double whole = usedBytes + parts.ShadowCopies + parts.Reserved + parts.Unaccounted + parts.Free;
         var longer = Math.Max(width, height);
 
-        return (Thick(unaccounted), Thick(free));
+        return new VolumeParts(
+            Thick(parts.ShadowCopies), Thick(parts.Reserved), Thick(parts.Unaccounted), Thick(parts.Free));
 
         long Thick(long bytes) => bytes > 0 && longer * (bytes / whole) >= limits.MinimumTileSize ? bytes : 0;
     }

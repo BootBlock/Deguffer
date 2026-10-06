@@ -3,6 +3,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
@@ -629,16 +630,90 @@ public sealed class ExploreViewModelTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void TheUnaccountedNoteIsTheOneForThisProcess(bool isElevated)
+    public void TheUnaccountedNoteIsTheOneForThisProcessAndThisVolume(bool isElevated) => UiThread.Run(async () =>
     {
-        _explore.Volumes.With(@"C:\");
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
+        _explore.Hidden.Answer = new HiddenSpace(ShadowStorage.Refused, new ReservedStorage(Statement.Stated, 500));
         var page = _explore.Page(isElevated);
+        var tree = Drive(ExploreFixture.File("file", 3_000));
 
-        page.Hover(new ExploreHit(ExploreTile.Unaccounted, 1024));
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+        page.Hover(new ExploreHit(ExploreTile.Unaccounted, 2_500));
 
         Assert.Equal("In use, but not accounted for by this scan", page.Hovered);
-        Assert.Equal(ExploreUnaccountedNote.For(isElevated), page.HoveredNote);
-    }
+        Assert.Equal(ExploreUnaccountedNote.For(isElevated, page.Volume, tree.TotalBytes), page.HoveredNote);
+        Assert.Contains("Reserved storage", page.HoveredNote);
+    });
+
+    /// <summary>
+    /// Windows' figures are read once, for the volume the finished scan covered, and each block they
+    /// draw is described from them.
+    /// </summary>
+    [Fact]
+    public void AWholeVolumeIsDrawnWithWindowsFiguresReadOnceForIt() => UiThread.Run(async () =>
+    {
+        var shadow = new ShadowStorage(Statement.Stated, 400, 1_000, 2_000);
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
+        _explore.Hidden.Answer = new HiddenSpace(shadow, new ReservedStorage(Statement.Stated, 500));
+        var page = _explore.Page();
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(ExploreFixture.File("file", 3_000))));
+
+        Assert.Equal([@"C:\"], _explore.Hidden.Asked);
+        Assert.Equal(new VolumeParts(1_000, 500, 1_500, 6_000), page.VolumeBeside.Parts(3_000));
+
+        page.Hover(new ExploreHit(ExploreTile.ShadowCopies, 1_000));
+
+        Assert.Equal("Restore points and shadow copies, by Windows' own figure", page.Hovered);
+        Assert.Equal(FreeSpace.Format(1_000), page.HoveredFigures);
+        Assert.Equal(HiddenSpaceNote.ShadowCopies(shadow), page.HoveredNote);
+
+        page.Hover(new ExploreHit(ExploreTile.ReservedStorage, 500));
+
+        Assert.Equal("Reserved storage, by Windows' own figure", page.Hovered);
+        Assert.Equal(HiddenSpaceNote.ReservedStorage(), page.HoveredNote);
+    });
+
+    /// <summary>
+    /// A scan that walked for a reason elevating cannot fix still offers it where Windows refused a
+    /// figure, because the elevated scan would draw that figure.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARefusedFigureKeepsTheElevationOffered(bool refused) => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
+        _explore.Hidden.Answer = refused ? new HiddenSpace(ShadowStorage.Refused, default) : HiddenSpace.None;
+        var page = _explore.Page();
+
+        await _explore.ScanAsync(
+            page, ExploreScan.Walked(Drive(ExploreFixture.File("file", 3_000)), FallbackReason.NotNtfsVolume));
+
+        Assert.Equal(refused, page.CanElevate);
+    });
+
+    /// <summary>
+    /// Where the scan counted System Volume Information, the storage is inside it, and pointing at it
+    /// says how much of it Windows states is the storage.
+    /// </summary>
+    [Fact]
+    public void SystemVolumeInformationCountedByTheScanSaysWhatWindowsStatesIsInIt() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
+        _explore.Hidden.Answer = new HiddenSpace(new ShadowStorage(Statement.Stated, 400, 1_000, 2_000), default);
+        var page = _explore.Page();
+        var tree = Drive(ExploreFixture.Folder(VolumeSpace.SystemVolumeInformation), ExploreFixture.File("file", 3_000));
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+        page.Hover(new ExploreHit(Child(tree, VolumeSpace.SystemVolumeInformation), 0));
+
+        Assert.True(page.Volume.CountedSystemVolumeInformation);
+        Assert.EndsWith(
+            HiddenSpaceNote.For(tree, Child(tree, VolumeSpace.SystemVolumeInformation), page.Volume),
+            page.HoveredNote);
+        Assert.Contains(FreeSpace.Format(1_000), page.HoveredNote);
+    });
 
     /// <summary>
     /// The replacement is pointed where this page is pointed now, which is what the Scan button
