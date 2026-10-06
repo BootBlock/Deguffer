@@ -132,6 +132,19 @@ public static class TilePalette
     /// </summary>
     public static TileColour Unaccounted => TileColour.FromRgb(0x9C9C9C);
 
+    /// <summary>
+    /// The colour for the block standing for restore points and shadow copies: a neutral a step
+    /// darker than the unaccounted block it was taken out of, so it reads as part of the same use
+    /// and apart from it, and like it is no hue a thing on the disk is drawn in.
+    /// </summary>
+    public static TileColour ShadowCopies => TileColour.FromRgb(0x888888);
+
+    /// <summary>
+    /// The colour for the block standing for reserved storage: a neutral a step lighter than the
+    /// unaccounted block, for the reason <see cref="ShadowCopies"/> is a step darker.
+    /// </summary>
+    public static TileColour ReservedStorage => TileColour.FromRgb(0xB0B0B0);
+
     /// <summary>Where one scheme's lightness and saturation start, and how far each level moves them.</summary>
     private readonly record struct Ramp(
         double RootLightness,

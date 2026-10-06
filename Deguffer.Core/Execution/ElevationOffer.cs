@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
@@ -55,12 +56,18 @@ public static class ElevationOffer
     /// <summary>
     /// What a finished Explore scan found. That page draws one volume by one route, so it has a
     /// single fallback reason rather than a plan per provider, and it removes nothing during the
-    /// scan — leaving the route as the whole of the question.
+    /// scan. Two things are improved by elevating, and both are read here: the route, and a figure
+    /// Windows states only to an administrator about the volume's space that no folder holds.
     /// </summary>
     /// <param name="fallback">Why <see cref="ExploreScan"/> walked, or
     /// <see cref="FallbackReason.None"/> where it did not.</param>
-    public static bool ShouldOffer(bool isElevated, FallbackReason fallback) =>
-        !isElevated && fallback is FallbackReason.NotElevated;
+    /// <param name="hidden">
+    /// What Windows stated about the scanned volume's space that no folder holds. A figure it gives
+    /// only to an administrator is the second thing elevating adds to the picture, and it does so
+    /// whatever route the scan took.
+    /// </param>
+    public static bool ShouldOffer(bool isElevated, FallbackReason fallback, HiddenSpace hidden) =>
+        !isElevated && (fallback is FallbackReason.NotElevated || hidden.NeedsElevation);
 
     /// <summary>
     /// What the button says, given whether a scan has finished on the page showing it.

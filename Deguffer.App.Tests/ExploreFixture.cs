@@ -36,6 +36,8 @@ internal sealed class ExploreFixture : IDisposable
 
     public FakeExploreScanner Scanner { get; } = new();
 
+    public FakeHiddenSpaceSource Hidden { get; } = new();
+
     public ManualTimeProvider Time { get; } = new();
 
     public FakeExploreConfirmation Prompt { get; set; } = new(answer: true);
@@ -56,6 +58,7 @@ internal sealed class ExploreFixture : IDisposable
         new(
             Scanner,
             Volumes,
+            Hidden,
             Time,
             new ExploreActions(Build, () => Prompt, Faults, Running, new FakeRecycleBin()),
             Guide,

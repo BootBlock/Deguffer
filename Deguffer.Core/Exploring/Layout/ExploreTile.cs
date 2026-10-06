@@ -12,8 +12,9 @@ namespace Deguffer.Core.Exploring.Layout;
 /// <param name="Node">
 /// The node in the tree, <see cref="Aggregated"/> where this rectangle stands for several siblings
 /// too small to draw individually, <see cref="FreeSpace"/> where it stands for what the volume has
-/// left, or <see cref="Unaccounted"/> where it stands for what the volume has in use that the scan
-/// did not count.
+/// left, <see cref="Unaccounted"/> where it stands for what the volume has in use that the scan
+/// did not count, or <see cref="ShadowCopies"/> or <see cref="ReservedStorage"/> where it stands for
+/// a part of that Windows states the size of.
 /// </param>
 /// <param name="Depth">How far below the layout's root this sits. The root itself is zero.</param>
 /// <param name="Bytes">
@@ -52,7 +53,7 @@ public readonly record struct ExploreTile(
     /// of a scanned volume so the used space is seen in proportion to what is left.
     ///
     /// <para>Not a thing on the disk, so it can never be picked, opened or outlined (§7.1). Every
-    /// caller that acts on a shape asks <see cref="IsNode"/>, which this and both other blocks fail.</para>
+    /// caller that acts on a shape asks <see cref="IsNode"/>, which this and every other block fail.</para>
     /// </summary>
     public const int FreeSpace = -2;
 
@@ -66,11 +67,29 @@ public readonly record struct ExploreTile(
     /// </summary>
     public const int Unaccounted = -3;
 
+    /// <summary>
+    /// The node number of the rectangle standing for the space Windows states it has set aside for
+    /// restore points and shadow copies, taken out of <see cref="Unaccounted"/> where the scan did
+    /// not count it. Not a thing on the disk Explore can act on, on the terms <see cref="FreeSpace"/>
+    /// is: System Protection is what reduces it.
+    /// </summary>
+    public const int ShadowCopies = -4;
+
+    /// <summary>
+    /// The node number of the rectangle standing for the space Windows keeps back for updates
+    /// (reserved storage), taken out of <see cref="Unaccounted"/>. Not a thing on the disk either.
+    /// </summary>
+    public const int ReservedStorage = -5;
+
     public bool IsAggregate => Node == Aggregated;
 
     public bool IsFreeSpace => Node == FreeSpace;
 
     public bool IsUnaccounted => Node == Unaccounted;
+
+    public bool IsShadowCopies => Node == ShadowCopies;
+
+    public bool IsReservedStorage => Node == ReservedStorage;
 
     /// <summary>Whether this rectangle is a node of the tree, rather than one standing for something else.</summary>
     public bool IsNode => Node >= 0;
