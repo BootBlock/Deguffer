@@ -433,17 +433,22 @@ public sealed partial class ExplorePage : Page
 
         try
         {
-            RowsList.SelectedItems.Clear();
-
             if (RowsList.SelectionMode == ListViewSelectionMode.Single)
             {
                 // A list that holds one row at a time can show a selection of one, and nothing else
                 // without misstating it. Several picked in the folder list stay picked, and the line
                 // under the card names them.
+                //
+                // Written through SelectedItem alone. A single-selection ListView refuses a write to
+                // SelectedItems with E_UNEXPECTED, Clear included, and a removal ends by emptying the
+                // selection - so clearing it here took the app down after every removal from the
+                // Files layout.
                 RowsList.SelectedItem = picked.Count == 1 && shown is [var only] ? only : null;
             }
             else
             {
+                RowsList.SelectedItems.Clear();
+
                 foreach (var row in shown)
                 {
                     RowsList.SelectedItems.Add(row);

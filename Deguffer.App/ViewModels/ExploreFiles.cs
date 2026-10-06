@@ -221,8 +221,8 @@ public sealed partial class ExploreFiles : ObservableObject
 
             _ranking = ranking;
 
-            ShowRows(rows);
-            Summary = SummaryOf(ranking);
+            var gone = ShowRows(rows);
+            Summary = SummaryOf(ranking, gone);
         }
         catch (OperationCanceledException)
         {
@@ -233,13 +233,16 @@ public sealed partial class ExploreFiles : ObservableObject
     /// <summary>
     /// Bring <see cref="Rows"/> to <paramref name="arriving"/>, less anything removed since the scan.
     /// </summary>
-    private void ShowRows(IReadOnlyList<ExploreFileRow> arriving)
+    /// <returns>How many of <paramref name="arriving"/> were left out for having been removed.</returns>
+    private int ShowRows(IReadOnlyList<ExploreFileRow> arriving)
     {
+        ExploreFileRow[] kept = [.. arriving.Where(row => !_wasRemoved(row.Node))];
+
         IsShowingRows = true;
 
         try
         {
-            LiveList.Show(Rows, [.. arriving.Where(row => !_wasRemoved(row.Node))], row => row.Key);
+            LiveList.Show(Rows, kept, row => row.Key);
         }
         finally
         {
@@ -247,14 +250,24 @@ public sealed partial class ExploreFiles : ObservableObject
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
+
+        return arriving.Count - kept.Length;
     }
 
     /// <summary>
     /// How many files are listed and of how many. The count is of what matched, so a reader whose
     /// filter matches fifty thousand files is told the list is the top of it rather than all of it.
     /// </summary>
-    private static string SummaryOf(FileRanking ranking) =>
-        (ranking.Matched, ranking.IsComplete, ranking.Filter.IsEverything) switch
+    /// <param name="gone">
+    /// How many listed files were removed since the scan. They are taken off the counts as they are
+    /// off the rows, so the sentence describes the list under it. A file removed from outside the
+    /// list is still counted, as the sizes on the page still count it, and the stale note says so.
+    /// </param>
+    private static string SummaryOf(FileRanking ranking, int gone)
+    {
+        var (matched, listed) = (ranking.Matched - gone, ranking.Files.Count - gone);
+
+        return (matched, ranking.IsComplete, ranking.Filter.IsEverything) switch
         {
             (0, _, true) => "There are no files here.",
             (0, _, false) => "No file here matches.",
@@ -262,7 +275,8 @@ public sealed partial class ExploreFiles : ObservableObject
             (1, _, false) => "1 file matches.",
             (var count, true, true) => $"{count:N0} files here, largest first.",
             (var count, true, false) => $"{count:N0} files match, largest first.",
-            (var count, false, true) => $"The {ranking.Files.Count:N0} largest of {count:N0} files here.",
-            (var count, false, false) => $"The {ranking.Files.Count:N0} largest of {count:N0} files that match.",
+            (var count, false, true) => $"The {listed:N0} largest of {count:N0} files here.",
+            (var count, false, false) => $"The {listed:N0} largest of {count:N0} files that match.",
         };
+    }
 }

@@ -162,8 +162,9 @@
             setup.exe apart; then the size and the newest write, as the folder rows state them.
 
             A file Explore will not remove is listed all the same, with the reason under its folder
-            (§7.1). Dropping it would order the list by removability after all, and greying it out
-            would say nothing about why. The glyph is never the only carrier: the line says it in
+            (§7.1), wrapped rather than cut short, because the part of a refusal that says what to do
+            instead is its end. Dropping the row would order the list by removability after all, and
+            greying it out would say nothing about why. The glyph is never the only carrier: the line says it in
             words, and the row's name says it to a screen reader.
         -->
         <DataTemplate x:Key="FileRow" x:DataType="vm:ExploreFileRow">
@@ -207,7 +208,7 @@
                         <TextBlock Grid.Column="1"
                                    Text="{x:Bind RefusalLine}"
                                    FontSize="12"
-                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="Wrap"
                                    Style="{StaticResource SecondaryText}" />
                     </Grid>
                 </StackPanel>

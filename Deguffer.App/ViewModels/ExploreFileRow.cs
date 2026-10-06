@@ -45,8 +45,9 @@ public sealed record ExploreFileRow(
     public string Tip => Refusal is null ? DatesLabel : $"{DatesLabel}{Environment.NewLine}{Environment.NewLine}{Refusal}";
 
     /// <summary>
-    /// What a screen reader says for the row. The refusal is in it in full, because the row trims it
-    /// to one line and a tooltip is not an accessible surface here (see the list's template).
+    /// What a screen reader says for the row, the refusal included. A row is announced by this name
+    /// rather than by its parts, and a tooltip is not an accessible surface here (see the list's
+    /// template).
     /// </summary>
     public string Description =>
         $"{Name}, {SizeLabel}, in {Folder}, last written {AgeLabel}"
