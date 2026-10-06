@@ -85,12 +85,15 @@ internal static class ShadowStorageCalls
                 hr = ((IVssDifferentialSoftwareSnapshotMgmt)provider).QueryDiffAreasOnVolume(
                     volumeRoot, out var areas);
 
-                if (hr == ObjectNotFound)
+                // A volume holding no storage answers S_FALSE, which was observed elevated on Windows
+                // 11 where vssadmin found nothing, or VSS_E_OBJECT_NOT_FOUND. Either is a statement
+                // that there is none, and only a failure code other than that one is not.
+                if (hr == ObjectNotFound || (hr >= 0 && areas is null))
                 {
                     return new ShadowStorage(Statement.Stated, MaximumBytes: 0);
                 }
 
-                if (hr != S_OK)
+                if (hr < 0)
                 {
                     return Unanswered(hr);
                 }
