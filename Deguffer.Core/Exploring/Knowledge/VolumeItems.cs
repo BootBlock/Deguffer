@@ -38,8 +38,9 @@ internal static class VolumeItems
             + "follows how many restore points and snapshots have built up, and can be many "
             + "gigabytes.",
 
-            "It belongs to Windows and cannot be deleted, so the way to reduce it is System "
-            + "Protection's own limit on how much of the drive restore points may use."),
+            "It belongs to Windows and cannot be deleted. System Protection's own limit on how much of "
+            + "the drive restore points may use keeps it smaller, and Deguffer's clean list offers every "
+            + "restore point but the newest, as 'Older restore points'."),
 
         new(
             KnownPlace.VolumeRoot,
