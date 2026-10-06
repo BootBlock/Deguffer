@@ -31,7 +31,7 @@ public sealed class StandingFoldersTests : IDisposable
     private string? WhyNotTaken(string path) => StandingFolders.WhyNotTaken(path, _environment, _system, _volumes);
 
     private string? PersonalFolderHolding(string path) =>
-        StandingFolders.Examine(path, _environment, _system, _volumes).PersonalFolder;
+        StandingFolders.Examine(ReachedFolder.At(path, _volumes), _environment, _system).PersonalFolder;
 
     /// <summary>The folder at <paramref name="path"/>, reached below <paramref name="mountPoint"/> rather than its own root.</summary>
     private static string Through(string mountPoint, string path) =>

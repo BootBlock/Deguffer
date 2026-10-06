@@ -55,7 +55,7 @@ internal static class ConfiguredFolder
     /// sentence, or null where it may be.
     /// </summary>
     /// <param name="configured">The folder, already through <see cref="LongPath.Configured"/>.</param>
-    /// <param name="volumes">Asked every other path the folder is reachable at.</param>
+    /// <param name="volumes">Asked every other path the folder and each temporary folder are reachable at.</param>
     /// <param name="accountTempFolders">This account's own temporary folders.</param>
     public static string? WhyNotOwned(
         string configured,
@@ -64,16 +64,18 @@ internal static class ConfiguredFolder
         IVolumeInventory volumes,
         IReadOnlyList<string> accountTempFolders)
     {
-        if (StandingFolders.WhyNotTaken(configured, environment, machine, volumes) is { } standing)
+        var folder = ReachedFolder.At(configured, volumes);
+
+        if (StandingFolders.WhyNotTaken(folder, environment, machine) is { } standing)
         {
             return standing;
         }
 
-        var unaliased = LongPath.Unaliased(configured);
-
+        // Each temporary folder at every path it is reachable at too, because it is a setting as well,
+        // and the two may name one volume through different letters.
         return accountTempFolders
             .Append(Path.Combine(machine.WindowsDirectory, "Temp"))
-            .Any(temp => temp.Length > 0 && LongPath.Contains(unaliased, LongPath.Unaliased(temp)))
+            .Any(temp => temp.Length > 0 && folder.Holds(ReachedFolder.At(temp, volumes)))
             ? "it holds a temporary folder, where other rows remove things."
             : null;
     }

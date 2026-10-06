@@ -45,6 +45,23 @@ public sealed class ConfiguredFolderTests : IDisposable
     }
 
     /// <summary>
+    /// A folder holding a temporary folder is refused however either is named. With <c>S:</c>
+    /// substituted for <c>D:\shared</c>, <c>S:\cache</c> holds <c>D:\shared\cache\Temp</c>, and
+    /// <c>D:\shared\cache</c> holds <c>S:\cache\Temp</c>. A folder beside it reached the same way is
+    /// still a tool's (§5.6).
+    /// </summary>
+    [Fact]
+    public void RefusesAFolderHoldingATemporaryFolderWhereEitherIsNamedThroughASubstitutedLetter()
+    {
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", @"D:\shared");
+        const string held = "it holds a temporary folder, where other rows remove things.";
+
+        Assert.Equal(held, ConfiguredFolder.WhyNotOwned(@"S:\cache", _environment, _system, volumes, [@"D:\shared\cache\Temp"]));
+        Assert.Equal(held, ConfiguredFolder.WhyNotOwned(@"D:\shared\cache", _environment, _system, volumes, [@"S:\cache\Temp"]));
+        Assert.Null(ConfiguredFolder.WhyNotOwned(@"S:\gradle", _environment, _system, volumes, [@"D:\shared\cache\Temp"]));
+    }
+
+    /// <summary>
     /// A setting naming one of the account's own folders through a letter <c>subst</c> made for the
     /// profile names that folder, and is declined as one. A tool's folder reached the same way is
     /// still the tool's (§5.6).

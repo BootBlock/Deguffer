@@ -2880,7 +2880,10 @@ A path in Capture One's list is not evidence on its own. **A catalog must be a f
 `<Name>.cocatalog` holding its database**, a file ending in `.cocatalogdb`, and **a session's folder
 must hold its session file**, ending in `.cosessiondb`. A catalog database anywhere else does not make
 the folder around it a catalog, a session file at the root of a drive names no session, and a session
-folder that holds your profile or its application data is not searched. A listed folder that fails any of these is left
+folder that is a folder a volume is mounted at, or holds your profile or its application data, or is
+inside that data, is not searched. Each is asked at every path the folder is reachable at, so a session
+opened through a `subst` letter or a second mount of the volume is declined as surely as one opened
+at the path it stands for. A listed folder that fails any of these is left
 alone, and the scan says why.
 
 Inside a catalog, and inside each `CaptureOne` folder of a session, **`Cache` is the only thing
@@ -5614,10 +5617,12 @@ declined outright, with the reason shown on the row:
   host produces exactly that by default, so the folder your programs actually resolve to is the one
   kept.
 
-The first two, and the refusal of a folder inside one of your own folders, are asked of every path
-the folder is reachable at, not only the one the setting names. A `subst` letter for the profile
-or a second mount of its volume reaches the same folders, so `S:\Documents\Temp` is refused as
-surely as the path it stands for.
+Every refusal here is asked of every path the folder is reachable at, not only the one the setting
+names, and so are the folder inside `C:\Windows\Temp` that is left to that folder's own step and two
+settings naming one folder, which is offered once. A `subst` letter for the profile or a second mount
+of its volume reaches the same folders, so `S:\Documents\Temp` is refused as surely as the path it
+stands for, and `S:\AppData\Local\Temp` is found inside the temporary folder it is in however that
+one is named.
 
 A temporary folder that turns out to be a link to somewhere else is declined too, on the rule that
 applies everywhere in Deguffer: it does not delete through a link, because what is on the far side
