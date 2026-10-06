@@ -409,6 +409,17 @@ Deliberate points, and the traps that come with them:
 - **Dry run is the default action.** The primary button scans and removes nothing; deleting is the
   second step.
 - **Show free space before and after**, prominently. It is the only number the user came for.
+- **What follows a clean is the user's choice, and it can always be stopped.** Beside Clean, a
+  "When complete" box offers to exit Deguffer, lock the PC, log off, sleep, hibernate, restart or
+  shut down once a clean has finished. Sleep and hibernate are offered only where Windows says the
+  machine can do them. The choice is stored, so it can be carried out days after it was made, and it
+  is therefore never carried out without a 30-second countdown that names it and can be cancelled.
+  The countdown starts again while anything else in Deguffer is changing the machine, because ending
+  the process under a run loses its §5.6 check. Nothing follows a clean that was cancelled, declined
+  or failed, or one whose §5.6 verification failed, because that verdict must be read before the next
+  run. Logging off, restarting and shutting down ask Windows to do it, which asks every program to
+  close and lets any of them refuse. Deguffer never forces it. That is the one call outside §7.2.1
+  that ends other programs, and a test holds it to that one file and to those flags.
 - **Age is a first-class column** for per-workspace and per-project data — "last touched 5 months
   ago" drives the decision more than size does.
 - **The Acrylic backdrop (§6.5) is decoration, never information.** Tier, risk and selection state
