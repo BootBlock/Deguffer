@@ -10,6 +10,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
 {
     private readonly List<LocalVolume> _volumes = [];
 
+    private readonly Dictionary<string, string> _substitutes = new(StringComparer.OrdinalIgnoreCase);
+
     private string? _answer;
 
     public IReadOnlyList<LocalVolume> Volumes => _volumes;
@@ -102,6 +104,30 @@ public sealed class FakeVolumeInventory : IVolumeInventory
             .Where(mountPoint => HostVolume.Holds(mountPoint, comparable))
             .MaxBy(mountPoint => mountPoint.Length);
     }
+
+    /// <summary>
+    /// Every mount point of the volume here that is mounted at <paramref name="mountPoint"/>, as the
+    /// volumes stand at the call, or none where no volume is mounted there.
+    /// </summary>
+    public IReadOnlyList<string> MountPointsOf(string mountPoint) =>
+        _volumes.FirstOrDefault(volume => volume.MountPoints.Any(known => HostVolume.IsMountPoint(known, mountPoint)))
+            is { RootPath: not null } held
+            ? [.. held.MountPoints]
+            : [];
+
+    /// <summary>
+    /// Pretend <c>subst</c> made the drive letter <paramref name="driveRoot"/> stand for
+    /// <paramref name="folder"/>. Not a volume, so it is not in <see cref="Volumes"/> and no mount
+    /// point answers for it, as Windows names none for such a letter.
+    /// </summary>
+    public FakeVolumeInventory Substituting(string driveRoot, string folder)
+    {
+        _substitutes[driveRoot] = folder;
+
+        return this;
+    }
+
+    public string? SubstituteOf(string driveRoot) => _substitutes.GetValueOrDefault(driveRoot);
 
     /// <summary>
     /// Answer every <see cref="MountPointOf"/> with <paramref name="mountPoint"/>, whatever the path.

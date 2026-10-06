@@ -78,6 +78,49 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// Asked live at any of a volume's mount points, with or without its trailing separator, the
+    /// answer is every place the remembered list says the volume is mounted, in the same order. A
+    /// folder nothing is mounted at answers nothing, and so asks nothing more of a refusing caller.
+    /// Makes no claim that any volume here has more than one mount point, for the reason
+    /// <see cref="ReportsEveryPathEachVolumeIsMountedAt"/> gives.
+    /// </summary>
+    [Fact]
+    public void AnswersEveryMountPointOfTheVolumeMountedAtOne()
+    {
+        var volumes = VolumeInventory.Current.Volumes.Where(v => v.VolumeName is not null).ToList();
+
+        Assert.NotEmpty(volumes);
+
+        Assert.All(volumes, v => Assert.All(v.MountPoints, mountPoint =>
+        {
+            Assert.Equal(v.MountPoints, VolumeInventory.Current.MountPointsOf(mountPoint));
+            Assert.Equal(v.MountPoints, VolumeInventory.Current.MountPointsOf(mountPoint[..^1]));
+        }));
+
+        using var temp = new TempDirectory();
+
+        Assert.Empty(VolumeInventory.Current.MountPointsOf(temp.Path));
+    }
+
+    /// <summary>
+    /// What a drive letter stands for, read from the target Windows keeps for it. <c>subst</c> writes
+    /// a folder in the <c>\??\</c> namespace, and a volume's own letter names a device, which is no
+    /// folder. Asked of the parsing rather than the machine, because no test may create a letter.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\??\C:\Users\testuser", @"C:\Users\testuser")]
+    [InlineData(@"\??\C:\Users\testuser\", @"C:\Users\testuser")]
+    [InlineData(@"\??\C:", @"C:\")]
+    [InlineData(@"\??\C:\", @"C:\")]
+    [InlineData(@"\??\UNC\server\share\folder", @"\\server\share\folder")]
+    [InlineData(@"\Device\HarddiskVolume3", null)]
+    [InlineData(@"\Device\LanmanRedirector\;Z:0000000000012345\server\share", null)]
+    [InlineData(@"\??\", null)]
+    [InlineData(null, null)]
+    public void ASubstitutedLetterStandsForTheFolderItsTargetNames(string? target, string? folder) =>
+        Assert.Equal(folder, VolumeCalls.Substitution(target));
+
+    /// <summary>
     /// One entry per volume. The list is built from the volume enumeration and then topped up with
     /// the drive letters no volume claimed, so a letter counted twice would put the same volume in
     /// front of the picker twice and plan its Recycle Bin twice.

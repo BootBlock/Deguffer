@@ -30,6 +30,9 @@ public static class VolumeRoot
     private static readonly char[] Separators =
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
+    /// <summary>How many drive letters there are, which bounds how far substituted letters chain.</summary>
+    private const int Letters = 26;
+
     /// <summary>
     /// Whether <paramref name="path"/> is the top of a drive in display form, <c>C:\</c>, and nothing
     /// else: not <c>C:</c>, which is drive-relative and means a different directory in every process;
@@ -56,8 +59,8 @@ public static class VolumeRoot
     /// answers the callers here have to keep apart: one is never a thing to remove and never a thing
     /// to explain, and the other is both.</para>
     ///
-    /// <para>For a caller that explains. A caller that refuses reads <see cref="Readings"/>, which
-    /// also keeps the drive letter's answer.</para>
+    /// <para>For a caller that explains. A caller that refuses reads <see cref="Places"/>, which
+    /// also keeps the drive letter's answer and asks about every other path the item is at.</para>
     /// </summary>
     /// <param name="volumes">Asked where the volume holding the path is mounted.</param>
     /// <param name="path">
@@ -81,23 +84,139 @@ public static class VolumeRoot
     /// where either reading makes the path a volume root, and for a path <see cref="Below"/> answers
     /// null for.
     ///
-    /// <para><b>Both, for a caller that refuses.</b> Asking the machine is what finds the top of a
+    /// <para><b>Both, for a caller that refuses</b>, which reads them for each of the item's
+    /// <see cref="Places"/> rather than for its one path. Asking the machine is what finds the top of a
     /// volume mounted at a folder, and it must not also take away what the drive letter already
     /// showed. A volume mounted at a folder inside <c>C:\$Recycle.Bin</c> would otherwise read
     /// everything under it as ordinary, where the drive letter reads it as inside the Recycle Bin.
     /// A refusal that holds on either reading therefore holds, and the lookup can only add
     /// refusals to what the path's text alone gave.</para>
     /// </summary>
-    public static IReadOnlyList<string>? Readings(IVolumeInventory volumes, string path)
+    public static IReadOnlyList<string>? Readings(IVolumeInventory volumes, string path) =>
+        Read(volumes, path, out _, out _);
+
+    /// <summary>
+    /// Every path the item at <paramref name="path"/> is reachable at, each with its
+    /// <see cref="Readings"/>: <paramref name="path"/> itself first, then the same item below each
+    /// other place its volume is mounted, then the same for the folder its drive letter stands for
+    /// where <c>subst</c> made the letter. Null where <see cref="Readings"/> answers null for any of
+    /// them, because the item is then a whole volume wherever it is reached.
+    ///
+    /// <para><b>For a caller that refuses, which has to ask every rule about every one of them.</b>
+    /// A rule is written about a path's text, and the system volume mounted at <c>D:\SysMount\</c>
+    /// as well as at <c>C:\</c> puts <c>C:\Windows</c> at <c>D:\SysMount\Windows</c> too. Asked
+    /// about that text alone, the region table and every §5.2 tool root answered it as unclassified,
+    /// and removing it removes the same folder. So a refusal that holds at any of these paths
+    /// holds, as one that holds on either reading does.</para>
+    ///
+    /// <para>The other places are asked of the machine at each call, for the reason
+    /// <see cref="IVolumeInventory.MountPointOf"/> is, and from the mount point the path's first
+    /// reading is taken below. That is the path's own root where the machine's answer is not a
+    /// prefix of the path, and a junction on that root's volume is reached at every other mount of
+    /// the volume as surely as at this one.</para>
+    ///
+    /// <para><b>A substituted letter is followed to its folder.</b> Windows names no volume for a
+    /// letter standing for <c>C:\Users\testuser</c>, so no mount point leads from it, and the
+    /// profile's application data at <c>S:\AppData\Local</c> would read as unclassified.</para>
+    /// </summary>
+    public static IReadOnlyList<VolumePlace>? Places(IVolumeInventory volumes, string path)
+    {
+        List<VolumePlace> places = [];
+        string? reached = path;
+
+        // One step per drive letter at most, because a substituted letter may stand for a folder
+        // reached through another, and two may stand for each other.
+        for (var step = 0; step < Letters && reached is not null; step++)
+        {
+            if (Mounted(volumes, reached) is not { } mounted)
+            {
+                return null;
+            }
+
+            // A letter standing for a volume's top leads to places its mount points already named.
+            foreach (var place in mounted)
+            {
+                if (!places.Exists(known => known.Path.Equals(place.Path, StringComparison.OrdinalIgnoreCase)))
+                {
+                    places.Add(place);
+                }
+            }
+
+            reached = Substituted(volumes, mounted[0].Path);
+
+            // Letters standing for each other come back to a path already read, and reading it
+            // again would ask the machine the same questions and add nothing.
+            if (reached is not null && places.Exists(known => known.Path.Equals(reached, StringComparison.OrdinalIgnoreCase)))
+            {
+                break;
+            }
+        }
+
+        return places;
+    }
+
+    /// <summary>
+    /// The path <paramref name="display"/> names through the folder its drive letter stands for,
+    /// or null where the letter stands for no folder.
+    /// </summary>
+    private static string? Substituted(IVolumeInventory volumes, string display) =>
+        Path.GetPathRoot(display) is { Length: > 0 } root && volumes.SubstituteOf(root) is { } folder
+            ? Path.Join(folder, Remainder(display, root))
+            : null;
+
+    /// <summary>
+    /// <paramref name="path"/> itself and the same item below each other place its volume is
+    /// mounted, or null where the path is a volume root. See <see cref="Places"/>.
+    /// </summary>
+    private static List<VolumePlace>? Mounted(IVolumeInventory volumes, string path)
+    {
+        if (Read(volumes, path, out var display, out var top) is not { } readings)
+        {
+            return null;
+        }
+
+        var below = readings[0];
+        List<VolumePlace> places = [new(display, readings)];
+
+        foreach (var mountPoint in volumes.MountPointsOf(top))
+        {
+            if (HostVolume.IsMountPoint(top, mountPoint))
+            {
+                continue;
+            }
+
+            var elsewhere = Path.Join(mountPoint, below);
+            var root = Path.GetPathRoot(elsewhere.AsSpan()).ToString();
+
+            // Both readings where this mount point is a folder, for the reason Readings keeps both:
+            // the volume mounted inside another's Recycle Bin is in that bin read from the letter.
+            places.Add(new(
+                elsewhere,
+                mountPoint.Length > root.Length && Remainder(elsewhere, root) is { } belowRoot
+                    ? [below, belowRoot]
+                    : [below]));
+        }
+
+        return places;
+    }
+
+    /// <summary>
+    /// <see cref="Readings"/>, with the display form it read and the mount point its first reading
+    /// is below, for <see cref="Places"/> to find the volume's other mount points from.
+    /// </summary>
+    private static IReadOnlyList<string>? Read(
+        IVolumeInventory volumes, string path, out string display, out string top)
     {
         ArgumentNullException.ThrowIfNull(volumes);
+
+        display = top = string.Empty;
 
         if (!Path.IsPathFullyQualified(path))
         {
             return null;
         }
 
-        var display = LongPath.Display(path);
+        display = LongPath.Display(path);
 
         if (Path.GetPathRoot(display) is not { Length: > 0 } root
             || Remainder(display, root) is not { } belowRoot)
@@ -109,9 +228,11 @@ public static class VolumeRoot
             || mountPoint.Length <= root.Length
             || !HostVolume.Holds(mountPoint, display))
         {
+            top = root;
             return [belowRoot];
         }
 
+        top = mountPoint;
         return Remainder(display, mountPoint) is { } belowMountPoint ? [belowMountPoint, belowRoot] : null;
     }
 
