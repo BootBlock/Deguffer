@@ -17,6 +17,10 @@ namespace Deguffer.Core.Execution;
 /// are the same folder or one holds the other, or when its figure counts links from elsewhere and
 /// the run removed anything at all. A location is a path a step deletes or a path a tool's own
 /// command was declared to reach, which is <see cref="RunReach"/>'s reading of a plan.</para>
+///
+/// <para><b>Compared as folders.</b> A tool reports where it keeps its cache the way its own process
+/// reached it, which may be through a letter <c>subst</c> made, or another mount of its volume, and a
+/// row naming the same folder another way was left stating a figure the run had changed.</para>
 /// </summary>
 public static class RunChanges
 {
@@ -26,11 +30,14 @@ public static class RunChanges
     /// run only to prove what it left standing (<see cref="StandingProof"/>) removes nothing, and is
     /// not one of these.
     /// </param>
+    /// <param name="volumes">Asked every other path each location is reachable at.</param>
     /// <returns>The providers to plan again, in the order <paramref name="shown"/> gives them.</returns>
-    public static IReadOnlyList<ICleanupProvider> Stale(IReadOnlyList<Finding> shown, IReadOnlyList<Finding> ran)
+    public static IReadOnlyList<ICleanupProvider> Stale(
+        IReadOnlyList<Finding> shown, IReadOnlyList<Finding> ran, IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(shown);
         ArgumentNullException.ThrowIfNull(ran);
+        ArgumentNullException.ThrowIfNull(volumes);
 
         var removing = ran.Where(f => f.Plan is { IsEmpty: false }).ToList();
 
@@ -40,6 +47,16 @@ public static class RunChanges
         }
 
         var ranIds = removing.Select(f => f.Provider.Id).ToHashSet(StringComparer.Ordinal);
+
+        // Each location followed once, however many rows name it (G4).
+        var followed = new Dictionary<string, ReachedFolder>(StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlyList<ReachedFolder> LocationsOf(RunReach reach) =>
+        [
+            .. reach.TargetedPaths.Concat(reach.ProbedPaths).Select(path =>
+                followed.TryGetValue(path, out var folder) ? folder : followed[path] = ReachedFolder.At(path, volumes)),
+        ];
+
         var changed = LocationsOf(RunReach.Of([.. removing.Select(f => f.Plan!)]));
 
         return
@@ -53,12 +70,10 @@ public static class RunChanges
     }
 
     /// <summary>
+    /// Whether a location of one set and one of the other are the same folder or one holds the other.
     /// A step's path may carry the extended-length prefix (§6.3) where a command's declared path does
-    /// not, so every location is compared in display form.
+    /// not, and <see cref="ReachedFolder"/> compares each without it.
     /// </summary>
-    private static IReadOnlyList<string> LocationsOf(RunReach reach) =>
-        [.. reach.TargetedPaths.Concat(reach.ProbedPaths).Select(LongPath.Display)];
-
-    private static bool Overlaps(IReadOnlyList<string> these, IReadOnlyList<string> those) =>
-        these.Any(a => those.Any(b => LongPath.Contains(a, b) || LongPath.Contains(b, a)));
+    private static bool Overlaps(IReadOnlyList<ReachedFolder> these, IReadOnlyList<ReachedFolder> those) =>
+        these.Any(a => those.Any(b => a.Holds(b) || b.Holds(a)));
 }

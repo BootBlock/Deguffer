@@ -111,18 +111,38 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
 
     public VcpkgLocations Discover()
     {
+        // Each folder followed once for the discovery, because following one asks the machine where
+        // its volume is mounted, and the downloads variable is asked about twice (G4).
+        var followed = new Dictionary<string, ReachedFolder>(StringComparer.OrdinalIgnoreCase);
+
         var (root, unmarked, unreached, unread) = FindRoot();
         var binaryCache = FindBinaryCache();
-        var downloads = FindRelocatedDownloads(root);
+        var downloads = FindRelocatedDownloads(root, Reach);
+
+        // vcpkg's own directories, only where a variable is set.
+        IReadOnlyList<ReachedFolder> own = binaryCache is null && downloads is null
+            ? []
+            : [.. ProfileDirectories.Append(root).OfType<string>().Select(Reach)];
 
         return new VcpkgLocations(binaryCache, root, downloads, unmarked, unreached, unread)
         {
             Declined =
             [
-                .. Decline(binaryCache, root, BinaryCacheVariable, "binary cache", VcpkgFolderEvidence.WhyNotABinaryCache),
-                .. Decline(downloads, root, DownloadsVariable, "downloads folder", VcpkgFolderEvidence.WhyNotDownloads),
+                .. Decline(binaryCache, own, Reach, BinaryCacheVariable, "binary cache", VcpkgFolderEvidence.WhyNotABinaryCache),
+                .. Decline(downloads, own, Reach, DownloadsVariable, "downloads folder", VcpkgFolderEvidence.WhyNotDownloads),
             ],
         };
+
+        ReachedFolder Reach(string folder)
+        {
+            if (!followed.TryGetValue(folder, out var reached))
+            {
+                reached = ReachedFolder.At(folder, volumes);
+                followed[folder] = reached;
+            }
+
+            return reached;
+        }
     }
 
     /// <summary>
@@ -131,18 +151,29 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
     /// vcpkg writes there.
     ///
     /// <para>Not asked of a folder inside the clone or one of the user's vcpkg directories, which is
-    /// vcpkg's by where it is, and whose own declarations already say what in it may go. Nor are the
-    /// contents asked of a folder that is not there, which holds nothing to remove.</para>
+    /// vcpkg's by where it is, and whose own declarations already say what in it may go. Asked of the
+    /// folders, because the variable may name one of them through a letter <c>subst</c> made, or
+    /// another mount of its volume. Nor are the contents asked of a folder that is not there, which
+    /// holds nothing to remove.</para>
     /// </summary>
+    /// <param name="own">vcpkg's own directories, each at every path it is reachable at.</param>
+    /// <param name="reach">The folder at a path, followed once for the discovery.</param>
     private IEnumerable<(string Path, string Sentence)> Decline(
         string? folder,
-        string? root,
+        IReadOnlyList<ReachedFolder> own,
+        Func<string, ReachedFolder> reach,
         string variable,
         string what,
         Func<string, string?> evidence)
     {
-        if (folder is null
-            || ProfileDirectories.Append(root).OfType<string>().Any(own => LongPath.Contains(own, folder)))
+        if (folder is null)
+        {
+            yield break;
+        }
+
+        var reached = reach(folder);
+
+        if (own.Any(directory => directory.Holds(reached)))
         {
             yield break;
         }
@@ -264,7 +295,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
             null);
     }
 
-    private string? FindRelocatedDownloads(string? root)
+    private string? FindRelocatedDownloads(string? root, Func<string, ReachedFolder> reach)
     {
         if (FullyQualified(environment.GetEnvironmentVariable(DownloadsVariable)) is not { } configured)
         {
@@ -273,9 +304,11 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
 
         // Only "relocated" if it actually left the clone. A variable set to the place vcpkg would
         // have used anyway must not produce a second declaration of the same directory, which §5.6
-        // would then report as two survivors and the plan as two steps over one path.
+        // would then report as two survivors and the plan as two steps over one path. Asked of the
+        // folders, because the variable may name the clone's downloads through an alias, and read as
+        // relocated they were refused as the clone's own and not offered at all.
         return root is not null
-            && configured.Equals(Path.Combine(root, "downloads"), StringComparison.OrdinalIgnoreCase)
+            && reach(configured).IsSameAs(reach(Path.Combine(root, "downloads")))
                 ? null
                 : configured;
     }

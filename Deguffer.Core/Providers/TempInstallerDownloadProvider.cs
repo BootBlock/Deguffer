@@ -182,14 +182,13 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
 
         foreach (var staging in VisualStudioStaging())
         {
-            var parent = Path.GetDirectoryName(LongPath.Unaliased(staging));
-
             // Recognised only directly inside one of this account's temporary folders, where the
             // installer puts it. A state file naming somewhere else is not followed: this row is about
-            // the temporary folder, and a path read from a file is a path somebody else chose.
-            if (accountFolders.FirstOrDefault(folder =>
-                    LongPath.Unaliased(Path.TrimEndingDirectorySeparator(folder)).Equals(parent, StringComparison.OrdinalIgnoreCase))
-                is { } folder)
+            // the temporary folder, and a path read from a file is a path somebody else chose. Asked of
+            // the folders, because the installer records the folder the way its own process reached
+            // it, which may be through a letter subst made, or another mount of its volume.
+            if (Path.GetDirectoryName(staging) is { } parent
+                && accountFolders.FirstOrDefault(folder => Reach(folder).IsSameAs(Reach(parent))) is { } folder)
             {
                 places.Add(new TempMarkerPlace(
                     Path.Combine(folder, Path.GetFileName(staging)), [Staged], VisualStudioTool, folder));

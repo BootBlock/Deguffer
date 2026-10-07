@@ -60,16 +60,22 @@ internal sealed class EmulatorCacheExamination
     /// Whether another row answers for a declared folder none of <paramref name="layouts"/> proved, so
     /// the plan does not tell the user their RetroArch folder holds no emulator.
     /// </param>
+    /// <param name="reach">
+    /// The folder at a path, at every path it is reachable at, kept by the caller for its planning pass.
+    /// A declared folder may name a fixed root, and a setting a cache folder inside its root, through a
+    /// letter <c>subst</c> made, or another mount of its volume.
+    /// </param>
     public static EmulatorCacheExamination Of(
         IReadOnlyList<EmulatorLayout> layouts,
         IReadOnlyList<string> declaredFolders,
         IUserEnvironment environment,
         Func<string, string?> whyNotOwned,
         Func<string, bool> claimedElsewhere,
+        Func<string, ReachedFolder> reach,
         CancellationToken ct)
     {
         var examination = new EmulatorCacheExamination();
-        var reported = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var reported = new List<(EmulatorLayout Layout, ReachedFolder Folder, bool Answered)>();
         var provenFrom = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var layout in layouts)
@@ -88,12 +94,20 @@ internal sealed class EmulatorCacheExamination
                     continue;
                 }
 
-                // A declared folder can be a fixed root too, and is answered for once.
-                var key = layout.Name + "|" + root;
+                // A declared folder can be a fixed root too, however each names it, and is answered for
+                // once, under the first name.
+                var folder = reach(root);
+                var known = reported.FindIndex(other => other.Layout == layout && other.Folder.IsSameAs(folder));
+                bool answered;
 
-                if (!reported.TryGetValue(key, out var answered))
+                if (known < 0)
                 {
-                    reported[key] = answered = examination.Reports(layout, root, whyNotOwned);
+                    answered = examination.Reports(layout, root, whyNotOwned);
+                    reported.Add((layout, folder, answered));
+                }
+                else
+                {
+                    answered = reported[known].Answered;
                 }
 
                 if (answered && declared is not null)
@@ -113,7 +127,7 @@ internal sealed class EmulatorCacheExamination
 
         for (var i = 0; i < examination.Roots.Count; i++)
         {
-            examination.Roots[i] = examination.Read(examination.Roots[i], whyNotOwned, ct);
+            examination.Roots[i] = examination.Read(examination.Roots[i], whyNotOwned, reach, ct);
         }
 
         return examination;
@@ -170,7 +184,8 @@ internal sealed class EmulatorCacheExamination
         return true;
     }
 
-    private EmulatorRoot Read(EmulatorRoot found, Func<string, string?> whyNotOwned, CancellationToken ct)
+    private EmulatorRoot Read(
+        EmulatorRoot found, Func<string, string?> whyNotOwned, Func<string, ReachedFolder> reach, CancellationToken ct)
     {
         var layout = found.Layout;
 
@@ -179,13 +194,21 @@ internal sealed class EmulatorCacheExamination
 
         var readings = new List<EmulatorCacheFolderReading>();
 
-        foreach (var folder in layout.CacheFoldersIn(found.Path))
+        foreach (var listed in layout.CacheFoldersIn(found.Path))
         {
             ct.ThrowIfCancellationRequested();
 
-            // A folder a setting moved outside the root is held to the rule a root is, because it is
-            // the folder whose entries are about to be classified.
-            if (!LongPath.Contains(found.Path, folder.Path) && whyNotOwned(folder.Path) is { } why)
+            var folder = listed;
+
+            // A folder inside the root is named as the root is, at any path either is reachable at, so
+            // a setting naming it through an alias is still read on the way down from the root. One a
+            // setting moved outside the root is held to the rule a root is, because it is the folder
+            // whose entries are about to be classified.
+            if (reach(found.Path).Naming(reach(listed.Path), found.Path) is { } named)
+            {
+                folder = listed with { Path = named };
+            }
+            else if (whyNotOwned(folder.Path) is { } why)
             {
                 Notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,

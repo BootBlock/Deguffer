@@ -101,7 +101,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     /// that is cancelled throws before it is kept, so the next caller looks again.
     /// </summary>
     private EmulatorCacheExamination Examine(CancellationToken ct) =>
-        _examination ??= EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, HoldsRetroArch, ct);
+        _examination ??= EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, HoldsRetroArch, Reach, ct);
 
     /// <summary>
     /// Whether the RetroArch rows answer for <paramref name="folder"/>. A refusal counts, because those

@@ -27,13 +27,14 @@ public sealed class TempInstallerDownloadProviderTests : IDisposable
 
     private string UserTemp => _environment.TempPath;
 
-    private TempInstallerDownloadProvider CreateProvider(IProcessInspector? inspector = null) =>
+    private TempInstallerDownloadProvider CreateProvider(IProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
         new(
             _environment,
             new FakeProcessRunner(),
             inspector ?? FakeProcessInspector.NothingRunning,
             system: _system,
-            liveTrees: FakeLiveTreeInspector.NothingLive);
+            liveTrees: FakeLiveTreeInspector.NothingLive,
+            volumes: volumes ?? new FakeVolumeInventory());
 
     private string Entry(int bytes, params string[] segments) => _temp.CreateFile(bytes, ["temp", .. segments]);
 
@@ -110,6 +111,36 @@ public sealed class TempInstallerDownloadProviderTests : IDisposable
         Assert.True(File.Exists(lookalike), "a random folder that only looks like staging was removed");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
         Assert.Equal([staging], await provider.ClaimedEntriesAsync([UserTemp]));
+    }
+
+    /// <summary>
+    /// The installer records the staging folder the way its own process reached it. Named through
+    /// <c>S:</c>, a letter <c>subst</c> made for the temporary folder, it is still directly inside it,
+    /// and is examined as the temporary folder names it. A folder one level further down reached the
+    /// same way is not followed.
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\q4mzt0xk", true)]
+    [InlineData(@"S:\nested\q4mzt0xk", false)]
+    public async Task FindsAStagingFolderTheStateFileNamesThroughASubstitutedLetter(string recorded, bool followed)
+    {
+        var staging = Path.Combine(UserTemp, "q4mzt0xk");
+        Entry(4096, "q4mzt0xk", "Win11SDK_10.0.26100.E9BB0EB40C39C3B4B64C", "Installers", "a.msi");
+        var other = Entry(1024, "q4mzt0xk", "notes", "x.txt");
+        VisualStudioStagesIn(recorded);
+
+        var provider = CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", UserTemp));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            followed ? [Path.Combine(staging, "Win11SDK_10.0.26100.E9BB0EB40C39C3B4B64C")] : [],
+            plan.Steps.OfType<DeleteDirectoryStep>().Select(step => step.Path));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(other), "something in the staging folder the installer did not stage was removed");
+        Assert.True(Directory.Exists(staging), "the staging folder itself was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>A state file naming a folder outside the temporary folders is not followed.</summary>

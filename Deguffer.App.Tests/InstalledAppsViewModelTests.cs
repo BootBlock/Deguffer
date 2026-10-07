@@ -51,7 +51,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     private InstalledAppsViewModel Page(bool relaunchStarts = false)
     {
-        var reader = new InstalledAppsReader(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
+        var reader = new InstalledAppsReader(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies(), new FakeVolumeInventory());
         var backups = new RegistryBackups(_runner, Path.Combine(_temp.Path, "backups"), RegExe, TimeProvider.System);
 
         return new InstalledAppsViewModel(

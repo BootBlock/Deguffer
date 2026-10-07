@@ -21,12 +21,14 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner ?? DirectoryScanner.Default,
+            volumes: volumes)
     {
     }
 
@@ -123,9 +125,10 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// the temporary folder.
     ///
     /// <para>Matched on the folder holding each local rather than on the name, because NuGet says
-    /// where its locals are and the answer is configuration. The comparison is between unaliased
-    /// forms: NuGet reports the temporary folder the way its own process sees it, which on a profile
-    /// with a long folder name is the 8.3 short form.</para>
+    /// where its locals are and the answer is configuration. The comparison is between folders: NuGet
+    /// reports the temporary folder the way its own process sees it, which on a profile with a long
+    /// folder name is the 8.3 short form, and <c>NUGET_SCRATCH</c> may name it through a letter
+    /// <c>subst</c> made, or another mount of its volume.</para>
     /// </summary>
     public async Task<IReadOnlyList<string>> ClaimedEntriesAsync(
         IReadOnlyList<string> folders,
@@ -139,15 +142,19 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
         }
 
         var locals = await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false);
+        var holders = locals
+            .Select(local => (Local: local, Parent: Path.GetDirectoryName(local)))
+            .Where(local => local.Parent is not null)
+            .Select(local => (local.Local, Holder: Reach(local.Parent!)))
+            .ToList();
 
         return
         [
             .. from folder in folders
-               let canonical = LongPath.Unaliased(Path.TrimEndingDirectorySeparator(folder))
-               from local in locals
-               where Path.GetDirectoryName(LongPath.Unaliased(local)) is { } parent
-                   && parent.Equals(canonical, StringComparison.OrdinalIgnoreCase)
-               let entry = Path.Combine(folder, Path.GetFileName(local))
+               let reached = Reach(Path.TrimEndingDirectorySeparator(folder))
+               from local in holders
+               where reached.IsSameAs(local.Holder)
+               let entry = Path.Combine(folder, Path.GetFileName(local.Local))
 
                // NuGet names its scratch folder whether or not it has made it, and a claim on an
                // entry that is not there would have the other row say it left something out.
@@ -255,22 +262,23 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     ///
     /// <para>A child holding a location NuGet reported is left out. NuGet's settings can move a
     /// cache into any folder, and the command then empties it, so asserting that the folder holding
-    /// it is unchanged would fail a successful run. Both sides are unaliased, because NuGet reports
-    /// a location the way its own process sees it, which can be the 8.3 short form.</para>
+    /// it is unchanged would fail a successful run. Both sides are compared as folders, because NuGet
+    /// reports a location the way its own process sees it, which can be the 8.3 short form, and a
+    /// setting may name it through a letter <c>subst</c> made, or another mount of its volume.</para>
     /// </summary>
-    private static IEnumerable<(string Path, string Reason)> Spared(
+    private IEnumerable<(string Path, string Reason)> Spared(
         string root,
         FrozenSet<string> caches,
         IReadOnlyList<string> locals)
     {
         var scan = ChildDirectories.Under(root);
-        var reported = locals.Select(local => LongPath.Unaliased(local)).ToList();
+        var reported = locals.Select(Reach).ToList();
 
         return scan.Directories
             .Select(child => (child.Name, Path: LongPath.Display(child.FullName), Reason: NotACacheReason))
             .Concat(scan.Links.Select(link => (link.Name, Path: LongPath.Display(link.FullName), Reason: CacheLevelWalk.LinkReason)))
             .Where(child => !caches.Contains(child.Name)
-                && !reported.Any(cache => LongPath.Contains(LongPath.Unaliased(child.Path), cache)))
+                && !reported.Exists(Reach(child.Path).Holds))
             .Select(child => (child.Path, child.Reason));
     }
 

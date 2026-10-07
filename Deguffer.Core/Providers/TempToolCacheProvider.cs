@@ -228,10 +228,12 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
             return default;
         }
 
-        var unaliased = LongPath.Unaliased(configured);
+        // Asked of the folders, because the variable may name the temporary folder's cache through a
+        // letter subst made, or another mount of its volume. Examined twice, the folder would be taken
+        // whole and asserted to survive as Node's own in one plan.
+        var folder = Reach(configured);
 
-        if (accountFolders.Any(folder => LongPath.Unaliased(Path.Combine(folder, "node-compile-cache"))
-                .Equals(unaliased, StringComparison.OrdinalIgnoreCase)))
+        if (accountFolders.Any(temp => Reach(Path.Combine(temp, "node-compile-cache")).IsSameAs(folder)))
         {
             return default;
         }

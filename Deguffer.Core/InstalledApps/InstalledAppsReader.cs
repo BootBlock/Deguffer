@@ -21,14 +21,16 @@ public sealed class InstalledAppsReader(
     IWindowsInstaller installer,
     IPathProbe probe,
     ISystemDirectories system,
-    IPackageDependencies dependencies)
+    IPackageDependencies dependencies,
+    IVolumeInventory volumes)
 {
     public static InstalledAppsReader Default { get; } = new(
         WindowsUninstallRegistry.Default,
         WindowsInstaller.Default,
         LongPathProbe.Default,
         SystemDirectories.Current,
-        WindowsPackageDependencies.Default);
+        WindowsPackageDependencies.Default,
+        VolumeInventory.Current);
 
     /// <summary>
     /// Every entry. Each question is asked once for the life of the reading (G4). See
@@ -78,7 +80,7 @@ public sealed class InstalledAppsReader(
     {
         var answers = new ReadingAnswers(registry, installer, probe, dependencies);
 
-        return new StaleEvidence(answers, new InstalledPaths(answers, system), answers, answers.NonInstallerEntryNamed);
+        return new StaleEvidence(answers, new InstalledPaths(answers, system, volumes), answers, answers.NonInstallerEntryNamed);
     }
 
     private static InstalledEntry Evaluate(UninstallRecord record, StaleEvidence evidence)

@@ -881,7 +881,8 @@ break something.
 - **Every view of a path is asked.** A 32-bit Deguffer reaches `System32` through the redirection to
   `SysWOW64`, and a 64-bit Deguffer expands a 32-bit entry's `%ProgramFiles%` to the 64-bit folder.
   A path under `System32`, `SysWOW64` or `Sysnative`, or under either `Program Files` folder, is
-  absent only where it is absent under every one of them.
+  absent only where it is absent under every one of them. A path reaching one of them through a
+  `subst` letter or a second mount of the volume is under it too.
 - **Every row says why it is in its list**, in the words the evidence supports: "The uninstaller
   `C:\...\unins000.exe` and the install folder are both gone", or "Windows Installer does not know
   this product". An installed row whose presence nothing could prove says that instead, so the list

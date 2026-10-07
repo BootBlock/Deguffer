@@ -60,7 +60,7 @@ public sealed partial class EntryRemoverTests : IDisposable
     private UninstallKey Stale(UninstallScope scope, string name) => _registry.With(scope, name,
         ("DisplayName", name), ("UninstallString", $"\"{Path.Combine(_temp.Path, name, "unins000.exe")}\""));
 
-    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
+    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies(), new FakeVolumeInventory());
 
     private InstalledEntry Current(UninstallKey key) => Reader.ReadAgain(key)!;
 

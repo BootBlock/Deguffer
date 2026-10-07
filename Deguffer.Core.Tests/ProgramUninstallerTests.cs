@@ -41,7 +41,7 @@ public sealed class ProgramUninstallerTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
+    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies(), new FakeVolumeInventory());
 
     private ProgramUninstaller Uninstaller => new(Reader, _launcher, Msiexec);
 

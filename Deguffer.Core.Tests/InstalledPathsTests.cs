@@ -12,7 +12,8 @@ public sealed class InstalledPathsTests
 {
     private readonly FakePathProbe _probe = new();
 
-    private InstalledPaths Paths(ISystemDirectories? system = null) => new(_probe, system ?? FixedSystemDirectories.Standard);
+    private InstalledPaths Paths(ISystemDirectories? system = null, IVolumeInventory? volumes = null) =>
+        new(_probe, system ?? FixedSystemDirectories.Standard, volumes ?? new FakeVolumeInventory());
 
     [Fact]
     public void ASystemFolderPathIsAskedAboutInAllThreeOfItsNames()
@@ -139,5 +140,57 @@ public sealed class InstalledPathsTests
         _probe.Directory(@"C:\Windows").Directory(@"C:\Windows\SysWOW64", isLink: true);
 
         Assert.Contains(@"C:\Windows\SysWOW64 is a link", Paths().WhyAbsenceProvesNothing(@"C:\Windows\System32\tool.exe"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An entry naming the system folder through a letter <c>subst</c> made for <c>C:\Windows</c> names
+    /// a path below <c>System32</c>, which its text does not say. It is asked about in every name of that
+    /// folder, so its absence through the letter alone does not read as the program gone.
+    /// </summary>
+    [Fact]
+    public void ASystemFolderReachedThroughASubstitutedLetterIsAskedAboutInAllThreeOfItsNames()
+    {
+        var volumes = new FakeVolumeInventory().With(@"C:\").Substituting(@"S:\", @"C:\Windows");
+
+        Assert.Equal(
+            [@"S:\System32\tool.exe", @"C:\Windows\System32\tool.exe", @"C:\Windows\SysWOW64\tool.exe", @"C:\Windows\Sysnative\tool.exe"],
+            Paths(volumes: volumes).ViewsOf(@"S:\System32\tool.exe"));
+    }
+
+    /// <summary>The system volume also mounted at a folder puts both program folders below that folder too.</summary>
+    [Fact]
+    public void AProgramFolderReachedThroughAnotherMountIsAskedAboutInBoth()
+    {
+        var volumes = new FakeVolumeInventory().With(@"C:\", alsoMountedAt: [@"D:\SysMount\"]);
+
+        Assert.Equal(
+            [@"D:\SysMount\Program Files (x86)\Tool", @"C:\Program Files\Tool", @"C:\Program Files (x86)\Tool"],
+            Paths(volumes: volumes).ViewsOf(@"D:\SysMount\Program Files (x86)\Tool"));
+    }
+
+    /// <summary>
+    /// What the views are for: a 32-bit uninstaller standing in <c>SysWOW64</c>, named through the letter
+    /// as the native folder, is there.
+    /// </summary>
+    [Fact]
+    public void AFileStandingInAnyViewOfAPathThroughALetterIsPresent()
+    {
+        var volumes = new FakeVolumeInventory().With(@"C:\").Substituting(@"S:\", @"C:\Windows");
+        _probe.File(@"C:\Windows\SysWOW64\tool.exe");
+
+        Assert.Equal(PathPresence.Present, Paths(volumes: volumes).ProbeFile(@"S:\System32\tool.exe"));
+    }
+
+    /// <summary>An ordinary folder reached through a letter or another mount has no other view, as before.</summary>
+    [Theory]
+    [InlineData(@"S:\Apps\Tool")]
+    [InlineData(@"D:\SysMount\Users\testuser\Apps\Tool")]
+    public void AnOrdinaryFolderReachedAnotherWayIsAskedAboutAsItIs(string path)
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\", alsoMountedAt: [@"D:\SysMount\"])
+            .Substituting(@"S:\", @"C:\Users\testuser");
+
+        Assert.Equal([path], Paths(volumes: volumes).ViewsOf(path));
     }
 }

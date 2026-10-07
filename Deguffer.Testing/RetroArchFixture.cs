@@ -62,8 +62,8 @@ public sealed class RetroArchFixture(FakeUserEnvironment environment, string pro
     public string Pictures(string system, string kind, string? thumbnails = null) =>
         Folder(Path.Combine(thumbnails ?? Thumbnails, system, kind));
 
-    public RetroArchDiscovery Discovery(ISystemDirectories system, SteamDiscovery? steam = null) =>
-        new(environment, steam, system: system);
+    public RetroArchDiscovery Discovery(ISystemDirectories system, SteamDiscovery? steam = null, IVolumeInventory? volumes = null) =>
+        new(environment, steam, system: system, volumes: volumes);
 
     public static string WriteFile(string path, int bytes = 4096)
     {

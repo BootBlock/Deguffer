@@ -42,6 +42,12 @@ internal sealed class RetroArchReading
 
     public List<RetroArchFolderReading> Folders { get; } = [];
 
+    /// <summary>
+    /// Each folder a setting named, at every path it is reachable at, with the name it is read under, so
+    /// a folder two settings name differently is read once. See <see cref="RetroArchProviderBase"/>.
+    /// </summary>
+    public List<(string Name, ReachedFolder Folder)> Located { get; } = [];
+
     public bool Unreadable { get; private set; }
 
     /// <summary>A reading that carries on from what <paramref name="found"/> already says.</summary>

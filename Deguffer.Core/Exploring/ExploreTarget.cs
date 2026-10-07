@@ -41,20 +41,29 @@ public readonly record struct ExploreTarget(string? Drive, string? Folder)
     /// <para>A volume Windows would not describe is refused at its mount point and nowhere else. A
     /// folder below it can still be readable, because every account may bypass traverse checking, so
     /// refusing the folder would refuse a scan that can run.</para>
+    ///
+    /// <para>A letter <c>subst</c> made for that mount point is the mount point too, because the
+    /// volume is the one the letter leads to (<see cref="HostVolume.For"/>).</para>
     /// </summary>
     public string? Refusal(IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(volumes);
 
-        return Root is { } root && HostVolume.For(volumes, root) is { } volume
-            ? volume switch
-            {
-                { StoresContentRemotely: true } => DriveChoice.RemoteStorageRefusal,
-                { Readiness: VolumeReadiness.Refused }
-                    when volume.MountPoints.Any(mountPoint => HostVolume.IsMountPoint(mountPoint, root)) => DriveChoice.UnreadableRefusal,
-                _ => null,
-            }
-            : null;
+        if (Root is not { } root || HostVolume.For(volumes, root) is not { } volume)
+        {
+            return null;
+        }
+
+        var reached = VolumeRoot.Followed(volumes, root);
+
+        return volume switch
+        {
+            { StoresContentRemotely: true } => DriveChoice.RemoteStorageRefusal,
+            { Readiness: VolumeReadiness.Refused }
+                when volume.MountPoints.Any(mountPoint =>
+                    HostVolume.IsMountPoint(mountPoint, root) || HostVolume.IsMountPoint(mountPoint, reached)) => DriveChoice.UnreadableRefusal,
+            _ => null,
+        };
     }
 
     /// <summary>Whether there is something to scan and nothing refuses it.</summary>

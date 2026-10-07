@@ -38,7 +38,7 @@ public sealed class BundleRuleTests
     {
         var answers = new ReadingAnswers(_registry, _installer, _paths, _dependencies);
         var evidence = new StaleEvidence(
-            answers, new InstalledPaths(answers, FixedSystemDirectories.Standard), answers, answers.NonInstallerEntryNamed);
+            answers, new InstalledPaths(answers, FixedSystemDirectories.Standard, new FakeVolumeInventory()), answers, answers.NonInstallerEntryNamed);
 
         return StaleRule.Decide(record, command, evidence);
     }

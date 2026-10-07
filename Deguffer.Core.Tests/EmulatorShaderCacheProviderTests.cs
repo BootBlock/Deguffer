@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -32,8 +33,13 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
 
     private string Pcsx2Root => Path.Combine(_environment.Documents!, "PCSX2");
 
-    private EmulatorShaderCacheProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, system: _system);
+    private EmulatorShaderCacheProvider CreateProvider(FakeProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
+        new(
+            _environment,
+            new FakeProcessRunner(),
+            inspector ?? FakeProcessInspector.NothingRunning,
+            system: _system,
+            volumes: volumes ?? new FakeVolumeInventory());
 
     private void Declare(params string[] folders) => Assert.True(new EmulatorFolderStore(_environment).Save(folders));
 
@@ -349,6 +355,74 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
 
         Assert.Equal([shaders], plan.TargetedPaths);
         Assert.DoesNotContain(defaultFolder, plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// A cache folder PCSX2's settings name through <c>S:</c>, a letter <c>subst</c> made for its own
+    /// folder, is inside that folder, though its text names nothing there. It is read as the folder
+    /// names it, so Explore is told the way down to it, and refuses it at the other name too. What
+    /// PCSX2 keeps beside it survives (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task FollowsPcsx2sCacheFolderNamedThroughASubstitutedLetterAsItsOwn()
+    {
+        File.WriteAllText(
+            WriteFile(Path.Combine(Pcsx2Root, "inis", "PCSX2.ini"), 0),
+            "[Folders]\nCache = S:\\shaders\n");
+        var shaders = WriteFile(Path.Combine(Pcsx2Root, "shaders", "vulkan_shaders.bin"));
+        var gameList = WriteFile(Path.Combine(Pcsx2Root, "shaders", "gamelist.cache"));
+        var memoryCards = Folder(Path.Combine(Pcsx2Root, "memcards"));
+
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", Pcsx2Root);
+        var provider = CreateProvider(volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([shaders], plan.TargetedPaths);
+
+        var roots = await provider.DiscoverToolRootsAsync();
+        var explore = new ExploreActionPolicy([], [], volumes, probedRoots: roots);
+
+        Assert.Contains(roots, r => r.Path.Equals(Pcsx2Root, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("shaders"));
+        Assert.True(explore.MayRemove(@"S:\shaders\vulkan_shaders.bin").IsAllowed);
+        Assert.False(explore.MayRemove(@"S:\shaders\gamelist.cache").IsAllowed);
+        Assert.False(explore.MayRemove(@"S:\memcards").IsAllowed);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(shaders));
+        Assert.True(File.Exists(gameList));
+        Assert.True(Directory.Exists(memoryCards));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A declared folder naming PCSX2's own folder through another mount of its volume is the same
+    /// root, offered once and refused in Explore at both names. The mount is a folder of its own here,
+    /// standing in for the same folder reached the other way.
+    /// </summary>
+    [Fact]
+    public async Task ADeclaredFolderNamingAFixedRootThroughAnotherMountIsOneRoot()
+    {
+        WriteFile(Path.Combine(Pcsx2Root, "inis", "PCSX2.ini"), 64);
+        var shaders = WriteFile(Path.Combine(Pcsx2Root, "cache", "vulkan_shaders.bin"));
+
+        using var mirror = new TempDirectory();
+        var volumes = new FakeVolumeInventory().With(_environment.Documents! + @"\", alsoMountedAt: [mirror.Path + @"\"]);
+        var declared = Path.Combine(mirror.Path, "PCSX2");
+        WriteFile(Path.Combine(declared, "inis", "PCSX2.ini"), 64);
+        WriteFile(Path.Combine(declared, "cache", "vulkan_shaders.bin"));
+        Declare(declared);
+
+        var provider = CreateProvider(volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([shaders], plan.TargetedPaths);
+
+        var explore = new ExploreActionPolicy([], [], volumes, probedRoots: await provider.DiscoverToolRootsAsync());
+
+        Assert.True(explore.MayRemove(Path.Combine(declared, "cache", "vulkan_shaders.bin")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(declared, "memcards")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(Pcsx2Root, "memcards")).IsAllowed);
     }
 
     /// <summary>

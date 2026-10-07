@@ -60,6 +60,34 @@ public sealed class ReachedFolderTests
     }
 
     /// <summary>
+    /// A folder asked about by its 8.3 alias keeps that spelling beside the expansion, so a rule spelled
+    /// with the alias, whose expansion Windows refused when the rule was followed, still holds what is
+    /// spelled the same way. A folder beside it spelled the same way is not held (§5.6).
+    ///
+    /// <para>On a volume that creates no 8.3 aliases there is no short spelling to ask by, and the
+    /// test ends once it has found that, rather than failing.</para>
+    /// </summary>
+    [Fact]
+    public void KeepsTheSpellingAFolderWasAskedAboutByBesideItsExpansion()
+    {
+        using var temp = new TempDirectory();
+        var folder = temp.CreateDirectory("LongToolFolderName", "tool");
+        temp.CreateDirectory("LongToolFolderName", "beside");
+
+        if (ShortPath.Of(Path.GetDirectoryName(folder)!) is not { } alias)
+        {
+            return;
+        }
+
+        var reached = At(Path.Combine(alias, "tool"));
+
+        Assert.Contains(Path.Combine(alias, "tool"), reached.Places, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(ReachedFolder.Comparable(folder), reached.Places, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("secret", reached.PathTo(Path.Combine(alias, "tool", "secret")));
+        Assert.Null(reached.PathTo(Path.Combine(alias, "beside", "secret")));
+    }
+
+    /// <summary>
     /// A folder reached through an alias is named below another the way that other is named, so a
     /// rule asked of text sees it where it is. One beside it is named nowhere (§5.6).
     /// </summary>
