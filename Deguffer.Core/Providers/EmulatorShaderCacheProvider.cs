@@ -165,7 +165,6 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase)
             .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)));
 
-
         return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
     }
 

@@ -75,7 +75,7 @@ internal sealed class EmulatorCacheExamination
         CancellationToken ct)
     {
         var examination = new EmulatorCacheExamination();
-        var reported = new List<(EmulatorLayout Layout, string Root, ReachedFolder Folder, bool Answered)>();
+        var reported = new List<(EmulatorLayout Layout, ReachedFolder Folder, bool Answered)>();
         var provenFrom = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var layout in layouts)
@@ -103,7 +103,7 @@ internal sealed class EmulatorCacheExamination
                 if (known < 0)
                 {
                     answered = examination.Reports(layout, root, whyNotOwned);
-                    reported.Add((layout, root, folder, answered));
+                    reported.Add((layout, folder, answered));
                 }
                 else
                 {

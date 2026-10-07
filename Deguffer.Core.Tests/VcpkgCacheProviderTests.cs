@@ -770,11 +770,16 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
             .WithEnvironmentVariable(VcpkgDiscovery.DownloadsVariable, configured);
 
-        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", Path.GetDirectoryName(root)!)).PlanAsync();
+        var provider = CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", Path.GetDirectoryName(root)!));
+        var plan = await provider.PlanAsync();
 
         Assert.Equal(offered, plan.TargetedPaths.Contains(Path.Combine(root, "downloads"), StringComparer.OrdinalIgnoreCase));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains($"Leaving '{configured}' alone", StringComparison.Ordinal));
-        Assert.True(Directory.Exists(Path.Combine(root, "installed")));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(!offered, Directory.Exists(Path.Combine(root, "downloads")));
+        AssertTheCloneStands(root, result);
     }
 
     /// <summary>
@@ -798,11 +803,18 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
             .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, named);
 
-        var plan = await CreateProvider(volumes).PlanAsync();
+        var provider = CreateProvider(volumes);
+        var plan = await provider.PlanAsync();
 
         Assert.Equal(
             !insideTheClone,
             plan.Notes.Any(n => n.Message.Contains($"Leaving '{named}' alone: {VcpkgDiscovery.BinaryCacheVariable}", StringComparison.Ordinal)));
+        Assert.Equal(insideTheClone, plan.TargetedPaths.Contains(named, StringComparer.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(!insideTheClone, Directory.Exists(named));
+        AssertTheCloneStands(root, result);
     }
 
     /// <summary>
@@ -820,10 +832,21 @@ public sealed class VcpkgCacheProviderTests : IDisposable
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
             .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, shared);
 
-        var plan = await CreateProvider(volumes).PlanAsync();
+        var provider = CreateProvider(volumes);
+        var plan = await provider.PlanAsync();
 
         Assert.Single(plan.TargetedPaths, p => Path.GetFileName(p).Equals("downloads", StringComparison.OrdinalIgnoreCase));
+
+        AssertTheCloneStands(root, await provider.ExecuteAsync(plan));
+    }
+
+    /// <summary>The §5.6 half of a run over a clone: the clone, what it has installed and its ports survived.</summary>
+    private static void AssertTheCloneStands(string root, CleanupResult result)
+    {
         Assert.True(Directory.Exists(Path.Combine(root, "installed")));
+        Assert.True(Directory.Exists(Path.Combine(root, "ports")));
+        Assert.True(File.Exists(Path.Combine(root, VcpkgDiscovery.RootMarker)));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>

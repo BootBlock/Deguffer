@@ -137,7 +137,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
             .Select(location => location.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        List<ToolRoot> roots =
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
             running
                 ? new ToolRoot(common, HeldReason, static _ => false)
@@ -151,9 +151,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
                     survivor.Path,
                     survivor.Reason,
                     chosen.Contains(survivor.Path) ? static _ => true : static _ => false)),
-        ];
-
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
+        ]);
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)

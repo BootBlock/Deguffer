@@ -115,7 +115,6 @@ public sealed record ToolRoot(
 
         return next.Select(level => Folders(level.Key, reason, level.Value.Contains));
     }
-
 }
 
 /// <summary>What a <see cref="ToolRoot"/> says of the entries inside it.</summary>

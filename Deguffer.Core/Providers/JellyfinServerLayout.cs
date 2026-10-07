@@ -172,6 +172,7 @@ public static class JellyfinServerLayout
             // Where Jellyfin transcodes to when nothing moves it. Anything else was moved by a setting or
             // a variable, and is trusted only as far as that setting is.
             var standard = Path.Combine(data, "cache", "transcodes");
+            var standardFolder = ReachedFolder.At(standard, volumes);
 
             foreach (var setting in new[] { cacheSetting, transcodeSetting }.Where(s => s.Reading is MediaServerSettingReading.Unknown))
             {
@@ -196,7 +197,9 @@ public static class JellyfinServerLayout
                     continue;
                 }
 
-                var isMoved = !folder.Equals(standard, StringComparison.OrdinalIgnoreCase);
+                // Asked of the folders, because a setting may name the standard folder through a letter
+                // subst made or another mount of its volume, which moves nothing.
+                var isMoved = !reached.IsSameAs(standardFolder);
 
                 // Refused in Explore at each name it is reached by, for the reason a data folder is,
                 // and offered once.
@@ -254,7 +257,7 @@ public static class JellyfinServerLayout
                     return "the installer records no Jellyfin that uses it";
                 }
 
-                return presence is PathPresence.Present && !IsJellyfins(folder, data)
+                return presence is PathPresence.Present && !IsJellyfins(folder, data, isMoved)
                     ? $"it has no {Marker} file in it"
                     : null;
             }
@@ -272,12 +275,11 @@ public static class JellyfinServerLayout
 
     /// <summary>
     /// The marker, or the cache tag above the standard folder. The tag is a general convention other
-    /// tools write too, so it counts only where the folder is at the path Jellyfin's own name gives it.
+    /// tools write too, so it counts only where the folder is the one Jellyfin's own name gives it.
     /// </summary>
-    private static bool IsJellyfins(string folder, string data) =>
+    private static bool IsJellyfins(string folder, string data, bool isMoved) =>
         LongPath.FileExists(Path.Combine(folder, Marker))
-        || (folder.Equals(Path.Combine(data, "cache", "transcodes"), StringComparison.OrdinalIgnoreCase)
-            && LongPath.FileExists(Path.Combine(data, "cache", CacheTag)));
+        || (!isMoved && LongPath.FileExists(Path.Combine(data, "cache", CacheTag)));
 
     private static PlanNote Unrecognised(string folder, string why) => new(
         PlanNoteSeverity.Information,

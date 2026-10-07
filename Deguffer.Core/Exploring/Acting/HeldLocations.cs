@@ -30,18 +30,17 @@ namespace Deguffer.Core.Exploring.Acting;
 /// </summary>
 internal sealed class HeldLocations
 {
-    private readonly IReadOnlyList<(string Path, string Reason, ReachedFolder Folder)> _locations;
+    private readonly IReadOnlyList<(string Reason, ReachedFolder Folder)> _locations;
     private readonly IFileSystem _fileSystem;
 
     /// <param name="locations">
-    /// Resolved paths in display form, the reason each is refused, and the folder each names. Where
-    /// one path is refused for two reasons the first is kept, as <see cref="ExploreActionPolicy"/>
-    /// shows the first refusal of a path owned twice.
+    /// The reason each location is refused, and the folder it is. Where one folder is refused for two
+    /// reasons the first is shown, as <see cref="ExploreActionPolicy"/> shows the first refusal of a
+    /// path owned twice.
     /// </param>
-    public HeldLocations(
-        IEnumerable<(string Path, string Reason, ReachedFolder Folder)> locations, IFileSystem fileSystem)
+    public HeldLocations(IEnumerable<(string Reason, ReachedFolder Folder)> locations, IFileSystem fileSystem)
     {
-        _locations = [.. locations.DistinctBy(l => l.Path, StringComparer.OrdinalIgnoreCase)];
+        _locations = [.. locations];
 
         _fileSystem = fileSystem;
     }
@@ -59,7 +58,7 @@ internal sealed class HeldLocations
             .Where(location => location.Levels > 0)
             .OrderBy(location => location.Levels);
 
-        foreach (var ((_, reason, located), _) in held)
+        foreach (var ((reason, located), _) in held)
         {
             // Asked about at every path it is reachable at, and present where any answers so: each is
             // the same folder, and the path it was declared at may be a letter or a mount that no

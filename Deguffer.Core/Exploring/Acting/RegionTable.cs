@@ -49,10 +49,10 @@ internal sealed class RegionTable
     /// Every refusing region, whichever scope it has, with the folder it names: a folder holding the
     /// profile or <c>C:\Windows</c> takes it along as surely as one holding a tool's folder does.
     /// </summary>
-    public IEnumerable<(string Path, string Reason, ReachedFolder Folder)> Refusing =>
+    public IEnumerable<(string Reason, ReachedFolder Folder)> Refusing =>
         _regions
             .Where(r => !r.Region.Verdict.IsAllowed)
-            .Select(r => (r.Region.Path, r.Region.Verdict.Reason, r.Folder));
+            .Select(r => (r.Region.Verdict.Reason, r.Folder));
 
     /// <summary>
     /// The innermost region covering <paramref name="place"/>, or null where none does: a path-only

@@ -113,7 +113,7 @@ public sealed class ExploreActionPolicy
         _held = new HeldLocations(
             [
                 .. _regions.Refusing,
-                .. _toolRoots.Concat(_probedRoots).Select(root => (root.Path, root.Root.Reason, root.Folder)),
+                .. _toolRoots.Concat(_probedRoots).Select(root => (root.Root.Reason, root.Folder)),
             ],
             _fileSystem);
 

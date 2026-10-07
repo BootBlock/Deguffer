@@ -111,23 +111,38 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
 
     public VcpkgLocations Discover()
     {
+        // Each folder followed once for the discovery, because following one asks the machine where
+        // its volume is mounted, and the downloads variable is asked about twice (G4).
+        var followed = new Dictionary<string, ReachedFolder>(StringComparer.OrdinalIgnoreCase);
+
         var (root, unmarked, unreached, unread) = FindRoot();
         var binaryCache = FindBinaryCache();
-        var downloads = FindRelocatedDownloads(root);
+        var downloads = FindRelocatedDownloads(root, Reach);
 
-        // vcpkg's own directories, followed once for both variables, and only where one is set.
+        // vcpkg's own directories, only where a variable is set.
         IReadOnlyList<ReachedFolder> own = binaryCache is null && downloads is null
             ? []
-            : [.. ProfileDirectories.Append(root).OfType<string>().Select(folder => ReachedFolder.At(folder, volumes))];
+            : [.. ProfileDirectories.Append(root).OfType<string>().Select(Reach)];
 
         return new VcpkgLocations(binaryCache, root, downloads, unmarked, unreached, unread)
         {
             Declined =
             [
-                .. Decline(binaryCache, own, BinaryCacheVariable, "binary cache", VcpkgFolderEvidence.WhyNotABinaryCache),
-                .. Decline(downloads, own, DownloadsVariable, "downloads folder", VcpkgFolderEvidence.WhyNotDownloads),
+                .. Decline(binaryCache, own, Reach, BinaryCacheVariable, "binary cache", VcpkgFolderEvidence.WhyNotABinaryCache),
+                .. Decline(downloads, own, Reach, DownloadsVariable, "downloads folder", VcpkgFolderEvidence.WhyNotDownloads),
             ],
         };
+
+        ReachedFolder Reach(string folder)
+        {
+            if (!followed.TryGetValue(folder, out var reached))
+            {
+                reached = ReachedFolder.At(folder, volumes);
+                followed[folder] = reached;
+            }
+
+            return reached;
+        }
     }
 
     /// <summary>
@@ -142,9 +157,11 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
     /// holds nothing to remove.</para>
     /// </summary>
     /// <param name="own">vcpkg's own directories, each at every path it is reachable at.</param>
+    /// <param name="reach">The folder at a path, followed once for the discovery.</param>
     private IEnumerable<(string Path, string Sentence)> Decline(
         string? folder,
         IReadOnlyList<ReachedFolder> own,
+        Func<string, ReachedFolder> reach,
         string variable,
         string what,
         Func<string, string?> evidence)
@@ -154,7 +171,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
             yield break;
         }
 
-        var reached = ReachedFolder.At(folder, volumes);
+        var reached = reach(folder);
 
         if (own.Any(directory => directory.Holds(reached)))
         {
@@ -278,7 +295,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
             null);
     }
 
-    private string? FindRelocatedDownloads(string? root)
+    private string? FindRelocatedDownloads(string? root, Func<string, ReachedFolder> reach)
     {
         if (FullyQualified(environment.GetEnvironmentVariable(DownloadsVariable)) is not { } configured)
         {
@@ -291,7 +308,7 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
         // folders, because the variable may name the clone's downloads through an alias, and read as
         // relocated they were refused as the clone's own and not offered at all.
         return root is not null
-            && ReachedFolder.At(configured, volumes).IsSameAs(ReachedFolder.At(Path.Combine(root, "downloads"), volumes))
+            && reach(configured).IsSameAs(reach(Path.Combine(root, "downloads")))
                 ? null
                 : configured;
     }
