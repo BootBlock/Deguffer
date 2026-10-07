@@ -25,7 +25,13 @@ public sealed class ReachedFolder
 
     /// <summary>
     /// Every path the folder is reachable at, comparable with <see cref="Comparable"/>: the path it was
-    /// asked about first.
+    /// asked about first, then that path as it was spelled where the two differ.
+    ///
+    /// <para><b>The spelling is kept beside the comparable form</b> because an 8.3 alias is expanded by
+    /// asking the disk, which can refuse, or find nothing yet. A root spelled
+    /// <c>C:\Users\LONGPR~1\tool</c> when its folder was not there keeps the alias, and the item spelled
+    /// the same way, expanded later, would otherwise match it nowhere. Each spelling names the same
+    /// folder, so keeping both can only find a match the comparison of text found before.</para>
     /// </summary>
     public IReadOnlyList<string> Places { get; }
 
@@ -44,10 +50,10 @@ public sealed class ReachedFolder
 
         if (VolumeRoot.Places(volumes, comparable) is { } places)
         {
-            return Following(comparable, places);
+            return Following(path, places);
         }
 
-        List<string> tops = [comparable];
+        var tops = Spelled(path, comparable);
         AddTopPlaces(tops, comparable, volumes);
 
         return new ReachedFolder(tops, true);
@@ -58,8 +64,17 @@ public sealed class ReachedFolder
     /// <see cref="VolumeRoot.Places"/> gave for it, for a caller that read them for rules of its own
     /// and would otherwise ask the machine the same questions twice.
     /// </summary>
-    internal static ReachedFolder Following(string path, IReadOnlyList<VolumePlace> places) =>
-        new([Comparable(path), .. places.Skip(1).Select(place => Comparable(place.Path))], false);
+    internal static ReachedFolder Following(string path, IReadOnlyList<VolumePlace> places)
+    {
+        var reached = Spelled(path, Comparable(path));
+
+        foreach (var place in places.Skip(1))
+        {
+            Add(reached, Comparable(place.Path));
+        }
+
+        return new ReachedFolder(reached, false);
+    }
 
     /// <summary>Whether this folder is <paramref name="inner"/> or holds it, at any path either is reachable at.</summary>
     public bool Holds(ReachedFolder inner) => PathTo(inner) is not null;
@@ -201,6 +216,15 @@ public sealed class ReachedFolder
         {
             AddTopPlaces(places, folder, volumes);
         }
+    }
+
+    /// <summary><paramref name="comparable"/>, then <paramref name="path"/> as it was spelled where that differs. See <see cref="Places"/>.</summary>
+    private static List<string> Spelled(string path, string comparable)
+    {
+        List<string> places = [comparable];
+        Add(places, Path.TrimEndingDirectorySeparator(LongPath.Display(path)));
+
+        return places;
     }
 
     /// <summary>Adds <paramref name="place"/> where it is not there already, and says whether it was not.</summary>
