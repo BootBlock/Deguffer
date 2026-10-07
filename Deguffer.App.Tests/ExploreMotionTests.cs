@@ -19,8 +19,12 @@ public sealed class ExploreMotionTests
 
     private static readonly TimeSpan OneFrame = TimeSpan.FromMilliseconds(16);
 
+    /// <summary>
+    /// With motion off the picture is where it was asked to go the moment it is asked, with nothing in
+    /// between, and is drawn there afresh once the wheel rests.
+    /// </summary>
     [Fact]
-    public void WithMotionOffAZoomArrivesAtOnce()
+    public void WithMotionOffAZoomJumpsAtOnce()
     {
         var clock = new SteppedFrameClock();
         var (zoom, moved, arrived) = Zoom(new ScriptedMotion(animationsEnabled: false), clock);
@@ -28,9 +32,43 @@ public sealed class ExploreMotionTests
         zoom.GlideTo(Target);
 
         Assert.Equal(Target, zoom.Shown);
-        Assert.Empty(moved);
+        Assert.Single(moved);
+        Assert.Empty(arrived);
+
+        clock.Step(ExploreZoom.JumpSettleTime);
+
+        Assert.Equal(Target, zoom.Shown);
+        Assert.Single(moved);
         Assert.Single(arrived);
-        Assert.False(clock.IsTicking, "a zoom with nothing to animate waited on frames");
+        Assert.False(clock.IsTicking, "a zoom at rest went on waiting for frames");
+    }
+
+    /// <summary>
+    /// A run of notches with motion off jumps at each one and is drawn once, after the last: drawing at
+    /// every notch would put the map behind a touchpad that reports many a second.
+    /// </summary>
+    [Fact]
+    public void WithMotionOffARunOfNotchesIsDrawnOnceTheWheelRests()
+    {
+        var clock = new SteppedFrameClock();
+        var (zoom, moved, arrived) = Zoom(new ScriptedMotion(animationsEnabled: false), clock);
+        var further = MapViewport.Anchored(16, 0.2, 0.3, 0.5, 0.5);
+
+        zoom.GlideTo(Target);
+        clock.Step(OneFrame);
+        zoom.GlideTo(further);
+
+        Assert.Equal(further, zoom.Shown);
+        Assert.Equal(2, moved.Count);
+
+        clock.Step(ExploreZoom.JumpSettleTime - OneFrame);
+
+        Assert.Empty(arrived);
+
+        clock.Step(OneFrame);
+
+        Assert.Single(arrived);
+        Assert.Equal(further, zoom.Shown);
     }
 
     [Fact]
@@ -85,7 +123,16 @@ public sealed class ExploreMotionTests
 
         descent.Start(Shape);
 
-        for (var elapsed = TimeSpan.Zero; elapsed < fade; elapsed += OneFrame)
+        Assert.True(descent.IsMoving, "the folder cut to its drawing rather than fading in");
+        Assert.Equal(0, descent.Opacity);
+
+        clock.Step(fade / 2);
+
+        Assert.True(descent.IsMoving);
+        Assert.InRange(descent.Opacity, double.Epsilon, 1 - double.Epsilon);
+        Assert.Empty(arrived);
+
+        for (var elapsed = fade / 2; elapsed < fade; elapsed += OneFrame)
         {
             Assert.Equal(MapFrame.Whole, descent.Opened);
             Assert.Equal(MapFrame.Whole, descent.Departing);

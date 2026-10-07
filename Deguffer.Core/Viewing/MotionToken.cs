@@ -5,8 +5,9 @@ namespace Deguffer.Core.Viewing;
 /// on and with them off.
 ///
 /// <para>Every animation asks for one of these by name rather than holding a duration of its own.
-/// Composition animations do not follow the system setting on their own, as the framework's theme
-/// transitions do, so an animation that carried its own timing would be one more place to forget it.</para>
+/// An animation the app clocks itself, or a composition animation, does not follow the system setting
+/// on its own as the framework's theme transitions do, so one that carried its own timing would be one
+/// more place to forget it.</para>
 /// </summary>
 /// <param name="Full">How it plays for a reader who has animation effects on.</param>
 /// <param name="Reduced">How it plays for one who has turned them off.</param>

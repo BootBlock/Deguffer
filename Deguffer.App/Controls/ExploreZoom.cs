@@ -25,6 +25,14 @@ internal sealed class ExploreZoom
     /// <summary>What a wheel reports for one notch (WHEEL_DELTA).</summary>
     private const double Notch = 120;
 
+    /// <summary>
+    /// How long the wheel has to rest before a zoom that jumped is drawn afresh where it landed. The
+    /// jump is on screen at once, over the drawings kept, as each frame of a glide is. Drawing at every
+    /// notch would rasterise for a zoom superseded before the paint finished, and a precision touchpad
+    /// reports many notches a second, so the map would fall behind the hand.
+    /// </summary>
+    internal static readonly TimeSpan JumpSettleTime = TimeSpan.FromMilliseconds(120);
+
     private readonly IMotionPolicy _motion;
 
     private readonly IFrameClock _clock;
@@ -38,8 +46,8 @@ internal sealed class ExploreZoom
     private MapViewport _target;
 
     /// <summary>
-    /// Raised at each frame while the zoom is moving. A frame is the display's, so this is sixty or
-    /// more times a second and must cost next to nothing to answer.
+    /// Raised at each frame while the zoom is moving, and once at a jump. A frame is the display's, so
+    /// this is sixty or more times a second and must cost next to nothing to answer.
     /// </summary>
     public event EventHandler? Moved;
 
@@ -72,8 +80,9 @@ internal sealed class ExploreZoom
     }
 
     /// <summary>
-    /// Move from what is on screen to <paramref name="target"/>, or arrive there at once for a reader
-    /// who has turned animation effects off.
+    /// Move from what is on screen to <paramref name="target"/>, or jump there for a reader who has
+    /// turned animation effects off. A jump arrives once the wheel has rested for
+    /// <see cref="JumpSettleTime"/>, so a run of notches is drawn once, as a glide's is.
     /// </summary>
     public void GlideTo(MapViewport target)
     {
@@ -88,18 +97,18 @@ internal sealed class ExploreZoom
 
         var motion = _motion.For(MotionToken.Camera);
 
-        if (motion.IsInstant)
-        {
-            Land();
-            return;
-        }
-
         if (_glide is null)
         {
             _clock.Frame += OnFrame;
         }
 
         _glide = new MapGlide(Shown, target, _clock.Now, motion);
+
+        if (motion.IsInstant)
+        {
+            Shown = target;
+            Moved?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>
@@ -170,15 +179,11 @@ internal sealed class ExploreZoom
         _target = Shown;
     }
 
-    /// <summary>Put the picture where it was going now, and say it has arrived.</summary>
+    /// <summary>End the move where it was going, and say it has arrived.</summary>
     private void Land()
     {
-        if (_glide is not null)
-        {
-            _clock.Frame -= OnFrame;
-            _glide = null;
-        }
-
+        _clock.Frame -= OnFrame;
+        _glide = null;
         Shown = _target;
 
         Arrived?.Invoke(this, EventArgs.Empty);
@@ -204,6 +209,17 @@ internal sealed class ExploreZoom
         }
 
         var now = _clock.Now;
+
+        // A jump is already where it was going, and waits only for the wheel to rest.
+        if (glide.Motion.IsInstant)
+        {
+            if (now - glide.Start >= JumpSettleTime)
+            {
+                Land();
+            }
+
+            return;
+        }
 
         Shown = glide.At(now);
 
