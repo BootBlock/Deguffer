@@ -1,18 +1,18 @@
-using System.Diagnostics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
-using Microsoft.UI.Xaml.Media;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.Controls;
 
 /// <summary>
-/// Where a map's zoom is, where it is going, and the clock that eases it from one to the other, or
+/// Where a map's zoom is, where it is going, and the clock that moves it from one to the other, or
 /// the hand that drags it there.
 ///
 /// <para>Separate from <see cref="ExploreMap"/> for the reason <see cref="ExploreHighlight"/> is.
 /// That one is about which tree is drawn and what the pointer found; this is about a viewport moving
 /// over time, and it knows nothing of what is drawn in it (G1). The arithmetic is Core's —
-/// <see cref="MapViewport"/> and <see cref="MapGlide"/> — so what is left here is the frame clock,
-/// which needs a window.</para>
+/// <see cref="MapViewport"/> and <see cref="MapGlide"/> — and how it moves is
+/// <see cref="MotionToken.Camera"/>'s, so what is left here is following the frames.</para>
 /// </summary>
 internal sealed class ExploreZoom
 {
@@ -25,8 +25,17 @@ internal sealed class ExploreZoom
     /// <summary>What a wheel reports for one notch (WHEEL_DELTA).</summary>
     private const double Notch = 120;
 
-    /// <summary>One clock for the life of the map, read at each frame rather than started per move (G5).</summary>
-    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    /// <summary>
+    /// How long a zoom that jumped has to rest before it is drawn afresh where it landed. The
+    /// jump is on screen at once, over the drawings kept, as each frame of a glide is. Drawing at every
+    /// notch would rasterise for a zoom superseded before the paint finished, and a precision touchpad
+    /// reports many notches a second, so the map would fall behind the hand.
+    /// </summary>
+    internal static readonly TimeSpan JumpSettleTime = TimeSpan.FromMilliseconds(120);
+
+    private readonly IMotionPolicy _motion;
+
+    private readonly IFrameClock _clock;
 
     private MapGlide? _glide;
 
@@ -37,13 +46,19 @@ internal sealed class ExploreZoom
     private MapViewport _target;
 
     /// <summary>
-    /// Raised at each frame while the zoom is moving. A frame is the display's, so this is sixty or
-    /// more times a second and must cost next to nothing to answer.
+    /// Raised at each frame while the zoom is moving, and once at a jump. A frame is the display's, so
+    /// this is sixty or more times a second and must cost next to nothing to answer.
     /// </summary>
     public event EventHandler? Moved;
 
     /// <summary>Raised once when a move arrives, which is when the picture is worth drawing again.</summary>
     public event EventHandler? Arrived;
+
+    public ExploreZoom(IMotionPolicy motion, IFrameClock clock)
+    {
+        _motion = motion;
+        _clock = clock;
+    }
 
     /// <summary>The viewport on screen at this moment.</summary>
     public MapViewport Shown { get; private set; }
@@ -64,7 +79,11 @@ internal sealed class ExploreZoom
         GlideTo(MapViewport.Anchored(zoom, pictureX, pictureY, x, y));
     }
 
-    /// <summary>Ease from what is on screen to <paramref name="target"/>.</summary>
+    /// <summary>
+    /// Move from what is on screen to <paramref name="target"/>, or jump there for a reader who has
+    /// turned animation effects off. A jump arrives once the wheel has rested for
+    /// <see cref="JumpSettleTime"/>, so a run of notches is drawn once, as a glide's is.
+    /// </summary>
     public void GlideTo(MapViewport target)
     {
         // Already going there: at either end of the zoom a further notch asks for nothing, and
@@ -76,12 +95,20 @@ internal sealed class ExploreZoom
 
         _target = target;
 
+        var motion = _motion.For(MotionToken.Camera);
+
         if (_glide is null)
         {
-            CompositionTarget.Rendering += OnRendering;
+            _clock.Frame += OnFrame;
         }
 
-        _glide = new MapGlide(Shown, target, _clock.Elapsed);
+        _glide = new MapGlide(Shown, target, _clock.Now, motion);
+
+        if (motion.IsInstant)
+        {
+            Shown = target;
+            Moved?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>
@@ -134,7 +161,7 @@ internal sealed class ExploreZoom
             return;
         }
 
-        CompositionTarget.Rendering -= OnRendering;
+        _clock.Frame -= OnFrame;
         _glide = null;
         Shown = _target;
     }
@@ -147,23 +174,52 @@ internal sealed class ExploreZoom
             return;
         }
 
-        CompositionTarget.Rendering -= OnRendering;
+        _clock.Frame -= OnFrame;
         _glide = null;
         _target = Shown;
+    }
+
+    /// <summary>End the move where it was going, and say it has arrived.</summary>
+    private void Land()
+    {
+        _clock.Frame -= OnFrame;
+        _glide = null;
+        Shown = _target;
+
+        Arrived?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
     /// One frame of the move. Subscribed only while there is a move, because the event fires at every
     /// frame the window composes, and an idle map would otherwise pay for it for as long as it is open.
     /// </summary>
-    private void OnRendering(object? sender, object e)
+    private void OnFrame(object? sender, object e)
     {
         if (_glide is not { } glide)
         {
             return;
         }
 
-        var now = _clock.Elapsed;
+        // Animation effects turned off or on while the picture was moving: it lands where it was going
+        // rather than playing out a move made under the setting the reader has just changed.
+        if (_motion.For(MotionToken.Camera) != glide.Motion)
+        {
+            Land();
+            return;
+        }
+
+        var now = _clock.Now;
+
+        // A jump is already where it was going, and waits only for the wheel to rest.
+        if (glide.Motion.IsInstant)
+        {
+            if (now - glide.Start >= JumpSettleTime)
+            {
+                Land();
+            }
+
+            return;
+        }
 
         Shown = glide.At(now);
 
@@ -173,9 +229,6 @@ internal sealed class ExploreZoom
             return;
         }
 
-        CompositionTarget.Rendering -= OnRendering;
-        _glide = null;
-
-        Arrived?.Invoke(this, EventArgs.Empty);
+        Land();
     }
 }

@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.Core.Tests;
 
@@ -196,13 +197,26 @@ public sealed class MapViewportTests
         var from = MapViewport.Whole;
         var to = MapViewport.Anchored(8, 0.2, 0.3, 0.5, 0.5);
         var start = TimeSpan.FromSeconds(10);
-        var glide = new MapGlide(from, to, start);
+        var motion = MotionToken.Camera.Full;
+        var glide = new MapGlide(from, to, start, motion);
 
         Assert.Equal(from, glide.At(start));
-        Assert.False(glide.IsOverAt(start + (MapGlide.Duration / 2)));
-        Assert.True(glide.IsOverAt(start + MapGlide.Duration));
-        Assert.Equal(to, glide.At(start + MapGlide.Duration));
-        Assert.Equal(to, glide.At(start + (MapGlide.Duration * 3)));
+        Assert.False(glide.IsOverAt(start + (motion.Duration / 2)));
+        Assert.True(glide.IsOverAt(start + motion.Duration));
+        Assert.Equal(to, glide.At(start + motion.Duration));
+        Assert.Equal(to, glide.At(start + (motion.Duration * 3)));
+    }
+
+    /// <summary>With animation effects off the camera jumps: it is where it was asked to go from the start.</summary>
+    [Fact]
+    public void WithMotionOffAGlideHasArrivedAsItStarts()
+    {
+        var to = MapViewport.Anchored(8, 0.2, 0.3, 0.5, 0.5);
+        var start = TimeSpan.FromSeconds(10);
+        var glide = new MapGlide(MapViewport.Whole, to, start, MotionToken.Camera.Reduced);
+
+        Assert.True(glide.IsOverAt(start));
+        Assert.Equal(to, glide.At(start));
     }
 
     /// <summary>
@@ -213,9 +227,10 @@ public sealed class MapViewportTests
     public void AGlideIsFastestAtTheStartAndNeverTurnsBack()
     {
         var to = MapViewport.Anchored(16, 0.5, 0.5, 0.5, 0.5);
-        var glide = new MapGlide(MapViewport.Whole, to, TimeSpan.Zero);
+        var motion = MotionToken.Camera.Full;
+        var glide = new MapGlide(MapViewport.Whole, to, TimeSpan.Zero, motion);
 
-        var halfway = glide.At(MapGlide.Duration / 2);
+        var halfway = glide.At(motion.Duration / 2);
 
         Assert.True(halfway.Zoom > MapViewport.Between(MapViewport.Whole, to, 0.5).Zoom, "the glide was not eased out");
 
@@ -223,7 +238,7 @@ public sealed class MapViewportTests
 
         for (var step = 0; step <= 25; step++)
         {
-            var zoom = glide.At(MapGlide.Duration * (step / 25.0)).Zoom;
+            var zoom = glide.At(motion.Duration * (step / 25.0)).Zoom;
 
             Assert.True(zoom >= previous, $"the zoom went back from {previous} to {zoom}");
             previous = zoom;

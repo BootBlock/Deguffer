@@ -148,6 +148,10 @@
 
         <ProjectReference Include="..\Deguffer.Core\Deguffer.Core.csproj" />
 
+        <!-- The map's animations are internal, and their tests drive them through the motion and
+             frame-clock seams rather than through a window. -->
+        <InternalsVisibleTo Include="Deguffer.App.Tests" />
+
         <Manifest Include="$(ApplicationManifest)" />
 
         <!-- The window icon is set from the file at runtime, so it has to reach the output. -->

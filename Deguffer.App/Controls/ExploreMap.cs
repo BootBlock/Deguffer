@@ -1,3 +1,4 @@
+using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
@@ -66,9 +67,9 @@ public sealed class ExploreMap : UserControl
 
     private readonly DispatcherQueueTimer _settled;
 
-    private readonly ExploreZoom _zoom = new();
+    private readonly ExploreZoom _zoom = new(SystemMotion.Current, RenderingClock.Current);
 
-    private readonly ExploreDescent _descent = new();
+    private readonly ExploreDescent _descent = new(SystemMotion.Current, RenderingClock.Current);
 
     /// <summary>The pointer's look while it drags the picture. One for the life of the map (G5).</summary>
     private readonly InputCursor _dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
