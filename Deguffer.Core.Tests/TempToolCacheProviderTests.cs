@@ -30,14 +30,16 @@ public sealed class TempToolCacheProviderTests : IDisposable
     private TempToolCacheProvider CreateProvider(
         IProcessInspector? inspector = null,
         ILiveTreeInspector? liveTrees = null,
-        INamedMutexes? mutexes = null) =>
+        INamedMutexes? mutexes = null,
+        IVolumeInventory? volumes = null) =>
         new(
             _environment,
             new FakeProcessRunner(),
             inspector ?? FakeProcessInspector.NothingRunning,
             system: _system,
             liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
-            mutexes: mutexes ?? FakeNamedMutexes.None);
+            mutexes: mutexes ?? FakeNamedMutexes.None,
+            volumes: volumes ?? new FakeVolumeInventory());
 
     private string Entry(int bytes, params string[] segments) => _temp.CreateFile(bytes, ["temp", .. segments]);
 
@@ -212,6 +214,54 @@ public sealed class TempToolCacheProviderTests : IDisposable
         Assert.True(File.Exists(mine), "a folder in a configured cache Node did not make was removed");
         Assert.True(File.Exists(loose), "a file in a configured cache was removed");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A setting naming the temporary folder's own <c>node-compile-cache</c> through another mount of
+    /// its volume names the folder the temporary-folder marker already takes whole. Examined again as
+    /// Node's, its version folders were offered beside it and it was asserted to survive the run that
+    /// removes it (§5.6). A setting naming an ordinary folder reached the same way is still Node's.
+    /// </summary>
+    [Theory]
+    [InlineData("node-compile-cache", false)]
+    [InlineData("node-cache", true)]
+    public async Task ANodeCacheSettingNamingTheTemporaryFoldersCacheThroughAnotherMountIsNotExaminedTwice(
+        string name, bool examined)
+    {
+        using var mirror = new TempDirectory();
+        var volumes = new FakeVolumeInventory().With(_temp.Path + @"\", alsoMountedAt: [mirror.Path + @"\"]);
+        var cache = Path.GetDirectoryName(Path.GetDirectoryName(Entry(4096, "node-compile-cache", "v26.7.0-x64-8d7ad2ee", "0a1b2c3d")))!;
+        mirror.CreateFile(2048, "temp", name, "v26.7.0-x64-8d7ad2ee", "0a1b2c3d");
+        var configured = Path.Combine(mirror.Path, "temp", name);
+        _environment.WithEnvironmentVariable(TempToolCacheProvider.NodeCompileCacheVariable, configured);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(examined, plan.ProtectedPaths.Any(p => p.Path.Equals(configured, StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(
+            examined,
+            plan.TargetedPaths.Contains(Path.Combine(configured, "v26.7.0-x64-8d7ad2ee"), StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A configured cache inside the temporary folder, named through another mount of its volume, is
+    /// claimed from the temporary folder as it names it, so the temporary-folder row leaves Node's
+    /// folder to this row rather than taking it on its age. Nothing beside it is claimed.
+    /// </summary>
+    [Fact]
+    public async Task ClaimsAConfiguredCacheInATemporaryFolderNamedThroughAnotherMount()
+    {
+        using var mirror = new TempDirectory();
+        var volumes = new FakeVolumeInventory().With(_temp.Path + @"\", alsoMountedAt: [mirror.Path + @"\"]);
+        mirror.CreateFile(4096, "temp", "node-cache", "v24.15.0-x64-1a2b3c4d", "0a1b2c3d");
+        mirror.CreateFile(1024, "temp", "unrelated", "x");
+        _environment.WithEnvironmentVariable(
+            TempToolCacheProvider.NodeCompileCacheVariable, Path.Combine(mirror.Path, "temp", "node-cache"));
+
+        var claimed = await CreateProvider(volumes: volumes).ClaimedEntriesAsync([UserTemp]);
+
+        Assert.Equal([Path.Combine(UserTemp, "node-cache")], claimed);
     }
 
     /// <summary>
