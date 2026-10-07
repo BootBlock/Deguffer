@@ -774,6 +774,13 @@ public sealed class ExploreMap : UserControl
         // arrives, the old one answers, and it has to be shown where it is resolved.
         Place();
 
+        // Its names are where its own placement put them, so they go while it is shown anywhere
+        // else, as they do during a zoom. The new drawing brings its own.
+        if (_zoom.Shown != _drawn)
+        {
+            _labels.Hide();
+        }
+
         var width = DevicePixels(ActualWidth);
         var height = DevicePixels(ActualHeight);
 
