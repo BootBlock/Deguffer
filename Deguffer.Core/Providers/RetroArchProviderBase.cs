@@ -126,6 +126,12 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
     /// <summary>
     /// The folder <paramref name="setting"/> names for <paramref name="install"/>, or null where there is
     /// none, it could not be worked out, or it must be left alone, each of the last two said.
+    ///
+    /// <para><b>Named as the program's folder is, where it is inside it</b>, at any path either is
+    /// reachable at. A setting may name it through a letter <c>subst</c> made for the program's folder,
+    /// or another mount of its volume, and read as somewhere else it was reached past the check for a
+    /// link on the way down, and Explore refused it on the way down from the program. A folder another
+    /// setting already named another way is read under that name, so it is offered once.</para>
     /// </summary>
     /// <param name="what">What the folder holds, as a noun phrase in lower case, for the sentence.</param>
     private protected string? Locate(RetroArchInstall install, RetroArchFolderSetting setting, RetroArchReading reading, string what)
@@ -138,12 +144,19 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             return null;
         }
 
-        if (folder.Path is not { } path)
+        if (folder.Path is not { } named)
         {
             return null;
         }
 
-        if (install.Program is { } program && LongPath.Contains(program, path))
+        var reached = Reach(named);
+
+        if (reading.Located.Find(known => known.Folder.IsSameAs(reached)) is { Name: { } located })
+        {
+            return Named(located);
+        }
+
+        if (install.Program is { } program && Reach(program).Naming(reached, program) is { } path)
         {
             // Built from the program's folder, so a link at any folder between would put the removal
             // somewhere nothing established.
@@ -161,18 +174,31 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
                 return null;
             }
 
-            return path;
+            reading.Located.Add((path, reached));
+            return Named(path);
         }
 
-        if (_discovery.WhyNotOwned(path) is { } why)
+        if (_discovery.WhyNotOwned(named) is { } why)
         {
             reading.Notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving '{path}' alone although RetroArch's settings name it for its {what}: {why}"));
+                $"Leaving '{named}' alone although RetroArch's settings name it for its {what}: {why}"));
             return null;
         }
 
-        return path;
+        reading.Located.Add((named, reached));
+        return named;
+
+        string Named(string readAs)
+        {
+            if (!readAs.Equals(named, StringComparison.OrdinalIgnoreCase)
+                && !reading.OtherNames.Exists(other => other.Name.Equals(named, StringComparison.OrdinalIgnoreCase)))
+            {
+                reading.OtherNames.Add((named, readAs));
+            }
+
+            return readAs;
+        }
     }
 
     /// <summary>The folder Explore is told the way down from: the program's, where the folder is in it.</summary>
@@ -239,7 +265,15 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase)
             .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)));
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
+        // A folder a setting named another way than it is read under is refused at that name too.
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. roots,
+            .. readings
+                .SelectMany(reading => reading.OtherNames)
+                .Distinct()
+                .SelectMany(other => ToolRoot.AlsoAt(roots, other.ReadAs, other.Name)),
+        ]);
     }
 
     private const string ProgramReason =

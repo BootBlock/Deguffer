@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -30,8 +31,17 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private RetroArchThumbnailProvider CreateProvider(FakeProcessInspector? inspector = null) =>
-        new(_environment, new FakeProcessRunner(), inspector ?? FakeProcessInspector.NothingRunning, discovery: _retroArch.Discovery(_system));
+    private RetroArchThumbnailProvider CreateProvider(FakeProcessInspector? inspector = null, IVolumeInventory? volumes = null)
+    {
+        volumes ??= new FakeVolumeInventory();
+
+        return new(
+            _environment,
+            new FakeProcessRunner(),
+            inspector ?? FakeProcessInspector.NothingRunning,
+            discovery: _retroArch.Discovery(_system, volumes: volumes),
+            volumes: volumes);
+    }
 
     [Fact]
     public void IsTierThreeAndItsPartsAreSeparateDecisions()
@@ -137,6 +147,65 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
 
         Assert.Equal([elsewhere], plan.TargetedPaths);
         Assert.True(Directory.Exists(stale));
+    }
+
+    /// <summary>
+    /// A thumbnails folder the settings name through <c>S:</c>, a letter <c>subst</c> made for the
+    /// program's folder, is the program's own, though its text names nothing there. It is read as the
+    /// program's folder names it, so the way down from the program is checked for links and told to
+    /// Explore, and Explore refuses it at the other name too. What the program holds beside it survives
+    /// (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task AThumbnailsFolderTheSettingsNameThroughASubstitutedLetterIsTheProgramsOwn()
+    {
+        _retroArch.Install(@"thumbnails_directory = ""S:\thumbnails""").Declare();
+        var boxArt = _retroArch.Pictures(Nes, "Named_Boxarts");
+        var custom = RetroArchFixture.Folder(Path.Combine(_retroArch.Thumbnails, Nes, "Custom"));
+        var saves = RetroArchFixture.Folder(Path.Combine(_retroArch.Program, "saves"));
+
+        var provider = CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", _retroArch.Program));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([boxArt], plan.TargetedPaths);
+
+        var roots = await provider.DiscoverToolRootsAsync();
+
+        Assert.Contains(roots, r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("thumbnails"));
+        Assert.Contains(roots, r => r.Path.Equals(@"S:\thumbnails", StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder(Nes));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(boxArt));
+        Assert.True(Directory.Exists(custom));
+        Assert.True(Directory.Exists(saves));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// Two copies of RetroArch whose settings name one thumbnails folder two ways, through another
+    /// mount of its volume, offer its pictures once. The mount is a folder of its own here, standing in
+    /// for the same folder reached the other way.
+    /// </summary>
+    [Fact]
+    public async Task OneThumbnailsFolderTwoCopiesNameTwoWaysIsOfferedOnce()
+    {
+        using var mirror = new TempDirectory();
+        var volumes = new FakeVolumeInventory().With(_temp.Path + @"\", alsoMountedAt: [mirror.Path + @"\"]);
+        var other = new RetroArchFixture(_environment, Path.Combine(_temp.Path, "RetroArch-Portable"));
+        var art = Path.Combine(_temp.Path, "art");
+        var mirrored = Path.Combine(mirror.Path, "art");
+
+        _retroArch.Install($"thumbnails_directory = \"{art}\"");
+        other.Install($"thumbnails_directory = \"{mirrored}\"");
+        Assert.True(new EmulatorFolderStore(_environment).Save([_retroArch.Program, other.Program]));
+
+        var boxArt = _retroArch.Pictures(Nes, "Named_Boxarts", art);
+        _retroArch.Pictures(Nes, "Named_Boxarts", mirrored);
+
+        var plan = await CreateProvider(volumes: volumes).PlanAsync();
+
+        Assert.Equal([boxArt], plan.TargetedPaths);
     }
 
     [Fact]
