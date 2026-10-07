@@ -135,7 +135,7 @@ public sealed class MemoryTreeLayoutTests
         var surface = ExploreSurface.Create(Tree, Tree.RootNode, view, (int)Width, (int)Height, scale: 1, textScale: 1, ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
         var pixels = new byte[PixelBuffer.LengthFor((int)Width, (int)Height)];
 
-        surface.Painter(new TileColour(32, 32, 32)).PaintAll(pixels);
+        surface.Painter(new TileColour(32, 32, 32)).PaintRegions(pixels);
 
         Assert.NotNull(surface.At(x, y));
         Assert.NotEmpty(surface.Labels);

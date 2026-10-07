@@ -61,14 +61,6 @@ public abstract class CanvasPainter
     }
 
     /// <summary>
-    /// Paint the whole canvas, cut into bands across threads where it is large enough to pay for
-    /// them. The picture is the one painting it as a single region would give.
-    /// </summary>
-    public void PaintAll(byte[] pixels) =>
-        PixelBuffer.Bands(0, Height, Width * Height, (from, to) =>
-            Paint(pixels, new CanvasRegion(0, from, Width, to - from)));
-
-    /// <summary>
     /// Draw every shape that shows in <paramref name="region"/> over the ground already in it.
     /// Called only with a region inside the canvas, and a buffer large enough for it.
     /// </summary>

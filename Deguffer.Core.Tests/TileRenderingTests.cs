@@ -253,7 +253,7 @@ public sealed class TileRenderingTests
             (node, depth) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
                 : Hues.Colour(branchOf(node), depth))
-            .PaintAll(pixels);
+            .PaintRegions(pixels);
 
         return pixels;
     }

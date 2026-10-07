@@ -185,7 +185,7 @@ public sealed class SectorRenderingTests
             (node, _) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
                 : Hues.Colour(0, 0))
-            .PaintAll(pixels);
+            .PaintRegions(pixels);
 
         return pixels;
     }

@@ -73,7 +73,7 @@ public sealed class RegionPaintingTests
         var painter = drawing.Painter(Drawings.Ground);
 
         var whole = new byte[PixelBuffer.LengthFor(Width, Height)];
-        painter.PaintAll(whole);
+        painter.PaintRegions(whole);
 
         // Every byte starts as something no painter writes, so a region left unpainted shows.
         var regions = new byte[whole.Length];

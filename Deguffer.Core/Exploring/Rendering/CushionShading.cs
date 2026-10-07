@@ -38,7 +38,7 @@ public static class CushionShading
     /// <summary>
     /// The ridge height at every depth a real tree reaches, worked out once.
     ///
-    /// <para><see cref="RidgeAt"/> is asked per pixel of a sunburst and per rectangle per band of a
+    /// <para><see cref="RidgeAt"/> is asked per pixel of a sunburst and per rectangle per region of a
     /// treemap, which is millions of times a repaint, and <see cref="Math.Pow(double, double)"/> is
     /// nowhere near cheap enough to be asked that often (G4/G5). Sixty-four levels is past the point
     /// where the ridge is flat to within a byte of a colour channel, and a deeper shape than that

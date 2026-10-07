@@ -35,7 +35,7 @@ public static class IcicleLayout
     ///
     /// <para>An array rather than the list it is built in, for the reason
     /// <see cref="TreemapLayout.Compute"/> gives: both layouts feed the same rasteriser, and it
-    /// indexes what it is given once per rectangle per band of every repaint.</para>
+    /// indexes what it is given once per rectangle per region of every repaint.</para>
     /// </summary>
     public static IReadOnlyList<ExploreTile> Compute(
         ISizedTree tree,

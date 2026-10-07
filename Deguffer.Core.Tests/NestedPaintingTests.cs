@@ -10,9 +10,9 @@ namespace Deguffer.Core.Tests;
 /// rendering of the same shape on its own rather than against a repeat of the shading arithmetic —
 /// so a change to the shading model cannot make them pass for the wrong reason.
 ///
-/// <para>Run on a canvas below the threshold for splitting the work across threads and on one well
-/// above it, because the record of which pixels are spoken for belongs to a band. An index that is
-/// right within one band and wrong across two would pass on the small canvas alone.</para>
+/// <para>Run on a canvas of one region and on one of many, because the record of which pixels are
+/// spoken for belongs to a region. An index that is right within one region and wrong across two
+/// would pass on the small canvas alone.</para>
 /// </summary>
 public sealed class NestedPaintingTests
 {
@@ -120,7 +120,7 @@ public sealed class NestedPaintingTests
         var pixels = new byte[PixelBuffer.LengthFor(width, height)];
 
         new TileRasteriser(tiles, width, height, Ground, (node, depth) => Hues.Colour(node, depth))
-            .PaintAll(pixels);
+            .PaintRegions(pixels);
 
         return pixels;
     }

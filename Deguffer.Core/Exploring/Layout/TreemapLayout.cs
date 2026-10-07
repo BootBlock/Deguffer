@@ -40,8 +40,8 @@ public static class TreemapLayout
     /// this would lay one out into rectangles that look like a treemap and are not one.</para>
     ///
     /// <para>An array rather than the list it is built in, because every consumer indexes it and
-    /// <see cref="Rendering.TileRasteriser"/> does so once per rectangle per band of every repaint.
-    /// That is a couple of million reads a frame on a full canvas, and an interface indexer
+    /// <see cref="Rendering.TileRasteriser"/> does so once per rectangle per region of every
+    /// repaint. That is a few million reads a frame on a full canvas, and an interface indexer
     /// returning a 32-byte struct is not free at that count (G4).</para>
     /// </summary>
     /// <param name="volume">

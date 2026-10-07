@@ -8,8 +8,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 ///
 /// <para>Off that thread because it is the UI thread. A redraw of a large tree at 4K is a layout of
 /// tens of thousands of shapes and a pass over eight million pixels, and a scan asks for one every
-/// three quarters of a second. Done where the pointer is heard, each was a pause in which nothing
-/// the reader did had any effect.</para>
+/// three quarters of a second. On the thread the pointer is heard on, each would be a pause in which
+/// nothing the reader did had any effect.</para>
 ///
 /// <para>The newest only, because anything newer is more current: a resize, a zoom arriving, or a
 /// new snapshot of the tree. Starting one supersedes the one before, which puts nothing more on
@@ -81,8 +81,8 @@ public sealed class CanvasRedraws
             TaskContinuationOptions.DenyChildAttach,
             TaskScheduler.Default);
 
-        // A layout or a paint that fails is a defect, and it is raised where it would have been
-        // raised before the work moved off the owner's thread, rather than lost with the task.
+        // A layout or a paint that fails is a defect, so it is raised on the owner's thread, where
+        // the application's handling of an unexpected failure sees it, rather than lost with the task.
         redraw.Finished.ContinueWith(
             failed => _owner.Post(
                 state => ((ExceptionDispatchInfo)state!).Throw(),
@@ -96,16 +96,6 @@ public sealed class CanvasRedraws
         return redraw;
     }
 
-    /// <summary>
-    /// Stop the redraw still pending, if there is one, for a canvas that no longer wants it. Says
-    /// whether there was one, so the caller knows it is owed a redraw later.
-    /// </summary>
-    public bool Cancel()
-    {
-        var pending = Pending;
-
-        pending?.Supersede();
-
-        return pending is not null;
-    }
+    /// <summary>Stop the redraw still pending, if there is one, for a canvas that no longer wants it.</summary>
+    public void Cancel() => Pending?.Supersede();
 }

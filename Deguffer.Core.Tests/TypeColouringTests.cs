@@ -115,7 +115,7 @@ public sealed class TypeColouringTests
     {
         var surface = Surface(tree, colours);
         var pixels = new byte[PixelBuffer.LengthFor(200, 200)];
-        surface.Painter(new TileColour(0, 0, 0)).PaintAll(pixels);
+        surface.Painter(new TileColour(0, 0, 0)).PaintRegions(pixels);
 
         return pixels;
     }

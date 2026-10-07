@@ -46,7 +46,7 @@ public sealed class MapHitTestTests
     /// its regions covered: they came off the screen with it.
     /// </summary>
     [Fact]
-    public void ASupersededRedrawNeverAnswers()
+    public async Task ASupersededRedrawNeverAnswers()
     {
         var tree = Drawings.Tree();
         var old = Drawings.Covering(tree, Old);
@@ -60,7 +60,7 @@ public sealed class MapHitTestTests
         }
 
         gated.Open();
-        arriving.Finished.Wait(TimeSpan.FromSeconds(20));
+        await arriving.Finished.WaitAsync(TimeSpan.FromSeconds(20));
         _owner.RunPending();
 
         foreach (var (x, y) in Grid())

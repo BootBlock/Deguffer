@@ -44,7 +44,7 @@ public sealed class CanvasRedrawTests
             _target.Landed.Select(landed => landed.Region).OrderBy(Key));
 
         var whole = new byte[redraw.Pixels.Length];
-        drawing.Painter(Drawings.Ground).PaintAll(whole);
+        drawing.Painter(Drawings.Ground).PaintRegions(whole);
 
         Assert.Equal(whole, redraw.Pixels);
         Assert.Same(drawing, redraw.Surface);
@@ -55,20 +55,26 @@ public sealed class CanvasRedrawTests
     /// and the newer one lands in full.
     /// </summary>
     [Fact]
-    public void ARedrawSupersededWhileItLaysOutPutsNothingOnScreen()
+    public async Task ARedrawSupersededWhileItLaysOutPutsNothingOnScreen()
     {
+        using var layingOut = new ManualResetEventSlim();
         using var laidOut = new ManualResetEventSlim();
         var older = Start(() =>
         {
+            layingOut.Set();
             laidOut.Wait(TimeSpan.FromSeconds(20));
             return Drawings.Covering(Drawings.Tree(), node: 1);
         });
+
+        // Inside its layout, so the layout finishes after the redraw is superseded rather than never
+        // starting, and what it returns is what must not reach the screen.
+        Assert.True(layingOut.Wait(TimeSpan.FromSeconds(20)), "the older redraw never started laying out");
 
         var newer = Start(() => Drawings.Covering(Drawings.Tree(), node: 2));
 
         laidOut.Set();
         _owner.RunUntil(() => newer.IsArrived, "the newer redraw to arrive");
-        older.Finished.Wait(TimeSpan.FromSeconds(20));
+        await older.Finished.WaitAsync(TimeSpan.FromSeconds(20));
         _owner.RunPending();
 
         Assert.Empty(_target.Of(older));
@@ -83,11 +89,11 @@ public sealed class CanvasRedrawTests
     /// it does they are not wanted.
     /// </summary>
     [Fact]
-    public void ARedrawSupersededAfterItPaintedPutsNothingOnScreen()
+    public async Task ARedrawSupersededAfterItPaintedPutsNothingOnScreen()
     {
         var older = Start(() => Drawings.Covering(Drawings.Tree(), node: 1));
 
-        Assert.True(older.Finished.Wait(TimeSpan.FromSeconds(20)), "the older redraw never finished painting");
+        await older.Finished.WaitAsync(TimeSpan.FromSeconds(20));
 
         var newer = Start(() => Drawings.Covering(Drawings.Tree(), node: 2));
 
@@ -104,7 +110,7 @@ public sealed class CanvasRedrawTests
     /// they were painting.
     /// </summary>
     [Fact]
-    public void ARedrawSupersededWhileItLandsIsWithdrawnAndLandsNoMore()
+    public async Task ARedrawSupersededWhileItLandsIsWithdrawnAndLandsNoMore()
     {
         var gated = new GatedSurface(Drawings.Covering(Drawings.Tree(), node: 1), region => region is { X: 0, Y: 0 });
         var older = Start(() => gated, new ExplorePoint(1, 1));
@@ -120,7 +126,7 @@ public sealed class CanvasRedrawTests
 
         gated.Open();
         _owner.RunUntil(() => newer.IsArrived, "the newer redraw to arrive");
-        older.Finished.Wait(TimeSpan.FromSeconds(20));
+        await older.Finished.WaitAsync(TimeSpan.FromSeconds(20));
         _owner.RunPending();
 
         Assert.Equal([RedrawCall.Begin, RedrawCall.Land, RedrawCall.Withdraw], _target.Of(older));
@@ -176,15 +182,19 @@ public sealed class CanvasRedrawTests
 
         _owner.RunUntil(() => redraw.IsArrived, "the redraw to arrive");
 
-        Assert.False(_redraws.Cancel());
         Assert.Null(_redraws.Pending);
+
+        _redraws.Cancel();
+
+        Assert.False(redraw.IsSuperseded);
         Assert.DoesNotContain(RedrawCall.Withdraw, _target.Of(redraw));
         Assert.False(redraw.Covers(1, 1));
     }
 
     /// <summary>
-    /// A layout that fails is a defect, and it is raised on the owner's thread, where it would have
-    /// been raised when the layout ran there, rather than lost with the worker's task.
+    /// A layout that fails is a defect, and it is raised on the owner's thread, where the
+    /// application's handling of an unexpected failure sees it, rather than lost with the worker's
+    /// task.
     /// </summary>
     [Fact]
     public void ALayoutThatFailsIsRaisedOnTheOwnersThread()

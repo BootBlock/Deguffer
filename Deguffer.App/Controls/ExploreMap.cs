@@ -768,6 +768,12 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
+        // The screen is put where the zoom now says before anything lands on it. A zoom can change
+        // with nothing moving the drawings, as a new picture resets it and a page left mid-glide
+        // finishes it, and every point is resolved through the zoom (§7.1): until the new drawing
+        // arrives, the old one answers, and it has to be shown where it is resolved.
+        Place();
+
         var width = DevicePixels(ActualWidth);
         var height = DevicePixels(ActualHeight);
 
@@ -1296,7 +1302,9 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Pick(Point point)
     {
-        if (_drawing is null)
+        // A click on nothing at all, with no picture yet, leaves the selection as it is. A click on a
+        // picture still landing picks what has landed under it, as the readout already names.
+        if (_drawing is null && _arriving is not { Landed.Count: > 0 })
         {
             return;
         }

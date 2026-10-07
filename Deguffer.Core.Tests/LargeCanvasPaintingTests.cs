@@ -5,27 +5,25 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A canvas large enough to be cut into bands and shaded on several threads has to come out as the
-/// picture one thread would have produced.
+/// A canvas large enough to be cut into many regions, each painted on its own, has to come out as
+/// one picture.
 ///
-/// <para>Every canvas the app actually draws is that size — the threshold is half a megapixel and a
-/// 1080p panel is two — so this is the shipped path rather than an edge of it, and the two ways it
-/// can go wrong are both invisible to a small-canvas test. A band that measures a shape's cushion
-/// from its own top edge puts a seam across the picture at every boundary, and a band split that
-/// does not tile the canvas exactly leaves rows nobody painted.</para>
+/// <para>Every canvas the app actually draws is that size, so this is the shipped path rather than an
+/// edge of it, and the two ways it can go wrong are both invisible to a canvas of one region. A
+/// region that measures a shape's cushion from its own edge puts a seam across the picture at every
+/// boundary, and regions that do not tile the canvas exactly leave pixels nobody painted.</para>
 /// </summary>
-public sealed class ParallelPaintingTests
+public sealed class LargeCanvasPaintingTests
 {
-    // Comfortably past PixelBuffer's threshold, and a height that divides evenly by nothing the
-    // band arithmetic is likely to pick — so a rounding mistake in the split shows up as a gap
-    // rather than being hidden by a clean division.
+    // Several regions across and down, and a height that is not a multiple of the region size, so
+    // the last row of regions is ragged.
     private const int Width = 1024;
     private const int Height = 769;
 
     private static readonly TileColour Ground = TileColour.FromRgb(0x123456);
 
     /// <summary>
-    /// The bands together cover every row exactly once. A gap between two of them is a stripe of
+    /// The regions together cover every pixel exactly once. A gap between two of them is a patch of
     /// whatever the buffer held before, which on a reused buffer is the previous frame.
     /// </summary>
     [Fact]
@@ -43,12 +41,12 @@ public sealed class ParallelPaintingTests
     }
 
     /// <summary>
-    /// The cushion is measured across the whole rectangle, not across the band drawing part of it.
-    /// Measured per band, the gradient restarts at every boundary and the rectangle comes out as a
+    /// The cushion is measured across the whole rectangle, not across the region drawing part of it.
+    /// Measured per region, the gradient restarts at every boundary and the rectangle comes out as a
     /// stack of ridges — which reads as nesting that is not there.
     /// </summary>
     [Fact]
-    public void ARectangleSpanningEveryBandIsShadedAsOneCushion()
+    public void ARectangleSpanningEveryRegionIsShadedAsOneCushion()
     {
         var pixels = Paint([new ExploreTile(Node: 1, Depth: 0, Bytes: 1, X: 0, Y: 0, Width, Height)]);
 
@@ -78,17 +76,17 @@ public sealed class ParallelPaintingTests
     }
 
     /// <summary>
-    /// Painting order survives the split. Each band draws every rectangle in the order the layout
-    /// gave, so a child still covers its parent — in every band, not only the one holding the row a
-    /// small test happens to look at.
+    /// Painting order survives the split. Each region draws every rectangle in the order the layout
+    /// gave, so a child still covers its parent — in every region, not only the one holding the
+    /// pixel a small test happens to look at.
     /// </summary>
     [Fact]
-    public void ALaterRectangleCoversAnEarlierOneInEveryBandItReaches()
+    public void ALaterRectangleCoversAnEarlierOneInEveryRegionItReaches()
     {
         var under = new ExploreTile(1, 0, 1, 0, 0, Width, Height);
 
         // An aggregate on top, because it is the one shape drawn flat: every row of it is the same
-        // colour, so a band that painted it before the rectangle underneath — or skipped it — shows
+        // colour, so a region that painted it before the rectangle underneath — or skipped it — shows
         // up as that row carrying the cushion instead.
         var over = new ExploreTile(ExploreTile.Aggregated, 1, 1, 100, 0, 200, Height);
 
@@ -113,7 +111,7 @@ public sealed class ParallelPaintingTests
             (node, depth) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
                 : Hues.Colour(node, depth))
-            .PaintAll(pixels);
+            .PaintRegions(pixels);
 
         return pixels;
     }
