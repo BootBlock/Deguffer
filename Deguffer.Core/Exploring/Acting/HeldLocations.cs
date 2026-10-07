@@ -61,12 +61,14 @@ internal sealed class HeldLocations
 
         foreach (var ((_, reason, located), _) in held)
         {
-            // Named below the target, because that is the path the removal takes it at, and the one
-            // the user reached it by.
-            var location = folder.Naming(located, target)!;
-
-            if (_fileSystem.MayExist(LongPath.Extended(location)))
+            // Asked about at every path it is reachable at, and present where any answers so: each is
+            // the same folder, and the path it was declared at may be a letter or a mount that no
+            // longer answers. Named below the target in the refusal, because that is the path the
+            // removal takes it at, and the one the user reached it by.
+            if (located.Places.Any(place => _fileSystem.MayExist(LongPath.Extended(place))))
             {
+                var location = folder.Naming(located, target)!;
+
                 return ExploreVerdict.Refuse(
                     $"'{Path.GetFileName(target)}' holds '{location}', and removing a folder removes "
                     + $"everything in it. Explore refuses '{Path.GetFileName(location)}' itself: {reason}");
