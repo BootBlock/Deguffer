@@ -291,6 +291,24 @@ public sealed class TreemapVolumeTests
         Assert.Equal(new VolumeSpace(1_000, 900), VolumeSpace.Of(volumes, @"C:\Data"));
     }
 
+    /// <summary>
+    /// A letter <c>subst</c> made for the top of a volume is the whole of that volume. One made for a
+    /// folder is a folder: <c>S:\</c> is the top of its letter and not of <c>C:</c>, so it is given no
+    /// space, and its scan is not kept as one of the whole of <c>C:</c>.
+    /// </summary>
+    [Fact]
+    public void ALetterIsTheWholeOfAVolumeOnlyWhereItStandsForTheVolumesTop()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\", totalBytes: 200, freeBytes: 100)
+            .With(@"D:\", totalBytes: 900, freeBytes: 500)
+            .Substituting(@"T:\", @"D:\")
+            .Substituting(@"S:\", @"C:\Users\testuser\src");
+
+        Assert.Equal(new VolumeSpace(900, 500), VolumeSpace.Of(volumes, @"T:\"));
+        Assert.Equal(VolumeSpace.None, VolumeSpace.Of(volumes, @"S:\"));
+    }
+
     [Theory]
     [InlineData(null, 500L)]
     [InlineData(900L, null)]

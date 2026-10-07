@@ -171,4 +171,77 @@ public sealed class HostVolumeTests
         Assert.Equal(@"D:\", HostVolume.For(machine, @"C:\Mount\work")?.RootPath);
         Assert.True(HostVolume.For(machine, @"C:\Mount\work")?.StoresContentRemotely);
     }
+
+    /// <summary>
+    /// A letter <c>subst</c> made is not a volume, and no volume is mounted at it. The folder it stands
+    /// for is on the volume holding that folder, and read as named it was on none, so a cloud-backed
+    /// folder reached through a letter was walked and downloaded. Beside it, the same letter standing for
+    /// a folder on the local disk answers the local disk, so following the letter refuses nothing more.
+    /// </summary>
+    [Fact]
+    public void AnswersAPathThroughASubstitutedLetterAsTheVolumeTheLetterLeadsTo()
+    {
+        var cloud = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"V:\", features: CloudMount)
+            .Substituting(@"S:\", @"V:\work")
+            .Substituting(@"T:\", @"V:\");
+        var local = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"V:\", features: CloudMount)
+            .Substituting(@"S:\", @"C:\Users\testuser\src");
+
+        Assert.Equal(@"V:\", HostVolume.For(cloud, @"S:\app")?.RootPath);
+        Assert.True(HostVolume.For(cloud, LongPath.Extended(@"S:\app"))?.StoresContentRemotely);
+        Assert.True(HostVolume.For(cloud, @"T:\")?.StoresContentRemotely);
+        Assert.Equal(@"C:\", HostVolume.For(local, @"S:\app")?.RootPath);
+        Assert.False(HostVolume.For(local, @"S:\app")?.StoresContentRemotely);
+    }
+
+    /// <summary>
+    /// The inventory lists a letter no volume claims as an entry of its own, read through the letter,
+    /// and that entry is not the volume: it has no volume name, and a letter made after the list was
+    /// read has none. The volume the letter leads to answers ahead of it.
+    /// </summary>
+    [Fact]
+    public void AnswersTheVolumeALetterLeadsToAheadOfTheLettersOwnEntry()
+    {
+        var machine = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"V:\", features: CloudMount, volumeName: @"\\?\Volume{11111111-2222-3333-4444-555555555555}\")
+            .With(@"S:\")
+            .Substituting(@"S:\", @"V:\work");
+
+        var held = HostVolume.For(machine, @"S:\app");
+
+        Assert.Equal(@"V:\", held?.RootPath);
+        Assert.True(held?.StoresContentRemotely);
+    }
+
+    /// <summary>
+    /// A letter standing for a share leads to no volume the inventory holds, so the letter's own entry is
+    /// the only reading there is, as it was before letters were followed.
+    /// </summary>
+    [Fact]
+    public void AnswersALetterForAShareAsTheLettersOwnEntry()
+    {
+        var machine = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"S:\", kind: DriveType.Network)
+            .Substituting(@"S:\", @"\\server.test\share");
+
+        Assert.Equal(@"S:\", HostVolume.For(machine, @"S:\work")?.RootPath);
+    }
+
+    /// <summary>Letters standing for each other lead nowhere Windows can open, and are read as named.</summary>
+    [Fact]
+    public void AnswersLettersThatStandForEachOtherAsNamed()
+    {
+        var machine = new FakeVolumeInventory()
+            .With(@"C:\")
+            .Substituting(@"X:\", @"Y:\a")
+            .Substituting(@"Y:\", @"X:\b");
+
+        Assert.Null(HostVolume.For(machine, @"X:\c"));
+    }
 }
