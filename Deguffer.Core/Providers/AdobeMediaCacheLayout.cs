@@ -31,16 +31,10 @@ namespace Deguffer.Core.Providers;
 /// Whether a folder Adobe may be using was left alone or could not be placed, so a plan with nothing
 /// in it must not read as clear.
 /// </param>
-/// <param name="OtherNames">
-/// Each name a setting gave a folder in <paramref name="Roots"/> that the root is not named by, with the
-/// root's own name. The folder is planned once, under its first name, and Explore refuses it at each,
-/// because Explore compares a folder it is asked about with each root as that root is named.
-/// </param>
 public sealed record AdobeMediaCacheLayout(
     IReadOnlyList<DeclaredRoot> Roots,
     IReadOnlyList<PlanNote> Notes,
-    bool LeftSomethingUnexamined,
-    IReadOnlyList<(string Name, string Root)> OtherNames)
+    bool LeftSomethingUnexamined)
 {
     /// <summary>The key under <c>HKEY_CURRENT_USER</c> each release's <c>Common</c> key sits in.</summary>
     public const string SettingsKey = @"Software\Adobe";
@@ -107,7 +101,6 @@ public sealed record AdobeMediaCacheLayout(
         // letter subst made, or another mount of its volume, does not declare it twice: a second
         // declaration offers each cache folder again, and asserts nothing of the user's data beside it.
         var folders = new List<(string Path, ReachedFolder Reached, List<string> Names)>();
-        var otherNames = new List<(string Name, string Root)>();
 
         // A roaming profile can put the default folder on a share, where it is withheld for the reason
         // a moved one is. Said only where something is there, so a machine without Adobe says nothing.
@@ -157,8 +150,7 @@ public sealed record AdobeMediaCacheLayout(
                     folder.Path.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonSurvivors : [])),
             ],
             notes,
-            withheld,
-            [.. otherNames.Where(other => roots.Exists(root => root.Path.Equals(other.Root, StringComparison.OrdinalIgnoreCase)))]);
+            withheld);
 
         // One location from one release's settings. A value that is not a full path is said out loud,
         // because Adobe may be using a folder nobody here can name.
@@ -196,11 +188,6 @@ public sealed record AdobeMediaCacheLayout(
             {
                 folders.Add((chosen, reached, []));
                 index = folders.Count - 1;
-            }
-            else if (!folders[index].Path.Equals(chosen, StringComparison.OrdinalIgnoreCase)
-                && !otherNames.Exists(other => other.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase)))
-            {
-                otherNames.Add((chosen, folders[index].Path));
             }
 
             var names = folders[index].Names;

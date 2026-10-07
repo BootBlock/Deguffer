@@ -153,7 +153,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
 
         if (reading.Located.Find(known => known.Folder.IsSameAs(reached)) is { Name: { } located })
         {
-            return Named(located);
+            return located;
         }
 
         if (install.Program is { } program && Reach(program).Naming(reached, program) is { } path)
@@ -175,7 +175,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             }
 
             reading.Located.Add((path, reached));
-            return Named(path);
+            return path;
         }
 
         if (_discovery.WhyNotOwned(named) is { } why)
@@ -188,17 +188,6 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
 
         reading.Located.Add((named, reached));
         return named;
-
-        string Named(string readAs)
-        {
-            if (!readAs.Equals(named, StringComparison.OrdinalIgnoreCase)
-                && !reading.OtherNames.Exists(other => other.Name.Equals(named, StringComparison.OrdinalIgnoreCase)))
-            {
-                reading.OtherNames.Add((named, readAs));
-            }
-
-            return readAs;
-        }
     }
 
     /// <summary>The folder Explore is told the way down from: the program's, where the folder is in it.</summary>
@@ -265,15 +254,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase)
             .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)));
 
-        // A folder a setting named another way than it is read under is refused at that name too.
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
-        [
-            .. roots,
-            .. readings
-                .SelectMany(reading => reading.OtherNames)
-                .Distinct()
-                .SelectMany(other => ToolRoot.AlsoAt(roots, other.ReadAs, other.Name)),
-        ]);
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
     }
 
     private const string ProgramReason =

@@ -492,12 +492,12 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
         Assert.Equal([Files, Peaks, Database, Path.Combine(other, AdobeMediaCacheLayout.DatabaseFolder)], plan.TargetedPaths);
         Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(Common, "LUTs"), StringComparison.OrdinalIgnoreCase));
 
-        var roots = await provider.DiscoverToolRootsAsync();
+        var explore = new ExploreActionPolicy([], [], volumes, probedRoots: await provider.DiscoverToolRootsAsync());
 
-        Assert.False(Assert.Single(roots, r => r.Path.Equals(mirror, StringComparison.OrdinalIgnoreCase)).RecognisesFolder("LUTs"));
-        Assert.True(Assert.Single(roots, r => r.Path.Equals(mirror, StringComparison.OrdinalIgnoreCase))
-            .RecognisesFolder(AdobeMediaCacheLayout.FilesFolder));
-        Assert.Contains(roots, r => r.Path.Equals(Path.Combine(mirror, "LUTs"), StringComparison.OrdinalIgnoreCase));
+        Assert.False(explore.MayRemove(Path.Combine(mirror, "LUTs")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(Common, "LUTs")).IsAllowed);
+        Assert.True(explore.MayRemove(Path.Combine(mirror, AdobeMediaCacheLayout.FilesFolder)).IsAllowed);
+        Assert.True(explore.MayRemove(Path.Combine(other, "LUTs")).IsAllowed);
 
         var result = await provider.ExecuteAsync(plan);
 

@@ -165,8 +165,6 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase)
             .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)));
 
-        // A root or cache folder named another way than it is read under is refused at that name too.
-        roots.AddRange([.. examination.OtherNames.SelectMany(other => ToolRoot.AlsoAt(roots, other.ReadAs, other.Name))]);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
     }

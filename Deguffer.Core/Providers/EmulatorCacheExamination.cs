@@ -45,12 +45,6 @@ internal sealed class EmulatorCacheExamination
     public bool Unreadable { get; private set; }
 
     /// <summary>
-    /// Each name a root or a cache folder was given that it is read under another, with that other name.
-    /// Explore compares a folder with each root as the root is named, so it is told of both.
-    /// </summary>
-    public List<(string Name, string ReadAs)> OtherNames { get; } = [];
-
-    /// <summary>
     /// No root was proven and there is nothing to say: no link declined, nothing unread, and no
     /// declared folder or refused root to tell the user about.
     /// </summary>
@@ -114,7 +108,6 @@ internal sealed class EmulatorCacheExamination
                 else
                 {
                     answered = reported[known].Answered;
-                    examination.AlsoNamed(root, reported[known].Root);
                 }
 
                 if (answered && declared is not null)
@@ -138,16 +131,6 @@ internal sealed class EmulatorCacheExamination
         }
 
         return examination;
-    }
-
-    /// <summary>Records <paramref name="name"/> as another name of <paramref name="readAs"/>, once.</summary>
-    private void AlsoNamed(string name, string readAs)
-    {
-        if (!name.Equals(readAs, StringComparison.OrdinalIgnoreCase)
-            && !OtherNames.Exists(other => other.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
-        {
-            OtherNames.Add((name, readAs));
-        }
     }
 
     private static string Names(IReadOnlyList<EmulatorLayout> layouts) =>
@@ -223,7 +206,6 @@ internal sealed class EmulatorCacheExamination
             // whose entries are about to be classified.
             if (reach(found.Path).Naming(reach(listed.Path), found.Path) is { } named)
             {
-                AlsoNamed(listed.Path, named);
                 folder = listed with { Path = named };
             }
             else if (whyNotOwned(folder.Path) is { } why)

@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -372,15 +373,19 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
         var gameList = WriteFile(Path.Combine(Pcsx2Root, "shaders", "gamelist.cache"));
         var memoryCards = Folder(Path.Combine(Pcsx2Root, "memcards"));
 
-        var provider = CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", Pcsx2Root));
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", Pcsx2Root);
+        var provider = CreateProvider(volumes: volumes);
         var plan = await provider.PlanAsync();
 
         Assert.Equal([shaders], plan.TargetedPaths);
 
         var roots = await provider.DiscoverToolRootsAsync();
+        var explore = new ExploreActionPolicy([], [], volumes, probedRoots: roots);
 
         Assert.Contains(roots, r => r.Path.Equals(Pcsx2Root, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("shaders"));
-        Assert.Contains(roots, r => r.Path.Equals(@"S:\shaders", StringComparison.OrdinalIgnoreCase));
+        Assert.True(explore.MayRemove(@"S:\shaders\vulkan_shaders.bin").IsAllowed);
+        Assert.False(explore.MayRemove(@"S:\shaders\gamelist.cache").IsAllowed);
+        Assert.False(explore.MayRemove(@"S:\memcards").IsAllowed);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -413,10 +418,11 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
 
         Assert.Equal([shaders], plan.TargetedPaths);
 
-        var roots = await provider.DiscoverToolRootsAsync();
+        var explore = new ExploreActionPolicy([], [], volumes, probedRoots: await provider.DiscoverToolRootsAsync());
 
-        Assert.Contains(roots, r => r.Path.Equals(declared, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("cache"));
-        Assert.DoesNotContain(roots, r => r.Path.Equals(declared, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("memcards"));
+        Assert.True(explore.MayRemove(Path.Combine(declared, "cache", "vulkan_shaders.bin")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(declared, "memcards")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(Pcsx2Root, "memcards")).IsAllowed);
     }
 
     /// <summary>

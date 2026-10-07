@@ -153,11 +153,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
                     chosen.Contains(survivor.Path) ? static _ => true : static _ => false)),
         ];
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
-        [
-            .. roots,
-            .. Layout.OtherNames.SelectMany(other => ToolRoot.AlsoAt(roots, other.Root, other.Name)),
-        ]);
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)

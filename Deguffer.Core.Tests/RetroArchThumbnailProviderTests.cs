@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -164,15 +165,18 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
         var custom = RetroArchFixture.Folder(Path.Combine(_retroArch.Thumbnails, Nes, "Custom"));
         var saves = RetroArchFixture.Folder(Path.Combine(_retroArch.Program, "saves"));
 
-        var provider = CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", _retroArch.Program));
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", _retroArch.Program);
+        var provider = CreateProvider(volumes: volumes);
         var plan = await provider.PlanAsync();
 
         Assert.Equal([boxArt], plan.TargetedPaths);
 
         var roots = await provider.DiscoverToolRootsAsync();
+        var explore = new ExploreActionPolicy([], [], volumes, probedRoots: roots);
 
         Assert.Contains(roots, r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("thumbnails"));
-        Assert.Contains(roots, r => r.Path.Equals(@"S:\thumbnails", StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder(Nes));
+        Assert.True(explore.MayRemove(Path.Combine(@"S:\thumbnails", Nes, "Named_Boxarts")).IsAllowed);
+        Assert.False(explore.MayRemove(@"S:\saves").IsAllowed);
 
         var result = await provider.ExecuteAsync(plan);
 
