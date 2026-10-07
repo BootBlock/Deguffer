@@ -141,6 +141,11 @@
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.*" />
 
+        <!-- For drawing the map into composition surfaces, which nothing does yet. 1.4.0 is the first
+             release that depends on the WinUI package alone, and needs WinUI 1.8.260204000 or later.
+             docs/todo/composition-stack.md has what was measured in this build. -->
+        <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.*" />
+
         <ProjectReference Include="..\Deguffer.Core\Deguffer.Core.csproj" />
 
         <Manifest Include="$(ApplicationManifest)" />
