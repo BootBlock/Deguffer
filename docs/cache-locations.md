@@ -1374,7 +1374,10 @@ can stay. Keeping a session keeps both.
   against Windows. If the list cannot be read, no conversation is offered, and the row says so.
 - **Every conversation in a project Claude Code is running in is left alone.** A running session can
   resume any conversation in its project. A session counts as in a project if it is working in it or
-  inside it, or if it started there and has since moved, into a worktree for example.
+  inside it, or if it started there and has since moved, into a worktree for example. A project is
+  the folder as Claude Code wrote it: Claude Code names a project by the text of the folder it was
+  started in, so a session started in `S:\app`, with `S:` a `subst` letter for `C:\Users\<user>\src`,
+  is in a different project from `C:\Users\<user>\src\app` and cannot resume that one's conversations.
 - **If any project folder cannot be listed, no conversation is offered.** Which folders are a session's
   is answered across every project folder.
 - **A session goes whole or not at all.** If anything in its folder was written in the last 7 days, the

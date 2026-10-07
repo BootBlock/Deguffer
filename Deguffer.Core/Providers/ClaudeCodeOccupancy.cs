@@ -73,6 +73,17 @@ internal sealed class ClaudeCodeOccupancy
     ///
     /// <para>Compared as Claude Code writes both paths, ignoring case and a trailing separator. Nothing
     /// is resolved: a path from another system, such as WSL, is compared as it stands.</para>
+    ///
+    /// <para><b>Not followed through another path to the same folder, because Claude Code does not
+    /// follow it either.</b> Claude Code keeps a project's conversations in a folder named from the text
+    /// of the working folder it was started in, every character that is not a letter or a digit made a
+    /// <c>-</c>, and records that text, unresolved, as each conversation's <c>cwd</c>: a session started
+    /// at <c>c:\Users\testuser\src</c> keeps <c>c--Users-testuser-src</c> and records
+    /// <c>c:\Users\testuser\src</c>, lower-case letter and all. Its resume list leaves out a conversation
+    /// whose recorded folder is a different text, even in the same project folder. So a session working
+    /// in <c>S:\app</c>, with <c>S:</c> substituted for <c>C:\Users\testuser\src</c>, writes and resumes
+    /// the conversations of <c>S:\app</c>, and cannot switch to one recorded at
+    /// <c>C:\Users\testuser\src\app</c>. Those are not occupied, and offering them is right.</para>
     /// </summary>
     public bool Occupies(string project) =>
         _everywhere || _folders.Any(folder => IsWithin(folder, project));
