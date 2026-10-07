@@ -31,8 +31,8 @@ internal sealed record DeclaredRoot(ToolRoot Root, string Path, ReachedFolder Fo
     ];
 
     /// <summary>
-    /// <paramref name="target"/> named below <see cref="Path"/>, or null where this root does not hold
-    /// it at any path either is reachable at.
+    /// <paramref name="place"/>, one path an item is reachable at, named below <see cref="Path"/>, or
+    /// null where this root does not hold it at any path the root is reachable at.
     /// </summary>
-    public string? Naming(ReachedFolder target) => Folder.Naming(target, Path);
+    public string? Naming(string place) => Folder.Naming(place, Path);
 }

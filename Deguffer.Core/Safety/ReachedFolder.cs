@@ -90,19 +90,42 @@ public sealed class ReachedFolder
     }
 
     /// <summary>
-    /// How many folders below this one <paramref name="inner"/> is: none where the two are one
-    /// folder, and null where this folder does not hold it.
+    /// Where <paramref name="place"/>, one path in <see cref="Comparable"/> form, lies below this
+    /// folder, as a path relative to it: from the nearest of this folder's places that holds it,
+    /// <c>.</c> where it is this folder, and null where none of them holds it.
     ///
-    /// <para>For a caller choosing the innermost of several folders holding one. Their paths' lengths
-    /// say that only where every one is named the same way, and <c>S:\vcpkg</c> is inside
+    /// <para>For a caller that judges each path an item is reachable at on its own, because a rule
+    /// that holds at any of them holds. Asked of the item as a whole, the innermost rule at one path
+    /// would answer for another, where a different rule is innermost.</para>
+    /// </summary>
+    public string? PathTo(string place) =>
+        Places
+            .Where(outer => LongPath.Contains(outer, place))
+            .Select(outer => Path.GetRelativePath(outer, place))
+            .MinBy(Levels);
+
+    /// <summary>
+    /// How many folders below this one <paramref name="inner"/> is, at the first pair of their places
+    /// where one holds the other: none where the two are one folder, and null where this folder does
+    /// not hold it.
+    /// </summary>
+    public int? LevelsTo(ReachedFolder inner) => PathTo(inner) is { } relative ? Levels(relative) : null;
+
+    /// <summary>
+    /// How many folders below this one <paramref name="place"/> is, from the nearest of this folder's
+    /// places that holds it: none where it is this folder, and null where none of them holds it.
+    ///
+    /// <para>For a caller choosing the innermost of several folders holding one path. Their paths'
+    /// lengths say that only where every one is named the same way, and <c>S:\vcpkg</c> is inside
     /// <c>C:\Users\testuser\src</c> where <c>S:</c> stands for the second.</para>
     /// </summary>
-    public int? LevelsTo(ReachedFolder inner) => PathTo(inner) switch
-    {
-        null => null,
-        "." => 0,
-        var relative => relative.Split(Path.DirectorySeparatorChar).Length,
-    };
+    public int? LevelsTo(string place) => PathTo(place) is { } relative ? Levels(relative) : null;
+
+    /// <summary>
+    /// <paramref name="place"/> named below this folder the way <paramref name="named"/> names this
+    /// folder, or null where none of this folder's places holds it. See <see cref="PathTo(string)"/>.
+    /// </summary>
+    public string? Naming(string place, string named) => Named(PathTo(place), named);
 
     /// <summary>
     /// <paramref name="inner"/> named below this folder the way <paramref name="named"/> names this
@@ -112,12 +135,17 @@ public sealed class ReachedFolder
     /// a list of projects a solution names, each written in the form the root was configured in.</para>
     /// </summary>
     /// <param name="named">How this folder is named, which may be a form <see cref="Places"/> does not use.</param>
-    public string? Naming(ReachedFolder inner, string named) => PathTo(inner) switch
+    public string? Naming(ReachedFolder inner, string named) => Named(PathTo(inner), named);
+
+    private static string? Named(string? relative, string named) => relative switch
     {
         null => null,
         "." => named,
-        var relative => Path.Combine(named, relative),
+        _ => Path.Combine(named, relative),
     };
+
+    private static int Levels(string relative) =>
+        relative == "." ? 0 : relative.Split(Path.DirectorySeparatorChar).Length;
 
     /// <summary>Whether this folder and <paramref name="other"/> are one folder reached two ways.</summary>
     public bool IsSameAs(ReachedFolder other) =>

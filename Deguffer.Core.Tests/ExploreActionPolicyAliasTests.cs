@@ -133,6 +133,48 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
         Assert.True(policy.MayRemove(Path.Combine(_environment.LocalAppData, "Some Program")).IsAllowed);
     }
 
+    /// <summary>
+    /// One volume mounted inside machine-wide application data and inside the profile puts what is on
+    /// it in both. The profile's permission is the innermost region at one path and the refusal of
+    /// <c>ProgramData</c> at the other, and a refusal at any path holds. Ordinary folders of the
+    /// profile stay removable.
+    /// </summary>
+    [Fact]
+    public void AnItemMountedInsideARefusedRegionIsRefusedThoughThePermissionIsNearerAtAnotherPath()
+    {
+        var store = Path.Combine(_system.ProgramData, "Service", "Store");
+        var mirror = Path.Combine(_environment.UserProfile, "Store");
+        _volumes.With(@"V:\", alsoMountedAt: [store + @"\", mirror + @"\"]);
+
+        var policy = Policy();
+
+        Assert.False(policy.MayRemove(Path.Combine(store, "data")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(mirror, "data")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(_environment.UserProfile, "Unmounted", "data")).IsAllowed);
+    }
+
+    /// <summary>
+    /// The same for tool roots. One volume mounted at a child one root recognises and at a child
+    /// another root refuses is refused, though the two roots are as many levels up and one of them
+    /// would recognise it pooled with the other.
+    /// </summary>
+    [Fact]
+    public void AnItemMountedInsideAChildOneRootRefusesIsRefusedThoughAnotherRecognisesIt()
+    {
+        var cache = Path.Combine(Source, "tool", "cache");
+        var config = Path.Combine(Source, "other", "config");
+        _volumes.With(@"V:\", alsoMountedAt: [cache + @"\", config + @"\"]);
+
+        var policy = Policy(toolRoots:
+        [
+            ToolRoot.Folders(Path.Combine(Source, "tool"), "The tool's own folder.", Named("cache")),
+            ToolRoot.Folders(Path.Combine(Source, "other"), "Another tool's own folder.", Named("cache")),
+        ]);
+
+        Assert.False(policy.MayRemove(Path.Combine(cache, "data")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(Source, "other", "cache", "data")).IsAllowed);
+    }
+
     private ExploreActionPolicy Policy(IEnumerable<ToolRoot>? toolRoots = null, IEnumerable<ToolRoot>? probedRoots = null) =>
         new(ProtectedRegions.For(_system, _environment), toolRoots ?? [], _volumes, probedRoots: probedRoots);
 

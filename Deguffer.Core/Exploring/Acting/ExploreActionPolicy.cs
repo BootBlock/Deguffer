@@ -58,7 +58,7 @@ public sealed class ExploreActionPolicy
         "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend",
     };
 
-    private readonly IReadOnlyList<(ProtectedRegion Region, ReachedFolder Folder)> _regions;
+    private readonly RegionTable _regions;
     private readonly IReadOnlyList<DeclaredRoot> _toolRoots;
     private readonly IReadOnlyList<DeclaredRoot> _probedRoots;
     private readonly HeldLocations _held;
@@ -66,9 +66,10 @@ public sealed class ExploreActionPolicy
     private readonly IFileSystem _fileSystem;
 
     /// <param name="regions">
-    /// The structural table. Ordered here rather than trusted from the caller, because the
-    /// most-specific-wins rule is what makes an exception expressible and an unordered table would
-    /// resolve by declaration order instead — silently, and differently for each caller.
+    /// The structural table. Its most-specific-wins rule is <see cref="RegionTable"/>'s, rather than
+    /// trusted to the caller's order, because that rule is what makes an exception expressible and an
+    /// unordered table would resolve by declaration order instead — silently, and differently for
+    /// each caller.
     /// </param>
     /// <param name="toolRoots">The §5.2 declarations, as the providers wrote them.</param>
     /// <param name="volumes">
@@ -102,36 +103,16 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(toolRoots);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        // A region whose path will not resolve is dropped, not kept with the value it arrived
-        // with. An empty one is the case that matters: LongPath.Contains("", candidate) builds the
-        // prefix "\\" and so matches every UNC path, which would refuse a whole network share with a
-        // sentence naming no directory at all. A path that names nothing protects nothing, and
-        // %ProgramFiles(x86)% is genuinely empty on a 32-bit Windows.
-        // A path-only entry first among entries for one folder, because it is the exception to the
-        // entry for that folder and below. Which folder is innermost is asked of each item, in Region.
-        _regions =
-        [
-            .. regions
-                .Select(r => (Region: r, Path: LongPath.Configured(r.Path)))
-                .Where(r => r.Path is not null)
-                .Select(r => r.Region with { Path = r.Path! })
-                .OrderBy(r => r.Scope == RegionScope.PathOnly ? 0 : 1)
-                .Select(r => (r, ReachedFolder.At(r.Path, volumes))),
-        ];
-
+        _regions = new RegionTable(regions, volumes);
         _toolRoots = DeclaredRoot.Follow(toolRoots, volumes);
         _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], volumes);
 
         _fileSystem = fileSystem ?? WindowsFileSystem.Default;
 
-        // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
-        // takes it along as surely as one holding a tool's folder does. A permitting entry protects
-        // nothing, and a root that will not resolve names nothing, for the reason given above.
+        // A permitting region protects nothing, and a root that will not resolve names nothing.
         _held = new HeldLocations(
             [
-                .. _regions
-                    .Where(r => !r.Region.Verdict.IsAllowed)
-                    .Select(r => (r.Region.Path, r.Region.Verdict.Reason, r.Folder)),
+                .. _regions.Refusing,
                 .. _toolRoots.Concat(_probedRoots).Select(root => (root.Path, root.Root.Reason, root.Folder)),
             ],
             _fileSystem);
@@ -200,7 +181,8 @@ public sealed class ExploreActionPolicy
     /// </summary>
     public ExploreVerdict MayRemove(string path)
     {
-        // Normalised first, because every comparison below is a prefix match on text. A path
+        // Normalised first, because every comparison below is a prefix match on a path's text, made
+        // of each path the item and each rule are reachable at. A path
         // carrying '..' compares equal to nothing and would walk straight past the whole table —
         // the same trap LongPath.Configured exists for on a provider's configured root.
         if (LongPath.Configured(path) is not { } target)
@@ -239,34 +221,48 @@ public sealed class ExploreActionPolicy
             return reserved;
         }
 
-        // The item as a folder, so a region, a root or a refused location named through another
-        // letter or another mount of its volume is compared with it rather than with its text.
+        // Every path the item is reachable at, comparable with each region, root and refused location,
+        // which were followed to every path they are reachable at when the policy was built. A rule
+        // named through another letter or another mount of its volume is found at the path it shares
+        // with the item.
         var folder = ReachedFolder.Following(target, places);
+        var children = new ToolRootChildren(_fileSystem);
+        ExploreVerdict? allowed = null;
 
-        // Before the region table, because the table ends in a permission: a mail store inside the
-        // signed-in profile would otherwise be answered by the profile's own entry and allowed.
         foreach (var place in folder.Places)
         {
-            if (OutlookDataFiles.Refusal(place) is { } mail)
+            var verdict = Above(place, children);
+
+            if (!verdict.IsAllowed)
             {
-                return mail;
+                return verdict;
             }
+
+            // The first place's, which is the path the user named, so what they are told about it
+            // is never a sentence written about another of its paths.
+            allowed ??= verdict;
         }
 
-        var verdict = Above(folder, new ToolRootChildren(_fileSystem));
-
-        // Last, and only of a path everything above allows, because it reads every location the path
-        // holds. The tool roots read one entry each, and only of a path inside one.
-        return verdict.IsAllowed && _held.Refusal(target, folder) is { } held ? held : verdict;
+        // Last, and only of a path everything above allows at every place, because it reads every
+        // location the path holds. The tool roots read one entry each, and only of a path inside one.
+        return _held.Refusal(target, folder) ?? allowed!;
     }
 
     /// <summary>
-    /// What the region table and §5.2's declared and probed roots, in that order, say about the
-    /// folder the item is.
+    /// What everything that answers from above says about one place the item is reachable at: the
+    /// Outlook rule, the region table, and §5.2's declared and probed roots, in that order.
     /// </summary>
-    private ExploreVerdict Above(ReachedFolder target, ToolRootChildren children)
+    /// <param name="target">One path the item is reachable at, in <see cref="ReachedFolder.Comparable"/> form.</param>
+    private ExploreVerdict Above(string target, ToolRootChildren children)
     {
-        var verdict = Region(target) is { Verdict.IsAllowed: false } refusing
+        // Before the region table, because the table ends in a permission: a mail store inside the
+        // signed-in profile would otherwise be answered by the profile's own entry and allowed.
+        if (OutlookDataFiles.Refusal(target) is { } mail)
+        {
+            return mail;
+        }
+
+        var verdict = _regions.Innermost(target) is { Verdict.IsAllowed: false } refusing
             ? refusing.Verdict
             : Below(_toolRoots, target, children);
 
@@ -377,7 +373,7 @@ public sealed class ExploreActionPolicy
     /// declaration at that depth is asked, and a child one of them recognises is allowed: each
     /// provider states what it knows, and none has to carry another's table.</para>
     /// </summary>
-    private static ExploreVerdict Below(IReadOnlyList<DeclaredRoot> roots, ReachedFolder target, ToolRootChildren children)
+    private static ExploreVerdict Below(IReadOnlyList<DeclaredRoot> roots, string target, ToolRootChildren children)
     {
         List<DeclaredRoot> innermost = [];
         int? levels = null;
@@ -441,7 +437,7 @@ public sealed class ExploreActionPolicy
     /// claims only <see cref="ToolRootClaim.NamedEntries"/> is the exception: the rest of its folder is
     /// someone else's, so its refusal names the entry rather than the folder.</para>
     /// </summary>
-    private ExploreVerdict? ProbedRefusal(ReachedFolder target, ToolRootChildren children)
+    private ExploreVerdict? ProbedRefusal(string target, ToolRootChildren children)
     {
         ExploreVerdict? refusal = null;
         int? levels = null;
@@ -469,37 +465,5 @@ public sealed class ExploreActionPolicy
         }
 
         return refusal;
-    }
-
-    /// <summary>
-    /// The innermost region covering <paramref name="target"/>, or null where none does: a path-only
-    /// entry where it names the folder itself, and otherwise the entry for the nearest folder holding it.
-    ///
-    /// <para><b>Innermost by levels, not by the length of a region's path.</b> The two agree only where
-    /// every region is named the way the item is. With <c>T:</c> substituted for the temporary folder,
-    /// the profile's permission at <c>C:\Users\testuser</c> is longer than the temporary folder's
-    /// refusal at <c>T:\</c>, and read by length it answered for the temporary folder.</para>
-    /// </summary>
-    private ProtectedRegion? Region(ReachedFolder target)
-    {
-        ProtectedRegion? innermost = null;
-        int? levels = null;
-
-        foreach (var (region, folder) in _regions)
-        {
-            // Strictly deeper only, so of two entries for one folder the path-only one, ordered
-            // first, answers for the folder itself.
-            if (folder.LevelsTo(target) is not { } below
-                || (region.Scope == RegionScope.PathOnly && below > 0)
-                || below >= levels)
-            {
-                continue;
-            }
-
-            innermost = region;
-            levels = below;
-        }
-
-        return innermost;
     }
 }

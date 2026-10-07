@@ -49,8 +49,8 @@ public enum RegionScope
 /// One entry in the table Explore decides removals from: a path, how far the entry reaches, and
 /// what it says.
 ///
-/// <para>Entries may overlap, and the most specific one wins — the longest path, and at equal
-/// length <see cref="RegionScope.PathOnly"/> ahead of <see cref="RegionScope.PathAndBelow"/>. That
+/// <para>Entries may overlap, and the most specific one wins — the innermost folder, and for one
+/// folder <see cref="RegionScope.PathOnly"/> ahead of <see cref="RegionScope.PathAndBelow"/>. That
 /// is what lets the table state a rule and its exception without either being written as a special
 /// case: <c>C:\Users</c> is refused with everything under it, the signed-in user's own profile is
 /// permitted below, and the profile directory itself is refused again on its own.</para>
