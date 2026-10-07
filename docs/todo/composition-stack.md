@@ -36,7 +36,7 @@ package reference is.
 | Package pairing | Win2D 1.4.0 depends on `Microsoft.WindowsAppSDK.WinUI` ≥ 1.8.260204000. The App's float `1.*` resolves WinUI 1.8.260803003, which satisfies it. |
 | Surface type | `CompositionVirtualDrawingSurface`, from `CanvasComposition.CreateCompositionGraphicsDevice`, on a `SpriteVisual`. [Why](#the-chosen-surface). |
 | `SwapChainPanel` | Not used. Composition surfaces show the backdrop through transparent pixels, observed over `DesktopAcrylicBackdrop`. |
-| Device loss | Replacing the device raises `RenderingDeviceReplaced` once, on the UI thread, and every surface redraws on the new device, WARP included. Oversized surfaces can break this: see [the traps](#two-traps-found-on-the-way). [Detail](#device-loss). |
+| Device loss | Replacing the device raises `RenderingDeviceReplaced` once, on the UI thread, and every surface redraws on the new device, WARP included. Surfaces that break the documented rules can break this: see [the white map](#the-white-map-after-a-device-replacement). [Detail](#device-loss). |
 | Remote Desktop and WARP | `new CompositionCapabilities()` reports effects supported and fast on this machine. Remote Desktop is **not measured**. [What the map turns off](#when-effects-are-slow). |
 | DPI | The sprite is scaled by `1 / RasterizationScale`. A scale change is **not observed**: both monitors are at 100%. [Detail](#dpi). |
 | Trimming | Not exercised: Deguffer does not trim. The Win2D projection assembly carries `IsTrimmable=True`. |
@@ -62,9 +62,11 @@ hosts under the map. Tiles are written with `CanvasComposition.CreateDrawingSess
 The update rectangle is always in pixels, and the session's 96 DPI makes the drawing units pixels too.
 
 - **Size.** A virtual surface of 16,777,216 × 16,777,216 px was created and a tile drawn in its far
-  corner. 1,073,741,823 px square is refused with `E_INVALIDARG`. A plain `CompositionDrawingSurface`
-  from `CreateDrawingSurface(Size)` was drawn in full at 16,384 px, the device's largest texture
-  here. Its upper limit was not measured. `CreateDrawingSurface2` refuses 32,768 px.
+  corner. 1,073,741,823 px square is refused with `E_INVALIDARG`, matching the documented 2^24 px
+  limit. A plain `CompositionDrawingSurface` is backed by one texture, and the compositor asks for
+  one a pixel or two larger than the surface: the Direct3D debug layer shows 16,384 × 16,386 px
+  refused for a 16,384 px surface, against the 16,384 px texture limit. A plain surface is not
+  usable at the texture limit, even when Win2D reports the draw as successful.
 - **Sparse.** `Trim` over the whole surface, followed by a redraw, worked. That only written tiles
   hold memory, and that `Trim` releases them, is documented behaviour. Memory was not measured.
 - **The camera is a visual property.** Offset and scale on a visual animate on the compositor
@@ -80,39 +82,72 @@ region. It is documented to track DPI on its own, which was not observed. But it
 XAML layout or a render transform from the UI thread, and its `RegionsInvalidated` follows its own
 visible region rather than the map's camera. That is the per-frame UI-thread work #274 removes.
 
-### Two traps found on the way
+### Rules a composition surface must follow
 
-**Win2D cannot draw into a `CreateDrawingSurface2` surface.** A surface made with
-`CompositionGraphicsDevice.CreateDrawingSurface2` (the `SizeInt32` overload) is created, but every
-Win2D `CreateDrawingSession` on it fails with `E_INVALIDARG`, at every size tried from 4,096 to
-16,384 px. Create surfaces with `CreateVirtualDrawingSurface`, or `CreateDrawingSurface` with a
-`Size`.
+These are documented. The probe broke the first and the third on purpose to find the limits. The
+other two are documented only.
 
-**After oversized surfaces, a device replacement can leave the map white.** In a run that first
-created the surfaces above (virtual surfaces up to 16,777,216 px with a tile drawn, plain surfaces
-drawn in full at 16,384 px, `CreateDrawingSurface2` surfaces up to 16,384 px and one refused at
-32,768 px), the next `SetCanvasDevice` left the map's surface white on screen. Every redraw after it
-reported success. The cause is not identified. What the runs show:
+- **The first draw into a plain surface must cover all of it.** A smaller first update rectangle
+  fails with `E_INVALIDARG` ([`IDCompositionSurface::BeginDraw`](https://learn.microsoft.com/windows/win32/api/dcomp/nf-dcomp-idcompositionsurface-begindraw),
+  and the sample in [Composition native interop](https://learn.microsoft.com/windows/apps/develop/composition/composition-native-interop)).
+  A virtual surface has no such rule. Surfaces from `CreateDrawingSurface2` drew at 4,096, 8,192
+  and 16,000 px once the first draw covered them.
+- **One draw at a time per graphics device.** A second `BeginDraw` before `EndDraw` fails.
+- **No plain surface at or past the device's texture limit,** and no virtual surface past 2^24 px.
+- **An invalid-argument failure from `BeginDraw` is an application defect.** Microsoft's guide says
+  to fail fast on it. Only a lost device is a failure to skip a frame for.
 
-| Created before the replacement | White on screen |
+### The white map after a device replacement
+
+After the limit probes above, the next device replacement left the map's surface opaque white on
+screen, gaps included, while every redraw reported success. With every probe, 12 of 12 runs did
+this. Without the `CreateDrawingSurface2` probes (partial first draws from 4,096 to 16,384 px, and a
+refused 32,768 px creation), 0 of 6 did, although those runs still drew a plain 16,384 px surface
+past the texture limit. With only some of the `CreateDrawingSurface2` probes, the result varied
+from run to run.
+
+What was ruled out, by measurement:
+
+| Tried | White on screen |
 | --- | --- |
-| All of them | 12 of 12 runs |
-| All except the `CreateDrawingSurface2` surfaces | 0 of 6 |
-| The `CreateDrawingSurface2` surfaces with the virtual ones, or with the plain ones | 6 of 6 |
-| All, with `CreateDrawingSurface2` only at the refused 32,768 px | 3 of 3 |
-| All, with `CreateDrawingSurface2` only at 16,384 px | 1 of 3 |
-| All, with `CreateDrawingSurface2` only at 4,096 px | 0 of 3 |
-| The `CreateDrawingSurface2` surfaces alone | 2 of 9 |
-| The refused 32,768 px `CreateDrawingSurface2` call alone | 0 of 4 |
-| Any one of the other probes alone | 0 of 10 |
-| None of them | 0 of 3 |
+| 0 to 6 plain 16,384 px surfaces, each with a partial first draw and a refused texture, and nothing else, then the replacement | 0 of 12 runs |
+| After the probes: a new surface on the same graphics device | 3 of 3 |
+| After the probes: a new graphics device on the new Direct3D device | 3 of 3 |
+| After the probes: a new graphics device, with no `SetCanvasDevice` at all | 3 of 3 |
+| After the probes: a new graphics device on the original Direct3D device | 3 of 3 |
+| After the probes: a second Direct3D device created and left unused | 0 of 3 |
+| After the probes: a new surface with no device change | 0 of 3 |
+| The probe's GPU memory | 179 to 248 MB in every case, so not a leak |
 
-Whether the `CreateDrawingSurface2` surfaces were drawn into made no difference. The refused
-32,768 px call, beside the other large surfaces, caused it every time. Two rules follow for the map:
+So the fault is not GPU memory, and breaking the plain-surface rules alone does not cause it. Once
+it happens, no in-process recovery that was tried clears it. Win2D's source holds no cache of
+graphics devices or surfaces, and passes each call straight to the compositor's interop interfaces.
+That suggests the damaged state is in the Windows App SDK compositor or below it, which was not
+measured. No document describes a white fallback.
+Microsoft states that an undrawn surface is transparent. No issue in `microsoft/Win2D`,
+`microsoft/microsoft-ui-xaml` or `microsoft/WindowsAppSDK` reports it. Which internal state is
+damaged is not known.
 
-- Size every surface to what it shows. The map uses one virtual surface written in small tiles, and
-  it never probes the device's limits at run time.
-- Test a device recovery by what the screen shows, not by the redraw's success. Every failed run here
+**The map's own pattern did not trigger it in 20 runs.** A workload shaped like the map's camera ran 400 steps
+over one virtual surface. It panned the sprite, zoomed a container between 0.5× and 2× with 16
+compositor scale animations, wrote 9,244 tiles of 256 px, and trimmed to a window of three
+viewports 40 times. It then replaced the device and redrew. Each run was checked with a capture of
+the probe window's own content. That capture was first checked against one run known to be white
+and one known to be correct.
+
+| Device replacement | Correct on screen |
+| --- | --- |
+| After the workload, to a new GPU device | 5 of 5 |
+| After the workload, to WARP | 5 of 5 |
+| During a 1.5 s zoom animation, to a new GPU device | 5 of 5 |
+| During a 1.5 s zoom animation, to WARP | 5 of 5 |
+
+So the rules for #274 are:
+
+- Follow every rule above. The map uses one virtual surface written in 256 px tiles, never a plain
+  surface near the texture limit, and never probes the device's limits at run time.
+- Treat an `E_INVALIDARG` from a tile write as a defect to report, not a frame to retry.
+- Test device recovery by what the screen shows, not by the redraw's success. Every white run here
   reported success.
 
 ## Device loss
