@@ -5316,9 +5316,10 @@ from the devices using it.
 Nothing is offered:
 
 - **while an update is unfinished**: while a restart is owed for an update, or the servicing stack
-  or Windows Setup is running, because Windows Update installs drivers too. The previous
-  installation's test for a restart due to move a file inside its folder does not apply, because
-  this row removes nothing by path.
+  or Windows Setup is running, because Windows Update installs drivers too. Where Windows' cleanup
+  does the work, a restart due to move a file inside one of the package folders also stops it when
+  the clean reaches it. `pnputil` is given a package's name rather than a folder, so that last test
+  has nothing to apply to on its route.
 - **for a package a device is using**, whatever its age.
 - **where your recent-files setting would keep any of it**, when Windows' cleanup does the work,
   because it takes every older package at once and cannot be told to leave one. Where `pnputil`

@@ -52,7 +52,7 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
     /// <summary>
     /// §3's Tier 2, which is the reason this row exists apart from the engine's caches: a web
     /// application that worked offline stops doing so until it is next online, so the row is offered
-    /// and never pre-selected. A Tier 1 answer here pre-selects that loss for everyone who presses
+    /// and not pre-selected. A Tier 1 answer here pre-selects that loss for everyone who presses
     /// Clean.
     /// </summary>
     [Fact]
