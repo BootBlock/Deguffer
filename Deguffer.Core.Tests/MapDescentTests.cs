@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.Core.Tests;
 
@@ -12,20 +13,26 @@ public sealed class MapDescentTests
 
     private static readonly TimeSpan Start = TimeSpan.FromSeconds(5);
 
+    /// <summary>A folder opening for a reader with animation effects on.</summary>
+    private static readonly Motion Opening = MotionToken.Entrance.Full;
+
+    /// <summary>The same for a reader with them off.</summary>
+    private static readonly Motion Fading = MotionToken.Entrance.Reduced;
+
     [Fact]
     public void AFolderOpensFromWhereItsShapeWasToTheWholeScreen()
     {
         var shape = new MapFrame(0.6, 0.1, 0.3, 0.2);
-        var descent = new MapDescent(shape, Start);
+        var descent = new MapDescent(shape, Start, Opening);
 
         AssertClose(shape, descent.Opened(Start));
         AssertClose(MapFrame.Whole, descent.Departing(Start));
         Assert.Equal(0, descent.Opacity(Start));
-        Assert.False(descent.IsOverAt(Start + (MapGlide.Duration / 2)));
+        Assert.False(descent.IsOverAt(Start + (Opening.Duration / 2)));
 
-        Assert.True(descent.IsOverAt(Start + MapGlide.Duration));
-        AssertClose(MapFrame.Whole, descent.Opened(Start + MapGlide.Duration));
-        Assert.Equal(1, descent.Opacity(Start + MapGlide.Duration));
+        Assert.True(descent.IsOverAt(Start + Opening.Duration));
+        AssertClose(MapFrame.Whole, descent.Opened(Start + Opening.Duration));
+        Assert.Equal(1, descent.Opacity(Start + Opening.Duration));
     }
 
     /// <summary>
@@ -36,11 +43,11 @@ public sealed class MapDescentTests
     public void TheOldShapeLiesUnderTheNewDrawingAtEveryStep()
     {
         var shape = new MapFrame(0.15, 0.55, 0.25, 0.4);
-        var descent = new MapDescent(shape, Start);
+        var descent = new MapDescent(shape, Start, Opening);
 
         for (var step = 0; step <= 20; step++)
         {
-            var now = Start + (MapGlide.Duration * (step / 20.0));
+            var now = Start + (Opening.Duration * (step / 20.0));
             var screen = descent.Departing(now);
             var opened = descent.Opened(now);
 
@@ -63,11 +70,11 @@ public sealed class MapDescentTests
     [InlineData(-0.5, 0.2, 1.2, 1.5)]
     public void TheOldPictureCoversTheScreenThroughout(double x, double y, double width, double height)
     {
-        var descent = new MapDescent(new MapFrame(x, y, width, height), Start);
+        var descent = new MapDescent(new MapFrame(x, y, width, height), Start, Opening);
 
         for (var step = 0; step <= 20; step++)
         {
-            var screen = descent.Departing(Start + (MapGlide.Duration * (step / 20.0)));
+            var screen = descent.Departing(Start + (Opening.Duration * (step / 20.0)));
 
             Assert.True(screen.X <= Precision, $"the left edge was bare at step {step}: {screen}");
             Assert.True(screen.Y <= Precision, $"the top edge was bare at step {step}: {screen}");
@@ -79,15 +86,40 @@ public sealed class MapDescentTests
     [Fact]
     public void TheNewDrawingComesInWithoutEverFadingBack()
     {
-        var descent = new MapDescent(new MapFrame(0.2, 0.2, 0.2, 0.2), Start);
+        var descent = new MapDescent(new MapFrame(0.2, 0.2, 0.2, 0.2), Start, Opening);
         var previous = 0.0;
 
         for (var step = 0; step <= 25; step++)
         {
-            var opacity = descent.Opacity(Start + (MapGlide.Duration * (step / 25.0)));
+            var opacity = descent.Opacity(Start + (Opening.Duration * (step / 25.0)));
 
             Assert.InRange(opacity, previous, 1);
             previous = opacity;
+        }
+    }
+
+    /// <summary>
+    /// With animation effects off nothing grows or stretches: both pictures fill the screen where they
+    /// are throughout, and the new one fades in over the old, sooner than the move it stands in for.
+    /// </summary>
+    [Fact]
+    public void WithMotionOffTheFolderFadesInPlace()
+    {
+        var shape = new MapFrame(0.6, 0.1, 0.3, 0.2);
+        var descent = new MapDescent(shape, Start, Fading);
+
+        Assert.True(Fading.Duration < Opening.Duration, "the fade took as long as the move it stands in for");
+        Assert.Equal(0, descent.Opacity(Start));
+        Assert.False(descent.IsOverAt(Start + (Fading.Duration / 2)));
+        Assert.True(descent.IsOverAt(Start + Fading.Duration));
+        Assert.Equal(1, descent.Opacity(Start + Fading.Duration));
+
+        for (var step = 0; step <= 20; step++)
+        {
+            var now = Start + (Fading.Duration * (step / 20.0));
+
+            Assert.Equal(MapFrame.Whole, descent.Opened(now));
+            Assert.Equal(MapFrame.Whole, descent.Departing(now));
         }
     }
 

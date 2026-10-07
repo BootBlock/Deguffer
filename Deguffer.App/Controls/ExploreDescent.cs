@@ -1,6 +1,6 @@
-using System.Diagnostics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
-using Microsoft.UI.Xaml.Media;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.Controls;
 
@@ -9,14 +9,22 @@ namespace Deguffer.App.Controls;
 /// frame of the move from one to the other.
 ///
 /// <para>The same split as <see cref="ExploreZoom"/>: the arithmetic is Core's, in
-/// <see cref="MapDescent"/>, and what is left here is the frame clock, which needs a window.</para>
+/// <see cref="MapDescent"/>, how it moves is <see cref="MotionToken.Entrance"/>'s, and what is left
+/// here is following the frames.</para>
 /// </summary>
 internal sealed class ExploreDescent
 {
-    /// <summary>One clock for the life of the map, read at each frame rather than started per move (G5).</summary>
-    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private readonly IMotionPolicy _motion;
+
+    private readonly IFrameClock _clock;
 
     private MapDescent? _move;
+
+    public ExploreDescent(IMotionPolicy motion, IFrameClock clock)
+    {
+        _motion = motion;
+        _clock = clock;
+    }
 
     /// <summary>Raised at each frame of the move, and once more at its end.</summary>
     public event EventHandler? Moved;
@@ -38,14 +46,23 @@ internal sealed class ExploreDescent
     /// <summary>Open the shape that was at <paramref name="shape"/> on the screen, in fractions of it.</summary>
     public void Start(MapFrame shape)
     {
+        var now = _clock.Now;
+        var move = new MapDescent(shape, now, _motion.For(MotionToken.Entrance));
+
         if (_move is null)
         {
-            CompositionTarget.Rendering += OnRendering;
+            _clock.Frame += OnFrame;
         }
 
-        _move = new MapDescent(shape, _clock.Elapsed);
+        _move = move;
 
-        Follow(_move.Value, _clock.Elapsed);
+        if (move.IsOverAt(now))
+        {
+            Finish();
+            return;
+        }
+
+        Follow(move, now);
     }
 
     /// <summary>
@@ -59,7 +76,7 @@ internal sealed class ExploreDescent
             return;
         }
 
-        CompositionTarget.Rendering -= OnRendering;
+        _clock.Frame -= OnFrame;
         _move = null;
 
         Follow(move, TimeSpan.MaxValue);
@@ -70,16 +87,18 @@ internal sealed class ExploreDescent
     /// One frame of the move. Subscribed only while there is one, because the event fires at every
     /// frame the window composes.
     /// </summary>
-    private void OnRendering(object? sender, object e)
+    private void OnFrame(object? sender, object e)
     {
         if (_move is not { } move)
         {
             return;
         }
 
-        var now = _clock.Elapsed;
+        var now = _clock.Now;
 
-        if (move.IsOverAt(now))
+        // Animation effects turned off while the folder was opening: it arrives rather than playing
+        // out a move the reader has just asked not to see.
+        if (move.IsOverAt(now) || _motion.For(MotionToken.Entrance) != move.Motion)
         {
             Finish();
             return;
