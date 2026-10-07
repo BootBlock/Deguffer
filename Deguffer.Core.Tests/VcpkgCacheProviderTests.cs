@@ -755,6 +755,78 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The case above with the variable naming the clone's downloads through <c>S:</c>, a letter
+    /// <c>subst</c> made for the folder holding the clone. It is the place vcpkg would have used, so
+    /// the clone's downloads are offered as they are without it, rather than read as moved and then
+    /// refused as the clone's own. A folder beside the clone named the same way has moved them.
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\vcpkg\downloads", true)]
+    [InlineData(@"S:\downloads", false)]
+    public async Task ADownloadsVariableNamingTheClonesDownloadsThroughASubstitutedLetterIsNotAMove(string configured, bool offered)
+    {
+        var root = CreateClone();
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.DownloadsVariable, configured);
+
+        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", Path.GetDirectoryName(root)!)).PlanAsync();
+
+        Assert.Equal(offered, plan.TargetedPaths.Contains(Path.Combine(root, "downloads"), StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains($"Leaving '{configured}' alone", StringComparison.Ordinal));
+        Assert.True(Directory.Exists(Path.Combine(root, "installed")));
+    }
+
+    /// <summary>
+    /// A binary cache a variable names inside the clone through another mount of its volume is vcpkg's
+    /// by where it is, and is not declined for holding what a binary cache does not. One beside the
+    /// clone named the same way still has to show it is one. The mount is a folder of its own here,
+    /// standing in for the same folder reached the other way.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ABinaryCacheVariableNamingAFolderInsideTheCloneThroughAnotherMountIsNotDeclined(bool insideTheClone)
+    {
+        var root = CreateClone();
+        using var mirror = new TempDirectory();
+        var volumes = new FakeVolumeInventory().With(Path.GetDirectoryName(root) + @"\", alsoMountedAt: [mirror.Path + @"\"]);
+        var named = insideTheClone
+            ? Populate(Path.Combine(mirror.Path, "vcpkg", "archives"))
+            : Populate(Path.Combine(mirror.Path, "archives"));
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, named);
+
+        var plan = await CreateProvider(volumes).PlanAsync();
+
+        Assert.Equal(
+            !insideTheClone,
+            plan.Notes.Any(n => n.Message.Contains($"Leaving '{named}' alone: {VcpkgDiscovery.BinaryCacheVariable}", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// <see cref="DeclaresOneDirectoryOnceWhenTwoVariablesNameIt"/> with the binary cache naming the
+    /// clone's downloads through another mount of its volume: one folder, declared once.
+    /// </summary>
+    [Fact]
+    public async Task DeclaresOneDirectoryOnceWhenTwoVariablesNameItThroughDifferentMounts()
+    {
+        var root = CreateClone();
+        using var mirror = new TempDirectory();
+        var volumes = new FakeVolumeInventory().With(Path.GetDirectoryName(root) + @"\", alsoMountedAt: [mirror.Path + @"\"]);
+        var shared = Populate(Path.Combine(mirror.Path, "vcpkg", "downloads"));
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, shared);
+
+        var plan = await CreateProvider(volumes).PlanAsync();
+
+        Assert.Single(plan.TargetedPaths, p => Path.GetFileName(p).Equals("downloads", StringComparison.OrdinalIgnoreCase));
+        Assert.True(Directory.Exists(Path.Combine(root, "installed")));
+    }
+
+    /// <summary>
     /// vcpkg resolves a relative value against a working directory Deguffer is not, so a relative
     /// one is no answer at all and the next route is tried.
     /// </summary>

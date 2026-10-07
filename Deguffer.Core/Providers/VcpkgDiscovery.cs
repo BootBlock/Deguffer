@@ -115,12 +115,17 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
         var binaryCache = FindBinaryCache();
         var downloads = FindRelocatedDownloads(root);
 
+        // vcpkg's own directories, followed once for both variables, and only where one is set.
+        IReadOnlyList<ReachedFolder> own = binaryCache is null && downloads is null
+            ? []
+            : [.. ProfileDirectories.Append(root).OfType<string>().Select(folder => ReachedFolder.At(folder, volumes))];
+
         return new VcpkgLocations(binaryCache, root, downloads, unmarked, unreached, unread)
         {
             Declined =
             [
-                .. Decline(binaryCache, root, BinaryCacheVariable, "binary cache", VcpkgFolderEvidence.WhyNotABinaryCache),
-                .. Decline(downloads, root, DownloadsVariable, "downloads folder", VcpkgFolderEvidence.WhyNotDownloads),
+                .. Decline(binaryCache, own, BinaryCacheVariable, "binary cache", VcpkgFolderEvidence.WhyNotABinaryCache),
+                .. Decline(downloads, own, DownloadsVariable, "downloads folder", VcpkgFolderEvidence.WhyNotDownloads),
             ],
         };
     }
@@ -131,18 +136,27 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
     /// vcpkg writes there.
     ///
     /// <para>Not asked of a folder inside the clone or one of the user's vcpkg directories, which is
-    /// vcpkg's by where it is, and whose own declarations already say what in it may go. Nor are the
-    /// contents asked of a folder that is not there, which holds nothing to remove.</para>
+    /// vcpkg's by where it is, and whose own declarations already say what in it may go. Asked of the
+    /// folders, because the variable may name one of them through a letter <c>subst</c> made, or
+    /// another mount of its volume. Nor are the contents asked of a folder that is not there, which
+    /// holds nothing to remove.</para>
     /// </summary>
+    /// <param name="own">vcpkg's own directories, each at every path it is reachable at.</param>
     private IEnumerable<(string Path, string Sentence)> Decline(
         string? folder,
-        string? root,
+        IReadOnlyList<ReachedFolder> own,
         string variable,
         string what,
         Func<string, string?> evidence)
     {
-        if (folder is null
-            || ProfileDirectories.Append(root).OfType<string>().Any(own => LongPath.Contains(own, folder)))
+        if (folder is null)
+        {
+            yield break;
+        }
+
+        var reached = ReachedFolder.At(folder, volumes);
+
+        if (own.Any(directory => directory.Holds(reached)))
         {
             yield break;
         }
@@ -273,9 +287,11 @@ public sealed class VcpkgDiscovery(IUserEnvironment environment, ISystemDirector
 
         // Only "relocated" if it actually left the clone. A variable set to the place vcpkg would
         // have used anyway must not produce a second declaration of the same directory, which §5.6
-        // would then report as two survivors and the plan as two steps over one path.
+        // would then report as two survivors and the plan as two steps over one path. Asked of the
+        // folders, because the variable may name the clone's downloads through an alias, and read as
+        // relocated they were refused as the clone's own and not offered at all.
         return root is not null
-            && configured.Equals(Path.Combine(root, "downloads"), StringComparison.OrdinalIgnoreCase)
+            && ReachedFolder.At(configured, volumes).IsSameAs(ReachedFolder.At(Path.Combine(root, "downloads"), volumes))
                 ? null
                 : configured;
     }
