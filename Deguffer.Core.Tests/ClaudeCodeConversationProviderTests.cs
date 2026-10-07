@@ -708,6 +708,27 @@ public sealed class ClaudeCodeConversationProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Claude Code names a project by the text of the folder it was started in, and resumes only the
+    /// conversations recorded at that text. A session working through a letter <c>subst</c> made for the
+    /// project's parent is in another project, and cannot switch to this one's conversations, so they
+    /// are offered. See <see cref="ClaudeCodeOccupancy.Occupies"/>.
+    /// </summary>
+    [Fact]
+    public async Task ASessionWorkingThroughALetterForTheProjectIsInAnotherProject()
+    {
+        var (conversation, _) = OldSession(SessionA);
+        _claude.Registered(SessionProcess, SessionC, project: @"S:\example");
+
+        var volumes = new FakeVolumeInventory().With(@"C:\").Substituting(@"S:\", @"C:\Users\testuser\src");
+        var provider = new ClaudeCodeConversationProvider(
+            _environment, runner: new FakeProcessRunner(), inspector: Running(), volumes: volumes);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(conversation, plan.TargetedPaths);
+    }
+
+    /// <summary>
     /// Which folders are a session's, and whether its name is its own, are answered across every project
     /// folder. One that cannot be listed may hold the answer, so nothing is offered, and the row says so.
     /// </summary>

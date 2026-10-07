@@ -50,13 +50,18 @@ public readonly record struct VolumeSpace(
     /// <para>Whether the root is the top of its volume is <see cref="VolumeRoot"/>'s question, which
     /// answers for a volume mounted at a folder and for each of a volume's mount points, and is
     /// written once for the safety rules that ask it too.</para>
+    ///
+    /// <para><b>Asked of the folder a <c>subst</c> letter stands for</b>, as
+    /// <see cref="HostVolume.For"/> answers the volume of. <c>S:\</c> is the top of a drive letter, and
+    /// with <c>S:</c> standing for <c>C:\Users\testuser\src</c> it is a folder of <c>C:</c>: read as a
+    /// top, its scan was given the whole of <c>C:</c>'s space, and kept as a scan of that volume.</para>
     /// </summary>
     public static VolumeSpace Of(IVolumeInventory volumes, string scannedRoot)
     {
         ArgumentNullException.ThrowIfNull(volumes);
 
         return Path.IsPathFullyQualified(scannedRoot)
-            && VolumeRoot.Below(volumes, scannedRoot) is null
+            && VolumeRoot.Below(volumes, VolumeRoot.Followed(volumes, scannedRoot)) is null
             && HostVolume.For(volumes, scannedRoot) is { TotalBytes: { } total, FreeBytes: { } free }
                 ? new VolumeSpace(total, free)
                 : None;

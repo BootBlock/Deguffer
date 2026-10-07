@@ -44,6 +44,15 @@ public static class HostVolume
     /// appending a second one builds a prefix nothing below it can match. The extended-length prefix
     /// comes off first (§6.3) — every path in Core may arrive as <c>\\?\C:\…</c>, and that form
     /// starts with none of the mount points the inventory reports.</para>
+    ///
+    /// <para><b>A letter <c>subst</c> made is followed to the folder it stands for first</b>
+    /// (<see cref="VolumeRoot.Followed"/>). The letter is not a volume, and the bytes of
+    /// <c>S:\work</c>, with <c>S:</c> standing for a folder on a cloud mount, are on that mount. No
+    /// volume is mounted at the letter, and the entry the inventory adds for a letter no volume claims
+    /// is a reading taken through it: it has no volume name, and there is none for a letter made after
+    /// the list was read. Matched as named, such a folder could read as on no volume and be walked,
+    /// which downloads it. The path as named is matched only where no volume holds the folder it leads
+    /// to, which is a letter standing for a share.</para>
     /// </summary>
     /// <param name="path">
     /// A rooted path. An unrooted one matches no volume and answers null, which is the same non-answer
@@ -53,8 +62,16 @@ public static class HostVolume
     {
         ArgumentNullException.ThrowIfNull(volumes);
 
-        var comparable = LongPath.Display(path);
+        var named = LongPath.Display(path);
+        var stored = VolumeRoot.Followed(volumes, named);
 
+        return Holding(volumes, stored)
+            ?? (stored.Equals(named, StringComparison.OrdinalIgnoreCase) ? null : Holding(volumes, named));
+    }
+
+    /// <summary>The volume with the longest mount point that holds <paramref name="comparable"/>, in display form.</summary>
+    private static LocalVolume? Holding(IVolumeInventory volumes, string comparable)
+    {
         // A loop rather than a LINQ maximum, because LocalVolume is a struct: those forms answer a
         // default-constructed volume for "no match", and a caller reading StoresContentRemotely off
         // that would be reading the flags of a volume that does not exist.

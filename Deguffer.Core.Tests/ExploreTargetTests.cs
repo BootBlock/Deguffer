@@ -74,6 +74,30 @@ public sealed class ExploreTargetTests
         Assert.Null(new ExploreTarget(@"C:\", @"C:\Mountain").Refusal(volumes));
     }
 
+    /// <summary>
+    /// A letter <c>subst</c> made leads to the volume the scan reads. One standing for a folder on a cloud
+    /// mount is that mount, and one standing for the top of a volume Windows will not describe is that
+    /// volume's mount point. One standing for a folder on the local disk is refused for neither.
+    /// </summary>
+    [Fact]
+    public void ALetterIsRefusedForTheVolumeItLeadsTo()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"V:\", features: VolumeFeatures.RemoteStorage)
+            .With(@"R:\", readiness: VolumeReadiness.Refused)
+            .Substituting(@"S:\", @"V:\Photos")
+            .Substituting(@"T:\", @"R:\")
+            .Substituting(@"U:\", @"C:\Users\testuser");
+
+        Assert.Equal(DriveChoice.RemoteStorageRefusal, new ExploreTarget(@"S:\", null).Refusal(volumes));
+        Assert.Equal(DriveChoice.RemoteStorageRefusal, new ExploreTarget(@"C:\", @"S:\2024").Refusal(volumes));
+        Assert.Equal(DriveChoice.UnreadableRefusal, new ExploreTarget(@"T:\", null).Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"T:\", @"T:\Projects").Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"U:\", null).Refusal(volumes));
+        Assert.Null(new ExploreTarget(@"C:\", @"U:\Downloads").Refusal(volumes));
+    }
+
     /// <summary>A share the inventory says nothing about has no flags to refuse on, and refusing on none would be a guess.</summary>
     [Fact]
     public void AFolderOnAVolumeNothingMeasuredIsNotRefused()
