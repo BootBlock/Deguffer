@@ -24,7 +24,7 @@ public sealed class StaleRuleTests
     private StandingVerdict Decide(UninstallRecord record, UninstallCommand command) =>
         StaleRule.Decide(record, command, new StaleEvidence(
             _installer,
-            new InstalledPaths(_paths, FixedSystemDirectories.Standard),
+            new InstalledPaths(_paths, FixedSystemDirectories.Standard, new FakeVolumeInventory()),
             new FakePackageDependencies(),
             _ => PathPresence.Absent));
 

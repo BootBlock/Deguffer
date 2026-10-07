@@ -21,7 +21,7 @@ public sealed class InstalledAppsReaderTests
 
     private readonly FakePackageDependencies _dependencies = new();
 
-    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, _dependencies);
+    private InstalledAppsReader Reader => new(_registry, _installer, _paths, FixedSystemDirectories.Standard, _dependencies, new FakeVolumeInventory());
 
     private InstalledAppsReading Read() => Reader.Read(CancellationToken.None);
 

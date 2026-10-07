@@ -21,7 +21,7 @@ public sealed class EntryMarksTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private InstalledAppsReader Reader => new(_registry, new FakeWindowsInstaller(), _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
+    private InstalledAppsReader Reader => new(_registry, new FakeWindowsInstaller(), _paths, FixedSystemDirectories.Standard, new FakePackageDependencies(), new FakeVolumeInventory());
 
     private InstalledEntry Installed(UninstallScope scope, params (string Name, object Value)[] values)
     {

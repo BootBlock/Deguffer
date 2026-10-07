@@ -21,7 +21,7 @@ public sealed class UninstallQueueTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private InstalledAppsReader Reader => new(_registry, new FakeWindowsInstaller(), _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
+    private InstalledAppsReader Reader => new(_registry, new FakeWindowsInstaller(), _paths, FixedSystemDirectories.Standard, new FakePackageDependencies(), new FakeVolumeInventory());
 
     private ProgramUninstaller Uninstaller => new(Reader, _launcher, @"C:\Windows\System32\msiexec.exe");
 

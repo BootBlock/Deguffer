@@ -16,7 +16,7 @@ public sealed class UninstallSelectionTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private InstalledAppsReader Reader => new(_registry, new FakeWindowsInstaller(), _paths, FixedSystemDirectories.Standard, new FakePackageDependencies());
+    private InstalledAppsReader Reader => new(_registry, new FakeWindowsInstaller(), _paths, FixedSystemDirectories.Standard, new FakePackageDependencies(), new FakeVolumeInventory());
 
     private ProgramUninstaller Uninstaller => new(Reader, new FakeUninstallLauncher(), Msiexec);
 
