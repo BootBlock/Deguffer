@@ -18,7 +18,7 @@ four questions worth asking before deleting anything:
 | Tier | Meaning | Deguffer's behaviour |
 | --- | --- | --- |
 | **1 — Regenerable cache** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
-| **2 — Regenerable, with cost** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **never pre-selected**, and needs an extra acknowledgement. |
+| **2 — Regenerable, with cost** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **not pre-selected**, and needs an extra acknowledgement on every run. A tick you gave it before is remembered. |
 | **3 — User data in a cache costume** | Logs, histories, saved sessions, and anything else whose loss is permanent, such as the means to uninstall updates. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
 | **4 — Do not touch** | Config, credentials, live state, or anything Deguffer cannot positively identify. | Excluded entirely — not even shown as an option. |
 
@@ -516,7 +516,7 @@ time a project asks for it, with no command from you and nothing to re-configure
 
 ## Maven local repository
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -584,7 +584,7 @@ not — but that file is a Maven implementation detail rather than a promise, it
 trees, and a rule that deleted a version directory on the strength of it would be guessing about
 exactly the case that cannot be undone.
 
-So the whole is offered at the more cautious tier: never pre-selected, and needing an
+So the whole is offered at the more cautious tier: not pre-selected, and needing an
 acknowledgement. That is the honest form of "some of this is a slower build and some of it is a
 broken one".
 
@@ -592,7 +592,7 @@ broken one".
 
 ## vcpkg build caches
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -630,7 +630,9 @@ the three variables can point Deguffer at the clone itself, or at your own vcpkg
 where a cache is, and they are not a way to ask for the directory holding the tool. Each is asked at
 every path the folder is reachable at, so a variable naming the clone, or something protected in
 it, through a `subst` letter or a second mount of the volume is declined as surely as one naming
-the path it stands for.
+the path it stands for. The same holds the other way: `VCPKG_DOWNLOADS` naming the clone's own
+`downloads` through another name has moved nothing, a cache named inside the clone that way is
+vcpkg's by where it is, and two variables naming one folder two ways declare it once.
 
 vcpkg ships no cache-eviction command. Its own answer to a cache that has grown is the
 `--clean-after-build` family of flags on `vcpkg install`, which cleans as it goes, and its
@@ -670,7 +672,7 @@ each directory is its own row, so you can take the scratch and leave the binary 
 
 ## Conda package cache
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -1517,6 +1519,7 @@ Firefox refills all of it without being asked.
 
 Thunderbird keeps the identical layout — its own `profiles.ini`, the same two roots, the same
 `cache2`. Deguffer does not reach it yet, because nothing here has been measured against it.
+
 ---
 
 ## Epic Games launcher web cache
@@ -1945,7 +1948,7 @@ own: see [Steam shader pre-cache](#steam-shader-pre-cache).
 
 ## Steam library artwork
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2031,7 +2034,7 @@ runs.
 
 ## Steam shader pre-cache
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2129,7 +2132,7 @@ by definition.
 
 ## Emulator shader caches
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2177,6 +2180,11 @@ renderer writes are offered, as files, because the same folder holds other thing
 
 **PCSX2's cache folder is where PCSX2's settings put it.** `[Folders] Cache` in `inis\PCSX2.ini` can
 move it anywhere, and Deguffer reads it rather than assuming the default.
+
+**One folder is one folder, however it is named.** A folder you add that is an emulator's default
+folder reached through a `subst` letter or a second mount of the volume is read once, and a cache
+folder a setting names inside the emulator's folder that way is still treated as inside it. Explore
+refuses each at both names.
 
 **Nothing of an emulator's while it runs.** An emulator writes its cache while you play, so while
 one is running its caches are not offered, the plan says why, and Explore refuses them. The clean
@@ -2276,7 +2284,9 @@ folder between, although that folder is widely written about. The file is read b
 rules, which are not an INI file's: the first entry for a setting wins, `#include` is followed, and
 a value set to `default` switches the thumbnails or the shaders off. A setting relative to where
 RetroArch was started from is not followed, and the plan says so. Settings in `%APPDATA%` that no
-program found is using are followed only where they give a full path.
+program found is using are followed only where they give a full path. A setting naming a folder
+inside RetroArch's own through a `subst` letter or a second mount of the volume is read as that
+folder, and a folder two copies name two ways is read once. Explore refuses each at both names.
 
 **Only what the updater writes, by the name it writes it under.** The updater extracts each shader
 set into a folder of its own name, so only those three are offered, and the presets you saved in the
@@ -2340,7 +2350,7 @@ permanent loss.
 
 ## Unreal Engine derived data cache
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2759,7 +2769,7 @@ Every segment is derived from media still on disk.
 
 ## Affinity machine-learning models
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2854,7 +2864,7 @@ Sources:
 
 ## Capture One previews and thumbnails
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2959,7 +2969,7 @@ A thumbnail cache would normally be Tier 1. This one is not, and the reason is a
 caveat. Previews can be rebuilt only from the original raw files, and **Deguffer cannot tell "the
 originals are on this disk" from "the originals are on a shelf"**: both look the same from the cache
 folder. Where the originals are online, rebuilding a large catalog's previews is also §3's
-"re-indexing for minutes". So the row is never pre-selected, and it states the offline cost.
+"re-indexing for minutes". So the row is not pre-selected, and it states the offline cost.
 
 **Capture One has no command to empty its cache**, so §5.1 has no route to drive. Its documented
 route is **Regenerate Previews** on the images you select, a menu item in the running program. Since
@@ -2979,7 +2989,7 @@ Sources:
 
 ## DaVinci Resolve render cache
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3091,7 +3101,7 @@ Sources:
 
 ## Adobe media cache
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3122,7 +3132,9 @@ and `DatabasePath` for the database. The version in the key's name changes betwe
 Deguffer reads every `Common` key it finds there. Each value names the folder Adobe writes its own
 folder *into*. Adobe's default reads `...\AppData\Roaming\Adobe\Common\` for both, while the files
 are in `Media Cache Files` inside it. So in a folder a setting names, only `Media Cache Files` or
-`Media Cache` is reached, and nothing else there, which is your own folder, ever is.
+`Media Cache` is reached, and nothing else there, which is your own folder, ever is. A setting naming
+the default folder, or another a setting names, through a `subst` letter or a second mount of the
+volume names the same folder, which is offered once and refused in Explore at both names.
 
 **The default folder is looked at even after you move the cache.** Adobe moves only the converted
 audio and the waveforms. What it read from each file stays in `%APPDATA%\Adobe\Common\Media Cache
@@ -3214,7 +3226,7 @@ Sources:
 
 ## After Effects disk cache
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3319,6 +3331,10 @@ Sources:
 
 ## Squirrel updater leftovers
 
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
 | **Location** | `%LOCALAPPDATA%\SquirrelTemp`, and the `packages` folder inside each application Squirrel installed |
 | **Method** | Delete what the updater unpacked, and the update packages an application's own index has stopped naming |
 | **Typical size** | 466 MB of staging, and 87 MB of spent packages across three applications, on the machine this was measured on |
@@ -3454,8 +3470,10 @@ to sessions that had ended, and every one of them was empty.
 
 - **A file that names a process** is offered once Deguffer has asked Windows about that process and
   found it has ended. A process it could not ask about keeps its file. A handshake file an editor
-  wrote outside Windows, and a key written in another process namespace such as WSL, are never
-  offered, because the id they record is not one this machine issued. Where a key records when its
+  wrote outside Windows, and a key stamped with another process namespace such as WSL, are never
+  offered, because the id they record is not one this machine issued. A key with no namespace at
+  all predates Claude Code recording one, and is read as this machine's, as Claude Code's own sweep
+  reads it. Where a key records when its
   process started, a process id that has since passed to another program is told apart from the
   process itself.
 - **Anything that names a session** is offered only where Claude Code's own list of running sessions
@@ -3515,6 +3533,11 @@ Anthropic's diagnostics, not your data.
 
 ## Superseded application versions
 
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
 | **Location** | The `app-<version>` folders, other than the newest, inside each application Squirrel installed |
 | **Method** | Delete the folders holding builds the application has replaced |
 | **Typical size** | 719 MB for one application on the machine this was measured on, sitting beside the 722 MB it actually runs |
@@ -3760,7 +3783,7 @@ Roslyn that rebuilds it without being asked.
 
 ## Playwright browsers
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3822,7 +3845,7 @@ deliberate command from you.
 
 So the honest description is not "a slower next test run" but "a broken next test run, followed by a
 re-download you have to start". That is a decision to put in front of you rather than tick on your
-behalf — hence Tier 2, never pre-selected.
+behalf — hence Tier 2, not pre-selected.
 
 Deguffer does **not** use `playwright uninstall`, despite §5.1's preference for a tool's own
 command. Playwright's CLI is normally a per-project binary reached through `npx`, and without
@@ -3834,7 +3857,7 @@ rather than a global install.
 
 ## Puppeteer browsers
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3871,10 +3894,12 @@ Within the folder, a browser folder is recognised only if Puppeteer names that b
 `chrome-headless-shell`, `chromedriver`, `chromium` or `firefox`. Within a browser folder, a build is
 removed only if its name is a platform Puppeteer names followed by a build **in that browser's own
 shape**: four dotted numbers for Chrome's builds, a revision number for Chromium (and for `chrome`
-under Puppeteer 19 and 20, which kept Chromium there), and a Firefox version with its release
-channel in front. A Firefox version under `chromedriver`, `chrome\win64-127.0.6533.88-backup`, a
-`webkit` folder and anything you created yourself do not qualify. They stay in Tier 4 and Deguffer
-tells you it is leaving them alone.
+under Puppeteer 19 and 20, which kept Chromium there), and a Firefox version, usually with its
+release channel in front. The channel is optional because the first releases of
+`@puppeteer/browsers` installed Firefox Nightly under its bare version, such as `113.0a1`, and
+Puppeteer's own parser still reads that name as Nightly. A Firefox version under `chromedriver`,
+`chrome\win64-127.0.6533.88-backup`, a `webkit` folder and anything you created yourself do not
+qualify. They stay in Tier 4 and Deguffer tells you it is leaving them alone.
 
 A build a running program is using, such as a browser a script launched, is left alone and named,
 and the clean asks again before each removal. Deleting a build under a running browser fails part of
@@ -3915,7 +3940,7 @@ has it installed.
 
 ## LM Studio superseded runtimes
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4041,8 +4066,11 @@ the command line of every running program it may inspect, and leaves alone any p
 started with. It also leaves alone a profile a program is running from or working in.
 
 The age limit is the other half. A test that is running now has a profile it wrote to moments ago,
-so only profiles nothing has touched for the number of days set for temporary files are offered.
-The profile folder's own times count as well as its files', because an empty profile has no files.
+so a profile is offered only where its folder's own times are older than the number of days set
+for temporary files. That check is made on the folder, because an empty profile has no files. The
+files inside an offered profile are then aged one by one against the same limit, and any file
+changed within it is left. A folder's times do not change when a file deeper inside it changes, so
+a profile with an old folder and some recent files is offered, and only its old files are removed.
 On the workstation measured, the default of seven days still offered 5,140.2 MB of the 6,750.9 MB.
 
 A browser that runs as another account or as administrator cannot be inspected from an ordinary
@@ -4073,7 +4101,7 @@ so each is offered once, here.
 
 ## Azure Functions Core Tools releases
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4152,7 +4180,7 @@ what is left.
 
 ## Graphics driver installer files
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4261,7 +4289,7 @@ location nobody has measured out of the default selection.
 
 ## Autodesk installer files
 
-**Tier 2 — regenerable, with cost.** Offered but **never pre-selected**, and requires an
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4362,7 +4390,7 @@ default selection.
 
 ## Local copies of cloud files
 
-**Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and confirmed with an
+**Tier 2 — regenerable, with cost.** Offered, **not pre-selected**, and confirmed with an
 acknowledgement. Nothing is deleted, here or in the cloud.
 
 | | |
@@ -4416,7 +4444,8 @@ refuses none of them:
 
 Each file is judged again at the moment of the clean, through the handle that marks it. A file that
 gained an edit or a pinned folder while the preview was on screen is left alone. After the clean,
-Deguffer checks that every file it named is still there and still a cloud file (§5.6).
+Deguffer checks that every file it named is still there (§5.6). A file the sync app turned back into
+an ordinary file also counts, because all of it is then on this PC.
 
 ### What it costs you
 
@@ -4426,7 +4455,7 @@ offline, a released file will not open until you reconnect.** Nothing is lost.
 ### Why Tier 2
 
 §3's Tier 2 is "re-created only by re-downloading". That is exactly what opening a released file
-does, and offline it is a file you cannot open. So the row is never pre-selected, and is confirmed on
+does, and offline it is a file you cannot open. So the row is not pre-selected, and is confirmed on
 its own.
 
 ---
@@ -4592,9 +4621,8 @@ Everything except the one directory in each row, asserted by name after the dele
 
 - **The project folder itself** — only the build directory inside it is removed.
 - **Every file the rebuild reads.** `Assets`, `Packages` and `ProjectSettings` for Unity;
-  `Cargo.toml`; `package.json` and the lock file; the Python manifest; `pubspec.yaml` and
-  `.dart_tool`. These are what make the directory regenerable, so losing one would falsify the whole
-  claim.
+  `Cargo.toml`; `package.json` and the lock file; the Python manifest. These are what make the
+  directory regenerable, so losing one would falsify the whole claim.
 - **For Unreal, the `.uproject` descriptor, `Source`, `Content`, `Config` and `Plugins`, and `Saved`
   and `Binaries`.** `Saved` holds the editor's autosaves, which are the only copy of work nobody
   saved, and your editor settings. `Binaries` is compiled output, but on a team an artist often
@@ -5120,7 +5148,9 @@ figure shown.
 
 `C:\Windows\SoftwareDistribution`, Windows Update's own folder, and the `DataStore` inside it, which
 holds the history of the updates installed on this machine. The command reaches neither. Deguffer
-asserts after the run that both are still there and have not been emptied.
+asserts after the run that both are still there and have not been emptied. Because the command acts
+inside `C:\Windows`, the run asserts the same of `C:\Windows\WinSxS` and `C:\Windows\Installer`,
+which nothing may remove by hand.
 
 Delivery Optimization's own folder must still be there after the run too, although what is inside it
 is the command's to clear. Windows lets only an administrator look at that folder, so on an ordinary
@@ -5142,7 +5172,7 @@ never be needed, and nothing is lost.
 
 ## Previous Windows installation
 
-**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -5210,7 +5240,7 @@ not Tier 3, because none of it is a record of something you did.
 
 ## Leftover Windows update folders
 
-**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -5265,7 +5295,7 @@ through that and listed under [Windows servicing logs](#windows-servicing-logs) 
 
 ## Superseded driver packages
 
-**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -5299,8 +5329,11 @@ from the devices using it.
 
 Nothing is offered:
 
-- **while an update is unfinished**, on the same tests as the previous installation above, because
-  Windows Update installs drivers too.
+- **while an update is unfinished**: while a restart is owed for an update, or the servicing stack
+  or Windows Setup is running, because Windows Update installs drivers too. Where Windows' cleanup
+  does the work, a restart due to move a file inside one of the package folders also stops it when
+  the clean reaches it. `pnputil` is given a package's name rather than a folder, so that last test
+  has nothing to apply to on its route.
 - **for a package a device is using**, whatever its age.
 - **where your recent-files setting would keep any of it**, when Windows' cleanup does the work,
   because it takes every older package at once and cannot be told to leave one. Where `pnputil`
@@ -5313,7 +5346,8 @@ Removing a package needs administrator rights.
 
 `FileRepository` itself is never a target. The run checks afterwards that the store, the newest
 version of each driver, every package a device is using and every driver that is part of Windows
-are still there. Where `pnputil` does the work, every other third-party package is checked as well,
+are still there, and so are `C:\Windows\WinSxS` and `C:\Windows\Installer`, which nothing may
+remove by hand. Where `pnputil` does the work, every other third-party package is checked as well,
 and immediately before each removal Deguffer asks Windows again whether the package's name still
 belongs to the folder it planned to remove. Windows gives a freed name to the next package it
 stages, so a name that has changed hands stops that removal.
@@ -5333,7 +5367,7 @@ the network works. Nothing here is a record of something you did, so it is not T
 
 ## Superseded Windows components
 
-**Tier 2 — regenerable with cost.** Offered, **never pre-selected**.
+**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -5376,16 +5410,19 @@ Nothing is offered:
 
 - **without administrator rights.** DISM analyses and cleans the store only for an administrator, so
   an unelevated scan says so, and a scan as administrator is what lets Deguffer ask.
-- **while an update is unfinished**, on the same tests as the previous installation above, asked
-  when the scan plans the row and again when the clean reaches it.
+- **while an update is unfinished**: while a restart is owed for an update, or the servicing stack
+  or Windows Setup is running. It is asked when the scan plans the row and again when the clean
+  reaches it. The previous installation's test for a restart due to move a file inside its folder
+  does not apply, because this row removes nothing by path.
 - **where Windows reports that the store does not need cleaning**, which is DISM's own verdict.
 
 ### What is protected
 
 No path is ever a target. The run checks afterwards that the store itself, Windows' record of its
 installed updates in `C:\Windows\servicing\Packages`, and `System32`, which shares most of the
-store's files, are all still there and not emptied. Every other provider that reaches into
-`C:\Windows` keeps `WinSxS` as a folder that must survive.
+store's files, are all still there and not emptied, and so is `C:\Windows\Installer`. Every other
+row that reaches into `C:\Windows`, whether it deletes by path or by Windows' own command, asserts
+`WinSxS` and `Installer` as folders that must survive.
 
 ### What it costs you
 
@@ -5519,7 +5556,7 @@ exists to say.
 
 ## Windows temporary folders
 
-**Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and it needs an extra
+**Tier 2 — regenerable, with cost.** Offered, **not pre-selected**, and it needs an extra
 acknowledgement before it runs.
 
 | | |
@@ -5583,7 +5620,9 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
 of a temporary folder — Node's compile cache, a Roslyn session, VS Code's downloaded update, NuGet's
 scratch folder — the row for that tool offers it, under that tool's rules, and this row leaves it
 out and says which rows have it. So each entry is counted once, and an entry that row would keep is
-not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. See
+not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. That
+holds however the tool names the entry, through a `subst` letter or a second mount of the volume
+included. See
 [Tool caches in temporary folders](#tool-caches-in-temporary-folders) and the three sections after it.
 
 The size shown already has all of those taken out of it, so the number the scan reports is what the
@@ -5761,6 +5800,9 @@ the architecture and a code-cache tag. Anything else in the folder stays, so a s
 at the wrong folder costs nothing. A setting that names a drive root, or a folder holding a
 temporary folder or one Windows is built out of, is declined outright, and the row says so: other
 rows remove things there, and this row would otherwise count each of those removals as a failure.
+A setting naming the temporary folder's own `node-compile-cache` through a `subst` letter or a
+second mount of the volume adds nothing, and a folder it names inside a temporary folder that way
+is still left to this row by the "Temporary files" row.
 
 ### What is protected
 
@@ -5793,7 +5835,7 @@ copied from.
 
 ## Installer downloads in temporary folders
 
-**Tier 2 — regenerable, with cost.** Offered, **never pre-selected**, and it needs an extra
+**Tier 2 — regenerable, with cost.** Offered, **not pre-selected**, and it needs an extra
 acknowledgement before it runs.
 
 | | |
@@ -5817,8 +5859,8 @@ it there:
 The Visual Studio Installer's folder has a random name that cannot be told from a thousand others.
 Deguffer finds it the only reliable way: each installed Visual Studio records it, as
 `temporaryCache`, in a state file under `%LOCALAPPDATA%\Microsoft\VisualStudio\Packages\_Instances`.
-Deguffer follows that only to a folder directly inside one of your temporary folders, and removes
-only the packages in it, named for the package and a 20-digit code.
+Deguffer follows that only to a folder directly inside one of your temporary folders, however the
+state file names it, and removes only the packages in it, named for the package and a 20-digit code.
 
 ### What Deguffer does
 

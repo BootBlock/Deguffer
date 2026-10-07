@@ -159,6 +159,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         [
             .. KeptPaths(drivers.Newest, listing),
             .. matched ? unlisted.Select(folder => (folder, "A driver that is part of Windows, which pnputil does not list as third-party.")) : [],
+            .. WindowsSystemRoot.ExclusionsUnder(_system.WindowsDirectory),
         ]);
 
         if (drivers.Superseded.Count == 0)

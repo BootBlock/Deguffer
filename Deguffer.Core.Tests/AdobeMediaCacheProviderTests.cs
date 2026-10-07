@@ -463,6 +463,83 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// A release naming the default folder through another mount of its volume names one folder, which
+    /// is offered once and asserted once, its user data beside the cache surviving (§5.6). Explore
+    /// refuses it at both names. A setting naming an ordinary folder reached the same way is followed
+    /// as any moved cache is.
+    /// </summary>
+    [Fact]
+    public async Task ASettingNamingTheDefaultFolderThroughAnotherMountDeclaresItOnce()
+    {
+        var (cached, kept) = CreateLayout();
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var other = Path.Combine(_temp.Path, "Other");
+        var volumes = new FakeVolumeInventory()
+            .With(_temp.Path)
+            .With(Common + @"\", alsoMountedAt: [mirror + @"\"]);
+
+        Write(Path.Combine(mirror, AdobeMediaCacheLayout.FilesFolder, "interview.wav 48000.cfa"));
+        Write(Path.Combine(other, AdobeMediaCacheLayout.DatabaseFolder, "Media Cache Database.db"));
+        _environment
+            .WithRegistryValue(Release, AdobeMediaCacheLayout.FilesValue, mirror + @"\")
+            .WithRegistryValue(Release, AdobeMediaCacheLayout.DatabaseValue, other + @"\");
+
+        var provider = new AdobeMediaCacheProvider(
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([Files, Peaks, Database, Path.Combine(other, AdobeMediaCacheLayout.DatabaseFolder)], plan.TargetedPaths);
+        Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(Common, "LUTs"), StringComparison.OrdinalIgnoreCase));
+
+        var roots = await provider.DiscoverToolRootsAsync();
+
+        Assert.False(Assert.Single(roots, r => r.Path.Equals(mirror, StringComparison.OrdinalIgnoreCase)).RecognisesFolder("LUTs"));
+        Assert.True(Assert.Single(roots, r => r.Path.Equals(mirror, StringComparison.OrdinalIgnoreCase))
+            .RecognisesFolder(AdobeMediaCacheLayout.FilesFolder));
+        Assert.Contains(roots, r => r.Path.Equals(Path.Combine(mirror, "LUTs"), StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.All(cached, path => Assert.False(File.Exists(path), $"{path} was left behind."));
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the media cache."));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The case above with the setting naming the cache folder through another mount of its volume:
+    /// it is inside the default cache folder, though its text names nothing there, so it adds nothing
+    /// and the run passes §5.6.
+    /// </summary>
+    [Fact]
+    public async Task ASettingInsideAnotherCacheFolderThroughAnotherMountIsNotDeclaredTwice()
+    {
+        var (cached, kept) = CreateLayout();
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var volumes = new FakeVolumeInventory()
+            .With(_temp.Path)
+            .With(Common + @"\", alsoMountedAt: [mirror + @"\"]);
+        var named = Path.Combine(mirror, AdobeMediaCacheLayout.FilesFolder);
+
+        Write(Path.Combine(named, AdobeMediaCacheLayout.FilesFolder, "nested.cfa"));
+        _environment.WithRegistryValue(Release, AdobeMediaCacheLayout.FilesValue, named);
+
+        var provider = new AdobeMediaCacheProvider(
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([Files, Peaks, Database], plan.TargetedPaths);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(named, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.All(cached, path => Assert.False(File.Exists(path)));
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the media cache."));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
     /// <summary>G4: presence, the plan and Explore read Adobe's settings once between them.</summary>
     [Fact]
     public async Task ReadsAdobesSettingsOncePerPass()

@@ -98,7 +98,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     public Task<IReadOnlyList<string>> ClaimedEntriesAsync(
         IReadOnlyList<string> folders,
         CancellationToken ct = default) =>
-        Task.FromResult(Examine(ct).ClaimsIn(folders));
+        Task.FromResult(Examine(ct).ClaimsIn(folders, Reach));
 
     /// <summary>
     /// Explore's reading of the same examination: an entry held back is refused, and in a tool's own

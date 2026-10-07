@@ -612,7 +612,7 @@ public sealed partial class CleanViewModel : ObservableObject
             // The rows the run changed say sizes and "Ready to clean" labels about a machine that no
             // longer exists, so they are planned again. Only those: every other row still describes
             // the disk, and measuring it again is the whole scan over for answers already on screen.
-            var stale = RunChanges.Stale([.. Findings.Select(row => row.Finding)], authorised);
+            var stale = RunChanges.Stale([.. Findings.Select(row => row.Finding)], authorised, _volumes);
 
             await ReplanRunChangesAsync(stale, ct);
 

@@ -34,7 +34,7 @@ namespace Deguffer.Core.Providers;
 /// deletes it, which is where an application deregisters what that build registered. Removing the
 /// directory here means that hook never runs, and Deguffer does not run it — starting a vendor's
 /// executable to tidy up after a deletion is not something this tool does. So the row is offered,
-/// never pre-selected, and §7's acknowledgement applies.</para>
+/// not pre-selected, and §7's acknowledgement applies.</para>
 ///
 /// <para><b>An application that is running is refused outright, not warned about (§5.3).</b>
 /// Squirrel's own clean-up skips a version directory a process is running from, and it is doing

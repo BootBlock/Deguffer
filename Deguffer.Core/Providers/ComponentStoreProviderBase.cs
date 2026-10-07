@@ -11,8 +11,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>§5.1, because nothing else is safe.</b> Microsoft's own warning is that deleting from the
 /// store "may severely damage your system so that your PC might not boot and make it impossible to
-/// update". The store is protected from every other provider by <see cref="WindowsSystemRoot"/>, and
-/// here it is never a target either: the plan is one DISM command, and DISM decides what goes.</para>
+/// update". Every provider that acts under <c>C:\Windows</c> asserts it as a survivor, from
+/// <see cref="WindowsSystemRoot.Exclusions"/>, and here it is never a target either: the plan is one
+/// DISM command, and DISM decides what goes.</para>
 ///
 /// <para><b>Windows' figures, not a measurement.</b> Most of the store is hard-linked into Windows
 /// itself, so a walk of it overstates what any cleanup frees many times over. DISM's analysis counts
@@ -132,11 +133,14 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
                 },
             ],
             ProtectedPaths = Protect(
+            [
                 (_store, "The component store itself. Windows' cleanup removes superseded components inside it, and never the store."),
                 (Path.Combine(_windows, "servicing", "Packages"),
                     "Windows' record of the updates installed on this machine. The cleanup removes superseded entries from it, and never the record."),
                 (Path.Combine(_windows, "System32"),
-                    "Windows itself, which shares most of the component store's files through hard links.")),
+                    "Windows itself, which shares most of the component store's files through hard links."),
+                .. WindowsSystemRoot.ExclusionsUnder(_windows),
+            ]),
             Notes =
             [
                 analysed,

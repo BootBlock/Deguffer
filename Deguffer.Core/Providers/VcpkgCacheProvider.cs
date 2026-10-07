@@ -408,8 +408,22 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         // directory — a binary cache pointed at the clone's own downloads, or both variables set to
         // one "put all the vcpkg junk here" folder. Declared twice, that directory becomes two steps
         // over one path: its size is counted twice in the total the user reads, and §5.6 reports one
-        // survivor as two.
-        var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // survivor as two. Asked of the folders, because the two variables may name one directory
+        // through different letters, or through another mount of its volume.
+        var declared = new List<ReachedFolder>(3);
+
+        bool Declared(string path)
+        {
+            var folder = Reach(path);
+
+            if (declared.Exists(folder.IsSameAs))
+            {
+                return false;
+            }
+
+            declared.Add(folder);
+            return true;
+        }
 
         if (Containing(
                 located.BinaryCache,
@@ -418,7 +432,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                 located,
                 refused) is { } binaryCache)
         {
-            declared.Add(located.BinaryCache!);
+            Declared(located.BinaryCache!);
             roots.Add(binaryCache);
         }
 
@@ -439,7 +453,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
                     "Source archives and the tools vcpkg downloaded to build with. It fetches each one again when a build needs it."));
             }
 
-            locations.RemoveAll(l => !declared.Add(Path.Combine(root, l.RelativePath)));
+            locations.RemoveAll(l => !Declared(Path.Combine(root, l.RelativePath)));
 
             roots.Add(new DeclaredRoot(
                 root,
@@ -451,7 +465,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         }
 
         if (located.RelocatedDownloads is { } relocated
-            && declared.Add(relocated)
+            && Declared(relocated)
             && Containing(
                 relocated,
                 "Source archives and the tools vcpkg downloaded to build with. It fetches each one again when a build needs it.",

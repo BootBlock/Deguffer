@@ -2,6 +2,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -21,7 +22,7 @@ public sealed class RunChangesTests
         var npm = Row("npm", Deletes(Profile + @"\AppData\Local\npm-cache\_cacache"));
         var gradle = Row("gradle", Deletes(Profile + @"\.gradle\caches"));
 
-        Assert.Equal(["npm"], Ids(RunChanges.Stale([npm, gradle], [npm])));
+        Assert.Equal(["npm"], Ids(RunChanges.Stale([npm, gradle], [npm], new FakeVolumeInventory())));
     }
 
     /// <summary>
@@ -34,7 +35,7 @@ public sealed class RunChangesTests
         var nuget = Row("nuget", Runs(Profile + @"\.nuget\packages", Temp + @"\NuGetScratch"));
         var temp = Row("temp", Deletes(Temp + @"\NuGetScratch"), Deletes(Temp + @"\other"));
 
-        Assert.Equal(["nuget", "temp"], Ids(RunChanges.Stale([nuget, temp], [nuget])));
+        Assert.Equal(["nuget", "temp"], Ids(RunChanges.Stale([nuget, temp], [nuget], new FakeVolumeInventory())));
     }
 
     [Fact]
@@ -43,7 +44,7 @@ public sealed class RunChangesTests
         var temp = Row("temp", Clears(Temp));
         var app = Row("app", Deletes(Temp + @"\SomeApp\cache"));
 
-        Assert.Equal(["temp", "app"], Ids(RunChanges.Stale([temp, app], [app])));
+        Assert.Equal(["temp", "app"], Ids(RunChanges.Stale([temp, app], [app], new FakeVolumeInventory())));
     }
 
     [Fact]
@@ -52,7 +53,7 @@ public sealed class RunChangesTests
         var temp = Row("temp", Clears(Temp));
         var app = Row("app", Deletes(Temp + @"\SomeApp\cache"));
 
-        Assert.Equal(["temp", "app"], Ids(RunChanges.Stale([temp, app], [temp])));
+        Assert.Equal(["temp", "app"], Ids(RunChanges.Stale([temp, app], [temp], new FakeVolumeInventory())));
     }
 
     /// <summary>A shared prefix is not a shared folder: <c>cache2</c> is not inside <c>cache</c>.</summary>
@@ -62,7 +63,7 @@ public sealed class RunChangesTests
         var first = Row("first", Deletes(Profile + @"\cache"));
         var second = Row("second", Deletes(Profile + @"\cache2"));
 
-        Assert.Equal(["first"], Ids(RunChanges.Stale([first, second], [first])));
+        Assert.Equal(["first"], Ids(RunChanges.Stale([first, second], [first], new FakeVolumeInventory())));
     }
 
     /// <summary>
@@ -75,7 +76,24 @@ public sealed class RunChangesTests
         var nuget = Row("nuget", Runs(Temp + @"\NuGetScratch"));
         var temp = Row("temp", Deletes(@"\\?\" + Temp + @"\NuGetScratch"));
 
-        Assert.Equal(["nuget", "temp"], Ids(RunChanges.Stale([nuget, temp], [nuget])));
+        Assert.Equal(["nuget", "temp"], Ids(RunChanges.Stale([nuget, temp], [nuget], new FakeVolumeInventory())));
+    }
+
+    /// <summary>
+    /// The case above with NuGet reporting its scratch folder through <c>S:</c>, a letter <c>subst</c>
+    /// made for the temporary folder: the same folder, so the temporary files row is planned again. A
+    /// row beside it reached the same way is not.
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\NuGetScratch", true)]
+    [InlineData(@"S:\Other", false)]
+    public void ARowListingAFolderACommandWasDeclaredToReachThroughASubstitutedLetterIsPlannedAgain(string reached, bool stale)
+    {
+        var nuget = Row("nuget", Runs(Profile + @"\.nuget\packages", reached));
+        var temp = Row("temp", Deletes(Temp + @"\NuGetScratch"));
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", Temp);
+
+        Assert.Equal(stale ? ["nuget", "temp"] : ["nuget"], Ids(RunChanges.Stale([nuget, temp], [nuget], volumes)));
     }
 
     /// <summary>
@@ -88,7 +106,7 @@ public sealed class RunChangesTests
         var modules = Row("node_modules", Deletes(@"C:\Source\app\node_modules"));
         var pnpm = CountingLinks(Row("pnpm", Runs(Profile + @"\AppData\Local\pnpm\store\v10")));
 
-        Assert.Equal(["node_modules", "pnpm"], Ids(RunChanges.Stale([modules, pnpm], [modules])));
+        Assert.Equal(["node_modules", "pnpm"], Ids(RunChanges.Stale([modules, pnpm], [modules], new FakeVolumeInventory())));
     }
 
     /// <summary>
@@ -101,7 +119,7 @@ public sealed class RunChangesTests
         var proof = Row("proof");
         var pnpm = CountingLinks(Row("pnpm", Runs(Profile + @"\AppData\Local\pnpm\store\v10")));
 
-        Assert.Empty(RunChanges.Stale([proof, pnpm], [proof]));
+        Assert.Empty(RunChanges.Stale([proof, pnpm], [proof], new FakeVolumeInventory()));
     }
 
     [Fact]
@@ -110,7 +128,7 @@ public sealed class RunChangesTests
         var npm = Row("npm", Deletes(Profile + @"\AppData\Local\npm-cache\_cacache"));
         var absent = new Finding(new NamedProvider("absent"), IsPresent: false, Plan: null);
 
-        Assert.Equal(["npm"], Ids(RunChanges.Stale([absent, npm], [npm])));
+        Assert.Equal(["npm"], Ids(RunChanges.Stale([absent, npm], [npm], new FakeVolumeInventory())));
     }
 
     [Fact]
@@ -119,7 +137,7 @@ public sealed class RunChangesTests
         var temp = Row("temp", Clears(Temp));
         var app = Row("app", Deletes(Temp + @"\SomeApp\cache"));
 
-        Assert.Equal(["app", "temp"], Ids(RunChanges.Stale([app, temp], [temp])));
+        Assert.Equal(["app", "temp"], Ids(RunChanges.Stale([app, temp], [temp], new FakeVolumeInventory())));
     }
 
     private static string[] Ids(IReadOnlyList<ICleanupProvider> providers) => [.. providers.Select(p => p.Id)];

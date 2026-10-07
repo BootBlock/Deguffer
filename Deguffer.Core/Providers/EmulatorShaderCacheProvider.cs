@@ -101,7 +101,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     /// that is cancelled throws before it is kept, so the next caller looks again.
     /// </summary>
     private EmulatorCacheExamination Examine(CancellationToken ct) =>
-        _examination ??= EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, HoldsRetroArch, ct);
+        _examination ??= EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, HoldsRetroArch, Reach, ct);
 
     /// <summary>
     /// Whether the RetroArch rows answer for <paramref name="folder"/>. A refusal counts, because those
@@ -164,6 +164,9 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             .Where(survivor => !declared.Contains(survivor.Path))
             .DistinctBy(survivor => survivor.Path, StringComparer.OrdinalIgnoreCase)
             .Select(survivor => new ToolRoot(survivor.Path, survivor.Reason, static _ => false)));
+
+        // A root or cache folder named another way than it is read under is refused at that name too.
+        roots.AddRange([.. examination.OtherNames.SelectMany(other => ToolRoot.AlsoAt(roots, other.ReadAs, other.Name))]);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
     }
