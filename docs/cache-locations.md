@@ -630,7 +630,9 @@ the three variables can point Deguffer at the clone itself, or at your own vcpkg
 where a cache is, and they are not a way to ask for the directory holding the tool. Each is asked at
 every path the folder is reachable at, so a variable naming the clone, or something protected in
 it, through a `subst` letter or a second mount of the volume is declined as surely as one naming
-the path it stands for.
+the path it stands for. The same holds the other way: `VCPKG_DOWNLOADS` naming the clone's own
+`downloads` through another name has moved nothing, a cache named inside the clone that way is
+vcpkg's by where it is, and two variables naming one folder two ways declare it once.
 
 vcpkg ships no cache-eviction command. Its own answer to a cache that has grown is the
 `--clean-after-build` family of flags on `vcpkg install`, which cleans as it goes, and its
@@ -2175,6 +2177,11 @@ renderer writes are offered, as files, because the same folder holds other thing
 **PCSX2's cache folder is where PCSX2's settings put it.** `[Folders] Cache` in `inis\PCSX2.ini` can
 move it anywhere, and Deguffer reads it rather than assuming the default.
 
+**One folder is one folder, however it is named.** A folder you add that is an emulator's default
+folder reached through a `subst` letter or a second mount of the volume is read once, and a cache
+folder a setting names inside the emulator's folder that way is still treated as inside it. Explore
+refuses each at both names.
+
 **Nothing of an emulator's while it runs.** An emulator writes its cache while you play, so while
 one is running its caches are not offered, the plan says why, and Explore refuses them. The clean
 asks again before it removes each item, so an emulator started while the preview is on screen holds
@@ -2273,7 +2280,9 @@ folder between, although that folder is widely written about. The file is read b
 rules, which are not an INI file's: the first entry for a setting wins, `#include` is followed, and
 a value set to `default` switches the thumbnails or the shaders off. A setting relative to where
 RetroArch was started from is not followed, and the plan says so. Settings in `%APPDATA%` that no
-program found is using are followed only where they give a full path.
+program found is using are followed only where they give a full path. A setting naming a folder
+inside RetroArch's own through a `subst` letter or a second mount of the volume is read as that
+folder, and a folder two copies name two ways is read once. Explore refuses each at both names.
 
 **Only what the updater writes, by the name it writes it under.** The updater extracts each shader
 set into a folder of its own name, so only those three are offered, and the presets you saved in the
@@ -3119,7 +3128,9 @@ and `DatabasePath` for the database. The version in the key's name changes betwe
 Deguffer reads every `Common` key it finds there. Each value names the folder Adobe writes its own
 folder *into*. Adobe's default reads `...\AppData\Roaming\Adobe\Common\` for both, while the files
 are in `Media Cache Files` inside it. So in a folder a setting names, only `Media Cache Files` or
-`Media Cache` is reached, and nothing else there, which is your own folder, ever is.
+`Media Cache` is reached, and nothing else there, which is your own folder, ever is. A setting naming
+the default folder, or another a setting names, through a `subst` letter or a second mount of the
+volume names the same folder, which is offered once and refused in Explore at both names.
 
 **The default folder is looked at even after you move the cache.** Adobe moves only the converted
 audio and the waveforms. What it read from each file stays in `%APPDATA%\Adobe\Common\Media Cache
@@ -5580,7 +5591,9 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
 of a temporary folder — Node's compile cache, a Roslyn session, VS Code's downloaded update, NuGet's
 scratch folder — the row for that tool offers it, under that tool's rules, and this row leaves it
 out and says which rows have it. So each entry is counted once, and an entry that row would keep is
-not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. See
+not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. That
+holds however the tool names the entry, through a `subst` letter or a second mount of the volume
+included. See
 [Tool caches in temporary folders](#tool-caches-in-temporary-folders) and the three sections after it.
 
 The size shown already has all of those taken out of it, so the number the scan reports is what the
@@ -5758,6 +5771,9 @@ the architecture and a code-cache tag. Anything else in the folder stays, so a s
 at the wrong folder costs nothing. A setting that names a drive root, or a folder holding a
 temporary folder or one Windows is built out of, is declined outright, and the row says so: other
 rows remove things there, and this row would otherwise count each of those removals as a failure.
+A setting naming the temporary folder's own `node-compile-cache` through a `subst` letter or a
+second mount of the volume adds nothing, and a folder it names inside a temporary folder that way
+is still left to this row by the "Temporary files" row.
 
 ### What is protected
 
@@ -5814,8 +5830,8 @@ it there:
 The Visual Studio Installer's folder has a random name that cannot be told from a thousand others.
 Deguffer finds it the only reliable way: each installed Visual Studio records it, as
 `temporaryCache`, in a state file under `%LOCALAPPDATA%\Microsoft\VisualStudio\Packages\_Instances`.
-Deguffer follows that only to a folder directly inside one of your temporary folders, and removes
-only the packages in it, named for the package and a 20-digit code.
+Deguffer follows that only to a folder directly inside one of your temporary folders, however the
+state file names it, and removes only the packages in it, named for the package and a 20-digit code.
 
 ### What Deguffer does
 
