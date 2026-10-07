@@ -372,4 +372,41 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
             result.Verification.Failures,
             c => c.Subject.Equals(dataStore, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// §9 under the command's own reach: the Delivery Optimization folder is inside the Windows
+    /// directory, so the run shows afterwards that <c>WinSxS</c> and <c>Installer</c> stood, and a
+    /// command that took either fails it.
+    /// </summary>
+    [Theory]
+    [InlineData("WinSxS", "component.manifest")]
+    [InlineData("Installer", "patch.msp")]
+    public async Task ACommandThatReachedASection9ExclusionFailsTheNegative(string folder, string file)
+    {
+        InstallModule();
+        _temp.CreateFile(4096, "Windows", "WinSxS", "component.manifest");
+        _temp.CreateFile(4096, "Windows", "Installer", "patch.msp");
+        var reached = Path.Combine(_system.WindowsDirectory, folder);
+
+        _runner.Replying(PowerShell, arguments =>
+        {
+            if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
+            {
+                File.Delete(Path.Combine(reached, file));
+            }
+
+            return new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
+        });
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.All(
+            [Path.Combine(_system.WindowsDirectory, "WinSxS"), Path.Combine(_system.WindowsDirectory, "Installer")],
+            path => Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.HeldContentBefore));
+        Assert.False(result.Verification!.Passed);
+        Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(reached, StringComparison.OrdinalIgnoreCase));
+    }
 }

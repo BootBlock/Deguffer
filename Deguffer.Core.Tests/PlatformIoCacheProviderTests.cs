@@ -167,7 +167,7 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
         Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
 
-        // Tier 2 is offered but never pre-selected, and needs a deliberate yes before it runs.
+        // Tier 2 is offered but not pre-selected by default, and needs a deliberate yes before it runs.
         Assert.False(plan.Tier.IsPreSelectedByDefault());
         Assert.Equal(ConfirmationLevel.Acknowledgement, ConfirmationRequirement.For(plan).Level);
     }

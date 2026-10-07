@@ -12,7 +12,7 @@ namespace Deguffer.Core.Providers;
 /// next time the tool needs it; these binaries do not. Playwright resolves the browser it was pinned
 /// to at launch, and if that directory is gone the run fails with "Executable doesn't exist" until
 /// somebody runs <c>playwright install</c> by hand. The user is therefore choosing a broken test run
-/// followed by a deliberate re-download, not a slower one — so this is offered, never pre-selected,
+/// followed by a deliberate re-download, not a slower one — so this is offered, not pre-selected,
 /// and §7's acknowledgement applies.
 ///
 /// §5.1's command was considered and not used. <c>playwright uninstall</c> is a per-project binary

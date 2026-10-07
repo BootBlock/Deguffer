@@ -316,7 +316,7 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
         Assert.Contains("OneDrive is not running", outcome.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>§5.6: every file the step named is still there, and still a cloud file.</summary>
+    /// <summary>§5.6: every file the step named is still there.</summary>
     [Fact]
     public async Task VerifiesEveryReleasedFileSurvived()
     {

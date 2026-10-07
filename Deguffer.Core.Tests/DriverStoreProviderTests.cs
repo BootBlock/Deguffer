@@ -500,4 +500,32 @@ public sealed class DriverStoreProviderTests : IDisposable
         await provider.PlanAsync();
         Assert.Equal(2, store.Listings);
     }
+
+    /// <summary>
+    /// §9 under the store's own reach: the driver store is inside the Windows directory, so the run
+    /// shows afterwards that <c>WinSxS</c> and <c>Installer</c> stood, and a cleanup that took either
+    /// fails it however well it did the rest.
+    /// </summary>
+    [Theory]
+    [InlineData("WinSxS")]
+    [InlineData("Installer")]
+    public async Task ACleanupThatReachesASection9ExclusionFailsVerification(string folder)
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        _temp.CreateFile(4096, "Windows", "WinSxS", "component.manifest");
+        _temp.CreateFile(4096, "Windows", "Installer", "patch.msp");
+        var reached = Path.Combine(_system.WindowsDirectory, folder);
+        var provider = CreateProvider(new FakeDriverStore(older, newest), Removing(older.Folder!, reached));
+
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.All(
+            [Path.Combine(_system.WindowsDirectory, "WinSxS"), Path.Combine(_system.WindowsDirectory, "Installer")],
+            path => Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.HeldContentBefore));
+        Assert.False(result.Verification!.Passed);
+        Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(reached, StringComparison.OrdinalIgnoreCase));
+    }
 }

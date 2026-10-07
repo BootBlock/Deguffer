@@ -301,7 +301,8 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 /// <para><b>Nothing is destroyed, so nothing here is a target.</b> Each file stays in its folder, lists,
 /// and opens while the machine is online, so this step adds nothing to
 /// <see cref="CleanupPlan.TargetedPaths"/>, and its §5.6 negative asserts the opposite of a
-/// deletion's: that every file it named is still there and is still a cloud file.</para>
+/// deletion's: that every file it named is still there. A file the sync app turned back into an
+/// ordinary file counts, because all of it is then on this PC.</para>
 ///
 /// <para><b>What it frees is a request, never a result.</b> Windows' own documentation for
 /// <c>CF_PIN_STATE_UNPINNED</c> says there is "no guarantee that the placeholders to be unpinned will be
