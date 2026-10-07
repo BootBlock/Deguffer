@@ -156,6 +156,40 @@ public static class VolumeRoot
     }
 
     /// <summary>
+    /// Where <paramref name="path"/> leads: the path it names once each drive letter <c>subst</c> made
+    /// is followed to the folder it stands for, in display form, and the path itself in display form
+    /// where its letter stands for no folder.
+    ///
+    /// <para><b>For a caller that asks what holds a path rather than where it sits.</b> Windows names
+    /// no volume for <c>S:</c> standing for a folder on a cloud mount, so the letter is matched by no
+    /// mount point that holds the folder, and the folder read through it is on no volume at all.
+    /// <see cref="Places"/> follows the letter as one step of finding every path; this is that step
+    /// alone, for a caller that needs only where the bytes are.</para>
+    ///
+    /// <para>One step per drive letter at most, as in <see cref="Places"/>. Letters that stand for each
+    /// other lead nowhere Windows can open, so the path is answered as it was named.</para>
+    /// </summary>
+    public static string Followed(IVolumeInventory volumes, string path)
+    {
+        ArgumentNullException.ThrowIfNull(volumes);
+
+        var named = LongPath.Display(path);
+        var reached = named;
+
+        for (var step = 0; step < Letters; step++)
+        {
+            if (Substituted(volumes, reached) is not { } folder)
+            {
+                return reached;
+            }
+
+            reached = folder;
+        }
+
+        return named;
+    }
+
+    /// <summary>
     /// The path <paramref name="display"/> names through the folder its drive letter stands for,
     /// or null where the letter stands for no folder.
     /// </summary>

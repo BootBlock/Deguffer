@@ -25,7 +25,13 @@ public sealed class ReachedFolder
 
     /// <summary>
     /// Every path the folder is reachable at, comparable with <see cref="Comparable"/>: the path it was
-    /// asked about first.
+    /// asked about first, then that path as it was spelled where the two differ.
+    ///
+    /// <para><b>The spelling is kept beside the comparable form</b> because an 8.3 alias is expanded by
+    /// asking the disk, which can refuse, or find nothing yet. A root spelled
+    /// <c>C:\Users\LONGPR~1\tool</c> when its folder was not there keeps the alias, and the item spelled
+    /// the same way, expanded later, would otherwise match it nowhere. Each spelling names the same
+    /// folder, so keeping both can only find a match the comparison of text found before.</para>
     /// </summary>
     public IReadOnlyList<string> Places { get; }
 
@@ -42,16 +48,32 @@ public sealed class ReachedFolder
     {
         var comparable = Comparable(path);
 
-        // The first place is the path itself, which is comparable already.
         if (VolumeRoot.Places(volumes, comparable) is { } places)
         {
-            return new ReachedFolder([comparable, .. places.Skip(1).Select(place => Comparable(place.Path))], false);
+            return Following(path, places);
         }
 
-        List<string> tops = [comparable];
+        var tops = Spelled(path, comparable);
         AddTopPlaces(tops, comparable, volumes);
 
         return new ReachedFolder(tops, true);
+    }
+
+    /// <summary>
+    /// The folder at <paramref name="path"/>, from the <paramref name="places"/>
+    /// <see cref="VolumeRoot.Places"/> gave for it, for a caller that read them for rules of its own
+    /// and would otherwise ask the machine the same questions twice.
+    /// </summary>
+    internal static ReachedFolder Following(string path, IReadOnlyList<VolumePlace> places)
+    {
+        var reached = Spelled(path, Comparable(path));
+
+        foreach (var place in places.Skip(1))
+        {
+            Add(reached, Comparable(place.Path));
+        }
+
+        return new ReachedFolder(reached, false);
     }
 
     /// <summary>Whether this folder is <paramref name="inner"/> or holds it, at any path either is reachable at.</summary>
@@ -83,6 +105,44 @@ public sealed class ReachedFolder
     }
 
     /// <summary>
+    /// Where <paramref name="place"/>, one path in <see cref="Comparable"/> form, lies below this
+    /// folder, as a path relative to it: from the nearest of this folder's places that holds it,
+    /// <c>.</c> where it is this folder, and null where none of them holds it.
+    ///
+    /// <para>For a caller that judges each path an item is reachable at on its own, because a rule
+    /// that holds at any of them holds. Asked of the item as a whole, the innermost rule at one path
+    /// would answer for another, where a different rule is innermost.</para>
+    /// </summary>
+    public string? PathTo(string place) =>
+        Places
+            .Where(outer => LongPath.Contains(outer, place))
+            .Select(outer => Path.GetRelativePath(outer, place))
+            .MinBy(Levels);
+
+    /// <summary>
+    /// How many folders below this one <paramref name="inner"/> is, at the first pair of their places
+    /// where one holds the other: none where the two are one folder, and null where this folder does
+    /// not hold it.
+    /// </summary>
+    public int? LevelsTo(ReachedFolder inner) => PathTo(inner) is { } relative ? Levels(relative) : null;
+
+    /// <summary>
+    /// How many folders below this one <paramref name="place"/> is, from the nearest of this folder's
+    /// places that holds it: none where it is this folder, and null where none of them holds it.
+    ///
+    /// <para>For a caller choosing the innermost of several folders holding one path. Their paths'
+    /// lengths say that only where every one is named the same way, and <c>S:\vcpkg</c> is inside
+    /// <c>C:\Users\testuser\src</c> where <c>S:</c> stands for the second.</para>
+    /// </summary>
+    public int? LevelsTo(string place) => PathTo(place) is { } relative ? Levels(relative) : null;
+
+    /// <summary>
+    /// <paramref name="place"/> named below this folder the way <paramref name="named"/> names this
+    /// folder, or null where none of this folder's places holds it. See <see cref="PathTo(string)"/>.
+    /// </summary>
+    public string? Naming(string place, string named) => Named(PathTo(place), named);
+
+    /// <summary>
     /// <paramref name="inner"/> named below this folder the way <paramref name="named"/> names this
     /// folder, or null where this folder does not hold it at any path either is reachable at.
     ///
@@ -90,12 +150,17 @@ public sealed class ReachedFolder
     /// a list of projects a solution names, each written in the form the root was configured in.</para>
     /// </summary>
     /// <param name="named">How this folder is named, which may be a form <see cref="Places"/> does not use.</param>
-    public string? Naming(ReachedFolder inner, string named) => PathTo(inner) switch
+    public string? Naming(ReachedFolder inner, string named) => Named(PathTo(inner), named);
+
+    private static string? Named(string? relative, string named) => relative switch
     {
         null => null,
         "." => named,
-        var relative => Path.Combine(named, relative),
+        _ => Path.Combine(named, relative),
     };
+
+    private static int Levels(string relative) =>
+        relative == "." ? 0 : relative.Split(Path.DirectorySeparatorChar).Length;
 
     /// <summary>Whether this folder and <paramref name="other"/> are one folder reached two ways.</summary>
     public bool IsSameAs(ReachedFolder other) =>
@@ -151,6 +216,15 @@ public sealed class ReachedFolder
         {
             AddTopPlaces(places, folder, volumes);
         }
+    }
+
+    /// <summary><paramref name="comparable"/>, then <paramref name="path"/> as it was spelled where that differs. See <see cref="Places"/>.</summary>
+    private static List<string> Spelled(string path, string comparable)
+    {
+        List<string> places = [comparable];
+        Add(places, Path.TrimEndingDirectorySeparator(LongPath.Display(path)));
+
+        return places;
     }
 
     /// <summary>Adds <paramref name="place"/> where it is not there already, and says whether it was not.</summary>

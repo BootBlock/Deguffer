@@ -313,6 +313,43 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Settings the installer does not record naming the standard folder through another mount of its
+    /// volume have moved nothing, so the folder is offered once, as it is with no setting. A folder
+    /// beside it named the same way has been moved, and is left whole while the standard folder is still
+    /// offered. What the data folder keeps survives either way (§5.6). The mount is a folder of its own
+    /// here, standing in for the same folder reached the other way.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ASettingNamingTheStandardFolderThroughAnotherMountHasMovedNothing(bool moved)
+    {
+        var local = Path.Combine(_environment.LocalAppData, "jellyfin");
+        var kept = CreateData(local);
+        var segment = Transcoding(Path.Combine(local, "cache", "transcodes"));
+        var mirror = Path.Combine(_temp.Path, "Mirror");
+        var named = Path.Combine(mirror, "jellyfin", "cache", moved ? "elsewhere" : "transcodes");
+        var reachedTheOtherWay = Transcoding(named);
+        Write(Path.Combine(local, "config", "encoding.xml"), Old, Settings("TranscodingTempPath", named));
+
+        var volumes = new FakeVolumeInventory().With(_environment.LocalAppData + @"\", alsoMountedAt: [mirror + @"\"]);
+        var provider = CreateProvider(volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.TargetedPaths, path => Path.GetFileName(path) == "transcodes");
+        Assert.Equal(moved, plan.Notes.Any(n => n.Message.Contains("records no Jellyfin", StringComparison.Ordinal)));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        // Offered at the name the setting gives it where that is the standard folder, which the test
+        // stands in for with a folder of its own.
+        Assert.False(File.Exists(moved ? segment : reachedTheOtherWay), "the transcoder folder was not emptied.");
+        Assert.True(!moved || File.Exists(reachedTheOtherWay), "a folder an unrecorded install's settings moved the transcoder to was emptied.");
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the transcoder folder."));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// A transcoder folder that holds a data folder would take the server's database and backups with
     /// it, marker or not. Jellyfin refuses to start that way, so only stale settings can say so.
     /// </summary>

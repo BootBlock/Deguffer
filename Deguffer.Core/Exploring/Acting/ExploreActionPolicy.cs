@@ -58,26 +58,28 @@ public sealed class ExploreActionPolicy
         "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend",
     };
 
-    private readonly IReadOnlyList<ProtectedRegion> _regions;
-    private readonly IReadOnlyList<ToolRoot> _toolRoots;
-    private readonly IReadOnlyList<ToolRoot> _probedRoots;
+    private readonly RegionTable _regions;
+    private readonly IReadOnlyList<DeclaredRoot> _toolRoots;
+    private readonly IReadOnlyList<DeclaredRoot> _probedRoots;
     private readonly HeldLocations _held;
     private readonly IVolumeInventory _volumes;
     private readonly IFileSystem _fileSystem;
 
     /// <param name="regions">
-    /// The structural table. Sorted here rather than trusted from the caller, because the
-    /// most-specific-wins rule is what makes an exception expressible and an unsorted table would
-    /// resolve by declaration order instead — silently, and differently for each caller.
+    /// The structural table. Its most-specific-wins rule is <see cref="RegionTable"/>'s, rather than
+    /// trusted to the caller's order, because that rule is what makes an exception expressible and an
+    /// unordered table would resolve by declaration order instead — silently, and differently for
+    /// each caller.
     /// </param>
     /// <param name="toolRoots">The §5.2 declarations, as the providers wrote them.</param>
     /// <param name="volumes">
     /// Where <see cref="VolumeRoot"/> asks which volume a path is on, so that what sits at the top
-    /// of a volume mounted at a folder is recognised as surely as what sits at the top of a drive.
-    /// Asked at each <see cref="MayRemove"/> rather than once here, which is what keeps a volume
-    /// mounted after this policy was built covered. Required rather than defaulted, because a
-    /// default would be the real machine's volumes, and a test that forgot to pass a fake would
-    /// quietly be asking about the developer's disks.
+    /// of a volume mounted at a folder is recognised as surely as what sits at the top of a drive,
+    /// and where each region, root and refused location is followed to every path it is reachable
+    /// at. The item asked about is followed at each <see cref="MayRemove"/> rather than once here,
+    /// which is what keeps a volume mounted after this policy was built covered. Required rather than
+    /// defaulted, because a default would be the real machine's volumes, and a test that forgot to
+    /// pass a fake would quietly be asking about the developer's disks.
     /// </param>
     /// <param name="fileSystem">
     /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk, and where
@@ -101,37 +103,17 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(toolRoots);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        // A region whose path will not resolve is dropped, not kept with the value it arrived
-        // with. An empty one is the case that matters: LongPath.Contains("", candidate) builds the
-        // prefix "\\" and so matches every UNC path, which would refuse a whole network share with a
-        // sentence naming no directory at all. A path that names nothing protects nothing, and
-        // %ProgramFiles(x86)% is genuinely empty on a 32-bit Windows.
-        _regions =
-        [
-            .. regions
-                .Select(r => (Region: r, Path: LongPath.Configured(r.Path)))
-                .Where(r => r.Path is not null)
-                .Select(r => r.Region with { Path = r.Path! })
-                .OrderByDescending(r => r.Path.Length)
-                .ThenBy(r => r.Scope == RegionScope.PathOnly ? 0 : 1),
-        ];
-
-        _toolRoots = [.. toolRoots];
-        _probedRoots = [.. probedRoots ?? []];
+        _regions = new RegionTable(regions, volumes);
+        _toolRoots = DeclaredRoot.Follow(toolRoots, volumes);
+        _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], volumes);
 
         _fileSystem = fileSystem ?? WindowsFileSystem.Default;
 
-        // Every refusing region, whichever scope it has: a folder holding the profile or C:\Windows
-        // takes it along as surely as one holding a tool's folder does. A permitting entry protects
-        // nothing, and a root that will not resolve names nothing, for the reason given above.
+        // A permitting region protects nothing, and a root that will not resolve names nothing.
         _held = new HeldLocations(
             [
-                .. _regions.Where(r => !r.Verdict.IsAllowed).Select(r => (r.Path, r.Verdict.Reason)),
-                .. _toolRoots
-                    .Concat(_probedRoots)
-                    .Select(root => (Path: LongPath.Configured(root.Path), root.Reason))
-                    .Where(root => root.Path is not null)
-                    .Select(root => (root.Path!, root.Reason)),
+                .. _regions.Refusing,
+                .. _toolRoots.Concat(_probedRoots).Select(root => (root.Root.Reason, root.Folder)),
             ],
             _fileSystem);
 
@@ -199,7 +181,8 @@ public sealed class ExploreActionPolicy
     /// </summary>
     public ExploreVerdict MayRemove(string path)
     {
-        // Normalised first, because every comparison below is a prefix match on text. A path
+        // Normalised first, because every comparison below is a prefix match on a path's text, made
+        // of each path the item and each rule are reachable at. A path
         // carrying '..' compares equal to nothing and would walk straight past the whole table —
         // the same trap LongPath.Configured exists for on a provider's configured root.
         if (LongPath.Configured(path) is not { } target)
@@ -238,12 +221,17 @@ public sealed class ExploreActionPolicy
             return reserved;
         }
 
+        // Every path the item is reachable at, comparable with each region, root and refused location,
+        // which were followed to every path they are reachable at when the policy was built. A rule
+        // named through another letter or another mount of its volume is found at the path it shares
+        // with the item.
+        var folder = ReachedFolder.Following(target, places);
         var children = new ToolRootChildren(_fileSystem);
         ExploreVerdict? allowed = null;
 
-        foreach (var place in places)
+        foreach (var place in folder.Places)
         {
-            var verdict = Above(place.Path, children);
+            var verdict = Above(place, children);
 
             if (!verdict.IsAllowed)
             {
@@ -257,21 +245,14 @@ public sealed class ExploreActionPolicy
 
         // Last, and only of a path everything above allows at every place, because it reads every
         // location the path holds. The tool roots read one entry each, and only of a path inside one.
-        foreach (var place in places)
-        {
-            if (_held.Refusal(place.Path) is { } held)
-            {
-                return held;
-            }
-        }
-
-        return allowed!;
+        return _held.Refusal(target, folder) ?? allowed!;
     }
 
     /// <summary>
     /// What everything that answers from above says about one place the item is reachable at: the
     /// Outlook rule, the region table, and §5.2's declared and probed roots, in that order.
     /// </summary>
+    /// <param name="target">One path the item is reachable at, in <see cref="ReachedFolder.Comparable"/> form.</param>
     private ExploreVerdict Above(string target, ToolRootChildren children)
     {
         // Before the region table, because the table ends in a permission: a mail store inside the
@@ -281,7 +262,7 @@ public sealed class ExploreActionPolicy
             return mail;
         }
 
-        var verdict = _regions.FirstOrDefault(region => Covers(region, target)) is { Verdict.IsAllowed: false } refusing
+        var verdict = _regions.Innermost(target) is { Verdict.IsAllowed: false } refusing
             ? refusing.Verdict
             : Below(_toolRoots, target, children);
 
@@ -392,27 +373,24 @@ public sealed class ExploreActionPolicy
     /// declaration at that depth is asked, and a child one of them recognises is allowed: each
     /// provider states what it knows, and none has to carry another's table.</para>
     /// </summary>
-    private static ExploreVerdict Below(IReadOnlyList<ToolRoot> roots, string target, ToolRootChildren children)
+    private static ExploreVerdict Below(IReadOnlyList<DeclaredRoot> roots, string target, ToolRootChildren children)
     {
-        List<ToolRoot> innermost = [];
-        var depth = -1;
+        List<DeclaredRoot> innermost = [];
+        int? levels = null;
 
         foreach (var root in roots)
         {
-            if (LongPath.Configured(root.Path) is not { } path
-                || !LongPath.Contains(path, target)
-                || path.Length < depth)
+            if (root.Folder.LevelsTo(target) is not { } below || below > levels)
             {
                 continue;
             }
 
             // Strictly deeper discards what was found before it; equally deep joins it. Two roots
-            // that both contain this path and are the same length are the same directory, because
-            // each is a prefix of the target.
-            if (path.Length > depth)
+            // that both hold this folder as many levels up are the same folder, however each is named.
+            if (below != levels)
             {
                 innermost.Clear();
-                depth = path.Length;
+                levels = below;
             }
 
             innermost.Add(root);
@@ -422,7 +400,7 @@ public sealed class ExploreActionPolicy
 
         foreach (var owner in innermost)
         {
-            if (children.Refusal(owner, target) is not { } refused)
+            if (children.Refusal(owner, owner.Naming(target)!) is not { } refused)
             {
                 // One declaration recognises this child, which settles it: a child is recognised
                 // however many other providers also own the directory holding it.
@@ -462,33 +440,30 @@ public sealed class ExploreActionPolicy
     private ExploreVerdict? ProbedRefusal(string target, ToolRootChildren children)
     {
         ExploreVerdict? refusal = null;
-        var depth = -1;
+        int? levels = null;
 
         foreach (var root in _probedRoots)
         {
-            if (LongPath.Configured(root.Path) is not { } path
-                || path.Length <= depth
-                || !LongPath.Contains(path, target)
-                || children.Refusal(root, target) is not { } refused)
+            if (root.Folder.LevelsTo(target) is not { } below
+                || below >= levels
+                || root.Naming(target) is not { } named
+                || children.Refusal(root, named) is not { } refused)
             {
                 continue;
             }
 
-            refusal = target.Length == path.Length
+            var name = Path.GetFileName(named);
+
+            refusal = below == 0
                 ? refused
-                : root.Claim == ToolRootClaim.NamedEntries
-                    ? ExploreVerdict.Refuse($"'{Path.GetFileName(target)}' is the tool's, in '{path}': {root.Reason}")
+                : root.Root.Claim == ToolRootClaim.NamedEntries
+                    ? ExploreVerdict.Refuse($"'{name}' is the tool's, in '{root.Path}': {root.Root.Reason}")
                     : ExploreVerdict.Refuse(
-                        $"'{Path.GetFileName(target)}' is inside '{path}', and Explore refuses what is in there "
-                        + $"as well as '{Path.GetFileName(path)}' itself: {root.Reason}");
-            depth = path.Length;
+                        $"'{name}' is inside '{root.Path}', and Explore refuses what is in there "
+                        + $"as well as '{Path.GetFileName(root.Path)}' itself: {root.Root.Reason}");
+            levels = below;
         }
 
         return refusal;
     }
-
-    private static bool Covers(ProtectedRegion region, string target) =>
-        region.Scope == RegionScope.PathAndBelow
-            ? LongPath.Contains(region.Path, target)
-            : target.Equals(region.Path, StringComparison.OrdinalIgnoreCase);
 }

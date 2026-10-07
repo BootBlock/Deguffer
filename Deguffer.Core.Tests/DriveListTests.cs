@@ -255,6 +255,22 @@ public sealed class DriveListTests
         Assert.Null(drives.Holding(@"\\server.test\share\folder"));
     }
 
+    /// <summary>
+    /// A folder reached through a letter <c>subst</c> made is on the volume the letter leads to, as a
+    /// folder below a mount point is on the mounted volume.
+    /// </summary>
+    [Fact]
+    public void TheDriveHoldingAFolderThroughALetterIsTheVolumeTheLetterLeadsTo()
+    {
+        var drives = new DriveList(
+            new FakeVolumeInventory().With(@"C:\").With(@"C:\Mount\").Substituting(@"S:\", @"C:\Mount\Photos"),
+            new ManualTimeProvider());
+
+        drives.Refresh();
+
+        Assert.Equal(@"C:\Mount\", drives.Holding(@"S:\2024")?.RootPath);
+    }
+
     private static List<NotifyCollectionChangedAction> WatchList(DriveList drives)
     {
         var changes = new List<NotifyCollectionChangedAction>();

@@ -33,20 +33,15 @@ internal sealed class ToolRootChildren(IFileSystem fileSystem)
     /// and <c>.gradle\init.d\anything</c> is inside an unrecognised one and does not — asking about
     /// the leaf instead would refuse the first and allow the second, which is exactly backwards.</para>
     /// </summary>
-    /// <param name="root">
-    /// A root containing <paramref name="target"/>, already established by the caller — so this
-    /// re-resolves the path rather than re-checking containment.
-    /// </param>
-    public ExploreVerdict? Refusal(ToolRoot root, string target)
+    /// <param name="root">A root containing <paramref name="target"/>, already established by the caller.</param>
+    /// <param name="target">The item, named below the root's own path as <see cref="DeclaredRoot.Naming"/> names it.</param>
+    public ExploreVerdict? Refusal(DeclaredRoot root, string target)
     {
-        if (LongPath.Configured(root.Path) is not { } rootPath)
-        {
-            return null;
-        }
+        var rootPath = root.Path;
 
         if (target.Equals(rootPath, StringComparison.OrdinalIgnoreCase))
         {
-            return ExploreVerdict.Refuse(root.Reason);
+            return ExploreVerdict.Refuse(root.Root.Reason);
         }
 
         // Empty only if the remainder is separators alone, which Configured has already collapsed
@@ -55,12 +50,12 @@ internal sealed class ToolRootChildren(IFileSystem fileSystem)
         if (target[rootPath.Length..].Split(Separators, StringSplitOptions.RemoveEmptyEntries)
             is not [var child, ..])
         {
-            return ExploreVerdict.Refuse(root.Reason);
+            return ExploreVerdict.Refuse(root.Root.Reason);
         }
 
         // A file or a link named like a recognised folder is refused here rather than allowed by its
         // name: the plan lists folders, or declines links, and so never offered it (§7.1).
-        return Recognises(root, rootPath, child) switch
+        return Recognises(root.Root, rootPath, child) switch
         {
             true => null,
             null => ExploreVerdict.Refuse(

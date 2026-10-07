@@ -54,40 +54,63 @@ public sealed record TempMarkerFindings(
     /// <para><b>Except where the place says it speaks for itself alone.</b> A recognised path inside one
     /// of <see cref="ClaimRoots"/> is claimed as that place, so the temporary-folder row goes on taking,
     /// on its own rules, what sits beside it.</para>
+    ///
+    /// <para><b>Asked of the folders, and named as each folder is.</b> A setting may name a tool's
+    /// place through a letter <c>subst</c> made for the temporary folder, or another mount of its
+    /// volume, and a claim the temporary-folder row cannot see is an entry it takes on its age.</para>
     /// </summary>
-    public IReadOnlyList<string> ClaimsIn(IReadOnlyList<string> folders)
+    /// <param name="reach">
+    /// The folder at a path, at every path it is reachable at, kept by the caller for its planning pass,
+    /// because each place's folder is asked about for every temporary folder.
+    /// </param>
+    public IReadOnlyList<string> ClaimsIn(IReadOnlyList<string> folders, Func<string, ReachedFolder> reach)
     {
         ArgumentNullException.ThrowIfNull(folders);
+        ArgumentNullException.ThrowIfNull(reach);
 
         var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var claimRoots = ClaimRoots.Select(reach).ToList();
 
         foreach (var folder in folders)
         {
             var root = Path.TrimEndingDirectorySeparator(folder);
-            var canonical = LongPath.Unaliased(root);
+            var reached = reach(root);
+
+            // Each place that claims only itself, named below this folder, so a recognised path named
+            // the same way is matched by its text.
+            var places = claimRoots
+                .Select(reached.PathTo)
+                .OfType<string>()
+                .Where(place => place != ".")
+                .ToList();
 
             foreach (var path in Recognised)
             {
-                var unaliased = LongPath.Unaliased(path);
-                var relative = Path.GetRelativePath(canonical, unaliased);
-
-                if (relative == "." || relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+                if (Below(reached, path, reach) is not { } relative)
                 {
                     continue;
                 }
 
-                var place = ClaimRoots
-                    .Select(claimRoot => LongPath.Unaliased(claimRoot))
-                    .FirstOrDefault(claimRoot => LongPath.Contains(claimRoot, unaliased));
+                var place = places.FirstOrDefault(place =>
+                    relative.Equals(place, StringComparison.OrdinalIgnoreCase)
+                    || relative.StartsWith(place + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
 
-                claimed.Add(place is null
-                    ? Path.Combine(root, relative.Split(Path.DirectorySeparatorChar, 2)[0])
-                    : Path.Combine(root, Path.GetRelativePath(canonical, place)));
+                claimed.Add(Path.Combine(root, place ?? relative.Split(Path.DirectorySeparatorChar, 2)[0]));
             }
         }
 
         return [.. claimed];
     }
+
+    /// <summary>
+    /// Where <paramref name="path"/> lies below <paramref name="folder"/>, or null where it is not below
+    /// it. Its own folder is followed rather than the path, because the paths are every entry a marker
+    /// recognised and a few folders hold them all.
+    /// </summary>
+    private static string? Below(ReachedFolder folder, string path, Func<string, ReachedFolder> reach) =>
+        Path.GetDirectoryName(path) is not { } parent || folder.PathTo(reach(parent)) is not { } above
+            ? null
+            : above == "." ? Path.GetFileName(path) : Path.Combine(above, Path.GetFileName(path));
 }
 
 /// <summary>

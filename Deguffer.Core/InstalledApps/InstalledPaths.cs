@@ -11,9 +11,23 @@ namespace Deguffer.Core.InstalledApps;
 /// Deguffer probes <c>System32</c> through the redirection to <c>SysWOW64</c>, and a 64-bit Deguffer
 /// expands a 32-bit entry's <c>%ProgramFiles%</c> to the 64-bit folder. Absence in one view proves
 /// nothing, so a path counts as absent only where every view of it is absent.</para>
+///
+/// <para><b>A path is placed below those folders as folders, not as text.</b> An entry may name the
+/// system folder through another path to it: <c>S:\System32</c> with <c>S:</c> substituted for
+/// <c>C:\Windows</c>, or <c>D:\SysMount\Windows\System32</c> with the system volume also mounted
+/// there. Compared as text, neither was below any of them, so it was asked about in one view only, and
+/// its absence there read as the program gone. <see cref="ReachedFolder"/> follows both sides to every
+/// path each is reachable at.</para>
 /// </summary>
-public sealed partial class InstalledPaths(IPathProbe probe, ISystemDirectories system)
+/// <param name="volumes">Asked every other path an entry's path and each of the folders is reachable at.</param>
+public sealed partial class InstalledPaths(IPathProbe probe, ISystemDirectories system, IVolumeInventory volumes)
 {
+    /// <summary>
+    /// Each path followed the first time it is asked about, for the life of one reading (G4). Following
+    /// one asks the machine where its volume is mounted, and every entry is asked about several times.
+    /// </summary>
+    private readonly Dictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The three names of the Windows system folder: native, 32-bit, and native as a 32-bit process reaches it.</summary>
     private readonly IReadOnlyList<string> _systemFolders = Named(
         ["System32", "SysWOW64", "Sysnative"],
@@ -84,24 +98,39 @@ public sealed partial class InstalledPaths(IPathProbe probe, ISystemDirectories 
     private static IReadOnlyList<string> Named(IEnumerable<string> folders, Func<string, string> path) =>
         [.. folders.Where(folder => folder.Length > 0).Select(folder => Path.TrimEndingDirectorySeparator(path(folder)))];
 
-    private static void AddViews(List<string> views, string path, IReadOnlyList<string> folders)
+    /// <summary>
+    /// The same path under each of <paramref name="folders"/>, where it is at or below one of them at
+    /// any path either is reachable at.
+    /// </summary>
+    private void AddViews(List<string> views, string path, IReadOnlyList<string> folders)
     {
-        if (folders.FirstOrDefault(folder => LongPath.Contains(folder, path)) is not { } under)
+        var place = Reach(path);
+
+        if (folders.Select(folder => Reach(folder).PathTo(place)).FirstOrDefault(relative => relative is not null) is not { } rest)
         {
             return;
         }
 
-        var rest = path[under.Length..];
-
         foreach (var folder in folders)
         {
-            var view = folder + rest;
+            var view = rest == "." ? folder : Path.Join(folder, rest);
 
             if (!views.Contains(view, StringComparer.OrdinalIgnoreCase))
             {
                 views.Add(view);
             }
         }
+    }
+
+    private ReachedFolder Reach(string path)
+    {
+        if (!_reached.TryGetValue(path, out var folder))
+        {
+            folder = ReachedFolder.At(path, volumes);
+            _reached[path] = folder;
+        }
+
+        return folder;
     }
 
     /// <summary>Present where any view is, then refused where any view is, and absent only where every view is.</summary>
