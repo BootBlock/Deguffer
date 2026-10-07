@@ -18,7 +18,7 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Tier 2</b>, on <see cref="PlaywrightBrowsersProvider"/>'s reasoning. Nothing fetches a
 /// model back in the background: the next subject or object selection is what discovers the model is
 /// gone, and getting it back needs a connection and, on Affinity 3, a signed-in account. So the row
-/// is offered and never pre-selected, and §7's acknowledgement applies.</para>
+/// is offered and not pre-selected, and §7's acknowledgement applies.</para>
 ///
 /// <para><b>§5.1 has an answer here, and it is not a command.</b> Affinity's own control is
 /// Settings → Machine Learning, which lists each model category and installs or uninstalls it, and

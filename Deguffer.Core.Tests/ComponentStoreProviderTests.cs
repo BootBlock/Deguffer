@@ -27,6 +27,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     private readonly string _store;
     private readonly string _packages;
     private readonly string _system32;
+    private readonly string _installer;
 
     public ComponentStoreProviderTests()
     {
@@ -35,9 +36,11 @@ public sealed class ComponentStoreProviderTests : IDisposable
         _temp.CreateFile(4096, "Windows", "WinSxS", "Manifests", "component.manifest");
         _temp.CreateFile(2048, "Windows", "servicing", "Packages", "Package_for_RollupFix.mum");
         _temp.CreateFile(1024, "Windows", "System32", "kernel32.dll");
+        _temp.CreateFile(512, "Windows", "Installer", "patch.msp");
         _store = Path.Combine(_system.WindowsDirectory, "WinSxS");
         _packages = Path.Combine(_system.WindowsDirectory, "servicing", "Packages");
         _system32 = Path.Combine(_system.WindowsDirectory, "System32");
+        _installer = Path.Combine(_system.WindowsDirectory, "Installer");
     }
 
     public void Dispose() => _temp.Dispose();
@@ -403,8 +406,8 @@ public sealed class ComponentStoreProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.2 and §5.6: no path is a target, and the store, Windows' record of its updates and Windows
-    /// itself are protected on their contents as well as their existence.
+    /// §5.2 and §5.6: no path is a target, and the store, Windows' record of its updates, Windows
+    /// itself and §9's installer cache are protected on their contents as well as their existence.
     /// </summary>
     [Fact]
     public async Task TheRunTargetsNoPathAndProtectsTheStoreAndWindows()
@@ -418,7 +421,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.Empty(Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps)).MeasuredPaths);
         Assert.All(
-            [_store, _packages, _system32],
+            [_store, _packages, _system32, _installer],
             path => Assert.Contains(plan.ProtectedPaths, p =>
                 p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.HeldContentBefore));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
@@ -429,6 +432,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     [InlineData("WinSxS")]
     [InlineData("servicing")]
     [InlineData("System32")]
+    [InlineData("Installer")]
     public async Task ACommandThatEmptiedAProtectedFolderFailsTheNegative(string folder)
     {
         var emptied = folder == "servicing" ? _packages : Path.Combine(_system.WindowsDirectory, folder);

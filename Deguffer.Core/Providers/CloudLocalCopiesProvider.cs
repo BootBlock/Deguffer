@@ -12,7 +12,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Tier 2.</b> Nothing is lost, and a file released is downloaded again the next time it is
 /// opened. That is §3's "regenerable, with cost", and offline it is a file that will not open until the
-/// machine reconnects, so it is never pre-selected.</para>
+/// machine reconnects, so it is not pre-selected.</para>
 ///
 /// <para><b>Recognised sync apps only (§5.2).</b> The mechanism is Windows' own and any sync app can
 /// register a root, but what each does with a released file is the app's decision. A root whose app is

@@ -14,7 +14,8 @@ public enum SafetyTier
 
     /// <summary>
     /// Tier 2 — regenerable, with cost. Re-created only by re-downloading gigabytes or
-    /// re-indexing for minutes. Offered, but never pre-selected.
+    /// re-indexing for minutes. Offered, but not pre-selected: only a tick the user gave before is
+    /// remembered.
     /// </summary>
     RegenerableWithCost = 2,
 

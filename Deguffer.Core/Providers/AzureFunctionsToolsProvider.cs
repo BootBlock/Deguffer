@@ -19,7 +19,7 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Tier 2</b>, on <see cref="PlaywrightBrowsersProvider"/>'s reasoning and for the same
 /// cause. A package cache refills itself the next time the tool needs it; a release does not refill
 /// itself so much as get fetched again, on the tooling's schedule rather than the developer's, and
-/// the wait lands in the middle of opening a project. So the row is offered and never pre-selected,
+/// the wait lands in the middle of opening a project. So the row is offered and not pre-selected,
 /// and §7's acknowledgement applies.</para>
 ///
 /// <para>§5.1 has no answer here rather than being skipped: neither Visual Studio nor the Core Tools

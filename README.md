@@ -259,12 +259,17 @@ Deguffer.Core/
   Safety/        tier classification, disposable-child rules, long paths, machine seams
   Scanning/      size aggregation, free space
   Execution/     plan model, planner, executor, post-run verification
+  Choosing/      per-item selection: groups, columns, the search filter, each step's choice
   Providers/     one class per known cache
+  Cloud/         cloud-file placeholders: reading them and releasing local copies
+  SystemProtection/ restore points and shadow copy storage, through Windows' own interfaces
+  VirtualDisks/  WSL and Docker Desktop virtual disks: where they are, and the vendor's route to shrink each
   Exploring/     whole-drive view: file-table reads, tree building, what each location is
   Memory/        where memory goes: process and service tables, checked figures, the memory tree
   InstalledApps/ Windows' installed programs list: stale entries, reg.exe backups, uninstallers
   Configuration/ user preferences
   Diagnostics/   run logging
+  Viewing/       the live list and size ordering the views share
 Deguffer.Core.Tests/
 Deguffer.Testing/  the fakes and fixtures the test projects use
 Deguffer.App/  WinUI 3 shell, MVVM over Core
