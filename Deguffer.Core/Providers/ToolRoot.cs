@@ -115,6 +115,20 @@ public sealed record ToolRoot(
 
         return next.Select(level => Folders(level.Key, reason, level.Value.Contains));
     }
+
+    /// <summary>
+    /// Each of <paramref name="roots"/> at or below <paramref name="folder"/>, declared again below
+    /// <paramref name="name"/>, another path the folder is reached at.
+    ///
+    /// <para>For a provider that plans one folder named two ways once, through a letter <c>subst</c>
+    /// made or another mount of its volume. Explore compares a folder it is asked about with each root
+    /// as the root is named, so a root declared under one name alone refuses nothing at the other.</para>
+    /// </summary>
+    public static IEnumerable<ToolRoot> AlsoAt(IEnumerable<ToolRoot> roots, string folder, string name) =>
+        from root in roots
+        where LongPath.Contains(folder, root.Path)
+        let relative = System.IO.Path.GetRelativePath(folder, root.Path)
+        select root with { Path = relative == "." ? name : System.IO.Path.Combine(name, relative) };
 }
 
 /// <summary>What a <see cref="ToolRoot"/> says of the entries inside it.</summary>

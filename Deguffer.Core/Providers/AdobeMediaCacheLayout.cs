@@ -31,10 +31,16 @@ namespace Deguffer.Core.Providers;
 /// Whether a folder Adobe may be using was left alone or could not be placed, so a plan with nothing
 /// in it must not read as clear.
 /// </param>
+/// <param name="OtherNames">
+/// Each name a setting gave a folder in <paramref name="Roots"/> that the root is not named by, with the
+/// root's own name. The folder is planned once, under its first name, and Explore refuses it at each,
+/// because Explore compares a folder it is asked about with each root as that root is named.
+/// </param>
 public sealed record AdobeMediaCacheLayout(
     IReadOnlyList<DeclaredRoot> Roots,
     IReadOnlyList<PlanNote> Notes,
-    bool LeftSomethingUnexamined)
+    bool LeftSomethingUnexamined,
+    IReadOnlyList<(string Name, string Root)> OtherNames)
 {
     /// <summary>The key under <c>HKEY_CURRENT_USER</c> each release's <c>Common</c> key sits in.</summary>
     public const string SettingsKey = @"Software\Adobe";
@@ -96,13 +102,18 @@ public sealed record AdobeMediaCacheLayout(
         var withheld = false;
 
         var common = DefaultFolder(environment);
-        var folders = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        // One folder however each setting names it, so a release naming the default folder through a
+        // letter subst made, or another mount of its volume, does not declare it twice: a second
+        // declaration offers each cache folder again, and asserts nothing of the user's data beside it.
+        var folders = new List<(string Path, ReachedFolder Reached, List<string> Names)>();
+        var otherNames = new List<(string Name, string Root)>();
 
         // A roaming profile can put the default folder on a share, where it is withheld for the reason
         // a moved one is. Said only where something is there, so a machine without Adobe says nothing.
         if (HostVolume.For(volumes, common) is { IsLocalDisk: true })
         {
-            folders[common] = [FilesFolder, PeakFolder, DatabaseFolder];
+            folders.Add((common, ReachedFolder.At(common, volumes), [FilesFolder, PeakFolder, DatabaseFolder]));
         }
         else if (LongPath.ProbeDirectory(common) is not PathPresence.Absent)
         {
@@ -123,26 +134,31 @@ public sealed record AdobeMediaCacheLayout(
 
         // A setting can name a folder inside another cache folder, such as the old default one. Emptying
         // the outer folder takes the inner one with it, so the inner one is left out: declared as well,
-        // it would be asserted to survive a run that is bound to remove it.
-        var cacheFolders = folders.SelectMany(folder => folder.Value.Select(name => Path.Combine(folder.Key, name))).ToList();
+        // it would be asserted to survive a run that is bound to remove it. Asked of the folders, because
+        // the setting may name the inner one through an alias the outer one is not named by.
+        var cacheFolders = folders
+            .SelectMany(folder => folder.Names.Select(name =>
+                (Root: folder.Path, Name: name, Reached: ReachedFolder.At(Path.Combine(folder.Path, name), volumes))))
+            .ToList();
 
-        bool InsideAnother(string path) =>
-            cacheFolders.Any(other => !other.Equals(path, StringComparison.OrdinalIgnoreCase) && LongPath.Contains(other, path));
+        var roots = cacheFolders
+            .Where(inner => !cacheFolders.Exists(outer => !outer.Reached.IsSameAs(inner.Reached) && outer.Reached.Holds(inner.Reached)))
+            .GroupBy(folder => folder.Root, StringComparer.OrdinalIgnoreCase)
+            .Select(folder => (Path: folder.Key, Names: folder.Select(cache => cache.Name).ToList()))
+            .ToList();
 
         return new AdobeMediaCacheLayout(
             [
-                .. folders
-                    .Select(folder => (folder.Key, Names: folder.Value.Where(name => !InsideAnother(Path.Combine(folder.Key, name))).ToList()))
-                    .Where(folder => folder.Names.Count > 0)
-                    .Select(folder => new DeclaredRoot(
-                        folder.Key,
-                        folder.Key.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonReason : ChosenReason,
-                        RequiresElevation: false,
-                        [.. folder.Names.Select(name => new DeclaredLocation(name, ReasonFor(name), DeclaredLocationKind.DirectoryContents))],
-                        folder.Key.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonSurvivors : [])),
+                .. roots.Select(folder => new DeclaredRoot(
+                    folder.Path,
+                    folder.Path.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonReason : ChosenReason,
+                    RequiresElevation: false,
+                    [.. folder.Names.Select(name => new DeclaredLocation(name, ReasonFor(name), DeclaredLocationKind.DirectoryContents))],
+                    folder.Path.Equals(common, StringComparison.OrdinalIgnoreCase) ? CommonSurvivors : [])),
             ],
             notes,
-            withheld);
+            withheld,
+            [.. otherNames.Where(other => roots.Exists(root => root.Path.Equals(other.Root, StringComparison.OrdinalIgnoreCase)))]);
 
         // One location from one release's settings. A value that is not a full path is said out loud,
         // because Adobe may be using a folder nobody here can name.
@@ -173,7 +189,21 @@ public sealed record AdobeMediaCacheLayout(
                 return;
             }
 
-            var names = folders.TryGetValue(chosen, out var existing) ? existing : folders[chosen] = [];
+            var reached = ReachedFolder.At(chosen, volumes);
+            var index = folders.FindIndex(known => known.Reached.IsSameAs(reached));
+
+            if (index < 0)
+            {
+                folders.Add((chosen, reached, []));
+                index = folders.Count - 1;
+            }
+            else if (!folders[index].Path.Equals(chosen, StringComparison.OrdinalIgnoreCase)
+                && !otherNames.Exists(other => other.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase)))
+            {
+                otherNames.Add((chosen, folders[index].Path));
+            }
+
+            var names = folders[index].Names;
 
             if (!names.Contains(folder, StringComparer.OrdinalIgnoreCase))
             {

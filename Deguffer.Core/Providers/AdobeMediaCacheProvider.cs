@@ -137,7 +137,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
             .Select(location => location.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        List<ToolRoot> roots =
         [
             running
                 ? new ToolRoot(common, HeldReason, static _ => false)
@@ -151,6 +151,12 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
                     survivor.Path,
                     survivor.Reason,
                     chosen.Contains(survivor.Path) ? static _ => true : static _ => false)),
+        ];
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. roots,
+            .. Layout.OtherNames.SelectMany(other => ToolRoot.AlsoAt(roots, other.Root, other.Name)),
         ]);
     }
 
