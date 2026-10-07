@@ -96,8 +96,8 @@ internal sealed class ExploreDescent
 
         var now = _clock.Now;
 
-        // Animation effects turned off while the folder was opening: it arrives rather than playing
-        // out a move the reader has just asked not to see.
+        // Animation effects turned off or on while the folder was opening: it arrives rather than
+        // playing out a move made under the setting the reader has just changed.
         if (move.IsOverAt(now) || _motion.For(MotionToken.Entrance) != move.Motion)
         {
             Finish();

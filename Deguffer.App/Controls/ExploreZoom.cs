@@ -26,7 +26,7 @@ internal sealed class ExploreZoom
     private const double Notch = 120;
 
     /// <summary>
-    /// How long the wheel has to rest before a zoom that jumped is drawn afresh where it landed. The
+    /// How long a zoom that jumped has to rest before it is drawn afresh where it landed. The
     /// jump is on screen at once, over the drawings kept, as each frame of a glide is. Drawing at every
     /// notch would rasterise for a zoom superseded before the paint finished, and a precision touchpad
     /// reports many notches a second, so the map would fall behind the hand.
@@ -200,8 +200,8 @@ internal sealed class ExploreZoom
             return;
         }
 
-        // Animation effects turned off while the picture was moving: it lands rather than playing out
-        // a move the reader has just asked not to see.
+        // Animation effects turned off or on while the picture was moving: it lands where it was going
+        // rather than playing out a move made under the setting the reader has just changed.
         if (_motion.For(MotionToken.Camera) != glide.Motion)
         {
             Land();
