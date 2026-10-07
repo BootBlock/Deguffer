@@ -138,10 +138,13 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
                 },
             ],
             ProtectedPaths = [.. Protect(
+            [
                 (Path.Combine(_system.WindowsDirectory, "SoftwareDistribution"),
                     "Windows Update's own folder, which the Delivery Optimization command does not clear."),
                 (Path.Combine(_system.WindowsDirectory, "SoftwareDistribution", "DataStore"),
-                    "The database Windows Update keeps its history of installed updates in.")),
+                    "The database Windows Update keeps its history of installed updates in."),
+                .. WindowsSystemRoot.ExclusionsUnder(_system.WindowsDirectory),
+            ]),
                 .. serviceFolder.Protected],
             Notes =
             [

@@ -1547,7 +1547,8 @@ provider.
 **Shipped for OneDrive** as `ReleaseLocalCopiesStep` and `CloudLocalCopiesProvider`, on the grounds
 recorded in issue #93. The step unpins each chosen placeholder with `CfSetPinState` and reports the
 bytes as requested, never reclaimed. Its §5.6 negative asserts that every file it named is still
-there and still a cloud file. A scratch sync root registered by the test suite showed the API unpin a
+there; a file the sync app turned back into an ordinary file also counts. A scratch sync root
+registered by the test suite showed the API unpin a
 file with unsynced edits, a pinned file and an ordinary file without complaint, so every rule is
 Deguffer's own, asked again through the handle that unpins. Google Drive and Dropbox, named above, do
 not qualify: Google Drive uses no placeholders, and Dropbox's mechanism is unestablished. Nextcloud and
