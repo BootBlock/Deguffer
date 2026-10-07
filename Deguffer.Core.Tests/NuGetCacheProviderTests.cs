@@ -24,7 +24,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
     [Fact]
     public async Task ReportsNotPresentWithoutTheDotnetSdk()
     {
-        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
 
         Assert.False(await provider.IsPresentAsync());
         Assert.True((await provider.PlanAsync()).IsEmpty);
@@ -156,7 +156,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"global-packages: {before_[0]}\nhttp-cache: {before_[1]}");
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
 
         var planned = await provider.PlanAsync();
         var step = Assert.IsType<RunCommandStep>(Assert.Single(planned.Steps));
@@ -219,12 +219,35 @@ public sealed class NuGetCacheProviderTests : IDisposable
             n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(http, StringComparison.Ordinal));
     }
 
-    private Task<CleanupPlan> PlanReporting(string listing)
+    /// <summary>
+    /// The case above with NuGet reporting the cache through another mount of the profile's volume:
+    /// the folder holding it is still emptied by the command, so it is not asserted unchanged. A
+    /// folder beside it is still protected (§5.6). The mount is a folder of its own here, standing in
+    /// for the same folder reached the other way.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotProtectAFolderHoldingACacheNuGetReportsThroughAnotherMount()
+    {
+        var holder = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "relocated-caches");
+        _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "relocated-caches", "http");
+        var beside = _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "something-else");
+        using var mirror = new TempDirectory();
+        var volumes = new FakeVolumeInventory().With(_environment.UserProfile + @"\", alsoMountedAt: [mirror.Path + @"\"]);
+        var reported = mirror.CreateDirectory("AppData", "Local", "NuGet", "relocated-caches", "http");
+
+        var plan = await PlanReporting($"http-cache: {reported}", volumes);
+
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(holder, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(beside, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private Task<CleanupPlan> PlanReporting(string listing, IVolumeInventory? volumes = null)
     {
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", listing);
 
-        return new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+        return new NuGetCacheProvider(
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory()).PlanAsync();
     }
 
     /// <summary>
@@ -242,7 +265,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"global-packages: {packages}\\\ntemp: {scratch}\\");
 
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
 
         Assert.Equal([scratch], await provider.ClaimedEntriesAsync([temporary]));
         Assert.Empty(await provider.ClaimedEntriesAsync([_temp.CreateDirectory("elsewhere")]));
@@ -260,7 +283,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"temp: {Path.Combine(temporary, "NuGetScratch")}\\");
 
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
 
         Assert.Empty(await provider.ClaimedEntriesAsync([temporary]));
     }
@@ -285,9 +308,32 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"temp: {Path.Combine(asReported, "NuGetScratch")}\\");
 
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
 
         Assert.Equal([scratch], await provider.ClaimedEntriesAsync([temporary]));
+    }
+
+    /// <summary>
+    /// NuGet reporting its scratch folder through <c>S:</c>, a letter <c>subst</c> made for the
+    /// temporary folder, still names an entry of that folder, which is claimed as the temporary folder
+    /// names it. A scratch folder one level further down reached the same way is not one of its entries.
+    /// </summary>
+    [Theory]
+    [InlineData(@"S:\NuGetScratch", true)]
+    [InlineData(@"S:\nested\NuGetScratch", false)]
+    public async Task ClaimsItsScratchFolderWhenNuGetReportsItThroughASubstitutedLetter(string reported, bool claimed)
+    {
+        var scratch = _temp.CreateDirectory("temp", "NuGetScratch");
+        var temporary = Path.GetDirectoryName(scratch)!;
+
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", $"temp: {reported}\\");
+
+        var provider = new NuGetCacheProvider(
+            _environment, runner, FakeProcessInspector.NothingRunning,
+            volumes: new FakeVolumeInventory().Substituting(@"S:\", temporary));
+
+        Assert.Equal(claimed ? [scratch] : [], await provider.ClaimedEntriesAsync([temporary]));
     }
 
     /// <summary>Without the SDK nothing offers the scratch folder here, so the temporary-folder row keeps it.</summary>
@@ -295,7 +341,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
     public async Task ClaimsNothingWithoutTheDotnetSdk()
     {
         var scratch = _temp.CreateDirectory("temp", "NuGetScratch");
-        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
 
         Assert.Empty(await provider.ClaimedEntriesAsync([Path.GetDirectoryName(scratch)!]));
     }
@@ -326,7 +372,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", listing);
 
-        var plan = await new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+        var plan = await new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory()).PlanAsync();
         return (plan, locations);
     }
 }
