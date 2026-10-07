@@ -15,39 +15,48 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// through. What is drawn and what is reported under the pointer are therefore one rule rather
 /// than two that have to be kept in step.</para>
 /// </summary>
-public static class SectorRasteriser
+public sealed class SectorRasteriser : CanvasPainter
 {
+    private readonly SectorHitTest _hits;
+
+    private readonly TileColour[] _colours;
+
     /// <summary>
-    /// Paint <paramref name="hits"/>' sunburst into <paramref name="pixels"/>, a BGRA buffer of
-    /// <paramref name="width"/> × <paramref name="height"/>.
-    ///
-    /// <para>The buffer belongs to the caller and is overwritten in full, for the reason
-    /// <see cref="TileRasteriser.Paint"/> gives (G5).</para>
+    /// Get ready to paint <paramref name="hits"/>' sunburst on a canvas of <paramref name="width"/>
+    /// by <paramref name="height"/>, each sector in the colour <paramref name="colourOf"/> gives its
+    /// node at its depth.
     /// </summary>
-    public static void Paint(
-        byte[] pixels,
+    public SectorRasteriser(
         SectorHitTest hits,
         int width,
         int height,
         TileColour background,
         Func<int, int, TileColour> colourOf)
+        : base(width, height, background)
     {
-        ArgumentNullException.ThrowIfNull(pixels);
         ArgumentNullException.ThrowIfNull(hits);
         ArgumentNullException.ThrowIfNull(colourOf);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-        if (pixels.Length < PixelBuffer.LengthFor(width, height))
+        _hits = hits;
+
+        // One colour per sector, before a single pixel is written. Resolving it per pixel instead
+        // would walk a node's ancestors and index the palette three million times per repaint on a
+        // 4K canvas, for an answer that changes only with the sector (G4). TileRasteriser hoists
+        // its colours the same way, for the same reason.
+        var sectors = hits.Sunburst.Sectors;
+
+        _colours = new TileColour[sectors.Count];
+
+        for (var i = 0; i < sectors.Count; i++)
         {
-            throw new ArgumentException(
-                $"A {width}x{height} canvas needs {PixelBuffer.LengthFor(width, height)} bytes, not {pixels.Length}.",
-                nameof(pixels));
+            _colours[i] = colourOf(sectors[i].Node, sectors[i].Depth);
         }
+    }
 
-        PixelBuffer.Fill(pixels, background);
-
-        var sunburst = hits.Sunburst;
+    /// <summary>Paint the part of the disc inside <paramref name="region"/>.</summary>
+    protected override void Draw(byte[] pixels, CanvasRegion region)
+    {
+        var sunburst = _hits.Sunburst;
         var sectors = sunburst.Sectors;
 
         if (sectors.Count == 0)
@@ -55,28 +64,12 @@ public static class SectorRasteriser
             return;
         }
 
-        // One colour per sector, before a single pixel is written. Resolving it inside the loop
-        // instead would walk a node's ancestors and index the palette three million times per
-        // repaint on a 4K canvas, for an answer that changes only with the sector (G4).
-        // TileRasteriser hoists its colours the same way, for the same reason.
-        var colours = new TileColour[sectors.Count];
+        var left = Math.Max(region.X, (int)MathF.Floor(sunburst.CentreX - sunburst.Radius));
+        var right = Math.Min(region.Right, (int)MathF.Ceiling(sunburst.CentreX + sunburst.Radius));
+        var top = Math.Max(region.Y, (int)MathF.Floor(sunburst.CentreY - sunburst.Radius));
+        var bottom = Math.Min(region.Bottom, (int)MathF.Ceiling(sunburst.CentreY + sunburst.Radius));
 
-        for (var i = 0; i < sectors.Count; i++)
-        {
-            colours[i] = colourOf(sectors[i].Node, sectors[i].Depth);
-        }
-
-        var left = Math.Max(0, (int)MathF.Floor(sunburst.CentreX - sunburst.Radius));
-        var right = Math.Min(width, (int)MathF.Ceiling(sunburst.CentreX + sunburst.Radius));
-        var top = Math.Max(0, (int)MathF.Floor(sunburst.CentreY - sunburst.Radius));
-        var bottom = Math.Min(height, (int)MathF.Ceiling(sunburst.CentreY + sunburst.Radius));
-
-        if (right <= left || bottom <= top)
-        {
-            return;
-        }
-
-        void Row(int y)
+        for (var y = top; y < bottom; y++)
         {
             // Sampled at the middle of the pixel rather than at its corner. On a corner every
             // sector is measured half a pixel too far towards the top left of the canvas, and the
@@ -96,7 +89,7 @@ public static class SectorRasteriser
                 var angle = SectorHitTest.AngleOf(dx, dy);
 
                 // The ground is already in the buffer, so a gap in a ring needs nothing drawn.
-                if (hits.AtPolar(radius, angle) is not { } index)
+                if (_hits.AtPolar(radius, angle) is not { } index)
                 {
                     continue;
                 }
@@ -104,11 +97,9 @@ public static class SectorRasteriser
                 var (nx, ny) = Normal(sectors[index], dx, dy, radius, angle);
 
                 CushionShading.Write(
-                    pixels, ((y * width) + x) * 4, colours[index], CushionShading.LightAt(nx, ny));
+                    pixels, ((y * Width) + x) * 4, _colours[index], CushionShading.LightAt(nx, ny));
             }
         }
-
-        PixelBuffer.Rows(top, bottom, (right - left) * (bottom - top), Row);
     }
 
     /// <summary>

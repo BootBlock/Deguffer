@@ -10,9 +10,9 @@ namespace Deguffer.Core.Tests;
 /// rendering of the same shape on its own rather than against a repeat of the shading arithmetic —
 /// so a change to the shading model cannot make them pass for the wrong reason.
 ///
-/// <para>Run on a canvas below the threshold for splitting the work across threads and on one well
-/// above it, because the record of which pixels are spoken for belongs to a band. An index that is
-/// right within one band and wrong across two would pass on the small canvas alone.</para>
+/// <para>Run on a canvas of one region and on one of many, because the record of which pixels are
+/// spoken for belongs to a region. An index that is right within one region and wrong across two
+/// would pass on the small canvas alone.</para>
 /// </summary>
 public sealed class NestedPaintingTests
 {
@@ -86,13 +86,13 @@ public sealed class NestedPaintingTests
     /// stops with the ground still showing through it.
     /// </summary>
     [Fact]
-    public void ABandIsFullOnlyOnceEveryPixelOfItIsSpokenFor()
+    public void ARegionIsFullOnlyOnceEveryPixelOfItIsSpokenFor()
     {
-        var claimed = new ClaimedPixels(width: 3, top: 4, bottom: 6);
+        var claimed = new ClaimedPixels(new CanvasRegion(X: 2, Y: 4, Width: 3, Height: 2));
 
         var pixels = (
             from y in Enumerable.Range(4, 2)
-            from x in Enumerable.Range(0, 3)
+            from x in Enumerable.Range(2, 3)
             select (X: x, Y: y)).ToList();
 
         foreach (var (x, y) in pixels)
@@ -119,8 +119,8 @@ public sealed class NestedPaintingTests
     {
         var pixels = new byte[PixelBuffer.LengthFor(width, height)];
 
-        TileRasteriser.Paint(
-            pixels, tiles, width, height, Ground, (node, depth) => Hues.Colour(node, depth));
+        new TileRasteriser(tiles, width, height, Ground, (node, depth) => Hues.Colour(node, depth))
+            .PaintRegions(pixels);
 
         return pixels;
     }

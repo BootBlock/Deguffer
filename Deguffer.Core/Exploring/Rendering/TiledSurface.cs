@@ -60,8 +60,8 @@ public sealed class TiledSurface : ExploreSurface
 
     public override bool HasVolumeBeside { get; }
 
-    public override void Paint(byte[] pixels, TileColour background) =>
-        TileRasteriser.Paint(pixels, _tiles, Width, Height, background, ColourFor);
+    public override CanvasPainter Painter(TileColour background) =>
+        new TileRasteriser(_tiles, Width, Height, background, ColourFor);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;

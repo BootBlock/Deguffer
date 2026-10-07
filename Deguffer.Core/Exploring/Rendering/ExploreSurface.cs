@@ -168,7 +168,11 @@ public abstract class ExploreSurface
     /// </summary>
     public abstract IReadOnlyList<ExploreLabel> Labels { get; }
 
-    protected ISizedTree Tree { get; }
+    /// <summary>
+    /// The tree drawn. A caller resolving a point on this drawing to a node needs it, because the
+    /// node is a number in this tree and means nothing in another.
+    /// </summary>
+    public ISizedTree Tree { get; }
 
     /// <summary>The node being drawn, which is the whole canvas rather than the tree's own root.</summary>
     protected int Root { get; }
@@ -286,8 +290,11 @@ public abstract class ExploreSurface
         };
     }
 
-    /// <summary>Paint the whole canvas into <paramref name="pixels"/>, a BGRA buffer of that size.</summary>
-    public abstract void Paint(byte[] pixels, TileColour background);
+    /// <summary>
+    /// What paints this drawing on <paramref name="background"/>, a region at a time. Made once per
+    /// paint of the drawing, because it works out every shape's colour before it paints a pixel.
+    /// </summary>
+    public abstract CanvasPainter Painter(TileColour background);
 
     /// <summary>What is at this canvas point, or null where the point is over nothing.</summary>
     public abstract ExploreHit? At(float x, float y);

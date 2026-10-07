@@ -343,7 +343,8 @@ public sealed class TreemapZoomTests
     {
         var pixels = new byte[PixelBuffer.LengthFor(width, height)];
 
-        TileRasteriser.Paint(pixels, tiles, width, height, TileColour.FromRgb(0x123456), (_, depth) => Hues.Colour(0, depth));
+        new TileRasteriser(tiles, width, height, TileColour.FromRgb(0x123456), (_, depth) => Hues.Colour(0, depth))
+            .PaintRegions(pixels);
 
         return pixels;
     }

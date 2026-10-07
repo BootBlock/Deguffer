@@ -180,11 +180,12 @@ public sealed class SectorRenderingTests
         var pixels = new byte[PixelBuffer.LengthFor(Size, Size)];
         // One branch and no depth shading is what these tests want: they ask which pixels a sector
         // covers, and a colour that varied with either would make every assertion two facts.
-        SectorRasteriser.Paint(
-            pixels, new SectorHitTest(sunburst), Size, Size, Ground,
+        new SectorRasteriser(
+            new SectorHitTest(sunburst), Size, Size, Ground,
             (node, _) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
-                : Hues.Colour(0, 0));
+                : Hues.Colour(0, 0))
+            .PaintRegions(pixels);
 
         return pixels;
     }

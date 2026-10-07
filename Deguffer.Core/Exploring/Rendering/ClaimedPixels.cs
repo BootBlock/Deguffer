@@ -1,7 +1,7 @@
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
-/// Which pixels of one band of a canvas already belong to a shape.
+/// Which pixels of one region of a canvas already belong to a shape.
 ///
 /// <para>A treemap's rectangles are nested, so painting them in the layout's order shades every
 /// pixel once for its own shape and once again for each level above it. Measured over a tree of a
@@ -14,7 +14,7 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// so this is a reordering of the same result rather than a different one.</para>
 ///
 /// <para>One bit per pixel. A byte per pixel would put megabytes on the large-object heap for
-/// every band of every repaint, which is the allocation the rasteriser's own buffer contract
+/// every region of every repaint, which is the allocation the rasteriser's own buffer contract
 /// exists to avoid (G5).</para>
 /// </summary>
 public sealed class ClaimedPixels
@@ -22,35 +22,26 @@ public sealed class ClaimedPixels
     private const int PixelsPerWord = 64;
 
     private readonly ulong[] _words;
-    private readonly int _width;
 
     private int _unclaimed;
 
-    /// <summary>
-    /// Track rows <paramref name="top"/> up to but not including <paramref name="bottom"/> of a
-    /// canvas <paramref name="width"/> pixels across.
-    /// </summary>
-    public ClaimedPixels(int width, int top, int bottom)
+    /// <summary>Track the pixels of <paramref name="region"/>.</summary>
+    public ClaimedPixels(CanvasRegion region)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
-        ArgumentOutOfRangeException.ThrowIfLessThan(bottom, top);
+        ArgumentOutOfRangeException.ThrowIfNegative(region.Width, nameof(region));
+        ArgumentOutOfRangeException.ThrowIfNegative(region.Height, nameof(region));
 
-        Top = top;
-        Bottom = bottom;
+        Region = region;
 
-        _width = width;
-        _unclaimed = width * (bottom - top);
+        _unclaimed = region.Width * region.Height;
         _words = new ulong[((_unclaimed + PixelsPerWord) - 1) / PixelsPerWord];
     }
 
-    /// <summary>The first row of the band.</summary>
-    public int Top { get; }
-
-    /// <summary>The row after the last one of the band.</summary>
-    public int Bottom { get; }
+    /// <summary>The pixels tracked.</summary>
+    public CanvasRegion Region { get; }
 
     /// <summary>
-    /// Whether every pixel of the band is spoken for. Nothing drawn after that can show, so the
+    /// Whether every pixel of the region is spoken for. Nothing drawn after that can show, so the
     /// caller can stop rather than walk the shapes it has left.
     /// </summary>
     public bool IsFull => _unclaimed == 0;
@@ -61,7 +52,7 @@ public sealed class ClaimedPixels
     /// </summary>
     public bool Claim(int x, int y)
     {
-        var index = ((y - Top) * _width) + x;
+        var index = ((y - Region.Y) * Region.Width) + (x - Region.X);
         var bit = 1UL << (index % PixelsPerWord);
 
         ref var word = ref _words[index / PixelsPerWord];

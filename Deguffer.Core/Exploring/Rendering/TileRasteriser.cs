@@ -19,93 +19,84 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// controls, which keeps them selectable, scalable with the user's text size, and visible to a
 /// screen reader — none of which a label burnt into a bitmap is.</para>
 /// </summary>
-public static class TileRasteriser
+public sealed class TileRasteriser : CanvasPainter
 {
     /// <summary>
-    /// Paint <paramref name="tiles"/> into <paramref name="pixels"/>, a BGRA buffer of
-    /// <paramref name="width"/> × <paramref name="height"/>.
+    /// The shapes as an array rather than through the interface. Every region walks the whole list,
+    /// so on a 4K canvas of thirty thousand rectangles that is a few million calls through an
+    /// interface indexer returning a 32-byte struct, per repaint (G4). The layouts hand back arrays,
+    /// so the copy is the fallback rather than the usual case.
+    /// </summary>
+    private readonly ExploreTile[] _shapes;
+
+    private readonly TileColour[] _colours;
+
+    /// <summary>
+    /// Get ready to paint <paramref name="tiles"/> on a canvas of <paramref name="width"/> by
+    /// <paramref name="height"/>.
     ///
-    /// <para>The buffer belongs to the caller and is overwritten in full, so a view that repaints
-    /// keeps one and hands it back (G5). At 3840 by 2160 it is 33 MB — every one of them a
-    /// large-object-heap allocation, and the heap is not compacted by default — so allocating per
-    /// repaint would leak tens of megabytes a second for the length of a scan.</para>
+    /// <para><paramref name="colourOf"/> answers what one shape is painted, given its node and its
+    /// depth. Supplied rather than decided here because what a colour means is the surface's choice
+    /// — a hue per branch, or a band per age — and because the tree does not know which node the
+    /// view is currently rooted at, which is what a branch is measured from.</para>
+    /// </summary>
+    public TileRasteriser(
+        IReadOnlyList<ExploreTile> tiles,
+        int width,
+        int height,
+        TileColour background,
+        Func<int, int, TileColour> colourOf)
+        : base(width, height, background)
+    {
+        ArgumentNullException.ThrowIfNull(tiles);
+        ArgumentNullException.ThrowIfNull(colourOf);
+
+        _shapes = tiles as ExploreTile[] ?? [.. tiles];
+
+        // One colour per rectangle, before a single pixel is written, as SectorRasteriser does. Each
+        // region walks the whole list, so resolving a colour inside that walk would climb a node's
+        // ancestors once per region as well as once per rectangle (G4).
+        _colours = new TileColour[_shapes.Length];
+
+        for (var i = 0; i < _shapes.Length; i++)
+        {
+            _colours[i] = colourOf(_shapes[i].Node, _shapes[i].Depth);
+        }
+    }
+
+    /// <summary>
+    /// Paint the rectangles that show in <paramref name="region"/>.
+    ///
+    /// <para>Cut by region, not by rectangle. A treemap of a real volume is tens of thousands of
+    /// small rectangles and a handful of large ones, so a partition drawn around each rectangle in
+    /// turn leaves almost every one of them below any size worth handing to a second thread, and the
+    /// canvas is shaded on one core while the rest sit idle (G4). A region owns its pixels outright,
+    /// and every rectangle is offered to every region, clipped to it, so the picture is the one a
+    /// single pass over the whole canvas would have produced.</para>
     ///
     /// <para>Tiles are walked from the end of the list towards the start, and the first shape to
     /// claim a pixel keeps it. That is the same picture as painting them in the order given, where
     /// a later shape covers an earlier one: whichever of two overlapping shapes comes later wins
     /// under both rules. What it avoids is shading a pixel once for every level above it — see
     /// <see cref="ClaimedPixels"/> for what that costs on a real volume.</para>
-    ///
-    /// <paramref name="colourOf"/> answers what one shape is painted, given its node and its
-    /// depth. Supplied rather than decided here because what a colour means is the surface's choice
-    /// — a hue per branch, or a band per age — and because the tree does not know which node the
-    /// view is currently rooted at, which is what a branch is measured from.
     /// </summary>
-    public static void Paint(
-        byte[] pixels,
-        IReadOnlyList<ExploreTile> tiles,
-        int width,
-        int height,
-        TileColour background,
-        Func<int, int, TileColour> colourOf)
+    protected override void Draw(byte[] pixels, CanvasRegion region)
     {
-        ArgumentNullException.ThrowIfNull(pixels);
-        ArgumentNullException.ThrowIfNull(tiles);
-        ArgumentNullException.ThrowIfNull(colourOf);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        var claimed = new ClaimedPixels(region);
 
-        if (pixels.Length < PixelBuffer.LengthFor(width, height))
+        // Stopping the moment the region is entirely spoken for, for the reason the walk is
+        // backwards: a shape can only show where nothing nested inside it already does.
+        for (var i = _shapes.Length - 1; i >= 0 && !claimed.IsFull; i--)
         {
-            throw new ArgumentException(
-                $"A {width}x{height} canvas needs {PixelBuffer.LengthFor(width, height)} bytes, not {pixels.Length}.",
-                nameof(pixels));
+            Cushion(pixels, claimed, Width, Height, _shapes[i], _colours[i]);
         }
-
-        // One colour per rectangle, before a single pixel is written, as SectorRasteriser does. The
-        // reason is sharper here: each band below walks the whole list, so resolving a colour inside
-        // that loop would climb a node's ancestors once per band as well as once per rectangle (G4).
-        var colours = new TileColour[tiles.Count];
-
-        for (var i = 0; i < tiles.Count; i++)
-        {
-            colours[i] = colourOf(tiles[i].Node, tiles[i].Depth);
-        }
-
-        // Indexed as an array below rather than through the interface. Every band walks the whole
-        // list, so on a 4K canvas of thirty thousand rectangles that is a couple of million calls
-        // through an interface indexer returning a 32-byte struct, per repaint (G4). The layouts
-        // hand back arrays, so the copy is the fallback rather than the usual case.
-        var shapes = tiles as ExploreTile[] ?? [.. tiles];
-
-        // Split by rows, not by rectangle. A treemap of a real volume is tens of thousands of small
-        // rectangles and a handful of large ones, so a partition drawn around each rectangle in
-        // turn leaves almost every one of them below any threshold worth handing to a second
-        // thread — and the canvas is shaded on one core while the rest sit idle (G4).
-        //
-        // A band owns its rows outright, and every rectangle is offered to every band, clipped to
-        // the rows that band holds. So the picture is the one a single thread would have produced.
-        PixelBuffer.Bands(0, height, width * height, (from, to) =>
-        {
-            PixelBuffer.Fill(pixels, width, from, to, background);
-
-            var claimed = new ClaimedPixels(width, from, to);
-
-            // Backwards, and stopping the moment the band is entirely spoken for. Both are the
-            // same argument: a shape can only show where nothing nested inside it already does.
-            for (var i = shapes.Length - 1; i >= 0 && !claimed.IsFull; i--)
-            {
-                Cushion(pixels, claimed, width, height, shapes[i], colours[i]);
-            }
-        });
     }
 
     /// <summary>
-    /// Shade one rectangle into whichever of <paramref name="claimed"/>'s rows and pixels are still
-    /// free.
+    /// Shade one rectangle into whichever of <paramref name="claimed"/>'s pixels are still free.
     ///
     /// <para>The cushion is measured across the whole rectangle and only <em>drawn</em> where it
-    /// shows. Measuring it within the band instead would restart the gradient at every band
+    /// shows. Measuring it within the region instead would restart the gradient at every region
     /// boundary and put a seam across the picture wherever one fell; measuring it across only the
     /// unclaimed part would stretch a shape's whole cushion into the sliver of it that is
     /// visible.</para>
@@ -127,18 +118,13 @@ public static class TileRasteriser
         var shapeRight = (int)MathF.Round(tile.X + tile.Width);
         var shapeBottom = (int)MathF.Round(tile.Y + tile.Height);
 
-        var left = Math.Max(0, shapeLeft);
-        var right = Math.Min(width, shapeRight);
+        var area = claimed.Region;
+        var left = Math.Max(Math.Max(0, shapeLeft), area.X);
+        var right = Math.Min(Math.Min(width, shapeRight), area.Right);
+        var firstRow = Math.Max(Math.Max(0, shapeTop), area.Y);
+        var lastRow = Math.Min(Math.Min(height, shapeBottom), area.Bottom);
 
-        if (right <= left || Math.Min(height, shapeBottom) <= Math.Max(0, shapeTop))
-        {
-            return;
-        }
-
-        var firstRow = Math.Max(Math.Max(0, shapeTop), claimed.Top);
-        var lastRow = Math.Min(Math.Min(height, shapeBottom), claimed.Bottom);
-
-        if (lastRow <= firstRow)
+        if (right <= left || lastRow <= firstRow)
         {
             return;
         }

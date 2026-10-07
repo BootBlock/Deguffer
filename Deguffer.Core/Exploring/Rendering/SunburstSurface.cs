@@ -27,8 +27,8 @@ public sealed class SunburstSurface : ExploreSurface
 
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
-    public override void Paint(byte[] pixels, TileColour background) =>
-        SectorRasteriser.Paint(pixels, _hits, Width, Height, background, ColourFor);
+    public override CanvasPainter Painter(TileColour background) =>
+        new SectorRasteriser(_hits, Width, Height, background, ColourFor);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index
