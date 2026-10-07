@@ -197,7 +197,7 @@ public sealed class TreemapFrameTests
         var big = TileOf(Layout(tree, LayoutLimits.Default), tree, "big");
 
         var pixels = new byte[PixelBuffer.LengthFor((int)Width, (int)Height)];
-        surface.Paint(pixels, new TileColour(0, 0, 0));
+        surface.Painter(new TileColour(0, 0, 0)).PaintAll(pixels);
 
         var y = (int)(big.Y + (big.Header / 2));
         var left = At(pixels, (int)big.X + 2, y);

@@ -3,7 +3,8 @@ using System.Runtime.InteropServices;
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
-/// The BGRA buffer both rasterisers draw into, and how the work over it is spread.
+/// The BGRA buffer both rasterisers draw into, and how the work over it is spread when a whole
+/// canvas is painted at once.
 ///
 /// <para>Separate from either of them because it is the part that is the same whatever shape is
 /// being drawn: how large a canvas's buffer is, what an undrawn pixel holds, and when a span of
@@ -43,47 +44,28 @@ public static class PixelBuffer
     /// <summary>How large a buffer a canvas of this size needs.</summary>
     public static int LengthFor(int width, int height) => width * height * 4;
 
-    /// <summary>Overwrite the whole buffer with one opaque colour.</summary>
-    public static void Fill(byte[] pixels, TileColour colour)
-    {
-        ArgumentNullException.ThrowIfNull(pixels);
-
-        MemoryMarshal.Cast<byte, uint>(pixels.AsSpan()).Fill(Packed(colour));
-    }
-
     /// <summary>
-    /// Overwrite rows <paramref name="top"/> up to but not including <paramref name="bottom"/> of a
-    /// canvas <paramref name="width"/> pixels across with one opaque colour.
+    /// Overwrite <paramref name="region"/> of a canvas <paramref name="width"/> pixels across with
+    /// one opaque colour.
     /// </summary>
-    public static void Fill(byte[] pixels, int width, int top, int bottom, TileColour colour)
+    public static void Fill(byte[] pixels, int width, CanvasRegion region, TileColour colour)
     {
         ArgumentNullException.ThrowIfNull(pixels);
 
-        if (bottom <= top)
+        var packed = Packed(colour);
+        var words = MemoryMarshal.Cast<byte, uint>(pixels.AsSpan());
+
+        // Row by row unless the region is whole rows, where it is one span and one vectorised fill.
+        if (region.X == 0 && region.Width == width)
         {
+            words.Slice(region.Y * width, region.Height * width).Fill(packed);
             return;
         }
 
-        MemoryMarshal
-            .Cast<byte, uint>(pixels.AsSpan(top * width * 4, (bottom - top) * width * 4))
-            .Fill(Packed(colour));
-    }
-
-    /// <summary>
-    /// Paint rows <paramref name="top"/> up to but not including <paramref name="bottom"/>, across
-    /// threads where <paramref name="pixels"/> says there is enough work to pay for it.
-    /// </summary>
-    public static void Rows(int top, int bottom, int pixels, Action<int> paint)
-    {
-        ArgumentNullException.ThrowIfNull(paint);
-
-        Bands(top, bottom, pixels, (from, to) =>
+        for (var y = region.Y; y < region.Bottom; y++)
         {
-            for (var y = from; y < to; y++)
-            {
-                paint(y);
-            }
-        });
+            words.Slice((y * width) + region.X, region.Width).Fill(packed);
+        }
     }
 
     /// <summary>
@@ -93,8 +75,7 @@ public static class PixelBuffer
     ///
     /// <para>A band owns its rows outright and no two overlap, so a caller that draws overlapping
     /// shapes still gets each pixel written by one thread, in the order it hands the shapes over
-    /// (G4). That is what <see cref="Rows"/> cannot offer a caller whose shapes are not disjoint,
-    /// and it is why <see cref="TileRasteriser"/> takes this one.</para>
+    /// (G4).</para>
     /// </summary>
     public static void Bands(int top, int bottom, int pixels, Action<int, int> paint)
     {

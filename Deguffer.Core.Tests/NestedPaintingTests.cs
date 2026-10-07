@@ -86,13 +86,13 @@ public sealed class NestedPaintingTests
     /// stops with the ground still showing through it.
     /// </summary>
     [Fact]
-    public void ABandIsFullOnlyOnceEveryPixelOfItIsSpokenFor()
+    public void ARegionIsFullOnlyOnceEveryPixelOfItIsSpokenFor()
     {
-        var claimed = new ClaimedPixels(width: 3, top: 4, bottom: 6);
+        var claimed = new ClaimedPixels(new CanvasRegion(X: 2, Y: 4, Width: 3, Height: 2));
 
         var pixels = (
             from y in Enumerable.Range(4, 2)
-            from x in Enumerable.Range(0, 3)
+            from x in Enumerable.Range(2, 3)
             select (X: x, Y: y)).ToList();
 
         foreach (var (x, y) in pixels)
@@ -119,8 +119,8 @@ public sealed class NestedPaintingTests
     {
         var pixels = new byte[PixelBuffer.LengthFor(width, height)];
 
-        TileRasteriser.Paint(
-            pixels, tiles, width, height, Ground, (node, depth) => Hues.Colour(node, depth));
+        new TileRasteriser(tiles, width, height, Ground, (node, depth) => Hues.Colour(node, depth))
+            .PaintAll(pixels);
 
         return pixels;
     }

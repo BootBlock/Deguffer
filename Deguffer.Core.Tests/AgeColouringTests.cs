@@ -218,7 +218,7 @@ public class AgeColouringTests
             tree, tree.RootNode, ExploreView.Treemap, Small, Small, scale: 1, textScale: 1, colouring, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         var pixels = new byte[PixelBuffer.LengthFor(Small, Small)];
-        surface.Paint(pixels, new TileColour(0, 0, 0));
+        surface.Painter(new TileColour(0, 0, 0)).PaintAll(pixels);
 
         // Found through the surface's own hit test rather than guessed at. Where the aggregate lands
         // is the layout's business, and a fixed coordinate would quietly start sampling a drawn tile
@@ -305,7 +305,7 @@ public class AgeColouringTests
             tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, colouring, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         var pixels = new byte[PixelBuffer.LengthFor(Width, Height)];
-        surface.Paint(pixels, new TileColour(0, 0, 0));
+        surface.Painter(new TileColour(0, 0, 0)).PaintAll(pixels);
 
         return pixels;
     }

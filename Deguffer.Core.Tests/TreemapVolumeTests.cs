@@ -218,7 +218,7 @@ public sealed class TreemapVolumeTests
         Assert.Contains(surface.Labels, label => label.Node == ExploreTile.Unaccounted && label.Bytes == 3_000);
 
         var pixels = new byte[PixelBuffer.LengthFor(Width, Height)];
-        surface.Paint(pixels, new TileColour(0, 0, 0));
+        surface.Painter(new TileColour(0, 0, 0)).PaintAll(pixels);
 
         var lit = CushionShading.LightAt(0, 0);
         var tiles = TreemapLayout.Compute(

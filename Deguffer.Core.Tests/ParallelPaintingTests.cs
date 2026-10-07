@@ -108,11 +108,12 @@ public sealed class ParallelPaintingTests
     {
         var pixels = new byte[PixelBuffer.LengthFor(Width, Height)];
 
-        TileRasteriser.Paint(
-            pixels, tiles, Width, Height, Ground,
+        new TileRasteriser(
+            tiles, Width, Height, Ground,
             (node, depth) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
-                : Hues.Colour(node, depth));
+                : Hues.Colour(node, depth))
+            .PaintAll(pixels);
 
         return pixels;
     }

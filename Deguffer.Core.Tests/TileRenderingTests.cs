@@ -248,11 +248,12 @@ public sealed class TileRenderingTests
         // These tests are about where the pixels go, so they colour the way the shipped map does
         // and let the branch stand in for the whole scheme. AgeColouringTests asks the other
         // question, which is what a colour means.
-        TileRasteriser.Paint(
-            pixels, tiles, width, height, ground,
+        new TileRasteriser(
+            tiles, width, height, ground,
             (node, depth) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
-                : Hues.Colour(branchOf(node), depth));
+                : Hues.Colour(branchOf(node), depth))
+            .PaintAll(pixels);
 
         return pixels;
     }
