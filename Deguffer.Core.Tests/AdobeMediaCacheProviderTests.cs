@@ -477,13 +477,13 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
         var other = Path.Combine(_temp.Path, "Other");
         var volumes = new FakeVolumeInventory()
             .With(_temp.Path)
-            .With(Common + @"", alsoMountedAt: [mirror + @""]);
+            .With(Common + @"\", alsoMountedAt: [mirror + @"\"]);
 
         Write(Path.Combine(mirror, AdobeMediaCacheLayout.FilesFolder, "interview.wav 48000.cfa"));
         Write(Path.Combine(other, AdobeMediaCacheLayout.DatabaseFolder, "Media Cache Database.db"));
         _environment
-            .WithRegistryValue(Release, AdobeMediaCacheLayout.FilesValue, mirror + @"")
-            .WithRegistryValue(Release, AdobeMediaCacheLayout.DatabaseValue, other + @"");
+            .WithRegistryValue(Release, AdobeMediaCacheLayout.FilesValue, mirror + @"\")
+            .WithRegistryValue(Release, AdobeMediaCacheLayout.DatabaseValue, other + @"\");
 
         var provider = new AdobeMediaCacheProvider(
             _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: volumes);
@@ -519,7 +519,7 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
         var mirror = Path.Combine(_temp.Path, "Mirror");
         var volumes = new FakeVolumeInventory()
             .With(_temp.Path)
-            .With(Common + @"", alsoMountedAt: [mirror + @""]);
+            .With(Common + @"\", alsoMountedAt: [mirror + @"\"]);
         var named = Path.Combine(mirror, AdobeMediaCacheLayout.FilesFolder);
 
         Write(Path.Combine(named, AdobeMediaCacheLayout.FilesFolder, "nested.cfa"));
