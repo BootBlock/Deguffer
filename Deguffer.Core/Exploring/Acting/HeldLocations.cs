@@ -17,44 +17,53 @@ namespace Deguffer.Core.Exploring.Acting;
 /// is for. <see cref="IFileSystem.MayExist"/> fails closed, so a location that could not be asked
 /// about counts as present.</para>
 ///
+/// <para><b>Asked of folders, not of their text.</b> A location is named the way its provider or
+/// Windows named it, and the target the way the user reached it. With <c>S:</c> substituted for
+/// <c>C:\Users\testuser\src</c>, removing that folder removes a vcpkg clone declared at
+/// <c>S:\vcpkg</c>, and compared as text it held nothing. Each location arrives followed to every
+/// path it is reachable at, once, when the policy is built, for the reason <see cref="DeclaredRoot"/>
+/// gives.</para>
+///
 /// <para>The disk is asked only about locations the path holds, shallowest first, and the first
 /// one present settles it. The shell asks on every change of selection, so a folder high in the
 /// profile costs a handful of probes rather than one per declaration.</para>
 /// </summary>
 internal sealed class HeldLocations
 {
-    private readonly IReadOnlyList<(string Path, string Reason)> _locations;
+    private readonly IReadOnlyList<(string Path, string Reason, ReachedFolder Folder)> _locations;
     private readonly IFileSystem _fileSystem;
 
     /// <param name="locations">
-    /// Resolved paths in display form, and the reason each is refused. Where one path is refused for
-    /// two reasons the first is kept, as <see cref="ExploreActionPolicy"/> shows the first refusal of
-    /// a path owned twice.
+    /// Resolved paths in display form, the reason each is refused, and the folder each names. Where
+    /// one path is refused for two reasons the first is kept, as <see cref="ExploreActionPolicy"/>
+    /// shows the first refusal of a path owned twice.
     /// </param>
-    public HeldLocations(IEnumerable<(string Path, string Reason)> locations, IFileSystem fileSystem)
+    public HeldLocations(
+        IEnumerable<(string Path, string Reason, ReachedFolder Folder)> locations, IFileSystem fileSystem)
     {
-        _locations =
-        [
-            .. locations
-                .DistinctBy(l => l.Path, StringComparer.OrdinalIgnoreCase)
-                .OrderBy(l => l.Path.Length),
-        ];
+        _locations = [.. locations.DistinctBy(l => l.Path, StringComparer.OrdinalIgnoreCase)];
 
         _fileSystem = fileSystem;
     }
 
     /// <summary>The refusal for removing <paramref name="target"/>, or null where it holds nothing refused.</summary>
     /// <param name="target">A resolved path in display form, as the policy has already made it.</param>
-    public ExploreVerdict? Refusal(string target)
+    /// <param name="folder">The folder at <paramref name="target"/>, at every path it is reachable at.</param>
+    public ExploreVerdict? Refusal(string target, ReachedFolder folder)
     {
-        foreach (var (location, reason) in _locations)
+        // Strictly inside: a location no levels down is the target itself, which the passes before
+        // this one have already answered. Shallowest first by levels rather than by the length of the
+        // location's path, which says nothing where the two are named through different letters.
+        var held = _locations
+            .Select(location => (Location: location, Levels: folder.LevelsTo(location.Folder)))
+            .Where(location => location.Levels > 0)
+            .OrderBy(location => location.Levels);
+
+        foreach (var ((_, reason, located), _) in held)
         {
-            // Strictly inside: a location as long as the target is the target itself, which the
-            // passes before this one have already answered.
-            if (location.Length <= target.Length || !LongPath.Contains(target, location))
-            {
-                continue;
-            }
+            // Named below the target, because that is the path the removal takes it at, and the one
+            // the user reached it by.
+            var location = folder.Naming(located, target)!;
 
             if (_fileSystem.MayExist(LongPath.Extended(location)))
             {

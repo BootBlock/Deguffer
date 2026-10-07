@@ -42,10 +42,9 @@ public sealed class ReachedFolder
     {
         var comparable = Comparable(path);
 
-        // The first place is the path itself, which is comparable already.
         if (VolumeRoot.Places(volumes, comparable) is { } places)
         {
-            return new ReachedFolder([comparable, .. places.Skip(1).Select(place => Comparable(place.Path))], false);
+            return Following(comparable, places);
         }
 
         List<string> tops = [comparable];
@@ -53,6 +52,14 @@ public sealed class ReachedFolder
 
         return new ReachedFolder(tops, true);
     }
+
+    /// <summary>
+    /// The folder at <paramref name="path"/>, from the <paramref name="places"/>
+    /// <see cref="VolumeRoot.Places"/> gave for it, for a caller that read them for rules of its own
+    /// and would otherwise ask the machine the same questions twice.
+    /// </summary>
+    internal static ReachedFolder Following(string path, IReadOnlyList<VolumePlace> places) =>
+        new([Comparable(path), .. places.Skip(1).Select(place => Comparable(place.Path))], false);
 
     /// <summary>Whether this folder is <paramref name="inner"/> or holds it, at any path either is reachable at.</summary>
     public bool Holds(ReachedFolder inner) => PathTo(inner) is not null;
@@ -81,6 +88,21 @@ public sealed class ReachedFolder
 
         return null;
     }
+
+    /// <summary>
+    /// How many folders below this one <paramref name="inner"/> is: none where the two are one
+    /// folder, and null where this folder does not hold it.
+    ///
+    /// <para>For a caller choosing the innermost of several folders holding one. Their paths' lengths
+    /// say that only where every one is named the same way, and <c>S:\vcpkg</c> is inside
+    /// <c>C:\Users\testuser\src</c> where <c>S:</c> stands for the second.</para>
+    /// </summary>
+    public int? LevelsTo(ReachedFolder inner) => PathTo(inner) switch
+    {
+        null => null,
+        "." => 0,
+        var relative => relative.Split(Path.DirectorySeparatorChar).Length,
+    };
 
     /// <summary>
     /// <paramref name="inner"/> named below this folder the way <paramref name="named"/> names this
