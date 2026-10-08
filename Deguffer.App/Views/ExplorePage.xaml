@@ -10,9 +10,9 @@
     KeyboardAcceleratorPlacementMode="Hidden">
 
     <!--
-        Backspace goes back from anywhere on the page, as Alt+Left does. An accelerator rather than a
-        KeyDown handler, because a click on the map focuses nothing and a key then reaches no element
-        to bubble from; an accelerator is heard from the whole page whatever holds the focus.
+        Backspace goes back, as Alt+Left does, unless a box being typed in has it. An accelerator
+        rather than a KeyDown handler, because a click on the map focuses nothing and a key then
+        reaches no element to bubble from; an accelerator is heard whatever holds the focus.
     -->
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="Back" Invoked="OnBackspaceInvoked" />
@@ -383,9 +383,9 @@
 
             Back and Forward retrace where you have been, as a browser's do, which is not the same
             as up: a folder opened from the list of what grew is several levels from the one before
-            it. The mouse's own Back and Forward buttons and Backspace reach them too, from anywhere
-            on the page (see ExplorePage's constructor); Alt+Left and Alt+Right are here, as in a
-            browser.
+            it. The mouse's own Back and Forward buttons reach them from anywhere on the page (see
+            ExplorePage's constructor), and Backspace through the page's accelerator above; Alt+Left
+            and Alt+Right are here, as in a browser.
         -->
         <Grid Grid.Row="2" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto"
               Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">

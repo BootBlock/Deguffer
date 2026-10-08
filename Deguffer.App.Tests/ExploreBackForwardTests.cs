@@ -140,10 +140,39 @@ public sealed class ExploreBackForwardTests : IDisposable
         Assert.True(offered[^1]);
 
         var asked = offered.Count;
-        page.ZoomSettled();
+        page.ViewportChanged();
 
         Assert.Equal(asked + 1, offered.Count);
     });
+
+    /// <summary>
+    /// A view that shows no zoom offers no step that only zooms, and is asked again as the view
+    /// changes.
+    /// </summary>
+    [Fact]
+    public void AViewThatShowsNoZoomOffersNoStepThatOnlyZooms() => UiThread.Run(async () =>
+    {
+        var (page, _, _, _) = await ScannedAsync();
+        var viewing = MapViewport.Whole;
+        var told = 0;
+
+        page.Viewing = () => viewing;
+        page.GoBackCommand.CanExecuteChanged += (_, _) => told++;
+
+        page.Zoomed(viewing);
+        viewing = Zoomed;
+
+        Assert.True(page.GoBackCommand.CanExecute(null));
+
+        // The map puts the zoom back to the whole picture for a view that cannot show one.
+        viewing = MapViewport.Whole;
+        told = 0;
+        page.SelectedView = Core.Configuration.ExploreView.Sunburst;
+
+        Assert.True(told > 0);
+        Assert.False(page.GoBackCommand.CanExecute(null));
+    });
+
 
     /// <summary>
     /// A rescan of the same place keeps where the reader has been, and a scan of somewhere else, or a

@@ -21,7 +21,7 @@ public sealed class ExploreVisits
     /// <summary>
     /// How many steps are kept in either direction, the oldest forgotten first. Bounded because every
     /// snapshot of a walked scan carries each step into the arriving tree (see <see cref="Carry"/>),
-    /// and that costs a path per step at a few snapshots a second.
+    /// which builds two paths per step, at every snapshot.
     /// </summary>
     public const int Depth = 50;
 
@@ -46,25 +46,30 @@ public sealed class ExploreVisits
     /// Whether going back from <paramref name="current"/> leads anywhere: some step behind it that
     /// <see cref="Back"/> would not pass over.
     /// </summary>
+    /// <param name="zooms">
+    /// Whether the view on screen shows a zoom. Where it does not, a step that differs from here only
+    /// by its zoom shows nothing new, and is passed over.
+    /// </param>
     /// <param name="wasRemoved">Whether a node of <paramref name="tree"/> has gone from the page since the scan.</param>
-    public bool CanGoBack(ExploreVisit current, ExploreTree tree, VolumeSpace volume, Func<int, bool> wasRemoved) =>
-        _back.Exists(visit => Leads(visit, current, tree, volume, wasRemoved));
+    public bool CanGoBack(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
+        _back.Exists(visit => Leads(visit, current, tree, volume, zooms, wasRemoved));
 
     /// <summary>The same as <see cref="CanGoBack"/>, ahead.</summary>
-    public bool CanGoForward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, Func<int, bool> wasRemoved) =>
-        _forward.Exists(visit => Leads(visit, current, tree, volume, wasRemoved));
+    public bool CanGoForward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
+        _forward.Exists(visit => Leads(visit, current, tree, volume, zooms, wasRemoved));
 
     /// <summary>
     /// The nearest step behind <paramref name="current"/> that can be shown, with
     /// <paramref name="current"/> put ahead, or null where none can. Nothing changes on null.
     /// </summary>
+    /// <param name="zooms">See <see cref="CanGoBack"/>.</param>
     /// <param name="wasRemoved">Whether a node of <paramref name="tree"/> has gone from the page since the scan.</param>
-    public ExploreVisit? Back(ExploreVisit current, ExploreTree tree, VolumeSpace volume, Func<int, bool> wasRemoved) =>
-        Step(_back, _forward, current, tree, volume, wasRemoved);
+    public ExploreVisit? Back(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
+        Step(_back, _forward, current, tree, volume, zooms, wasRemoved);
 
     /// <summary>The same as <see cref="Back"/>, ahead.</summary>
-    public ExploreVisit? Forward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, Func<int, bool> wasRemoved) =>
-        Step(_forward, _back, current, tree, volume, wasRemoved);
+    public ExploreVisit? Forward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
+        Step(_forward, _back, current, tree, volume, zooms, wasRemoved);
 
     /// <summary>
     /// Bring every step into <paramref name="arriving"/>, which replaces <paramref name="leaving"/>:
@@ -73,8 +78,7 @@ public sealed class ExploreVisits
     /// them all.
     ///
     /// <para>Every step comes back at the whole picture. A zoom is a part of one layout, and the
-    /// arriving tree lays out differently, so the same part of it is not the same shapes. Two steps
-    /// that then show the same thing one after the other are one step.</para>
+    /// arriving tree lays out differently, so the same part of it is not the same shapes.</para>
     /// </summary>
     /// <param name="leaving">
     /// The tree the steps were taken in, or null where there was none, which is also a page whose tree
@@ -90,7 +94,7 @@ public sealed class ExploreVisits
             return;
         }
 
-        if (leaving is null || ExplorePlace.TryCarry(leaving, leaving.RootNode, arriving) is null)
+        if (!ExplorePlace.IsRootedAlike(leaving, arriving))
         {
             Clear();
             return;
@@ -112,12 +116,13 @@ public sealed class ExploreVisits
         ExploreVisit current,
         ExploreTree tree,
         VolumeSpace volume,
+        bool zooms,
         Func<int, bool> wasRemoved)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(wasRemoved);
 
-        var nearest = from.FindLastIndex(visit => Leads(visit, current, tree, volume, wasRemoved));
+        var nearest = from.FindLastIndex(visit => Leads(visit, current, tree, volume, zooms, wasRemoved));
 
         if (nearest < 0)
         {
@@ -135,8 +140,13 @@ public sealed class ExploreVisits
 
     /// <summary>Whether stepping to <paramref name="visit"/> from <paramref name="current"/> shows something.</summary>
     private static bool Leads(
-        ExploreVisit visit, ExploreVisit current, ExploreTree tree, VolumeSpace volume, Func<int, bool> wasRemoved) =>
-        !wasRemoved(visit.Position.Node) && !visit.Shows(current, tree, volume);
+        ExploreVisit visit,
+        ExploreVisit current,
+        ExploreTree tree,
+        VolumeSpace volume,
+        bool zooms,
+        Func<int, bool> wasRemoved) =>
+        !wasRemoved(visit.Position.Node) && !visit.Shows(current, tree, volume, zooms);
 
     private static void Push(List<ExploreVisit> steps, ExploreVisit visit)
     {
@@ -149,8 +159,8 @@ public sealed class ExploreVisits
     }
 
     /// <summary>
-    /// <see cref="Carry"/> for one direction, written over in place. Written in order, so a step that
-    /// is gone and one that merges with the step before it both close the gap behind them.
+    /// <see cref="Carry"/> for one direction, written over in place and in order, so a step that is
+    /// gone closes the gap behind it.
     /// </summary>
     private static void CarryInto(List<ExploreVisit> steps, ExploreTree leaving, ExploreTree arriving)
     {
@@ -165,14 +175,7 @@ public sealed class ExploreVisits
                 continue;
             }
 
-            var carried = visit with { Viewport = MapViewport.Whole };
-
-            if (kept > 0 && steps[kept - 1] == carried)
-            {
-                continue;
-            }
-
-            steps[kept++] = carried;
+            steps[kept++] = visit with { Viewport = MapViewport.Whole };
         }
 
         steps.RemoveRange(kept, steps.Count - kept);

@@ -404,7 +404,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     public partial ExploreView SelectedView { get; set; }
 
     /// <summary>The Files layout searches only while it is on screen. See <see cref="ExploreFiles.IsActive"/>.</summary>
-    partial void OnSelectedViewChanged(ExploreView value) => Files.IsActive = value == ExploreView.Files;
+    partial void OnSelectedViewChanged(ExploreView value)
+    {
+        Files.IsActive = value == ExploreView.Files;
+
+        // Whether a zoom is part of where the reader is turns on the view. See Zooms.
+        NotifyVisits();
+    }
 
     /// <summary>
     /// What the colours on the map are to say. See <see cref="ExploreColouring"/>.
@@ -966,10 +972,10 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
     }
 
-    /// <summary>Go straight to a step on the trail. The step the reader is on goes nowhere, and is not one.</summary>
+    /// <summary>Go straight to a step on the trail.</summary>
     public void GoTo(ExplorePosition position)
     {
-        if (Tree is { } tree && !position.Shows(_position, tree, Volume))
+        if (Tree is { } tree)
         {
             Visit(tree, position);
         }
@@ -997,7 +1003,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (Tree is { } tree)
         {
-            Revisit(tree, _visits.Back(Here, tree, Volume, Selection.WasRemoved));
+            Revisit(tree, _visits.Back(Here, tree, Volume, Zooms, Selection.WasRemoved));
         }
     }
 
@@ -1007,17 +1013,32 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (Tree is { } tree)
         {
-            Revisit(tree, _visits.Forward(Here, tree, Volume, Selection.WasRemoved));
+            Revisit(tree, _visits.Forward(Here, tree, Volume, Zooms, Selection.WasRemoved));
         }
     }
 
     /// <summary>Where the reader is now, zoom and all, as a step on <see cref="_visits"/>.</summary>
     private ExploreVisit Here => new(_position, Viewing());
 
-    /// <summary>A step somewhere new: where the reader was goes behind them.</summary>
+    /// <summary>
+    /// Whether the picture on screen can be zoomed, so a zoom is part of where the reader is. See
+    /// <see cref="ExploreSurface.Zooms"/>. Read from the view rather than from the map, because the
+    /// map hears of a change of view only once this page has said it.
+    /// </summary>
+    private bool Zooms => Tree is { } tree && ExploreSurface.Zooms(tree, SelectedView);
+
+    /// <summary>
+    /// Show <paramref name="to"/>: a step somewhere new, where the reader was going behind them. The
+    /// place already on screen is not somewhere new, so it is shown again without being a step, and
+    /// what lay ahead stays ahead.
+    /// </summary>
     private void Visit(ExploreTree tree, ExplorePosition to)
     {
-        _visits.Leave(Here);
+        if (!to.Shows(_position, tree, Volume))
+        {
+            _visits.Leave(Here);
+        }
+
         Show(tree, to, Volume);
     }
 
@@ -1057,10 +1078,10 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The map's zoom has come to rest somewhere new. Where Back and Forward lead turns on it, because
-    /// a step to the place on screen at the zoom on screen goes nowhere.
+    /// The map's zoom is somewhere new. Where Back and Forward lead turns on it, because a step to the
+    /// place on screen at the zoom on screen goes nowhere.
     /// </summary>
-    public void ZoomSettled() => NotifyVisits();
+    public void ViewportChanged() => NotifyVisits();
 
     /// <summary>Say that where Back and Forward lead may have changed.</summary>
     private void NotifyVisits()
@@ -1418,7 +1439,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     private bool CanAscend() => Tree is { } tree && _position.Up(tree, Volume) is not null;
 
-    private bool CanGoBack() => Tree is { } tree && _visits.CanGoBack(Here, tree, Volume, Selection.WasRemoved);
+    private bool CanGoBack() => Tree is { } tree && _visits.CanGoBack(Here, tree, Volume, Zooms, Selection.WasRemoved);
 
-    private bool CanGoForward() => Tree is { } tree && _visits.CanGoForward(Here, tree, Volume, Selection.WasRemoved);
+    private bool CanGoForward() => Tree is { } tree && _visits.CanGoForward(Here, tree, Volume, Zooms, Selection.WasRemoved);
 }

@@ -141,7 +141,7 @@ public readonly record struct ExplorePosition(int Node, bool OnVolume)
     {
         ArgumentNullException.ThrowIfNull(arriving);
 
-        if (leaving is null || ExplorePlace.TryCarry(leaving, leaving.RootNode, arriving) is null)
+        if (!ExplorePlace.IsRootedAlike(leaving, arriving))
         {
             return Top(arriving);
         }

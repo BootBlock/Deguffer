@@ -88,9 +88,10 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Whether the last press was one a tap may act on: the left button, a touch or a pen. The
-    /// framework makes a tap and a double-tap of the mouse's Back and Forward buttons too, and those
-    /// belong to the page, which goes back or forward with them; picking or opening the shape under
-    /// the pointer as well would act on a picture the step is about to replace.
+    /// framework makes a tap and a double-tap of the mouse's Back and Forward buttons too, which pick
+    /// and open nothing anywhere else in Windows. Where the page goes back or forward with them,
+    /// picking or opening the shape under the pointer as well would act on a picture the step is
+    /// about to replace.
     /// </summary>
     private bool _tapPress = true;
 
@@ -243,8 +244,9 @@ public sealed class ExploreMap : UserControl
         _zoom.Arrived += (_, _) =>
         {
             OnZoomArrived();
-            ZoomSettled?.Invoke(this, EventArgs.Empty);
+            ViewportChanged?.Invoke(this, EventArgs.Empty);
         };
+        _zoom.Retargeted += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
 
         _descent.Moved += OnDescentMoved;
         _descent.Arrived += OnDescentArrived;
@@ -393,10 +395,10 @@ public sealed class ExploreMap : UserControl
     public MapViewport Viewport => _zoom.Target;
 
     /// <summary>
-    /// The zoom has come to rest, wherever the wheel, a drag, a double-click or the page put it, so
-    /// <see cref="Viewport"/> has a new answer worth asking for.
+    /// <see cref="Viewport"/> has a new answer: a glide set off, a drag let go, or the zoom was put
+    /// back for another picture or for a drawing that cannot be zoomed.
     /// </summary>
-    public event EventHandler? ZoomSettled;
+    public event EventHandler? ViewportChanged;
 
     /// <summary>
     /// Whether the mouse wheel zooms the picture and the left button drags it, where the drawing can
@@ -425,7 +427,9 @@ public sealed class ExploreMap : UserControl
             + "contents as a readable list. Double-click a shape to open what is inside it."
             + (Zoomable
                 ? " On the treemap, turn the mouse wheel to zoom, drag with the left button to move a "
-                    + "zoomed picture, and double-click anything else to zoom to it."
+                    + "zoomed picture, and double-click anything else to zoom to it. The mouse's Back and "
+                    + "Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through "
+                    + "the folders opened and the zooms to a shape."
                 : string.Empty));
 
     /// <summary>
@@ -584,7 +588,7 @@ public sealed class ExploreMap : UserControl
 
         // The same picture, zoomed to where the reader was, moves there as a zoom to a shape does.
         // After the redraw, which draws where the zoom is now and is the drawing the move starts from.
-        if (!another && Zoomable && viewport is { } returning && _drawing is { Viewport: not null })
+        if (!another && Zoomable && viewport is { } returning && tree is not null && ExploreSurface.Zooms(tree, view))
         {
             _zoom.GlideTo(returning);
         }

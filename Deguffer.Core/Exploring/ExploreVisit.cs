@@ -18,8 +18,9 @@ public readonly record struct ExploreVisit(ExplorePosition Position, MapViewport
     /// <summary>
     /// Whether this shows what <paramref name="other"/> shows in <paramref name="tree"/> beside
     /// <paramref name="volume"/>: the same picture, by <see cref="ExplorePosition.Shows"/>, at the
-    /// same zoom.
+    /// same zoom where the view on screen <paramref name="zooms"/>, and at any zoom where it does
+    /// not, because that view shows no zoom at all.
     /// </summary>
-    public bool Shows(ExploreVisit other, ExploreTree tree, VolumeSpace volume) =>
-        Position.Shows(other.Position, tree, volume) && Viewport == other.Viewport;
+    public bool Shows(ExploreVisit other, ExploreTree tree, VolumeSpace volume, bool zooms) =>
+        Position.Shows(other.Position, tree, volume) && (!zooms || Viewport == other.Viewport);
 }

@@ -54,6 +54,12 @@ internal sealed class ExploreZoom
     /// <summary>Raised once when a move arrives, which is when the picture is worth drawing again.</summary>
     public event EventHandler? Arrived;
 
+    /// <summary>
+    /// Raised when <see cref="Target"/> moves at once: a glide that sets off for somewhere new, and a
+    /// reset. A drag moves it at every step, and says so once, by <see cref="Arrived"/>, as it lets go.
+    /// </summary>
+    public event EventHandler? Retargeted;
+
     public ExploreZoom(IMotionPolicy motion, IFrameClock clock)
     {
         _motion = motion;
@@ -97,6 +103,7 @@ internal sealed class ExploreZoom
         }
 
         _target = target;
+        Retargeted?.Invoke(this, EventArgs.Empty);
 
         var motion = _motion.For(MotionToken.Camera);
 
@@ -151,8 +158,15 @@ internal sealed class ExploreZoom
     {
         Stop();
 
+        var moved = viewport != _target;
+
         Shown = viewport;
         _target = viewport;
+
+        if (moved)
+        {
+            Retargeted?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>

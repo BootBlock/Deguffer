@@ -203,7 +203,7 @@ public sealed partial class ExplorePage : Page
         Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
         Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
-        Map.ZoomSettled += (_, _) => ViewModel.ZoomSettled();
+        Map.ViewportChanged += (_, _) => ViewModel.ViewportChanged();
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
         Map.MenuRequested += OnMapMenuRequested;
 
