@@ -11,8 +11,9 @@
 wasted disk space, with a safety model good enough to trust unattended. It recognises what specific
 locations on a disk actually are, reports what each one costs to lose, and leaves the decision with
 the user. It also shows where the machine's memory goes, and its one action there is to ask a program
-to close itself (§7.2), and it clears Windows' list of installed programs of entries for programs that
-are gone (§7.3).
+to close itself (§7.2), it clears Windows' list of installed programs of entries for programs that
+are gone (§7.3), and it finds the files that are on the disk more than once and removes the copies a
+user marks, never the last one (§7.4).
 
 ## The name
 
@@ -71,12 +72,18 @@ in a few minutes, without touching a single piece of user data.
 - **Show where memory goes**, as a picture of physical memory led by commit charge against the
   commit limit, without implying that any process, service or part of Windows is safe to close.
   See §7.2.
+- **Find the files that are there twice**, across one drive or several, matched on the criteria the
+  user chooses, and remove the copies the user marks while at least one copy of every file stays.
+  See §7.4.
 
 **Non-goals**
 
-- Not a duplicate finder or an uninstaller. Installed apps (§7.3) removes entries Windows lists for
-  programs that are gone, and for a program that is still there it runs that program's own
-  uninstaller. Deguffer itself removes no program's files.
+- Not an uninstaller. Installed apps (§7.3) removes entries Windows lists for programs that are
+  gone, and for a program that is still there it runs that program's own uninstaller. Deguffer
+  itself removes no program's files.
+- Not a similarity finder. Duplicates (§7.4) finds files that are the same, byte for byte, or that
+  share the name, size or date the user chose to match on. It never judges two photographs, two
+  recordings or two documents to be "the same" because they look or sound alike.
 - Not a general file manager. Explore (§7.1) opens, reveals and removes an individual file or
   folder the user has picked out of the picture, because that is the action a size view leads to.
   It does not browse, move, rename or copy, and it does not aim to replace Explorer.
@@ -966,6 +973,198 @@ against writing and deletion until `reg.exe` has read it.
   last one exited.
 - No other account's hive, and no packaged application.
 - No removal of an entry the evidence did not prove stale, under any preference.
+
+### 7.4 Duplicates — the files that are there twice
+
+Storage answers **"what is safe to remove"** and Explore answers **"where did the space go"**.
+Duplicates answers **"which files are on this disk more than once"**: the photograph copied off a
+phone three times, the installer downloaded twice, the folder of music restored over a folder that
+was already there. It is a destination of its own for the reason Explore is. It ranks by size and
+finds a match, and neither says a copy is safe to remove. The one claim it makes is that two files
+match on the criteria the user chose, and the claim it adds before anything is removed is that the
+two hold the same bytes.
+
+As with the rest of this document, what follows is the target.
+[duplicates.md](duplicates.md) is the build plan, and it records the research every rule here rests
+on: what the established duplicate finders do, and the ways their users have lost data.
+
+**What is searched**
+
+- **The locations the user chose**: whole drives, folders, or both, on more than one drive in one
+  search. A location is on a local disk of this machine, fixed or removable, whose content is stored
+  on it. Network drives and shares are not searched, as Explore does not draw them, because a file
+  reached over the network can be a file on this machine under a second name that its identity does
+  not reveal. Nor is a drive that a cloud client presents as local while it keeps the content
+  elsewhere: its files carry no sign that reading them downloads them, and removing one removes it
+  from the cloud.
+- **A volume where a file cannot be identified is not searched**, and the page names it. FAT and
+  exFAT give a file an ID only for as long as it is not moved, so there it identifies a file for one
+  search at most, and never for the checksum cache.
+- **Each file is searched once.** Two locations that overlap, or that reach the same folder by two
+  names (a junction, a substituted drive, a volume mounted in a folder, a folder named twice), are
+  resolved to where they are before anything is enumerated, and a file found twice that way is one
+  file. A finder that lists a file as its own duplicate is how fdupes documents losing data.
+- **A location can be marked as a reference.** A reference copy is searched and matched, and it is
+  never marked and never removed, under any rule or preference. A file's role is its innermost
+  location's, so a reference folder inside a searched drive stays a reference, and a folder given in
+  both roles is a reference. "Find what in Downloads is already in my Photos" is the search the
+  established tools are most asked for.
+- **What Explore refuses at and below is not searched by default**: the §9 exclusions,
+  `C:\Windows`, the `Program Files` folders, `%PROGRAMDATA%`, other accounts' profiles, every
+  `$Recycle.Bin`, and what Windows keeps at the top of a volume (`System Volume Information`, the
+  paging and hibernation files, the boot files). **Nor are program folders**: the folder each
+  installed program's entry names as where it is installed (the entries §7.3 reads), and
+  `%LOCALAPPDATA%\Programs`, where per-user installers put programs. An entry that names a drive's
+  top, a profile, a folder Windows keeps for the user such as Documents, a folder that holds one of
+  those, or a folder that holds a location the user chose, names nothing usable, and the page says
+  which entry it set aside. Two programs that ship the same
+  library each need their own copy, and a search of them finds thousands of matches nobody should
+  act on. The page names what it left out, so a search that skipped a place is never read as one
+  that found nothing there. The user may include those places; a copy in one is still matched, and
+  it is refused (below).
+- **Filters the user sets**, all of them stored as preferences: a smallest and a largest size, the
+  extensions to search or the extensions to skip, and whether hidden and system files are searched,
+  which by default they are not. Empty files are never matched: an empty file's name is its content,
+  and placeholder files with meaningful names are what a size match would put side by side.
+- **Never through a link.** A symbolic link, a junction or a mount point inside a location is not
+  followed, and a link is not a file to match, so a file link and its target are never a group. A
+  reparse point that holds a file's own data (a cloud file, a deduplicated file, a file Windows
+  compressed) is a file like any other.
+
+**What makes two files a match**
+
+- **The user chooses the criteria, and may combine them**: the name, the size, the last-modified
+  time, and the content. At least one is chosen, and content is the default. Names compare ordinally,
+  ignoring case. Times compare to the file system's full precision, never rounded. A match on content
+  implies a match on size.
+- **Content is compared by checksum, and the user chooses which**: xxHash (XXH128, the default),
+  SHA-256, SHA-512, SHA-1, MD5 or CRC-32, and SHA3-256 where Windows offers it. A checksum is what
+  sorts thousands of files into groups in reasonable time, and naming the algorithm lets a user
+  compare a value with one another tool printed. Files are filtered by size first, then by a
+  checksum of their first and last blocks, and only the files that still match are read in full.
+  A checksum is kept between searches under the file's volume, file ID, size and last-modified and
+  change times, never under its path, so a second search reads only what changed. Nothing a cached
+  checksum says reaches a removal, which reads the bytes again.
+- **A checksum groups; it never licenses a removal.** The real false matches in the established tools
+  came from a cache fault and a sampled checksum, not from a collision, and the only test that
+  catches all of them is reading both files. So every removal is preceded by a byte-for-byte
+  comparison of the copy against a copy the group keeps, made immediately before the removal and
+  whatever criteria built the group (below). A group matched on its name or size alone is shown,
+  and says plainly that its files may differ; a copy in it can be removed only if those bytes match.
+- **A file is more than its main stream.** NTFS lets a file carry named streams beside its content,
+  and a copy whose named streams differ from the kept copy's holds data the kept copy does not. The
+  comparison before a removal covers every named stream except `Zone.Identifier`, which records only
+  where a download came from, and a copy holding a stream the kept copy lacks, or holds differently,
+  is not removed.
+- **One file is one file, however many names it has.** Every file is known by its volume and its
+  file ID (`FILE_ID_INFO`), never by its path. Two hard links to one file are one file listed with
+  every one of its names: they are never a group, they are never counted as space that could be
+  freed, and no name is offered for removal, because removing one name frees nothing. A path is
+  never the key, because NTFS lets a folder be case-sensitive and two different files can then
+  differ only in the case of a letter.
+- **A file not on this device is never read.** A cloud file that is online-only or partly
+  downloaded (`RECALL_ON_DATA_ACCESS`, `RECALL_ON_OPEN` or `OFFLINE`) would be downloaded by reading
+  it, so a content match leaves it out and counts it, and a name, size or date match may show it but
+  never marks it. The attributes are read again immediately before any read, through a handle that
+  reads attributes only and recalls nothing, because Windows can make a file online-only after the
+  search saw it and opening such a file for its content can itself download it. Duplicates never
+  makes Windows download a file.
+- **A read that fails leaves the file out.** A file that is locked, refused, changed while it was
+  read or gone is never a match. An error never makes two files the same.
+
+**What it shows**
+
+- **Groups, sorted by the space they could free**: what the copies that could be removed occupy on
+  disk, with one copy that can be kept (below) left. A reference copy, a refused copy and a file
+  with several names count for nothing. Each group names its files with their folders, their sizes,
+  their last-modified times, the criteria that matched them and, for a content match, the checksum
+  and its algorithm. Where two paths differ by little, the page shows where they differ, because two
+  near-identical folder names are how a user marks the copy they meant to keep.
+- **The space a removal would free is a lower bound, and says so.** On ReFS, which a Dev Drive uses,
+  two copies may share their clusters, because Windows 11 copies by block cloning there, and
+  removing one may free nothing. Windows Server's deduplication behaves the same way.
+- **A copy inside a cloud folder says what removing it does there**: OneDrive, Dropbox and the rest
+  remove it from the cloud and from every device that syncs it, not only from this disk.
+- **Results stream.** Groups appear as each is confirmed, the search reports what stage it has
+  reached, and it can be stopped at any point, keeping what it has confirmed.
+- **Results can be saved** as a CSV file the user names and places, one row per copy with its group,
+  path, size, times and checksum. Deguffer writes no copy of them anywhere else.
+
+**Marking and removing**
+
+- **Nothing is marked when a search finishes.** The user marks copies by hand, or runs a named rule
+  that marks them: keep the newest, keep the oldest, keep the copy with the shortest path, keep the
+  copy in a chosen folder, or mark every copy in a chosen folder.
+- **A rule is the one place Deguffer acts on more than the user picked out by hand, and it says so.**
+  §7.1 refuses that for Explore, because a size picture offers no reason to remove anything and a
+  bulk action there would be a recommendation by size. A duplicate is different in kind: the reason
+  to remove it is the copy that stays, and a search can find forty thousand of them, which no one
+  marks by hand. So a rule marks, and it does not remove. Every copy it marked is listed before
+  anything goes, any mark can be undone, and every rule obeys the keeping rule below, which no rule
+  and no preference can relax.
+- **Every group keeps a copy, by construction.** A copy that can be kept is one that is unmarked, on
+  this device and not online-only, not refused (below), not in `%TEMP%` and not inside anything a
+  Storage provider deletes when it cleans. It must also be on an internal drive and outside a cloud
+  folder, unless its location is a reference. A drive attached over USB, SD or FireWire is not
+  internal, whatever type Windows gives it, because most USB disks report themselves as fixed. A file
+  with several names can be kept where any one of its names could be. Core refuses any mark that would leave a group with no
+  copy that can be kept, and it asks again immediately before removal. Each exclusion is a copy that
+  can go without anyone choosing it to: a program can remove its own folder, Storage deletes what its
+  providers name, a removable drive is unplugged, and a cloud copy can be removed from another
+  device. Making a location a reference is how a user says that the copy on a removable drive or in
+  a cloud folder is the one they keep; it lifts those two exclusions and no other. Where no copy can
+  be kept, every copy stays unmarked, and the page says why. A cloud folder is one Windows lists as a
+  sync root, and a program folder is one an installed program's entry names. A folder that neither
+  names is not known to be either, and the confirmation's list is where the user sees it.
+- **A rule chooses the copy it keeps only from the copies that can be kept.** "Keep the newest"
+  keeps the newest copy that can be kept, so a newer copy on a USB drive is marked and the newest
+  internal copy stays, and a rule that can keep nothing in a group marks nothing there.
+- **Some copies are never marked, and some are refused.** A reference copy is never marked, and nor
+  is one name of a file with several, because removing it frees nothing; either can still be the
+  copy a group keeps. A copy is refused where §7.1's policy would not let Explore remove it: Tier 4,
+  a §5.2 tool root's unrecognised child, a §9 exclusion, a protected region, an Outlook data file.
+  It is refused too in a program folder, and while it is online-only. A refused copy is never marked
+  and never the copy a group keeps. The policy is decided again in the remover immediately before
+  each removal, with its reason on the row, not by greying it out.
+- **A copy in a cloud folder is marked only by hand.** Removing it removes it from every device that
+  syncs the folder, including devices with no other copy, so no rule marks one, and the confirmation
+  says that other devices lose it too.
+- **Checked again immediately before it goes.** The kept copy is opened and held open, refusing
+  anyone else's write or delete, until the removal has finished, and the copy to remove is held open
+  refusing anyone else's write. The two must be different files. Both must have the same file ID,
+  size, last-modified time and attributes as the search saw, neither may now be online-only, and
+  then they must hold the same bytes and the same named streams. A permanent removal deletes through
+  the handle that was compared, so nothing put at that path in the meantime is what goes. A copy that
+  fails any of those is not removed, and the result says which check failed.
+- **To the Recycle Bin by default**, through §7.1's route and with its rule: a copy the bin will not
+  take fails, and is never deleted outright in its place. What the bin received is checked to be the
+  file that was compared, by its file ID. Where it is not, or cannot be told, the run stops there
+  and says which file went to the bin, where it can still be restored. Where the copies bound for
+  one drive's bin
+  are more than it has room for, the confirmation says so, because Windows then deletes the bin's
+  oldest items outright to make room, and those include copies removed earlier in the same run.
+  Removing permanently stays available as a deliberate second choice, and says what it is.
+- **Every removal is confirmed** by a dialog that lists every copy that goes, and states how many
+  there are, from how many groups, and how much space they occupy. A catalogue such as a photo
+  library or a music player can name a copy Deguffer cannot see is in use, and the list is where a
+  user can.
+- **§5.6 applies, and adds a question.** Afterwards, every copy a group kept is still there with the
+  same file ID, size and last-modified time, every reference copy is untouched, and every sibling of
+  a removed copy survived, as Explore asserts. A kept or reference copy is known by its file ID, and
+  a sibling by its exact name. Neither is ever found by a path compared without regard to case,
+  which in a case-sensitive folder would let a removed `a.txt` stand in for a lost `A.txt`.
+
+**What this section does not authorise**
+
+- No folder removal. Duplicates removes files; a folder whose files all match another's is shown as
+  its files.
+- No replacement of a copy by a hard link or a symbolic link. A link removes the second copy a user
+  may keep as a backup, and a program that saves by writing a new file and renaming it breaks the
+  link without saying so.
+- No similarity matching, of images, audio or anything else (§2).
+- No search of a network drive or share, or of a drive whose content is kept in the cloud.
+- No reading of a file that is not on this device, and no removal of a cloud-only file.
+- No removal of the last copy that can be kept, or of a reference copy, under any rule or preference.
 
 ---
 
