@@ -26,6 +26,37 @@ public sealed class ExploreSurfaceTests
     /// <summary>Any instant will do while the colouring is by branch, and it must not be the clock.</summary>
     private static readonly DateTime Now = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 
+    /// <summary>
+    /// Whether a view zooms is said before drawing, for a page handing a zoom over, and where it says
+    /// so the drawing has to take the zoom: a picture placed at a zoom it then refuses is drawn in the
+    /// wrong place until it lands. A view that shows no map zooms nothing anybody can see, whatever
+    /// the drawing kept behind it would take.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap, false, true)]
+    [InlineData(ExploreView.Treemap, true, false)]
+    [InlineData(ExploreView.Icicle, false, false)]
+    [InlineData(ExploreView.Sunburst, false, false)]
+    [InlineData(ExploreView.List, false, false)]
+    [InlineData(ExploreView.Tree, false, false)]
+    [InlineData(ExploreView.Files, false, false)]
+    public void OnlyATreemapOnScreenZooms(ExploreView view, bool scanning, bool zooms)
+    {
+        var tree = scanning ? NamedTree(10) : FlatTree(10);
+        var zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5));
+
+        var surface = ExploreSurface.Create(
+            tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, zoomed);
+
+        Assert.Equal(zooms, ExploreSurface.Zooms(tree, view));
+
+        if (zooms)
+        {
+            Assert.Equal(zoomed, surface.Viewport);
+        }
+    }
+
     [Theory]
     [InlineData(ExploreView.Treemap)]
     [InlineData(ExploreView.Icicle)]

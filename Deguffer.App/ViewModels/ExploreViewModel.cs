@@ -9,6 +9,7 @@ using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -79,6 +80,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>Where the views are: see <see cref="ExplorePosition"/>. Written only by <see cref="Show"/>.</summary>
     private ExplorePosition _position;
+
+    /// <summary>Where the reader has been, for Back and Forward. See <see cref="ExploreVisits"/>.</summary>
+    private readonly ExploreVisits _visits = new();
 
     /// <summary>
     /// What the app knows about well-known files and folders, resolved against this machine once
@@ -400,7 +404,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     public partial ExploreView SelectedView { get; set; }
 
     /// <summary>The Files layout searches only while it is on screen. See <see cref="ExploreFiles.IsActive"/>.</summary>
-    partial void OnSelectedViewChanged(ExploreView value) => Files.IsActive = value == ExploreView.Files;
+    partial void OnSelectedViewChanged(ExploreView value)
+    {
+        Files.IsActive = value == ExploreView.Files;
+
+        // Whether a zoom is part of where the reader is turns on the view. See Zooms.
+        NotifyVisits();
+    }
 
     /// <summary>
     /// What the colours on the map are to say. See <see cref="ExploreColouring"/>.
@@ -546,6 +556,21 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     public int CurrentNode => _position.Node;
 
+    /// <summary>
+    /// The part of the map's picture on screen now, which a step away from here remembers so Back
+    /// comes back to it. Asked at the moment of the step rather than followed, because the zoom moves
+    /// at every frame of a glide. The page points this at its map, and it is the whole picture until
+    /// it does.
+    /// </summary>
+    public Func<MapViewport> Viewing { get; set; } = () => MapViewport.Whole;
+
+    /// <summary>
+    /// The zoom Back or Forward is returning to, for the one redraw that step asks for, and null for
+    /// every other. Handed over for that moment only, because every other redraw keeps the zoom the
+    /// reader has now: a recolouring, a snapshot, a removal.
+    /// </summary>
+    public MapViewport? Revisiting { get; private set; }
+
     /// <summary>What is under the pointer, or the current node when nothing is.</summary>
     [ObservableProperty]
     public partial string Hovered { get; set; } = string.Empty;
@@ -690,6 +715,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             // the drive that is wrong by however much was left.
             Tree = null;
             Volume = VolumeSpace.None;
+            NotifyVisits();
             Growth.Clear();
             Selection.Show(null);
             Files.Show(null, 0);
@@ -752,7 +778,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         if (Tree is { } tree && row.CanOpen && ReferenceEquals(Growth.Comparison?.Tree, tree)
             && !Selection.WasRemoved(row.Node))
         {
-            Show(tree, ExplorePosition.Inside(row.Node), Volume);
+            Visit(tree, ExplorePosition.Inside(row.Node));
         }
     }
 
@@ -934,7 +960,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             return;
         }
 
-        Show(tree, opened, Volume);
+        Visit(tree, opened);
     }
 
     [RelayCommand(CanExecute = nameof(CanAscend))]
@@ -942,7 +968,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (Tree is { } tree && _position.Up(tree, Volume) is { } up)
         {
-            Show(tree, up, Volume);
+            Visit(tree, up);
         }
     }
 
@@ -951,8 +977,117 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (Tree is { } tree)
         {
-            Show(tree, position, Volume);
+            Visit(tree, position);
         }
+    }
+
+    /// <summary>
+    /// The map zoomed to a shape it could not open, from <paramref name="from"/>. A step like
+    /// opening a folder, so Back zooms out again; a turn of the wheel or a drag is not, as scrolling
+    /// a page is not a step in a browser.
+    /// </summary>
+    public void Zoomed(MapViewport from)
+    {
+        if (Tree is null)
+        {
+            return;
+        }
+
+        _visits.Leave(new ExploreVisit(_position, from));
+        NotifyVisits();
+    }
+
+    /// <summary>Back to where the reader was before their last step, as a browser's Back button goes.</summary>
+    [RelayCommand(CanExecute = nameof(CanGoBack))]
+    private void GoBack()
+    {
+        if (Tree is { } tree)
+        {
+            Revisit(tree, _visits.Back(Here, tree, Volume, Zooms, Selection.WasRemoved));
+        }
+    }
+
+    /// <summary>Forward again to where Back left, as a browser's Forward button goes.</summary>
+    [RelayCommand(CanExecute = nameof(CanGoForward))]
+    private void GoForward()
+    {
+        if (Tree is { } tree)
+        {
+            Revisit(tree, _visits.Forward(Here, tree, Volume, Zooms, Selection.WasRemoved));
+        }
+    }
+
+    /// <summary>Where the reader is now, zoom and all, as a step on <see cref="_visits"/>.</summary>
+    private ExploreVisit Here => new(_position, Viewing());
+
+    /// <summary>
+    /// Whether the picture on screen can be zoomed, so a zoom is part of where the reader is. See
+    /// <see cref="ExploreSurface.Zooms"/>. Read from the view rather than from the map, because the
+    /// map hears of a change of view only once this page has said it.
+    /// </summary>
+    private bool Zooms => Tree is { } tree && ExploreSurface.Zooms(tree, SelectedView);
+
+    /// <summary>
+    /// Show <paramref name="to"/>: a step somewhere new, where the reader was going behind them. The
+    /// place already on screen is not somewhere new, so it is shown again without being a step, and
+    /// what lay ahead stays ahead.
+    /// </summary>
+    private void Visit(ExploreTree tree, ExplorePosition to)
+    {
+        if (!to.Shows(_position, tree, Volume))
+        {
+            _visits.Leave(Here);
+        }
+
+        Show(tree, to, Volume);
+    }
+
+    /// <summary>
+    /// Show <paramref name="visit"/> again, at the zoom it was left at. Within the same place only the
+    /// zoom moves, so the rows, the selection and the trail stay as they are.
+    /// </summary>
+    private void Revisit(ExploreTree tree, ExploreVisit? visit)
+    {
+        if (visit is not { } to)
+        {
+            return;
+        }
+
+        Revisiting = to.Viewport;
+
+        try
+        {
+            if (to.Position == _position)
+            {
+                ViewChanged?.Invoke(this, EventArgs.Empty);
+            }
+            else
+            {
+                Show(tree, to.Position, Volume);
+            }
+        }
+        finally
+        {
+            Revisiting = null;
+        }
+
+        // Asked again once the redraw has put the zoom where it was going: until then the map still
+        // answers with the zoom being left, and a step back to the same place at another zoom would
+        // read as a step to where the reader already is.
+        NotifyVisits();
+    }
+
+    /// <summary>
+    /// The map's zoom is somewhere new. Where Back and Forward lead turns on it, because a step to the
+    /// place on screen at the zoom on screen goes nowhere.
+    /// </summary>
+    public void ViewportChanged() => NotifyVisits();
+
+    /// <summary>Say that where Back and Forward lead may have changed.</summary>
+    private void NotifyVisits()
+    {
+        GoBackCommand.NotifyCanExecuteChanged();
+        GoForwardCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -1077,12 +1212,16 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         var redraw = ExploreRedraw.Between(Tree, _position, tree, position);
 
+        // Before the tree is replaced, because the steps' node numbers belong to the one leaving.
+        _visits.Carry(Tree, tree);
+
         Tree = tree;
         Volume = volume;
         _position = position;
 
         OnPropertyChanged(nameof(CurrentNode));
         AscendCommand.NotifyCanExecuteChanged();
+        NotifyVisits();
 
         if (redraw.KeepsSelection)
         {
@@ -1107,6 +1246,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Rebuild the list and the picture from what is left, without rescanning.</summary>
     private void Refresh()
     {
+        // A removal can take away a folder Back or Forward led to.
+        NotifyVisits();
+
         if (Tree is { } tree)
         {
             // The same directory of the same tree, with something taken out of it, so the rows are
@@ -1296,4 +1438,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     private bool CanRun() => !IsBusy;
 
     private bool CanAscend() => Tree is { } tree && _position.Up(tree, Volume) is not null;
+
+    private bool CanGoBack() => Tree is { } tree && _visits.CanGoBack(Here, tree, Volume, Zooms, Selection.WasRemoved);
+
+    private bool CanGoForward() => Tree is { } tree && _visits.CanGoForward(Here, tree, Volume, Zooms, Selection.WasRemoved);
 }

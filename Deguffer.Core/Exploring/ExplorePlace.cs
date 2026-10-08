@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
@@ -42,6 +44,14 @@ public static class ExplorePlace
     /// </returns>
     public static int Carry(ExploreTree? standing, int node, ExploreTree arriving) =>
         TryCarry(standing, node, arriving) ?? arriving.RootNode;
+
+    /// <summary>
+    /// Whether <paramref name="arriving"/> is rooted where <paramref name="standing"/> is, so places in
+    /// the one carry into the other at all. A tree rooted somewhere else is somewhere else, and so is
+    /// the first tree after none.
+    /// </summary>
+    public static bool IsRootedAlike([NotNullWhen(true)] ExploreTree? standing, ExploreTree arriving) =>
+        standing is not null && TryCarry(standing, standing.RootNode, arriving) is not null;
 
     /// <summary>
     /// The node of <paramref name="arriving"/> that stands where <paramref name="node"/> stood in

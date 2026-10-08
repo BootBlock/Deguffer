@@ -86,6 +86,15 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private bool _openingOwed;
 
+    /// <summary>
+    /// Whether the last press was one a tap may act on: the left button, a touch or a pen. The
+    /// framework makes a tap and a double-tap of the mouse's Back and Forward buttons too, which pick
+    /// and open nothing anywhere else in Windows. Where the page goes back or forward with them,
+    /// picking or opening the shape under the pointer as well would act on a picture the step is
+    /// about to replace.
+    /// </summary>
+    private bool _tapPress = true;
+
     private readonly ExploreLabels _labels = new();
 
     private readonly ExploreHighlight _highlight = new();
@@ -232,7 +241,12 @@ public sealed class ExploreMap : UserControl
         Canvas.SetZIndex(_labels, 3);
 
         _zoom.Moved += OnZoomMoved;
-        _zoom.Arrived += (_, _) => OnZoomArrived();
+        _zoom.Arrived += (_, _) =>
+        {
+            OnZoomArrived();
+            ViewportChanged?.Invoke(this, EventArgs.Empty);
+        };
+        _zoom.Retargeted += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
 
         _descent.Moved += OnDescentMoved;
         _descent.Arrived += OnDescentArrived;
@@ -368,6 +382,25 @@ public sealed class ExploreMap : UserControl
     public event EventHandler<int>? Activated;
 
     /// <summary>
+    /// A double-click is zooming to a shape it could not open, away from this part of the picture.
+    /// A step the page can go back from, as it can from a folder opened; a turn of the wheel or a drag
+    /// is not one.
+    /// </summary>
+    public event EventHandler<MapViewport>? ZoomingIn;
+
+    /// <summary>
+    /// The part of the picture the reader asked for: where the zoom is going, or where it is when
+    /// nothing is moving it. The whole picture on a drawing that does not zoom.
+    /// </summary>
+    public MapViewport Viewport => _zoom.Target;
+
+    /// <summary>
+    /// <see cref="Viewport"/> has a new answer: a glide set off, a drag let go, or the zoom was put
+    /// back for another picture or for a drawing that cannot be zoomed.
+    /// </summary>
+    public event EventHandler? ViewportChanged;
+
+    /// <summary>
     /// Whether the mouse wheel zooms the picture and the left button drags it, where the drawing can
     /// be zoomed at all. Off unless the page asks, because every new tree starts from the whole
     /// picture, and a page that draws a new tree every few seconds would take the reader's zoom away
@@ -394,7 +427,9 @@ public sealed class ExploreMap : UserControl
             + "contents as a readable list. Double-click a shape to open what is inside it."
             + (Zoomable
                 ? " On the treemap, turn the mouse wheel to zoom, drag with the left button to move a "
-                    + "zoomed picture, and double-click anything else to zoom to it."
+                    + "zoomed picture, and double-click anything else to zoom to it. The mouse's Back and "
+                    + "Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through "
+                    + "the folders opened and the zooms to a shape."
                 : string.Empty));
 
     /// <summary>
@@ -429,6 +464,7 @@ public sealed class ExploreMap : UserControl
     /// </param>
     /// <param name="growth">What grew since the last scan, for a map coloured by growth, or null.</param>
     /// <param name="types">The kind of file each node holds most of, for a map coloured by type, or null.</param>
+    /// <param name="viewport">See the other overload.</param>
     public void Show(
         ExploreTree? tree,
         int node,
@@ -438,7 +474,8 @@ public sealed class ExploreMap : UserControl
         ExploreSpacing spacing,
         VolumeSpace volume,
         Core.Exploring.History.ScanGrowth? growth,
-        Core.Exploring.Files.DominantTypes? types) =>
+        Core.Exploring.Files.DominantTypes? types,
+        MapViewport? viewport = null) =>
         Show(
             tree,
             node,
@@ -450,7 +487,8 @@ public sealed class ExploreMap : UserControl
                 ? _ => string.Empty
                 : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}",
             spacing,
-            volume);
+            volume,
+            viewport);
 
     /// <summary>
     /// Draw <paramref name="node"/> of any tree a layout can lay out.
@@ -459,6 +497,10 @@ public sealed class ExploreMap : UserControl
     /// <param name="labelText">What to write on a shape of the tree this drawing chose to label.</param>
     /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
     /// <param name="volume">The volume to draw beside <paramref name="node"/>, or <see cref="VolumeSpace.None"/>.</param>
+    /// <param name="viewport">
+    /// The zoom to show the picture at, for a page going back or forward to where the reader had
+    /// zoomed, and null to keep the zoom on the same picture and start another at the whole of it.
+    /// </param>
     public void Show(
         ISizedTree? tree,
         int node,
@@ -466,7 +508,8 @@ public sealed class ExploreMap : UserControl
         Func<DateTime, ShapeColours> colours,
         Func<int, string> labelText,
         ExploreSpacing spacing,
-        VolumeSpace volume)
+        VolumeSpace volume,
+        MapViewport? viewport = null)
     {
         ArgumentNullException.ThrowIfNull(colours);
         ArgumentNullException.ThrowIfNull(labelText);
@@ -491,7 +534,11 @@ public sealed class ExploreMap : UserControl
 
             _descent.Finish();
             EndDrag();
-            _zoom.Reset();
+
+            // Drawn at the zoom asked for from the start, rather than drawn whole and then glided in.
+            _zoom.Reset(Zoomable && viewport is { } revisited && tree is not null && ExploreSurface.Zooms(tree, view)
+                ? revisited
+                : MapViewport.Whole);
 
             // The picture on screen stays, to open out of, and the new one is drawn into the other
             // set of layers over it.
@@ -537,6 +584,13 @@ public sealed class ExploreMap : UserControl
         if (opening is not null && _drawing is null && _redraws.Pending is null)
         {
             _descent.Finish();
+        }
+
+        // The same picture, zoomed to where the reader was, moves there as a zoom to a shape does.
+        // After the redraw, which draws where the zoom is now and is the drawing the move starts from.
+        if (!another && Zoomable && viewport is { } returning && tree is not null && ExploreSurface.Zooms(tree, view))
+        {
+            _zoom.GlideTo(returning);
         }
     }
 
@@ -848,7 +902,7 @@ public sealed class ExploreMap : UserControl
         }
         else
         {
-            _zoom.Reset();
+            _zoom.Reset(MapViewport.Whole);
             _drawn = MapViewport.Whole;
         }
 
@@ -1139,6 +1193,8 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetCurrentPoint(this);
 
+        _tapPress = point.PointerDeviceType != PointerDeviceType.Mouse || point.Properties.IsLeftButtonPressed;
+
         _descent.Finish();
 
         var movable = Zoomable
@@ -1288,7 +1344,7 @@ public sealed class ExploreMap : UserControl
 
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (!_drag.Dragged)
+        if (_tapPress && !_drag.Dragged)
         {
             Pick(e.GetPosition(this));
         }
@@ -1341,7 +1397,7 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetPosition(this);
 
-        if (_drag.Dragged || Locate(point) is not { } spot || spot.Drawing.At(spot.X, spot.Y) is not { } hit)
+        if (!_tapPress || _drag.Dragged || Locate(point) is not { } spot || spot.Drawing.At(spot.X, spot.Y) is not { } hit)
         {
             return;
         }
@@ -1379,8 +1435,16 @@ public sealed class ExploreMap : UserControl
 
         if (Zoomable && shape is { } frame)
         {
+            var fitting = MapViewport.Fitting(_zoom.Shown.PictureOf(frame));
+
+            // Already going there, which is a step to nowhere.
+            if (fitting != _zoom.Target)
+            {
+                ZoomingIn?.Invoke(this, _zoom.Target);
+            }
+
             Underlay();
-            _zoom.GlideTo(MapViewport.Fitting(_zoom.Shown.PictureOf(frame)));
+            _zoom.GlideTo(fitting);
         }
     }
 

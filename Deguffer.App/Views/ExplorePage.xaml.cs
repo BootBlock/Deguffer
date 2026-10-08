@@ -8,6 +8,7 @@ using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Safety;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -201,8 +202,18 @@ public sealed partial class ExplorePage : Page
 
         Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
+        Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
+        Map.ViewportChanged += (_, _) => ViewModel.ViewportChanged();
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
         Map.MenuRequested += OnMapMenuRequested;
+
+        // A step away remembers the zoom it left, so Back comes back to it. See ExploreViewModel.Viewing.
+        ViewModel.Viewing = () => Map.Viewport;
+
+        // The mouse's Back and Forward buttons from anywhere on the page, as a browser takes them.
+        // Heard past the handled flag, because a row or a button under the pointer marks the press
+        // handled on its way past. Backspace is the page's accelerator, in the XAML.
+        AddHandler(PointerReleasedEvent, new PointerEventHandler(OnPageReleased), handledEventsToo: true);
 
         // Read once, here, and never again — the same rule the Storage page's density selector
         // follows, and for the same reason: re-reading on every navigation undoes a choice whose
@@ -386,7 +397,8 @@ public sealed partial class ExplorePage : Page
             _appearance.Look.Spacing,
             ViewModel.VolumeBeside,
             ViewModel.Growth.Comparison,
-            ViewModel.Types.Dominant);
+            ViewModel.Types.Dominant,
+            ViewModel.Revisiting);
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the
@@ -838,6 +850,41 @@ public sealed partial class ExplorePage : Page
 
     private void OnRevealInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
         args.Handled = Invoke(ViewModel.Selection.RevealCommand);
+
+    /// <summary>
+    /// The mouse's Back or Forward button. Taken as it comes up rather than as it goes down, as
+    /// Windows takes it: the list is not then in the middle of a press, which it would read as the
+    /// reader picking a row out of the rows the step is about to replace. See
+    /// <see cref="IsUserSelecting"/>.
+    /// </summary>
+    private void OnPageReleased(object sender, PointerRoutedEventArgs e)
+    {
+        var command = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
+        {
+            PointerUpdateKind.XButton1Released => ViewModel.GoBackCommand,
+            PointerUpdateKind.XButton2Released => ViewModel.GoForwardCommand,
+            _ => null,
+        };
+
+        if (command is not null && Invoke(command))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Backspace goes back, unless a box being typed in has the focus: there it deletes a character,
+    /// and leaving the accelerator unhandled passes the key on to the box.
+    /// </summary>
+    private void OnBackspaceInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (FocusManager.GetFocusedElement(XamlRoot) is TextBox or PasswordBox or RichEditBox or AutoSuggestBox)
+        {
+            return;
+        }
+
+        args.Handled = Invoke(ViewModel.GoBackCommand);
+    }
 
     /// <summary>
     /// Run the command if it will run, and say whether it did.

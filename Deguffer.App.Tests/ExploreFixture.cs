@@ -93,6 +93,24 @@ internal sealed class ExploreFixture : IDisposable
         await running;
     }
 
+    /// <summary>A folder holding one file, beside a file, on the disk so a removal has something to remove.</summary>
+    public (ExploreTree Tree, int Folder) OnDisk()
+    {
+        var root = Temp.CreateDirectory("scan");
+        Temp.CreateFile(10, "scan", "old", "a.bin");
+        Temp.CreateFile(5, "scan", "keep.bin");
+
+        var builder = new ExploreTreeBuilder(root);
+        var folder = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            Folder("old"),
+            File("keep.bin", 5),
+        ]);
+
+        builder.AddChildren(folder, [File("a.bin", 10)]);
+
+        return (builder.Build(ExploreChildOrder.BySize), folder);
+    }
+
     public void Dispose() => Temp.Dispose();
 
     public static ExploreChild Folder(string name) => new(name, IsDirectory: true, IsLink: false, Size: 0);

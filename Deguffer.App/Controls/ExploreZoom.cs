@@ -54,6 +54,12 @@ internal sealed class ExploreZoom
     /// <summary>Raised once when a move arrives, which is when the picture is worth drawing again.</summary>
     public event EventHandler? Arrived;
 
+    /// <summary>
+    /// Raised when <see cref="Target"/> moves at once: a glide that sets off for somewhere new, and a
+    /// reset. A drag moves it at every step, and says so once, by <see cref="Arrived"/>, as it lets go.
+    /// </summary>
+    public event EventHandler? Retargeted;
+
     public ExploreZoom(IMotionPolicy motion, IFrameClock clock)
     {
         _motion = motion;
@@ -62,6 +68,9 @@ internal sealed class ExploreZoom
 
     /// <summary>The viewport on screen at this moment.</summary>
     public MapViewport Shown { get; private set; }
+
+    /// <summary>Where the zoom is going, which is where it is when nothing is moving it.</summary>
+    public MapViewport Target => _target;
 
     /// <summary>
     /// Zoom by <paramref name="delta"/> of the wheel, in its own units, at the screen point
@@ -94,6 +103,7 @@ internal sealed class ExploreZoom
         }
 
         _target = target;
+        Retargeted?.Invoke(this, EventArgs.Empty);
 
         var motion = _motion.For(MotionToken.Camera);
 
@@ -140,13 +150,23 @@ internal sealed class ExploreZoom
     /// <summary>The hand let go: the picture is where it will stay, and worth drawing there.</summary>
     public void Release() => Arrived?.Invoke(this, EventArgs.Empty);
 
-    /// <summary>Back to the whole picture at once, for a map that has been handed something else to draw.</summary>
-    public void Reset()
+    /// <summary>
+    /// To <paramref name="viewport"/> at once, for a map that has been handed something else to draw:
+    /// the whole of it, or the part the reader had zoomed to when they were last there.
+    /// </summary>
+    public void Reset(MapViewport viewport)
     {
         Stop();
 
-        Shown = MapViewport.Whole;
-        _target = MapViewport.Whole;
+        var moved = viewport != _target;
+
+        Shown = viewport;
+        _target = viewport;
+
+        if (moved)
+        {
+            Retargeted?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>
