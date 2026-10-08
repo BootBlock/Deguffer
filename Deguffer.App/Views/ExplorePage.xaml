@@ -6,7 +6,17 @@
     xmlns:controls="using:Deguffer.App.Controls"
     xmlns:exploring="using:Deguffer.Core.Exploring"
     xmlns:vm="using:Deguffer.App.ViewModels"
-    Background="Transparent">
+    Background="Transparent"
+    KeyboardAcceleratorPlacementMode="Hidden">
+
+    <!--
+        Backspace goes back from anywhere on the page, as Alt+Left does. An accelerator rather than a
+        KeyDown handler, because a click on the map focuses nothing and a key then reaches no element
+        to bubble from; an accelerator is heard from the whole page whatever holds the focus.
+    -->
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="Back" Invoked="OnBackspaceInvoked" />
+    </Page.KeyboardAccelerators>
 
     <Page.Resources>
         <!--

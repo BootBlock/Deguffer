@@ -1038,7 +1038,6 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             if (to.Position == _position)
             {
-                NotifyVisits();
                 ViewChanged?.Invoke(this, EventArgs.Empty);
             }
             else
@@ -1050,7 +1049,18 @@ public sealed partial class ExploreViewModel : ObservableObject
         {
             Revisiting = null;
         }
+
+        // Asked again once the redraw has put the zoom where it was going: until then the map still
+        // answers with the zoom being left, and a step back to the same place at another zoom would
+        // read as a step to where the reader already is.
+        NotifyVisits();
     }
+
+    /// <summary>
+    /// The map's zoom has come to rest somewhere new. Where Back and Forward lead turns on it, because
+    /// a step to the place on screen at the zoom on screen goes nowhere.
+    /// </summary>
+    public void ZoomSettled() => NotifyVisits();
 
     /// <summary>Say that where Back and Forward lead may have changed.</summary>
     private void NotifyVisits()

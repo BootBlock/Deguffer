@@ -16,8 +16,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
-using Windows.System;
-using Windows.UI.Core;
 
 namespace Deguffer.App.Views;
 
@@ -205,17 +203,17 @@ public sealed partial class ExplorePage : Page
         Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
         Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
+        Map.ZoomSettled += (_, _) => ViewModel.ZoomSettled();
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
         Map.MenuRequested += OnMapMenuRequested;
 
         // A step away remembers the zoom it left, so Back comes back to it. See ExploreViewModel.Viewing.
         ViewModel.Viewing = () => Map.Viewport;
 
-        // Back and Forward from anywhere on the page, as a browser takes them. The mouse's buttons are
-        // heard past the handled flag, because a row or a button under the pointer marks the press
-        // handled on its way past; the key is heard only where nothing under it wanted it.
+        // The mouse's Back and Forward buttons from anywhere on the page, as a browser takes them.
+        // Heard past the handled flag, because a row or a button under the pointer marks the press
+        // handled on its way past. Backspace is the page's accelerator, in the XAML.
         AddHandler(PointerReleasedEvent, new PointerEventHandler(OnPageReleased), handledEventsToo: true);
-        KeyDown += OnPageKeyDown;
 
         // Read once, here, and never again — the same rule the Storage page's density selector
         // follows, and for the same reason: re-reading on every navigation undoes a choice whose
@@ -875,23 +873,18 @@ public sealed partial class ExplorePage : Page
     }
 
     /// <summary>
-    /// Backspace on its own goes back, where nothing under it took the key: a box being typed in
-    /// deletes a character with it, and must go on doing so even where it marks nothing handled.
+    /// Backspace goes back, unless a box being typed in has the focus: there it deletes a character,
+    /// and leaving the accelerator unhandled passes the key on to the box.
     /// </summary>
-    private void OnPageKeyDown(object sender, KeyRoutedEventArgs e)
+    private void OnBackspaceInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (e.Key != VirtualKey.Back
-            || e.OriginalSource is TextBox or PasswordBox or RichEditBox or AutoSuggestBox
-            || IsDown(VirtualKey.Control) || IsDown(VirtualKey.Menu) || IsDown(VirtualKey.Shift))
+        if (FocusManager.GetFocusedElement(XamlRoot) is TextBox or PasswordBox or RichEditBox or AutoSuggestBox)
         {
             return;
         }
 
-        e.Handled = Invoke(ViewModel.GoBackCommand);
+        args.Handled = Invoke(ViewModel.GoBackCommand);
     }
-
-    private static bool IsDown(VirtualKey key) =>
-        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
     /// <summary>
     /// Run the command if it will run, and say whether it did.

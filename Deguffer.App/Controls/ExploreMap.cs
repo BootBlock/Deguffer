@@ -86,6 +86,14 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private bool _openingOwed;
 
+    /// <summary>
+    /// Whether the last press was one a tap may act on: the left button, a touch or a pen. The
+    /// framework makes a tap and a double-tap of the mouse's Back and Forward buttons too, and those
+    /// belong to the page, which goes back or forward with them; picking or opening the shape under
+    /// the pointer as well would act on a picture the step is about to replace.
+    /// </summary>
+    private bool _tapPress = true;
+
     private readonly ExploreLabels _labels = new();
 
     private readonly ExploreHighlight _highlight = new();
@@ -232,7 +240,11 @@ public sealed class ExploreMap : UserControl
         Canvas.SetZIndex(_labels, 3);
 
         _zoom.Moved += OnZoomMoved;
-        _zoom.Arrived += (_, _) => OnZoomArrived();
+        _zoom.Arrived += (_, _) =>
+        {
+            OnZoomArrived();
+            ZoomSettled?.Invoke(this, EventArgs.Empty);
+        };
 
         _descent.Moved += OnDescentMoved;
         _descent.Arrived += OnDescentArrived;
@@ -379,6 +391,12 @@ public sealed class ExploreMap : UserControl
     /// nothing is moving it. The whole picture on a drawing that does not zoom.
     /// </summary>
     public MapViewport Viewport => _zoom.Target;
+
+    /// <summary>
+    /// The zoom has come to rest, wherever the wheel, a drag, a double-click or the page put it, so
+    /// <see cref="Viewport"/> has a new answer worth asking for.
+    /// </summary>
+    public event EventHandler? ZoomSettled;
 
     /// <summary>
     /// Whether the mouse wheel zooms the picture and the left button drags it, where the drawing can
@@ -1171,6 +1189,8 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetCurrentPoint(this);
 
+        _tapPress = point.PointerDeviceType != PointerDeviceType.Mouse || point.Properties.IsLeftButtonPressed;
+
         _descent.Finish();
 
         var movable = Zoomable
@@ -1320,7 +1340,7 @@ public sealed class ExploreMap : UserControl
 
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (!_drag.Dragged)
+        if (_tapPress && !_drag.Dragged)
         {
             Pick(e.GetPosition(this));
         }
@@ -1373,7 +1393,7 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetPosition(this);
 
-        if (_drag.Dragged || Locate(point) is not { } spot || spot.Drawing.At(spot.X, spot.Y) is not { } hit)
+        if (!_tapPress || _drag.Dragged || Locate(point) is not { } spot || spot.Drawing.At(spot.X, spot.Y) is not { } hit)
         {
             return;
         }

@@ -114,6 +114,38 @@ public sealed class ExploreBackForwardTests : IDisposable
     });
 
     /// <summary>
+    /// Forward is offered once Back has undone a zoom, which is asked only after the redraw has moved
+    /// the map's zoom: asked before, the map still answers with the zoom being left, and the step
+    /// ahead reads as a step to where the reader already is. And a zoom that comes to rest anywhere
+    /// asks again.
+    /// </summary>
+    [Fact]
+    public void ForwardIsOfferedOnceTheZoomHasMoved() => UiThread.Run(async () =>
+    {
+        var (page, _, _, _) = await ScannedAsync();
+        var viewing = MapViewport.Whole;
+        var offered = new List<bool>();
+
+        // The map: a redraw that hands it a zoom puts it there before the redraw returns.
+        page.Viewing = () => viewing;
+        page.ViewChanged += (_, _) => viewing = page.Revisiting ?? viewing;
+        page.GoForwardCommand.CanExecuteChanged += (_, _) => offered.Add(page.GoForwardCommand.CanExecute(null));
+
+        page.Zoomed(viewing);
+        viewing = Zoomed;
+
+        page.GoBackCommand.Execute(null);
+
+        Assert.Equal(MapViewport.Whole, viewing);
+        Assert.True(offered[^1]);
+
+        var asked = offered.Count;
+        page.ZoomSettled();
+
+        Assert.Equal(asked + 1, offered.Count);
+    });
+
+    /// <summary>
     /// A rescan of the same place keeps where the reader has been, and a scan of somewhere else, or a
     /// cancelled one, forgets it.
     /// </summary>
