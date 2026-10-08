@@ -159,13 +159,14 @@ public sealed class ExploreBackForwardTests : IDisposable
         page.Viewing = () => viewing;
         page.GoBackCommand.CanExecuteChanged += (_, _) => told++;
 
-        page.Zoomed(viewing);
+        // A zoom to a shape, then a turn of the wheel back out to the whole picture: Back on the
+        // treemap zooms in again.
         viewing = Zoomed;
+        page.Zoomed(viewing);
+        viewing = MapViewport.Whole;
 
         Assert.True(page.GoBackCommand.CanExecute(null));
 
-        // The map puts the zoom back to the whole picture for a view that cannot show one.
-        viewing = MapViewport.Whole;
         told = 0;
         page.SelectedView = Core.Configuration.ExploreView.Sunburst;
 
