@@ -461,7 +461,7 @@ public sealed class ExploreViewModelTests : IDisposable
     {
         _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!);
         var page = _explore.Page();
-        var (tree, folder) = OnDisk();
+        var (tree, folder) = _explore.OnDisk();
         var busy = new List<bool>();
 
         page.ScopeTo(tree.PathOf(tree.RootNode));
@@ -496,7 +496,7 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Empty(page.Selection.Nodes);
 
         // A rescan is a new tree. What was removed from the last one says nothing about it.
-        var (rescan, again) = OnDisk();
+        var (rescan, again) = _explore.OnDisk();
         await _explore.ScanAsync(page, ExploreScan.Fast(rescan));
 
         Assert.Contains(page.Rows, row => row.Node == again);
@@ -820,24 +820,6 @@ public sealed class ExploreViewModelTests : IDisposable
         }
 
         throw new InvalidOperationException($"No child named {name}.");
-    }
-
-    /// <summary>A folder holding one file, beside a file, on the disk so a removal has something to remove.</summary>
-    private (ExploreTree Tree, int Folder) OnDisk()
-    {
-        var root = _explore.Temp.CreateDirectory("scan");
-        _explore.Temp.CreateFile(10, "scan", "old", "a.bin");
-        _explore.Temp.CreateFile(5, "scan", "keep.bin");
-
-        var builder = new ExploreTreeBuilder(root);
-        var folder = builder.AddChildren(ExploreTreeBuilder.RootNode, [
-            ExploreFixture.Folder("old"),
-            ExploreFixture.File("keep.bin", 5),
-        ]);
-
-        builder.AddChildren(folder, [ExploreFixture.File("a.bin", 10)]);
-
-        return (builder.Build(ExploreChildOrder.BySize), folder);
     }
 
     private static List<NotifyCollectionChangedAction> Watch(INotifyCollectionChanged list)

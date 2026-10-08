@@ -51,6 +51,17 @@ public readonly record struct ExplorePosition(int Node, bool OnVolume)
     }
 
     /// <summary>
+    /// Whether this draws what <paramref name="other"/> draws in <paramref name="tree"/> beside
+    /// <paramref name="volume"/>: the same node, on the same side of the root.
+    ///
+    /// <para>Not the record's own equality. Where there is no volume, the root drawn from the top and
+    /// the root opened are one picture, which <see cref="IsVolume"/> says and the two positions'
+    /// fields do not.</para>
+    /// </summary>
+    public bool Shows(ExplorePosition other, ExploreTree tree, VolumeSpace volume) =>
+        Node == other.Node && IsVolume(tree, volume) == other.IsVolume(tree, volume);
+
+    /// <summary>
     /// Where opening <paramref name="node"/> leads, or null where it leads nowhere new: a file, a
     /// folder with nothing in it, and the root when the views are already inside it. The first two
     /// would draw an empty card with a trail claiming the reader had gone somewhere.

@@ -63,6 +63,9 @@ internal sealed class ExploreZoom
     /// <summary>The viewport on screen at this moment.</summary>
     public MapViewport Shown { get; private set; }
 
+    /// <summary>Where the zoom is going, which is where it is when nothing is moving it.</summary>
+    public MapViewport Target => _target;
+
     /// <summary>
     /// Zoom by <paramref name="delta"/> of the wheel, in its own units, at the screen point
     /// (<paramref name="x"/>, <paramref name="y"/>) given as fractions of the screen.
@@ -140,13 +143,16 @@ internal sealed class ExploreZoom
     /// <summary>The hand let go: the picture is where it will stay, and worth drawing there.</summary>
     public void Release() => Arrived?.Invoke(this, EventArgs.Empty);
 
-    /// <summary>Back to the whole picture at once, for a map that has been handed something else to draw.</summary>
-    public void Reset()
+    /// <summary>
+    /// To <paramref name="viewport"/> at once, for a map that has been handed something else to draw:
+    /// the whole of it, or the part the reader had zoomed to when they were last there.
+    /// </summary>
+    public void Reset(MapViewport viewport)
     {
         Stop();
 
-        Shown = MapViewport.Whole;
-        _target = MapViewport.Whole;
+        Shown = viewport;
+        _target = viewport;
     }
 
     /// <summary>

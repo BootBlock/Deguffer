@@ -228,6 +228,15 @@ public abstract class ExploreSurface
     }
 
     /// <summary>
+    /// Whether a drawing of <paramref name="tree"/> for <paramref name="view"/> can be zoomed: the
+    /// treemap, and the drawing kept behind a view that draws no map at all, which is a treemap too.
+    /// Asked before drawing by a caller that has a zoom to hand over, so a picture that would only
+    /// refuse it is not placed at it while it is drawn.
+    /// </summary>
+    public static bool Zooms(ISizedTree tree, ExploreView view) =>
+        Drawn(tree, view) is not (ExploreView.Sunburst or ExploreView.Icicle);
+
+    /// <summary>
     /// Lay <paramref name="root"/> of <paramref name="tree"/> out for <paramref name="view"/>, on a
     /// canvas of <paramref name="width"/> by <paramref name="height"/> device pixels at
     /// <paramref name="scale"/>.

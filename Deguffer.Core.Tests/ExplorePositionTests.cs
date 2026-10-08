@@ -61,6 +61,24 @@ public sealed class ExplorePositionTests
         Assert.Null(top.Opening(tree, empty + 1, Volume));
     }
 
+    /// <summary>
+    /// The root from the top and the root opened are two pictures only where a volume is drawn
+    /// beside the one and not the other.
+    /// </summary>
+    [Fact]
+    public void TheRootFromTheTopAndOpenedAreOnePictureWithoutAVolume()
+    {
+        var tree = Tree(@"D:\");
+        var top = ExplorePosition.Top(tree);
+        var opened = ExplorePosition.Inside(tree.RootNode);
+        var folder = ExplorePosition.Inside(tree.ChildrenOf(tree.RootNode)[0]);
+
+        Assert.True(top.Shows(opened, tree, VolumeSpace.None));
+        Assert.False(top.Shows(opened, tree, Volume));
+        Assert.True(top.Shows(top, tree, Volume));
+        Assert.False(opened.Shows(folder, tree, VolumeSpace.None));
+    }
+
     [Fact]
     public void GoingUpFromTheOpenedRootGoesBackOutToTheVolume()
     {

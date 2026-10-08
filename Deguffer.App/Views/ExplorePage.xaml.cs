@@ -8,6 +8,7 @@ using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Safety;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -15,6 +16,8 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace Deguffer.App.Views;
 
@@ -201,8 +204,18 @@ public sealed partial class ExplorePage : Page
 
         Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
+        Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
         Map.MenuRequested += OnMapMenuRequested;
+
+        // A step away remembers the zoom it left, so Back comes back to it. See ExploreViewModel.Viewing.
+        ViewModel.Viewing = () => Map.Viewport;
+
+        // Back and Forward from anywhere on the page, as a browser takes them. The mouse's buttons are
+        // heard past the handled flag, because a row or a button under the pointer marks the press
+        // handled on its way past; the key is heard only where nothing under it wanted it.
+        AddHandler(PointerReleasedEvent, new PointerEventHandler(OnPageReleased), handledEventsToo: true);
+        KeyDown += OnPageKeyDown;
 
         // Read once, here, and never again — the same rule the Storage page's density selector
         // follows, and for the same reason: re-reading on every navigation undoes a choice whose
@@ -386,7 +399,8 @@ public sealed partial class ExplorePage : Page
             _appearance.Look.Spacing,
             ViewModel.VolumeBeside,
             ViewModel.Growth.Comparison,
-            ViewModel.Types.Dominant);
+            ViewModel.Types.Dominant,
+            ViewModel.Revisiting);
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the
@@ -838,6 +852,46 @@ public sealed partial class ExplorePage : Page
 
     private void OnRevealInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
         args.Handled = Invoke(ViewModel.Selection.RevealCommand);
+
+    /// <summary>
+    /// The mouse's Back or Forward button. Taken as it comes up rather than as it goes down, as
+    /// Windows takes it: the list is not then in the middle of a press, which it would read as the
+    /// reader picking a row out of the rows the step is about to replace. See
+    /// <see cref="IsUserSelecting"/>.
+    /// </summary>
+    private void OnPageReleased(object sender, PointerRoutedEventArgs e)
+    {
+        var command = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
+        {
+            PointerUpdateKind.XButton1Released => ViewModel.GoBackCommand,
+            PointerUpdateKind.XButton2Released => ViewModel.GoForwardCommand,
+            _ => null,
+        };
+
+        if (command is not null && Invoke(command))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Backspace on its own goes back, where nothing under it took the key: a box being typed in
+    /// deletes a character with it, and must go on doing so even where it marks nothing handled.
+    /// </summary>
+    private void OnPageKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Back
+            || e.OriginalSource is TextBox or PasswordBox or RichEditBox or AutoSuggestBox
+            || IsDown(VirtualKey.Control) || IsDown(VirtualKey.Menu) || IsDown(VirtualKey.Shift))
+        {
+            return;
+        }
+
+        e.Handled = Invoke(ViewModel.GoBackCommand);
+    }
+
+    private static bool IsDown(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
     /// <summary>
     /// Run the command if it will run, and say whether it did.
