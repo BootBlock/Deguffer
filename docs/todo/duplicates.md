@@ -460,19 +460,25 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
 
 - 2026-10-08: phase 0 landed. §2 amended (the duplicate-finder non-goal replaced by a goal and a
   similarity non-goal) and §7.4 written; this plan written from the research above.
-- 2026-10-09: phase 1 landed. The search as values (`DuplicateSearch`); locations resolved to the
-  final path of an opened handle (`SearchLocations`, `FileInformation`); the places Explore refuses
-  at and below (`ExploreActionPolicy.RefusedAtAndBelow`, `RefusalWatch`) and program folders
-  (`ProgramFolders`) passed over and named; one file-table read per volume
-  (`ExploreScanner.ScanFoldersAsync`); a hidden and system column on the scan tree; and the files
-  kept and grouped by length and name (`CandidateFinder`). Decided: the attributes column rather
-  than a later read; a mail store, and a folder named like one, are passed over; a folder matching
-  a location only when case is ignored takes the reference role where either role is one; the place
-  a reference that could not be resolved names is passed over, and no rule may mark while one went
-  unsearched (phase 4). Corrected
-  here: candidates group by length only where the size or the content is a criterion, not always;
-  `CloudFiles.Resolve` already followed every link, so the final-path call moved from it rather than
-  being new.
+- 2026-10-09: phase 1 landed. The search as values (`DuplicateSearch`), refusing a size range or
+  an extension list that admits no file; locations resolved to the final path of an opened handle
+  (`SearchLocations`, `FileInformation`), a share, a network drive and a cloud drive refused before
+  anything is opened on them; the places Explore refuses at and below
+  (`ExploreActionPolicy.RefusedAtAndBelow`, `TopOfVolumeRefusals`, `RefusalWatch`) and program
+  folders (`ProgramFolders`) passed over and named; one file-table read per volume
+  (`ExploreScanner.ScanFoldersAsync`), each folder found in it by its exact name and its route
+  noted; a hidden and system column on the scan tree; folders Windows would not list, and
+  locations read from a table not read whole, named as unread; and the files kept and grouped by
+  length and name (`CandidateFinder`). Decided: the attributes column rather than a later read; a
+  mail store, and a folder named like one, are passed over; one location holds another only on
+  the same volume, because the enumeration of a drive never crosses a volume mounted in one of its
+  folders; a folder matching a location only when case is ignored takes the reference role where
+  either role is one; the place a reference that went unsearched names is passed over, even where
+  the user searches the places passed over by default, and no rule may mark while one went
+  unsearched (§7.4, phase 4), because a link or a share naming this computer's own disk can hide
+  its copies from that match. Corrected here: candidates group by length only where the size or
+  the content is a criterion, not always; `CloudFiles.Resolve` already followed every link, so the
+  final-path call moved from it rather than being new.
 
 ## Limits that stay open
 
