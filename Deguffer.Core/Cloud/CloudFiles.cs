@@ -160,7 +160,7 @@ public sealed class CloudFiles : ICloudFiles
             return new PlaceholderReading(presence, null);
         }
 
-        using var handle = OpenForState(LongPath.Extended(path));
+        using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Describe);
 
         if (handle.IsInvalid)
         {
@@ -182,7 +182,7 @@ public sealed class CloudFiles : ICloudFiles
 
     public ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible)
     {
-        using var handle = OpenForState(LongPath.Extended(path));
+        using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Describe);
 
         if (handle.IsInvalid)
         {
@@ -261,7 +261,7 @@ public sealed class CloudFiles : ICloudFiles
             return (result, null);
         }
 
-        if (!TryBasicInfo(handle, out var basic))
+        if (!FileInformation.TryBasic(handle, out var basic))
         {
             return (Marshal.GetHRForLastWin32Error(), null);
         }

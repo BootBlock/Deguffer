@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Deguffer.Core.Cloud;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
 
@@ -90,9 +91,9 @@ public sealed partial class OccupancyProbe : IOccupancyProbe
     /// <summary>The reparse tag of the entry itself, never its target's, or null where it would not open.</summary>
     private static uint? ReparseTagOf(string path)
     {
-        using var handle = CloudFilesNative.OpenForState(path);
+        using var handle = FileInformation.Open(path, HandleUse.Describe);
 
-        return !handle.IsInvalid && CloudFilesNative.TryReparseTag(handle, out var tag) ? tag : null;
+        return !handle.IsInvalid && FileInformation.TryAttributeTag(handle, out var info) ? info.ReparseTag : null;
     }
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetCompressedFileSizeW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]

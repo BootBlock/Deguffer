@@ -25,11 +25,14 @@ public sealed class DuplicateCandidateTests : IDisposable
 
     private static IEnumerable<string> Names(CandidateGroup group) => group.Files.Select(file => file.Name).Order();
 
+    private static IEnumerable<string> Names(IReadOnlyList<FoundFile> group) => group.Select(file => file.Tree.NameOf(file.Node)).Order();
+
     /// <summary>Opens each path as Windows does, except <paramref name="refused"/>, spelled exactly so, which Windows will not open.</summary>
-    private static FileInformation Refusing(string refused) => new(path =>
-        LongPath.Display(path).Equals(refused, StringComparison.Ordinal)
+    private static FileInformation Refusing(string refused) => new(
+        (path, use) => LongPath.Display(path).Equals(refused, StringComparison.Ordinal)
             ? new SafeFileHandle(-1, ownsHandle: false)
-            : FileInformation.OpenToResolve(path));
+            : FileInformation.Open(path, use),
+        FileInformation.ReadIdentity);
 
     [Fact]
     public async Task AReferenceInsideASearchedFolderStaysAReference()
@@ -181,11 +184,11 @@ public sealed class DuplicateCandidateTests : IDisposable
             LocationRole.Reference, DriveX);
 
         var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]), new UnresolvedReferences([]));
-        walk.Read(Scanned(tree, tree.RootNode), root, [reference], below: null, default);
+        walk.Read(Scanned(tree, tree.RootNode), root, [reference], below: null, IdentityRoute.FileId, default);
 
-        var group = Assert.Single(CandidateGrouping.Group(walk.Found, MatchCriteria.Size));
-        Assert.Equal(LocationRole.Reference, group.Files.Single(file => file.Name == "a.jpg").Role);
-        Assert.Equal(LocationRole.Search, group.Files.Single(file => file.Name == "b.jpg").Role);
+        var group = Assert.Single(CandidateGrouping.ByTheTree(walk.Found, MatchCriteria.Size, CandidateGrouping.TreeMinuteOf));
+        Assert.Equal(LocationRole.Reference, group.Single(file => tree.NameOf(file.Node) == "a.jpg").Role);
+        Assert.Equal(LocationRole.Search, group.Single(file => tree.NameOf(file.Node) == "b.jpg").Role);
     }
 
     [Fact]
@@ -345,22 +348,24 @@ public sealed class DuplicateCandidateTests : IDisposable
     }
 
     /// <summary>
-    /// The tree keeps a modified time only to the minute, so the time waits for phase 2's
-    /// full-precision times, and until then every file kept is one group, whatever its length or name.
+    /// Times compare to the file system's full precision (§7.4): one tick apart in the same minute is
+    /// no match, whatever the files' lengths and names.
     /// </summary>
     [Fact]
-    public async Task AModifiedTimeSearchKeepsEveryFileInOneGroupUntilTheTimesAreRead()
+    public async Task AModifiedTimeSearchComparesTheTimesToTheTick()
     {
-        _tree.File(10, "One", "a.jpg");
-        _tree.File(20, "Two", "b.png");
-        _tree.File(30, "Two", "c");
+        var instant = new DateTime(2026, 3, 14, 15, 9, 26, DateTimeKind.Utc).AddTicks(5_358_979);
+        File.SetLastWriteTimeUtc(_tree.File(10, "One", "a.jpg"), instant);
+        File.SetLastWriteTimeUtc(_tree.File(20, "Two", "b.png"), instant);
+        File.SetLastWriteTimeUtc(_tree.File(30, "Two", "c"), instant.AddTicks(1));
 
         var found = await _tree.FindAsync(MatchCriteria.Modified, Searched());
 
         var group = Assert.Single(found.Groups);
         Assert.Null(group.Length);
         Assert.Null(group.Name);
-        Assert.Equal(["a.jpg", "b.png", "c"], Names(group));
+        Assert.Equal(instant, group.Modified);
+        Assert.Equal(["a.jpg", "b.png"], Names(group));
     }
 
     /// <summary>
@@ -455,15 +460,15 @@ public sealed class DuplicateCandidateTests : IDisposable
         Assert.Equal(FileVisibility.Shown, Of("plain.bin"));
     }
 
-    private static (IReadOnlyList<CandidateGroup> Groups, LeftOutFiles LeftOut) Walk(ExploreTree tree, int node, MatchCriteria criteria)
+    private static (IReadOnlyList<IReadOnlyList<FoundFile>> Groups, LeftOutFiles LeftOut) Walk(ExploreTree tree, int node, MatchCriteria criteria)
     {
         var volumes = new FakeVolumeInventory();
         var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search, DriveX);
         var walk = new CandidateWalk(new DuplicateSearch(criteria, [root.Given]), new UnresolvedReferences([]));
 
-        walk.Read(Scanned(tree, node), root, [], below: null, default);
+        walk.Read(Scanned(tree, node), root, [], below: null, IdentityRoute.FileId, default);
 
-        return (CandidateGrouping.Group(walk.Found, criteria), walk.LeftOut);
+        return (CandidateGrouping.ByTheTree(walk.Found, criteria, CandidateGrouping.TreeMinuteOf), walk.LeftOut);
     }
 
     /// <summary><paramref name="node"/> of a tree read whole from a file table.</summary>

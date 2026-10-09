@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using Deguffer.Core.Safety;
+﻿using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
@@ -26,14 +25,7 @@ public sealed class HardLinkAwareScannerTests : IDisposable
     /// <summary>The store→node_modules relationship, reduced to one linked file.</summary>
     private string LinkOut(string storeFile, params string[] linkSegments)
     {
-        var link = Path.Combine([_temp.Path, .. linkSegments]);
-        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-
-        Assert.True(
-            CreateHardLink(link, storeFile, securityAttributes: 0),
-            $"CreateHardLink failed with error {Marshal.GetLastWin32Error()}.");
-
-        return link;
+        return HardLink.To(storeFile, Path.Combine([_temp.Path, .. linkSegments]));
     }
 
     [Fact]
@@ -217,9 +209,6 @@ public sealed class HardLinkAwareScannerTests : IDisposable
 
         Assert.Equal(FallbackReason.None, result.Fallback);
     }
-
-    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CreateHardLink(string fileName, string existingFileName, nint securityAttributes);
 
     /// <summary>
     /// The third measurement route, and the pnpm store's only one. It has to exclude a recent file

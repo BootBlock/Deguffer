@@ -227,11 +227,13 @@ public sealed class SearchLocationsTests : IDisposable
             .Last(root => !Directory.Exists(root));
         _tree.Volumes.With(letter, kind, features: features);
         List<string> opened = [];
-        var files = new FileInformation(path =>
-        {
-            opened.Add(path);
-            return FileInformation.OpenToResolve(path);
-        });
+        var files = new FileInformation(
+            (path, use) =>
+            {
+                opened.Add(path);
+                return FileInformation.Open(path, use);
+            },
+            FileInformation.ReadIdentity);
 
         var locations = SearchLocations.Resolve([new(Path.Combine(letter, "Photos"))], _tree.Volumes, files);
 

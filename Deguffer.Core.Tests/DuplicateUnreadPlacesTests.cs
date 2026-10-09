@@ -92,9 +92,9 @@ public sealed class DuplicateUnreadPlacesTests : IDisposable
             new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", new FakeVolumeInventory()), LocationRole.Search,
             new LocalVolume(@"X:\", DriveType.Fixed, VolumeReadiness.Ready));
         var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [location.Given]), new UnresolvedReferences([]));
-        walk.Read(scan, location, [], below: null, default);
+        walk.Read(scan, location, [], below: null, IdentityRoute.FileId, default);
 
-        Assert.Equal(damage == Damage.None ? 3 : 2, Assert.Single(CandidateGrouping.Group(walk.Found, MatchCriteria.Size)).Files.Count);
+        Assert.Equal(damage == Damage.None ? 3 : 2, Assert.Single(CandidateGrouping.ByTheTree(walk.Found, MatchCriteria.Size, CandidateGrouping.TreeMinuteOf)).Count);
 
         if (damage == Damage.None)
         {
