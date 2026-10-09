@@ -11,8 +11,9 @@ refusal to guess on your behalf, and without claiming to free a byte of it.
 purpose. **De-** removes it.
 
 > **Status:** Version 0.70.0. Eighty-one sources across the tiers, a file-table-backed Explore view
-> of the whole drive, and a Memory view of where physical memory goes that can ask one program you
-> pick to close itself. See [Roadmap](#roadmap).
+> of the whole drive, a Duplicates view of the files that are on the disk more than once, and a
+> Memory view of where physical memory goes that can ask one program you pick to close itself. See
+> [Roadmap](#roadmap).
 
 ## Why
 
@@ -238,6 +239,30 @@ before sending it, naming the program and how many windows will be asked. Afterw
 it sent and where, what it expected to exit, and what exited that it sent nothing to — and it never
 claims that nothing else stopped, because processes exit on their own and it cannot know that.
 
+## Files that are there twice
+
+The Duplicates view finds files that are on the disk more than once, across whole drives and
+folders, matched on the name, size, last-modified time or content you choose. Content is compared by
+a checksum you pick (XXH128 by default, SHA-256, SHA-512, SHA-1, MD5, CRC-32, or SHA3-256 where
+Windows offers it), first over each file's first and last blocks and then in full, and a checksum is
+remembered under the file's volume, number, length and times, never its path, so a second search
+reads only what changed. A location can be a reference, whose copies are matched and never marked.
+
+A file is one file however many names it has, a link is never followed and never matched, an empty
+file is never matched, and a file that is online-only is never read, so a search never makes
+Windows download anything. The places Explore refuses, and the folders programs are installed in,
+are passed over by default and named, so a search that skipped a place never reads as one that found
+nothing there.
+
+Nothing is marked when a search finishes. You mark copies by hand, or run a named rule that marks
+them, and every group always keeps a copy that can be kept: one on an internal drive, outside the
+temporary folder, a cloud folder and anything a Storage clean deletes. Removal goes to the Recycle
+Bin by default, and before each copy goes it is held open beside the copy kept and compared with it
+byte for byte, named streams included. A copy the Recycle Bin cannot take, because its path is too
+long or it is larger than the bin can hold, stays where it is, since Windows would otherwise delete
+it outright. Afterwards every kept and reference copy is checked to be still there, by its file
+number, and everything beside a removed copy by its exact name.
+
 ## Building
 
 Requires the **.NET 10 SDK**. `Deguffer.App` additionally needs the Windows App SDK workload.
@@ -265,6 +290,7 @@ Deguffer.Core/
   SystemProtection/ restore points and shadow copy storage, through Windows' own interfaces
   VirtualDisks/  WSL and Docker Desktop virtual disks: where they are, and the vendor's route to shrink each
   Exploring/     whole-drive view: file-table reads, tree building, what each location is
+  Duplicates/    the files there twice: locations, identity, checksums, marks, the guarded removal
   Memory/        where memory goes: process and service tables, checked figures, the memory tree
   InstalledApps/ Windows' installed programs list: stale entries, reg.exe backups, uninstallers
   Configuration/ user preferences
@@ -287,6 +313,8 @@ knowledge.
 File-table-backed full-drive scanning has landed: Explore reads the volume's MFT when the app runs
 elevated, and walks whatever the table cannot account for. The Memory view has landed as well, with
 the one action it will ever have: asking a program you pick to close itself, and nothing stronger.
+So has the Duplicates view, built to [its plan](docs/todo/duplicates.md); it matches no folders as
+units and replaces no copy with a link, by design.
 Still to come: VS Code workspace storage with per-workspace
 ages, Docker (reporting reclaim *inside* the VHDX separately from host space), and Android SDK.
 
