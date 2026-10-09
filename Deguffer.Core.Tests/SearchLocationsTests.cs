@@ -214,16 +214,18 @@ public sealed class SearchLocationsTests : IDisposable
     }
 
     /// <summary>
-    /// A letter mapped to a share (<c>net use Z:</c>): opening anything there is a conversation with
-    /// another machine, so the letter is refused on what the inventory says of it, before anything is
-    /// opened.
+    /// A letter mapped to a share (<c>net use Z:</c>), where opening anything is a conversation with
+    /// another machine, and a drive that keeps its files in the cloud, whose driver answers the open:
+    /// each is refused on what the inventory says of it, before anything is opened.
     /// </summary>
-    [Fact]
-    public void AMappedNetworkDriveIsRefusedBeforeAnythingIsOpenedOnIt()
+    [Theory]
+    [InlineData(DriveType.Network, VolumeFeatures.ReparsePoints, "network share")]
+    [InlineData(DriveType.Fixed, VolumeFeatures.RemoteStorage, "cloud")]
+    public void ADriveTheInventoryRefusesIsNeverOpened(DriveType kind, VolumeFeatures features, string reason)
     {
         var letter = Enumerable.Range('D', 23).Select(c => $"{(char)c}:{Path.DirectorySeparatorChar}")
             .Last(root => !Directory.Exists(root));
-        _tree.Volumes.With(letter, DriveType.Network);
+        _tree.Volumes.With(letter, kind, features: features);
         List<string> opened = [];
         var files = new FileInformation(path =>
         {
@@ -234,7 +236,7 @@ public sealed class SearchLocationsTests : IDisposable
         var locations = SearchLocations.Resolve([new(Path.Combine(letter, "Photos"))], _tree.Volumes, files);
 
         Assert.Empty(locations.Roots);
-        Assert.Contains("network share", Assert.Single(locations.Unsearched).Reason, StringComparison.Ordinal);
+        Assert.Contains(reason, Assert.Single(locations.Unsearched).Reason, StringComparison.Ordinal);
         Assert.Empty(opened);
     }
 
