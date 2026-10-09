@@ -59,9 +59,7 @@ public static class CleanRunReport
             {
                 text.AppendLine($"Verification: {verification.Summary}");
 
-                foreach (var check in verification.Failures
-                             .Concat(verification.RemovedFromOutside)
-                             .Concat(verification.Unverified))
+                foreach (var check in verification.Unpassed)
                 {
                     text.AppendLine($"- {check.Outcome}: `{check.Subject}`")
                         .AppendLine($"  - Found: {check.Detail}")

@@ -100,8 +100,8 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
     public bool HasOutcomeChecks => OutcomeChecks.Count > 0;
 
-    /// <summary>The sentence whose checks <see cref="OutcomeChecks"/> lists, or null where it lists none.</summary>
-    private string? _listedFor;
+    /// <summary>The last statement a removal put on the page.</summary>
+    private OutcomeStatement _stated = OutcomeStatement.Said(string.Empty);
 
     /// <summary>Why nothing can be marked, ruled or removed now, or an empty string where something can.</summary>
     public string WhyClosed => WhyCannotAct ?? _marks?.WhyRulesCannotMark ?? string.Empty;
@@ -313,7 +313,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                     rows[copy.Copy.Identity].Removal(copy.Message);
                 }
 
-                Say(answer.Summary, answer.Report?.Verification.Unpassed ?? []);
+                Say(answer.Statement);
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
@@ -322,28 +322,22 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         });
     }
 
-    /// <summary>Put a removal's sentence on the page and its checks beside it, updating the list in place.</summary>
-    private void Say(string sentence, IReadOnlyList<VerificationCheck> checks)
+    /// <summary>Put a removal's statement on the page and its checks beside it.</summary>
+    private void Say(OutcomeStatement statement)
     {
-        // Before the sentence, so the change below knows the sentence is this removal's own.
-        _listedFor = sentence;
-        Outcome = sentence;
-        LiveList.Rewrite(OutcomeChecks, checks);
-        OnPropertyChanged(nameof(HasOutcomeChecks));
+        // Before the sentence, so the change below lists this statement's checks beside it.
+        _stated = statement;
+        Outcome = statement.Sentence;
+        ListBeside(Outcome);
     }
 
-    /// <summary>
-    /// Any other sentence takes the list with it: the folders a removal's report named are not what
-    /// a rule, a new search or cleared marks are about.
-    /// </summary>
-    partial void OnOutcomeChanged(string value)
+    partial void OnOutcomeChanged(string value) => ListBeside(value);
+
+    /// <summary>Update the list in place to what <see cref="OutcomeStatement.ChecksBeside"/> says belongs beside <paramref name="shown"/>.</summary>
+    private void ListBeside(string shown)
     {
-        if (_listedFor is not null && value != _listedFor)
-        {
-            _listedFor = null;
-            OutcomeChecks.Clear();
-            OnPropertyChanged(nameof(HasOutcomeChecks));
-        }
+        LiveList.Rewrite(OutcomeChecks, _stated.ChecksBeside(shown));
+        OnPropertyChanged(nameof(HasOutcomeChecks));
     }
 
     /// <summary>

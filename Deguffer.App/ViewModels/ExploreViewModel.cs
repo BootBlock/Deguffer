@@ -302,31 +302,25 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
     public bool HasStatusChecks => StatusChecks.Count > 0;
 
-    /// <summary>The report whose checks <see cref="StatusChecks"/> lists, or null where it lists none.</summary>
-    private ExploreStatusReport? _listed;
+    /// <summary>The last statement the selection put on the status line.</summary>
+    private OutcomeStatement _stated = OutcomeStatement.Said(string.Empty);
 
-    /// <summary>Put a report's sentence on the status line and its checks beside it, updating the list in place.</summary>
-    private void Say(ExploreStatusReport report)
+    /// <summary>Put a statement on the status line and its checks beside it.</summary>
+    private void Say(OutcomeStatement statement)
     {
-        // Before the sentence, so the change below knows the sentence is this report's own.
-        _listed = report;
-        Status = report.Sentence;
-        LiveList.Rewrite(StatusChecks, report.Checks);
-        OnPropertyChanged(nameof(HasStatusChecks));
+        // Before the sentence, so the change below lists this statement's checks beside it.
+        _stated = statement;
+        Status = statement.Sentence;
+        ListBeside(Status);
     }
 
-    /// <summary>
-    /// Any other sentence takes the list with it: the folders a removal's report named are not what
-    /// a scan's progress or a refusal is about.
-    /// </summary>
-    partial void OnStatusChanged(string value)
+    partial void OnStatusChanged(string value) => ListBeside(value);
+
+    /// <summary>Update the list in place to what <see cref="OutcomeStatement.ChecksBeside"/> says belongs beside <paramref name="shown"/>.</summary>
+    private void ListBeside(string shown)
     {
-        if (_listed is not null && value != _listed.Sentence)
-        {
-            _listed = null;
-            StatusChecks.Clear();
-            OnPropertyChanged(nameof(HasStatusChecks));
-        }
+        LiveList.Rewrite(StatusChecks, _stated.ChecksBeside(shown));
+        OnPropertyChanged(nameof(HasStatusChecks));
     }
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>

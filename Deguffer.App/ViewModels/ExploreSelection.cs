@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Scanning;
@@ -70,7 +71,7 @@ public sealed partial class ExploreSelection : ObservableObject
     /// A sentence for the status line: what happened, with the §5.6 checks a removal could not pass,
     /// or what another program refused.
     /// </summary>
-    public event EventHandler<ExploreStatusReport>? Reported;
+    public event EventHandler<OutcomeStatement>? Reported;
 
     /// <summary>Raised when something was removed, so the list and the picture are rebuilt.</summary>
     public event EventHandler? Changed;
@@ -279,13 +280,13 @@ public sealed partial class ExploreSelection : ObservableObject
             {
                 // Declined. Saying so beats leaving the previous sentence standing, which somebody
                 // who has just dismissed a dialog reads as the outcome of it.
-                Reported?.Invoke(this, ExploreStatusReport.Said("Nothing was removed."));
+                Reported?.Invoke(this, OutcomeStatement.Said("Nothing was removed."));
                 return;
             }
 
             _removals.Record(tree, picked, report);
 
-            Reported?.Invoke(this, new ExploreStatusReport(report.Summary, report.Verification.Unpassed));
+            Reported?.Invoke(this, report.Statement);
 
             // Every Select replaces the list, so the same list means nothing was picked meanwhile and
             // what was acted on is let go. A pick made while this ran is the user's and stays, less
@@ -300,7 +301,7 @@ public sealed partial class ExploreSelection : ObservableObject
             // The command is an AsyncRelayCommand without FlowExceptionsToTaskScheduler, so anything
             // escaping here is rethrown on the UI thread and takes the process down mid-deletion.
             // The Storage page's clean flow guards itself the same way and for the same reason.
-            Reported?.Invoke(this, ExploreStatusReport.Said($"The removal stopped: {ex.Message}"));
+            Reported?.Invoke(this, OutcomeStatement.Said($"The removal stopped: {ex.Message}"));
         }
         finally
         {
@@ -347,7 +348,7 @@ public sealed partial class ExploreSelection : ObservableObject
     {
         if (failure is not null)
         {
-            Reported?.Invoke(this, ExploreStatusReport.Said(failure));
+            Reported?.Invoke(this, OutcomeStatement.Said(failure));
         }
     }
 
