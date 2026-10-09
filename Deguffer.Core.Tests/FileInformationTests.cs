@@ -194,4 +194,40 @@ public sealed class FileInformationTests
             new[] { first, second }.Select(name => LongPath.Display(FileInformation.Default.FinalPath(name)!)).Order(StringComparer.Ordinal),
             FileInformation.Default.NamesOf(first)!.Order(StringComparer.Ordinal));
     }
+    /// <summary>
+    /// FAT32 and exFAT refuse the reparse-tag class with <c>ERROR_INVALID_PARAMETER</c> and hold no
+    /// reparse points, so an entry there that is not marked as one carries no tag and is described,
+    /// where before every file on such a volume was left out as one Windows would not describe.
+    /// </summary>
+    [Fact]
+    public void AnEntryWhoseFileSystemRefusesTheTagAndMarksNoReparsePointCarriesNone()
+    {
+        const int InvalidParameter = 87;
+        const uint Archive = (uint)FileAttributes.Archive;
+
+        var answered = FileInformation.TagWhereRefused(InvalidParameter, Archive);
+
+        Assert.Equal(0u, answered?.ReparseTag);
+        Assert.Equal(Archive, answered?.FileAttributes);
+        Assert.Null(FileInformation.TagWhereRefused(InvalidParameter, Archive | (uint)FileAttributes.ReparsePoint));
+        Assert.Null(FileInformation.TagWhereRefused(error: 5, Archive));
+    }
+
+    /// <summary>
+    /// A volume that says it holds no named streams has none to list where it refuses the listing, as
+    /// FAT32 and exFAT do. A volume that may hold them, or would not say, is never read as having none,
+    /// because a copy holding a stream the copy kept lacks would then be removed.
+    /// </summary>
+    [Fact]
+    public void AFileHasNoNamedStreamsOnlyWhereItsVolumeHoldsNone()
+    {
+        const int InvalidParameter = 87;
+        const uint NamedStreams = 0x0004_0000;
+        const uint FatFlags = 0x0000_0003;
+
+        Assert.Empty(FileInformation.StreamsWhereRefused(InvalidParameter, FatFlags)!);
+        Assert.Null(FileInformation.StreamsWhereRefused(InvalidParameter, FatFlags | NamedStreams));
+        Assert.Null(FileInformation.StreamsWhereRefused(InvalidParameter, volumeFlags: null));
+        Assert.Null(FileInformation.StreamsWhereRefused(error: 5, FatFlags));
+    }
 }

@@ -100,15 +100,20 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
     /// <summary>
     /// The compared copy is moved aside as the shell is asked, and another file put at its path, which
     /// the bin then takes. What the bin received is not the file compared, so the run stops there,
-    /// names it, and the next group's copy is never reached.
+    /// names it, and the next group's copy is never reached. On a drive that keeps no file numbers,
+    /// as FAT32 and exFAT do not, the handle the copy was compared through still tells them apart.
     /// </summary>
-    [Fact]
-    public void ABinItemThatIsNotTheComparedCopyStopsTheRunAndIsNamed()
+    [Theory]
+    [InlineData("NTFS")]
+    [InlineData("FAT32")]
+    public void ABinItemThatIsNotTheComparedCopyStopsTheRunAndIsNamed(string fileSystem)
     {
-        var firstKept = Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1)));
-        var first = Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1)));
-        var secondKept = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
-        var second = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        DuplicateCandidate On(DuplicateCandidate copy) => copy with { Volume = copy.Volume with { FileSystem = fileSystem } };
+
+        var firstKept = On(Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1))));
+        var first = On(Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1))));
+        var secondKept = On(Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2))));
+        var second = On(Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2))));
         var marks = Marks([firstKept, first], [secondKept, second]);
         Mark(marks, first, second);
         var aside = Path.Combine(Documents, "aside.bin");
