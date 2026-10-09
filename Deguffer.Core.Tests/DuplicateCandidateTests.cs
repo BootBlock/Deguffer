@@ -348,10 +348,6 @@ public sealed class DuplicateCandidateTests : IDisposable
     }
 
     /// <summary>
-    /// The tree keeps a modified time only to the minute, so the time waits for phase 2's
-    /// full-precision times, and until then every file kept is one group, whatever its length or name.
-    /// </summary>
-    /// <summary>
     /// Times compare to the file system's full precision (§7.4): one tick apart in the same minute is
     /// no match, whatever the files' lengths and names.
     /// </summary>

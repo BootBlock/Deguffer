@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Duplicates;
 
@@ -127,8 +128,21 @@ internal static class CandidateGrouping
             description.Names,
             description.Length,
             description.Modified,
-            tree.StorageOf(first.Found.Node),
+            StorageOf(first),
             paths.Any(path => path.Found.Role == LocationRole.Reference) ? LocationRole.Reference : LocationRole.Search);
+    }
+
+    /// <summary>
+    /// Whether a file is in the cloud as Windows said when it was identified, which is later than the
+    /// scan and can differ either way; anything else as the scan saw it, because only the file table
+    /// sees a file Windows itself compressed (<see cref="StorageAttributes"/>).
+    /// </summary>
+    private static FileStorage StorageOf(IdentifiedFile file)
+    {
+        var now = StorageAttributes.Of(file.Description.Attributes);
+        var scanned = file.Found.Tree.StorageOf(file.Found.Node);
+
+        return now is FileStorage.CloudOnly || scanned is FileStorage.CloudOnly ? now : scanned;
     }
 
     private static void Add<T>(Dictionary<(long Length, string Name, long Time), List<T>> groups, (long Length, string Name, long Time) key, T member)

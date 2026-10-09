@@ -210,7 +210,6 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         Assert.Equal(FallbackReason.None, result.Fallback);
     }
 
-
     /// <summary>
     /// The third measurement route, and the pnpm store's only one. It has to exclude a recent file
     /// exactly as the other two do: a figure that disagreed with them would make the number a user

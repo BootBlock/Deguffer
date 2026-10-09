@@ -200,10 +200,9 @@ public sealed partial class LinkFixtureTests : IDisposable
 
     private static uint ReparseTag(string path)
     {
-        using var handle = CreateFile(
-            LongPath.Extended(path), ReadAttributes, ShareAll, 0, OpenExisting, BackupSemantics | OpenReparsePoint, 0);
+        using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Describe);
 
-        if (handle.IsInvalid || !GetFileInformationByHandleEx(handle, FileAttributeTagInfo, out var info, 8))
+        if (handle.IsInvalid || !FileInformation.TryAttributeTag(handle, out var info))
         {
             throw new IOException($"Could not read the reparse tag of {path}.", Marshal.GetHRForLastWin32Error());
         }
@@ -216,8 +215,7 @@ public sealed partial class LinkFixtureTests : IDisposable
     {
         var buffer = new byte[MaximumReparseDataBytes];
 
-        using var handle = CreateFile(
-            LongPath.Extended(path), ReadAttributes, ShareAll, 0, OpenExisting, BackupSemantics | OpenReparsePoint, 0);
+        using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Describe);
 
         if (handle.IsInvalid || !DeviceIoControl(handle, FsctlGetReparsePoint, 0, 0, buffer, buffer.Length, out _, 0))
         {
@@ -238,34 +236,6 @@ public sealed partial class LinkFixtureTests : IDisposable
 
     private const uint FsctlGetReparsePoint = 0x0009_00A8;
     private const int MaximumReparseDataBytes = 16 * 1024;
-    private const uint ReadAttributes = 0x0080;
-    private const uint ShareAll = 0x0007;
-    private const uint OpenExisting = 3;
-    private const uint BackupSemantics = 0x0200_0000;
-    private const uint OpenReparsePoint = 0x0020_0000;
-    private const int FileAttributeTagInfo = 9;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct AttributeTagInfo
-    {
-        public uint FileAttributes;
-        public uint ReparseTag;
-    }
-
-    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern SafeFileHandle CreateFile(
-        string fileName,
-        uint desiredAccess,
-        uint shareMode,
-        nint securityAttributes,
-        uint creationDisposition,
-        uint flagsAndAttributes,
-        nint templateFile);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetFileInformationByHandleEx(
-        SafeFileHandle file, int informationClass, out AttributeTagInfo information, int bufferSize);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

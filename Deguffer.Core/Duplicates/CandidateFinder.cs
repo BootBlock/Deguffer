@@ -117,6 +117,7 @@ public sealed class CandidateFinder
         var passedOver = search.SearchPassedOverPlaces ? null : new PassedOverPlaces(policy, programs.Folders);
         List<ResolvedLocation> roots = [];
         List<IdentityRoute> routes = [];
+        Dictionary<LocalVolume, IdentityRoute?> routeOfVolume = [];
         List<UnsearchedLocation> unidentifiable = [];
 
         foreach (var root in locations.Roots)
@@ -127,7 +128,7 @@ public sealed class CandidateFinder
             {
                 walk.PassOver(new PassedOverPlace(root.Folder, why));
             }
-            else if (_files.IdentityRouteOf(root.Folder) is { } route)
+            else if (RouteOf(root) is { } route)
             {
                 roots.Add(root);
                 routes.Add(route);
@@ -140,6 +141,14 @@ public sealed class CandidateFinder
                 unidentifiable.AddRange(locations.Within(root).Select(inner => new UnsearchedLocation(inner.Given, Unidentifiable)));
             }
         }
+
+        // Asked once a volume and kept, so every file on one volume is identified by one route: the
+        // two routes give a volume's serial number at different widths, and a file identified by
+        // each would read as two files.
+        IdentityRoute? RouteOf(ResolvedLocation root) =>
+            routeOfVolume.TryGetValue(root.Volume, out var known)
+                ? known
+                : routeOfVolume[root.Volume] = _files.IdentityRouteOf(root.Folder);
 
         var scans = await _scanner.ScanFoldersAsync([.. roots.Select(root => root.Folder)], progress, ct).ConfigureAwait(false);
 

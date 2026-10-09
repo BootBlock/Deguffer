@@ -122,7 +122,7 @@ internal sealed class CandidateIdentification
 
         if (!_names.TryGetValue(identity, out var names))
         {
-            _names[identity] = names = FileInformation.NamesOf(file.Description.Path)
+            _names[identity] = names = _files.NamesOf(file.Description.Path)
                 ?? [.. _identified.Values
                     .Where(other => other?.Description.Identity == identity)
                     .Select(other => other!.Description.Path)

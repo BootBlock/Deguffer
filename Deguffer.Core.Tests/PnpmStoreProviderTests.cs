@@ -279,7 +279,6 @@ public sealed class PnpmStoreProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
     }
 
-
     /// <summary>
     /// §7.1 over a store outside pnpm's home, which is where one <c>store-dir</c> moved, or one on a
     /// second drive, sits. Every project on the machine links into it, and removing the folder that

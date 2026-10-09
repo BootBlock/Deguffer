@@ -22,8 +22,9 @@ namespace Deguffer.Core.Duplicates;
 /// <param name="Length">Its length in bytes when it was identified, which is what a size match compares.</param>
 /// <param name="Modified">Its last-modified time to the file system's full precision, which is what a time match compares.</param>
 /// <param name="Storage">
-/// How it is stored as the scan saw it. A cloud file that was online-only then, or when it was
-/// identified, is never in a content search, and the check before any read asks again.
+/// How it is stored: whether it is in the cloud as Windows said when it was identified, and
+/// otherwise as the scan saw it. A cloud file that was online-only at either time is never in a
+/// content search, and the check before any read asks again.
 /// </param>
 /// <param name="Role">
 /// The role of the innermost location holding it, and a reference where any path reaching it is in

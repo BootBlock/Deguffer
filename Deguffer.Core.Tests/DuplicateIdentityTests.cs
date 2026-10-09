@@ -156,6 +156,71 @@ public sealed class DuplicateIdentityTests : IDisposable
         Assert.Equal(unidentified, found.LeftOut.Unidentified);
     }
 
+    public enum Change
+    {
+        Emptied,
+        MadeOnlineOnly,
+        ReplacedByAFolder,
+    }
+
+    /// <summary>
+    /// A file is judged again as Windows describes it when it is identified, after the scan: one
+    /// emptied since is left out as an empty file, one gone online-only is left out of a content
+    /// search because reading it would download it, and one whose path now names a folder is gone.
+    /// Each change is made as the file is about to be described.
+    /// </summary>
+    [Theory]
+    [InlineData(Change.Emptied)]
+    [InlineData(Change.MadeOnlineOnly)]
+    [InlineData(Change.ReplacedByAFolder)]
+    public async Task AFileThatChangedSinceTheScanIsJudgedAsItIsNow(Change change)
+    {
+        _tree.File(100, "Data", "a.bin");
+        _tree.File(100, "Data", "b.bin");
+        var changing = _tree.File(100, "Data", "c.bin");
+        var changed = false;
+        var files = new FileInformation(
+            (path, use) =>
+            {
+                if (use is HandleUse.Describe && !changed && LongPath.Display(path).Equals(changing, StringComparison.Ordinal))
+                {
+                    changed = true;
+                    Make(change, changing);
+                }
+
+                return FileInformation.Open(path, use);
+            },
+            FileInformation.ReadIdentity);
+
+        var found = await _tree.Finder(files: files).FindAsync(
+            new DuplicateSearch(MatchCriteria.Content, [Searched("Data")]), _tree.Policy());
+
+        Assert.True(changed);
+        Assert.Equal(["a.bin", "b.bin"], Assert.Single(found.Groups).Files.Select(file => file.Name).Order());
+        Assert.Equal(change is Change.Emptied ? 1 : 0, found.LeftOut.Empty);
+        Assert.Equal(change is Change.MadeOnlineOnly ? 1 : 0, found.LeftOut.OnlyInTheCloud);
+        Assert.Equal(change is Change.ReplacedByAFolder ? 1 : 0, found.LeftOut.Gone);
+
+        static void Make(Change change, string path)
+        {
+            switch (change)
+            {
+                case Change.Emptied:
+                    File.WriteAllBytes(path, []);
+                    break;
+
+                case Change.MadeOnlineOnly:
+                    File.SetAttributes(path, FileAttributes.Offline);
+                    break;
+
+                case Change.ReplacedByAFolder:
+                    File.Delete(path);
+                    Directory.CreateDirectory(path);
+                    break;
+            }
+        }
+    }
+
     /// <summary>
     /// The tree dates a file to the minute, so a file it holds no date for is identified first and
     /// placed by the time Windows gives; it still matches a file the tree did date, to the tick.
@@ -224,7 +289,91 @@ public sealed class DuplicateIdentityTests : IDisposable
         var files = Assert.Single(found.Groups).Files;
         Assert.Equal(2, files.Count);
         Assert.Single(files, file => file.HasSeveralNames);
-        Assert.All(files, file => Assert.True(file.Identity.Volume <= uint.MaxValue));
+    }
+
+    /// <summary>
+    /// The route is decided once a volume, not once a location: where Windows answered the newer call
+    /// for one location's folder and not for another's on the same volume, the two names of one file,
+    /// one in each, would be identified by different routes and read as two files.
+    /// </summary>
+    [Fact]
+    public async Task EveryLocationOnOneVolumeIsIdentifiedByOneRoute()
+    {
+        var first = _tree.File(100, "First", "a.bin");
+        HardLink.To(first, At("Second", "b.bin"));
+        _tree.File(100, "First", "c.bin");
+        var notForSecond = new FileInformation(
+            FileInformation.Open,
+            (SafeFileHandle handle, IdentityRoute route, out FileIdentity identity) =>
+                route is IdentityRoute.FileId && FileInformation.FinalPathOf(handle)?.EndsWith(@"\Second", StringComparison.Ordinal) is true
+                    ? NoIdentity(handle, route, out identity)
+                    : FileInformation.ReadIdentity(handle, route, out identity));
+
+        var found = await _tree.Finder(files: notForSecond).FindAsync(
+            new DuplicateSearch(MatchCriteria.Size, [Searched("First"), Searched("Second")]), _tree.Policy());
+
+        var files = Assert.Single(found.Groups).Files;
+        Assert.Equal(2, files.Count);
+        Assert.Single(files, file => file.HasSeveralNames);
+    }
+
+    /// <summary>
+    /// A file the volume's route will not identify is left out and counted, never identified by the
+    /// other route, which would give it an identity no other file on the volume could share.
+    /// </summary>
+    [Fact]
+    public async Task AFileTheVolumesRouteWillNotIdentifyIsNeverIdentifiedByTheOther()
+    {
+        _tree.File(100, "Data", "a.bin");
+        _tree.File(100, "Data", "b.bin");
+        _tree.File(100, "Data", "c.bin");
+        var notForC = new FileInformation(
+            FileInformation.Open,
+            (SafeFileHandle handle, IdentityRoute route, out FileIdentity identity) =>
+                route is IdentityRoute.FileId && FileInformation.FinalPathOf(handle)?.EndsWith(@"\c.bin", StringComparison.Ordinal) is true
+                    ? NoIdentity(handle, route, out identity)
+                    : FileInformation.ReadIdentity(handle, route, out identity));
+
+        var found = await _tree.Finder(files: notForC).FindAsync(
+            new DuplicateSearch(MatchCriteria.Size, [Searched("Data")]), _tree.Policy());
+
+        Assert.Equal(["a.bin", "b.bin"], Assert.Single(found.Groups).Files.Select(file => file.Name).Order());
+        Assert.Equal(1, found.LeftOut.Unidentified);
+    }
+
+    /// <summary>
+    /// Whether a file is in the cloud is taken from Windows when the file is identified, which is
+    /// later than the scan and can differ either way. What only the scan can see, a file Windows
+    /// itself compressed, is kept.
+    /// </summary>
+    [Fact]
+    public void ACandidateIsInTheCloudAsWindowsSaidWhenItWasIdentified()
+    {
+        var directory = MftRecord.ReservedRecordCount;
+        var fixture = new MftFixture()
+            .AddDirectory(directory, MftRecord.RootRecordNumber, "Data")
+            .AddFile(directory + 1, directory, "went.bin", allocated: 4096, logical: 100)
+            .AddCloudFile(directory + 2, directory, "came.bin", logical: 100)
+            .AddCompressedFile(directory + 3, directory, "packed.bin", logical: 100, onDisk: 50);
+        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, onProgress: null, default).Tree!;
+        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+
+        IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
+            new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId),
+            new FileDescription(new FileIdentity(1, (UInt128)number), Path.Combine(@"X:\Data", name), 100, 1, DateTime.UnixEpoch, attributes, ReparseTag: 0));
+
+        var files = Assert.Single(CandidateGrouping.ByTheFiles(
+            [
+                Identified("went.bin", FileAttributes.Offline, 1),
+                Identified("came.bin", FileAttributes.Normal, 2),
+                Identified("packed.bin", FileAttributes.Normal, 3),
+            ],
+            MatchCriteria.Size,
+            _ => [])).Files;
+
+        Assert.Equal(FileStorage.CloudOnly, files.Single(file => file.Name == "went.bin").Storage);
+        Assert.Equal(FileStorage.Plain, files.Single(file => file.Name == "came.bin").Storage);
+        Assert.Equal(FileStorage.Compressed, files.Single(file => file.Name == "packed.bin").Storage);
     }
 
     private IReadOnlyList<FoundFile> Walk(MftFixture fixture, string top, LocationRole role = LocationRole.Search)

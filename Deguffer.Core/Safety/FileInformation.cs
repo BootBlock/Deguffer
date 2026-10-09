@@ -20,6 +20,12 @@ internal delegate SafeFileHandle HandleOpener(string extendedPath, HandleUse use
 internal delegate bool IdentityReader(SafeFileHandle handle, IdentityRoute route, out FileIdentity identity);
 
 /// <summary>
+/// Lists every name of the file at a path in the form it reaches Windows, each from the top of the
+/// file's volume, or answers null where Windows would not list them.
+/// </summary>
+internal delegate IReadOnlyList<string>? NameLister(string extendedPath);
+
+/// <summary>
 /// What Windows says about a file or folder through a handle opened for its attributes alone, which
 /// reads no data and so can neither download a cloud file nor be refused for want of read access.
 /// Stateless apart from how it opens a handle and reads an identity, so one instance serves every
@@ -28,8 +34,9 @@ internal delegate bool IdentityReader(SafeFileHandle handle, IdentityRoute route
 /// <para><b>The one declaration of each call that describes a file through a handle</b>:
 /// <c>GetFileInformationByHandleEx</c> for every class Deguffer reads, the older
 /// <c>GetFileInformationByHandle</c>, <c>GetFinalPathNameByHandle</c>, and <c>FindFirstFileNameW</c>,
-/// which lists a file's names. The cloud files, the occupancy probe and the hard-link scanner open
-/// and read through the members here rather than declaring their own.</para>
+/// which lists a file's names, each from the top of its volume as
+/// <see cref="VolumeCalls.MountPointOf"/> gives it. The cloud files, the occupancy probe and the
+/// hard-link scanner open and read through the members here rather than declaring their own.</para>
 /// </summary>
 internal sealed unsafe partial class FileInformation
 {
@@ -57,6 +64,7 @@ internal sealed unsafe partial class FileInformation
 
     private readonly HandleOpener _open;
     private readonly IdentityReader _identify;
+    private readonly NameLister _listNames;
 
     /// <param name="open">
     /// Opens the handle a path is resolved or described through, given the path in the form it
@@ -69,10 +77,16 @@ internal sealed unsafe partial class FileInformation
     /// Reads an identity by one route, so a test can stand for a file system that answers only the
     /// older call, or neither.
     /// </param>
-    internal FileInformation(HandleOpener open, IdentityReader identify)
+    /// <param name="listNames">
+    /// Lists a file's names, so a test can see the form of the path that reaches
+    /// <c>FindFirstFileNameW</c> (§6.3), which takes a path rather than a handle. Where none is
+    /// given, <see cref="ListNames"/>.
+    /// </param>
+    internal FileInformation(HandleOpener open, IdentityReader identify, NameLister? listNames = null)
     {
         _open = open;
         _identify = identify;
+        _listNames = listNames ?? ListNames;
     }
 
     /// <summary>
@@ -96,10 +110,14 @@ internal sealed unsafe partial class FileInformation
     /// The route that identifies the files on the volume holding <paramref name="folder"/>, or null
     /// where neither call identifies the folder, which no search of that volume can do without.
     /// <c>FileIdInfo</c> is asked first, and the older call only where it gives no answer.
+    ///
+    /// <para>Asked through a handle that follows links, because the folder a volume is mounted at is
+    /// a link on the volume holding it: opened as the link, it would answer for that volume rather
+    /// than the one whose files are searched.</para>
     /// </summary>
     public IdentityRoute? IdentityRouteOf(string folder)
     {
-        using var handle = _open(LongPath.Extended(folder), HandleUse.Describe);
+        using var handle = _open(LongPath.Extended(folder), HandleUse.Resolve);
 
         if (handle.IsInvalid)
         {
@@ -158,21 +176,25 @@ internal sealed unsafe partial class FileInformation
     /// would not list them. Windows gives each name from the top of the file's volume, which is
     /// asked of the same path.
     /// </summary>
-    public static IReadOnlyList<string>? NamesOf(string path)
+    public IReadOnlyList<string>? NamesOf(string path)
     {
-        var extended = LongPath.Extended(path);
+        if (VolumeCalls.MountPointOf(path) is not { } top || _listNames(LongPath.Extended(path)) is not { } names)
+        {
+            return null;
+        }
+
+        return [.. names.Select(name => Path.Join(top, name.TrimStart('\\')))];
+    }
+
+    /// <summary>Every name of the file at <paramref name="extendedPath"/>, as Windows lists them.</summary>
+    internal static IReadOnlyList<string>? ListNames(string extendedPath)
+    {
         var buffer = new char[LongestPath];
 
         fixed (char* chars = buffer)
         {
-            if (!GetVolumePathName(extended, chars, LongestPath))
-            {
-                return null;
-            }
-
-            var top = LongPath.Display(new string(chars));
             var length = (uint)LongestPath;
-            var find = FindFirstFileName(extended, 0, ref length, chars);
+            var find = FindFirstFileName(extendedPath, 0, ref length, chars);
 
             if (find == InvalidFind)
             {
@@ -185,7 +207,7 @@ internal sealed unsafe partial class FileInformation
 
                 do
                 {
-                    names.Add(Path.Join(top, new string(chars).TrimStart('\\')));
+                    names.Add(new string(chars));
                     length = LongestPath;
                 }
                 while (FindNextFileName(find, ref length, chars));
@@ -350,10 +372,6 @@ internal sealed unsafe partial class FileInformation
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetFileInformationByHandleEx(SafeFileHandle file, int informationClass, out FileAttributeTagInfo information, int bufferSize);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "GetVolumePathNameW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetVolumePathName(string fileName, char* volumePathName, uint length);
 
     [LibraryImport("kernel32.dll", EntryPoint = "FindFirstFileNameW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial nint FindFirstFileName(string fileName, uint flags, ref uint length, char* linkName);
