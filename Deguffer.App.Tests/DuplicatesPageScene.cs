@@ -29,6 +29,12 @@ public abstract class DuplicatesPageScene : IDisposable
     /// <summary>What the page's confirmation is answered with; declining unless a test says otherwise.</summary>
     private protected FakeDuplicateConfirmation Prompt { get; set; } = new(false);
 
+    /// <summary>The file the save dialog answers with, or null where the user cancels it.</summary>
+    private protected string? CsvChosen { get; set; }
+
+    /// <summary>What the save dialog does while it is open, for a test that acts meanwhile; where null, it answers <see cref="CsvChosen"/>.</summary>
+    private protected Func<Task<string?>>? ChooseCsv { get; set; }
+
     private protected string Photos => _scene.Folder("Photos");
 
     public void Dispose()
@@ -65,6 +71,7 @@ public abstract class DuplicatesPageScene : IDisposable
 
             // Asked through the property, so a test can change the answer after the page is built.
             new DuplicateActions(_scene.ProtectionsAsync, _ => null, () => Prompt, _scene.Remover(), _running),
+            () => ChooseCsv?.Invoke() ?? Task.FromResult(CsvChosen),
             _preferences,
             new DriveList(_volumes, new ManualTimeProvider()),
             isElevated: false,

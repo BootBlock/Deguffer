@@ -386,7 +386,7 @@ public sealed class DuplicateIdentityTests : IDisposable
 
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
             new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, DriveX),
-            new FileDescription(new FileIdentity(1, (UInt128)number), Path.Combine(@"X:\Data", name), 100, 4096, 1, DateTime.UnixEpoch, attributes, ReparseTag: 0));
+            new FileDescription(new FileIdentity(1, (UInt128)number), Path.Combine(@"X:\Data", name), 100, 4096, 1, DateTime.UnixEpoch, DateTime.UnixEpoch, attributes, ReparseTag: 0));
 
         var files = Assert.Single(CandidateGrouping.ByTheFiles(
             [

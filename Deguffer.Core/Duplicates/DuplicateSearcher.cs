@@ -41,13 +41,18 @@ public sealed class DuplicateSearcher
     private readonly CandidateFinder _finder;
     private readonly VolumeMediaCache _media;
     private readonly ReadContent _read;
+    private readonly ChecksumCache? _remembered;
 
     /// <param name="media">
     /// The disks behind each volume, and their kind, remembered for the life of the app, so files are
     /// read in lanes by disk.
     /// </param>
-    public DuplicateSearcher(CandidateFinder finder, VolumeMediaCache media)
-        : this(finder, media, ContentReader.Default.Read)
+    /// <param name="remembered">
+    /// The checksums earlier searches read, for the life of the app, used where a file is unchanged
+    /// and stored once each search stops reading.
+    /// </param>
+    public DuplicateSearcher(CandidateFinder finder, VolumeMediaCache media, ChecksumCache remembered)
+        : this(finder, media, ContentReader.Remembering(remembered).Read, remembered)
     {
     }
 
@@ -55,11 +60,13 @@ public sealed class DuplicateSearcher
     /// Reads one file's content, so a test can count reads, hold them to see how many run at once, or
     /// stop the search partway.
     /// </param>
-    internal DuplicateSearcher(CandidateFinder finder, VolumeMediaCache media, ReadContent read)
+    /// <param name="remembered">The cache <paramref name="read"/> uses, stored once the search stops reading, or null where it uses none.</param>
+    internal DuplicateSearcher(CandidateFinder finder, VolumeMediaCache media, ReadContent read, ChecksumCache? remembered = null)
     {
         _finder = finder;
         _media = media;
         _read = read;
+        _remembered = remembered;
     }
 
     /// <param name="policy">Explore's policy for this machine, whose refusals the search passes over.</param>
@@ -125,6 +132,15 @@ public sealed class DuplicateSearcher
         {
             // The caller stopped the search: what was confirmed stands, and the result says it stopped.
             stopped = true;
+        }
+        finally
+        {
+            // Every reader has finished by now, stopped or not, and what each read is as true of its
+            // file as it was, so a stopped search keeps its reads too.
+            if (_remembered is not null)
+            {
+                await Task.Run(_remembered.Save, CancellationToken.None).ConfigureAwait(false);
+            }
         }
 
         return new DuplicateSearchResult(finding, confirmed, finding.LeftOut + matching.LeftOut, stopped);

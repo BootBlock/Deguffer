@@ -80,6 +80,11 @@ internal readonly record struct ContentReading(ContentReadResult Result, Content
 /// sharing does not prevent) are each left out. What was read is never taken for the file's on any
 /// other evidence.</para>
 ///
+/// <para><b>A checksum read before stands in for reading the bytes</b> where a cache is given
+/// (<see cref="ChecksumCache"/>), never for opening them: it is asked only once the content is
+/// open and judged as before a read, and kept only from a read that found nothing changed, its
+/// change time included.</para>
+///
 /// <para><b>A refusal is never absence.</b> A file Windows would not describe is counted as
 /// unidentified, and one it would not let the search read as a failed read, never as gone, because a
 /// copy taken for gone may be the only one left.</para>
@@ -103,9 +108,14 @@ internal sealed class ContentReader
     private readonly PathDescriber _describe;
     private readonly ContentOpener _open;
     private readonly PathOpener _openPath;
+    private readonly ChecksumCache? _remembered;
 
     public static ContentReader Default { get; } =
         new(FileInformation.Default, FileInformation.Default.Hold, FileInformation.OpenById, OpenPath);
+
+    /// <summary>A reader that uses and keeps the checksums <paramref name="remembered"/> holds.</summary>
+    public static ContentReader Remembering(ChecksumCache remembered) =>
+        new(FileInformation.Default, FileInformation.Default.Hold, FileInformation.OpenById, OpenPath, remembered);
 
     /// <param name="files">Describes the opened content through its handle.</param>
     /// <param name="describe">
@@ -119,12 +129,17 @@ internal sealed class ContentReader
     /// that will not open a file by its number.
     /// </param>
     /// <param name="openPath">Opens the content by its path, where no link can exist on the volume.</param>
-    internal ContentReader(FileInformation files, PathDescriber describe, ContentOpener open, PathOpener openPath)
+    /// <param name="remembered">
+    /// The checksums earlier searches read, used in place of a read where the file is unchanged and
+    /// given each new one, or null to read every file.
+    /// </param>
+    internal ContentReader(FileInformation files, PathDescriber describe, ContentOpener open, PathOpener openPath, ChecksumCache? remembered = null)
     {
         _files = files;
         _describe = describe;
         _open = open;
         _openPath = openPath;
+        _remembered = remembered;
     }
 
     /// <summary>
@@ -150,7 +165,9 @@ internal sealed class ContentReader
             return ContentReading.LeftOut(before);
         }
 
-        var attributes = held.Reading.Description!.Attributes;
+        var described = held.Reading.Description!;
+        var attributes = described.Attributes;
+        var remembers = _remembered is not null && ChecksumCache.Keeps(file);
 
         if (Open(held.Handle!, file) is not { } content)
         {
@@ -159,9 +176,19 @@ internal sealed class ContentReader
 
         using (content)
         {
-            if (Judge(_files.Describe(content, file.Route), file, attributes) is { } opened)
+            var opened = _files.Describe(content, file.Route);
+
+            if (Judge(opened, file, attributes) is { } refused)
             {
-                return ContentReading.LeftOut(opened);
+                return ContentReading.LeftOut(refused);
+            }
+
+            // Asked only once the content is open and judged, so a remembered value stands in for
+            // reading the bytes and never for the open: a file another program holds now, or one
+            // this account may not read, is left out as a read would leave it (§7.4).
+            if (remembers && _remembered!.Find(opened.Description!, part, checksum.Algorithm) is { } known)
+            {
+                return new ContentReading(ContentReadResult.Read, known);
             }
 
             ContentChecksum? read;
@@ -181,9 +208,18 @@ internal sealed class ContentReader
                 return ContentReading.LeftOut(ContentReadResult.Changed);
             }
 
-            if (Judge(_files.Describe(content, file.Route), file, attributes) is { } after)
+            var finished = _files.Describe(content, file.Route);
+
+            if (Judge(finished, file, attributes) is { } after)
             {
                 return ContentReading.LeftOut(after);
+            }
+
+            // Kept only where nothing Windows records about the file changed while it was read, so
+            // the value stands for the file in the state its key names.
+            if (remembers && finished.Description!.Changed == described.Changed)
+            {
+                _remembered!.Remember(described, part, value);
             }
 
             return new ContentReading(ContentReadResult.Read, value);

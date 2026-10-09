@@ -31,7 +31,7 @@ public sealed partial class DuplicatesPage : Page
             SystemDirectories.Current);
 
         var run = new DuplicateSearchRun(
-            new DuplicateSearcher(finder, App.Media),
+            new DuplicateSearcher(finder, App.Media, App.Checksums),
             MachineProtections.ForThisMachineAsync,
             UserEnvironment.Current,
             CloudFiles.Default,
@@ -45,6 +45,7 @@ public sealed partial class DuplicatesPage : Page
             // The dialog is built per ask: a XamlRoot captured here would be the one from before a
             // theme change or a reparent.
             DuplicateActions.ForThisMachine(() => new ContentDialogDuplicateConfirmation(XamlRoot, ActualTheme), App.Running),
+            ChooseCsvAsync,
             App.Preferences,
             new DriveList(VolumeInventory.Current, TimeProvider.System),
             ElevatedRelaunch.IsElevated,
@@ -82,6 +83,9 @@ public sealed partial class DuplicatesPage : Page
     }
 
     private void OnDriveListOpened(object sender, object e) => ViewModel.Locations.RefreshDrives();
+
+    private static Task<string?> ChooseCsvAsync() =>
+        App.MainWindow is { } window ? CsvFileDialog.ChooseAsync(window, "Duplicates") : Task.FromResult<string?>(null);
 
     private async void OnAddFolder(object sender, RoutedEventArgs e)
     {

@@ -271,33 +271,39 @@ internal static partial class VolumeCalls
     internal static DriveType KindOf(string mountPoint) => (DriveType)GetDriveType(mountPoint);
 
     /// <summary>
-    /// What the volume at <paramref name="mountPoint"/> is called and what it says it supports, or
-    /// null and <see cref="VolumeFeatures.None"/> where it would not say.
+    /// What the volume at <paramref name="mountPoint"/> is called, what it says it supports and the
+    /// name of its file system, or null for each where it would not say.
     ///
-    /// <para>One call for both, because Windows answers both from one. Splitting them would ask a
-    /// volume that has already refused once to refuse again, and would let the label and the flags
-    /// come from two readings a moment apart.</para>
+    /// <para>One call for all three, because Windows answers them from one. Splitting them would ask
+    /// a volume that has already refused once to refuse again, and would let the answers come from
+    /// readings a moment apart.</para>
     /// </summary>
-    /// <returns>The label, and the flags, or null for both where the volume would not answer.</returns>
-    internal static (string? Label, VolumeFeatures? Features) InformationOf(string mountPoint)
+    /// <returns>The label, the flags and the file system's name, or null for each where the volume would not answer.</returns>
+    internal static (string? Label, VolumeFeatures? Features, string? FileSystem) InformationOf(string mountPoint)
     {
-        var buffer = Marshal.AllocHGlobal(LabelLength * sizeof(char));
+        var label = Marshal.AllocHGlobal(LabelLength * sizeof(char));
+        var fileSystem = Marshal.AllocHGlobal(LabelLength * sizeof(char));
 
         try
         {
-            if (!GetVolumeInformation(mountPoint, buffer, LabelLength, out _, out _, out var flags, IntPtr.Zero, 0))
+            if (!GetVolumeInformation(mountPoint, label, LabelLength, out _, out _, out var flags, fileSystem, LabelLength))
             {
-                return (null, null);
+                return (null, null, null);
             }
 
-            var label = Marshal.PtrToStringUni(buffer);
+            var named = Marshal.PtrToStringUni(label);
+            var format = Marshal.PtrToStringUni(fileSystem);
 
             // Null rather than empty, so "unlabelled" is one case at every caller instead of two.
-            return (string.IsNullOrWhiteSpace(label) ? null : label, (VolumeFeatures)flags);
+            return (
+                string.IsNullOrWhiteSpace(named) ? null : named,
+                (VolumeFeatures)flags,
+                string.IsNullOrWhiteSpace(format) ? null : format);
         }
         finally
         {
-            Marshal.FreeHGlobal(buffer);
+            Marshal.FreeHGlobal(label);
+            Marshal.FreeHGlobal(fileSystem);
         }
     }
 

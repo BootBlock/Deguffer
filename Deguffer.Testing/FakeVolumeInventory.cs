@@ -45,6 +45,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// <param name="totalBytes">The volume's capacity, or null where it would not say.</param>
     /// <param name="freeBytes">What the volume says it has left, or null where it would not say.</param>
     /// <param name="volumeName">The volume's <c>\\?\Volume{GUID}\</c> name, or null where it has none.</param>
+    /// <param name="fileSystem">The name the volume gives its file system: NTFS, as the default features are, unless a test says otherwise.</param>
     public FakeVolumeInventory With(
         string rootPath,
         DriveType kind = DriveType.Fixed,
@@ -53,7 +54,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         IReadOnlyList<string>? alsoMountedAt = null,
         long? totalBytes = null,
         long? freeBytes = null,
-        string? volumeName = null)
+        string? volumeName = null,
+        string? fileSystem = "NTFS")
     {
         _volumes.Add(new LocalVolume(
             rootPath,
@@ -64,7 +66,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
             Features: features,
             AlsoMountedAt: alsoMountedAt,
             VolumeName: volumeName,
-            FeaturesAnswered: true));
+            FeaturesAnswered: true,
+            FileSystem: fileSystem));
 
         return this;
     }

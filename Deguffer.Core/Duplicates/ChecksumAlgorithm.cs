@@ -38,6 +38,20 @@ public static class ChecksumAlgorithms
 
     public static bool IsOffered(ChecksumAlgorithm algorithm) => Offered.Contains(algorithm);
 
+    /// <summary>
+    /// How many bytes the algorithm's value is, or null for a number no algorithm has, so a stored
+    /// value can be told to be the right size for the algorithm stored beside it.
+    /// </summary>
+    internal static int? DigestBytes(ChecksumAlgorithm algorithm) => algorithm switch
+    {
+        ChecksumAlgorithm.Crc32 => 4,
+        ChecksumAlgorithm.XxHash128 or ChecksumAlgorithm.Md5 => 16,
+        ChecksumAlgorithm.Sha1 => 20,
+        ChecksumAlgorithm.Sha256 or ChecksumAlgorithm.Sha3_256 => 32,
+        ChecksumAlgorithm.Sha512 => 64,
+        _ => null,
+    };
+
     /// <summary>The name other tools print the algorithm under, so a value can be compared with theirs.</summary>
     public static string Name(this ChecksumAlgorithm algorithm) => algorithm switch
     {

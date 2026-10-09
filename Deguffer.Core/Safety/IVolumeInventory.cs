@@ -105,6 +105,10 @@ public enum VolumeReadiness
 /// when a drive letter moves between them, which is what keeps a scan of one from being compared
 /// with a scan of the other.
 /// </param>
+/// <param name="FileSystem">
+/// The name the volume gives its file system, such as <c>NTFS</c>, <c>ReFS</c>, <c>exFAT</c> or
+/// <c>FAT32</c>, or null where it would not say or was not asked.
+/// </param>
 public readonly record struct LocalVolume(
     string RootPath,
     DriveType Kind,
@@ -115,8 +119,20 @@ public readonly record struct LocalVolume(
     VolumeFeatures Features = VolumeFeatures.None,
     IReadOnlyList<string>? AlsoMountedAt = null,
     string? VolumeName = null,
-    bool FeaturesAnswered = false)
+    bool FeaturesAnswered = false,
+    string? FileSystem = null)
 {
+    /// <summary>
+    /// Whether a file's number on this volume stays the file's for as long as the file exists, so it
+    /// can name the file from one search to the next: NTFS and ReFS, which keep a number in the
+    /// file's record. FAT and exFAT make one up from where the file's entry lies, which a rename, a
+    /// move or a defragmentation changes, and a file system that would not name itself, or that
+    /// Deguffer does not know, may do the same, so neither counts.
+    /// </summary>
+    public bool KeepsFileNumbers =>
+        string.Equals(FileSystem, "NTFS", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(FileSystem, "ReFS", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Whether the volume answers. See <see cref="Readiness"/>.</summary>
     public bool IsReady => Readiness is VolumeReadiness.Ready;
 
@@ -434,7 +450,7 @@ public sealed class VolumeInventory : IVolumeInventory
         // reach StoresContentRemotely as "said nothing about remote storage" and so are walked — the
         // same answer a volume with no such driver gives — and as unanswered, so it is never taken
         // for a volume that said it cannot hold links.
-        var (label, features) = VolumeCalls.InformationOf(root);
+        var (label, features, fileSystem) = VolumeCalls.InformationOf(root);
         var space = VolumeCalls.SpaceOf(root);
 
         return new LocalVolume(
@@ -446,6 +462,7 @@ public sealed class VolumeInventory : IVolumeInventory
             FreeBytes: space?.Free,
             Features: features ?? VolumeFeatures.None,
             AlsoMountedAt: elsewhere,
-            FeaturesAnswered: features is not null);
+            FeaturesAnswered: features is not null,
+            FileSystem: fileSystem);
     }
 }

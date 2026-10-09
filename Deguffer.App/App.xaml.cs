@@ -1,6 +1,7 @@
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Safety;
@@ -42,6 +43,12 @@ public partial class App : Application
     /// before <see cref="ScanTuning"/>, which is initialised from it.
     /// </summary>
     public static VolumeMediaCache Media { get; } = new(StorageQueries.Machine);
+
+    /// <summary>
+    /// The checksums duplicate searches read, kept from one search to the next, loaded the first time
+    /// a search reads content and shared so a second search uses what the first read.
+    /// </summary>
+    public static ChecksumCache Checksums { get; } = new(UserEnvironment.Current, TimeProvider.System);
 
     /// <summary>
     /// What each scan runs with, shared by the Storage page, the Explore page, the Duplicates page and

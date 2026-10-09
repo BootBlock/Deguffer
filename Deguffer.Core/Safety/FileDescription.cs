@@ -49,6 +49,13 @@ public enum FileReadingResult
 /// </param>
 /// <param name="Names">How many names it has: more than one where it has hard links.</param>
 /// <param name="Modified">Its last-modified time, to the file system's full precision.</param>
+/// <param name="Changed">
+/// When Windows last recorded a change to it, to its content, its attributes, its security or its
+/// name, to the same precision.
+/// A program can put the last-modified time back after a write, and a new file can take a deleted
+/// one's number with the same length and last-modified time, but neither puts this back, so it is
+/// what says a remembered checksum is still the file's.
+/// </param>
 /// <param name="ReparseTag">The tag of the reparse point the entry itself carries, or zero.</param>
 public sealed record FileDescription(
     FileIdentity Identity,
@@ -57,6 +64,7 @@ public sealed record FileDescription(
     long Allocated,
     int Names,
     DateTime Modified,
+    DateTime Changed,
     FileAttributes Attributes,
     uint ReparseTag)
 {

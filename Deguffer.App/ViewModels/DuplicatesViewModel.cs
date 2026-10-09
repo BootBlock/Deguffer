@@ -24,6 +24,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         + "deduplicated volume can share their space, and the Recycle Bin frees nothing until it is emptied.";
 
     private readonly RunDuplicateSearch _run;
+    private readonly Func<Task<string?>> _chooseCsv;
     private readonly Func<ElevationRequest, bool> _relaunch;
     private readonly RunningActions _running;
 
@@ -31,10 +32,12 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     private Search? _search;
 
     /// <param name="actions">Runs the rules and the removal over what a search found.</param>
+    /// <param name="chooseCsv">Asks the user where to save the results, answering the file chosen or null.</param>
     /// <param name="requested">The locations an elevated relaunch was asked to search, or null for an ordinary launch.</param>
     public DuplicatesViewModel(
         RunDuplicateSearch run,
         DuplicateActions actions,
+        Func<Task<string?>> chooseCsv,
         PreferenceService preferences,
         DriveList drives,
         bool isElevated,
@@ -43,11 +46,13 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         DuplicatesRequest? requested = null)
     {
         _run = run;
+        _chooseCsv = chooseCsv;
         _relaunch = relaunch;
         _running = running;
         Filters = new DuplicateFiltersViewModel(preferences);
         Filters.Changed += (_, _) => Judge();
         Marking = new DuplicateMarkingViewModel(actions, Groups);
+        Groups.CollectionChanged += (_, _) => SaveCsvCommand.NotifyCanExecuteChanged();
 
         // A new search would take the groups from under a rule or a removal reading them.
         Marking.PropertyChanged += (_, changed) =>
@@ -87,6 +92,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SearchCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCsvCommand))]
     [NotifyPropertyChangedFor(nameof(SearchStatus))]
     public partial bool IsSearching { get; private set; }
 
@@ -135,6 +141,10 @@ public sealed partial class DuplicatesViewModel : ObservableObject
 
     public bool HasNotes => NotesHeading.Length > 0;
 
+    /// <summary>What saving the results as a CSV file came to, or an empty string before the first save.</summary>
+    [ObservableProperty]
+    public partial string CsvOutcome { get; private set; } = string.Empty;
+
     /// <summary>The marks for the last search's groups, which marking and removing work on.</summary>
     [ObservableProperty]
     public partial DuplicateMarks? Marks { get; private set; }
@@ -166,6 +176,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Groups.Clear();
         Notes.Clear();
         NotesHeading = string.Empty;
+        CsvOutcome = string.Empty;
         Marks = null;
         Marking.Started(search.Asked);
         IsSearching = true;
@@ -206,6 +217,28 @@ public sealed partial class DuplicatesViewModel : ObservableObject
 
             search.Stop.Dispose();
         }
+    }
+
+    /// <summary>Saving waits for the search to end, so the file never holds part of the results as though it were all of them.</summary>
+    private bool CanSaveCsv() => !IsSearching && Groups.Count > 0;
+
+    /// <summary>Save the groups, in the order shown, as a CSV file where the user says (§7.4).</summary>
+    [RelayCommand(CanExecute = nameof(CanSaveCsv))]
+    private async Task SaveCsvAsync()
+    {
+        if (!CanSaveCsv() || await _chooseCsv() is not { Length: > 0 } path)
+        {
+            return;
+        }
+
+        // Asked again: the list is the results of whatever search ran last by the time a file is chosen.
+        if (!CanSaveCsv())
+        {
+            CsvOutcome = "The results were not saved, because a search started while the file was being chosen.";
+            return;
+        }
+
+        CsvOutcome = (await DuplicateCsv.SaveAsync(path, [.. Groups.Select(row => row.Marks.Group)], CancellationToken.None)).Summary;
     }
 
     private bool CanStop() => IsSearching;
