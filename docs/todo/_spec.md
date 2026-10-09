@@ -485,8 +485,8 @@ not the shell asked.
   the bin will not take fails, and is never deleted outright in its place. Windows deletes outright,
   and says it succeeded, an item whose path, or any path inside it, is too long for the bin, one
   larger than the bin can hold, and anything sent to a bin set to keep nothing, so such an item is
-  never handed to it, and one Windows deleted outright all the same is reported as gone, never as in
-  the bin.
+  never handed to it, and nor is one whose bin Windows will not describe. One Windows deleted
+  outright all the same is reported as gone, never as in the bin.
 - **§5.6 still applies.** Every removal asserts afterwards that what should have survived did.
 - **Explore's numbers may be lower bounds, and must say so.** The measurement rules differ from
   Storage's on purpose: a total that is short is unacceptable where it decides a deletion, and
@@ -1151,7 +1151,8 @@ on: what the established duplicate finders do, and the ways their users have los
 - **To the Recycle Bin by default**, through §7.1's route and with its rule: a copy the bin will not
   take fails, and is never deleted outright in its place. Windows itself deletes outright, and says
   it succeeded, a file whose path is too long for the bin or that is larger than the bin can hold,
-  and anything sent to a bin set to keep nothing, so such a copy is never handed to it. What the bin
+  and anything sent to a bin set to keep nothing, so such a copy is never handed to it, and nor is
+  one whose bin Windows will not describe. What the bin
   received is checked to be the file that was compared, through the handle it was compared through,
   which follows the file into the bin, and by its file ID where the drive keeps one. Where it is
   not, or cannot be told, the run stops there and says which file went to the bin, where it can

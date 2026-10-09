@@ -25,9 +25,11 @@ namespace Deguffer.Core.Execution;
 /// </list>
 ///
 /// <para>Asked of the item as it is at the moment of the call, and of the bin as its settings say,
-/// where they can be read. A bin whose limit is not known is not refused for its size. What changes
-/// between this and the shell's move, or a reason this does not know, is caught after the fact
-/// (<see cref="RecycleOutcome.DeletedOutright"/>), which can report the loss and not undo it.</para>
+/// where they can be read. Where they cannot (a drive this cannot place, a bin Windows will not
+/// describe, a limit it will not say, or a removable drive with no bin at all), nothing shows the bin
+/// can take the item, so it is refused: the shell would delete it outright if it could not. What
+/// changes between this and the shell's move, or a reason this does not know, is caught after the
+/// fact (<see cref="RecycleOutcome.DeletedOutright"/>), which can report the loss and not undo it.</para>
 ///
 /// <para>Stateless apart from its collaborators, so one instance serves the process (G5).</para>
 /// </summary>
@@ -137,12 +139,23 @@ internal sealed class RecycleBinReach
         return (length, null);
     }
 
-    /// <summary>Why the bin of the volume holding <paramref name="path"/> cannot hold <paramref name="length"/> bytes, or null where it can or its settings do not say.</summary>
+    /// <summary>
+    /// Why the bin of the volume holding <paramref name="path"/> cannot hold <paramref name="length"/>
+    /// bytes, or cannot be shown to, or null where it can.
+    /// </summary>
     private string? WhyTheBinCannotHold(string path, long length)
     {
-        if (HostVolume.For(_volumes, path) is not { } volume || _rooms.Of(volume) is not { } room)
+        const string Unknown = ", so nothing shows the Recycle Bin can take it, and Windows deletes outright what its bin "
+            + "cannot take. Deguffer did not ask, and it is still where it was.";
+
+        if (HostVolume.For(_volumes, path) is not { } volume)
         {
-            return null;
+            return "Deguffer cannot tell which drive this is on" + Unknown;
+        }
+
+        if (_rooms.Of(volume) is not { } room)
+        {
+            return "Windows would not say what this drive's Recycle Bin holds, or the drive has none" + Unknown;
         }
 
         if (room.KeepsNothing)
@@ -151,7 +164,12 @@ internal sealed class RecycleBinReach
                 + "delete this outright, and Deguffer did not ask. It is still where it was.";
         }
 
-        return room.Limit is { } limit && length > limit
+        if (room.Limit is not { } limit)
+        {
+            return "Windows would not say how much this drive's Recycle Bin may hold" + Unknown;
+        }
+
+        return length > limit
             ? $"It is {FreeSpace.Format(length)} long, more than this drive's Recycle Bin can hold "
               + $"({FreeSpace.Format(limit)}), and Windows deletes outright what is larger than its bin, so Deguffer "
               + "did not ask. It is still where it was."

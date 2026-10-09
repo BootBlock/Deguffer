@@ -259,8 +259,8 @@ them, and every group always keeps a copy that can be kept: one on an internal d
 temporary folder, a cloud folder and anything a Storage clean deletes. Removal goes to the Recycle
 Bin by default, and before each copy goes it is held open beside the copy kept and compared with it
 byte for byte, named streams included. A copy the Recycle Bin cannot take, because its path is too
-long or it is larger than the bin can hold, stays where it is, since Windows would otherwise delete
-it outright. Afterwards every kept and reference copy is checked to be still there, by its file
+long, it is larger than the bin can hold, or Windows will not say what its drive's bin can hold,
+stays where it is, since Windows would otherwise delete it outright. Afterwards every kept and reference copy is checked to be still there, by its file
 number, and everything beside a removed copy by its exact name.
 
 ## Building

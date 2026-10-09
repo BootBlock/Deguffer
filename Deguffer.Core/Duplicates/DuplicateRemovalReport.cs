@@ -123,8 +123,9 @@ public sealed record DuplicateRemovalReport(
     {
         get
         {
+            // A copy Windows deleted outright went, and the stop names it, so "nothing" is said of the bin alone.
             var did = Removed.Count == 0
-                ? "Nothing was removed."
+                ? Copies.Any(copy => copy.Check is RemovalCheck.DeletedOutright) ? "Nothing went to the Recycle Bin." : "Nothing was removed."
                 : Mode == ExploreRemovalMode.RecycleBin
                     ? $"Moved {Count(Removed.Count)} ({FreeSpace.Format(SpaceRemoved)}) to the Recycle Bin. The drive gets the space once the bin is emptied."
                     : $"Deleted {Count(Removed.Count)} ({FreeSpace.Format(SpaceRemoved)}).";

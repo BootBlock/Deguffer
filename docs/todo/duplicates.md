@@ -113,8 +113,8 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   `GetFileInformationByHandleEx(FileStreamInfo)` lists the streams through a handle already held,
   one opened for attributes alone included (measured in phase 5), and `NtCreateFile` opens a named
   stream relative to that handle, given the stream's name alone, so no path is walked to read it. On FAT and exFAT
-  a file ID can change after a defragmentation or a rename, so it identifies a file for one search
-  and never for the cache. Measured in phase 9 on scratch FAT32 and exFAT volumes: both refuse
+  a file ID can change after a defragmentation or a move (measured below), so it identifies a file
+  for one search and never for the cache. Measured in phase 9 on scratch FAT32 and exFAT volumes: both refuse
   `FileIdInfo` with `ERROR_INVALID_PARAMETER` and answer the older call, which the search chooses for
   each volume as it runs (phase 2, step 5); a file keeps its number across a rename and takes a new
   one when it is moved to another folder, the Recycle Bin's included. Both refuse
@@ -641,8 +641,8 @@ ran on.
 Corrected here: Windows does not give a final path on a volume mounted in a folder in the
 `\\?\Volume{GUID}\` form, but through the folder it is mounted at, as `FollowedTo` names it (see
 "Paths"); the branch that mapped the GUID form to a mount could never run, and a path given only as
-a device path now names no folder. Driving the feature found five defects, each fixed here with a
-test seen to fail without it:
+a device path now names no folder. Driving the feature found five defects, each fixed here, with a
+test seen to fail without it wherever a test can reach it:
 
 - **The Recycle Bin route deleted outright.** The shell deletes outright, reporting success, an item
   whose path or a path inside it is 260 characters or more, one longer than its bin's limit, and
@@ -693,11 +693,10 @@ were proved by tests alone. On a machine that has them, drive the page with the 
    transfer); a name or size search shows it and never marks it. Make a local copy online-only after
    a search and before a removal, and see the removal refuse it.
 2. **A removable drive.** A USB or SD drive holding a copy of an internal file. Its copy is not
-   counted as kept unless its location is a reference; a removal of it to the Recycle Bin either
-   reaches the drive's bin or, where the drive has none, is refused or reported as deleted outright,
-   never as in the bin. Record which in the technical facts ("Recycle Bin"), and if Windows deletes
-   it outright, refuse such a drive before the shell is asked, as `RecycleBinReach` does for a bin
-   that keeps nothing, with a test that fails without it.
+   counted as kept unless its location is a reference, and a removal of it to the Recycle Bin is
+   refused where Windows will not describe the drive's bin or say its limit (`RecycleBinReach`).
+   Record in the technical facts ("Recycle Bin") whether such a drive has a bin Windows describes,
+   with a limit, and whether the copy reaches it.
 
 Then flip this banner to complete, move this file to `done/` with its links corrected (`_spec.md`
 becomes `../_spec.md`, §7.4's link becomes `done/duplicates.md`, and the README's link follows it),
@@ -915,10 +914,11 @@ that would delete it outright, and the result never says it is in a bin it is no
   `StreamsWhereRefused`); a group is placed by the figure it was judged by on arrival, so a search of
   hundreds of groups no longer freezes the page (`DuplicateMarks.Add`, `ResolvedPlaces`); a file's
   names are listed under its path; a note about one file agrees with it; a row's description reads
-  each sentence once; the notes expander's accessible name follows its heading; and a final path
-  given only as a device path names no folder (`SearchLocations.Displayed`). Decided: an item is
-  measured against its bin by its length, which is what Windows compares; a bin whose limit cannot
-  be read is not refused for size, and the outright deletion is reported if it comes; a folder
+  each sentence once; and a final path given only as a device path names no folder
+  (`SearchLocations.Displayed`). Fixed and checked by driving the page, which no test can reach: the
+  notes expander's accessible name follows its heading. Decided: an item is measured against its bin
+  by its length, which is what Windows compares; an item whose drive, bin or bin's limit Windows
+  will not describe is refused, since nothing then shows the bin can take it; a folder
   Windows will not list all the way down is not sent to the bin, since nothing then shows its paths
   are short enough; and a thread's own processor time measures how a cost grows
   (`Deguffer.Testing.ThreadCpu`). Measured: the FAT32 and exFAT identity and reading facts, the
@@ -969,8 +969,8 @@ that would delete it outright, and the result never says it is in a bin it is no
   checksum does not see the lock, where a read would have left the file out. The file is grouped,
   and a removal still reads it.
 - **A bin whose limit cannot be read.** Where Windows will not say what a drive's Recycle Bin may
-  hold, or which volume holds an item, the item is not refused for its size, so the shell may delete
-  one larger than the bin outright. The removal then reports it gone, never in the bin. A removable
-  drive with no bin at all was not measured; the same report covers it.
+  hold, or which volume holds an item, the item is refused rather than handed to a shell that may
+  delete it outright, so it can be removed only permanently, as a deliberate choice. A removable
+  drive with no bin at all was not measured (phase 10).
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

@@ -17,16 +17,19 @@ public sealed class RecycleBinReachTests : IDisposable
 
     private readonly TempDirectory _temp = new();
 
-    /// <summary>A volume whose bin's settings say nothing, so only the paths decide.</summary>
+    /// <summary>A volume whose bin may hold a gigabyte, so only the paths decide.</summary>
     private readonly RecycleBinReach _reach;
 
-    public RecycleBinReachTests() => _reach = Reach(new FakeUserEnvironment(Path.GetTempPath()));
+    public RecycleBinReachTests() => _reach = Reach(Limit(megabytes: 1024));
 
     public void Dispose() => _temp.Dispose();
 
     /// <summary>What the bin on the volume the scratch tree is on can take, as <paramref name="settings"/> say.</summary>
-    private RecycleBinReach Reach(FakeUserEnvironment settings) =>
-        new(new FakeVolumeInventory().With(_temp.Path + Path.DirectorySeparatorChar, volumeName: VolumeName), new RecycleBinRooms(_ => 0, settings));
+    /// <param name="held">What the bin holds, or null where Windows will not say; empty where not given.</param>
+    private RecycleBinReach Reach(FakeUserEnvironment settings, Func<string, long?>? held = null) =>
+        new(
+            new FakeVolumeInventory().With(_temp.Path + Path.DirectorySeparatorChar, volumeName: VolumeName),
+            new RecycleBinRooms(held ?? (_ => 0), settings));
 
     private static FakeUserEnvironment Limit(int megabytes, bool keepsNothing = false) =>
         new FakeUserEnvironment(Path.GetTempPath())
@@ -106,6 +109,35 @@ public sealed class RecycleBinReachTests : IDisposable
         _temp.CreateFile(600 * 1024, "folder", "inner", "b.bin");
 
         Assert.Contains("more than this drive's Recycle Bin can hold", reach.WhyNot(folder));
+    }
+
+    /// <summary>
+    /// Where nothing shows what the bin can take, the item is refused: a bin with no limit Windows
+    /// will say, a drive with no bin Windows will describe (a removable drive has none), and a drive
+    /// this cannot place. The shell would delete the item outright if the bin could not take it.
+    /// </summary>
+    [Fact]
+    public void AnItemIsRefusedWhereNothingShowsItsBinCanTakeIt()
+    {
+        var file = _temp.CreateFile(10, "small.bin");
+        var noSettings = new FakeUserEnvironment(Path.GetTempPath());
+
+        Assert.Contains("would not say how much", Reach(noSettings).WhyNot(file));
+        Assert.Contains("or the drive has none", Reach(Limit(megabytes: 1024), held: _ => null).WhyNot(file));
+        Assert.Contains("cannot tell which drive", new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => 0, Limit(1024))).WhyNot(file));
+    }
+
+    /// <summary>A folder Windows will not list all the way down may hold a path the bin cannot take, so it is refused.</summary>
+    [Fact]
+    public void AFolderWindowsWillNotListAllTheWayDownIsRefused()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        var inner = _temp.CreateDirectory("folder", "inner");
+        _temp.CreateFile(10, "folder", "inner", "a.bin");
+
+        using var denied = new DeniedDirectory(inner);
+
+        Assert.Contains("would not list", _reach.WhyNot(folder));
     }
 
     [Fact]

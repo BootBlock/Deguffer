@@ -5,6 +5,7 @@ using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
+using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Tests;
 
@@ -134,6 +135,40 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         Assert.True(File.Exists(aside));
     }
 
+    /// <summary>
+    /// FAT32 and exFAT number a file by where its entry lies, so the item the bin received reads with
+    /// another number than the copy compared. The handle the copy was compared through followed it into
+    /// the bin, which is what shows it is the copy, so it is removed and the run goes on.
+    /// </summary>
+    [Fact]
+    public void ACopyRenumberedByItsMoveIntoTheBinOnADriveThatKeepsNoNumbersIsRemoved()
+    {
+        DuplicateCandidate OnFat(DuplicateCandidate copy) => copy with { Volume = copy.Volume with { FileSystem = "FAT32" } };
+
+        var kept = OnFat(Found(Write(Path.Combine(Documents, "a.bin"), Content())));
+        var copy = OnFat(Found(Write(Path.Combine(Downloads, "a.bin"), Content())));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+
+        var renumbering = new FileInformation(FileInformation.Open, (SafeFileHandle handle, IdentityRoute route, out FileIdentity identity) =>
+        {
+            var read = FileInformation.ReadIdentity(handle, route, out identity);
+
+            if (FileInformation.FinalPathOf(handle) is { } at && LongPath.Display(at).StartsWith(Bin, StringComparison.OrdinalIgnoreCase))
+            {
+                identity = identity with { File = identity.File + 1 };
+            }
+
+            return read;
+        });
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: FakeRecycleBin.MovingTo(Bin), files: renumbering);
+
+        Assert.Equal(RemovalCheck.Removed, Assert.Single(report.Copies).Check);
+        Assert.Null(report.StoppedAt);
+        Assert.True(report.Verification.Passed);
+    }
+
     /// <summary>A bin that moves the copy and does not say where leaves nothing to identify, so the run stops there.</summary>
     [Fact]
     public void AMoveTheBinDoesNotPlaceStopsTheRun()
@@ -188,6 +223,7 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         Assert.DoesNotContain(first, report.Kept);
         Assert.True(report.Verification.Passed);
         Assert.DoesNotContain("Moved", report.Summary);
+        Assert.DoesNotContain("Nothing was removed", report.Summary);
     }
 
     /// <summary>

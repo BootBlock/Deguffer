@@ -298,8 +298,8 @@ public sealed class DuplicateRemover
     /// that was compared. The copy is still held, sharing deleting, so the shell can move it.
     ///
     /// <para>Identified through the handle the copy was compared through, which follows the file it is
-    /// open on wherever it is moved: measured on 2026-10-09 on NTFS, FAT32 and exFAT, the handle's
-    /// final path was the bin item the shell named. A file's number cannot do it everywhere, because
+    /// open on wherever it is moved: measured on 2026-10-09 on NTFS, FAT32 and exFAT, and on an NTFS
+    /// volume mounted in a folder, the handle's final path was the bin item the shell named. A file's number cannot do it everywhere, because
     /// FAT32 and exFAT number a file by where its entry lies, and a move into the bin changes it. Where
     /// the volume keeps a file's number, the item is identified by it as well.</para>
     /// </summary>
