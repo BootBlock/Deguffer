@@ -124,6 +124,11 @@ public sealed class DuplicateCandidateTests : IDisposable
         _tree.File(30, "One", "e");
         _tree.File(30, "Two", "f");
 
+        // Neither is a jpg: one ends in another extension after it, and the other's extension only
+        // ends in the letters.
+        _tree.File(10, "One", "g.jpg.bak");
+        _tree.File(10, "Two", "h.xjpg");
+
         var found = await _tree.FindAsync(new DuplicateSearch(
             MatchCriteria.Size, [Searched()], extensions: new ExtensionFilter(ExtensionFilterMode.OnlyThese, ["JPG"])));
 
@@ -139,11 +144,14 @@ public sealed class DuplicateCandidateTests : IDisposable
         _tree.File(20, "Two", "d.png");
         _tree.File(30, "One", "e");
         _tree.File(30, "Two", "f");
+        _tree.File(40, "One", "g.jpg.bak");
+        _tree.File(40, "Two", "h.xjpg");
 
         var found = await _tree.FindAsync(new DuplicateSearch(
             MatchCriteria.Size, [Searched()], extensions: new ExtensionFilter(ExtensionFilterMode.SkipThese, [".jpg"])));
 
-        Assert.Equal([20L, 30L], found.Groups.Select(group => group.Length!.Value).Order());
+        Assert.Equal([20L, 30L, 40L], found.Groups.Select(group => group.Length!.Value).Order());
+        Assert.Equal(["g.jpg.bak", "h.xjpg"], Names(found.Groups.Single(group => group.Length == 40)));
     }
 
     [Theory]

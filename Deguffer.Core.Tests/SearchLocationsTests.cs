@@ -280,6 +280,7 @@ public sealed class SearchLocationsTests : IDisposable
 
         var unsearched = Assert.Single(locations.Unsearched);
         Assert.Empty(locations.Roots);
+        Assert.Contains("Windows would not open this folder", unsearched.Reason, StringComparison.Ordinal);
         Assert.DoesNotContain("not there", unsearched.Reason, StringComparison.Ordinal);
     }
 
