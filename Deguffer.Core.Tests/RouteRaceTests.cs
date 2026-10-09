@@ -31,7 +31,24 @@ public class RouteRaceTests
 
         public bool Finished { get; private set; }
 
+        /// <summary>
+        /// The task the race was handed for this route as the table, set once the race has started
+        /// it, so a test can wait until the race has seen the table finish before the walk answers.
+        /// </summary>
+        public Task? Running { get; private set; }
+
         public void Answer(T value) => _answer.TrySetResult(value);
+
+        /// <summary>Run as the table runs, whose answer is null where it declines.</summary>
+        public Task<T?> RunAsTable(CancellationToken stop)
+        {
+            var running = AsTable(stop);
+            Running = running;
+
+            return running;
+
+            async Task<T?> AsTable(CancellationToken token) => await Run(token);
+        }
 
         public void Fail(Exception failure) => _answer.TrySetException(failure);
 
@@ -61,7 +78,7 @@ public class RouteRaceTests
     }
 
     private static Task<Raced<Answer>> Race(Route<Answer> table, Route<Answer> walk, CancellationToken ct = default) =>
-        RouteRace.FirstAsync<Answer>(async stop => await table.Run(stop), walk.Run, answer => answer.Reached, ct);
+        RouteRace.FirstAsync<Answer>(table.RunAsTable, walk.Run, answer => answer.Reached, ct);
 
     /// <summary>
     /// The walk is not left reading the disk, or reporting progress, after its question has been
@@ -132,7 +149,11 @@ public class RouteRaceTests
         var racing = Race(table, walk);
 
         table.Answer(null!);
-        await Task.Yield();
+
+        // The table's route resumes on the thread pool, so the walk answering at once could finish
+        // first under load. The race sees the table decline before the walk answers only once the
+        // task it was handed has finished.
+        await table.Running!;
         Assert.False(racing.IsCompleted);
 
         walk.Answer(new Answer("walk"));
