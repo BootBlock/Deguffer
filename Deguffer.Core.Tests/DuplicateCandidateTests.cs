@@ -142,6 +142,44 @@ public sealed class DuplicateCandidateTests : IDisposable
     }
 
     /// <summary>
+    /// The reference locations not searched in whole are named apart, for whatever reason, because no
+    /// rule may mark while one is (§7.4): one Windows would not open, and one inside a place the search
+    /// passed over. A reference that was searched, and a location to search that was not, are not.
+    /// </summary>
+    [Fact]
+    public async Task EveryReferenceThatWentUnsearchedIsNamedAndNoOther()
+    {
+        _tree.File(100, "Data", "a.jpg");
+        _tree.File(100, "Photos", "a.jpg");
+        var refused = _tree.Folder("Albums");
+        var passedOver = _tree.Folder("Program Files", "Vendor", "Samples");
+        var unopened = _tree.Folder("Unopened");
+        var photos = Path.Combine(_tree.Top, "Photos");
+
+        var found = await _tree.Finder(files: RefusingEach(refused, unopened)).FindAsync(
+            new DuplicateSearch(
+                MatchCriteria.Size,
+                [
+                    Searched(),
+                    new SearchLocation(photos, LocationRole.Reference),
+                    new SearchLocation(refused, LocationRole.Reference),
+                    new SearchLocation(passedOver, LocationRole.Reference),
+                    new SearchLocation(unopened),
+                ]),
+            _tree.Policy());
+
+        Assert.Equal(new[] { passedOver, refused }.Order(), found.UnsearchedReferences.Select(location => location.Given.Path).Order());
+        Assert.Single(found.Groups);
+    }
+
+    /// <summary>Opens each path as Windows does, except each of <paramref name="refused"/>, which Windows will not open.</summary>
+    private static FileInformation RefusingEach(params string[] refused) => new(
+        (path, use) => refused.Contains(LongPath.Display(path), StringComparer.Ordinal)
+            ? new SafeFileHandle(-1, ownsHandle: false)
+            : FileInformation.Open(path, use),
+        FileInformation.ReadIdentity);
+
+    /// <summary>
     /// A location to search that Windows would not open asks for nothing a location holding it does
     /// not already do, so its files are searched there in the role they would have had.
     /// </summary>

@@ -12,6 +12,13 @@ public sealed record ProgramFolder(string Path, ReachedFolder Reached, string Pr
 public sealed record SetAsideInstallLocation(string Program, string Location, string Reason);
 
 /// <summary>What <see cref="ProgramFolders.Read"/> found.</summary>
+/// <param name="Folders">The program folders a search passes over by default.</param>
+/// <param name="Installed">
+/// Every folder a program is installed in, which a copy is refused in (§7.4): <paramref name="Folders"/>,
+/// and each install location set aside only because it holds a location the search was asked to
+/// search. Searching inside a program's folder does not make the program's files the user's to
+/// remove, and a program's private library is how the established tools have broken programs.
+/// </param>
 /// <param name="Unread">
 /// The lists of installed programs Windows would not read, whose folders are therefore not known to be
 /// program folders. Reported, because a search that meant to pass over a program's folder and could
@@ -19,6 +26,7 @@ public sealed record SetAsideInstallLocation(string Program, string Location, st
 /// </param>
 public sealed record ProgramFolderReading(
     IReadOnlyList<ProgramFolder> Folders,
+    IReadOnlyList<ProgramFolder> Installed,
     IReadOnlyList<SetAsideInstallLocation> SetAside,
     IReadOnlyList<UninstallScope> Unread);
 
@@ -36,8 +44,9 @@ public sealed record ProgramFolderReading(
 /// those has named nothing a search can pass over without passing over the user's own files.
 /// <see cref="StandingFolders"/> already says which folders those are, for the removals that must
 /// never take one, so it is asked here rather than restated. A location holding a folder the user
-/// chose to search would silence that choice, so it is set aside too. Each set-aside entry is named,
-/// so the user sees what was not passed over and why.</para>
+/// chose to search would silence that choice, so it is set aside too, and is still a program's folder
+/// that a copy is refused in. Each set-aside entry is named, so the user sees what was not passed
+/// over and why.</para>
 /// </summary>
 public static class ProgramFolders
 {
@@ -57,6 +66,7 @@ public static class ProgramFolders
         ArgumentNullException.ThrowIfNull(chosen);
 
         List<ProgramFolder> folders = [];
+        List<ProgramFolder> installed = [];
         List<SetAsideInstallLocation> setAside = [];
         List<UninstallScope> unread = [];
 
@@ -68,13 +78,26 @@ public static class ProgramFolders
         {
             var reached = ReachedFolder.At(location, volumes);
 
-            if (WhySetAside(reached, environment, system, profiles, chosen) is { } why)
+            if (WhyNamesNoProgram(reached, environment, system, profiles) is { } why)
             {
                 setAside.Add(new SetAsideInstallLocation(program, location, why));
+                return;
+            }
+
+            var folder = new ProgramFolder(location, reached, program);
+
+            if (!installed.Exists(known => known.Reached.IsSameAs(reached)))
+            {
+                installed.Add(folder);
+            }
+
+            if (chosen.FirstOrDefault(choice => reached.Holds(choice.Reached)) is { } held)
+            {
+                setAside.Add(new SetAsideInstallLocation(program, location, $"it holds '{held.Folder}', which this search was asked to search."));
             }
             else if (!folders.Exists(known => known.Reached.IsSameAs(reached)))
             {
-                folders.Add(new ProgramFolder(location, reached, program));
+                folders.Add(folder);
             }
         }
 
@@ -100,15 +123,18 @@ public static class ProgramFolders
             }
         }
 
-        return new ProgramFolderReading(folders, setAside, unread);
+        return new ProgramFolderReading(folders, installed, setAside, unread);
     }
 
-    private static string? WhySetAside(
+    /// <summary>
+    /// Why an entry's install location names no program's folder at all, so that it is neither
+    /// passed over nor a folder a copy is refused in, or null where it names one.
+    /// </summary>
+    private static string? WhyNamesNoProgram(
         ReachedFolder location,
         IUserEnvironment environment,
         ISystemDirectories system,
-        ReachedFolder? profiles,
-        IReadOnlyList<ResolvedLocation> chosen)
+        ReachedFolder? profiles)
     {
         if (StandingFolders.WhyNotTaken(location, environment, system) is { } standing)
         {
@@ -120,11 +146,6 @@ public static class ProgramFolders
         if (profiles is not null && profiles.LevelsTo(location) == 1)
         {
             return "it is the profile of an account on this computer.";
-        }
-
-        if (chosen.FirstOrDefault(choice => location.Holds(choice.Reached)) is { } held)
-        {
-            return $"it holds '{held.Folder}', which this search was asked to search.";
         }
 
         return null;

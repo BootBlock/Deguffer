@@ -107,16 +107,7 @@ public sealed class ExploreActions
     public static ExploreActions ForThisMachine(
         Func<IExploreConfirmationPrompt> prompt, CrashLog faults, RunningActions running) =>
         new(
-            ct =>
-            {
-                var environment = new UserEnvironment();
-                var providers = CleanupPlanner.CreateDefault(
-                    liveTrees: new LiveTreeInspector(),
-                    environment: environment).Providers;
-
-                return ExploreActionPolicy.ForAsync(
-                    SystemDirectories.Current, environment, VolumeInventory.Current, providers, ct);
-            },
+            async ct => (await MachineProtections.ForThisMachineAsync(ct).ConfigureAwait(false)).Policy,
             prompt,
             faults,
             running);

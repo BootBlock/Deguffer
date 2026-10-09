@@ -42,6 +42,11 @@ public enum FileReadingResult
 /// <summary>A file as an attributes-only handle describes it, at the moment it was asked.</summary>
 /// <param name="Path">Where the handle says the file is, in display form, once the folders on the way are followed.</param>
 /// <param name="Length">Its length in bytes.</param>
+/// <param name="Allocated">
+/// What it occupies on disk, as Windows reports it: less than its length where it is compressed or
+/// sparse, and nothing where it is small enough to live in its file record. Space it shares through
+/// block cloning or deduplication is counted in full, as Windows reports no share.
+/// </param>
 /// <param name="Names">How many names it has: more than one where it has hard links.</param>
 /// <param name="Modified">Its last-modified time, to the file system's full precision.</param>
 /// <param name="ReparseTag">The tag of the reparse point the entry itself carries, or zero.</param>
@@ -49,6 +54,7 @@ public sealed record FileDescription(
     FileIdentity Identity,
     string Path,
     long Length,
+    long Allocated,
     int Names,
     DateTime Modified,
     FileAttributes Attributes,

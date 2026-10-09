@@ -106,6 +106,7 @@ public sealed class ContentMatchingTests
         [path],
         NameCount: 1,
         length,
+        SizeOnDisk: length,
         DateTime.UnixEpoch,
         FileStorage.Plain,
         LocationRole.Search)

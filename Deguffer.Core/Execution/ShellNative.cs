@@ -45,6 +45,21 @@ internal static class ShellNative
         IntPtr owner,
         [MarshalAs(UnmanagedType.LPWStr)] string? volumeRoot,
         uint flags);
+
+    /// <summary>
+    /// What the calling account's Recycle Bin on one volume holds, named by a path on the volume.
+    /// Declared with <c>PreserveSig</c> for the reason <see cref="SHEmptyRecycleBin"/> is: the one
+    /// caller reads a failure as "not known", never as an empty bin.
+    /// </summary>
+    /// <param name="info">
+    /// <c>SHQUERYRBINFO</c> as bytes, because its layout differs by platform: the headers pack it to
+    /// one byte for 32-bit Windows (20 bytes, the size at offset 4) and align it naturally elsewhere
+    /// (24 bytes, the size at offset 8), and Deguffer ships for both.
+    /// </param>
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHQueryRecycleBinW")]
+    internal static extern int SHQueryRecycleBin(
+        [MarshalAs(UnmanagedType.LPWStr)] string rootPath,
+        [In, Out] byte[] info);
 }
 
 /// <summary>One item in the shell namespace. Declared to <c>Compare</c> and no further.</summary>

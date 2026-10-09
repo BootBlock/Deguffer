@@ -185,7 +185,7 @@ public sealed class ExploreActionPolicy
         if (VolumeRoot.Places(_volumes, target) is not { } places)
         {
             return ExploreVerdict.Refuse(
-                $"'{target}' is a whole drive. Explore removes things from a drive, never the drive itself.");
+                $"'{target}' is a whole drive. Deguffer removes things from a drive, never the drive itself.");
         }
 
         // Each rule at every place the item is reachable and on every reading of each, because a
@@ -430,7 +430,7 @@ public sealed class ExploreActionPolicy
                 : root.Root.Claim == ToolRootClaim.NamedEntries
                     ? ExploreVerdict.Refuse($"'{name}' is the tool's, in '{root.Path}': {root.Root.Reason}")
                     : ExploreVerdict.Refuse(
-                        $"'{name}' is inside '{root.Path}', and Explore refuses what is in there "
+                        $"'{name}' is inside '{root.Path}', and Deguffer refuses what is in there "
                         + $"as well as '{Path.GetFileName(root.Path)}' itself: {root.Root.Reason}");
             levels = below;
         }

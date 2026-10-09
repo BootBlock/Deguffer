@@ -213,6 +213,7 @@ internal sealed unsafe partial class FileInformation
             identity,
             LongPath.Display(final),
             standard.EndOfFile,
+            standard.AllocationSize,
             (int)standard.NumberOfLinks,
             DateTime.FromFileTimeUtc(basic.LastWriteTime),
             (FileAttributes)basic.FileAttributes,

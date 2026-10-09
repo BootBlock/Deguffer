@@ -19,18 +19,33 @@ public sealed record ReadLocation(string Folder, string? RouteNote);
 /// <summary>What <see cref="CandidateFinder.FindAsync"/> found, and everything it did not look at.</summary>
 /// <param name="Groups">The files that may match, by what was compared without reading their content.</param>
 /// <param name="Unsearched">The chosen locations that were not searched, each with its reason.</param>
+/// <param name="UnsearchedReferences">
+/// The reference locations not searched in whole, for whatever reason: not resolved, on a volume
+/// whose files cannot be identified, passed over, or holding a place that could not be read. While
+/// any is, no rule marks a copy (§7.4): what a reference went unsearched for can be the very link or
+/// share that puts its copies inside a searched location under another name.
+/// </param>
 /// <param name="PassedOver">The places inside the locations that were passed over, each with its reason.</param>
 /// <param name="Unread">The places inside the locations that could not be read, each with its reason.</param>
 /// <param name="Read">Each location that was read, with the route it was read by.</param>
 /// <param name="SetAside">The install locations that named nothing a search could pass over.</param>
-/// <param name="UnreadProgramLists">The lists of installed programs Windows would not read.</param>
+/// <param name="ProgramFolders">
+/// Every folder an installed program's entry names, which a copy is refused in whether or not the
+/// search passed over it (<see cref="ProgramFolderReading.Installed"/>).
+/// </param>
+/// <param name="UnreadProgramLists">
+/// The lists of installed programs Windows would not read, so a program folder may be missing from
+/// <paramref name="ProgramFolders"/>.
+/// </param>
 public sealed record CandidateFinding(
     IReadOnlyList<CandidateGroup> Groups,
     IReadOnlyList<UnsearchedLocation> Unsearched,
+    IReadOnlyList<UnsearchedLocation> UnsearchedReferences,
     IReadOnlyList<PassedOverPlace> PassedOver,
     IReadOnlyList<UnreadPlace> Unread,
     IReadOnlyList<ReadLocation> Read,
     IReadOnlyList<SetAsideInstallLocation> SetAside,
+    IReadOnlyList<ProgramFolder> ProgramFolders,
     IReadOnlyList<UninstallScope> UnreadProgramLists,
     LeftOutFiles LeftOut);
 
@@ -110,15 +125,15 @@ public sealed class CandidateFinder
         var locations = SearchLocations.Resolve(search.Locations, _volumes, _files);
         var walk = new CandidateWalk(search);
 
-        var programs = search.SearchPassedOverPlaces
-            ? new ProgramFolderReading([], [], [])
-            : ProgramFolders.Read(_registry, _environment, _system, _volumes, locations.Locations, ct);
+        // Read whether or not the search passes over them, because a copy in one is refused either way.
+        var programs = ProgramFolders.Read(_registry, _environment, _system, _volumes, locations.Locations, ct);
 
         var passedOver = search.SearchPassedOverPlaces ? null : new PassedOverPlaces(policy, programs.Folders);
         List<ResolvedLocation> roots = [];
         List<IdentityRoute> routes = [];
         Dictionary<LocalVolume, IdentityRoute?> routeOfVolume = [];
         List<UnsearchedLocation> unidentifiable = [];
+        List<UnsearchedLocation> unsearchedReferences = [.. locations.Unsearched.Where(location => location.Given.Role == LocationRole.Reference)];
 
         foreach (var root in locations.Roots)
         {
@@ -137,8 +152,16 @@ public sealed class CandidateFinder
             {
                 // Every location inside it is on the same volume, so none of them can be searched
                 // either, and each is named: a reference among them is one no rule may mark around.
-                unidentifiable.Add(new UnsearchedLocation(root.Given, Unidentifiable));
-                unidentifiable.AddRange(locations.Within(root).Select(inner => new UnsearchedLocation(inner.Given, Unidentifiable)));
+                foreach (var location in (IEnumerable<ResolvedLocation>)[root, .. locations.Within(root)])
+                {
+                    var unsearched = new UnsearchedLocation(location.Given, Unidentifiable);
+                    unidentifiable.Add(unsearched);
+
+                    if (location.Role == LocationRole.Reference)
+                    {
+                        unsearchedReferences.Add(unsearched);
+                    }
+                }
             }
         }
 
@@ -167,16 +190,37 @@ public sealed class CandidateFinder
             walk.Read(scans[i], roots[i], locations.Within(roots[i]), passOver[i], routes[i], ct);
         }
 
+        // A reference at or inside a place the walk passed over or could not read was not searched in
+        // whole either, whether it is a root passed over or a folder inside one. Compared ignoring
+        // case, which can only find more.
+        IReadOnlyList<(string Path, string Reason)> skipped =
+            [.. walk.PassedOver.Select(place => (place.Path, place.Reason)), .. walk.Unread.Select(place => (place.Path, place.Reason))];
+
+        foreach (var reference in locations.Locations.Where(location => location.Role == LocationRole.Reference))
+        {
+            if (unidentifiable.Exists(unsearched => ReferenceEquals(unsearched.Given, reference.Given)))
+            {
+                continue;
+            }
+
+            if (skipped.FirstOrDefault(place => LongPath.Contains(place.Path, reference.Folder)) is { Path: not null } place)
+            {
+                unsearchedReferences.Add(new UnsearchedLocation(reference.Given, place.Reason));
+            }
+        }
+
         var identification = new CandidateIdentification(_files, search.Criteria);
         var groups = identification.Group(walk.Found, ct);
 
         return new CandidateFinding(
             groups,
             [.. locations.Unsearched, .. unidentifiable],
+            unsearchedReferences,
             walk.PassedOver,
             walk.Unread,
             [.. roots.Select((root, i) => new ReadLocation(root.Folder, scans[i].RouteNote))],
             programs.SetAside,
+            programs.Installed,
             programs.Unread,
             walk.LeftOut + identification.LeftOut);
     }
