@@ -171,6 +171,10 @@ public sealed class RecycleBinReachTests : IDisposable
         Assert.False(outcome.Removed);
         Assert.Empty(handed);
         Assert.True(File.Exists(LongPath.Extended(file)));
+
+        // The reason the bin gives, then what became of the item, so a refusal at the removal says both.
+        Assert.StartsWith(bin.WhyItCannotTake(file)!, outcome.Message, StringComparison.Ordinal);
+        Assert.EndsWith("it is still where it was.", outcome.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

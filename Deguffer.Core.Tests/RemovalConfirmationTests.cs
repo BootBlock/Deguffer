@@ -130,9 +130,8 @@ public sealed class RemovalConfirmationTests : IDisposable
 
     /// <summary>
     /// A copy the Recycle Bin cannot take, as on a removable drive with no bin, does not go, so it is
-    /// listed apart with the bin's reason and counted nowhere among what goes, where before the
-    /// confirmation promised the bin for it. A permanent removal takes it like any other, and does not
-    /// ask the bin.
+    /// listed apart with the bin's reason and counted nowhere among what goes. A permanent removal
+    /// takes it like any other, and does not ask the bin.
     /// </summary>
     [Fact]
     public void ACopyTheBinCannotTakeIsListedAsStayingWithWhyAndNotAsGoing()
@@ -167,8 +166,8 @@ public sealed class RemovalConfirmationTests : IDisposable
     }
 
     /// <summary>
-    /// Copies the bin can each take, but not all together, still say that Windows makes room by
-    /// deleting the bin's oldest items; the copies that stay are not counted against its room.
+    /// The copies that stay are not counted against the room in the bin the others go to, so a bin
+    /// with room for what goes is not said to be short of it.
     /// </summary>
     [Fact]
     public void ACopyThatStaysIsNotCountedAgainstTheBinsRoom()
@@ -182,6 +181,8 @@ public sealed class RemovalConfirmationTests : IDisposable
             marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(held: 0, limit: 1_500_000),
             copy => copy.Path.StartsWith(usb, StringComparison.Ordinal) ? "No bin." : null);
 
+        Assert.Equal([Path.Combine(Documents, "B", "1.jpg")], confirmation.Copies.Select(copy => copy.Path));
+        Assert.Equal(Path.Combine(usb, "1.jpg"), Assert.Single(confirmation.Staying).Copy.Path);
         Assert.DoesNotContain(confirmation.Warnings, warning => warning.Contains("more than it has room for", StringComparison.Ordinal));
     }
 

@@ -153,6 +153,12 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
 
         Assert.Equal([going], Assert.Single(prompt.Asked).Copies);
         Assert.Equal(staying, Assert.Single(answer.Confirmation.Staying).Copy);
+
+        // Asked of each marked copy in the form the shell is handed, never the extended form (§6.3).
+        Assert.Equal(
+            new[] { going.Path, staying.Path }.Order(),
+            bin.Asked.Order());
+        Assert.All(bin.Asked, path => Assert.False(path.StartsWith(@"\\?\", StringComparison.Ordinal)));
         Assert.DoesNotContain(bin.Paths, path => path.StartsWith(usb, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(going, Assert.Single(answer.Report!.Copies).Copy);
         Assert.EndsWith("1 marked copy stayed, because the Recycle Bin cannot take it.", answer.Summary, StringComparison.Ordinal);
