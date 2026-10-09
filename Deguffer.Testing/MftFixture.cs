@@ -158,6 +158,16 @@ public sealed class MftFixture
             MftAttributeBytes.SparseFlag, onDisk, MftRecordBytes.CloudFilesTag,
             bytesPerRecord: _bytesPerRecord));
 
+    /// <summary>
+    /// A file carrying <paramref name="attributes"/>, and the reparse point <paramref name="reparseTag"/>
+    /// names where it is not zero, whose stream occupies its length.
+    /// </summary>
+    public MftFixture AddFileWithAttributes(
+        uint number, uint parent, string name, long logical, FileAttributes attributes, uint reparseTag = 0) =>
+        Add(number, MftRecordBytes.Stored(
+            Reference(parent), name, logical, attributes, flags: 0, occupied: logical, reparseTag,
+            bytesPerRecord: _bytesPerRecord));
+
     /// <summary>A file NTFS compressed into <paramref name="onDisk"/> bytes of clusters.</summary>
     public MftFixture AddCompressedFile(uint number, uint parent, string name, long logical, long onDisk) =>
         Add(number, MftRecordBytes.Stored(

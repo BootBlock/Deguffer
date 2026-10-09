@@ -204,21 +204,9 @@ public sealed class ExploreActionPolicy
         // Each rule at every place the item is reachable and on every reading of each, because a
         // refusal that holds at any of them holds: VolumeRoot says why the drive letter's reading is
         // kept beside the mount point's, and why the volume's other mounts are asked about.
-        IReadOnlyList<string> readings = [.. places.SelectMany(place => place.Readings)];
-
-        if (OnAnyReading(readings, ReservedByTheFilesystem) is { } filesystem)
+        if (AtTheTopOfAVolume(places) is { } top)
         {
-            return filesystem;
-        }
-
-        if (OnAnyReading(readings, InARecycleBin) is { } bin)
-        {
-            return bin;
-        }
-
-        if (OnAnyReading(readings, VolumeReservations.Refusal) is { } reserved)
-        {
-            return reserved;
+            return top;
         }
 
         // Every path the item is reachable at, comparable with each region, root and refused location,
@@ -249,17 +237,98 @@ public sealed class ExploreActionPolicy
     }
 
     /// <summary>
+    /// The refusal that holds for <paramref name="path"/> and for everything in it, or null where
+    /// something in it, or the path itself, may be removed. A file is asked about as itself.
+    ///
+    /// <para><b>For a caller that goes through what a folder holds</b>, as a duplicate search does
+    /// (§7.4): a place refused here can be passed over whole, and nothing in it asked about.
+    /// <see cref="MayRemove"/> cannot serve, because it refuses a folder for what the folder
+    /// <em>holds</em> as well (<see cref="HeldLocations"/>), so it refuses the Users folder, which
+    /// holds the signed-in profile, and every folder above <c>C:\Windows</c>.</para>
+    ///
+    /// <para><b>The rules <see cref="MayRemove"/> asks first, through the same members</b>, so the two
+    /// cannot come to disagree: what Windows and NTFS keep at the top of a volume, every Recycle Bin,
+    /// Outlook's mail stores and the folder it saves them in, and each region of the table that covers what is
+    /// below it, less what a permitting region inside the path carves back out. A path refused here
+    /// is refused by <see cref="MayRemove"/> too.</para>
+    ///
+    /// <para>A whole volume is answered null rather than refused: it is never removed, and what is on
+    /// it is asked about thing by thing.</para>
+    /// </summary>
+    public ExploreVerdict? RefusedAtAndBelow(string path)
+    {
+        if (LongPath.Configured(path) is not { } target)
+        {
+            return ExploreVerdict.Refuse(
+                "Deguffer could not make sense of that path, so it will not act on it.");
+        }
+
+        if (VolumeRoot.Places(_volumes, target) is not { } places)
+        {
+            return null;
+        }
+
+        if (AtTheTopOfAVolume(places) is { } top)
+        {
+            return top;
+        }
+
+        foreach (var place in ReachedFolder.Following(target, places).Places)
+        {
+            if (WithEverythingIn(place) is { } refusal)
+            {
+                return refusal;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Where, below <paramref name="root"/>, <see cref="RefusedAtAndBelow"/> can answer differently
+    /// for a child than for the folder holding it, so a caller going through millions of folders asks
+    /// it about a handful rather than about each. See <see cref="RefusalWatch"/>.
+    /// </summary>
+    /// <param name="root">The folder the caller starts from, which it asks about itself.</param>
+    public RefusalWatch WatchBelow(string root) =>
+        new(ReachedFolder.At(root, _volumes).IsVolumeTop, [.. _regions.BoundaryPlaces]);
+
+    /// <summary>
+    /// What Windows and NTFS keep at the top of a volume, and every Recycle Bin, read on every
+    /// reading of every path the item is reachable at. Each refuses a name and everything in it.
+    /// </summary>
+    private static ExploreVerdict? AtTheTopOfAVolume(IReadOnlyList<VolumePlace> places)
+    {
+        IReadOnlyList<string> readings = [.. places.SelectMany(place => place.Readings)];
+
+        return OnAnyReading(readings, ReservedByTheFilesystem)
+            ?? OnAnyReading(readings, InARecycleBin)
+            ?? OnAnyReading(readings, VolumeReservations.Refusal);
+    }
+
+    /// <summary>
+    /// The refusal of one place the item is reachable at that holds for everything in it too: Outlook's
+    /// mail stores and the folder it saves them in, and the region table's rule for a whole folder. A
+    /// mail store is a file, so it is all there is of it; a folder named like one is refused with what
+    /// it holds, which errs, as the rule does, on the side of the mail.
+    /// </summary>
+    /// <param name="place">One path the item is reachable at, in <see cref="ReachedFolder.Comparable"/> form.</param>
+    private ExploreVerdict? WithEverythingIn(string place) =>
+        OutlookDataFiles.Refusal(place) ?? _regions.RefusingAtAndBelow(place);
+
+    /// <summary>
     /// What everything that answers from above says about one place the item is reachable at: the
-    /// Outlook rule, the region table, and §5.2's declared and probed roots, in that order.
+    /// Outlook rules, the region table, and §5.2's declared and probed roots, in that order.
     /// </summary>
     /// <param name="target">One path the item is reachable at, in <see cref="ReachedFolder.Comparable"/> form.</param>
     private ExploreVerdict Above(string target, ToolRootChildren children)
     {
-        // Before the region table, because the table ends in a permission: a mail store inside the
-        // signed-in profile would otherwise be answered by the profile's own entry and allowed.
-        if (OutlookDataFiles.Refusal(target) is { } mail)
+        // The Outlook rules before the region table, because the table ends in a permission: a mail
+        // store inside the signed-in profile would otherwise be answered by the profile's own entry
+        // and allowed. These are the rules RefusedAtAndBelow asks of each place.
+        if (WithEverythingIn(target) is { } refused)
         {
-            return mail;
+            return refused;
         }
 
         var verdict = _regions.Innermost(target) is { Verdict.IsAllowed: false } refusing

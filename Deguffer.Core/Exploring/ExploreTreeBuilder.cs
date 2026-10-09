@@ -24,6 +24,7 @@ namespace Deguffer.Core.Exploring;
 /// Whether the file system would not say what the file occupies, so <paramref name="Size"/> is a
 /// lower bound and so is every total above it.
 /// </param>
+/// <param name="Visibility">Whether the entry is hidden or a system file, as its attributes say.</param>
 public readonly record struct ExploreChild(
     string Name,
     bool IsDirectory,
@@ -33,7 +34,8 @@ public readonly record struct ExploreChild(
     ExploreTimestamp LastWritten = default,
     long? Length = null,
     FileStorage Storage = FileStorage.Plain,
-    bool SizeUnknown = false);
+    bool SizeUnknown = false,
+    FileVisibility Visibility = FileVisibility.Shown);
 
 /// <summary>
 /// Accumulates nodes as something discovers them, then hands over the finished
@@ -59,6 +61,7 @@ public sealed class ExploreTreeBuilder
     private readonly List<bool> _sizeUnknown;
     private readonly List<ExploreTimestamp> _created;
     private readonly List<ExploreTimestamp> _modified;
+    private readonly List<FileVisibility> _visibility;
     private readonly Lock _gate = new();
 
     /// <param name="created">
@@ -91,6 +94,7 @@ public sealed class ExploreTreeBuilder
         _sizeUnknown = [false];
         _created = [created];
         _modified = [lastWritten];
+        _visibility = [FileVisibility.Shown];
     }
 
     /// <summary>
@@ -123,6 +127,7 @@ public sealed class ExploreTreeBuilder
                 _sizeUnknown.Add(child.SizeUnknown);
                 _created.Add(child.Created);
                 _modified.Add(child.LastWritten);
+                _visibility.Add(child.Visibility);
             }
 
             return first;
@@ -177,6 +182,7 @@ public sealed class ExploreTreeBuilder
                 [.. _sizeUnknown],
                 [.. _created],
                 [.. _modified],
+                [.. _visibility],
                 present,
                 childOrder);
         }

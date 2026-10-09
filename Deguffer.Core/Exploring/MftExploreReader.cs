@@ -101,6 +101,10 @@ internal static class MftExploreReader
         var created = new ExploreTimestamp[count];
         var modified = new ExploreTimestamp[count];
 
+        // A byte a record, which is the whole cost: the attributes come from the
+        // $STANDARD_INFORMATION the dates are already read from.
+        var visibility = new FileVisibility[count];
+
         var present = new bool[count];
 
         Array.Fill(names, string.Empty);
@@ -164,6 +168,7 @@ internal static class MftExploreReader
                 sizeUnknown[number] = record.Size is null;
                 created[number] = ExploreTimestamp.FromFileTime(record.CreatedFileTime);
                 modified[number] = ExploreTimestamp.FromFileTime(record.LastWrittenFileTime);
+                visibility[number] = record.Visibility;
                 present[number] = true;
 
                 return true;
@@ -207,7 +212,7 @@ internal static class MftExploreReader
         return new MftExploreRead(
             ExploreTree.Create(
                 rootPath, root, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-                created, modified, present, ExploreChildOrder.BySize),
+                created, modified, visibility, present, ExploreChildOrder.BySize),
             FallbackReason.None,
             !couldNotReadWholeTable);
     }
@@ -256,6 +261,61 @@ internal static class MftExploreReader
         }
 
         return isDirectory[current]
+            ? (current, FallbackReason.None)
+            : (null, FallbackReason.MasterFileTableIncomplete);
+    }
+
+    /// <summary>
+    /// The node of <paramref name="tree"/>, a tree rooted at its volume's top, that holds the folder
+    /// <paramref name="components"/> name, or why the table cannot answer for it: the two failures
+    /// <see cref="Resolve"/> tells apart, for the same reasons, and the same preference for an exact
+    /// name over one that differs only in case.
+    ///
+    /// <para>For a caller that read the table once to answer for several folders, so the folders are
+    /// found in the tree rather than in the arrays it was built from, which the tree has taken.</para>
+    /// </summary>
+    public static (int? Node, FallbackReason Reason) Locate(ExploreTree tree, IReadOnlyList<string> components)
+    {
+        var current = tree.RootNode;
+
+        foreach (var component in components)
+        {
+            if (tree.IsLink(current))
+            {
+                return (null, FallbackReason.None);
+            }
+
+            int? differingInCase = null;
+            int? exact = null;
+
+            foreach (var child in tree.ChildrenOf(current))
+            {
+                if (tree.NameOf(child).Equals(component, StringComparison.Ordinal))
+                {
+                    exact = child;
+                    break;
+                }
+
+                if (differingInCase is null && tree.NameOf(child).Equals(component, StringComparison.OrdinalIgnoreCase))
+                {
+                    differingInCase = child;
+                }
+            }
+
+            if (!tree.IsDirectory(current) || (exact ?? differingInCase) is not { } next)
+            {
+                return (null, FallbackReason.MasterFileTableIncomplete);
+            }
+
+            current = next;
+        }
+
+        if (tree.IsLink(current))
+        {
+            return (null, FallbackReason.None);
+        }
+
+        return tree.IsDirectory(current)
             ? (current, FallbackReason.None)
             : (null, FallbackReason.MasterFileTableIncomplete);
     }

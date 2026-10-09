@@ -28,6 +28,7 @@ public sealed class ExploreTree : Layout.ISizedTree
     private readonly bool[] _sizeUnknown;
     private readonly ExploreTimestamp[] _created;
     private readonly ExploreTimestamp[] _modified;
+    private readonly FileVisibility[] _visibility;
     private readonly int[] _childStart;
     private readonly int[] _children;
     private readonly bool[] _placed;
@@ -45,6 +46,7 @@ public sealed class ExploreTree : Layout.ISizedTree
         bool[] sizeUnknown,
         ExploreTimestamp[] created,
         ExploreTimestamp[] modified,
+        FileVisibility[] visibility,
         int[] childStart,
         int[] children,
         bool[] placed,
@@ -63,6 +65,7 @@ public sealed class ExploreTree : Layout.ISizedTree
         _sizeUnknown = sizeUnknown;
         _created = created;
         _modified = modified;
+        _visibility = visibility;
         _childStart = childStart;
         _children = children;
         _placed = placed;
@@ -184,6 +187,12 @@ public sealed class ExploreTree : Layout.ISizedTree
     /// </summary>
     public ExploreTimestamp ModifiedOf(int node) => _modified[node];
 
+    /// <summary>
+    /// Whether this node is hidden or a system file, as its own attributes say. Never rolled up: a
+    /// visible file in a hidden folder is a visible file.
+    /// </summary>
+    public FileVisibility VisibilityOf(int node) => _visibility[node];
+
     public int ParentOf(int node) => _parents[node];
 
     /// <summary>
@@ -288,6 +297,7 @@ public sealed class ExploreTree : Layout.ISizedTree
         bool[] sizeUnknown,
         ExploreTimestamp[] created,
         ExploreTimestamp[] modified,
+        FileVisibility[] visibility,
         bool[] present,
         ExploreChildOrder childOrder)
     {
@@ -299,7 +309,7 @@ public sealed class ExploreTree : Layout.ISizedTree
 
         return new ExploreTree(
             rootPath, rootNode, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-            created, modified, childStart, children, Placed(order, names.Length), childOrder);
+            created, modified, visibility, childStart, children, Placed(order, names.Length), childOrder);
     }
 
     /// <summary>
