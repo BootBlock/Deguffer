@@ -267,6 +267,29 @@ public sealed class DuplicateIdentityTests : IDisposable
         Assert.Empty(found.Read);
         Assert.Equal([Searched("Data"), photos], found.Unsearched.Select(location => location.Given));
         Assert.All(found.Unsearched, location => Assert.Contains("which file is which", location.Reason, StringComparison.Ordinal));
+
+        // The reference on it went unsearched, so no rule may mark.
+        Assert.Equal([photos], found.UnsearchedReferences.Select(location => location.Given));
+    }
+
+    /// <summary>
+    /// What a copy occupies is what Windows says its clusters are, read as it is identified: a sparse
+    /// file of a megabyte that holds nothing occupies less than its length, and a written one does not.
+    /// </summary>
+    [Fact]
+    public async Task ACopysSizeOnDiskIsWhatWindowsSaysItOccupies()
+    {
+        const int length = 1 << 20;
+        var written = _tree.File(Enumerable.Repeat((byte)1, length).ToArray(), "Data", "written.bin");
+        var sparse = At("Data", "sparse.bin");
+        SparseFile.Create(sparse, length);
+
+        var found = await _tree.FindAsync(MatchCriteria.Size, Searched("Data"));
+
+        var files = Assert.Single(found.Groups).Files;
+        Assert.All(files, file => Assert.Equal(length, file.Length));
+        Assert.True(files.Single(file => file.Path == sparse).SizeOnDisk < length);
+        Assert.True(files.Single(file => file.Path == written).SizeOnDisk >= length);
     }
 
     /// <summary>

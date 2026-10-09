@@ -216,7 +216,7 @@ public sealed class SearchLocations
     /// holds no link that could lead back to a local disk. Every other drive waits for the final path:
     /// a link on it can lead to a local disk, where the location is searched.</para>
     /// </summary>
-    private static string? WhyNotOpened(string followed, IVolumeInventory volumes) =>
+    internal static string? WhyNotOpened(string followed, IVolumeInventory volumes) =>
         LongPath.IsShare(followed)
             ? NotLocal
             : HostVolume.For(volumes, followed) switch
@@ -240,7 +240,7 @@ public sealed class SearchLocations
     /// <paramref name="final"/> in display form, with a volume Windows names by its GUID named by
     /// where it is mounted instead, or null where nothing names it.
     /// </summary>
-    private static string? Displayed(string final, IVolumeInventory volumes)
+    internal static string? Displayed(string final, IVolumeInventory volumes)
     {
         var display = LongPath.Display(final);
 

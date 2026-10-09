@@ -20,10 +20,13 @@ public sealed record ReadLocation(string Folder, string? RouteNote);
 /// <param name="Groups">The files that may match, by what was compared without reading their content.</param>
 /// <param name="Unsearched">The chosen locations that were not searched, each with its reason.</param>
 /// <param name="UnsearchedReferences">
-/// The reference locations not searched in whole, for whatever reason: not resolved, on a volume
-/// whose files cannot be identified, passed over, or holding a place that could not be read. While
-/// any is, no rule marks a copy (§7.4): what a reference went unsearched for can be the very link or
-/// share that puts its copies inside a searched location under another name.
+/// The reference locations that were not searched, for whatever reason: not resolved, on a volume
+/// whose files cannot be identified, or at or inside a place that was passed over or could not be
+/// read. While any is, no rule marks a copy (§7.4): what a reference went unsearched for can be the
+/// very link or share that puts its copies inside a searched location under another name. A
+/// reference that was searched is not one of them for a place inside it that was passed over or
+/// could not be read: no copy there was found to reach a group, and a whole drive given as a
+/// reference always holds a place passed over.
 /// </param>
 /// <param name="PassedOver">The places inside the locations that were passed over, each with its reason.</param>
 /// <param name="Unread">The places inside the locations that could not be read, each with its reason.</param>
@@ -126,7 +129,7 @@ public sealed class CandidateFinder
         var walk = new CandidateWalk(search);
 
         // Read whether or not the search passes over them, because a copy in one is refused either way.
-        var programs = ProgramFolders.Read(_registry, _environment, _system, _volumes, locations.Locations, ct);
+        var programs = ProgramFolders.Read(_registry, _environment, _system, _volumes, _files, locations.Locations, ct);
 
         var passedOver = search.SearchPassedOverPlaces ? null : new PassedOverPlaces(policy, programs.Folders);
         List<ResolvedLocation> roots = [];
@@ -190,8 +193,8 @@ public sealed class CandidateFinder
             walk.Read(scans[i], roots[i], locations.Within(roots[i]), passOver[i], routes[i], ct);
         }
 
-        // A reference at or inside a place the walk passed over or could not read was not searched in
-        // whole either, whether it is a root passed over or a folder inside one. Compared ignoring
+        // A reference at or inside a place the walk passed over or could not read was not searched
+        // either, whether it is a root passed over or a folder inside one. Compared ignoring
         // case, which can only find more.
         IReadOnlyList<(string Path, string Reason)> skipped =
             [.. walk.PassedOver.Select(place => (place.Path, place.Reason)), .. walk.Unread.Select(place => (place.Path, place.Reason))];

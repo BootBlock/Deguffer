@@ -4,8 +4,26 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Duplicates;
 
 /// <summary>A folder a program is installed in, which a search passes over by default.</summary>
+/// <param name="Reached">Every place the folder is reachable at as its entry names it.</param>
 /// <param name="Program">The program's name as its entry gives it, which is what the page says.</param>
-public sealed record ProgramFolder(string Path, ReachedFolder Reached, string Program);
+/// <param name="Final">
+/// The folder the entry's path leads to once every link on the way is followed, or null where Windows
+/// would not open it (<see cref="ResolvedPlaces.FollowedTo"/>). A search's paths are final paths, so a
+/// program installed at <c>D:\Apps\Tool</c>, where <c>D:\Apps</c> is a junction to <c>E:\Apps</c>, is
+/// at <c>E:\Apps\Tool</c> to the search.
+/// </param>
+public sealed record ProgramFolder(string Path, ReachedFolder Reached, string Program, ReachedFolder? Final)
+{
+    /// <summary>The folder as its entry names it, and where that leads.</summary>
+    internal IEnumerable<ReachedFolder> Forms => Final is null ? [Reached] : [Reached, Final];
+
+    /// <summary>Whether <paramref name="path"/> is in the folder, at any place it is reachable at.</summary>
+    /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
+    public bool Holds(string path) => Forms.Any(form => form.PathTo(path) is not null);
+
+    /// <summary>Whether <paramref name="other"/> is the same folder, at any place either is reachable at.</summary>
+    internal bool IsSameAs(ProgramFolder other) => Forms.Any(form => other.Forms.Any(form.IsSameAs));
+}
 
 /// <summary>An installed program's entry whose install location names nothing a search can pass over.</summary>
 /// <param name="Reason">Why, as the end of a sentence that starts with the location.</param>
@@ -51,11 +69,12 @@ public sealed record ProgramFolderReading(
 public static class ProgramFolders
 {
     /// <param name="chosen">The locations the search covers, which no program folder may hold.</param>
-    public static ProgramFolderReading Read(
+    internal static ProgramFolderReading Read(
         IUninstallRegistry registry,
         IUserEnvironment environment,
         ISystemDirectories system,
         IVolumeInventory volumes,
+        FileInformation files,
         IReadOnlyList<ResolvedLocation> chosen,
         CancellationToken ct)
     {
@@ -63,6 +82,7 @@ public static class ProgramFolders
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(volumes);
+        ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(chosen);
 
         List<ProgramFolder> folders = [];
@@ -76,26 +96,26 @@ public static class ProgramFolders
 
         void Consider(string program, string location)
         {
-            var reached = ReachedFolder.At(location, volumes);
+            var folder = new ProgramFolder(
+                location, ReachedFolder.At(location, volumes), program, ResolvedPlaces.FollowedTo(location, volumes, files));
 
-            if (WhyNamesNoProgram(reached, environment, system, profiles) is { } why)
+            // Asked of where it leads too: an entry naming a junction to the profile has named the profile.
+            if (folder.Forms.Select(form => WhyNamesNoProgram(form, environment, system, profiles)).FirstOrDefault(why => why is not null) is { } why)
             {
                 setAside.Add(new SetAsideInstallLocation(program, location, why));
                 return;
             }
 
-            var folder = new ProgramFolder(location, reached, program);
-
-            if (!installed.Exists(known => known.Reached.IsSameAs(reached)))
+            if (!installed.Exists(folder.IsSameAs))
             {
                 installed.Add(folder);
             }
 
-            if (chosen.FirstOrDefault(choice => reached.Holds(choice.Reached)) is { } held)
+            if (chosen.FirstOrDefault(choice => folder.Forms.Any(form => form.Holds(choice.Reached))) is { } held)
             {
                 setAside.Add(new SetAsideInstallLocation(program, location, $"it holds '{held.Folder}', which this search was asked to search."));
             }
-            else if (!folders.Exists(known => known.Reached.IsSameAs(reached)))
+            else if (!folders.Exists(folder.IsSameAs))
             {
                 folders.Add(folder);
             }

@@ -129,7 +129,8 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   30 days (personal) or 93 (work or school).
 - **Space.** ReFS block cloning, which Windows 11 24H2 uses for ordinary copies on a Dev Drive, and
   Windows Server deduplication (`IO_REPARSE_TAG_DEDUP`) let copies share clusters. No user-mode API
-  reports what a cloned file shares **(unverified)**, so the freed figure is a lower bound there.
+  reports what a cloned file shares **(unverified)**, so there a removal can free less than the
+  figure, which counts shared clusters in full.
 - **Recycle Bin.** When a bin is full, Windows deletes its oldest items outright to make room for
   new ones. Measured in phase 4: `SHQueryRecycleBin` answers what this account's bin on a volume
   holds as the sum of its items' lengths, and takes a drive's top, a folder on it, the extended form
@@ -187,8 +188,9 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Size on disk.** The attributes-only handle that identifies a file already reads
   `FILE_STANDARD_INFO`, whose `AllocationSize` is what the file occupies (`FileDescription.Allocated`,
   `DuplicateCandidate.SizeOnDisk`, phase 4): less than the length for a compressed or sparse file,
-  nothing for one held in its file record, so a sum of them is a lower bound except where clusters
-  are shared.
+  nothing for one held in its file record. A sum of them is what the copies occupy, which a removal
+  may free less than: shared clusters are counted in full, and the Recycle Bin frees what it holds
+  only when it is emptied.
 - **File information.** `FileInformation` (phase 2) is the one declaration of each call that
   describes a file through a handle, and of the attributes-only handle itself (`FileInformation.Open`):
   `HardLinkAwareScanner`, `CloudFiles` and `OccupancyProbe` read through it, where before the first
@@ -458,7 +460,8 @@ the algorithm and the filters, stored as an `AppPreferences` group; the note of 
 set-aside install locations and unsearchable volumes; the search with stage progress and cancel; the
 group list updated in place, never cleared and refilled, because a rebuilt list loses the reader's
 place; groups sorted by the space each could free; the sentence on a name or size group that its
-files may differ; the freed figure stated as a lower bound; and, where two paths differ, the
+files may differ; the space stated as what the copies occupy, which a removal may free less than;
+and, where two paths differ, the
 difference shown. A `DuplicatesRequest` in `ElevationRequest` carries the locations and their roles
 across an elevated reopen, for the file-table route. Legible with no backdrop (§6.5), in light, dark
 and high contrast.
@@ -587,8 +590,10 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   generously, the default and every configured or reported location; a drive is internal only where
   its disks are NVMe, solid state or rotational; an install location set aside because it holds a
   chosen location still refuses the copies in it (§7.4 amended); the search names every reference
-  location not searched in whole, for any reason (`CandidateFinding.UnsearchedReferences`), which
-  stops every rule while marking by hand stays open; a rule adds to the marks there are, and a keep
+  location it did not search (`CandidateFinding.UnsearchedReferences`): one not resolved, one on a
+  volume whose files cannot be identified, and one at or inside a place passed over or not read,
+  but not one that was searched and holds such a place, since every whole drive holds one; a
+  reference named so stops every rule while marking by hand stays open; a rule adds to the marks there are, and a keep
   rule breaks a tie by the shorter path, then the path's text; the freed figure is what the copies
   occupy, as Windows reports it. Measured: what a bin holds and its limit, in the technical facts.
   Corrected here: step 1 (not the tool roots), the internal-drive test, and the facts on the
@@ -607,8 +612,8 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   removing a folder.
 - **Replacing a copy by a hard link.** Not authorised (§7.4), for the backup and save-by-rename
   reasons it gives. Re-opening it needs an answer to both.
-- **Space shared by block cloning.** The freed figure stays a lower bound on ReFS and a Dev Drive
-  until Windows reports what a cloned file shares.
+- **Space shared by block cloning.** On ReFS and a Dev Drive a removal can free less than the
+  figure shown, until Windows reports what a cloned file shares.
 - **A program that registers no install location.** A portable program, or a game library a
   launcher keeps without an entry, is not recognised as a program folder. The confirmation's list
   is where the user sees it.

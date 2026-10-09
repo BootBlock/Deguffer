@@ -89,7 +89,7 @@ public sealed class CopyRefusals
         var verdict = _policy.MayRemove(path);
         var why = !verdict.IsAllowed
             ? verdict.Reason
-            : _programs.FirstOrDefault(program => program.Reached.PathTo(path) is not null) is { } held
+            : _programs.FirstOrDefault(program => program.Holds(path)) is { } held
                 ? $"'{held.Program}' is installed here, and a program's own files are never removed as duplicates: "
                   + "two programs that ship the same file each need their own copy."
                 : null;

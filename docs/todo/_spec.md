@@ -1081,9 +1081,10 @@ on: what the established duplicate finders do, and the ways their users have los
   their last-modified times, the criteria that matched them and, for a content match, the checksum
   and its algorithm. Where two paths differ by little, the page shows where they differ, because two
   near-identical folder names are how a user marks the copy they meant to keep.
-- **The space a removal would free is a lower bound, and says so.** On ReFS, which a Dev Drive uses,
-  two copies may share their clusters, because Windows 11 copies by block cloning there, and
-  removing one may free nothing. Windows Server's deduplication behaves the same way.
+- **The space shown is what the copies occupy, a removal may free less, and the page says so.** On
+  ReFS, which a Dev Drive uses, two copies may share their clusters, because Windows 11 copies by
+  block cloning there, and removing one may free nothing. Windows Server's deduplication behaves the
+  same way. A copy moved to the Recycle Bin frees nothing until the bin is emptied.
 - **A copy inside a cloud folder says what removing it does there**: OneDrive, Dropbox and the rest
   remove it from the cloud and from every device that syncs it, not only from this disk.
 - **Results stream.** Groups appear as each is confirmed, the search reports what stage it has

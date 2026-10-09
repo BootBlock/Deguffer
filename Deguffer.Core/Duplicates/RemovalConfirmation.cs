@@ -13,7 +13,8 @@ namespace Deguffer.Core.Duplicates;
 /// use, and the list is where the user can.</para>
 ///
 /// <para><b>The list is the marks that stand now</b> (<see cref="GroupMarks.Standing"/>), judged by
-/// the keeping rule as it is at the confirmation rather than when each mark was made.</para>
+/// the keeping rule as the machine is at the confirmation rather than when each mark was made
+/// (<see cref="DuplicateMarks.RejudgeAsync"/>).</para>
 ///
 /// <para><b>A copy in a cloud folder</b> goes from every device that syncs the folder, so the
 /// confirmation says so. <b>Copies bound for one drive's Recycle Bin that are more than it has room
@@ -22,7 +23,11 @@ namespace Deguffer.Core.Duplicates;
 /// </summary>
 /// <param name="Copies">Every copy that goes, group by group.</param>
 /// <param name="Groups">How many groups they come from.</param>
-/// <param name="Space">What they occupy on disk, which the removal frees at least.</param>
+/// <param name="Space">
+/// What they occupy on disk, as Windows reports it, which a removal may free less than: copies can
+/// share clusters through block cloning or deduplication, and the Recycle Bin frees what it holds only
+/// when it is emptied.
+/// </param>
 /// <param name="Summary">The sentence that heads the confirmation.</param>
 /// <param name="Warnings">Each sentence about a cloud folder, the Recycle Bin, or a permanent removal.</param>
 public sealed record RemovalConfirmation(
@@ -33,21 +38,38 @@ public sealed record RemovalConfirmation(
     IReadOnlyList<string> Warnings)
 {
     /// <summary>The confirmation of removing the marks that stand in <paramref name="marks"/>.</summary>
+    /// <param name="protections">Built afresh for this confirmation, so Explore's policy is read now.</param>
     /// <param name="room">The room in a volume's Recycle Bin, or null where Windows would not say.</param>
-    public static RemovalConfirmation For(DuplicateMarks marks, ExploreRemovalMode mode, Func<LocalVolume, RecycleBinRoom?> room)
+    public static async Task<RemovalConfirmation> ForAsync(
+        DuplicateMarks marks,
+        MachineProtections protections,
+        ExploreRemovalMode mode,
+        Func<LocalVolume, RecycleBinRoom?> room,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(marks);
+
+        return For(marks, await marks.RejudgeAsync(protections, ct).ConfigureAwait(false), mode, room);
+    }
+
+    /// <param name="keeping">The keeping rule as <see cref="DuplicateMarks.RejudgeAsync"/> judged it for this confirmation.</param>
+    internal static RemovalConfirmation For(
+        DuplicateMarks marks, CopyKeeping keeping, ExploreRemovalMode mode, Func<LocalVolume, RecycleBinRoom?> room)
+    {
+        ArgumentNullException.ThrowIfNull(marks);
+        ArgumentNullException.ThrowIfNull(keeping);
         ArgumentNullException.ThrowIfNull(room);
 
-        var keeping = marks.Keeping;
         List<IReadOnlyList<DuplicateCandidate>> byGroup = [.. marks.Groups.Select(group => group.Standing(keeping)).Where(standing => standing.Count > 0)];
         List<DuplicateCandidate> copies = [.. byGroup.SelectMany(standing => standing)];
         var space = copies.Sum(copy => copy.SizeOnDisk);
+        var toBin = mode == ExploreRemovalMode.RecycleBin;
 
         var summary = $"{Count(copies.Count, "copy", "copies")} from {Count(byGroup.Count, "group", "groups")} will be "
-            + (mode == ExploreRemovalMode.RecycleBin ? "moved to the Recycle Bin" : "removed permanently")
-            + $". They occupy {FreeSpace.Format(space)} on disk, which is the least the removal frees: where copies share "
-            + "space, as block-cloned copies can, it frees less than their sizes add up to.";
+            + (toBin ? "moved to the Recycle Bin" : "removed permanently")
+            + $". They occupy {FreeSpace.Format(space)} on disk, and the removal may free less: copies can share space, "
+            + "as block-cloned and deduplicated copies do"
+            + (toBin ? ", and the Recycle Bin frees what it holds only when it is emptied." : ".");
 
         List<string> warnings = [];
 

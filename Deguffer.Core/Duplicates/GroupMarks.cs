@@ -104,13 +104,17 @@ public sealed class GroupMarks
         return keepsOne ? standing : [];
     }
 
-    /// <summary>What the standing marks occupy on disk, which a removal would free at least.</summary>
+    /// <summary>
+    /// What the standing marks occupy on disk, which a removal may free less than
+    /// (<see cref="DuplicateCandidate.SizeOnDisk"/>).
+    /// </summary>
     public long MarkedSpace(CopyKeeping keeping) => Standing(keeping).Sum(copy => copy.SizeOnDisk);
 
     /// <summary>
-    /// The most a removal could free here, which sorts the groups (§7.4): what every copy that may be
-    /// marked occupies, with one copy that can be kept left. A reference copy, a refused copy and a
-    /// file with several names count for nothing, and a group that can keep no copy frees nothing.
+    /// The space a removal here could free, which sorts the groups (§7.4): what every copy that may be
+    /// marked occupies, with one copy that can be kept left, which a removal may free less than
+    /// (<see cref="DuplicateCandidate.SizeOnDisk"/>). A reference copy, a refused copy and a file with
+    /// several names count for nothing, and a group that can keep no copy frees nothing.
     /// </summary>
     public long FreeableSpace(CopyKeeping keeping)
     {

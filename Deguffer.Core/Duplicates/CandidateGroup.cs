@@ -21,9 +21,10 @@ namespace Deguffer.Core.Duplicates;
 /// </param>
 /// <param name="Length">Its length in bytes when it was identified, which is what a size match compares.</param>
 /// <param name="SizeOnDisk">
-/// What it occupied on disk when it was identified, which is what removing it could free: never more
-/// than Windows reports, so a sum of them is the lower bound §7.4 states, except where clusters are
-/// shared by block cloning or deduplication, which Windows does not report.
+/// What it occupied on disk when it was identified, as Windows reports it, which removing it may free
+/// less than: clusters it shares through block cloning or deduplication are counted in full, because
+/// Windows does not report a share, and a copy in the Recycle Bin frees nothing until the bin is
+/// emptied (§7.4).
 /// </param>
 /// <param name="Modified">Its last-modified time to the file system's full precision, which is what a time match compares.</param>
 /// <param name="Storage">

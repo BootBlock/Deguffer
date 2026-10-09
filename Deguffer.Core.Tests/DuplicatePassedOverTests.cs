@@ -1,5 +1,6 @@
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.InstalledApps;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -222,6 +223,29 @@ public sealed class DuplicatePassedOverTests : IDisposable
         Assert.Equal("Launcher", Assert.Single(found.SetAside).Program);
         Assert.Empty(found.PassedOver);
         Assert.Equal(2, Assert.Single(found.Groups).Files.Count);
+    }
+
+    /// <summary>
+    /// A search walks final paths, so a program installed at a path with a junction on the way to it
+    /// is passed over at the folder the junction leads to.
+    /// </summary>
+    [Fact]
+    public async Task AProgramFolderNamedThroughAJunctionIsPassedOverWhereItLeads()
+    {
+        var real = _tree.Folder("Real", "Apps");
+        var apps = Path.Combine(_tree.Top, "Apps");
+        Junction.ToDirectory(apps, real);
+        var installed = _tree.File(Length, "Real", "Apps", "Tool", "a.dll");
+        _tree.File(Length, "Real", "Data", "b.dll");
+        _tree.File(Length, "Real", "Data", "c.dll");
+        _tree.Registry.With(
+            UninstallScope.Machine64, "Tool", ("DisplayName", "Tool"), ("InstallLocation", Path.Combine(apps, "Tool")));
+
+        var found = await _tree.FindAsync(MatchCriteria.Size, new SearchLocation(Path.Combine(_tree.Top, "Real")));
+
+        var tool = Assert.Single(found.PassedOver, place => place.Path == Path.GetDirectoryName(installed));
+        Assert.Contains("'Tool' is installed here", tool.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain(installed, Assert.Single(found.Groups).Files.Select(file => file.Path));
     }
 
     [Fact]
