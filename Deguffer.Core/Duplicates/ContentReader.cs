@@ -5,11 +5,20 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Duplicates;
 
-/// <summary>Describes the file at a path through a handle opened for attributes alone, as <see cref="FileInformation.Describe(string, IdentityRoute)"/> does.</summary>
-internal delegate FileReading PathDescriber(string path, IdentityRoute route);
+/// <summary>
+/// Describes the file at a path through a handle opened for attributes alone, and keeps that handle
+/// open, as <see cref="FileInformation.Hold"/> does.
+/// </summary>
+internal delegate HeldFile PathDescriber(string path, IdentityRoute route);
 
-/// <summary>Opens a file to read its content, given its path in the form it reaches Windows.</summary>
-internal delegate SafeFileHandle ContentOpener(string extendedPath);
+/// <summary>
+/// Opens a file to read its content by its number on the volume a held handle is open on, as
+/// <see cref="FileInformation.OpenById"/> does, answering an invalid handle where Windows would not.
+/// </summary>
+internal delegate SafeFileHandle ContentOpener(SafeFileHandle volume, FileIdentity identity, IdentityRoute route);
+
+/// <summary>Opens a file to read its content by its path, in the form it reaches Windows.</summary>
+internal delegate SafeFileHandle PathOpener(string extendedPath);
 
 /// <summary>How much of a file a read covers.</summary>
 internal enum ContentPart
@@ -50,12 +59,23 @@ internal readonly record struct ContentReading(ContentReadResult Result, Content
 /// opened. The file must still be the one identified: its identity, length and last-modified time to
 /// the tick.</para>
 ///
+/// <para><b>Opened by its number, never through a link.</b> The handle the path was described through
+/// is held, and the content is opened by the file's number on that handle's volume
+/// (<see cref="FileInformation.OpenById"/>), so no path is walked a second time. A folder or a name
+/// on the way replaced by a link after the description cannot send the open to another file, to a
+/// share, or to a cloud file that opening would recall.</para>
+///
+/// <para><b>The path is opened only where no link can be.</b> Where Windows will not open a file by
+/// its number, the path is opened instead only on a volume that says it supports no reparse points,
+/// such as FAT or exFAT, on which no link, junction or mount can exist; anywhere else the file is
+/// left out as a failed read, never as gone, because the held handle shows it was there.</para>
+///
 /// <para><b>Held while it is read, and checked through what it is read by.</b> The content is opened
 /// sharing only reading, so nobody can write to it while it is read, and the handle is described
-/// before the first byte and after the last. A path that names another file by the time it is
-/// opened, a file that went online-only in between, and a file whose times or attributes changed
-/// while it was read (which sharing does not prevent) are each left out. What was read is never
-/// taken for the file's on any other evidence.</para>
+/// before the first byte and after the last. A file that is not the identified one, a file that went
+/// online-only in between, and a file whose times or attributes changed while it was read (which
+/// sharing does not prevent) are each left out. What was read is never taken for the file's on any
+/// other evidence.</para>
 ///
 /// <para><b>A refusal is never absence.</b> A file Windows would not describe is counted as
 /// unidentified, and one it would not let the search read as a failed read, never as gone, because a
@@ -79,23 +99,29 @@ internal sealed class ContentReader
     private readonly FileInformation _files;
     private readonly PathDescriber _describe;
     private readonly ContentOpener _open;
+    private readonly PathOpener _openPath;
 
-    public static ContentReader Default { get; } = new(FileInformation.Default, FileInformation.Default.Describe, OpenForContent);
+    public static ContentReader Default { get; } =
+        new(FileInformation.Default, FileInformation.Default.Hold, FileInformation.OpenById, OpenPath);
 
     /// <param name="files">Describes the opened content through its handle.</param>
     /// <param name="describe">
-    /// Describes the path before anything is opened for content, so a test can hand back a real
-    /// description carrying a recall attribute, which no ordinary file can be given.
+    /// Describes the path before anything is opened for content, so a test can see the path reach
+    /// Windows in its extended form (§6.3), and hand back a real description carrying a recall
+    /// attribute, which no ordinary file can be given.
     /// </param>
     /// <param name="open">
-    /// Opens the content, so a test can see the path reach Windows in its extended form (§6.3), and
-    /// fail if a file that must not be read is opened at all.
+    /// Opens the content by the file's number, so a test can fail if a file that must not be read is
+    /// opened at all, change the disk between the description and the open, or stand for a volume
+    /// that will not open a file by its number.
     /// </param>
-    internal ContentReader(FileInformation files, PathDescriber describe, ContentOpener open)
+    /// <param name="openPath">Opens the content by its path, where no link can exist on the volume.</param>
+    internal ContentReader(FileInformation files, PathDescriber describe, ContentOpener open, PathOpener openPath)
     {
         _files = files;
         _describe = describe;
         _open = open;
+        _openPath = openPath;
     }
 
     /// <summary>
@@ -114,28 +140,17 @@ internal sealed class ContentReader
     {
         ct.ThrowIfCancellationRequested();
 
-        var described = _describe(file.Path, file.Route);
+        using var held = _describe(file.Path, file.Route);
 
-        if (Judge(described, file, attributes: null) is { } before)
+        if (Judge(held.Reading, file, attributes: null) is { } before)
         {
             return ContentReading.LeftOut(before);
         }
 
-        var attributes = described.Description!.Attributes;
-        SafeFileHandle content;
+        var attributes = held.Reading.Description!.Attributes;
 
-        try
+        if (Open(held.Handle!, file) is not { } content)
         {
-            content = _open(LongPath.Extended(file.Path));
-        }
-        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return ContentReading.LeftOut(ContentReadResult.Gone);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // Another program holding the file without sharing it for reading, an access rule that
-            // refuses its data, or a device that failed: the file may well still be there.
             return ContentReading.LeftOut(ContentReadResult.ReadFailed);
         }
 
@@ -169,6 +184,44 @@ internal sealed class ContentReader
             }
 
             return new ContentReading(ContentReadResult.Read, value);
+        }
+    }
+
+    /// <summary>
+    /// The file's content opened by its number on the volume <paramref name="held"/> is open on, or by
+    /// its path where Windows will not open it by number and the volume can hold no link, or null
+    /// where it could not be opened. Null is a failed read and never absence: the file was described
+    /// through <paramref name="held"/>, which is still open.
+    /// </summary>
+    private SafeFileHandle? Open(SafeFileHandle held, DuplicateCandidate file)
+    {
+        var content = _open(held, file.Identity, file.Route);
+
+        if (!content.IsInvalid)
+        {
+            return content;
+        }
+
+        content.Dispose();
+
+        // Another program holding the file without sharing it for reading, or an access rule that
+        // refuses its data, is refused by number as it would be by path. Only the volume decides
+        // whether the path may be tried, because on one that supports reparse points a link can be
+        // on the way.
+        if (file.Volume.Features.HasFlag(VolumeFeatures.ReparsePoints))
+        {
+            return null;
+        }
+
+        try
+        {
+            return _openPath(LongPath.Extended(file.Path));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Gone by now, held by another program, refused, or a device that failed: a failed read,
+            // for the reason above.
+            return null;
         }
     }
 
@@ -273,9 +326,10 @@ internal sealed class ContentReader
     }
 
     /// <summary>
-    /// Opened sharing only reading, so no other program can write to the file while it is read, and
-    /// for reading in order, which tells Windows to read ahead.
+    /// Opened as <see cref="FileInformation.OpenById"/> opens by number: sharing only reading, so no
+    /// other program can write to the file while it is read, and for reading in order, which tells
+    /// Windows to read ahead.
     /// </summary>
-    private static SafeFileHandle OpenForContent(string extendedPath) =>
+    private static SafeFileHandle OpenPath(string extendedPath) =>
         File.OpenHandle(extendedPath, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.SequentialScan);
 }

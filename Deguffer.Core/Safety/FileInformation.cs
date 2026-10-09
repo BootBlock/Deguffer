@@ -33,9 +33,10 @@ internal delegate IReadOnlyList<string>? NameLister(string extendedPath);
 ///
 /// <para><b>The one declaration of each call that describes a file through a handle</b>:
 /// <c>GetFileInformationByHandleEx</c> for every class Deguffer reads, the older
-/// <c>GetFileInformationByHandle</c>, <c>GetFinalPathNameByHandle</c>, and <c>FindFirstFileNameW</c>,
+/// <c>GetFileInformationByHandle</c>, <c>GetFinalPathNameByHandle</c>, <c>FindFirstFileNameW</c>,
 /// which lists a file's names, each from the top of its volume as
-/// <see cref="VolumeCalls.MountPointOf"/> gives it. The cloud files, the occupancy probe and the
+/// <see cref="VolumeCalls.MountPointOf"/> gives it, and <c>OpenFileById</c>, which opens a file
+/// described here by its number rather than its path. The cloud files, the occupancy probe and the
 /// hard-link scanner open and read through the members here rather than declaring their own.</para>
 /// </summary>
 internal sealed unsafe partial class FileInformation
@@ -47,6 +48,15 @@ internal sealed unsafe partial class FileInformation
     private const uint OpenExisting = 3;
     private const uint BackupSemantics = 0x0200_0000;
     private const uint OpenReparsePoint = 0x0020_0000;
+    private const uint GenericRead = 0x8000_0000;
+    private const uint ShareRead = 0x0001;
+    private const uint SequentialScan = 0x0800_0000;
+
+    /// <summary><c>FILE_ID_TYPE</c>'s <c>FileIdType</c>: the 64-bit number the older call gives.</summary>
+    private const int FileIdType = 0;
+
+    /// <summary><c>FILE_ID_TYPE</c>'s <c>ExtendedFileIdType</c>: <c>FILE_ID_128</c>, as <c>FileIdInfo</c> gives it.</summary>
+    private const int ExtendedFileIdType = 2;
 
     private const int FileBasicInfoClass = 0;
     private const int FileStandardInfoClass = 1;
@@ -143,16 +153,40 @@ internal sealed unsafe partial class FileInformation
     /// <param name="route">The route the volume's files are identified by, never mixed within one volume.</param>
     public FileReading Describe(string path, IdentityRoute route)
     {
-        using var handle = _open(LongPath.Extended(path), HandleUse.Describe);
+        using var held = Hold(path, route);
+
+        return held.Reading;
+    }
+
+    /// <summary>
+    /// The entry at <paramref name="path"/> described as <see cref="Describe(string, IdentityRoute)"/>
+    /// describes it, with the attributes-only handle it was described through kept open where it was
+    /// identified, for a caller that goes on to open the file by its number on that volume
+    /// (<see cref="OpenById"/>). The caller disposes it.
+    /// </summary>
+    public HeldFile Hold(string path, IdentityRoute route)
+    {
+        var handle = _open(LongPath.Extended(path), HandleUse.Describe);
 
         if (handle.IsInvalid)
         {
-            return Marshal.GetLastPInvokeError() is FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound
-                ? FileReading.Gone
-                : FileReading.Unreadable;
+            var error = Marshal.GetLastPInvokeError();
+            handle.Dispose();
+
+            return new HeldFile(
+                error is FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound ? FileReading.Gone : FileReading.Unreadable,
+                Handle: null);
         }
 
-        return Describe(handle, route);
+        var reading = Describe(handle, route);
+
+        if (reading.Result is not FileReadingResult.Identified)
+        {
+            handle.Dispose();
+            return new HeldFile(reading, Handle: null);
+        }
+
+        return new HeldFile(reading, handle);
     }
 
     /// <summary>
@@ -270,6 +304,28 @@ internal sealed unsafe partial class FileInformation
             use is HandleUse.Describe ? BackupSemantics | OpenReparsePoint : BackupSemantics,
             templateFile: 0);
 
+    /// <summary>
+    /// Opens the file numbered <paramref name="identity"/> on the volume <paramref name="volume"/> is
+    /// open on, to read its content, sharing only reading, or answers an invalid handle with the
+    /// error set where Windows would not open it.
+    ///
+    /// <para><b>By number, never by a path.</b> Windows walks no path to find it, so a folder or a name
+    /// replaced by a link since the file was described cannot send the open through the link to
+    /// another file, a share or a cloud file to be recalled. The reparse point of the file itself is
+    /// not opened as one, so a deduplicated or compressed file is read through its filter, as its
+    /// content, rather than as the stub on disk.</para>
+    /// </summary>
+    /// <param name="volume">Any handle open on the file's volume: the one it was described through.</param>
+    /// <param name="route">The route that read the identity, which decides which kind of number it is.</param>
+    public static SafeFileHandle OpenById(SafeFileHandle volume, FileIdentity identity, IdentityRoute route)
+    {
+        var descriptor = route is IdentityRoute.FileId
+            ? new FileIdDescriptor(ExtendedFileIdType, (ulong)identity.File, (ulong)(identity.File >> 64))
+            : new FileIdDescriptor(FileIdType, (ulong)identity.File, 0);
+
+        return OpenFileById(volume, descriptor, GenericRead, ShareRead, securityAttributes: 0, SequentialScan);
+    }
+
     /// <summary>The identity by <paramref name="route"/>, as Windows reads it through the handle.</summary>
     internal static bool ReadIdentity(SafeFileHandle handle, IdentityRoute route, out FileIdentity identity)
     {
@@ -335,6 +391,20 @@ internal sealed unsafe partial class FileInformation
     }
 
     /// <summary>
+    /// <c>FILE_ID_DESCRIPTOR</c>: its size, the kind of number, then a sixteen-byte union aligned to
+    /// eight, which holds the 64-bit number in its first half or <c>FILE_ID_128</c>'s bytes, low half
+    /// first, in both.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct FileIdDescriptor(int type, ulong low, ulong high)
+    {
+        public readonly uint Size = (uint)sizeof(FileIdDescriptor);
+        public readonly int Type = type;
+        public readonly ulong Low = low;
+        public readonly ulong High = high;
+    }
+
+    /// <summary>
     /// <c>BY_HANDLE_FILE_INFORMATION</c>. Packed to four because its times are <c>FILETIME</c>s, pairs
     /// of <c>DWORD</c>s aligned to four, and a <see cref="long"/> aligned to eight would move every
     /// field after the attributes.
@@ -363,6 +433,15 @@ internal sealed unsafe partial class FileInformation
         uint creationDisposition,
         uint flagsAndAttributes,
         nint templateFile);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial SafeFileHandle OpenFileById(
+        SafeFileHandle volumeHint,
+        in FileIdDescriptor fileId,
+        uint desiredAccess,
+        uint shareMode,
+        nint securityAttributes,
+        uint flagsAndAttributes);
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", SetLastError = true)]
     private static partial uint GetFinalPathNameByHandle(SafeFileHandle file, char* path, uint length, uint flags);

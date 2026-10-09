@@ -87,8 +87,18 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   four readers is a solid-state disk's bound. fclones' author reports that the choice of checksum barely
   matters except on a fast SSD or cached data, because the disk sets the pace, and that several
   readers on one spinning disk are much slower than one.
-- **Reading.** `File.OpenHandle` and `RandomAccess.Read(handle, span, offset)` read the first and
-  last blocks and the full content without a shared position.
+- **Reading.** Corrected in phase 3: the content is opened by the file's number with
+  `OpenFileById` (`ExtendedFileIdType` with the 128-bit ID, `FileIdType` with the 64-bit one on the
+  older route), using the attributes-only handle it was described through as the volume hint, and
+  `RandomAccess.Read(handle, span, offset)` reads the first and last blocks and the full content
+  without a shared position. A path opened by `File.OpenHandle` is walked again and follows every
+  link on it, its own name included, so a name replaced by a link after the description would send
+  the open to another file, a share, or a cloud file that opening recalls; an open by number walks
+  no path. While the described handle is held, Windows refuses to rename any folder above the file,
+  so only the file's own name can be replaced. Where a volume will not open a file by number, the
+  path is opened only if the volume reports no reparse-point support, since no link can exist
+  there. Which error a FAT or exFAT driver gives is **(unverified)**: no such volume was attached,
+  and the rule does not depend on it.
 - **Identity.** `GetFileInformationByHandleEx(FileIdInfo)` returns the volume serial and the 128-bit
   file ID, which ReFS needs because its 64-bit index is not unique. A handle opened for
   `FILE_READ_ATTRIBUTES` with `FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS` reads it
@@ -323,8 +333,8 @@ form.
    and SHA-256 throughput is measured here, and the figures set the per-disk bound in step 3.
 2. **Reading.** A content seam that first reads the attributes through phase 2's attributes-only
    handle and refuses an online-only file there, whatever the tree said, and only then opens the
-   content through `File.OpenHandle` and `RandomAccess`. The default placeholder mode an unpackaged
-   Deguffer sees is measured here.
+   content by its file ID through that held handle and reads it with `RandomAccess`. The default
+   placeholder mode an unpackaged Deguffer sees is measured here.
 3. **Staged matching.** First and last blocks, then the full content, each stage only over what the
    last left. Readers are bounded per physical disk from `VolumeMediaCache.Of`: one on a disk with
    a seek penalty, the measured bound on one without, and one where the media is unknown or
@@ -523,8 +533,8 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
 - 2026-10-09: phase 3 landed. Checksums behind one running `Checksum` over System.IO.Hashing and
   `IncrementalHash`, each pinned to a published vector, SHA3-256 offered only where Windows has it
   (`ChecksumAlgorithms`); a content seam (`ContentReader`) that describes the path through the
-  attributes-only handle and leaves an online-only file out unopened, opens the content sharing
-  only reading, and describes it again through that handle before the first byte and after the last
+  attributes-only handle and leaves an online-only file out unopened, opens the content by its
+  file ID through that held handle, sharing only reading, and describes it again through that handle before the first byte and after the last
   (`FileInformation.Describe` of a held handle), counting a failed read and a changed file apart
   from a gone one (`LeftOutFiles`); staged matching (`ContentMatching`) of the first and last
   64 KiB, then the whole of larger files, read in lanes by physical disk (`ReadingLanes`: one

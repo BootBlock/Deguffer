@@ -13,6 +13,9 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class ContentReaderTests : IDisposable
 {
+    /// <summary><c>ERROR_NOT_SUPPORTED</c>.</summary>
+    private const int NotSupported = 50;
+
     private readonly TempDirectory _temp = new();
 
     public void Dispose() => _temp.Dispose();
@@ -32,10 +35,11 @@ public sealed class ContentReaderTests : IDisposable
         var file = Candidate(path);
         var reader = new ContentReader(
             FileInformation.Default,
-            (described, route) => FileInformation.Default.Describe(described, route) is { Description: { } description } reading
-                ? reading with { Description = description with { Attributes = description.Attributes | (FileAttributes)recall } }
+            (described, route) => FileInformation.Default.Hold(described, route) is { Reading.Description: { } description } held
+                ? held with { Reading = held.Reading with { Description = description with { Attributes = description.Attributes | (FileAttributes)recall } } }
                 : throw new InvalidOperationException("The fixture's file could not be described."),
-            _ => throw new InvalidOperationException("The content of a file not on this device was opened."));
+            (_, _, _) => throw new InvalidOperationException("The content of a file not on this device was opened."),
+            _ => throw new InvalidOperationException("The content of a file not on this device was opened by its path."));
 
         Assert.Equal(ContentReadResult.OnlyInTheCloud, Read(reader, file).Result);
     }
@@ -52,12 +56,13 @@ public sealed class ContentReaderTests : IDisposable
         var file = Candidate(path);
         var reader = new ContentReader(
             FileInformation.Default,
-            FileInformation.Default.Describe,
-            extended =>
+            FileInformation.Default.Hold,
+            (held, identity, route) =>
             {
                 File.SetAttributes(path, FileAttributes.Offline);
-                return Open(extended);
-            });
+                return FileInformation.OpenById(held, identity, route);
+            },
+            NoPath);
         using var checksum = new Watched(_ => throw new InvalidOperationException("A file not on this device was read."));
 
         Assert.Equal(ContentReadResult.OnlyInTheCloud, reader.Read(file, ContentPart.Whole, checksum, default).Result);
@@ -146,9 +151,9 @@ public sealed class ContentReaderTests : IDisposable
     }
 
     /// <summary>
-    /// §6.3, asserted by the form of the path that reaches Windows, both where the path is described
-    /// and where its content is opened. A deep path opens here with or without the prefix, so only
-    /// the form shows it was given.
+    /// §6.3, asserted by the form of the path that reaches Windows where the path is described: the
+    /// content is then opened by the file's number, which walks no path at all. A deep path opens
+    /// here with or without the prefix, so only the form shows it was given.
     /// </summary>
     [Fact]
     public void ThePathReachesWindowsInItsExtendedForm()
@@ -165,7 +170,6 @@ public sealed class ContentReaderTests : IDisposable
         File.WriteAllBytes(LongPath.Extended(path), [1, 2, 3]);
         var file = Candidate(path);
         List<string> described = [];
-        List<string> opened = [];
         var files = new FileInformation(
             (extended, use) =>
             {
@@ -173,16 +177,11 @@ public sealed class ContentReaderTests : IDisposable
                 return FileInformation.Open(extended, use);
             },
             FileInformation.ReadIdentity);
-        var reader = new ContentReader(files, files.Describe, extended =>
-        {
-            opened.Add(extended);
-            return Open(extended);
-        });
+        var reader = new ContentReader(files, files.Hold, FileInformation.OpenById, NoPath);
 
         Assert.Equal(ContentReadResult.Read, Read(reader, file).Result);
         Assert.Equal(LongPath.Extended(file.Path), Assert.Single(described));
-        Assert.Equal(LongPath.Extended(file.Path), Assert.Single(opened));
-        Assert.StartsWith(@"\\?\", opened[0], StringComparison.Ordinal);
+        Assert.StartsWith(@"\\?\", described[0], StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -255,8 +254,91 @@ public sealed class ContentReaderTests : IDisposable
         Assert.True(synced.FetchRequests > 0, "Reading the file's data asked the sync app for nothing.");
     }
 
+    /// <summary>
+    /// The content is opened by the file's number, never by walking its path again. Between the
+    /// description and the open, the file is renamed away and a symbolic link put at its name, to
+    /// another file of the same length and time. An open by path would go through the link to that
+    /// file; the open by number reads the file that was described.
+    ///
+    /// <para>The file's own name is what is replaced, because its folder cannot be: Windows refuses
+    /// to rename a folder, or any folder above it, while a handle is open on a file inside, and the
+    /// handle the file was described through is held until it has been read.</para>
+    /// </summary>
+    [Fact]
+    public void AFileReplacedByALinkAfterTheDescriptionIsNotFollowed()
+    {
+        var original = new byte[100];
+        new Random(1).NextBytes(original);
+        var other = new byte[100];
+        new Random(2).NextBytes(other);
+        var path = Path.Combine(_temp.CreateDirectory("Data"), "x.bin");
+        File.WriteAllBytes(path, original);
+        var file = Candidate(path);
+        var decoy = Path.Combine(_temp.CreateDirectory("Elsewhere"), "x.bin");
+        File.WriteAllBytes(decoy, other);
+        File.SetLastWriteTimeUtc(decoy, file.Modified);
+        var replaced = false;
+        var reader = new ContentReader(
+            FileInformation.Default,
+            FileInformation.Default.Hold,
+            (held, identity, route) =>
+            {
+                File.Move(path, Path.Combine(_temp.Path, "Data", "x.moved"));
+                SymbolicLink.ToFile(path, decoy);
+                replaced = true;
+                return FileInformation.OpenById(held, identity, route);
+            },
+            NoPath);
+        using var checksum = Checksum.For(ChecksumAlgorithm.Sha256);
+
+        var reading = reader.Read(file, ContentPart.Whole, checksum, default);
+
+        Assert.True(replaced);
+        Assert.Equal(other, File.ReadAllBytes(path));
+        Assert.Equal(ContentReadResult.Read, reading.Result);
+        Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(original)), reading.Checksum.Hex);
+    }
+
+    /// <summary>
+    /// Where Windows will not open a file by its number, the path is opened instead only on a volume
+    /// that supports no reparse points, where no link can be on the way, and it is opened in its
+    /// extended form (§6.3).
+    /// </summary>
+    [Fact]
+    public void AVolumeWithNoLinksIsReadByPathWhereItWillNotOpenByNumber()
+    {
+        var path = _temp.CreateFile(100, "a.bin");
+        var file = Candidate(path, VolumeFeatures.None);
+        List<string> opened = [];
+        var reader = new ContentReader(FileInformation.Default, FileInformation.Default.Hold, Unsupported, extended =>
+        {
+            opened.Add(extended);
+            return File.OpenHandle(extended, FileMode.Open, FileAccess.Read, FileShare.Read);
+        });
+
+        Assert.Equal(ContentReadResult.Read, Read(reader, file).Result);
+        Assert.Equal(LongPath.Extended(file.Path), Assert.Single(opened));
+        Assert.StartsWith(@"\\?\", opened[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// On a volume that supports reparse points, a link can be on the way, so a file Windows will
+    /// not open by its number is never opened by path: it is left out as a failed read, and never
+    /// as gone, because it was there when it was described.
+    /// </summary>
+    [Fact]
+    public void AVolumeThatCanHoldLinksIsNeverReadByPath()
+    {
+        var path = _temp.CreateFile(100, "a.bin");
+        var file = Candidate(path);
+        var reader = new ContentReader(FileInformation.Default, FileInformation.Default.Hold, Unsupported, NoPath);
+
+        Assert.Equal(ContentReadResult.ReadFailed, Read(reader, file).Result);
+    }
+
     /// <summary>The file as the search identified it, which is what every check compares against.</summary>
-    internal static DuplicateCandidate Candidate(string path)
+    /// <param name="features">What the file's volume says it supports: an NTFS volume's reparse points, unless a test says otherwise.</param>
+    internal static DuplicateCandidate Candidate(string path, VolumeFeatures features = VolumeFeatures.ReparsePoints)
     {
         var description = FileInformation.Default.Describe(path, IdentityRoute.FileId).Description!;
 
@@ -269,7 +351,10 @@ public sealed class ContentReaderTests : IDisposable
             description.Length,
             description.Modified,
             StorageAttributes.Of(description.Attributes),
-            LocationRole.Search);
+            LocationRole.Search)
+        {
+            Volume = new LocalVolume(Path.GetPathRoot(description.Path)!, DriveType.Fixed, VolumeReadiness.Ready, Features: features),
+        };
     }
 
     private static ContentReading Read(ContentReader reader, DuplicateCandidate file)
@@ -279,8 +364,16 @@ public sealed class ContentReaderTests : IDisposable
         return reader.Read(file, ContentPart.Whole, checksum, default);
     }
 
-    private static SafeFileHandle Open(string extended) =>
-        File.OpenHandle(extended, FileMode.Open, FileAccess.Read, FileShare.Read);
+    /// <summary>A path open that fails the test, for a volume where the content must be opened by number.</summary>
+    private static SafeFileHandle NoPath(string extended) =>
+        throw new InvalidOperationException("The content was opened by its path on a volume that can hold links.");
+
+    /// <summary>A by-number open Windows refuses, as a file system that does not support it would.</summary>
+    private static SafeFileHandle Unsupported(SafeFileHandle volume, FileIdentity identity, IdentityRoute route)
+    {
+        System.Runtime.InteropServices.Marshal.SetLastPInvokeError(NotSupported);
+        return new SafeFileHandle(-1, ownsHandle: false);
+    }
 
     /// <summary>A checksum that shows each piece appended to <paramref name="onAppend"/> first.</summary>
     private sealed class Watched(Action<int> onAppend) : Checksum(ChecksumAlgorithm.XxHash128)
