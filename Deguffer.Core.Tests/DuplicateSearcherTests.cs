@@ -175,7 +175,9 @@ public sealed class DuplicateSearcherTests : IDisposable
     /// added to what finding the candidates left out: a file held by another program and one whose
     /// data is refused are failed reads, one whose time moves before it is read has changed, one
     /// deleted has gone, and one Windows will no longer describe is unidentified, never gone. Each
-    /// count is a different number, so a file counted as another kind changes two of them.
+    /// count that is not zero is a different number, the empty files finding left out included, so a
+    /// file counted as another kind, or two counts swapped where the stages are added, changes two
+    /// of them.
     /// </summary>
     [Fact]
     public async Task WhatTheContentStageLeavesOutIsCountedThroughTheSearch()
@@ -196,7 +198,11 @@ public sealed class DuplicateSearcherTests : IDisposable
         }
 
         _tree.File(content, "Data", "Shut", "undescribed.bin");
-        _tree.File(0, "Data", "empty.bin");
+        foreach (var i in Enumerable.Range(1, 5))
+        {
+            _tree.File(0, "Data", $"empty{i}.bin");
+        }
+
         using var held = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         using var denied = DeniedDirectory.WithUnreadableContent(refused);
         DeniedDirectory? undescribed = null;
@@ -226,9 +232,9 @@ public sealed class DuplicateSearcherTests : IDisposable
             Assert.Equal(4, result.LeftOut.Changed);
             Assert.Equal(3, result.LeftOut.Gone);
             Assert.Equal(1, result.LeftOut.Unidentified);
-            Assert.Equal(1, result.LeftOut.Empty);
+            Assert.Equal(5, result.LeftOut.Empty);
             Assert.Equal(
-                new LeftOutFiles(Links: 0, Empty: 1, UnknownLength: 0, OnlyInTheCloud: 0, Gone: 3, Unidentified: 1, ReadFailed: 2, Changed: 4),
+                new LeftOutFiles(Links: 0, Empty: 5, UnknownLength: 0, OnlyInTheCloud: 0, Gone: 3, Unidentified: 1, ReadFailed: 2, Changed: 4),
                 result.LeftOut);
         }
         finally
