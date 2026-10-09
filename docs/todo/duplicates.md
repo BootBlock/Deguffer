@@ -210,7 +210,11 @@ measurement replaces the mark here.
    A location Windows will not open is reported as one it could not open, never as absent. A file's
    role is that of the innermost location holding it, a folder given in both roles is a reference,
    and a folder that matches a location only when case is ignored takes the reference role where
-   either role is one.
+   either role is one. A reference location that is not resolved still names a place, its path once
+   a substituted drive is followed, and a location holding that place passes over it with
+   everything in it, matching it ignoring case, and names it with its reason
+   (`UnresolvedReferences`), because its files would otherwise take the holding location's role; an
+   unresolved location to search changes nothing.
 3. **Refused at and below.** `ExploreActionPolicy.RefusedAtAndBelow` answers whether a place and
    everything in it is refused, taking away what a `Permitting` entry carves back out, and
    `MayRemove` asks the same members first, so neither keeps a copy of the rules. A mail store is
@@ -253,7 +257,9 @@ measurement replaces the mark here.
 Proves: a search with no criteria or no location is refused; two locations reaching one folder
 through a substituted drive, a mounted volume or a junction are enumerated once; a location on a
 volume mounted inside another is enumerated in its own right; a reference inside a searched drive
-stays a reference, and a folder in both roles is a reference; a network location and a remotely
+stays a reference, and a folder in both roles is a reference; a reference Windows will not open is
+passed over by a location holding it, and so is a folder given in both roles whose reference will
+not open; a network location and a remotely
 stored drive are refused, a mapped network drive before anything is opened on it; a folder the table
 holds only in another case is walked; a folder Windows will not list and a location read from an
 incomplete table are named; every default skip comes from the shared refusal member and is reported,
@@ -335,7 +341,9 @@ without listing the places phase 1 passes over, and the decision it supports.
 4. **Marks.** A per-group mark state that refuses any mark leaving the group with no copy that can
    be kept, and the named rules, each of which chooses the copy it keeps only from the copies that
    can be kept, obeys the policy, and never marks a copy in a cloud folder. The space a group could free, which sorts the groups, comes from
-   the same state.
+   the same state. While a reference location went unsearched, no rule marks any copy: phase 1
+   passes over the place it names by matching text, and a link on the way to it can hide it from
+   that match, so a reference copy can still reach a group in the search role.
 5. **The confirmation's words.** Built in Core: every copy that goes, the counts, groups and space,
    the sentence for a copy in a cloud folder, and the sentence for a removal larger than a drive's
    Recycle Bin has room for, through a new seam over the bin's size and limit, measured here.
@@ -350,7 +358,8 @@ can be kept and marks a newer one on a USB drive; a copy whose cloud file Storag
 still counts; a
 reference copy and a multi-name file are never marked and can be kept; an online-only copy and a
 copy in a program folder are refused; every Explore refusal applies; each named rule marks what it
-says and never a copy in a cloud folder; nothing is marked when a search finishes; the space figure
+says and never a copy in a cloud folder; no rule marks a copy while a reference location went
+unsearched; nothing is marked when a search finishes; the space figure
 counts a reference, refused or multi-name copy as nothing; no copy counts as outside a cloud folder
 when the sync roots cannot be read; the confirmation lists every copy, and names the bin's room
 where the copies exceed it.
@@ -457,7 +466,9 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   (`ExploreScanner.ScanFoldersAsync`); a hidden and system column on the scan tree; and the files
   kept and grouped by length and name (`CandidateFinder`). Decided: the attributes column rather
   than a later read; a mail store, and a folder named like one, are passed over; a folder matching
-  a location only when case is ignored takes the reference role where either role is one. Corrected
+  a location only when case is ignored takes the reference role where either role is one; the place
+  a reference that could not be resolved names is passed over, and no rule may mark while one went
+  unsearched (phase 4). Corrected
   here: candidates group by length only where the size or the content is a criterion, not always;
   `CloudFiles.Resolve` already followed every link, so the final-path call moved from it rather than
   being new.

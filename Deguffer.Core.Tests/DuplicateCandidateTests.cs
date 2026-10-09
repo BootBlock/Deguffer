@@ -4,6 +4,7 @@ using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
+using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Tests;
 
@@ -23,6 +24,12 @@ public sealed class DuplicateCandidateTests : IDisposable
     private SearchLocation Searched(params string[] segments) => new(Path.Combine([_tree.Top, .. segments]));
 
     private static IEnumerable<string> Names(CandidateGroup group) => group.Files.Select(file => file.Name).Order();
+
+    /// <summary>Opens each path as Windows does, except <paramref name="refused"/>, spelled exactly so, which Windows will not open.</summary>
+    private static FileInformation Refusing(string refused) => new(path =>
+        LongPath.Display(path).Equals(refused, StringComparison.Ordinal)
+            ? new SafeFileHandle(-1, ownsHandle: false)
+            : FileInformation.OpenToResolve(path));
 
     [Fact]
     public async Task AReferenceInsideASearchedFolderStaysAReference()
@@ -72,6 +79,75 @@ public sealed class DuplicateCandidateTests : IDisposable
     }
 
     /// <summary>
+    /// A reference Windows would not open names no folder the walk can be told is it, so its files
+    /// would take the role of the location holding them and be offered for removal. The place it
+    /// names is passed over with everything in it, a folder inside it included, and the page says why.
+    /// </summary>
+    [Fact]
+    public async Task AReferenceWindowsWillNotOpenIsPassedOverByTheLocationHoldingIt()
+    {
+        _tree.File(100, "Downloads", "a.jpg");
+        _tree.File(100, "Downloads", "b.jpg");
+        _tree.File(100, "Photos", "a.jpg");
+        _tree.File(100, "Photos", "Album", "c.jpg");
+        var photos = Path.Combine(_tree.Top, "Photos");
+
+        var found = await _tree.Finder(files: Refusing(photos)).FindAsync(
+            new DuplicateSearch(MatchCriteria.Size, [Searched(), new SearchLocation(photos, LocationRole.Reference)]),
+            _tree.Policy());
+
+        Assert.Equal(photos, Assert.Single(found.Unsearched).Given.Path);
+        Assert.Contains("reference", Assert.Single(found.PassedOver, place => place.Path == photos).Reason, StringComparison.Ordinal);
+        var group = Assert.Single(found.Groups);
+        Assert.Equal(["a.jpg", "b.jpg"], Names(group));
+        Assert.All(group.Files, file => Assert.Equal(Path.Combine(_tree.Top, "Downloads"), Path.GetDirectoryName(file.Path)));
+    }
+
+    /// <summary>
+    /// A folder given in both roles is a reference, so where only its reference could not be opened,
+    /// the folder is passed over rather than searched in the role that was resolved. The two are
+    /// told apart here by the case they are spelled in, which the place is matched ignoring.
+    /// </summary>
+    [Fact]
+    public async Task AFolderGivenInBothRolesIsPassedOverWhereItsReferenceWillNotOpen()
+    {
+        _tree.File(100, "Photos", "a.jpg");
+        _tree.File(100, "Photos", "b.jpg");
+        var photos = Path.Combine(_tree.Top, "Photos");
+        var shouted = Path.Combine(_tree.Top, "PHOTOS");
+
+        var found = await _tree.Finder(files: Refusing(shouted)).FindAsync(
+            new DuplicateSearch(MatchCriteria.Size, [new SearchLocation(photos), new SearchLocation(shouted, LocationRole.Reference)]),
+            _tree.Policy());
+
+        Assert.Equal(shouted, Assert.Single(found.Unsearched).Given.Path);
+        Assert.Contains("reference", Assert.Single(found.PassedOver, place => place.Path == photos).Reason, StringComparison.Ordinal);
+        Assert.Empty(found.Groups);
+    }
+
+    /// <summary>
+    /// A location to search that Windows would not open asks for nothing a location holding it does
+    /// not already do, so its files are searched there in the role they would have had.
+    /// </summary>
+    [Fact]
+    public async Task ASearchedFolderWindowsWillNotOpenIsSearchedByTheLocationHoldingIt()
+    {
+        _tree.File(100, "Downloads", "a.jpg");
+        _tree.File(100, "Photos", "a.jpg");
+        var photos = Path.Combine(_tree.Top, "Photos");
+
+        var found = await _tree.Finder(files: Refusing(photos)).FindAsync(
+            new DuplicateSearch(MatchCriteria.Size, [Searched(), new SearchLocation(photos)]),
+            _tree.Policy());
+
+        Assert.Equal(photos, Assert.Single(found.Unsearched).Given.Path);
+        Assert.DoesNotContain(found.PassedOver, place => place.Path == photos);
+        var group = Assert.Single(found.Groups);
+        Assert.Equal(2, group.Files.Count);
+        Assert.All(group.Files, file => Assert.Equal(LocationRole.Search, file.Role));
+    }
+
+    /// <summary>
     /// A folder matching a location only when case is ignored can be another folder in a
     /// case-sensitive directory, so it takes the safer role. The tree is built by hand, because a test
     /// cannot rely on making a case-sensitive directory.
@@ -91,7 +167,7 @@ public sealed class DuplicateCandidateTests : IDisposable
             new(@"X:\Data\Photos", LocationRole.Reference), @"X:\Data\Photos", ReachedFolder.At(@"X:\Data\Photos", volumes),
             LocationRole.Reference, DriveX);
 
-        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]));
+        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]), new UnresolvedReferences([]));
         walk.Read(Scanned(tree, tree.RootNode), root, [reference], below: null, default);
 
         var group = Assert.Single(CandidateGrouping.Group(walk.Found, MatchCriteria.Size));
@@ -370,7 +446,7 @@ public sealed class DuplicateCandidateTests : IDisposable
     {
         var volumes = new FakeVolumeInventory();
         var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search, DriveX);
-        var walk = new CandidateWalk(new DuplicateSearch(criteria, [root.Given]));
+        var walk = new CandidateWalk(new DuplicateSearch(criteria, [root.Given]), new UnresolvedReferences([]));
 
         walk.Read(Scanned(tree, node), root, [], below: null, default);
 

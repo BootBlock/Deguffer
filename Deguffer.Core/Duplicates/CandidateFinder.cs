@@ -43,13 +43,45 @@ public sealed record CandidateFinding(
 /// <see cref="ExploreScanner"/> which route reads a tree, <see cref="CandidateWalk"/> which files are
 /// kept and <see cref="CandidateGrouping"/> how they are grouped.</para>
 /// </summary>
-public sealed class CandidateFinder(
-    ExploreScanner scanner,
-    IVolumeInventory volumes,
-    IUninstallRegistry registry,
-    IUserEnvironment environment,
-    ISystemDirectories system)
+public sealed class CandidateFinder
 {
+    private readonly ExploreScanner _scanner;
+    private readonly IVolumeInventory _volumes;
+    private readonly IUninstallRegistry _registry;
+    private readonly IUserEnvironment _environment;
+    private readonly ISystemDirectories _system;
+    private readonly FileInformation _files;
+
+    public CandidateFinder(
+        ExploreScanner scanner,
+        IVolumeInventory volumes,
+        IUninstallRegistry registry,
+        IUserEnvironment environment,
+        ISystemDirectories system)
+        : this(scanner, volumes, registry, environment, system, FileInformation.Default)
+    {
+    }
+
+    /// <param name="files">
+    /// Where each location is opened to learn its final path, so a test can make Windows refuse to
+    /// open one location and see what the search does with the locations around it.
+    /// </param>
+    internal CandidateFinder(
+        ExploreScanner scanner,
+        IVolumeInventory volumes,
+        IUninstallRegistry registry,
+        IUserEnvironment environment,
+        ISystemDirectories system,
+        FileInformation files)
+    {
+        _scanner = scanner;
+        _volumes = volumes;
+        _registry = registry;
+        _environment = environment;
+        _system = system;
+        _files = files;
+    }
+
     /// <param name="policy">
     /// Explore's policy, built for this machine by <see cref="ExploreActionPolicy.ForAsync"/>, whose
     /// refusals at and below a place are what the search passes over.
@@ -63,19 +95,21 @@ public sealed class CandidateFinder(
         ArgumentNullException.ThrowIfNull(search);
         ArgumentNullException.ThrowIfNull(policy);
 
-        var locations = SearchLocations.Resolve(search.Locations, volumes);
-        var walk = new CandidateWalk(search);
+        var locations = SearchLocations.Resolve(search.Locations, _volumes, _files);
+        var walk = new CandidateWalk(search, locations.UnresolvedReferences);
 
         var programs = search.SearchPassedOverPlaces
             ? new ProgramFolderReading([], [], [])
-            : ProgramFolders.Read(registry, environment, system, volumes, locations.Locations, ct);
+            : ProgramFolders.Read(_registry, _environment, _system, _volumes, locations.Locations, ct);
 
         var passedOver = search.SearchPassedOverPlaces ? null : new PassedOverPlaces(policy, programs.Folders);
         List<ResolvedLocation> roots = [];
 
         foreach (var root in locations.Roots)
         {
-            if (passedOver?.WhyPassedOver(root.Folder) is { } why)
+            // A folder given in both roles is a reference, so one whose reference was not resolved is
+            // passed over even though it was resolved to be searched.
+            if ((locations.UnresolvedReferences.WhyPassedOver(root.Folder) ?? passedOver?.WhyPassedOver(root.Folder)) is { } why)
             {
                 walk.PassOver(new PassedOverPlace(root.Folder, why));
             }
@@ -85,7 +119,7 @@ public sealed class CandidateFinder(
             }
         }
 
-        var scans = await scanner.ScanFoldersAsync([.. roots.Select(root => root.Folder)], progress, ct).ConfigureAwait(false);
+        var scans = await _scanner.ScanFoldersAsync([.. roots.Select(root => root.Folder)], progress, ct).ConfigureAwait(false);
 
         for (var i = 0; i < roots.Count; i++)
         {

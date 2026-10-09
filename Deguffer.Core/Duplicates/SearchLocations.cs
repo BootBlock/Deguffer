@@ -46,17 +46,23 @@ public sealed record UnsearchedLocation(SearchLocation Given, string Reason);
 /// <para><b>Local disks only.</b> A share can be this machine's own disk under a second name that no
 /// identity reveals, and a cloud client's drive downloads what it is asked to read, so a location on
 /// either is refused with its reason, as Explore refuses to draw them.</para>
+///
+/// <para><b>A reference it could not resolve still names a place.</b> That place is kept
+/// (<see cref="UnresolvedReferences"/>), so a location holding it passes over it rather than give
+/// its files the holding location's role.</para>
 /// </summary>
 public sealed class SearchLocations
 {
     private SearchLocations(
         IReadOnlyList<ResolvedLocation> locations,
         IReadOnlyList<ResolvedLocation> roots,
-        IReadOnlyList<UnsearchedLocation> unsearched)
+        IReadOnlyList<UnsearchedLocation> unsearched,
+        UnresolvedReferences unresolvedReferences)
     {
         Locations = locations;
         Roots = roots;
         Unsearched = unsearched;
+        UnresolvedReferences = unresolvedReferences;
     }
 
     /// <summary>Every location the search covers, each folder once.</summary>
@@ -67,6 +73,9 @@ public sealed class SearchLocations
 
     /// <summary>The locations that are not searched, each with its reason.</summary>
     public IReadOnlyList<UnsearchedLocation> Unsearched { get; }
+
+    /// <summary>The places of the reference locations among <see cref="Unsearched"/>, which a location holding one passes over.</summary>
+    internal UnresolvedReferences UnresolvedReferences { get; }
 
     /// <summary>The locations strictly inside <paramref name="root"/>, which its enumeration reaches.</summary>
     public IReadOnlyList<ResolvedLocation> Within(ResolvedLocation root) =>
@@ -87,26 +96,31 @@ public sealed class SearchLocations
 
         List<ResolvedLocation> resolved = [];
         List<UnsearchedLocation> unsearched = [];
+        List<string> unresolvedReferences = [];
 
         foreach (var location in given)
         {
-            if (Resolve(location, volumes, files) is { } why)
+            var (found, reason, place) = Resolve(location, volumes, files);
+
+            if (found is not null)
             {
-                if (why.Location is { } found)
-                {
-                    Merge(resolved, found);
-                }
-                else
-                {
-                    unsearched.Add(new UnsearchedLocation(location, why.Reason!));
-                }
+                Merge(resolved, found);
+                continue;
+            }
+
+            unsearched.Add(new UnsearchedLocation(location, reason!));
+
+            if (location.Role == LocationRole.Reference && place is not null)
+            {
+                unresolvedReferences.Add(place);
             }
         }
 
         return new SearchLocations(
             resolved,
             [.. resolved.Where(location => !resolved.Exists(outer => !ReferenceEquals(outer, location) && Holds(outer, location)))],
-            unsearched);
+            unsearched,
+            new UnresolvedReferences(unresolvedReferences));
     }
 
     /// <summary>
@@ -118,16 +132,29 @@ public sealed class SearchLocations
         outer.Volume.RootPath.Equals(inner.Volume.RootPath, StringComparison.OrdinalIgnoreCase)
         && LongPath.Contains(outer.Folder, inner.Folder, StringComparison.Ordinal);
 
-    private static (ResolvedLocation? Location, string? Reason)? Resolve(
+    /// <summary>
+    /// <paramref name="location"/> resolved, or why it is not, and the place it names: its path once a
+    /// substituted drive is followed, in display form, or null where it is no full path. The place is
+    /// what <see cref="UnresolvedReferences"/> passes over where a reference is not resolved.
+    /// </summary>
+    private static (ResolvedLocation? Location, string? Reason, string? Place) Resolve(
         SearchLocation location, IVolumeInventory volumes, FileInformation files)
     {
         if (LongPath.Configured(location.Path) is not { } configured)
         {
-            return (null, "This is not a full path to a drive or a folder.");
+            return (null, "This is not a full path to a drive or a folder.", null);
         }
 
         var followed = VolumeRoot.Followed(volumes, configured);
+        var (found, reason) = Resolve(location, followed, volumes, files);
 
+        return (found, reason, Path.TrimEndingDirectorySeparator(LongPath.Display(followed)));
+    }
+
+    /// <param name="followed">The location's path, with a substituted drive followed.</param>
+    private static (ResolvedLocation? Location, string? Reason) Resolve(
+        SearchLocation location, string followed, IVolumeInventory volumes, FileInformation files)
+    {
         if (WhyNotOpened(followed, volumes) is { } unopened)
         {
             return (null, unopened);

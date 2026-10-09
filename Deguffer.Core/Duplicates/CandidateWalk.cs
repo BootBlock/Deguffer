@@ -18,7 +18,9 @@ internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRo
 /// so a reference folder inside a searched drive stays a reference. A folder that matches a location
 /// inside this one only when case is ignored is given the safer role, a reference, where either
 /// role is one: the two can be different folders in a case-sensitive directory, and a file that
-/// should have been a reference must never be offered for removal.</para>
+/// should have been a reference must never be offered for removal. For that reason too, the place a
+/// reference location names is passed over where the location could not be resolved, because its
+/// files would otherwise take the role of the location holding it (<see cref="UnresolvedReferences"/>).</para>
 ///
 /// <para><b>What it could not read is named.</b> A folder Windows refused to list, and a location
 /// read from a file table that was not read whole, would otherwise read as holding nothing that
@@ -34,6 +36,7 @@ internal sealed class CandidateWalk
         "Part of this drive's file table could not be read, so some of the files here may not have been searched.";
 
     private readonly DuplicateSearch _search;
+    private readonly UnresolvedReferences _unresolvedReferences;
     private readonly List<FoundFile> _found = [];
     private readonly List<PassedOverPlace> _passedOver = [];
     private readonly List<UnreadPlace> _unread = [];
@@ -43,7 +46,15 @@ internal sealed class CandidateWalk
     private int _unknownLength;
     private int _onlyInTheCloud;
 
-    public CandidateWalk(DuplicateSearch search) => _search = search;
+    /// <param name="unresolvedReferences">
+    /// The places of the reference locations that were not resolved, passed over wherever the walk
+    /// reaches one, because the role their files should take is what is not known.
+    /// </param>
+    public CandidateWalk(DuplicateSearch search, UnresolvedReferences unresolvedReferences)
+    {
+        _search = search;
+        _unresolvedReferences = unresolvedReferences;
+    }
 
     public IReadOnlyList<FoundFile> Found => _found;
 
@@ -91,7 +102,8 @@ internal sealed class CandidateWalk
                 var name = tree.NameOf(child);
                 var path = Path.Join(folder.Path, name);
 
-                if (below?.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name) is { } why)
+                if ((_unresolvedReferences.WhyPassedOver(path)
+                        ?? below?.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name)) is { } why)
                 {
                     _passedOver.Add(new PassedOverPlace(path, why));
                 }

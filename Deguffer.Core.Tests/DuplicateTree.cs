@@ -60,9 +60,10 @@ internal sealed class DuplicateTree : IDisposable
         new(ProtectedRegions.For(System, Environment), [], Volumes);
 
     /// <summary>Search by walking, which is the route a test can run without administrator rights.</summary>
-    public CandidateFinder Finder(ExploreScanner? scanner = null) =>
+    /// <param name="files">Where each location is opened, for a test that has Windows refuse one.</param>
+    public CandidateFinder Finder(ExploreScanner? scanner = null, FileInformation? files = null) =>
         new(scanner ?? new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated)),
-            Volumes, Registry, Environment, System);
+            Volumes, Registry, Environment, System, files ?? FileInformation.Default);
 
     public Task<CandidateFinding> FindAsync(DuplicateSearch search) => Finder().FindAsync(search, Policy());
 
