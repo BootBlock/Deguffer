@@ -239,7 +239,7 @@ measurement replaces the mark here.
    still reads a passed-over place's entries on the walk; phase 3 measures whether passing over them
    in the walk itself is worth its cost. **Decided:** hidden and system attributes became a column
    on both routes (`FileVisibility`, one byte an entry; by arithmetic rather than measurement, about
-   2.4 MB for the 2.4 million records of an ordinary system volume), because neither route reads
+   1 MB for each million records of the file table), because neither route reads
    anything more for it: the file table takes the attributes from the `$STANDARD_INFORMATION` it
    already reads the dates from, and the walk's listing hands them over. The switches apply to
    files, so a visible file in a hidden folder is searched.
