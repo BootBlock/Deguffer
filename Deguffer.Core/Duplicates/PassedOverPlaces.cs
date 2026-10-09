@@ -43,7 +43,7 @@ internal sealed class PassedOverPlaces
     public Below Within(string root) => new(this, _policy.WatchBelow(root));
 
     private string? ProgramFolderAt(string path) =>
-        _programs.FirstOrDefault(program => program.Reached.Places.Any(place => LongPath.Contains(place, path)))
+        _programs.FirstOrDefault(program => program.Reached.PathTo(path) is not null)
             is { } held
             ? $"'{held.Program}' is installed here. Two programs that ship the same file each need their "
               + "own copy, so a search passes over the folders programs are installed in."
