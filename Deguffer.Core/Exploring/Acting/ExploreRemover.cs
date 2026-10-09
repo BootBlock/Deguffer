@@ -43,6 +43,12 @@ public sealed record ExploreItemOutcome(string Path, bool Removed, long Bytes, s
 
     /// <summary>Whether the removal was cancelled while it worked on this item.</summary>
     public bool Interrupted { get; init; }
+
+    /// <summary>
+    /// Whether Windows deleted the item outright when it was asked to move it to the Recycle Bin
+    /// (<see cref="RecycleOutcome.DeletedOutright"/>). It is removed, and not in the bin to restore.
+    /// </summary>
+    public bool DeletedOutright { get; init; }
 }
 
 /// <summary>What one Explore removal did, and the §5.6 evidence that it did no more.</summary>
@@ -128,16 +134,35 @@ public sealed record ExploreRemovalReport(
         };
     }
 
+    /// <summary>
+    /// What went, and how. On the Recycle Bin route an item Windows deleted outright is said apart
+    /// from what reached the bin, because the user would otherwise look for it there.
+    /// </summary>
     private string Did()
     {
-        var what = Removed is [{ } only]
-            ? $"'{Path.GetFileName(only.Path)}' ({FreeSpace.Format(only.Bytes)})"
-            : $"{Removed.Count} items ({FreeSpace.Format(BytesRemoved)})";
+        if (Mode == ExploreRemovalMode.Permanent)
+        {
+            return $"Deleted {What(Removed)}.";
+        }
 
-        return Mode == ExploreRemovalMode.RecycleBin
-            ? $"Moved {what} to the Recycle Bin. The drive gets the space once the bin is emptied."
-            : $"Deleted {what}.";
+        var outright = Removed.Where(item => item.DeletedOutright).ToList();
+        var moved = Removed.Where(item => !item.DeletedOutright).ToList();
+
+        var binned = moved.Count == 0
+            ? string.Empty
+            : $"Moved {What(moved)} to the Recycle Bin. The drive gets the space once the bin is emptied.";
+        var lost = outright.Count == 0
+            ? string.Empty
+            : $"Windows deleted {What(outright)} outright rather than moving {(outright.Count == 1 ? "it" : "them")} to the "
+              + $"Recycle Bin, so {(outright.Count == 1 ? "it cannot" : "they cannot")} be restored from there.";
+
+        return string.Join(" ", new[] { binned, lost }.Where(sentence => sentence.Length > 0));
     }
+
+    private static string What(IReadOnlyList<ExploreItemOutcome> items) =>
+        items is [{ } only]
+            ? $"'{Path.GetFileName(only.Path)}' ({FreeSpace.Format(only.Bytes)})"
+            : $"{items.Count} items ({FreeSpace.Format(items.Sum(item => item.Bytes))})";
 }
 
 /// <summary>
@@ -336,7 +361,10 @@ public static class ExploreRemover
                 item.Path,
                 recycled.Removed,
                 recycled.Removed ? item.Bytes : 0,
-                recycled.Message ?? "Moved to the Recycle Bin.");
+                recycled.Message ?? "Moved to the Recycle Bin.")
+            {
+                DeletedOutright = recycled.DeletedOutright,
+            };
         }
 
         if (!item.IsDirectory)

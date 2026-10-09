@@ -83,6 +83,9 @@ internal sealed unsafe partial class FileInformation
     private const int ErrorInvalidParameter = 87;
     private const int ErrorMoreData = 234;
 
+    /// <summary><c>FILE_NAMED_STREAMS</c>: the volume can hold streams beside a file's content.</summary>
+    private const uint NamedStreamsSupported = 0x0004_0000;
+
     /// <summary>The most a listing of one file's streams may take before Windows' answer is given up on.</summary>
     private const int LongestStreamListing = 16 * 1024 * 1024;
 
@@ -427,7 +430,9 @@ internal sealed unsafe partial class FileInformation
                     return Streams(bytes, size);
                 }
 
-                switch (Marshal.GetLastPInvokeError())
+                var error = Marshal.GetLastPInvokeError();
+
+                switch (error)
                 {
                     case ErrorHandleEof:
                         // Nothing holds data: a folder.
@@ -437,13 +442,28 @@ internal sealed unsafe partial class FileInformation
                         continue;
 
                     default:
-                        return null;
+                        return StreamsWhereRefused(error, VolumeFlagsOf(handle));
                 }
             }
         }
 
         return null;
     }
+
+    /// <summary>
+    /// The named streams of a file whose file system refused <c>FileStreamInfo</c> with
+    /// <paramref name="error"/>, given what its volume says it supports: none, where the volume says it
+    /// holds no named streams, which FAT32 and exFAT say and refuse the class with
+    /// <c>ERROR_INVALID_PARAMETER</c> (measured on 2026-10-09). Null everywhere else, because a volume
+    /// that may hold named streams and would not list them may hold one the copy kept lacks.
+    /// </summary>
+    /// <param name="volumeFlags">The volume's <c>FILE_*</c> flags, or null where it would not say.</param>
+    internal static IReadOnlyList<NamedStream>? StreamsWhereRefused(int error, uint? volumeFlags) =>
+        error == ErrorInvalidParameter && volumeFlags is { } flags && (flags & NamedStreamsSupported) == 0 ? [] : null;
+
+    /// <summary>The <c>FILE_*</c> flags of the volume <paramref name="handle"/> is open on, or null where Windows would not say.</summary>
+    private static uint? VolumeFlagsOf(SafeFileHandle handle) =>
+        GetVolumeInformationByHandle(handle, null, 0, null, null, out var flags, null, 0) ? flags : null;
 
     /// <summary>The entries of a <c>FILE_STREAM_INFO</c> listing, or null where one runs past the buffer.</summary>
     private static List<NamedStream>? Streams(byte* bytes, int size)
@@ -507,9 +527,39 @@ internal sealed unsafe partial class FileInformation
     /// <summary>
     /// The attributes and reparse tag of what <paramref name="handle"/> is open on, which is the link
     /// itself where it was opened to describe. The tag is zero for an entry that carries none.
+    ///
+    /// <para><b>Measured on 2026-10-09:</b> FAT32 and exFAT refuse the class with
+    /// <c>ERROR_INVALID_PARAMETER</c>, as they hold no reparse points, while they answer
+    /// <c>FileBasicInfo</c>. There the attributes are read from that, and an entry they do not mark as
+    /// a reparse point carries no tag (<see cref="TagWhereRefused"/>).</para>
     /// </summary>
-    public static bool TryAttributeTag(SafeFileHandle handle, out FileAttributeTagInfo info) =>
-        GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out info, sizeof(FileAttributeTagInfo));
+    public static bool TryAttributeTag(SafeFileHandle handle, out FileAttributeTagInfo info)
+    {
+        if (GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out info, sizeof(FileAttributeTagInfo)))
+        {
+            return true;
+        }
+
+        var error = Marshal.GetLastPInvokeError();
+
+        if (TryBasic(handle, out var basic) && TagWhereRefused(error, basic.FileAttributes) is { } answered)
+        {
+            info = answered;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The attributes and tag of an entry whose file system refused <c>FileAttributeTagInfo</c> with
+    /// <paramref name="error"/>, given its attributes, or null where that refusal leaves its tag
+    /// unknown: any other error, or an entry marked as a reparse point, whose tag says what it is.
+    /// </summary>
+    internal static FileAttributeTagInfo? TagWhereRefused(int error, uint attributes) =>
+        error == ErrorInvalidParameter && (attributes & (uint)System.IO.FileAttributes.ReparsePoint) == 0
+            ? new FileAttributeTagInfo { FileAttributes = attributes, ReparseTag = 0 }
+            : null;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct FileBasicInfo
@@ -626,6 +676,18 @@ internal sealed unsafe partial class FileInformation
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetFileInformationByHandleEx(SafeFileHandle file, int informationClass, byte* information, int bufferSize);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetVolumeInformationByHandleW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetVolumeInformationByHandle(
+        SafeFileHandle file,
+        char* volumeName,
+        uint volumeNameLength,
+        uint* serialNumber,
+        uint* maximumComponentLength,
+        out uint fileSystemFlags,
+        char* fileSystemName,
+        uint fileSystemNameLength);
 
     [LibraryImport("kernel32.dll", EntryPoint = "FindFirstFileNameW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial nint FindFirstFileName(string fileName, uint flags, ref uint length, char* linkName);

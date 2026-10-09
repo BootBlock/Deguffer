@@ -20,10 +20,22 @@ internal sealed class BinnedItem : IFileOperationProgressSink
     /// <summary>Where the bin put the item, or null where the shell did not say.</summary>
     public string? Path { get; private set; }
 
+    /// <summary>
+    /// Whether the shell reported deleting an item and handed back no item in the bin, which
+    /// Microsoft documents as the item not having been recycled: it was deleted outright.
+    /// </summary>
+    public bool DeletedOutright { get; private set; }
+
     public int PostDeleteItem(uint flags, IShellItem item, int result, IShellItem? created)
     {
-        if (result < 0 || created is null)
+        if (result < 0)
         {
+            return 0;
+        }
+
+        if (created is null)
+        {
+            DeletedOutright = true;
             return 0;
         }
 

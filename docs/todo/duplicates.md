@@ -100,8 +100,9 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   (`LocalVolume.CannotHoldLinks`; a volume that refused the question may be NTFS and never
   qualifies) and the path starts at that volume's own drive letter, since a volume reached through
   a folder of another is reached through folders that can be links. Anywhere else the file is a
-  failed read. Which error a FAT or exFAT driver gives is **(unverified)**: no such volume was
-  attached, and the rule does not depend on it.
+  failed read. Measured in phase 9 on scratch volumes: FAT32 and exFAT refuse `OpenFileById` with
+  `ERROR_INVALID_FUNCTION`, and say they support no reparse points, so their files are read by the
+  path, reached by the volume's own letter.
 - **Identity.** `GetFileInformationByHandleEx(FileIdInfo)` returns the volume serial and the 128-bit
   file ID, which ReFS needs because its 64-bit index is not unique. A handle opened for
   `FILE_READ_ATTRIBUTES` with `FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS` reads it
@@ -112,10 +113,17 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   `GetFileInformationByHandleEx(FileStreamInfo)` lists the streams through a handle already held,
   one opened for attributes alone included (measured in phase 5), and `NtCreateFile` opens a named
   stream relative to that handle, given the stream's name alone, so no path is walked to read it. On FAT and exFAT
-  a file ID can change after a defragmentation or a rename, so it identifies a file for one search
-  and never for the cache. Whether `FileIdInfo` or the older call answers on FAT and exFAT is
-  **(unverified)**: measuring it needs a scratch disk attached with administrator rights, and phase 2
-  ran without them, so the search decides it for each volume as it runs (phase 2, step 5).
+  a file ID can change after a defragmentation or a move (measured below), so it identifies a file
+  for one search and never for the cache. Measured in phase 9 on scratch FAT32 and exFAT volumes: both refuse
+  `FileIdInfo` with `ERROR_INVALID_PARAMETER` and answer the older call, which the search chooses for
+  each volume as it runs (phase 2, step 5); a file keeps its number across a rename and takes a new
+  one when it is moved to another folder, the Recycle Bin's included. Both refuse
+  `FileAttributeTagInfo` and `FileStreamInfo` the same way while they answer `FileBasicInfo`, and
+  say they hold no named streams, so there an entry not marked as a reparse point carries no tag and
+  a file has no named streams (`FileInformation.TagWhereRefused`, `StreamsWhereRefused`); until
+  phase 9 every file on them was left out as one Windows would not describe. Measured in phase 9 on
+  NTFS, FAT32 and exFAT: a handle on a file follows it wherever it is moved, the Recycle Bin
+  included, so its final path names the bin item the shell reports.
 - **Change time.** Corrected in phase 8: nothing read a file's change time before, though the
   `FileBasicInfo` the description already read holds it (`FileDescription.Changed`). Measured on
   NTFS: a rewrite whose last-modified time is put back, a change to the file's security, and a
@@ -140,21 +148,31 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Recycle Bin.** When a bin is full, Windows deletes its oldest items outright to make room for
   new ones. Measured in phase 4: `SHQueryRecycleBin` answers what this account's bin on a volume
   holds as the sum of its items' lengths, and takes a drive's top, a folder on it, the extended form
-  of either, or the volume's `\?\Volume{GUID}\` name alike; the limit is the `MaxCapacity` number,
+  of either, or the volume's `\\?\Volume{GUID}\` name alike; the limit is the `MaxCapacity` number,
   in megabytes, under the account's `Explorer\BitBucket\Volume\{GUID}` key, with `NukeOnDelete`
   beside it for a bin set to keep nothing (`RecycleBinRooms`). The measurement ran in a 64-bit
-  process, where `SHQUERYRBINFO` is 24 bytes with the size at offset 8; the 20-byte layout a 32-bit
-  process uses, packed as the SDK header packs it there, is **(unverified)**. Measured in phase 5:
-  `IFileOperation`'s progress sink hands the item it put in the bin to `PostDeleteItem`, its path in
-  the account's `$Recycle.Bin` folder on the same volume, with the file ID the file had before,
-  because the move is a rename on that volume (`BinnedItem`); and the shell moves a file that another
-  handle holds, as long as that handle shares reading and deleting.
+  process, where `SHQUERYRBINFO` is 24 bytes with the size at offset 8. Measured in phase 9: a
+  32-bit build reads the 20-byte packed layout, the size at offset 4, as the same figures the 64-bit
+  one reads, among them a bin holding exactly the 670,000 bytes of four copies a removal had sent it.
+  Measured in phase 5: `IFileOperation`'s progress sink hands the item it put in the bin to
+  `PostDeleteItem`, its path in the account's `$Recycle.Bin` folder on the same volume, with the file
+  ID the file had before, because the move is a rename on that volume (`BinnedItem`); and the shell
+  moves a file that another handle holds, as long as that handle shares reading and deleting.
+  Corrected in phase 9, measured on NTFS: `FOFX_RECYCLEONDELETE` does not make the shell fail where
+  the bin cannot take an item. An item whose path, or any path inside it, is 260 characters or more,
+  one longer than the bin's limit (the length is compared, so a compressed file occupying nothing
+  counts its length), and anything sent to a bin with `NukeOnDelete` set were each deleted outright,
+  the operation succeeding and `PostDeleteItem` handed no bin item, which Microsoft documents as the
+  item not having been recycled. So such an item is refused before the shell is asked
+  (`RecycleBinReach`), and a sink handed no item reports the item deleted outright
+  (`RecycleOutcome.DeletedOutright`). A FAT32 or exFAT bin keeps its items at its top
+  (`$RECYCLE.BIN\$R…`), with no folder for each account.
 - **Deleting through a handle.** Corrected in phase 5, measured on NTFS: `SetFileInformationByHandle`
   with `FileDispositionInfoEx` deletes the file a handle holds, whatever its path names by then, but
   only through a handle opened by path. Through one opened by its number with `OpenFileById` it is
   refused with `ERROR_INVALID_PARAMETER`. POSIX semantics take the name away as the handle closes,
   and `FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE` deletes a read-only file without changing its
-  attributes first (`HandleDeletion`).
+  attributes first (`HandleDeletion`). Measured in phase 9: the same route deletes a file on FAT32.
 - **Holding a file open.** Measured in phase 5 on NTFS: a handle opened by number that shares only
   reading refuses another program's write, and does not refuse a rename or a delete; one opened by
   path refuses all three. So a file that must stay is held by its path, never its number. A folder
@@ -206,6 +224,10 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   every link on the way to a path, its own name included, and a substituted letter, to the path an
   opened handle gives, and is the one declaration of `GetFinalPathNameByHandle`: it moved there from
   `CloudFilesNative`, whose `CloudFiles.Resolve` already followed every link and now calls it.
+  Measured in phase 9 on an NTFS volume mounted in a folder with no drive letter: Windows gives the
+  final path of a folder on it, and of a junction leading into it, through the folder it is mounted
+  at, never in the `\\?\Volume{GUID}\` form, so a final path given only as a device path names no
+  folder (`SearchLocations.Displayed`).
 - **Size on disk.** The attributes-only handle that identifies a file already reads
   `FILE_STANDARD_INFO`, whose `AllocationSize` is what the file occupies (`FileDescription.Allocated`,
   `DuplicateCandidate.SizeOnDisk`, phase 4): less than the length for a compressed or sparse file,
@@ -230,8 +252,10 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Removal.** `ExploreRemover.RemoveAsync` partitions the whole batch by the policy once, then
   removes each item with no hook between items. Its §5.6 check compared sibling paths ignoring case
   until phase 5 moved it into `SiblingCheck`, which both removers share and which compares exact
-  names. `ShellRecycleBin` uses `IFileOperation` with `FOFX_RECYCLEONDELETE`, so a file the bin
-  cannot take fails rather than going outright, and it refuses a path the shell cannot parse.
+  names. `ShellRecycleBin` uses `IFileOperation` with `FOFX_RECYCLEONDELETE`, and refuses a path the
+  shell cannot parse. Corrected in phase 9: the flag does not stop the shell deleting outright an
+  item the bin cannot take (see "Recycle Bin"), so `ShellRecycleBin` asks `RecycleBinReach` first,
+  for both pages.
 - **Elevation.** `ElevationRequest` has `Preview`, `InstalledApps` and `ExploreRequest`, each a
   switch on the command line with a round-trip test, and since phase 6 `DuplicatesRequest`, which
   carries each location as its own argument with its role in its switch.
@@ -265,8 +289,9 @@ measurement replaces the mark here.
 2. **Locations resolved.** Each location's folder is resolved to where it is (`SearchLocations`): a
    substituted letter is followed through `IVolumeInventory`, then the folder is opened and its
    final path taken (`FileInformation.FinalPath`), which follows a junction or symbolic link
-   anywhere in it and names a folder-mounted volume by its drive letter, or by its mount point where
-   Windows gives its GUID. `FileInformation` is an instance with an internal constructor taking
+   anywhere in it and names a folder-mounted volume by its drive letter, or by the folder it is
+   mounted at (corrected in phase 9: Windows gives that folder itself, and a final path given only
+   in its GUID form names no folder). `FileInformation` is an instance with an internal constructor taking
    the call that opens the handle, so a test sees the path reach Windows in its `\\?\` form; a
    folder deeper than `MAX_PATH` opens without the prefix on a machine that allows long paths, so
    only the form can show it. Two locations are one folder where their final paths are equal, or where
@@ -602,17 +627,84 @@ Drive the whole feature with the `verify` skill, unelevated and elevated, over a
 holds hard links, a junction loop, a substituted drive, a case-sensitive folder, a named stream, a
 long path, an empty file, a locked file, a reference folder, a file the bin cannot take and, where
 the machine has one, a OneDrive online-only file, and a volume mounted in a folder with no drive
-letter, holding a program's install location and a place a Storage clean names, so Windows gives
-their final paths in the `\\?\Volume{GUID}\` form that `ResolvedPlaces.FollowedTo` names by the
-mount (no test can produce that form without mounting such a volume). Attach a scratch disk with a FAT32 and an exFAT
-volume, measure whether each answers `FileIdInfo` or only the older call, and whether a file keeps
+letter, holding a program's install location and a place a Storage clean names, each named
+through a junction, so `ResolvedPlaces.FollowedTo` is seen to follow them into the volume. Attach a
+scratch disk with a FAT32 and an exFAT volume, measure whether each answers `FileIdInfo` or only the older call, and whether a file keeps
 its ID across a rename and a move, record it under the technical facts, and search both, seeing
 that the searches leave the checksum store as it was. Read a
 Recycle Bin's size from the x86 build, which asks for it with the packed 20-byte `SHQUERYRBINFO`
 that only a 32-bit process can confirm, and record it there too. Measure a
-search of a real drive and record the figures here, redacted. Update `README.md`. Flip this banner to complete, move this file to `done/`
-with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link becomes
-`done/duplicates.md`), and close #297.
+search of a real drive and record the figures here, redacted. Update `README.md`. Corrected here:
+closing the plan moves to phase 10, because two cases could not be driven on the machine phase 9
+ran on.
+
+Corrected here: Windows does not give a final path on a volume mounted in a folder in the
+`\\?\Volume{GUID}\` form, but through the folder it is mounted at, as `FollowedTo` names it (see
+"Paths"); the branch that mapped the GUID form to a mount could never run, and a path given only as
+a device path now names no folder. Driving the feature found five defects, each fixed here, with a
+test seen to fail without it wherever a test can reach it:
+
+- **The Recycle Bin route deleted outright.** The shell deletes outright, reporting success, an item
+  whose path or a path inside it is 260 characters or more, one longer than its bin's limit, and
+  anything sent to a bin set to keep nothing (see "Recycle Bin"). A 430-character copy and a
+  4.8 MB copy sent to a 1 MB bin were each lost that way, the page saying the first was in the bin.
+  Both pages share the route, so Explore's removals were exposed the same way (§7.1 amended to state
+  the rule). Such an item is now refused before the shell is asked (`RecycleBinReach`), and an item
+  the shell deletes outright all the same is reported as gone, never as in the bin
+  (`RecycleOutcome.DeletedOutright`, `RemovalCheck.DeletedOutright`).
+- **FAT32 and exFAT could not be searched.** They refuse the reparse-tag and stream classes (see
+  "Identity"), so every file there was left out as one Windows would not describe; and they renumber
+  a file moved into the bin, so a removal there stopped, saying the bin had received another file.
+  What the bin received is now identified through the handle the copy was compared through, and by
+  its file ID only where the volume keeps one (§7.4 amended).
+- **A search of a real drive froze the page for minutes.** Placing each group asked the keeping
+  rule again about every group already placed, and each answer canonicalised every place a Storage
+  clean names, so the cost grew with the square of the groups. Each group is now placed by the
+  figure it was judged by when it arrived, and each place is made comparable once.
+- **A file with several names listed them only in a tooltip**, which neither the keyboard nor a
+  screen reader reaches; they are now a line under its path (§7.4: it is listed with every name).
+- **The page's words.** A note about one file spoke of "them", a row's description read a refusal
+  twice with a doubled full stop, and the notes expander's accessible name kept the count it had
+  before the search added its last notes.
+
+Measured: on the scratch tree, unelevated and elevated, every item behaved as §7.4 says once the
+defects were fixed: hard links one file listed with both names (the file-table route keeping one of
+them as the file's name), the junction loop and links not followed, the substituted drive's folder
+searched once, `a.txt` removed from the case-sensitive folder beside `A.txt` unharmed, the copy with
+an extra named stream refused and the one with only `Zone.Identifier` removed, the locked and empty
+files left out, the reference copies never marked, the program's folder and the temporary folder
+through junctions into the letterless volume passed over by default and, included, refused and not
+counted as kept, and six copies moved to the Recycle Bin with every §5.6 check passing. A
+substituted letter is not seen by an elevated process, which reports it as a location Windows would
+not open. No online-only OneDrive file was available on the machine. A search of a real drive, an
+SSD holding 7,289 files (56 GB), found 358 groups in 205 to 257 seconds before the placing fix, the
+page frozen for nearly all of it, and in 9.5 seconds after it with the checksums remembered; with
+SHA-256, whose checksums were not yet remembered, it took 7.9 seconds, because few files there share
+a length, and 7.3 seconds again.
+
+### Phase 10 — The cases phase 9 could not drive, and close
+
+Phase 9's machine had no online-only OneDrive file and no removable drive, so two of §7.4's rules
+were proved by tests alone. On a machine that has them, drive the page with the `verify` skill:
+
+1. **An online-only file.** A OneDrive folder holding a file that is online-only and an identical
+   local copy elsewhere. A content search leaves the online-only file out and counts it, and
+   nothing downloads it (its attributes still say online-only afterwards, and OneDrive shows no
+   transfer); a name or size search shows it and never marks it. Make a local copy online-only after
+   a search and before a removal, and see the removal refuse it.
+2. **A removable drive.** A USB or SD drive holding a copy of an internal file. Its copy is not
+   counted as kept unless its location is a reference, and a removal of it to the Recycle Bin is
+   refused where Windows will not describe the drive's bin or say its limit (`RecycleBinReach`).
+   Record in the technical facts ("Recycle Bin") whether such a drive has a bin Windows describes,
+   with a limit, and whether the copy reaches it.
+
+Then flip this banner to complete, move this file to `done/` with its links corrected (`_spec.md`
+becomes `../_spec.md`, §7.4's link becomes `done/duplicates.md`, and the README's link follows it),
+and close #297.
+
+Proves: an online-only file is never read, by either recall attribute, and a copy that went
+online-only after the search is not removed; a copy on a removable drive is never sent to a bin
+that would delete it outright, and the result never says it is in a bin it is not in.
 
 ## What every phase passes before the next starts
 
@@ -810,6 +902,32 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   its byte order mark and the larger group first. Corrected here: the change time was not read (the
   technical facts, "Change time"), which volumes keep values, and that a second search reads no
   file's content rather than opening none.
+- 2026-10-09: phase 9 landed. The whole feature driven over a scratch tree, unelevated and
+  elevated, on a scratch disk with a letterless NTFS volume mounted in a folder, a FAT32, an exFAT
+  and an NTFS volume, and over a real drive (phase 9, "Measured"). Fixed, each with a test seen to
+  fail without it: the shared Recycle Bin route refuses an item the bin cannot take, which the
+  shell deletes outright while reporting success, and reports one it deleted outright all the same
+  as gone (`RecycleBinReach`, `RecycleOutcome.DeletedOutright`), for Explore as for Duplicates;
+  FAT32 and exFAT are searched and their copies removed, a file there carrying no reparse tag and no
+  named streams where the volume says it holds none, and what the bin received identified through
+  the handle the copy was compared through (`FileInformation.TagWhereRefused`,
+  `StreamsWhereRefused`); a group is placed by the figure it was judged by on arrival, so a search of
+  hundreds of groups no longer freezes the page (`DuplicateMarks.Add`, `ResolvedPlaces`); a file's
+  names are listed under its path; a note about one file agrees with it; a row's description reads
+  each sentence once; and a final path given only as a device path names no folder
+  (`SearchLocations.Displayed`). Fixed and checked by driving the page, which no test can reach: the
+  notes expander's accessible name follows its heading. Decided: an item is measured against its bin
+  by its length, which is what Windows compares; an item whose drive, bin or bin's limit Windows
+  will not describe is refused, since nothing then shows the bin can take it; a folder
+  Windows will not list all the way down is not sent to the bin, since nothing then shows its paths
+  are short enough; and a thread's own processor time measures how a cost grows
+  (`Deguffer.Testing.ThreadCpu`). Measured: the FAT32 and exFAT identity and reading facts, the
+  32-bit bin layout, the shell's outright deletions, a handle following its file into the bin, and
+  final paths on a folder-mounted volume, in the technical facts. Corrected here: the premise that
+  Windows gives such a volume's paths in their GUID form, the claim that `FOFX_RECYCLEONDELETE`
+  makes the shell fail where the bin cannot take an item, and §7.1 and §7.4 on the bin's rule and
+  how its item is identified. Not driven: an online-only OneDrive file and a removable drive, which
+  the machine did not have, so phase 10 drives both and closes the plan.
 
 ## Limits that stay open
 
@@ -850,5 +968,9 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   holding the whole of it, refuses only a read of that part, so a search that uses the file's kept
   checksum does not see the lock, where a read would have left the file out. The file is grouped,
   and a removal still reads it.
+- **A bin whose limit cannot be read.** Where Windows will not say what a drive's Recycle Bin may
+  hold, or which volume holds an item, the item is refused rather than handed to a shell that may
+  delete it outright, so it can be removed only permanently, as a deliberate choice. A removable
+  drive with no bin at all was not measured (phase 10).
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

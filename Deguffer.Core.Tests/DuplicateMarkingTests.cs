@@ -302,4 +302,25 @@ public sealed class DuplicateMarkingTests : DuplicateMarkingScene
         // nothing, so of four only the last can go, and the reference is what is kept.
         Assert.Equal([2 * 4096L, 4096L], marks.Groups.Select(group => group.FreeableSpace(marks.Keeping)));
     }
+    /// <summary>
+    /// Groups are placed as they arrive by what each could free, judged once a group. Placing each
+    /// by asking the keeping rule again about every group already placed made a search of a few
+    /// hundred groups take minutes on the page's thread, so four times the groups must cost about four
+    /// times as much, never sixteen.
+    /// </summary>
+    [Fact]
+    public void PlacingAGroupCostsTheSameHoweverManyArePlaced()
+    {
+        var few = Groups(100);
+        var many = Groups(400);
+
+        var growth = ThreadCpu.Growth(() => Place(few), () => Place(many), times: 4, TimeSpan.FromMilliseconds(250));
+
+        Assert.True(growth < 2, $"Four times the groups cost {growth:F2} times as much as four runs of the few.");
+
+        DuplicateCandidate[][] Groups(int count) =>
+            [.. Enumerable.Range(0, count).Select(i => new[] { Copy(Path.Combine(Documents, $"{i}.jpg")), Copy(Path.Combine(Downloads, $"{i}.jpg")) })];
+
+        void Place(DuplicateCandidate[][] groups) => Marks(groups);
+    }
 }

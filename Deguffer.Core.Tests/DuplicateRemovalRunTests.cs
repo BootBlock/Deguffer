@@ -5,6 +5,7 @@ using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
+using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Tests;
 
@@ -100,15 +101,20 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
     /// <summary>
     /// The compared copy is moved aside as the shell is asked, and another file put at its path, which
     /// the bin then takes. What the bin received is not the file compared, so the run stops there,
-    /// names it, and the next group's copy is never reached.
+    /// names it, and the next group's copy is never reached. On a drive that keeps no file numbers,
+    /// as FAT32 and exFAT do not, the handle the copy was compared through still tells them apart.
     /// </summary>
-    [Fact]
-    public void ABinItemThatIsNotTheComparedCopyStopsTheRunAndIsNamed()
+    [Theory]
+    [InlineData("NTFS")]
+    [InlineData("FAT32")]
+    public void ABinItemThatIsNotTheComparedCopyStopsTheRunAndIsNamed(string fileSystem)
     {
-        var firstKept = Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1)));
-        var first = Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1)));
-        var secondKept = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
-        var second = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        DuplicateCandidate On(DuplicateCandidate copy) => copy with { Volume = copy.Volume with { FileSystem = fileSystem } };
+
+        var firstKept = On(Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1))));
+        var first = On(Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1))));
+        var secondKept = On(Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2))));
+        var second = On(Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2))));
         var marks = Marks([firstKept, first], [secondKept, second]);
         Mark(marks, first, second);
         var aside = Path.Combine(Documents, "aside.bin");
@@ -127,6 +133,40 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         Assert.Contains(stopped.Copy.Path, stopped.Message, StringComparison.Ordinal);
         Assert.Contains(report.Copies, copy => copy.Check == RemovalCheck.NotReached && File.Exists(copy.Copy.Path));
         Assert.True(File.Exists(aside));
+    }
+
+    /// <summary>
+    /// FAT32 and exFAT number a file by where its entry lies, so the item the bin received reads with
+    /// another number than the copy compared. The handle the copy was compared through followed it into
+    /// the bin, which is what shows it is the copy, so it is removed and the run goes on.
+    /// </summary>
+    [Fact]
+    public void ACopyRenumberedByItsMoveIntoTheBinOnADriveThatKeepsNoNumbersIsRemoved()
+    {
+        DuplicateCandidate OnFat(DuplicateCandidate copy) => copy with { Volume = copy.Volume with { FileSystem = "FAT32" } };
+
+        var kept = OnFat(Found(Write(Path.Combine(Documents, "a.bin"), Content())));
+        var copy = OnFat(Found(Write(Path.Combine(Downloads, "a.bin"), Content())));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+
+        var renumbering = new FileInformation(FileInformation.Open, (SafeFileHandle handle, IdentityRoute route, out FileIdentity identity) =>
+        {
+            var read = FileInformation.ReadIdentity(handle, route, out identity);
+
+            if (FileInformation.FinalPathOf(handle) is { } at && LongPath.Display(at).StartsWith(Bin, StringComparison.OrdinalIgnoreCase))
+            {
+                identity = identity with { File = identity.File + 1 };
+            }
+
+            return read;
+        });
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: FakeRecycleBin.MovingTo(Bin), files: renumbering);
+
+        Assert.Equal(RemovalCheck.Removed, Assert.Single(report.Copies).Check);
+        Assert.Null(report.StoppedAt);
+        Assert.True(report.Verification.Passed);
     }
 
     /// <summary>A bin that moves the copy and does not say where leaves nothing to identify, so the run stops there.</summary>
@@ -149,6 +189,41 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
 
         Assert.Equal(RemovalCheck.BinUnconfirmed, Assert.Single(report.Copies).Check);
         Assert.NotNull(report.StoppedAt);
+    }
+
+    /// <summary>
+    /// Windows deleting a copy outright when asked to move it to the bin stops the run, and the copy
+    /// is said to be gone and not in the bin, never moved there or still in place. §5.6 does not count
+    /// it as a loss beside it, since the report names it.
+    /// </summary>
+    [Fact]
+    public void ACopyWindowsDeletedOutrightStopsTheRunAndIsNotSaidToBeInTheBin()
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var keptB = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
+        var copyB = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        var marks = Marks([kept, copy], [keptB, copyB]);
+        Mark(marks, copy);
+        Mark(marks, copyB);
+
+        var bin = new FakeRecycleBin(path =>
+        {
+            File.Delete(path);
+            return new RecycleOutcome(Removed: true, "Deleted outright.") { DeletedOutright = true };
+        });
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: bin);
+
+        var first = report.Copies.Single(outcome => outcome.Check is RemovalCheck.DeletedOutright);
+        Assert.Same(first, report.StoppedAt);
+        Assert.Contains("outright", first.Message);
+        Assert.Equal(RemovalCheck.NotReached, report.Copies.Single(outcome => outcome != first).Check);
+        Assert.Empty(report.Removed);
+        Assert.DoesNotContain(first, report.Kept);
+        Assert.True(report.Verification.Passed);
+        Assert.DoesNotContain("Moved", report.Summary);
+        Assert.DoesNotContain("Nothing was removed", report.Summary);
     }
 
     /// <summary>

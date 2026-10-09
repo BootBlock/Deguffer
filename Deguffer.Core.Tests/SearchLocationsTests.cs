@@ -295,4 +295,19 @@ public sealed class SearchLocationsTests : IDisposable
 
         Assert.Single(SearchLocations.Resolve([new(file)], _tree.Volumes).Unsearched);
     }
+    /// <summary>
+    /// A final path Windows gives only as a device path, such as a volume's
+    /// <c>\\?\Volume{GUID}\</c> name, names no drive or folder, so no location or program folder
+    /// is taken to be at it. Windows names a volume mounted in a folder by that folder.
+    /// </summary>
+    [Fact]
+    public void AFinalPathGivenOnlyAsADevicePathNamesNoFolder()
+    {
+        Assert.Null(SearchLocations.Displayed(@"\\?\Volume{0e6b1d3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b}\Programs\App"));
+        Assert.Null(SearchLocations.Displayed(@"\\?\Volume{0e6b1d3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b}\"));
+        Assert.Null(SearchLocations.Displayed(@"\\?\GLOBALROOT\Device\HarddiskVolume9\Programs"));
+        Assert.Equal(@"C:\Mount\Programs\App", SearchLocations.Displayed(@"\\?\C:\Mount\Programs\App"));
+        Assert.Equal(@"C:\", SearchLocations.Displayed(@"\\?\C:\"));
+        Assert.Equal(@"\\fileserver.test\photos", SearchLocations.Displayed(@"\\?\UNC\fileserver.test\photos"));
+    }
 }

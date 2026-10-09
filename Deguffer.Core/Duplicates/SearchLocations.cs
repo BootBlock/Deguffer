@@ -166,7 +166,7 @@ public sealed class SearchLocations
             return (null, "Windows would not open this folder, so Deguffer cannot tell where it is or what it holds.");
         }
 
-        if (Displayed(final, volumes) is not { } folder)
+        if (Displayed(final) is not { } folder)
         {
             return (null, "Windows names no drive or folder this volume is mounted at, so Deguffer cannot search it.");
         }
@@ -237,28 +237,22 @@ public sealed class SearchLocations
     };
 
     /// <summary>
-    /// <paramref name="final"/> in display form, with a volume Windows names by its GUID named by
-    /// where it is mounted instead, or null where nothing names it.
+    /// <paramref name="final"/> in display form, or null where Windows gave it only as a device path,
+    /// such as a volume's <c>\\?\Volume{GUID}\</c> name, which names no drive or folder.
+    ///
+    /// <para><b>Measured on 2026-10-09</b> on an NTFS volume mounted in a folder with no drive
+    /// letter: Windows gives the final path of a folder on it, and of a junction leading into it,
+    /// through the folder the volume is mounted at, so a volume Windows names only by its GUID is
+    /// one mounted nowhere a user can name.</para>
     /// </summary>
-    internal static string? Displayed(string final, IVolumeInventory volumes)
+    internal static string? Displayed(string final)
     {
         var display = LongPath.Display(final);
 
         // A drive keeps its separator, which is how C:\ names a drive rather than a path relative to one.
-        if (Path.IsPathFullyQualified(display))
-        {
-            return Path.TrimEndingDirectorySeparator(display);
-        }
-
-        foreach (var volume in volumes.Volumes)
-        {
-            if (volume.VolumeName is { } name && final.StartsWith(name, StringComparison.OrdinalIgnoreCase))
-            {
-                return Path.TrimEndingDirectorySeparator(Path.Join(volume.RootPath, final[name.Length..]));
-            }
-        }
-
-        return null;
+        return Path.IsPathFullyQualified(display) && !LongPath.IsDeviceSpelling(display)
+            ? Path.TrimEndingDirectorySeparator(display)
+            : null;
     }
 
     /// <summary>

@@ -481,7 +481,12 @@ not the shell asked.
 - **Removal from Explore goes to the Recycle Bin by default.** §8's fourth question concludes that
   undo is impossible at cache sizes, and that is true of a ten-gigabyte tree. It is not true of the
   one file a user picked out of a picture, and where recovery is available it is not optional.
-  Removing permanently stays available as a deliberate second choice, and says what it is.
+  Removing permanently stays available as a deliberate second choice, and says what it is. An item
+  the bin will not take fails, and is never deleted outright in its place. Windows deletes outright,
+  and says it succeeded, an item whose path, or any path inside it, is too long for the bin, one
+  larger than the bin can hold, and anything sent to a bin set to keep nothing, so such an item is
+  never handed to it, and nor is one whose bin Windows will not describe. One Windows deleted
+  outright all the same is reported as gone, never as in the bin.
 - **§5.6 still applies.** Every removal asserts afterwards that what should have survived did.
 - **Explore's numbers may be lower bounds, and must say so.** The measurement rules differ from
   Storage's on purpose: a total that is short is unacceptable where it decides a deletion, and
@@ -1144,12 +1149,17 @@ on: what the established duplicate finders do, and the ways their users have los
   the handle that was compared, so nothing put at that path in the meantime is what goes. A copy that
   fails any of those is not removed, and the result says which check failed.
 - **To the Recycle Bin by default**, through §7.1's route and with its rule: a copy the bin will not
-  take fails, and is never deleted outright in its place. What the bin received is checked to be the
-  file that was compared, by its file ID. Where it is not, or cannot be told, the run stops there
-  and says which file went to the bin, where it can still be restored. Where the copies bound for
-  one drive's bin
-  are more than it has room for, the confirmation says so, because Windows then deletes the bin's
-  oldest items outright to make room, and those include copies removed earlier in the same run.
+  take fails, and is never deleted outright in its place. Windows itself deletes outright, and says
+  it succeeded, a file whose path is too long for the bin or that is larger than the bin can hold,
+  and anything sent to a bin set to keep nothing, so such a copy is never handed to it, and nor is
+  one whose bin Windows will not describe. What the bin
+  received is checked to be the file that was compared, through the handle it was compared through,
+  which follows the file into the bin, and by its file ID where the drive keeps one. Where it is
+  not, or cannot be told, the run stops there and says which file went to the bin, where it can
+  still be restored, and where Windows deleted it outright the run stops and says so. Where the
+  copies bound for one drive's bin are more than it has room for, the confirmation says so, because
+  Windows then deletes the bin's oldest items outright to make room, and those include copies
+  removed earlier in the same run.
   Removing permanently stays available as a deliberate second choice, and says what it is.
 - **Every removal is confirmed** by a dialog that lists every copy that goes, and states how many
   there are, from how many groups, and how much space they occupy. A catalogue such as a photo

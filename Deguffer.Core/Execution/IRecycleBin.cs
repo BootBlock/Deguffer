@@ -18,6 +18,14 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
     /// received is the file it compared (§7.4).
     /// </summary>
     public string? Binned { get; init; }
+
+    /// <summary>
+    /// Whether Windows deleted the item outright when it was asked to move it to the bin. It is gone,
+    /// and it is not in the bin to restore. The shell does this, reporting success, for a path it
+    /// cannot take (<see cref="RecycleBinReach"/>), so it is refused beforehand; this is what the
+    /// shell's progress sink says when a path changed under that question or another reason arose.
+    /// </summary>
+    public bool DeletedOutright { get; init; }
 }
 
 /// <summary>
@@ -37,7 +45,9 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
 /// <para>A path too long for the shell is therefore a refusal rather than a truncation, and it is
 /// reported as one. Falling back to an outright delete would be worse than failing: the user asked
 /// for the reversible removal, and quietly giving them the irreversible one is the single change
-/// §7.1 would least tolerate.</para>
+/// §7.1 would least tolerate. That is also why an item the bin cannot take is refused before the
+/// shell is asked: the shell itself deletes such an item outright and reports success
+/// (<see cref="RecycleBinReach"/>).</para>
 /// </summary>
 public interface IRecycleBin
 {
@@ -65,21 +75,21 @@ public interface IRecycleBin
 /// </summary>
 public sealed class ShellRecycleBin : IRecycleBin
 {
-    public static ShellRecycleBin Default { get; } = new();
+    public static ShellRecycleBin Default { get; } = new(Perform, RecycleBinReach.Default);
 
     // FOF_SILENT | FOF_NOCONFIRMATION | FOF_ALLOWUNDO | FOF_NOERRORUI, with FOFX_RECYCLEONDELETE
     // and FOFX_EARLYFAILURE.
     //
-    // FOF_ALLOWUNDO alone is not enough, and that is the whole reason FOFX_RECYCLEONDELETE is here.
     // ALLOWUNDO *asks* for the Recycle Bin; the shell falls back to deleting outright whenever the
-    // item cannot go there — over the volume's bin quota, the bin switched off for that volume, a
-    // removable or network volume with no bin at all. Ordinarily it warns first, and the three
-    // suppression flags below are exactly what silences that warning. So without RECYCLEONDELETE
-    // this route would report "moved to the Recycle Bin" about a file that no longer exists
-    // anywhere, and §5.6 would not catch it because the siblings genuinely did survive. Explore
-    // ranks by size and points the user at the largest thing on the drive, which is precisely what
-    // exceeds a default bin allocation. With the flag the operation fails instead, and a failure is
-    // something this reports.
+    // item cannot go there. Ordinarily it warns first, and the three suppression flags below are
+    // exactly what silences that warning. FOFX_RECYCLEONDELETE was set to make the operation fail
+    // instead, and measured on 2026-10-09 it does not: an item longer than its volume's bin limit,
+    // anything sent to a bin set to keep nothing, and a path of MAX_PATH or more were each deleted
+    // outright, the operation reporting success. So RecycleBinReach is asked first, and the
+    // progress sink's word on what reached the bin is read afterwards. Without either, this route
+    // would report "moved to the Recycle Bin" about a file that no longer exists anywhere, and §5.6
+    // would not catch it because the siblings did survive. Explore ranks by size and points the
+    // user at the largest thing on the drive, which is precisely what exceeds a bin's limit.
     //
     // The suppression flags cover the shell's own windows: this app has already asked the user, and
     // a second modal dialog it does not own — parentless, because handing an HWND down here would
@@ -93,13 +103,28 @@ public sealed class ShellRecycleBin : IRecycleBin
 
     private static readonly Guid FileOperationClass = new("3ad05575-8857-4850-9277-11b85bdb8e09");
 
-    private ShellRecycleBin()
+    private readonly Func<string, RecycleOutcome> _perform;
+    private readonly RecycleBinReach _reach;
+
+    /// <param name="perform">
+    /// The shell's move of one item. A seam, so a test can show that an item the bin cannot take
+    /// never reaches the shell without asking the shell to delete anything.
+    /// </param>
+    /// <param name="reach">What the bin can take, asked before the shell is.</param>
+    internal ShellRecycleBin(Func<string, RecycleOutcome> perform, RecycleBinReach reach)
     {
+        _perform = perform;
+        _reach = reach;
     }
 
     public RecycleOutcome Recycle(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        if (_reach.WhyNot(path) is { } cannotTake)
+        {
+            return new RecycleOutcome(Removed: false, cannotTake);
+        }
 
         // The shell's apartment requirement, met on a thread of our own rather than by initialising
         // whatever thread the caller arrived on. Core is called from a thread-pool thread by every
@@ -107,7 +132,7 @@ public sealed class ShellRecycleBin : IRecycleBin
         // apartment of a thread the runtime hands to something else next.
         RecycleOutcome outcome = new(Removed: false, "The Recycle Bin operation did not run.");
 
-        var thread = new Thread(() => outcome = Perform(path));
+        var thread = new Thread(() => outcome = _perform(path));
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         thread.Join();
@@ -135,11 +160,7 @@ public sealed class ShellRecycleBin : IRecycleBin
             file.PerformOperations();
             file.GetAnyOperationsAborted(out var aborted);
 
-            return aborted
-                ? new RecycleOutcome(
-                    Removed: false,
-                    "Windows stopped before moving this to the Recycle Bin.")
-                : new RecycleOutcome(Removed: true) { Binned = binned.Path };
+            return Outcome(aborted, binned);
         }
         catch (COMException ex)
         {
@@ -167,4 +188,20 @@ public sealed class ShellRecycleBin : IRecycleBin
             }
         }
     }
+
+    /// <summary>
+    /// What a finished operation did, as the progress sink saw it. An outright deletion is answered
+    /// first, because whatever else the operation says, the item is gone and not in the bin.
+    /// </summary>
+    internal static RecycleOutcome Outcome(bool aborted, BinnedItem binned) =>
+        binned.DeletedOutright
+            ? new RecycleOutcome(
+                Removed: true,
+                "Windows deleted this outright rather than moving it to the Recycle Bin, so it cannot be restored from there.")
+            {
+                DeletedOutright = true,
+            }
+            : aborted
+                ? new RecycleOutcome(Removed: false, "Windows stopped before moving this to the Recycle Bin.")
+                : new RecycleOutcome(Removed: true) { Binned = binned.Path };
 }

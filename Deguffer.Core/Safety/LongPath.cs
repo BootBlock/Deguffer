@@ -201,10 +201,6 @@ public static partial class LongPath
     }
 
     /// <summary>
-    /// Whether Win32 reads <paramref name="path"/> as a device path: two separators, <c>.</c> or
-    /// <c>?</c>, and a separator, in any mix of slashes. The same test .NET applies.
-    /// </summary>
-    /// <summary>
     /// Whether <paramref name="path"/> names a location on a network share, in ordinary or
     /// extended-length form. A volume named by its GUID, or any other device path, is not a share:
     /// it starts with two separators as a share does, and is a local volume.
@@ -216,7 +212,11 @@ public static partial class LongPath
         return shown.Length > 2 && IsSeparator(shown[0]) && IsSeparator(shown[1]) && !IsDeviceSpelling(shown);
     }
 
-    private static bool IsDeviceSpelling(string path) =>
+    /// <summary>
+    /// Whether Win32 reads <paramref name="path"/> as a device path: two separators, <c>.</c> or
+    /// <c>?</c>, and a separator, in any mix of slashes. The same test .NET applies.
+    /// </summary>
+    internal static bool IsDeviceSpelling(string path) =>
         path.Length >= DevicePrefix.Length
         && IsSeparator(path[0])
         && IsSeparator(path[1])
