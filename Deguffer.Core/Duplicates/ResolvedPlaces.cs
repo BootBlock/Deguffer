@@ -23,8 +23,6 @@ internal sealed class ResolvedPlaces
 
     private ResolvedPlaces(IReadOnlyList<(CleanedPlace, IReadOnlyList<string>, string)> places) => _places = places;
 
-    public static ResolvedPlaces None { get; } = new([]);
-
     /// <param name="places">Each place, with what to say of a copy in it.</param>
     public static ResolvedPlaces Resolve(
         IEnumerable<(CleanedPlace Place, string What)> places, IVolumeInventory volumes, FileInformation files)

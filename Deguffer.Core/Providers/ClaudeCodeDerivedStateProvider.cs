@@ -224,13 +224,6 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home || LongPath.DirectoryMayExist(home));
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own
-    /// level, and one declaration per folder a leftover is recognised in, recognising exactly what this
-    /// pass would offer from it. The two neighbours outside the folder are declared as well, recognising
-    /// nothing, because the plan names them as paths that must survive and §7.1 has Explore refuse
-    /// every such path.
-    /// </summary>
-    /// <summary>
     /// Each folder this row takes leftovers from, in Claude Code's default folder and in the one its folder
     /// variable names. The projects folder is whole because a session's spilled output is a folder named
     /// for the session in any project's folder; the files at the top of Claude Code's folder, the rewind
@@ -246,6 +239,13 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     private IReadOnlyList<string> Homes() => ClaudeCodeHome.EveryHome(Environment, _system, Volumes);
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own
+    /// level, and one declaration per folder a leftover is recognised in, recognising exactly what this
+    /// pass would offer from it. The two neighbours outside the folder are declared as well, recognising
+    /// nothing, because the plan names them as paths that must survive and §7.1 has Explore refuse
+    /// every such path.
+    /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
     public override void InvalidateCaches()

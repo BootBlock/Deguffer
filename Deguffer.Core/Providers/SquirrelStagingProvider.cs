@@ -245,15 +245,6 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Present where there is a staging folder or a Squirrel application to talk about.
-    ///
-    /// <para>Deliberately not "there is something to remove". The planner never asks an absent
-    /// provider for a plan, so a machine whose staging folder cannot be listed, or whose
-    /// <see cref="SquirrelDiscovery.StagingVariable"/> names something that is not a path, would
-    /// answer false here and the sentence explaining that would be unreachable. The row would then
-    /// read "Not installed" about applications that are installed.</para>
-    /// </summary>
-    /// <summary>
     /// The staging folder the variable names and the default one, because the variable can be unset
     /// again after a duplicate search has read it, and the packages folder of each installation the
     /// sweep finds, where the spent packages are. Each whole: a staging directory is any child with a
@@ -278,6 +269,15 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             [.. places.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)]);
     }
 
+    /// <summary>
+    /// Present where there is a staging folder or a Squirrel application to talk about.
+    ///
+    /// <para>Deliberately not "there is something to remove". The planner never asks an absent
+    /// provider for a plan, so a machine whose staging folder cannot be listed, or whose
+    /// <see cref="SquirrelDiscovery.StagingVariable"/> names something that is not a path, would
+    /// answer false here and the sentence explaining that would be unreachable. The row would then
+    /// read "Not installed" about applications that are installed.</para>
+    /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
         var sweep = _discovery.Look(ct);

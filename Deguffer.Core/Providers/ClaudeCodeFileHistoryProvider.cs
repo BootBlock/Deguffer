@@ -136,10 +136,6 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             && LongPath.DirectoryMayExist(Path.Combine(home, ClaudeCodeHome.FileHistory)));
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own level,
-    /// and the snapshot folder, recognising exactly the sessions this pass would offer.
-    /// </summary>
-    /// <summary>
     /// The snapshot folder in Claude Code's default folder and in the one its folder variable names. Each
     /// session's snapshots are a folder named for the session, so the folder holding them is the
     /// narrowest place that holds a session started after this is asked.
@@ -150,6 +146,10 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
     private IReadOnlyList<string> Homes() => ClaudeCodeHome.EveryHome(Environment, _system, Volumes);
 
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own level,
+    /// and the snapshot folder, recognising exactly the sessions this pass would offer.
+    /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
     public override void InvalidateCaches()

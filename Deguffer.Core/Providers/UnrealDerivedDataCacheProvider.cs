@@ -168,10 +168,6 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Any cache with something in it, or any that Windows would not describe. A refusal reads as
-    /// presence, so the plan can say what it could not reach rather than the row never appearing.
-    /// </summary>
-    /// <summary>
     /// The derived data cache Unreal Engine 5.3 and earlier share, both default Zen stores, and every
     /// store a setting names that the plan would take as Zen's alone. A configured folder that holds
     /// anything else is someone's own and never reached, and so are the Zen server and the engine
@@ -184,6 +180,10 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
             .. Stores().Select(store => CleanedPlace.Whole(store.Path)),
         ]);
 
+    /// <summary>
+    /// Any cache with something in it, or any that Windows would not describe. A refusal reads as
+    /// presence, so the plan can say what it could not reach rather than the row never appearing.
+    /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Stores()
             .Select(store => store.Path)

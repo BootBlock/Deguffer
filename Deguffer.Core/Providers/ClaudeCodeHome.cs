@@ -69,19 +69,6 @@ public static partial class ClaudeCodeHome
     public static string? WhyUnusable(IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes) =>
         Examine(environment, system, volumes).Why;
 
-    /// <summary>
-    /// Two ways for <see cref="ConfigDirectoryVariable"/> to be no answer.
-    ///
-    /// <list type="bullet">
-    /// <item>A relative value resolves against the working directory of whichever process reads it,
-    /// which Deguffer does not share, so there is no correct reading of it — the reasoning
-    /// <see cref="CargoCacheProvider.ResolveHome"/> gives for <c>CARGO_HOME</c>.</item>
-    /// <item>A value naming somewhere <see cref="ConfiguredFolder"/> refuses — the profile, a drive
-    /// root, one of the account's own folders — would have every entry there asserted as a Claude
-    /// Code survivor and refused in Explore as Claude Code's own, and a removal there by any other
-    /// row would read as a failure of §5.6.</item>
-    /// </list>
-    /// </summary>
     /// <summary>Claude Code's folder where its variable does not move it.</summary>
     public static string DefaultIn(IUserEnvironment environment) =>
         Path.Combine(environment.UserProfile, DefaultDirectoryName);
@@ -95,6 +82,19 @@ public static partial class ClaudeCodeHome
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)];
 
+    /// <summary>
+    /// Two ways for <see cref="ConfigDirectoryVariable"/> to be no answer.
+    ///
+    /// <list type="bullet">
+    /// <item>A relative value resolves against the working directory of whichever process reads it,
+    /// which Deguffer does not share, so there is no correct reading of it — the reasoning
+    /// <see cref="CargoCacheProvider.ResolveHome"/> gives for <c>CARGO_HOME</c>.</item>
+    /// <item>A value naming somewhere <see cref="ConfiguredFolder"/> refuses — the profile, a drive
+    /// root, one of the account's own folders — would have every entry there asserted as a Claude
+    /// Code survivor and refused in Explore as Claude Code's own, and a removal there by any other
+    /// row would read as a failure of §5.6.</item>
+    /// </list>
+    /// </summary>
     private static (string? Home, string? Why) Examine(
         IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes)
     {

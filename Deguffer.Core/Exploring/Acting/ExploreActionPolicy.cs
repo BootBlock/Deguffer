@@ -43,7 +43,7 @@ public sealed class ExploreActionPolicy
     /// table rather than this machine's cores — and a user with every toolchain installed should not
     /// see ten console windows' worth of work start at the same instant.
     /// </summary>
-    private const int Discovery = 8;
+    internal const int Discovery = 8;
 
     private readonly RegionTable _regions;
     private readonly IReadOnlyList<DeclaredRoot> _toolRoots;

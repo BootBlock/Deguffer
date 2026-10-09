@@ -706,10 +706,6 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
-    /// <summary>
-    /// Whether deleting <paramref name="target"/> would destroy <paramref name="protectedPath"/> —
-    /// which is true when the protected path is the target or sits inside it.
-    /// </summary>
     /// <summary>§7.4: the places named without planning hold every cache, the webview ones included, in every editor.</summary>
     [Fact]
     public async Task CleanedPlacesCoverEveryPathThePlanCleans()
@@ -724,6 +720,10 @@ public sealed class VsCodeCacheProviderTests : IDisposable
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
     }
 
+    /// <summary>
+    /// Whether deleting <paramref name="target"/> would destroy <paramref name="protectedPath"/> —
+    /// which is true when the protected path is the target or sits inside it.
+    /// </summary>
     private static bool WouldTakeWithIt(string target, string protectedPath) =>
         protectedPath.Equals(target, StringComparison.OrdinalIgnoreCase) ||
         protectedPath.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);

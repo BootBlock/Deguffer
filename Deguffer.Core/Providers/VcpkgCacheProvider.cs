@@ -232,15 +232,6 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Presence is a declared path actually being there, or a clone Windows would not describe. The
-    /// user's vcpkg directory exists on any machine that has ever integrated vcpkg with Visual
-    /// Studio, and reading that as a hit would report a source the plan then has nothing to say
-    /// about.
-    ///
-    /// <para>The unreached clone is there because the planner never asks an absent provider for a
-    /// plan, and the sentence naming it would then be unreachable.</para>
-    /// </summary>
-    /// <summary>
     /// Every location the plan declares, from the same discovery, and the defaults a variable can
     /// fall back to after a duplicate search has read it: the binary cache in each of the user's
     /// vcpkg directories, and the clone's own <c>downloads</c> where <c>VCPKG_DOWNLOADS</c> moved it.
@@ -264,6 +255,15 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             [.. places.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)]);
     }
 
+    /// <summary>
+    /// Presence is a declared path actually being there, or a clone Windows would not describe. The
+    /// user's vcpkg directory exists on any machine that has ever integrated vcpkg with Visual
+    /// Studio, and reading that as a hit would report a source the plan then has nothing to say
+    /// about.
+    ///
+    /// <para>The unreached clone is there because the planner never asks an absent provider for a
+    /// plan, and the sentence naming it would then be unreachable.</para>
+    /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(
             DeclaredPaths(Declare(Locate())).Any(LongPath.DirectoryMayExist)

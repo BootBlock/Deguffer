@@ -192,22 +192,6 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Presence is something to remove actually on disk, never a folder existing. An application that
-    /// embeds Chromium but has not run yet keeps a user-data folder with nothing in it to remove, and
-    /// reporting that as a source would offer the user a row the plan then has nothing to say about.
-    ///
-    /// <para><b>A refused application-data root counts as present, and these are the rows where that
-    /// matters.</b> Nearly every other provider decides presence by probing a path it already knows
-    /// the name of, and a full path still resolves through a directory the account may not list.
-    /// These decide by enumerating, so a refusal here answers "no source" and the row renders as
-    /// "Not installed" — a stronger claim than "Already clear", and one made about a folder Deguffer
-    /// never read. Answering true sends the pass into <see cref="BuildPlanAsync"/>, which says
-    /// so.</para>
-    ///
-    /// <para>A browser Deguffer did not look inside, because a link or a refused segment stood in
-    /// front of it, counts as present for the same reason: the plan is where that is said.</para>
-    /// </summary>
-    /// <summary>
     /// Each disposable child this row recognises, at each of its levels, in every profile of every
     /// application the discovery finds, whether or not one is there today. The data folder, the profile
     /// and the sign-in cookies and passwords beside the caches are never reached, so none of them is a
@@ -223,6 +207,22 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                select CleanedPlace.Whole(Path.Combine(level.Resolve(profile), name)),
         ]);
 
+    /// <summary>
+    /// Presence is something to remove actually on disk, never a folder existing. An application that
+    /// embeds Chromium but has not run yet keeps a user-data folder with nothing in it to remove, and
+    /// reporting that as a source would offer the user a row the plan then has nothing to say about.
+    ///
+    /// <para><b>A refused application-data root counts as present, and these are the rows where that
+    /// matters.</b> Nearly every other provider decides presence by probing a path it already knows
+    /// the name of, and a full path still resolves through a directory the account may not list.
+    /// These decide by enumerating, so a refusal here answers "no source" and the row renders as
+    /// "Not installed" — a stronger claim than "Already clear", and one made about a folder Deguffer
+    /// never read. Answering true sends the pass into <see cref="BuildPlanAsync"/>, which says
+    /// so.</para>
+    ///
+    /// <para>A browser Deguffer did not look inside, because a link or a refused segment stood in
+    /// front of it, counts as present for the same reason: the plan is where that is said.</para>
+    /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(
             Applications(ct).Count > 0

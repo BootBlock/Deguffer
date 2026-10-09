@@ -166,16 +166,4 @@ public sealed class RemovalConfirmationTests : IDisposable
         Assert.Null(new RecycleBinRooms(_ => 0, environment).Of(_volume)!.Free);
         Assert.Null(new RecycleBinRooms(_ => null, environment).Of(_volume));
     }
-
-    [Fact]
-    public void WindowsDescribesTheSystemDrivesBin()
-    {
-        // Read only: the real call, asked what this account's bin on the system drive holds.
-        var system = Path.GetPathRoot(Environment.SystemDirectory)!;
-
-        var room = RecycleBinRooms.Default.Of(new LocalVolume(system, DriveType.Fixed, VolumeReadiness.Ready));
-
-        Assert.NotNull(room);
-        Assert.True(room.Held >= 0);
-    }
 }

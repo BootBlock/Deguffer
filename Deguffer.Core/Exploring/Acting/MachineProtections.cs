@@ -21,9 +21,6 @@ namespace Deguffer.Core.Exploring.Acting;
 /// </summary>
 public sealed class MachineProtections
 {
-    /// <summary>How many providers are asked at once, for the reason <see cref="ExploreActionPolicy.ForAsync"/> gives.</summary>
-    private const int Asking = 8;
-
     private readonly IReadOnlyList<ICleanupProvider> _providers;
     private readonly Lock _gate = new();
     private Task<IReadOnlyList<StorageClean>>? _cleaned;
@@ -88,7 +85,7 @@ public sealed class MachineProtections
         await Parallel.ForAsync(
             0,
             _providers.Count,
-            new ParallelOptions { MaxDegreeOfParallelism = Asking, CancellationToken = ct },
+            new ParallelOptions { MaxDegreeOfParallelism = ExploreActionPolicy.Discovery, CancellationToken = ct },
             async (index, token) => answers[index] = await _providers[index].CleanedPlacesAsync(token).ConfigureAwait(false))
             .ConfigureAwait(false);
 
