@@ -19,12 +19,24 @@ internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRo
 /// inside this one only when case is ignored is given the safer role, a reference, where either
 /// role is one: the two can be different folders in a case-sensitive directory, and a file that
 /// should have been a reference must never be offered for removal.</para>
+///
+/// <para><b>What it could not read is named.</b> A folder Windows refused to list, and a location
+/// read from a file table that was not read whole, would otherwise read as holding nothing that
+/// matched, and a search that skipped a place must never read as one that found nothing there. A
+/// place passed over is not gone through, so a refused folder inside one is not named again.</para>
 /// </summary>
 internal sealed class CandidateWalk
 {
+    private const string Refused =
+        "Windows would not let Deguffer list this folder, so what it holds was not searched, or not all of it.";
+
+    private const string TableIncomplete =
+        "Part of this drive's file table could not be read, so some of the files here may not have been searched.";
+
     private readonly DuplicateSearch _search;
     private readonly List<FoundFile> _found = [];
     private readonly List<PassedOverPlace> _passedOver = [];
+    private readonly List<UnreadPlace> _unread = [];
 
     private int _links;
     private int _empty;
@@ -37,36 +49,49 @@ internal sealed class CandidateWalk
 
     public IReadOnlyList<PassedOverPlace> PassedOver => _passedOver;
 
+    public IReadOnlyList<UnreadPlace> Unread => _unread;
+
     public LeftOutFiles LeftOut => new(_links, _empty, _unknownLength, _onlyInTheCloud);
 
     /// <summary>Note a place passed over before its tree was read, such as a whole location.</summary>
     public void PassOver(PassedOverPlace place) => _passedOver.Add(place);
 
-    /// <param name="node">The node of <paramref name="tree"/> that is <paramref name="root"/>'s folder.</param>
+    /// <param name="scan">The scan of <paramref name="root"/>'s folder: its tree, and its node in that tree.</param>
     /// <param name="within">The locations inside <paramref name="root"/>, whose roles its files may take.</param>
     /// <param name="below">What to pass over below the root, or null where nothing is passed over.</param>
     public void Read(
-        ExploreTree tree,
-        int node,
+        ScannedFolder scan,
         ResolvedLocation root,
         IReadOnlyList<ResolvedLocation> within,
         PassedOverPlaces.Below? below,
         CancellationToken ct)
     {
+        var tree = scan.Tree;
+
+        if (scan.FromIncompleteTable)
+        {
+            _unread.Add(new UnreadPlace(root.Folder, TableIncomplete));
+        }
+
         var inner = within.ToLookup(location => location.Folder, StringComparer.OrdinalIgnoreCase);
         var pending = new Stack<(int Node, string Path, LocationRole Role)>();
-        pending.Push((node, root.Folder, root.Role));
+        pending.Push((scan.Node, root.Folder, root.Role));
 
         while (pending.TryPop(out var folder))
         {
             ct.ThrowIfCancellationRequested();
+
+            if (tree.ListingWasRefused(folder.Node))
+            {
+                _unread.Add(new UnreadPlace(folder.Path, Refused));
+            }
 
             foreach (var child in tree.ChildrenOf(folder.Node))
             {
                 var name = tree.NameOf(child);
                 var path = Path.Join(folder.Path, name);
 
-                if (below?.WhyPassedOver(folder.Path, folder.Node == node, path, name) is { } why)
+                if (below?.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name) is { } why)
                 {
                     _passedOver.Add(new PassedOverPlace(path, why));
                 }

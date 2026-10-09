@@ -62,6 +62,7 @@ public sealed class ExploreTreeBuilder
     private readonly List<ExploreTimestamp> _created;
     private readonly List<ExploreTimestamp> _modified;
     private readonly List<FileVisibility> _visibility;
+    private readonly List<int> _listingRefused = [];
     private readonly Lock _gate = new();
 
     /// <param name="created">
@@ -150,6 +151,24 @@ public sealed class ExploreTreeBuilder
     }
 
     /// <summary>
+    /// Say that the walk was refused a listing of this folder: its size is unknown, as
+    /// <see cref="MarkSizeUnknown"/> says, and the tree names the folder
+    /// (<see cref="ExploreTree.ListingWasRefused"/>).
+    ///
+    /// <para>Named as well as sized, because a caller going through the files cannot tell a folder
+    /// it was refused from an empty one by its size, and a duplicate search that read the one as
+    /// the other would report a search that skipped a place as one that found nothing there.</para>
+    /// </summary>
+    public void MarkListingRefused(int node)
+    {
+        lock (_gate)
+        {
+            _sizeUnknown[node] = true;
+            _listingRefused.Add(node);
+        }
+    }
+
+    /// <summary>
     /// The tree as it stands, ordering each node's children by <paramref name="childOrder"/>.
     ///
     /// <para>Callable while the walk is still running, which is what makes a snapshot possible, and
@@ -184,7 +203,8 @@ public sealed class ExploreTreeBuilder
                 [.. _modified],
                 [.. _visibility],
                 present,
-                childOrder);
+                childOrder,
+                [.. _listingRefused]);
         }
     }
 }

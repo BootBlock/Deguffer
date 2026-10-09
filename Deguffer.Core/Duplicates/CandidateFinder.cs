@@ -5,16 +5,31 @@ using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Duplicates;
 
+/// <summary>
+/// A place inside a searched location that the search could not read, in whole or in part, and why,
+/// in a sentence the page shows. Named so a search that skipped a place never reads as one that
+/// found nothing there.
+/// </summary>
+public sealed record UnreadPlace(string Path, string Reason);
+
+/// <summary>A location that was read, and what to say about the route it was read by.</summary>
+/// <param name="RouteNote">The sentence <see cref="ScannedFolder.RouteNote"/> gives, or null where nothing needs saying.</param>
+public sealed record ReadLocation(string Folder, string? RouteNote);
+
 /// <summary>What <see cref="CandidateFinder.FindAsync"/> found, and everything it did not look at.</summary>
 /// <param name="Groups">The files that may match, by what was compared without reading them.</param>
 /// <param name="Unsearched">The chosen locations that were not searched, each with its reason.</param>
 /// <param name="PassedOver">The places inside the locations that were passed over, each with its reason.</param>
+/// <param name="Unread">The places inside the locations that could not be read, each with its reason.</param>
+/// <param name="Read">Each location that was read, with the route it was read by.</param>
 /// <param name="SetAside">The install locations that named nothing a search could pass over.</param>
 /// <param name="UnreadProgramLists">The lists of installed programs Windows would not read.</param>
 public sealed record CandidateFinding(
     IReadOnlyList<CandidateGroup> Groups,
     IReadOnlyList<UnsearchedLocation> Unsearched,
     IReadOnlyList<PassedOverPlace> PassedOver,
+    IReadOnlyList<UnreadPlace> Unread,
+    IReadOnlyList<ReadLocation> Read,
     IReadOnlyList<SetAsideInstallLocation> SetAside,
     IReadOnlyList<UninstallScope> UnreadProgramLists,
     LeftOutFiles LeftOut);
@@ -74,14 +89,15 @@ public sealed class CandidateFinder(
 
         for (var i = 0; i < roots.Count; i++)
         {
-            walk.Read(
-                scans[i].Tree, scans[i].Node, roots[i], locations.Within(roots[i]), passedOver?.Within(roots[i].Folder), ct);
+            walk.Read(scans[i], roots[i], locations.Within(roots[i]), passedOver?.Within(roots[i].Folder), ct);
         }
 
         return new CandidateFinding(
             CandidateGrouping.Group(walk.Found, search.Criteria),
             locations.Unsearched,
             walk.PassedOver,
+            walk.Unread,
+            [.. roots.Select((root, i) => new ReadLocation(root.Folder, scans[i].RouteNote))],
             programs.SetAside,
             programs.Unread,
             walk.LeftOut);

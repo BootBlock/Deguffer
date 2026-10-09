@@ -16,7 +16,13 @@ namespace Deguffer.Core.Exploring;
 /// Whether every record in use was read. Where it is false the tree is drawn from part of the table,
 /// and its root says its totals are lower bounds.
 /// </param>
-internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason Reason, bool WholeTable);
+/// <param name="EveryRecordRead">
+/// Whether every record in use was read and placed: <paramref name="WholeTable"/>, and no record the
+/// pass could not read. A record it could not read might have been anywhere on the volume, so where
+/// this is false no folder in the tree can be taken to hold all it holds, however whole the table
+/// read was.
+/// </param>
+internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason Reason, bool WholeTable, bool EveryRecordRead);
 
 /// <summary>
 /// Builds an <see cref="ExploreTree"/> straight from a volume's master file table — §5.5's fast
@@ -187,7 +193,8 @@ internal static class MftExploreReader
         var resolved = Resolve(components, names, parents, isDirectory, isLink, present, count);
         if (resolved.Node is not { } root)
         {
-            return new MftExploreRead(Tree: null, resolved.Reason, !couldNotReadWholeTable);
+            return new MftExploreRead(
+                Tree: null, resolved.Reason, !couldNotReadWholeTable, !couldNotReadWholeTable && !sawUnreadableRecord);
         }
 
         // The scan's root carries the path the user chose rather than the name NTFS holds for it —
@@ -214,7 +221,8 @@ internal static class MftExploreReader
                 rootPath, root, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
                 created, modified, visibility, present, ExploreChildOrder.BySize),
             FallbackReason.None,
-            !couldNotReadWholeTable);
+            !couldNotReadWholeTable,
+            !couldNotReadWholeTable && !sawUnreadableRecord);
     }
 
     /// <summary>

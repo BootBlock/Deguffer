@@ -53,14 +53,15 @@ internal static class WalkExploreReader
                 {
                     // §5.3 keeps the walk quiet about this, and it stays quiet — but the bytes
                     // behind a refused directory are real, so the totals above it are marked as
-                    // lower bounds rather than presented as measurements.
+                    // lower bounds rather than presented as measurements, and the directory is
+                    // named, so a caller going through its files can tell it from an empty one.
                     //
                     // Whatever was listed before the refusal is still recorded below rather than
                     // discarded. Enumeration can fail part way through, and the entries already in
                     // hand are as real as any others — dropping them would make the picture worse
                     // and the total shorter for no gain, and it is what the file-callback walk
                     // does with them too.
-                    builder.MarkSizeUnknown(parent);
+                    builder.MarkListingRefused(parent);
                 }
 
                 var children = Describe(contents, probe);

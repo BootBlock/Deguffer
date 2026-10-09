@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
@@ -32,6 +33,7 @@ public sealed class ExploreTree : Layout.ISizedTree
     private readonly int[] _childStart;
     private readonly int[] _children;
     private readonly bool[] _placed;
+    private readonly FrozenSet<int> _listingRefused;
 
     private ExploreTree(
         string rootPath,
@@ -50,7 +52,8 @@ public sealed class ExploreTree : Layout.ISizedTree
         int[] childStart,
         int[] children,
         bool[] placed,
-        ExploreChildOrder childOrder)
+        ExploreChildOrder childOrder,
+        FrozenSet<int> listingRefused)
     {
         RootPath = rootPath;
         RootNode = rootNode;
@@ -69,6 +72,7 @@ public sealed class ExploreTree : Layout.ISizedTree
         _childStart = childStart;
         _children = children;
         _placed = placed;
+        _listingRefused = listingRefused;
     }
 
     /// <summary>Where the scan started, as the user picked it — <c>C:\</c>.</summary>
@@ -193,6 +197,17 @@ public sealed class ExploreTree : Layout.ISizedTree
     /// </summary>
     public FileVisibility VisibilityOf(int node) => _visibility[node];
 
+    /// <summary>
+    /// Whether the walk was refused a listing of this folder, so what it holds is in the tree in part
+    /// or not at all. Its size is unknown too (<see cref="HasUnknownSizeBelow"/>), but that says only
+    /// that a total is short somewhere below; this names the folder, so a caller going through the
+    /// files can say which one it could not read rather than read it as empty.
+    ///
+    /// <para>Never true on the file table's route, which lists nothing: a record it could not read
+    /// might have been anywhere, so its root says the totals are lower bounds instead.</para>
+    /// </summary>
+    public bool ListingWasRefused(int node) => _listingRefused.Contains(node);
+
     public int ParentOf(int node) => _parents[node];
 
     /// <summary>
@@ -283,6 +298,10 @@ public sealed class ExploreTree : Layout.ISizedTree
     /// <paramref name="childOrder"/> settles the last of the three. See
     /// <see cref="ExploreChildOrder"/> for why a tree still being filled in wants a different one
     /// from a finished tree.
+    ///
+    /// <paramref name="listingRefused"/> names the folders the walk was refused a listing of, which
+    /// <see cref="ListingWasRefused"/> answers for. A set rather than a column, because a refusal is
+    /// rare against the millions of nodes a column would spend a slot on each.
     /// </summary>
     internal static ExploreTree Create(
         string rootPath,
@@ -299,7 +318,8 @@ public sealed class ExploreTree : Layout.ISizedTree
         ExploreTimestamp[] modified,
         FileVisibility[] visibility,
         bool[] present,
-        ExploreChildOrder childOrder)
+        ExploreChildOrder childOrder,
+        IReadOnlyCollection<int>? listingRefused = null)
     {
         var (childStart, children) = InvertParentLinks(parents, present);
         var order = DepthFirstOrder(childStart, children, rootNode);
@@ -309,7 +329,8 @@ public sealed class ExploreTree : Layout.ISizedTree
 
         return new ExploreTree(
             rootPath, rootNode, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-            created, modified, visibility, childStart, children, Placed(order, names.Length), childOrder);
+            created, modified, visibility, childStart, children, Placed(order, names.Length), childOrder,
+            listingRefused is { Count: > 0 } ? listingRefused.ToFrozenSet() : FrozenSet<int>.Empty);
     }
 
     /// <summary>

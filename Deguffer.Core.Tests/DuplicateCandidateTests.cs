@@ -92,7 +92,7 @@ public sealed class DuplicateCandidateTests : IDisposable
             LocationRole.Reference, DriveX);
 
         var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]));
-        walk.Read(tree, tree.RootNode, root, [reference], below: null, default);
+        walk.Read(Scanned(tree, tree.RootNode), root, [reference], below: null, default);
 
         var group = Assert.Single(CandidateGrouping.Group(walk.Found, MatchCriteria.Size));
         Assert.Equal(LocationRole.Reference, group.Files.Single(file => file.Name == "a.jpg").Role);
@@ -316,8 +316,12 @@ public sealed class DuplicateCandidateTests : IDisposable
         var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search, DriveX);
         var walk = new CandidateWalk(new DuplicateSearch(criteria, [root.Given]));
 
-        walk.Read(tree, node, root, [], below: null, default);
+        walk.Read(Scanned(tree, node), root, [], below: null, default);
 
         return (CandidateGrouping.Group(walk.Found, criteria), walk.LeftOut);
     }
+
+    /// <summary><paramref name="node"/> of a tree read whole from a file table.</summary>
+    private static ScannedFolder Scanned(ExploreTree tree, int node) =>
+        new(tree.PathOf(node), tree, node, ScanStrategy.MasterFileTable, FallbackReason.None, FromIncompleteTable: false);
 }
