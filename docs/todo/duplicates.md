@@ -117,7 +117,11 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **The scan.** `IExploreScanner.ScanAsync` scans one root, by the file table when elevated and by
   a bounded walk otherwise, into an `ExploreTree`. Each call reads the whole file table again, so
   `ExploreScanner.ScanFoldersAsync` (phase 1) reads each volume's table once, rooted at the
-  volume's top, and finds each folder in it, walking a folder the table cannot answer for. The tree
+  volume's top, and finds each folder in it by its exact name, walking a folder the table cannot
+  answer for or holds only in another case. Each `ScannedFolder` carries its route's note, and
+  says whether it came from a table that was not read whole or held a record the read could not
+  place (`MftExploreRead.EveryRecordRead`); the walk names each folder Windows refused to list
+  (`ExploreTree.ListingWasRefused`). The tree
   holds names, parents, sizes on disk, lengths, storage, times and, since phase 1, whether an entry
   is hidden or a system file (`FileVisibility`); it holds no file IDs or change times. Its times are
   whole minutes (`ExploreTimestamp`), so they never decide a match or a re-check. The file-table
@@ -153,11 +157,11 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Refusals.** `ExploreActionPolicy.MayRemove` decides one path. Asked of a folder, it also refuses
   a folder that *holds* something refused (`HeldLocations`), so it cannot serve as a skip list
   (`C:\Users` would be skipped). `ExploreActionPolicy.RefusedAtAndBelow` (phase 1) answers for a
-  place and everything in it: what Windows and NTFS keep at the top of a volume, every
-  `$Recycle.Bin`, Outlook's mail stores and its `Outlook Files` folder, and each `PathAndBelow`
-  region less what a `Permitting` region inside the place carves out, so `C:\Users` and the
-  signed-in profile are not refused and another account's profile is. `MayRemove` asks the same
-  members first. Its refusal reasons name Explore.
+  place and everything in it: what Windows and NTFS keep at the top of a volume and every
+  `$Recycle.Bin` (`TopOfVolumeRefusals`), Outlook's mail stores and its `Outlook Files` folder, and
+  each `PathAndBelow` region less what a `Permitting` region inside the place carves out, so
+  `C:\Users` and the signed-in profile are not refused and another account's profile is. `MayRemove`
+  asks the same members first. Its refusal reasons name Explore.
 - **Install locations.** `InstallLocation.Of` accepts any fully qualified path an entry gives,
   including a drive's top or a profile.
 - **Removal.** `ExploreRemover.RemoveAsync` partitions the whole batch by the policy once, then
@@ -195,8 +199,14 @@ measurement replaces the mark here.
    only the form can show it. Two locations are one folder where their final paths are equal, or where
    `ReachedFolder.At` finds one folder at two mounts of one volume. Whether one location holds
    another is asked of the final paths ordinally, because a case-sensitive folder can hold `Photos`
-   and `photos`. A share is refused before anything is opened on it, and a location on a volume
-   that is not `IsLocalDisk` is refused, which rules out network drives and a cloud client's drive.
+   and `photos`, and only of two locations on one volume: a volume with no letter is named by the
+   folder it is mounted at, the enumeration of the drive holding that folder does not cross the
+   mount point, so a location on another volume is enumerated in its own right. A share, a letter
+   the inventory calls a network drive and a drive that keeps its files in the cloud are refused
+   before anything is opened on them, because opening is itself a conversation with another
+   machine or the cloud client; any other drive waits for the final path, because a link on it can
+   lead to a local disk. The final path is then asked again, because a link can lead to a share or
+   to a volume that is not `IsLocalDisk`, which rules out network drives and a cloud client's drive.
    A location Windows will not open is reported as one it could not open, never as absent. A file's
    role is that of the innermost location holding it, a folder given in both roles is a reference,
    and a folder that matches a location only when case is ignored takes the reference role where
@@ -217,17 +227,22 @@ measurement replaces the mark here.
    location is set aside and reported, as is a list of programs Windows would not read. The search
    reports each place it passed over with its reason (`CandidateFinding`).
 4. **Enumeration.** `ExploreScanner.ScanFoldersAsync` reads each volume's file table once, rooted at
-   the volume's top, and finds each location in it, and walks a location the table cannot answer
-   for, so the choice of route stays in `ExploreScanner`. `CandidateWalk` applies the places passed
-   over, links, empty files, hidden and system files, and the size and extension filters as it reads
-   the tree, and builds no path until a file has a match. The scanner still reads a passed-over
-   place's entries on the walk; phase 3 measures whether passing over them in the walk itself is
-   worth its cost. **Measured and decided:** hidden and system attributes became a column on both
-   routes (`FileVisibility`, one byte an entry, about 2.4 MB on an ordinary system volume's 2.4
-   million records), because neither route reads anything more for it: the file table takes the
-   attributes from the `$STANDARD_INFORMATION` it already reads the dates from, and the walk's
-   listing hands them over. The switches apply to files, so a visible file in a hidden folder is
-   searched.
+   the volume's top, and finds each location in it by its exact name, and walks a location the table
+   cannot answer for or holds only in another case, so the choice of route stays in
+   `ExploreScanner`. `CandidateWalk` applies the places passed over, links, empty files, hidden and
+   system files, and the size and extension filters as it reads the tree, and builds no path until a
+   file has a match. It names each folder Windows refused to list and each location read from a
+   table that was not read whole or held a record the read could not place
+   (`CandidateFinding.Unread`), so a search that skipped a place never reads as one that found
+   nothing there; a refused folder inside a place passed over is named once, as passed over. Each
+   location read carries the note on the route it was read by (`CandidateFinding.Read`). The scanner
+   still reads a passed-over place's entries on the walk; phase 3 measures whether passing over them
+   in the walk itself is worth its cost. **Decided:** hidden and system attributes became a column
+   on both routes (`FileVisibility`, one byte an entry; by arithmetic rather than measurement, about
+   2.4 MB for the 2.4 million records of an ordinary system volume), because neither route reads
+   anything more for it: the file table takes the attributes from the `$STANDARD_INFORMATION` it
+   already reads the dates from, and the walk's listing hands them over. The switches apply to
+   files, so a visible file in a hidden folder is searched.
 5. **Grouping by length and name.** Candidates are grouped by length where the size or the content
    is a criterion, and by name (ordinal, ignoring case) where the name is, so a name-only search
    groups files of any length; singletons are dropped; cloud-only files are kept only where content
@@ -236,14 +251,17 @@ measurement replaces the mark here.
    full-precision times, so where it is the only criterion every file kept is one group until then.
 
 Proves: a search with no criteria or no location is refused; two locations reaching one folder
-through a substituted drive, a mounted volume or a junction are enumerated once; a reference inside a
-searched drive stays a reference, and a folder in both roles is a reference; a network location and
-a remotely stored drive are refused; every default skip comes from the shared refusal member and is
-reported, including a program's install location and other accounts' profiles; `C:\Users` and the
-signed-in profile are not skipped; an install location naming a drive's top, a profile or Documents
-is set aside and reported; each filter excludes exactly what it names, at its boundaries; an empty
-file and a link never reach a group, while a deduplicated, compressed or cloud file does; names
-group ignoring case.
+through a substituted drive, a mounted volume or a junction are enumerated once; a location on a
+volume mounted inside another is enumerated in its own right; a reference inside a searched drive
+stays a reference, and a folder in both roles is a reference; a network location and a remotely
+stored drive are refused, a mapped network drive before anything is opened on it; a folder the table
+holds only in another case is walked; a folder Windows will not list and a location read from an
+incomplete table are named; every default skip comes from the shared refusal member and is reported,
+including a program's install location and other accounts' profiles; `C:\Users` and the signed-in
+profile are not skipped; an install location naming a drive's top, a profile or Documents is set
+aside and reported; each filter excludes exactly what it names, at its boundaries; an empty file and
+a link never reach a group, while a deduplicated, compressed or cloud file does; names group
+ignoring case.
 
 ### Phase 2 — Identity (Core)
 
@@ -294,7 +312,8 @@ for its content (a content seam that fails the test if it is); a file that chang
 out; a locked, refused or vanished file is left out; equal first and last blocks with different
 middles do not match; each algorithm agrees with a published test vector; two volumes on one
 spinning disk share one reader; cancellation stops every stage and keeps what was confirmed; the
-path reaching Win32 is in its `\\?\` form.
+path reaching Win32 is in its `\\?\` form. Measured and recorded here: a walk of a drive with and
+without listing the places phase 1 passes over, and the decision it supports.
 
 ### Phase 4 — Marking (Core)
 
