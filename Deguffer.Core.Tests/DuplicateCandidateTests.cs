@@ -255,6 +255,54 @@ public sealed class DuplicateCandidateTests : IDisposable
         Assert.Equal(["report.pdf", "report.pdf"], Names(group));
     }
 
+    /// <summary>
+    /// The tree keeps a modified time only to the minute, so the time waits for phase 2's
+    /// full-precision times, and until then every file kept is one group, whatever its length or name.
+    /// </summary>
+    [Fact]
+    public async Task AModifiedTimeSearchKeepsEveryFileInOneGroupUntilTheTimesAreRead()
+    {
+        _tree.File(10, "One", "a.jpg");
+        _tree.File(20, "Two", "b.png");
+        _tree.File(30, "Two", "c");
+
+        var found = await _tree.FindAsync(MatchCriteria.Modified, Searched());
+
+        var group = Assert.Single(found.Groups);
+        Assert.Null(group.Length);
+        Assert.Null(group.Name);
+        Assert.Equal(["a.jpg", "b.png", "c"], Names(group));
+    }
+
+    /// <summary>
+    /// The file table gives a file it could not size no length, which reads as none at all. Such a
+    /// file may hold anything, so it is counted apart from an empty file, which the page says is never
+    /// matched because its name is its content.
+    /// </summary>
+    [Fact]
+    public void AFileWhoseLengthIsUnknownIsNotCountedAsEmpty()
+    {
+        var directory = MftRecord.ReservedRecordCount;
+        var unsized = directory + 2;
+        var fixture = new MftFixture()
+            .AddDirectory(directory, MftRecord.RootRecordNumber, "Data")
+            .AddFile(directory + 1, directory, "empty.bin", allocated: 0, logical: 0)
+            .AddFileWithDataInAnExtensionRecord(
+                unsized, directory, "unsized.bin", allocated: 4096, logical: 4096, extension: directory + 3, ListMismatch.ItsOwnSequence);
+
+        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, onProgress: null, default).Tree!;
+        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+
+        // The fixture gives the file no length, and says so, which is the case under test.
+        Assert.Equal(0, tree.LengthOf((int)unsized));
+        Assert.True(tree.HasUnknownSizeBelow((int)unsized));
+
+        var leftOut = Walk(tree, data, MatchCriteria.Size).LeftOut;
+
+        Assert.Equal(1, leftOut.UnknownLength);
+        Assert.Equal(1, leftOut.Empty);
+    }
+
     /// <summary>A content match is a match on length, so a content search groups by length first.</summary>
     [Fact]
     public async Task AContentSearchGroupsByLength()
