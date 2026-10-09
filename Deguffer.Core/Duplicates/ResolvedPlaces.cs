@@ -56,14 +56,14 @@ internal sealed class ResolvedPlaces
     ///
     /// <para>A share, a network drive and a drive that keeps its files in the cloud are never opened,
     /// as a search location is not (<see cref="SearchLocations"/>): opening is itself a conversation
-    /// with another machine or the cloud client, and no copy is searched there to be matched. A volume
-    /// Windows names by its GUID is named by where it is mounted, as a searched one is.</para>
+    /// with another machine or the cloud client, and no copy is searched there to be matched. A path
+    /// Windows gives only as a device path names no folder (<see cref="SearchLocations.Displayed"/>).</para>
     /// </summary>
     /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
     internal static ReachedFolder? FollowedTo(string path, IVolumeInventory volumes, FileInformation files) =>
         SearchLocations.WhyNotOpened(path, volumes) is null
         && files.FinalPath(path) is { } final
-        && SearchLocations.Displayed(final, volumes) is { } shown
+        && SearchLocations.Displayed(final) is { } shown
             ? ReachedFolder.At(shown, volumes)
             : null;
 
