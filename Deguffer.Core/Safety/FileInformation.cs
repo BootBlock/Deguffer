@@ -8,10 +8,10 @@ namespace Deguffer.Core.Safety;
 /// reads no data and so can neither download a cloud file nor be refused for want of read access.
 /// Stateless apart from how it opens a handle, so one instance serves every caller (G5).
 ///
-/// <para><b>One home for these calls.</b> Each caller that needed one declared its own, so the same
-/// question had several answers waiting to drift apart. The final path is the first to move here;
-/// what a handle says about a file's identity and its streams joins it as the duplicate search needs
-/// them (<c>docs/todo/duplicates.md</c>, phase 2).</para>
+/// <para><b>The one declaration of <c>GetFinalPathNameByHandle</c>.</b> What a handle says about a
+/// file's identity and its streams belongs here too, and comes here with the duplicate search's
+/// identities (<c>docs/todo/duplicates.md</c>, phase 2); until then <c>HardLinkAwareScanner</c> and
+/// <c>CloudFilesNative</c> each declare their own <c>GetFileInformationByHandleEx</c>.</para>
 /// </summary>
 internal sealed unsafe partial class FileInformation
 {
