@@ -503,7 +503,10 @@ store loads empty; the CSV round-trips hostile paths and a long path whole.
 Drive the whole feature with the `verify` skill, unelevated and elevated, over a scratch tree that
 holds hard links, a junction loop, a substituted drive, a case-sensitive folder, a named stream, a
 long path, an empty file, a locked file, a reference folder, a file the bin cannot take and, where
-the machine has one, a OneDrive online-only file. Attach a scratch disk with a FAT32 and an exFAT
+the machine has one, a OneDrive online-only file, and a volume mounted in a folder with no drive
+letter, holding a program's install location and a place a Storage clean names, so Windows gives
+their final paths in the `\\?\Volume{GUID}\` form that `ResolvedPlaces.FollowedTo` names by the
+mount (no test can produce that form without mounting such a volume). Attach a scratch disk with a FAT32 and an exFAT
 volume, measure whether each answers `FileIdInfo` or only the older call, and whether a file keeps
 its ID across a rename and a move, record it under the technical facts, and search both. Read a
 Recycle Bin's size from the x86 build, which asks for it with the packed 20-byte `SHQUERYRBINFO`
@@ -602,10 +605,14 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   occupy, as Windows reports it, which a removal may free less than, since shared clusters count in
   full and the Recycle Bin frees nothing until it is emptied (§7.4 reworded); the confirmation
   judges the marks again against the machine as it is then (`DuplicateMarks.RejudgeAsync`,
-  `RemovalConfirmation.ForAsync`), keeping every mark; a program folder, like a place Storage
-  cleans, is asked as named and at the final path a link on the way leads to, and an entry that
-  leads to a folder naming no program is set aside; neither is opened on a share, a network drive
-  or a cloud drive to follow it (`ResolvedPlaces.FollowedTo`). Measured: what a bin holds and its limit, in the technical facts.
+  `RemovalConfirmation.ForAsync`), keeping every mark: Explore's policy, Storage's places, the
+  installed programs (`MachineProtections.ProgramFolders`, keeping every program folder the search
+  knew), the temporary folder, the cloud folders, and each drive's bus asked again rather than
+  remembered (`VolumeMediaCache.Now`), because a disk moved into a USB dock keeps its volume and
+  every file ID; a program folder, like a place Storage cleans, is asked as named and at the final
+  path a link on the way leads to, and an entry that leads to a folder naming no program is set
+  aside; neither is opened on a share, a network drive or a cloud drive to follow it
+  (`ResolvedPlaces.FollowedTo`). Measured: what a bin holds and its limit, in the technical facts.
   Corrected here: step 1 (not the tool roots), the internal-drive test, and the facts on the
   Recycle Bin and on provider targets.
 
