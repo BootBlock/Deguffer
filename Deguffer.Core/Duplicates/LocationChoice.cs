@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 
 namespace Deguffer.Core.Duplicates;
@@ -23,13 +24,17 @@ public static class LocationChoice
     /// <paramref name="listed"/>, or null where it can. The same path twice is refused, compared case
     /// and all, because a case-sensitive folder can hold <c>Photos</c> and <c>photos</c>, and those are
     /// two places.
+    ///
+    /// <para>What a folder on a disk is, <see cref="PickedFolder.OnDisk"/> says, as it does for every
+    /// page. The words are this page's own, because <see cref="PickedFolder.NotOnDisk"/> offers a
+    /// network share, and the search refuses one.</para>
     /// </summary>
     public static string? WhyNotAdded(IEnumerable<SearchLocation> listed, string picked)
     {
         ArgumentNullException.ThrowIfNull(listed);
         ArgumentNullException.ThrowIfNull(picked);
 
-        if (!Path.IsPathFullyQualified(picked))
+        if (PickedFolder.OnDisk(picked) is null)
         {
             return NotOnDisk;
         }

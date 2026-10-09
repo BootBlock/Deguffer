@@ -327,7 +327,85 @@ public sealed class DuplicatesViewModelTests : IDisposable
 
         Assert.Equal(["kept.jpg"], page.Groups.Select(row => row.Copies[0].Copy.Name));
         Assert.StartsWith("Stopped.", page.Headline, StringComparison.Ordinal);
-        Assert.Equal(SearchNoteKind.Stopped, page.Notes[^1].Kind);
+        Assert.Equal(DuplicateSearchNotes.Stopped, page.Notes[^1]);
         Assert.False(page.IsSearching);
+    });
+
+    /// <summary>
+    /// The Remove button takes its location out of the search, and removing the only one leaves
+    /// nothing to search, so the search cannot start and says why.
+    /// </summary>
+    [Fact]
+    public void RemovingALocationTakesItOutOfTheSearch() => UiThread.Run(async () =>
+    {
+        var page = PageWithPhotos();
+        page.Locations.AddFolder(_scene.Folder("Backup"));
+
+        page.Locations.Rows[0].RemoveCommand.Execute(null);
+
+        Assert.Equal([new SearchLocation(_scene.Folder("Backup"))], (await SearchedWith(page)).Locations);
+
+        page.Locations.Rows[0].RemoveCommand.Execute(null);
+
+        Assert.Empty(page.Locations.Chosen);
+        Assert.Equal("Choose at least one drive or folder to search.", page.WhyCannotSearch);
+        Assert.False(page.SearchCommand.CanExecute(null));
+    });
+
+    /// <summary>
+    /// Each copy's row shows its own path, cut where Core says it differs from the others', so the
+    /// part picked out is that copy's and not another's.
+    /// </summary>
+    [Fact]
+    public void EachCopyShowsWhereItsOwnPathDiffers() => UiThread.Run(async () =>
+    {
+        var group = DuplicateScene.Group(
+            MatchCriteria.Content,
+            _scene.Copy(Path.Combine(_scene.Folder("Documents"), "Trip", "beach.jpg")),
+            _scene.Copy(Path.Combine(_scene.Folder("Downloads"), "beach.jpg")),
+            _scene.Copy(Path.Combine(_scene.Folder("Documents"), "Trip 2", "beach.jpg")));
+        var page = PageWithPhotos(Finds(group));
+
+        await page.SearchCommand.ExecuteAsync(null);
+
+        var copies = Assert.Single(page.Groups).Copies;
+        var paths = PathDifference.Of([.. group.Files.Select(copy => copy.Path)]);
+
+        // The fixture holds three different differences, so a row given another copy's parts shows.
+        Assert.Equal(3, paths.Select(parts => parts.Differs).Distinct().Count());
+        Assert.Equal(group.Files, copies.Select(row => row.Copy));
+        Assert.Equal(paths, copies.Select(row => new PathParts(row.Same, row.Differs, row.SameEnd)));
+    });
+
+    /// <summary>
+    /// A group, or the end of a search, that arrives before the marks were handed over is a broken
+    /// contract, and the page says so rather than leaving the group out, which would read as files
+    /// with no duplicate.
+    /// </summary>
+    [Fact]
+    public void AGroupArrivingWithoutTheMarksIsAnError() => Assert.Throws<InvalidOperationException>(() => UiThread.Run(async () =>
+    {
+        var group = _scene.Pair("a.jpg", 4096);
+
+        RunDuplicateSearch run = async (search, marksMade, finding, found, progress, ct) =>
+        {
+            found.Report(group);
+            await Task.Delay(Timeout.Infinite, ct);
+
+            return new DuplicateSearchResult(DuplicateScene.Finding(group), [group], default, Stopped: false);
+        };
+
+        await PageWithPhotos(run).SearchCommand.ExecuteAsync(null);
+    }));
+
+    [Fact]
+    public void ASearchEndingWithoutTheMarksIsAnError() => UiThread.Run(async () =>
+    {
+        RunDuplicateSearch run = (search, marksMade, finding, found, progress, ct) =>
+            Task.FromResult(new DuplicateSearchResult(DuplicateScene.Finding(), [], default, Stopped: false));
+        var page = PageWithPhotos(run);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => page.SearchCommand.ExecuteAsync(null));
+        Assert.Empty(page.Groups);
     });
 }

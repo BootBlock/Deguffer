@@ -8,7 +8,7 @@ namespace Deguffer.App.Shell;
 ///
 /// <para>The Windows App SDK picker rather than <c>Windows.Storage.Pickers</c>. The older one does
 /// not work in a process running as administrator: it fails with <c>E_FAIL</c>, and Deguffer
-/// offers to relaunch itself elevated on two pages, so every folder chosen after that would have
+/// offers to relaunch itself elevated on several pages, so every folder chosen after that would have
 /// ended the process from an <c>async void</c> handler. This one takes its owner as a
 /// <see cref="Microsoft.UI.WindowId"/> and supports an elevated caller.</para>
 /// </summary>

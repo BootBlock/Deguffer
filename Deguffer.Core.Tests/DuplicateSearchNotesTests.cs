@@ -31,14 +31,14 @@ public sealed class DuplicateSearchNotesTests
 
         Assert.Equal(
         [
-            (SearchNoteKind.NotSearched, @"\\server.test\share was not searched. It is on another computer."),
-            (SearchNoteKind.PassedOver, @"Passed over C:\Windows. Windows keeps it."),
-            (SearchNoteKind.NotRead, @"Not read: C:\Users\other. Windows would not list it."),
-            (SearchNoteKind.Route, @"C:\: It was walked."),
-            (SearchNoteKind.Programs, @"'Tool' says it is installed in C:\Users\testuser, which was not passed over: it is the profile of an account on this computer."),
-            (SearchNoteKind.Programs, "Windows would not read the programs installed for 'All users', so the folders they are installed in were not known, and may have been searched."),
+            @"\\server.test\share was not searched. It is on another computer.",
+            @"Passed over C:\Windows. Windows keeps it.",
+            @"Not read: C:\Users\other. Windows would not list it.",
+            @"C:\: It was walked.",
+            @"'Tool' says it is installed in C:\Users\testuser, which was not passed over: it is the profile of an account on this computer.",
+            "Windows would not read the programs installed for 'All users', so the folders they are installed in were not known, and may have been searched.",
         ],
-        notes.Select(note => (note.Kind, note.Text)));
+        notes);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public sealed class DuplicateSearchNotesTests
             @"The reference C:\Backup was not searched. Windows would not open it.",
             @"The reference C:\Windows\Archive was not searched. Windows keeps it.",
         ],
-        notes.Select(note => note.Text));
+        notes);
     }
 
     [Fact]
@@ -67,7 +67,6 @@ public sealed class DuplicateSearchNotesTests
         var notes = DuplicateSearchNotes.Of(Finding(leftOut: new LeftOutFiles(
             Links: 1, Empty: 2, UnknownLength: 3, OnlyInTheCloud: 4, Gone: 5, Unidentified: 6, ReadFailed: 7, Changed: 1_000)));
 
-        Assert.All(notes, note => Assert.Equal(SearchNoteKind.LeftOut, note.Kind));
         Assert.Equal(
         [
             "1 link was not followed: a link is never a file to match.",
@@ -79,7 +78,7 @@ public sealed class DuplicateSearchNotesTests
             "7 files were left out because they could not be read: another program held them, or Windows refused. They may still be there.",
             $"{1_000:N0} files were left out because they changed while the search read them.",
         ],
-        notes.Select(note => note.Text));
+        notes);
     }
 
     /// <summary>
@@ -96,8 +95,11 @@ public sealed class DuplicateSearchNotesTests
 
         Assert.Equal(atFinding, atEnd.Take(atFinding.Count));
         Assert.Equal(
-            [SearchNoteKind.LeftOut, SearchNoteKind.Stopped],
-            atEnd.Skip(atFinding.Count).Select(note => note.Kind));
+            [
+                "1 file was left out because they could not be read: another program held them, or Windows refused. They may still be there.",
+                DuplicateSearchNotes.Stopped,
+            ],
+            atEnd.Skip(atFinding.Count));
     }
 
     private static CandidateFinding Finding(

@@ -108,7 +108,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     public ObservableCollection<DuplicateGroupRow> Groups { get; } = [];
 
     /// <summary>What the search did not look at, or left out.</summary>
-    public ObservableCollection<SearchNote> Notes { get; } = [];
+    public ObservableCollection<string> Notes { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasNotes))]
@@ -207,7 +207,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             return;
         }
 
-        Marks = search.Marks;
+        Marks = search.MarksMade;
         ShowNotes(DuplicateSearchNotes.Of(finding));
     }
 
@@ -217,13 +217,14 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// </summary>
     private void Confirmed(Search search, DuplicateGroup group)
     {
-        // The marks are handed over before the first group, by the search's own thread, and are read
-        // here rather than from Marks so a group never waits on the finding's notes being shown.
-        if (!ReferenceEquals(_search, search) || search.Marks is not { } marks)
+        if (!ReferenceEquals(_search, search))
         {
             return;
         }
 
+        // The marks are handed over before the first group, by the search's own thread, and are read
+        // here rather than from Marks so a group never waits on the finding's notes being shown.
+        var marks = search.MarksMade;
         var (added, index) = marks.Add(group);
         Groups.Insert(index, new DuplicateGroupRow(added, marks.Keeping));
         Headline = $"Searching… {Groups.Count:N0} {(Groups.Count == 1 ? "group" : "groups")} so far.";
@@ -258,10 +259,11 @@ public sealed partial class DuplicatesViewModel : ObservableObject
 
     private void Finished(Search search, DuplicateSearchResult result)
     {
-        Marks = search.Marks;
+        var marks = search.MarksMade;
+        Marks = marks;
         ShowNotes(DuplicateSearchNotes.Of(result));
 
-        var freeable = Marks is { } marks ? Groups.Sum(row => row.Marks.FreeableSpace(marks.Keeping)) : 0;
+        var freeable = Groups.Sum(row => row.Marks.FreeableSpace(marks.Keeping));
         var found = Groups.Count == 0
             ? "No duplicates found."
             : $"{Groups.Count:N0} {(Groups.Count == 1 ? "group" : "groups")}. Copies that could go occupy {FreeSpace.Format(freeable)}.";
@@ -273,7 +275,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// Bring the notes up to date in place: the finding's notes stay where they are, and what the
     /// end of the search adds (files left out while reading, a stop) is written in after them.
     /// </summary>
-    private void ShowNotes(IReadOnlyList<SearchNote> notes)
+    private void ShowNotes(IReadOnlyList<string> notes)
     {
         Core.Viewing.LiveList.Rewrite(Notes, notes);
         NotesHeading = notes.Count switch
@@ -297,5 +299,13 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             get => Volatile.Read(ref field);
             set => Volatile.Write(ref field, value);
         }
+
+        /// <summary>
+        /// The marks, which the search hands over before its finding, its first group and its end.
+        /// Anything arriving without them is a broken contract, not a search to show half of: a group
+        /// left out of the list would read as files with no duplicate.
+        /// </summary>
+        public DuplicateMarks MarksMade =>
+            Marks ?? throw new InvalidOperationException("The search reported before handing over its marks.");
     }
 }
