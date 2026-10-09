@@ -220,4 +220,36 @@ public sealed class EmbyTranscodeProviderTests : IDisposable
         Assert.False(policy.MayRemove(movedTemp).IsAllowed);
         Assert.True(policy.MayRemove(beside).IsAllowed);
     }
+
+    // ---- §7.4: what the clean can reach --------------------------------------------------------
+
+    /// <summary>§7.4 keeps no duplicate copy where the next clean could remove it.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultTranscoderFolder()
+    {
+        CreateData();
+        Write(Path.Combine(TranscodingTemp, "a1b2c3.ts"), Old);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// The place follows a moved transcoder to the <c>transcoding-temp</c> Emby made there, and stops
+    /// at it: the folder the setting names is the user's, and a film beside it may be the copy a
+    /// duplicate search keeps.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesFollowAMovedTranscoderFolderAndNoFurther()
+    {
+        CreateData();
+        var moved = Path.Combine(_temp.Path, "Scratch");
+        Write(Path.Combine(moved, EmbyServerLayout.TranscodeFolderName, "a1b2c3.ts"), Old);
+        var beside = Write(Path.Combine(moved, "holiday.mkv"), Old);
+        MoveTranscoder(moved);
+
+        var provider = CreateProvider();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Holds(beside));
+    }
 }

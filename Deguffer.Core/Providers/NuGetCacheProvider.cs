@@ -105,6 +105,26 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             static _ => false),
     ];
 
+    /// <summary>
+    /// Every local <c>dotnet nuget locals all --clear</c> empties: each one <c>--list</c> reports, and
+    /// the documented defaults as well, because <c>NUGET_PACKAGES</c>, <c>NUGET_HTTP_CACHE_PATH</c>
+    /// or a <c>NuGet.Config</c> edit can move one back after a duplicate search has asked. Never
+    /// the folders around them, where the configuration and the credential plugins are.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        IReadOnlyList<string> reported = Environment.FindExecutable("dotnet") is { } dotnet
+            ? await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false)
+            : [];
+
+        return
+        [
+            .. DefaultLocals().Concat(reported)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(CleanedPlace.Whole),
+        ];
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("dotnet") is not null);
 

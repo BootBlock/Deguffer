@@ -118,6 +118,14 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
                 && (survey.Targets.Count > 0 || survey.Declined.Count > 0 || survey.Unreadable)));
 
     /// <summary>
+    /// The per-project log folders. Every server's log is a folder named by a prefix inside one of them,
+    /// so no narrower place holds a log a server writes after this is asked; the command-line tool's
+    /// own folder above them is never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(CacheFolder)]);
+
+    /// <summary>
     /// §5.2 as §7.1 needs it read from outside: the tool's folder and the cache folder in it, both
     /// recognising nothing, and each project's folder, recognising a server's log folder by its name.
     ///

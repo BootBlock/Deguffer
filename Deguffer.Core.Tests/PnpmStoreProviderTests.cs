@@ -300,4 +300,20 @@ public sealed class PnpmStoreProviderTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(store, "files")).IsAllowed);
         Assert.False(policy.MayRemove(holder).IsAllowed);
     }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultStoreThePruneIsSentTo()
+    {
+        Populate(Store);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverAStorePnpmReportsOutsideItsHome()
+    {
+        var store = Populate(Path.Combine(_environment.UserProfile, ".pnpm-store", "v10"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(Reporting(store))));
+    }
 }

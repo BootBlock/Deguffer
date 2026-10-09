@@ -96,6 +96,15 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
     /// a dozen Squirrel applications reads as a dozen headings rather than one list of folders.
     /// </summary>
     [Fact]
+    public async Task CleanedPlacesCoverEveryBuildThePlanRemoves()
+    {
+        CreateApplication("Chatterbox", "3.6.3", "3.6.4", "3.10.0");
+        CreateApplication("Notekeeper", "1.0.0", "1.1.0");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
     public async Task ListsEachBuildUnderItsApplicationWithItsVersion()
     {
         var chatterbox = CreateApplication("Chatterbox", "3.6.3", "3.10.0");

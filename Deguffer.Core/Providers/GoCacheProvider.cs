@@ -146,7 +146,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
         new ToolRoot(
             workspace,
             "This is a Go workspace, holding the programs you installed with 'go install' and your own "
-            + "source. Explore removes things from inside it, never the workspace itself.",
+            + "source. Deguffer removes things from inside it, never the workspace itself.",
             static _ => true),
 
         new ToolRoot(
@@ -168,6 +168,29 @@ public sealed class GoCacheProvider : CleanupProviderBase
         "This is inside your Go workspace. Deguffer clears the module cache in there and "
         + "nothing else, and leaves whatever Go keeps beside it alone.",
         static name => name.Equals("mod", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The build cache and the module cache <c>go clean</c> is sent to, as <c>go env</c> reports
+    /// them, and their documented defaults as well, because the environment or <c>go env -w</c> can
+    /// move either back after a duplicate search has asked. The module cache is also named in every
+    /// workspace <c>GOPATH</c> lists, since unsetting <c>GOMODCACHE</c> puts it in the first of them.
+    /// Never a workspace's <c>bin</c> or <c>src</c>.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        List<string> caches = [DefaultBuildCache, ModuleCacheIn(DefaultGoPath)];
+
+        if (Environment.FindExecutable("go") is { } go)
+        {
+            var located = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
+
+            caches.Add(located.BuildCache);
+            caches.Add(located.ModuleCache);
+            caches.AddRange(located.GoPaths.Select(ModuleCacheIn));
+        }
+
+        return [.. caches.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)];
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("go") is not null);
@@ -320,7 +343,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
             buildCache ?? DefaultBuildCache,
 
             // Go's own default for a list: the module cache is pkg\mod in the first workspace.
-            moduleCache ?? Path.Combine(workspaces[0], "pkg", "mod"),
+            moduleCache ?? ModuleCacheIn(workspaces[0]),
             workspaces,
             Answered: buildCache is not null && moduleCache is not null);
     }
@@ -365,6 +388,9 @@ public sealed class GoCacheProvider : CleanupProviderBase
         string ModuleCache,
         IReadOnlyList<string> GoPaths,
         bool Answered);
+
+    /// <summary>Where Go puts the module cache in a workspace when <c>GOMODCACHE</c> is unset.</summary>
+    private static string ModuleCacheIn(string workspace) => Path.Combine(workspace, "pkg", "mod");
 
     private static string? Reported(string[] lines, int index) =>
         index < lines.Length && Path.IsPathRooted(lines[index]) ? lines[index] : null;

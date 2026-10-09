@@ -127,6 +127,7 @@ internal static class CandidateGrouping
             description.Names > 1 ? namesOf(first) : [description.Path],
             description.Names,
             description.Length,
+            description.Allocated,
             description.Modified,
             StorageOf(first),
             paths.Any(path => path.Found.Role == LocationRole.Reference) ? LocationRole.Reference : LocationRole.Search)

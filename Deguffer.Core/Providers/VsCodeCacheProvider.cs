@@ -216,6 +216,24 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
                select root,
         ];
 
+    /// <summary>
+    /// Each cache this row recognises in the folder of every editor the discovery finds, whether or not
+    /// one is there today, and the web cache in every webview partition, named by its own name because
+    /// a partition is numbered and a new one appears with each webview. The settings, workspace state
+    /// and local history beside them are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from editor in Installed(ct)
+               from place in FolderChildren.DisposableNames
+                   .Select(name => CleanedPlace.Whole(Path.Combine(editor.UserData.Path, name)))
+                   .Append(CleanedPlace.FoldersNamed(
+                       Path.Combine(editor.UserData.Path, VsCodeWebStorage.DirectoryName),
+                       PartitionChildren.DisposableNames))
+               select place,
+        ]);
+
     public override void InvalidateCaches()
     {
         _installed = null;

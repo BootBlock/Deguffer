@@ -88,6 +88,25 @@ public sealed class UvCacheProvider : CleanupProviderBase
         Task.FromResult(Environment.FindExecutable("uv") is not null);
 
     /// <summary>
+    /// The cache <c>uv cache clean</c> is sent to: the one uv reports, and the documented default as
+    /// well, because <c>UV_CACHE_DIR</c> can move the cache back to it after a duplicate search has
+    /// asked. Only the cache, never the state directory around it.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        var uv = Environment.FindExecutable("uv");
+
+        if (uv is null)
+        {
+            return [CleanedPlace.Whole(DefaultCacheDirectory)];
+        }
+
+        var reported = await ResolveCacheDirectoryAsync(uv, ct).ConfigureAwait(false);
+
+        return [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(reported)];
+    }
+
+    /// <summary>
     /// The resolved cache directory is a cache like any other, and UV_CACHE_DIR can move it
     /// between one scan and the next. Keeping it across an invalidation would measure a location
     /// uv has stopped using.

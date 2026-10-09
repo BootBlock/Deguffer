@@ -562,4 +562,30 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
 
         Assert.True(_environment.RegistryReads > reads, "a rescan reused settings read before it.");
     }
+
+    /// <summary>§7.4: the places named without planning hold every cache folder the plan empties.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        CreateLayout();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 for a cache the settings moved: the folders inside the ones the settings name are held too.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverACacheTheSettingsMoved()
+    {
+        var chosen = Path.Combine(_temp.Path, "scratch-disk", "Adobe");
+        var database = Path.Combine(_temp.Path, "database-disk");
+
+        _environment
+            .WithRegistryValue(Release, AdobeMediaCacheLayout.FilesValue, chosen + @"\")
+            .WithRegistryValue(Release, AdobeMediaCacheLayout.DatabaseValue, database + @"\");
+
+        Write(Path.Combine(chosen, AdobeMediaCacheLayout.FilesFolder, "interview.wav 48000.cfa"));
+        Write(Path.Combine(database, AdobeMediaCacheLayout.DatabaseFolder, "Media Cache Database.db"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

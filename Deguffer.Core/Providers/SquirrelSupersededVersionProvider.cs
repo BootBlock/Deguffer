@@ -183,6 +183,19 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     }
 
     /// <summary>
+    /// Every build of every installation the sweep finds, the one in use included, because the next
+    /// update supersedes it and the clean after that can take it. Never the installation folder
+    /// around them, where the updater and the packages are.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. _discovery.Look(ct).Installations
+                .SelectMany(installation => installation.Versions)
+                .Select(version => CleanedPlace.Whole(version.Path)),
+        ]);
+
+    /// <summary>
     /// Present where a Squirrel application was found, or where the profile would not be listed.
     ///
     /// <para>Not "there is a superseded version to remove": the planner never asks an absent

@@ -77,6 +77,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     private readonly ILiveTreeInspector _liveTrees;
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
+    private TempRootSet? _roots;
     private IReadOnlyList<FolderScan>? _scans;
 
     public TestBrowserProfileProvider(
@@ -138,6 +139,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     public override void InvalidateCaches()
     {
         _liveTrees.Invalidate();
+        _roots = null;
         _scans = null;
         base.InvalidateCaches();
     }
@@ -323,6 +325,16 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     }
 
     /// <summary>
+    /// Every temporary folder the scan reads, the machine's included, whole. A profile is told apart
+    /// only by a pattern in its name, so no narrower place names every folder a test can leave.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. Roots.Folders.Select(CleanedPlace.Whole)]);
+
+    /// <summary>The temporary files row's own folders, resolved once per planning pass.</summary>
+    private TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system, Volumes);
+
+    /// <summary>
     /// The temporary folders and every child named for either tool, listed once per planning pass
     /// because the presence probe, Explore and the plan all ask.
     ///
@@ -337,7 +349,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     /// </summary>
     private IReadOnlyList<FolderScan> Scans => _scans ??=
     [
-        .. from root in TempRoots.Resolve(Environment, _system, Volumes).Roots
+        .. from root in Roots.Roots
            from location in root.Locations
            let folder = Path.Combine(root.Path, location.RelativePath)
            select new FolderScan(

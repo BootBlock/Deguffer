@@ -73,6 +73,21 @@ public sealed class RestorePointProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The row names no cleaned place, which holds only while its plan deletes no file and sends no
+    /// command anywhere a file could be.
+    /// </summary>
+    [Fact]
+    public async Task ThePlanCleansNoPathSoItNamesNoCleanedPlace()
+    {
+        ThreePoints();
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.NotEmpty(plan.Steps);
+        Assert.Empty(CleanedPlaceCoverage.Cleaned(plan));
+    }
+
+    /// <summary>
     /// Windows gives no figure for one restore point, so the row offers all the storage Windows states as
     /// the most the removal could free, and says that it includes what stays.
     /// </summary>

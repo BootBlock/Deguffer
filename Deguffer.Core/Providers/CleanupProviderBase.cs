@@ -184,6 +184,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Task.FromResult<IReadOnlyList<ToolRoot>>([]);
 
     /// <summary>
+    /// Abstract rather than defaulted, for the reason <see cref="Description"/> is: a default of
+    /// nothing would say, for every provider nobody thought about, that its clean deletes nowhere,
+    /// and a duplicate search would keep the copies it deletes.
+    /// </summary>
+    public abstract Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// The plan this provider builds, with the user's guard on recently touched files stamped onto
     /// it and its consequences applied.
     ///

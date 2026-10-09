@@ -32,7 +32,7 @@ internal sealed class PassedOverPlaces
     {
         _policy = policy;
         _programs = programs;
-        _programPlaces = [.. programs.SelectMany(program => program.Reached.Places)];
+        _programPlaces = [.. programs.SelectMany(program => program.Forms).SelectMany(form => form.Places)];
     }
 
     /// <summary>Why <paramref name="path"/> is passed over with everything in it, or null where it is searched.</summary>
@@ -43,7 +43,7 @@ internal sealed class PassedOverPlaces
     public Below Within(string root) => new(this, _policy.WatchBelow(root));
 
     private string? ProgramFolderAt(string path) =>
-        _programs.FirstOrDefault(program => program.Reached.PathTo(path) is not null)
+        _programs.FirstOrDefault(program => program.Holds(path))
             is { } held
             ? $"'{held.Program}' is installed here. Two programs that ship the same file each need their "
               + "own copy, so a search passes over the folders programs are installed in."

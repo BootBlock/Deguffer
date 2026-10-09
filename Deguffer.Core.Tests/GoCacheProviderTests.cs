@@ -200,6 +200,28 @@ public sealed class GoCacheProviderTests : IDisposable
             plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultCachesTheCommandsAreSentTo()
+    {
+        Populate(Path.Combine(_environment.LocalAppData, "go-build"));
+        Populate(Path.Combine(_environment.UserProfile, "go", "pkg", "mod"));
+
+        var provider = CreateProvider(new FakeProcessRunner().Responding(Go, "env", "\r\n\r\n\r\n"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheCachesGoReportsElsewhere()
+    {
+        var buildCache = Populate(Path.Combine(_temp.Path, "elsewhere", "build"));
+        var moduleCache = Populate(Path.Combine(_temp.Path, "elsewhere", "mod"));
+
+        var provider = CreateProvider(Reporting(buildCache, moduleCache, GoPath));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+    }
+
     /// <summary>
     /// "Go reports its build cache as X" is a claim about a subprocess that may never have spoken.
     /// When it did not, X is Deguffer's guess, and a machine whose caches have been moved will not

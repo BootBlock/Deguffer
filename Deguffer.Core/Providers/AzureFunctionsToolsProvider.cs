@@ -147,6 +147,14 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             name => ReleaseVersion().IsMatch(name)),
     ];
 
+    /// <summary>
+    /// The folder holding the releases, whole, because a release is any child whose name is a
+    /// version, which no narrower place can name. Never the tooling's folder above it, where the feed
+    /// and the tag records are.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(_releases)]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_root));
 

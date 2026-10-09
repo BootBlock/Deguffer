@@ -454,4 +454,18 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
 
         Assert.Equal([project], (await provider.PlanAsync()).TargetedPaths);
     }
+
+    /// <summary>§7.4: the places named without planning hold every project's render cache, on a drive and in Videos.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var cache = CacheIn(Drive);
+        Project(cache, "8b1f0c2a4e");
+        Project(cache, "c93d7e5f10");
+        WriteFile(Path.Combine(cache, "OptimizedMedia", "a1b2c3", "0001.dvcc"));
+        Project(CacheIn(_environment.Videos!), "d40e8f6a21");
+        _volumes.With(_environment.UserProfile);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

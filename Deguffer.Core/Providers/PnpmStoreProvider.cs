@@ -131,6 +131,31 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             ];
     }
 
+    /// <summary>
+    /// The store <c>pnpm store prune</c> is sent to, as pnpm reports it, and the default store
+    /// folders under the home and under the default home, because <c>store-dir</c> can be unset
+    /// again after a duplicate search has asked. Each holds a layout-versioned store, so the folder
+    /// rather than one version is named. The dlx cache the same command expires is named at its
+    /// default too, since pnpm reports no location for it here.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        List<CleanedPlace> places =
+        [
+            CleanedPlace.Whole(Path.Combine(HomeDirectory, "store")),
+            CleanedPlace.Whole(Path.Combine(Environment.LocalAppData, "pnpm", "store")),
+            CleanedPlace.Whole(Path.Combine(Environment.LocalAppData, "pnpm-cache", "dlx")),
+        ];
+
+        if (Environment.FindExecutable("pnpm") is { } pnpm
+            && await ResolveStoreAsync(pnpm, ct).ConfigureAwait(false) is { } store)
+        {
+            places.Add(CleanedPlace.Whole(store));
+        }
+
+        return places;
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("pnpm") is not null);
 

@@ -151,6 +151,21 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             ]
             : [];
 
+    /// <summary>
+    /// The browser cache the variable names and the default one, because the variable can be unset
+    /// again after a duplicate search has read it. Each whole: a build is any child whose name has a
+    /// revision on the end, which no narrower place can name, and the only other thing there is
+    /// Playwright's small <c>.links</c> registry.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. new[] { ResolveRoot(), DefaultRoot }
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(CleanedPlace.Whole),
+        ]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveRoot() is { } root && LongPath.DirectoryMayExist(root));
 

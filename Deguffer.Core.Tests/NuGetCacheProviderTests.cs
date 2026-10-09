@@ -346,6 +346,48 @@ public sealed class NuGetCacheProviderTests : IDisposable
         Assert.Empty(await provider.ClaimedEntriesAsync([Path.GetDirectoryName(scratch)!]));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultLocalsWhenNuGetDeclinesToList()
+    {
+        string[] defaults =
+        [
+            _temp.CreateDirectory("profile", ".nuget", "packages"),
+            _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "v3-cache"),
+            _temp.CreateDirectory("profile", "AppData", "Local", "NuGet", "plugins-cache"),
+            Path.Combine(_environment.TempPath, "NuGetScratch"),
+        ];
+
+        foreach (var location in defaults)
+        {
+            Directory.CreateDirectory(location);
+            File.WriteAllBytes(Path.Combine(location, "payload.bin"), new byte[1024]);
+        }
+
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", string.Empty, exitCode: 1);
+        var provider = new NuGetCacheProvider(
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverEveryLocalNuGetReportsIncludingOnesAwayFromTheDefaults()
+    {
+        var relocated = _temp.CreateDirectory("elsewhere", "nuget-packages");
+        var scratch = _temp.CreateDirectory("scratch", "NuGetScratch");
+        File.WriteAllBytes(Path.Combine(relocated, "payload.bin"), new byte[1024]);
+        File.WriteAllBytes(Path.Combine(scratch, "payload.bin"), new byte[1024]);
+
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(
+            Dotnet, "locals all --list", $"global-packages: {relocated}\\\ntemp: {scratch}\n");
+        var provider = new NuGetCacheProvider(
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+    }
+
     private async Task<(CleanupPlan Plan, string[] Locations)> PlanWithLocals()
     {
         // Deliberately mirrors the audit: two locations under .nuget, two well outside it.

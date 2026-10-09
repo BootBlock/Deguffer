@@ -167,4 +167,24 @@ public interface ICleanupProvider
     /// then, separately from any planning pass.</para>
     /// </summary>
     Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Every place this provider's clean can delete files in, named without planning: what a step
+    /// destroys, and where a tool's own eviction command is sent. Empty for a provider whose clean
+    /// deletes no file, such as one that only releases a cloud file's local copy.
+    ///
+    /// <para><b>It exists for §7.4.</b> A duplicate copy in one of these places is never the copy a
+    /// group keeps, because the next clean could remove it. <see cref="ToolRoots"/> cannot answer
+    /// that: a root is a refusal of what is beside a cache, and many cleans delete where no root is
+    /// declared (the temporary folders, crash dumps, a project's build output, a cache a tool
+    /// reports), while some roots claim far more than their clean ever touches.</para>
+    ///
+    /// <para><b>Required of every provider, and generous.</b> A place named here that the clean
+    /// never reaches only stops a copy there being kept; a place left out lets a duplicate search
+    /// keep a copy the next clean deletes, and mark the user's own copy for removal. So it names
+    /// what the plan could take on any machine, with no regard to the age guard or to what is in
+    /// use today, and it runs the probes <see cref="DiscoverToolRootsAsync"/> runs where a location
+    /// is only known by asking the tool.</para>
+    /// </summary>
+    Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default);
 }

@@ -164,6 +164,9 @@ public sealed class LeftoverStepTests : IDisposable
     private sealed class TargetsProvider(IUserEnvironment environment, SafetyTier tier, params DeletionTarget[] targets)
         : CleanupProviderBase(environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, new FakeDirectoryScanner())
     {
+        public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
         public override string Id => "targets";
 
         public override string Name => "Targets";

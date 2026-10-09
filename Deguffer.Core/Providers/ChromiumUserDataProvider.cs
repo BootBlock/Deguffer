@@ -192,6 +192,22 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     }
 
     /// <summary>
+    /// Each disposable child this row recognises, at each of its levels, in every profile of every
+    /// application the discovery finds, whether or not one is there today. The data folder, the profile
+    /// and the sign-in cookies and passwords beside the caches are never reached, so none of them is a
+    /// place.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from application in _discovery.Discover(ct)
+               from profile in application.Profiles
+               from level in CacheLevels
+               from name in level.Children.DisposableNames
+               select CleanedPlace.Whole(Path.Combine(level.Resolve(profile), name)),
+        ]);
+
+    /// <summary>
     /// Presence is something to remove actually on disk, never a folder existing. An application that
     /// embeds Chromium but has not run yet keeps a user-data folder with nothing in it to remove, and
     /// reporting that as a source would offer the user a row the plan then has nothing to say about.

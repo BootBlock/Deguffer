@@ -209,6 +209,24 @@ public sealed class MavenRepositoryProviderTests : IDisposable
         Assert.DoesNotContain(DefaultRepository, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultRepositoryThePlanCleans()
+    {
+        Populate(DefaultRepository);
+        WriteSettings();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverARepositoryTheSettingsMoveElsewhere()
+    {
+        var moved = PopulateRepository(Path.Combine(_temp.Path, "shared", "m2-repository"));
+        WriteSettings(moved);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// A settings file naming one of the account's own folders as the repository. The repository is
     /// removed whole, so this would take all of the Desktop or Downloads, and §5.6 protected only the

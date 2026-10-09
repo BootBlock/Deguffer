@@ -127,6 +127,19 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= DeclareToolRoots();
 
+    /// <summary>
+    /// The shader cache folder of every game library Steam's own list names, beside the program and
+    /// elsewhere. Each game's cache is named by its app ID, so the folder is the narrowest place that
+    /// holds a game installed after this is asked; the games, their records and the Workshop content
+    /// beside it are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. (_discovery.Libraries?.Folders ?? [])
+                .Select(library => CleanedPlace.Whole(Path.Combine(library, ShaderCacheDirectory))),
+        ]);
+
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();

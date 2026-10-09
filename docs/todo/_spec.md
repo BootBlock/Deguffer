@@ -1016,8 +1016,9 @@ on: what the established duplicate finders do, and the ways their users have los
   installed program's entry names as where it is installed (the entries §7.3 reads), and
   `%LOCALAPPDATA%\Programs`, where per-user installers put programs. An entry that names a drive's
   top, a profile, a folder Windows keeps for the user such as Documents, a folder that holds one of
-  those, or a folder that holds a location the user chose, names nothing usable, and the page says
-  which entry it set aside. Two programs that ship the same
+  those, or a folder that holds a location the user chose, names nothing usable to pass over, and the page
+  says which entry it set aside. One set aside only because it holds a chosen location still names a
+  program's folder, and a copy in it is refused (below). Two programs that ship the same
   library each need their own copy, and a search of them finds thousands of matches nobody should
   act on. The page names what it left out, so a search that skipped a place is never read as one
   that found nothing there. The user may include those places; a copy in one is still matched, and
@@ -1080,9 +1081,10 @@ on: what the established duplicate finders do, and the ways their users have los
   their last-modified times, the criteria that matched them and, for a content match, the checksum
   and its algorithm. Where two paths differ by little, the page shows where they differ, because two
   near-identical folder names are how a user marks the copy they meant to keep.
-- **The space a removal would free is a lower bound, and says so.** On ReFS, which a Dev Drive uses,
-  two copies may share their clusters, because Windows 11 copies by block cloning there, and
-  removing one may free nothing. Windows Server's deduplication behaves the same way.
+- **The space shown is what the copies occupy, a removal may free less, and the page says so.** On
+  ReFS, which a Dev Drive uses, two copies may share their clusters, because Windows 11 copies by
+  block cloning there, and removing one may free nothing. Windows Server's deduplication behaves the
+  same way. A copy moved to the Recycle Bin frees nothing until the bin is emptied.
 - **A copy inside a cloud folder says what removing it does there**: OneDrive, Dropbox and the rest
   remove it from the cloud and from every device that syncs it, not only from this disk.
 - **Results stream.** Groups appear as each is confirmed, the search reports what stage it has

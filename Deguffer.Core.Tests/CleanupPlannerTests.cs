@@ -812,6 +812,9 @@ public sealed class CleanupPlannerTests
         IReadOnlyList<string>? leavesStanding = null,
         Action? onExecute = null) : ICleanupProvider
     {
+        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
         public bool IsAwaitingSourceFolders => awaitingSourceFolders;
 
         public IReadOnlyList<ToolRoot> ToolRoots => [];

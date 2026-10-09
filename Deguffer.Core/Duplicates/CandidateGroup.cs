@@ -20,6 +20,12 @@ namespace Deguffer.Core.Duplicates;
 /// free, which is never marked and never counted.
 /// </param>
 /// <param name="Length">Its length in bytes when it was identified, which is what a size match compares.</param>
+/// <param name="SizeOnDisk">
+/// What it occupied on disk when it was identified, as Windows reports it, which removing it may free
+/// less than: clusters it shares through block cloning or deduplication are counted in full, because
+/// Windows does not report a share, and a copy in the Recycle Bin frees nothing until the bin is
+/// emptied (§7.4).
+/// </param>
 /// <param name="Modified">Its last-modified time to the file system's full precision, which is what a time match compares.</param>
 /// <param name="Storage">
 /// How it is stored: whether it is in the cloud as Windows said when it was identified, and
@@ -37,6 +43,7 @@ public sealed record DuplicateCandidate(
     IReadOnlyList<string> Names,
     int NameCount,
     long Length,
+    long SizeOnDisk,
     DateTime Modified,
     FileStorage Storage,
     LocationRole Role)

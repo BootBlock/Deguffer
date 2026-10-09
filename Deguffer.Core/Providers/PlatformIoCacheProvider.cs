@@ -175,6 +175,36 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             static name => name.Equals(".cache", StringComparison.OrdinalIgnoreCase)),
     ];
 
+    /// <summary>
+    /// The cache <c>prune --cache</c> is sent to and the packages folder the package prune uninstalls
+    /// from, as PlatformIO reports them, and where each sits by default under the reported core
+    /// directory and under the default one, because <c>PLATFORMIO_CORE_DIR</c> or a
+    /// <c>cache_dir</c> setting can move either back after a duplicate search has asked. Never the
+    /// core directory around them, which holds the Python PlatformIO runs on and the global libraries.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        List<string> places = [.. Defaults(CoreRoot)];
+
+        if (Environment.FindExecutable("pio") is { } pio)
+        {
+            var located = await ResolveLocationsAsync(pio, ct).ConfigureAwait(false);
+
+            places.Add(located.CacheDirectory);
+            places.Add(located.PackagesDirectory);
+            places.AddRange(Defaults(located.CoreDirectory));
+        }
+
+        return [.. places.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)];
+
+        static IEnumerable<string> Defaults(string core)
+        {
+            var defaults = PlatformIoLocations.Read(string.Empty, core);
+
+            return [defaults.CacheDirectory, defaults.PackagesDirectory];
+        }
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("pio") is not null);
 

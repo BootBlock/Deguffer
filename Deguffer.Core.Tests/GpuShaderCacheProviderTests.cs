@@ -634,6 +634,20 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         Assert.True(Directory.Exists(cache), "a cache was reached through a guess at where LocalLow is.");
     }
 
+    /// <summary>§7.4: the places named without planning hold every vendor's cache and Direct3D's own.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        CreateCache(Path.Combine("NVIDIA", "DXCache"));
+        CreateCache(Path.Combine("NVIDIA", "GLCache"));
+        CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
+        CreateCache(Path.Combine("AMD", "DxCache"));
+        CreateCache(Path.Combine("Intel", "ShaderCache"));
+        CreateCache("D3DSCache");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);

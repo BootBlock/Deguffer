@@ -71,6 +71,17 @@ public sealed class TempToolLogProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Entry(4096, "DiagOutputDir", "RdClientAutoTrace", "RdClientAutoTrace-WppAutoTrace-20260901.etl");
+        Entry(2048, "DiagOutputDir", "Windows365", "Logs", "health_checks.log");
+        Entry(1024, "servicehub", "logs", "0a1b2c3d-VsHubClient-1234-abcdefgh-1.log");
+        Entry(512, "vscode-inno-updater-1756000000.log");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
     public async Task ClaimsTheToolsFoldersWholeAndTheUpdaterLog()
     {
         Entry(1, "DiagOutputDir", "RdClientAutoTrace", "a.etl");

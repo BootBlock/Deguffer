@@ -119,6 +119,13 @@ public sealed class CrashDumpProvider : CleanupProviderBase
         Task.FromResult(DeclaredPaths().Any(p =>
             p.IsFile ? LongPath.FileMayExist(p.Path) : LongPath.DirectoryMayExist(p.Path)));
 
+    /// <summary>
+    /// Each declared dump folder, and the kernel's full dump file, whole: everything in them is a
+    /// record this row offers, and the folders holding them are not this row's.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. DeclaredPaths().Select(declared => CleanedPlace.Whole(declared.Path))]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var scan = DeclaredLocations.Examine(_roots, ct);

@@ -243,6 +243,20 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                select root,
         ];
 
+    /// <summary>
+    /// Each cache this row recognises, in the local half of every profile Firefox's register lists,
+    /// read through the same discovery the plan reads, whether or not one is there today. The roaming
+    /// half, with the bookmarks and passwords, and the synchronised data beside the caches are never
+    /// reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from profile in Profiles(ct)
+               from name in Children.DisposableNames
+               select CleanedPlace.Whole(Path.Combine(profile.LocalPath, name)),
+        ]);
+
     public override void InvalidateCaches()
     {
         _profiles = null;

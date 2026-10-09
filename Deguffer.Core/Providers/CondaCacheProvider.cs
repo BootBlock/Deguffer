@@ -144,6 +144,36 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         return roots;
     }
 
+    /// <summary>
+    /// Every package cache <c>conda info</c> reports and conda's documented default caches, which
+    /// <c>.condarc</c> can bring back into use after a duplicate search has asked. The installation
+    /// prefix is named whole, reported and at each default install location, because
+    /// <c>--tempfiles</c> deletes conda's leftover temporary files anywhere under it, environments
+    /// included, and no narrower place can name files by their ending.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        List<string> places =
+        [
+            .. DefaultPrefixes(),
+            Path.Combine(Environment.UserProfile, ".conda", "pkgs"),
+            Path.Combine(Environment.LocalAppData, "conda", "conda", "pkgs"),
+        ];
+
+        if (FindConda() is { } conda
+            && await ResolveInstallationAsync(conda, ct).ConfigureAwait(false) is { } installation)
+        {
+            if (installation.RootPrefix is { } prefix)
+            {
+                places.Add(prefix);
+            }
+
+            places.AddRange(installation.PackageCacheDirs);
+        }
+
+        return [.. places.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)];
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(FindConda() is not null);
 
@@ -329,14 +359,16 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             ?? DefaultInstallations().FirstOrDefault(LongPath.FileMayExistInDescribedDirectory);
     }
 
-    private IEnumerable<string> DefaultInstallations()
+    private IEnumerable<string> DefaultInstallations() =>
+        DefaultPrefixes().Select(prefix => Path.Combine(prefix, "Scripts", "conda.exe"));
+
+    /// <summary>Where the vendors' installers put conda for the current user and for all users.</summary>
+    private IEnumerable<string> DefaultPrefixes()
     {
         string[] products = ["anaconda3", "miniconda3", "miniforge3"];
         string[] roots = [Environment.UserProfile, Environment.LocalAppData, _systemDirectories.ProgramData];
 
-        return roots.SelectMany(
-            _ => products,
-            (root, product) => Path.Combine(root, product, "Scripts", "conda.exe"));
+        return roots.SelectMany(_ => products, (root, product) => Path.Combine(root, product));
     }
 
     private async Task<CondaInstallation?> ResolveInstallationAsync(string conda, CancellationToken ct)

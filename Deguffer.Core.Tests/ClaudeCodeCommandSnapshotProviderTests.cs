@@ -138,6 +138,15 @@ public sealed class ClaudeCodeCommandSnapshotProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        SessionStarted();
+        Snapshot(Before);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// The trap the design is built around. A process keeps its snapshot when it moves to another session,
     /// so the list names a session the snapshot's name does not. The snapshot is kept on its time alone.

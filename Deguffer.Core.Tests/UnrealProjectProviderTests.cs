@@ -225,6 +225,19 @@ public sealed class UnrealProjectProviderTests : IDisposable
             Assert.Single(inspector.Asked).LockFileNames.Order(StringComparer.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// §7.4 keeps no duplicate copy where the next clean could remove it. The project's own derived
+    /// data is the row whose folder no other test names, so it is asked here.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheDerivedDataThePlanRemoves()
+    {
+        BuildDirectoryFixture.CreateUnrealProject(
+            Path.Combine(ApproveRoot(), "Shooter"), directoryName: "DerivedDataCache");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(DerivedData()));
+    }
+
     private string ApproveRoot()
     {
         var root = _temp.CreateDirectory("src");

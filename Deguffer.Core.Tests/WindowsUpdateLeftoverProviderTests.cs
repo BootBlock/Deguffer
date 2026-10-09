@@ -102,6 +102,15 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
         Assert.True(root.RequiresElevation);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Agent(Quiet);
+        Assistant(Quiet);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// Quiet for longer than the floor and nothing unfinished: each folder is offered as a removal that
     /// goes whole or not at all, and after the run it is gone and everything beside it is standing.

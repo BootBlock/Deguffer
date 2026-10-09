@@ -332,6 +332,22 @@ public sealed class CondaCacheProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(second, StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultPackageCacheTheCommandIsSentTo()
+    {
+        Populate(PackageCache);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverAPackageCacheCondaReportsAwayFromTheDefaults()
+    {
+        var shared = Populate(Path.Combine(_temp.Path, "shared-pkgs"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(Reporting(packageCaches: [shared]))));
+    }
+
     /// <summary>
     /// A cache conda names but which is not on disk is neither measured nor cleared, so a stale
     /// entry in a configuration file does not produce a step that reclaims nothing.

@@ -98,6 +98,17 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     private static readonly IReadOnlyList<CacheLevel> HomeLevel = [new CacheLevel(string.Empty, HomeChildren)];
 
+    /// <summary>The folders in Claude Code's own folder that the leftovers of each kind are taken from.</summary>
+    private static readonly IReadOnlyList<string> LeftoverFolders =
+    [
+        ClaudeCodeHome.Projects,
+        ClaudeCodeHome.SessionEnvironments,
+        ClaudeCodeHome.Ide,
+        ClaudeCodeHome.Sessions,
+        ClaudeCodeHome.ShellSnapshots,
+        ClaudeCodeHome.Telemetry,
+    ];
+
     /// <summary>
     /// Files in Claude Code's folder whose reason is worth stating. Every file there is asserted to
     /// survive whether or not it is named, because nothing at that level is ever a target.
@@ -211,6 +222,22 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home || LongPath.DirectoryMayExist(home));
+
+    /// <summary>
+    /// Each folder this row takes leftovers from, in Claude Code's default folder and in the one its folder
+    /// variable names. The projects folder is whole because a session's spilled output is a folder named
+    /// for the session in any project's folder; the files at the top of Claude Code's folder, the rewind
+    /// snapshots and the configuration beside it are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from home in Homes()
+               from folder in LeftoverFolders
+               select CleanedPlace.Whole(Path.Combine(home, folder)),
+        ]);
+
+    private IReadOnlyList<string> Homes() => ClaudeCodeHome.EveryHome(Environment, _system, Volumes);
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own

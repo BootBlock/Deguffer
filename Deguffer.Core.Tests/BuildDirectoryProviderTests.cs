@@ -985,6 +985,28 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.Empty(await Unity(live: live, volumes: CloudMountHolding(root)).DiscoverToolRootsAsync());
     }
 
+    // ---- §7.4: what the clean can reach --------------------------------------------------------
+
+    /// <summary>
+    /// §7.4 keeps no duplicate copy where the next clean could remove it, so each toolchain names
+    /// every build directory its plan removes. The project sits two folders down, because the search
+    /// finds one at any depth and a place that reached only the approved folder's children would miss
+    /// it.
+    /// </summary>
+    [Theory]
+    [InlineData(Toolchain.Unity)]
+    [InlineData(Toolchain.Cargo)]
+    [InlineData(Toolchain.Node)]
+    [InlineData(Toolchain.Python)]
+    [InlineData(Toolchain.Unreal)]
+    public async Task CleanedPlacesCoverEveryBuildDirectoryThePlanRemoves(Toolchain toolchain)
+    {
+        var root = ApproveRoot();
+        CreateRecognised(toolchain, Path.Combine(root, "team", "Project"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(ProviderFor(toolchain, FakeLiveTreeInspector.NothingLive)));
+    }
+
     // ---- helpers --------------------------------------------------------------------------------
 
     /// <summary>

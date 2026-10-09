@@ -383,6 +383,7 @@ public sealed class ContentReaderTests : IDisposable
             [description.Path],
             description.Names,
             description.Length,
+            description.Allocated,
             description.Modified,
             StorageAttributes.Of(description.Attributes),
             LocationRole.Search)

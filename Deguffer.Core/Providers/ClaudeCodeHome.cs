@@ -69,6 +69,19 @@ public static partial class ClaudeCodeHome
     public static string? WhyUnusable(IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes) =>
         Examine(environment, system, volumes).Why;
 
+    /// <summary>Claude Code's folder where its variable does not move it.</summary>
+    public static string DefaultIn(IUserEnvironment environment) =>
+        Path.Combine(environment.UserProfile, DefaultDirectoryName);
+
+    /// <summary>
+    /// The default folder and the one the variable names where it is usable, each once: every folder
+    /// a clean of Claude Code's leftovers can reach, whichever the variable says when it runs.
+    /// </summary>
+    public static IReadOnlyList<string> EveryHome(IUserEnvironment environment, ISystemDirectories system, IVolumeInventory volumes) =>
+        [.. new[] { DefaultIn(environment), Resolve(environment, system, volumes) }
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
+
     /// <summary>
     /// Two ways for <see cref="ConfigDirectoryVariable"/> to be no answer.
     ///
@@ -89,7 +102,7 @@ public static partial class ClaudeCodeHome
         ArgumentNullException.ThrowIfNull(system);
 
         var setting = ConfiguredFolder.FromVariable(
-            ConfigDirectoryVariable, Path.Combine(environment.UserProfile, DefaultDirectoryName), environment, system, volumes);
+            ConfigDirectoryVariable, DefaultIn(environment), environment, system, volumes);
 
         return setting.Folder is { } home
             ? (home, null)

@@ -124,6 +124,21 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             ]
             : [];
 
+    /// <summary>
+    /// Each browser folder, where the builds are, in the cache the variable names and in the default
+    /// cache, because the variable can be unset again after a duplicate search has read it. Never the
+    /// cache root or the folder shared with other tools above it.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. new[] { ResolveRoot(), DefaultRoot }
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .SelectMany(root => PuppeteerCacheLayout.Browsers
+                    .Select(browser => CleanedPlace.Whole(Path.Combine(root, browser)))),
+        ]);
+
     public override void InvalidateCaches()
     {
         _liveTrees.Invalidate();

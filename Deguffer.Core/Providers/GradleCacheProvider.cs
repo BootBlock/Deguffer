@@ -153,6 +153,21 @@ public sealed class GradleCacheProvider : CleanupProviderBase
                 ? [ToolRoot.Sparing(declined, DeclinedRootReason, Configuration.Select(file => file.Name))]
                 : []);
 
+    /// <summary>
+    /// The disposable children of the home in use and of the default home, because the variable can
+    /// be unset again after a duplicate search has read it. Only those children: the configuration
+    /// beside them is never cleaned, and a declined home is not Gradle's to clean at all.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. new[] { ResolveHome(), DefaultHome }
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .SelectMany(home => DisposableChildren.DisposableNames
+                    .Select(child => CleanedPlace.Whole(Path.Combine(home, child)))),
+        ]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveHome() is { } home && LongPath.DirectoryMayExist(home));
 

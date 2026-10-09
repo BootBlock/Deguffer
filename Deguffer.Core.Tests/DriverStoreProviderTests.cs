@@ -324,6 +324,16 @@ public sealed class DriverStoreProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(older.Folder, StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var oldest = Staged("oem1.inf", "2021-01-01");
+        var older = Staged("oem2.inf", "2022-01-01");
+        var newest = Staged("oem3.inf", "2024-01-01");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(new FakeDriverStore(oldest, older, newest))));
+    }
+
     /// <summary>
     /// Where Windows' cleanup cannot be loaded, each older package is removed with pnputil, named by the
     /// name Windows gave it, and never with <c>/force</c> or <c>/uninstall</c>.

@@ -28,6 +28,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
 {
     private readonly ComponentStoreAnalysis _analysis;
     private readonly string _store;
+    private readonly string _packages;
     private readonly string _windows;
 
     protected ComponentStoreProviderBase(
@@ -49,6 +50,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         _analysis = analysis ?? new ComponentStoreAnalysis(system, Runner);
         _windows = system.WindowsDirectory;
         _store = Path.Combine(_windows, "WinSxS");
+        _packages = Path.Combine(_windows, "servicing", "Packages");
     }
 
     /// <summary>
@@ -74,6 +76,15 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     /// <summary>The store's folder. DISM is part of every Windows that has one.</summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_store));
+
+    /// <summary>
+    /// The store, and Windows' record of installed updates that the cleanup prunes alongside it. DISM's
+    /// command names no path, so these are where its cleanup removes files rather than anything the
+    /// plan lists: both rows run the same cleanup over the same two folders, whatever DISM decides
+    /// to take inside them.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(_store), CleanedPlace.Whole(_packages)]);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -135,7 +146,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             ProtectedPaths = Protect(
             [
                 (_store, "The component store itself. Windows' cleanup removes superseded components inside it, and never the store."),
-                (Path.Combine(_windows, "servicing", "Packages"),
+                (_packages,
                     "Windows' record of the updates installed on this machine. The cleanup removes superseded entries from it, and never the record."),
                 (Path.Combine(_windows, "System32"),
                     "Windows itself, which shares most of the component store's files through hard links."),

@@ -105,6 +105,23 @@ public sealed class PipCacheProvider : CleanupProviderBase
         Task.FromResult(FindPip() is not null);
 
     /// <summary>
+    /// The cache <c>pip cache purge</c> is sent to: the one pip reports, and the documented default
+    /// as well, because <c>PIP_CACHE_DIR</c> can move the cache back to it after a duplicate search
+    /// has asked. Never the configuration beside it.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        if (FindPip() is not { } pip)
+        {
+            return [CleanedPlace.Whole(DefaultCacheDirectory)];
+        }
+
+        var reported = await ResolveCacheDirectoryAsync(pip, ct).ConfigureAwait(false);
+
+        return [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(reported)];
+    }
+
+    /// <summary>
     /// PIP_CACHE_DIR can move the cache between one scan and the next, so a remembered location
     /// would measure a directory pip has stopped using.
     /// </summary>

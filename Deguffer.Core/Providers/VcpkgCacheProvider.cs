@@ -232,6 +232,30 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
+    /// Every location the plan declares, from the same discovery, and the defaults a variable can
+    /// fall back to after a duplicate search has read it: the binary cache in each of the user's
+    /// vcpkg directories, and the clone's own <c>downloads</c> where <c>VCPKG_DOWNLOADS</c> moved it.
+    /// Never the clone itself, whose installed libraries a rebuild cannot bring back.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        var located = Locate();
+        List<string> places =
+        [
+            .. _discovery.ProfileDirectories.Select(profile => Path.Combine(profile, "archives")),
+            .. DeclaredPaths(Declare(located)),
+        ];
+
+        if (located.Root is { } root)
+        {
+            places.Add(Path.Combine(root, "downloads"));
+        }
+
+        return Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. places.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)]);
+    }
+
+    /// <summary>
     /// Presence is a declared path actually being there, or a clone Windows would not describe. The
     /// user's vcpkg directory exists on any machine that has ever integrated vcpkg with Visual
     /// Studio, and reading that as a hit would report a source the plan then has nothing to say
@@ -549,7 +573,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         return new ToolRoot(
             container,
             "This holds a vcpkg cache that one of your vcpkg environment variables points at, and "
-            + "removing it would take the cache with everything else in it. Explore removes things from "
+            + "removing it would take the cache with everything else in it. Deguffer removes things from "
             + "inside it, never the folder itself.",
             static _ => true);
     }

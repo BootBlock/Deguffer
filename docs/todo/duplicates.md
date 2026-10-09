@@ -129,10 +129,16 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   30 days (personal) or 93 (work or school).
 - **Space.** ReFS block cloning, which Windows 11 24H2 uses for ordinary copies on a Dev Drive, and
   Windows Server deduplication (`IO_REPARSE_TAG_DEDUP`) let copies share clusters. No user-mode API
-  reports what a cloned file shares **(unverified)**, so the freed figure is a lower bound there.
+  reports what a cloned file shares **(unverified)**, so there a removal can free less than the
+  figure, which counts shared clusters in full.
 - **Recycle Bin.** When a bin is full, Windows deletes its oldest items outright to make room for
-  new ones. How Deguffer reads a bin's room on a volume (its size from `SHQueryRecycleBin`, its
-  limit from the bin's settings) is **(unverified)**, and nothing in Core asks it yet. Whether
+  new ones. Measured in phase 4: `SHQueryRecycleBin` answers what this account's bin on a volume
+  holds as the sum of its items' lengths, and takes a drive's top, a folder on it, the extended form
+  of either, or the volume's `\?\Volume{GUID}\` name alike; the limit is the `MaxCapacity` number,
+  in megabytes, under the account's `Explorer\BitBucket\Volume\{GUID}` key, with `NukeOnDelete`
+  beside it for a bin set to keep nothing (`RecycleBinRooms`). The measurement ran in a 64-bit
+  process, where `SHQUERYRBINFO` is 24 bytes with the size at offset 8; the 20-byte layout a 32-bit
+  process uses, packed as the SDK header packs it there, is **(unverified)**. Whether
   `IFileOperation`'s progress sink hands back the item it put in the bin, so that its file ID can be
   read, is **(unverified)**.
 - **Deleting through a handle.** `SetFileInformationByHandle` with `FileDispositionInfoEx` deletes
@@ -167,17 +173,26 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Cloud folders.** `ICloudFiles.SyncRoots` lists the roots registered with the Cloud Files API and
   returns null where Windows will not list them. It leaves out a root Windows will not hand back,
   such as one under `AppData\Local`, and a client that does not register at all.
-- **Provider targets.** Nothing yet answers "what would Storage delete" without planning: the
-  planner offers only a full plan, which runs subprocesses and depends on the age setting.
-  `ICleanupProvider.ToolRoots` and `DiscoverToolRootsAsync` declare the roots Explore protects: 42
-  of the 68 providers built on `CleanupProviderBase` declare a root, and 57 counting discovered
-  ones.
+- **Provider targets.** Corrected in phase 4: `ICleanupProvider.ToolRoots` and
+  `DiscoverToolRootsAsync` declare what Explore refuses beside a cache, not where a clean deletes.
+  A sweep of every provider found cleans that delete where no root is declared (the temporary
+  folders, crash dumps, build output under the approved source folders, a cache a tool reports
+  elsewhere, Windows' own servicing folders) and roots that recognise every child or none, so the
+  roots answer neither way. Every provider now declares where its clean deletes, without planning
+  (`ICleanupProvider.CleanedPlacesAsync`, `CleanedPlace`), and each provider's tests check that the
+  places cover every path its plan cleans (`CleanedPlaceCoverage`).
 - **Paths.** `LongPath.Canonical` normalises a path's form and expands 8.3 names; it resolves no
   link and no drive letter. `ReachedFolder.At` gives every place a folder is reachable at, through
   substituted drives and volumes mounted in folders. `FileInformation.FinalPath` (phase 1) follows
   every link on the way to a path, its own name included, and a substituted letter, to the path an
   opened handle gives, and is the one declaration of `GetFinalPathNameByHandle`: it moved there from
   `CloudFilesNative`, whose `CloudFiles.Resolve` already followed every link and now calls it.
+- **Size on disk.** The attributes-only handle that identifies a file already reads
+  `FILE_STANDARD_INFO`, whose `AllocationSize` is what the file occupies (`FileDescription.Allocated`,
+  `DuplicateCandidate.SizeOnDisk`, phase 4): less than the length for a compressed or sparse file,
+  nothing for one held in its file record. A sum of them is what the copies occupy, which a removal
+  may free less than: shared clusters are counted in full, and the Recycle Bin frees what it holds
+  only when it is emptied.
 - **File information.** `FileInformation` (phase 2) is the one declaration of each call that
   describes a file through a handle, and of the attributes-only handle itself (`FileInformation.Open`):
   `HardLinkAwareScanner`, `CloudFiles` and `OccupancyProbe` read through it, where before the first
@@ -360,21 +375,28 @@ without listing the places phase 1 passes over, and the decision it supports.
 
 ### Phase 4 — Marking (Core)
 
-1. **What Storage deletes.** A way to ask every provider which roots its clean deletes files under,
-   without planning: the declared and discovered tool roots of each provider whose clean deletes,
-   with a declaration added to each such provider that has none. A provider that only releases a
-   cloud file's local copy names none, because the file stays.
+1. **What Storage deletes.** A way to ask every provider where its clean deletes files, without
+   planning. Corrected here: not the tool roots, which are refusals (see "Provider targets"), but a
+   declaration every provider makes (`CleanedPlacesAsync`), as generous as it needs to be, asking
+   a tool where its cache is as discovery already does, and checked against each provider's plan in
+   its tests. A provider that only releases a cloud file's local copy names none, because the file
+   stays.
 2. **What can be kept.** The §7.4 definition, decided in one place: unmarked, on this device and not
-   online-only, not refused, not in `%TEMP%` and not under a root from step 1, and on an internal
-   drive outside a cloud folder unless its location is a reference. A drive is internal where its
-   `StorageMedia` is not `Removable`, never by its `DriveType`. A file with several names qualifies
-   where any one of its names does. A cloud folder is a root
+   online-only, not refused, not in `%TEMP%` and not under a place from step 1, and on an internal
+   drive outside a cloud folder unless its location is a reference. Corrected here: a drive is
+   internal only where its `StorageMedia` is `Nvme`, `SolidState` or `Rotational`, never by its
+   `DriveType`; `Unknown` (which a USB disk whose bus Windows would not report, or a volume over
+   disks of different kinds, reads as) and `Virtual` are not counted on, as `Removable` is not. A
+   file with several names qualifies where any one of its names does. A cloud folder is a root
    `ICloudFiles.SyncRoots` lists, and where Windows will not list them, no copy counts as outside
-   one.
+   one. Each place is asked at every path it is reachable at and at its final path, because a
+   copy's path is the final one.
 3. **The policy.** A copy is refused where Explore's policy refuses it, in a program folder, or
-   while it is online-only. Reference copies and files with several names are never marked. Explore's
+   while it is online-only. A program folder is every install location that names a program,
+   including one set aside from the places passed over because it holds a chosen location, and they
+   are read whether or not the search passes over them. Reference copies and files with several names are never marked. Explore's
    refusal reasons are reworded so they read correctly on either page, and the refusal set is built
-   once for both pages.
+   once for both pages (`MachineProtections`).
 4. **Marks.** A per-group mark state that refuses any mark leaving the group with no copy that can
    be kept, and the named rules, each of which chooses the copy it keeps only from the copies that
    can be kept, obeys the policy, and never marks a copy in a cloud folder. The space a group could
@@ -440,7 +462,8 @@ the algorithm and the filters, stored as an `AppPreferences` group; the note of 
 set-aside install locations and unsearchable volumes; the search with stage progress and cancel; the
 group list updated in place, never cleared and refilled, because a rebuilt list loses the reader's
 place; groups sorted by the space each could free; the sentence on a name or size group that its
-files may differ; the freed figure stated as a lower bound; and, where two paths differ, the
+files may differ; the space stated as what the copies occupy, which a removal may free less than;
+and, where two paths differ, the
 difference shown. A `DuplicatesRequest` in `ElevationRequest` carries the locations and their roles
 across an elevated reopen, for the file-table route. Legible with no backdrop (§6.5), in light, dark
 and high contrast.
@@ -480,9 +503,14 @@ store loads empty; the CSV round-trips hostile paths and a long path whole.
 Drive the whole feature with the `verify` skill, unelevated and elevated, over a scratch tree that
 holds hard links, a junction loop, a substituted drive, a case-sensitive folder, a named stream, a
 long path, an empty file, a locked file, a reference folder, a file the bin cannot take and, where
-the machine has one, a OneDrive online-only file. Attach a scratch disk with a FAT32 and an exFAT
+the machine has one, a OneDrive online-only file, and a volume mounted in a folder with no drive
+letter, holding a program's install location and a place a Storage clean names, so Windows gives
+their final paths in the `\\?\Volume{GUID}\` form that `ResolvedPlaces.FollowedTo` names by the
+mount (no test can produce that form without mounting such a volume). Attach a scratch disk with a FAT32 and an exFAT
 volume, measure whether each answers `FileIdInfo` or only the older call, and whether a file keeps
-its ID across a rename and a move, record it under the technical facts, and search both. Measure a
+its ID across a rename and a move, record it under the technical facts, and search both. Read a
+Recycle Bin's size from the x86 build, which asks for it with the packed 20-byte `SHQUERYRBINFO`
+that only a 32-bit process can confirm, and record it there too. Measure a
 search of a real drive and record the figures here, redacted. Update `README.md`. Flip this banner to complete, move this file to `done/`
 with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link becomes
 `done/duplicates.md`), and close #297.
@@ -556,6 +584,37 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   file table, read whole anyway, ignores it. Corrected here: CRC-32's byte order, the throughput
   figures, the placeholder mode, and how the content is opened (by file ID, not `File.OpenHandle`
   on the path), in the technical facts above.
+- 2026-10-09: phase 4 landed. Every provider declares where its clean deletes, without planning
+  (`ICleanupProvider.CleanedPlacesAsync`, `CleanedPlace`), each checked against its own plan in its
+  tests (`CleanedPlaceCoverage`); the copies that can be kept (`CopyKeeping`), the copies never marked
+  and refused (`CopyRefusals`), a mark state per group that always keeps a copy and judges its marks
+  again at each question (`GroupMarks`), the named rules (`MarkingRule`, `DuplicateMarks`), and the
+  confirmation's words (`RemovalConfirmation`) over a seam on each bin's size and limit
+  (`RecycleBinRooms`); each copy's size on disk, from the handle that identifies it; and Explore's
+  refusal set and Storage's places asked of one set of providers for both pages
+  (`MachineProtections`), with Explore's refusal reasons reworded to read on either page. Decided:
+  the tool roots are refusals, not where a clean deletes, so every provider declares its places,
+  generously, the default and every configured or reported location; a drive is internal only where
+  its disks are NVMe, solid state or rotational; an install location set aside because it holds a
+  chosen location still refuses the copies in it (§7.4 amended); the search names every reference
+  location it did not search (`CandidateFinding.UnsearchedReferences`): one not resolved, one on a
+  volume whose files cannot be identified, and one at or inside a place passed over or not read,
+  but not one that was searched and holds such a place, since every whole drive holds one; a
+  reference named so stops every rule while marking by hand stays open; a rule adds to the marks there are, and a keep
+  rule breaks a tie by the shorter path, then the path's text; the space shown is what the copies
+  occupy, as Windows reports it, which a removal may free less than, since shared clusters count in
+  full and the Recycle Bin frees nothing until it is emptied (§7.4 reworded); the confirmation
+  judges the marks again against the machine as it is then (`DuplicateMarks.RejudgeAsync`,
+  `RemovalConfirmation.ForAsync`), keeping every mark: Explore's policy, Storage's places, the
+  installed programs (`MachineProtections.ProgramFolders`, keeping every program folder the search
+  knew), the temporary folder, the cloud folders, and each drive's bus asked again rather than
+  remembered (`VolumeMediaCache.Now`), because a disk moved into a USB dock keeps its volume and
+  every file ID; a program folder, like a place Storage cleans, is asked as named and at the final
+  path a link on the way leads to, and an entry that leads to a folder naming no program is set
+  aside; neither is opened on a share, a network drive or a cloud drive to follow it
+  (`ResolvedPlaces.FollowedTo`). Measured: what a bin holds and its limit, in the technical facts.
+  Corrected here: step 1 (not the tool roots), the internal-drive test, and the facts on the
+  Recycle Bin and on provider targets.
 
 ## Limits that stay open
 
@@ -570,13 +629,19 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   removing a folder.
 - **Replacing a copy by a hard link.** Not authorised (§7.4), for the backup and save-by-rename
   reasons it gives. Re-opening it needs an answer to both.
-- **Space shared by block cloning.** The freed figure stays a lower bound on ReFS and a Dev Drive
-  until Windows reports what a cloned file shares.
+- **Space shared by block cloning.** On ReFS and a Dev Drive a removal can free less than the
+  figure shown, until Windows reports what a cloned file shares.
 - **A program that registers no install location.** A portable program, or a game library a
   launcher keeps without an entry, is not recognised as a program folder. The confirmation's list
   is where the user sees it.
 - **A cloud folder Windows does not list.** A sync client that does not register with the Cloud
   Files API, or a root Windows will not hand back, is not known to be a cloud folder, so a copy there
   can count as kept and is not marked by hand only. The confirmation's list is where the user sees it.
+- **A place a clean deletes that its provider cannot name.** A provider names the places it can
+  find without planning, and a few it cannot: a Delivery Optimization cache a policy moved to another
+  drive, a pnpm `dlx` cache moved by its `cache-dir` setting, a Maven repository named by
+  `-Dmaven.repo.local` or the global `settings.xml`, an app Squirrel installed after the places were
+  asked, and whatever Windows' own cleanups reach beyond the folders their provider declares. A
+  copy in one can count as kept. The confirmation's list is where the user sees it.
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

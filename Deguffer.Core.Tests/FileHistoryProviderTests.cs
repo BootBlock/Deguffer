@@ -171,6 +171,18 @@ public sealed class FileHistoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The saved versions are wherever the configuration sends them, so only reading it names the
+    /// place the command trims.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        CreateConfiguredDrive();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
     /// §9 reaches Windows' own cleanup. <c>-cleanup</c> removes a saved version once it is past the
     /// age and either a newer one exists or the file has left what File History protects — so the
     /// last saved copy of an Outlook data file the user has since deleted is exactly what it takes.

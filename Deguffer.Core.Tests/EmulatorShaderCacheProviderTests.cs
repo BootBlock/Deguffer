@@ -660,4 +660,35 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
             Assert.DoesNotContain(plan.TargetedPaths, path => IsAtOrUnder(path, kept));
         }
     }
+
+    /// <summary>§7.4: the places named without planning hold each cache in an emulator's default folder.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Dolphin(DolphinRoot);
+        WriteFile(Path.Combine(CemuRoot, "settings.xml"), 64);
+        Folder(Path.Combine(CemuRoot, "shaderCache", "precompiled"));
+        Folder(Path.Combine(CemuRoot, "shaderCache", "driver", "vk"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// §7.4 for caches found only through the user's emulator folders or an emulator's own settings: a
+    /// declared RPCS3 and a PCSX2 cache moved outside its folder are held too.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverADeclaredFolderAndACacheASettingMoved()
+    {
+        var install = Path.Combine(_temp.Path, "emulators", "rpcs3");
+        Rpcs3(install);
+        Declare(install);
+
+        var moved = Path.Combine(_temp.Path, "fast", "pcsx2-cache");
+        WriteFile(Path.Combine(Pcsx2Root, "inis", "PCSX2.ini"), 0);
+        File.WriteAllText(Path.Combine(Pcsx2Root, "inis", "PCSX2.ini"), $"[Folders]\nCache = {moved}\n");
+        WriteFile(Path.Combine(moved, "vulkan_shaders.bin"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

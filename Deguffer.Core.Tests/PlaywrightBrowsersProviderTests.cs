@@ -250,6 +250,26 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         Assert.Contains(Path.Combine(elsewhere, "chromium-1228"), (await provider.PlanAsync()).TargetedPaths);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryBuildThePlanCleansInTheDefaultCache()
+    {
+        CreateRoot("chromium-1228", "firefox-1488", "ffmpeg-1011");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverEveryBuildThePlanCleansWhereTheVariableMovedTheCache()
+    {
+        var elsewhere = Path.Combine(_temp.Path, "browsers");
+        Directory.CreateDirectory(Path.Combine(elsewhere, "chromium-1228"));
+        File.WriteAllBytes(Path.Combine(elsewhere, "chromium-1228", "payload.bin"), new byte[4096]);
+
+        _environment.WithEnvironmentVariable(PlaywrightBrowsersProvider.LocationVariable, elsewhere);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// "0" is Playwright's sentinel for per-project installs, not a directory. Treating it as a
     /// path would have the provider probe a folder literally named "0".

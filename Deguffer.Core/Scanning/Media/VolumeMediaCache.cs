@@ -4,7 +4,8 @@ namespace Deguffer.Core.Scanning.Media;
 
 /// <summary>
 /// The storage behind each volume, asked once per volume and once per disk for the life of an
-/// operation (G4).
+/// operation (G4), and asked again, remembered nowhere, where no earlier answer may settle the
+/// question (<see cref="Now"/>).
 ///
 /// <para>Its own type rather than a member of <see cref="LocalVolume"/>, because
 /// <see cref="IVolumeInventory.Volumes"/> is read on the UI thread and this is not to be (#181):
@@ -27,6 +28,15 @@ public sealed class VolumeMediaCache(IStorageQueries queries)
     /// </summary>
     public VolumeMedia Of(LocalVolume volume) =>
         Remembered(_byVolume, volume.RootPath, () => MediaClassifier.ClassifyVolume(volume, queries, DiskOf));
+
+    /// <summary>
+    /// What <paramref name="volume"/> sits on now, asked of its disks again and remembered nowhere,
+    /// for a question no earlier answer may settle: a disk moved from an internal bay into a USB dock
+    /// keeps its volume and every file ID on it, and only its bus says it can now be unplugged. Blocks
+    /// on the device, so never call it on the UI thread.
+    /// </summary>
+    public VolumeMedia Now(LocalVolume volume) =>
+        MediaClassifier.ClassifyVolume(volume, queries, disk => MediaClassifier.ClassifyDisk(disk, queries));
 
     /// <summary>Forget every answer, so the next operation sees disks attached or swapped since.</summary>
     public void Invalidate()

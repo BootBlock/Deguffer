@@ -473,4 +473,30 @@ public sealed class RetroArchDownloadProviderTests : IDisposable
             Assert.DoesNotContain(plan.TargetedPaths, path => path.Equals(kept, StringComparison.OrdinalIgnoreCase));
         }
     }
+
+    /// <summary>§7.4: the places named without planning hold every shader set and game database beside the program.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        _retroArch.Install().Declare();
+        _retroArch.ShaderSet("shaders_slang");
+        _retroArch.ShaderSet("shaders_glsl");
+        _retroArch.DatabaseFile("Nintendo - Nintendo Entertainment System");
+        RetroArchFixture.WriteFile(Path.Combine(_retroArch.Shaders, "my-crt.slangp"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 for folders the settings move: the shader sets and databases there are held too.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverFoldersTheSettingsMove()
+    {
+        var shaders = Path.Combine(_temp.Path, "retro-shaders");
+        var databases = Path.Combine(_temp.Path, "games");
+        _retroArch.Install($"video_shader_dir = \"{shaders}\"", $"content_database_path = \"{databases}\"").Declare();
+        _retroArch.ShaderSet("shaders_slang", shaders);
+        _retroArch.DatabaseFile("Sega - Mega Drive - Genesis", databases);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

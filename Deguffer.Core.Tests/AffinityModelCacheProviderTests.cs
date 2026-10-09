@@ -627,4 +627,15 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Assert.Contains(ModelCache(RoamingRoot, "3.0"), plan.TargetedPaths);
         Assert.True(plan.EstimatedBytes > Shallow, "Models nested inside the cache were not measured.");
     }
+
+    /// <summary>§7.4: the places named without planning hold the model cache under both roots.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        CreateVersion(ProfileRoot, "2.0");
+        CreateVersion(RoamingRoot, "3.0");
+        CreateWhatSitsBesideTheModels(RoamingRoot, "3.0");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

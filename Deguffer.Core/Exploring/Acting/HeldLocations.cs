@@ -70,7 +70,7 @@ internal sealed class HeldLocations
 
                 return ExploreVerdict.Refuse(
                     $"'{Path.GetFileName(target)}' holds '{location}', and removing a folder removes "
-                    + $"everything in it. Explore refuses '{Path.GetFileName(location)}' itself: {reason}");
+                    + $"everything in it. Deguffer refuses '{Path.GetFileName(location)}' itself: {reason}");
             }
         }
 

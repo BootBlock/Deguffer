@@ -380,6 +380,26 @@ public sealed class GradleCacheProviderTests : IDisposable
         Assert.DoesNotContain(stale, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleansInTheDefaultHome()
+    {
+        var root = CreateGradleHome();
+        CreateAt(root, "caches", 4096);
+        CreateAt(root, "wrapper", 2048);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleansWhereTheVariableMovedTheHome()
+    {
+        var moved = MoveGradleHome();
+        CreateAt(moved, "caches", 4096);
+        CreateAt(moved, "wrapper", 4096);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>The variable naming a home that is not there yet is Gradle not having run, not the default.</summary>
     [Fact]
     public async Task AMovedHomeThatIsNotThereIsNotPresentEvenWithTheDefaultOnDisk()

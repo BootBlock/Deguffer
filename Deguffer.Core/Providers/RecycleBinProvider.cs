@@ -197,6 +197,13 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         Volumes.Invalidate();
     }
 
+    /// <summary>
+    /// This account's own bin on each fixed volume stored here, whole: either route empties all of
+    /// it, and another account's bin beside it is never this row's to take.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. RecognisedBinPaths().Select(CleanedPlace.Whole)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.UserSecurityIdentifier is null)

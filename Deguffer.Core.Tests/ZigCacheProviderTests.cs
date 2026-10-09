@@ -251,6 +251,26 @@ public sealed class ZigCacheProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(moved, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleansInTheDefaultCache()
+    {
+        CreateFullCache();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleansWhereTheVariableMovedTheCache()
+    {
+        var moved = Path.Combine(_temp.Path, "caches", "zig");
+        Populate(Path.Combine(moved, "h"));
+        Populate(Path.Combine(moved, "o"));
+        Populate(Path.Combine(moved, "z"));
+        _environment.WithEnvironmentVariable(ZigCacheProvider.CacheVariable, moved);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// Zig resolves a relative value against the build's working directory, which Deguffer is not, and
     /// the default location is not what the user asked for either.

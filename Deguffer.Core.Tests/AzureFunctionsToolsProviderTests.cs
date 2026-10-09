@@ -109,6 +109,16 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        CreateReleases("1.13.2", "2.60.0", "4.18.1");
+        RecordTag("v4", "4.18.1");
+        WriteFeed();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
     public async Task NamesEachReleasesVersionInAColumn()
     {
         var releases = CreateReleases("1.13.2", "4.18.1");

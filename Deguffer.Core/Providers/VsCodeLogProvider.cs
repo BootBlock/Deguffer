@@ -135,6 +135,19 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
                 FolderChildren)),
         ];
 
+    /// <summary>
+    /// The log and crash report folders of every editor the same discovery the plan reads finds
+    /// holding either. The editor's settings, workspace state and local history beside them are never
+    /// reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from editor in Editors(ct)
+               from name in FolderChildren.DisposableNames
+               select CleanedPlace.Whole(Path.Combine(editor.Path, name)),
+        ]);
+
     public override void InvalidateCaches()
     {
         _editors = null;

@@ -172,6 +172,21 @@ public sealed class ZigCacheProvider : CleanupProviderBase
             : [];
 
     /// <summary>
+    /// The disposable children of the cache in use and of the default cache, because the variable can
+    /// be unset again after a duplicate search has read it. Never <c>p</c>, where fetched packages may
+    /// be the only copy, and never a folder the variable names that this declines.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. new[] { ResolveRoot(), DefaultRoot }
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .SelectMany(root => Children.DisposableNames
+                    .Select(child => CleanedPlace.Whole(Path.Combine(root, child)))),
+        ]);
+
+    /// <summary>
     /// Presence is a cache actually on disk, never the root existing: a root holding only fetched
     /// packages has nothing this row would offer.
     /// </summary>

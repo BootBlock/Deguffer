@@ -451,6 +451,26 @@ public sealed class CargoCacheProviderTests : IDisposable
         Assert.Equal([Path.Combine(moved, "registry", "cache")], plan.TargetedPaths);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleansInTheDefaultHome()
+    {
+        CreateFullHome();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleansWhereCargoHomeMovedIt()
+    {
+        var moved = Path.Combine(_temp.Path, "elsewhere", ".cargo");
+        Populate(Path.Combine(moved, "registry", "cache"));
+        Populate(Path.Combine(moved, "registry", "src"));
+        Populate(Path.Combine(moved, "git", "checkouts"));
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, moved);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// Cargo resolves a relative value against the invoking shell's working directory, which
     /// Deguffer is not. There is no correct interpretation available, so nothing is offered.

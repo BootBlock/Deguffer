@@ -267,4 +267,13 @@ public sealed class BattleNetCacheProviderTests : IDisposable
             Assert.Equal(root.RecognisesFolder(name), fromLogs.RecognisesFolder(name));
         }
     }
+
+    /// <summary>§7.4: the places named without planning hold the cache the plan removes.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        _battleNet.CreateMeasuredLayout();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

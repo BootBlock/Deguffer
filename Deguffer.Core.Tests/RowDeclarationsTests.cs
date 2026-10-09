@@ -283,6 +283,9 @@ public sealed class RowDeclarationsTests : IDisposable
     private sealed class DeclaringRow(Func<IReadOnlyList<ToolRoot>> roots, IReadOnlyList<ToolRoot>? discovered = null)
         : ICleanupProvider
     {
+        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
         public DeclaringRow(IReadOnlyList<ToolRoot> roots, IReadOnlyList<ToolRoot>? discovered = null)
             : this(() => roots, discovered)
         {

@@ -126,6 +126,18 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         return listing.Failure is not null || SupersededDrivers.Of(listing.Packages, _repository).Newest.Count > 0;
     }
 
+    /// <summary>
+    /// The driver store's package folders, and the Windows <c>INF</c> folder, both whole. Which
+    /// packages go is Windows' decision rather than this row's, and removing one also removes the
+    /// <c>oem&lt;N&gt;.inf</c> copy Windows installed it under, which sits in <c>INF</c>.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            CleanedPlace.Whole(_repository),
+            CleanedPlace.Whole(Path.Combine(_system.WindowsDirectory, "INF")),
+        ]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (NothingToPlanFor(_repository, "This Windows keeps no driver store.") is { } nothing)

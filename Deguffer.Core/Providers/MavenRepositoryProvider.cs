@@ -247,13 +247,32 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
                     new ToolRoot(
                         container,
                         "This holds the local repository your Maven settings point at, and removing it "
-                        + "would take the repository with everything else in it. Explore removes things "
+                        + "would take the repository with everything else in it. Deguffer removes things "
                         + "from inside it, never the folder itself.",
                         static _ => true),
                 ]
                 : [];
 
         return Task.FromResult(declared);
+    }
+
+    /// <summary>
+    /// The default local repository, and the one <c>settings.xml</c> moves it to, because an edit
+    /// can move it back after a duplicate search has read the file. A configured folder the plan
+    /// would leave alone is not named, since the plan never takes it and it may be the user's own.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        List<CleanedPlace> places = [CleanedPlace.Whole(DefaultLocalRepository)];
+
+        if (ResolveLocalRepository() is { } configured
+            && WhyLeftAlone(configured) is null
+            && Path.GetDirectoryName(configured) is { Length: > 0 })
+        {
+            places.Add(CleanedPlace.Whole(configured));
+        }
+
+        return Task.FromResult<IReadOnlyList<CleanedPlace>>(places);
     }
 
     /// <summary>

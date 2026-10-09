@@ -52,6 +52,49 @@ public sealed class DuplicateUnreadPlacesTests : IDisposable
         Assert.Empty(found.Unread);
     }
 
+    /// <summary>
+    /// A reference inside a folder Windows would not list was not searched, so no rule may mark while
+    /// it is named. It was opened, so it went unsearched for the folder alone.
+    /// </summary>
+    [Fact]
+    public async Task AReferenceInsideAFolderWindowsWillNotListWentUnsearched()
+    {
+        _tree.File(100, "Data", "a.jpg");
+        _tree.File(100, "Data", "Locked", "Photos", "a.jpg");
+        var photos = Path.Combine(_tree.Top, "Data", "Locked", "Photos");
+        using var denied = new DeniedDirectory(Path.Combine(_tree.Top, "Data", "Locked"));
+
+        var found = await _tree.FindAsync(
+            MatchCriteria.Size, new SearchLocation(Path.Combine(_tree.Top, "Data")), new SearchLocation(photos, LocationRole.Reference));
+
+        Assert.Empty(found.Unsearched);
+        var reference = Assert.Single(found.UnsearchedReferences);
+        Assert.Equal(photos, reference.Given.Path);
+        Assert.Contains("would not let Deguffer list this folder", reference.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A reference that was searched and holds a folder Windows would not list is not one that went
+    /// unsearched: nothing in that folder reached a group, and a whole drive given as a reference always
+    /// holds a place a search does not go into.
+    /// </summary>
+    [Fact]
+    public async Task AReferenceHoldingAFolderWindowsWillNotListWasSearched()
+    {
+        _tree.File(100, "Data", "a.jpg");
+        _tree.File(100, "Data", "Photos", "a.jpg");
+        var photos = Path.Combine(_tree.Top, "Data", "Photos");
+        var locked = _tree.Folder("Data", "Photos", "Locked");
+        using var denied = new DeniedDirectory(locked);
+
+        var found = await _tree.FindAsync(
+            MatchCriteria.Size, new SearchLocation(Path.Combine(_tree.Top, "Data")), new SearchLocation(photos, LocationRole.Reference));
+
+        Assert.Equal(locked, Assert.Single(found.Unread).Path);
+        Assert.Empty(found.UnsearchedReferences);
+        Assert.Equal(2, Assert.Single(found.Groups).Files.Count);
+    }
+
     public enum Damage
     {
         None,

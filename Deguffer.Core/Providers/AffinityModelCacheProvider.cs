@@ -244,6 +244,18 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(AffinityProfiles.RootsFor(Environment).Any(LongPath.DirectoryMayExist));
 
+    /// <summary>
+    /// The model cache of every version below each profile root's <c>Common</c> folder, named by its
+    /// folder rather than by the versions found on disk today, so a version Affinity adds after this is
+    /// asked is held as well. The asset library and licences beside it are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. AffinityProfiles.RootsFor(Environment)
+                .Select(root => CleanedPlace.FoldersNamed(Path.Combine(root, AffinityProfiles.CommonName), [ModelCacheName])),
+        ]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var trees = Trees(ct);

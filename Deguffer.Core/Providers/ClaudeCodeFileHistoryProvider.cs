@@ -136,6 +136,17 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             && LongPath.DirectoryMayExist(Path.Combine(home, ClaudeCodeHome.FileHistory)));
 
     /// <summary>
+    /// The snapshot folder in Claude Code's default folder and in the one its folder variable names. Each
+    /// session's snapshots are a folder named for the session, so the folder holding them is the
+    /// narrowest place that holds a session started after this is asked.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. Homes().Select(home => CleanedPlace.Whole(Path.Combine(home, ClaudeCodeHome.FileHistory)))]);
+
+    private IReadOnlyList<string> Homes() => ClaudeCodeHome.EveryHome(Environment, _system, Volumes);
+
+    /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own level,
     /// and the snapshot folder, recognising exactly the sessions this pass would offer.
     /// </summary>

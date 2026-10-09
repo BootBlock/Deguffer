@@ -70,6 +70,17 @@ public sealed class TempInstallerDownloadProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Entry(4096, "vscode-stable-user-x64", "CodeSetup-stable-1.105.0.exe");
+        Entry(2048, "DockerDesktopUpdates", "Docker Desktop Installer (223695).exe");
+        Entry(1024, "q4mzt0xk", "Win11SDK_10.0.26100.E9BB0EB40C39C3B4B64C", "Installers", "a.msi");
+        VisualStudioStagesIn(Path.Combine(UserTemp, "q4mzt0xk"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// VS Code applies a downloaded update from its folder when it restarts, so the folder waits for
     /// VS Code to close.

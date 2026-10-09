@@ -298,4 +298,17 @@ public sealed class VsCodeLogProviderTests : IDisposable
         Assert.NotEmpty(plan.Steps);
         Assert.All(plan.Steps, step => Assert.Null(step.LastWritten));
     }
+
+    /// <summary>§7.4: the places named without planning hold the logs and crash reports of every editor.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var code = CreateEditor();
+        CreateDirectory(Path.Combine(code, "logs", "20260101T090000"));
+        CreateDirectory(Path.Combine(code, "Crashpad", "reports"));
+        CreateDirectory(Path.Combine(code, "CachedData"));
+        CreateDirectory(Path.Combine(CreateEditor("Cursor"), "logs", "20260102T090000"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

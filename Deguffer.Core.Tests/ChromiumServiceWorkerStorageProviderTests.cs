@@ -320,4 +320,16 @@ public sealed class ChromiumServiceWorkerStorageProviderTests : IDisposable
 
         Assert.Empty(mine.Intersect(theirs, StringComparer.OrdinalIgnoreCase));
     }
+
+    /// <summary>§7.4: the places named without planning hold each profile's offline storage the plan removes.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var app = CreateApplication("Browserish");
+        CreateDirectory(Path.Combine(app, "Service Worker", "CacheStorage"));
+        CreateDirectory(Path.Combine(app, "Default", "Service Worker", "CacheStorage"));
+        CreateDirectory(Path.Combine(app, "Profile 1", "Service Worker", "CacheStorage"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

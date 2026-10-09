@@ -136,6 +136,14 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The runtimes folder, whole: LM Studio's remove command takes a runtime's folder and also the
+    /// shared libraries in <c>vendor</c> that only that runtime used. Never LM Studio's own folder
+    /// above it, which holds the models and chats.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(Backends)]);
+
+    /// <summary>
     /// Read from the disk rather than asked of LM Studio, because asking would start it. Present where
     /// some line holds two or more versions: one version is a working install with nothing to reclaim.
     ///

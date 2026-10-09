@@ -265,6 +265,20 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryRuntimeThePlanRemoves()
+    {
+        string[] runtimes =
+        [
+            $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0", $"{Cuda12}@2.44.0",
+            $"{Vulkan}@2.28.2", $"{Vulkan}@2.13.0",
+        ];
+        Install(runtimes);
+        Listing($"{Cuda12}@2.45.0", runtimes);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// Without the version, <c>lms runtime remove</c> matches every version of the line, the one in use
     /// included.

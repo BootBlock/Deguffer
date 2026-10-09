@@ -654,4 +654,29 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
 
         Assert.All(sentences, sentence => Assert.DoesNotContain(AuthToken, sentence, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>§7.4: the places named without planning hold a leftover of every kind.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        CreateOneOfEachLeftover();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 where Claude Code's folder variable moves its folder: the leftovers there are held too.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheFolderTheConfigDirectoryVariableNames()
+    {
+        var moved = new ClaudeCodeFixture(Path.Combine(_temp.Path, "elsewhere", "claude-config"));
+        moved.SpilledOutput(SessionA, age: Old);
+        moved.HookEnvironment(SessionA, age: Old);
+        moved.EditorLock(51299, processId: 4102);
+        moved.ShellSnapshot(DateTime.UtcNow - Old);
+        moved.FailedEvents(SessionA, age: Old);
+
+        _environment.WithEnvironmentVariable(ClaudeCodeHome.ConfigDirectoryVariable, moved.Home);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

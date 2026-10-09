@@ -96,6 +96,13 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
         Task.FromResult(_cloud.SyncRoots() is not { } roots
             || roots.Any(root => RecognisedApps.ContainsKey(root.ProviderName)));
 
+    /// <summary>
+    /// None: releasing a local copy leaves the file where it is, online-only, so nothing in a sync
+    /// folder is deleted.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (_cloud.SyncRoots() is not { } roots)

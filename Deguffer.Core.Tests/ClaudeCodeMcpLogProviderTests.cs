@@ -266,4 +266,14 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
 
         Assert.Equal([log], (await provider.PlanAsync()).TargetedPaths);
     }
+
+    /// <summary>§7.4: the places named without planning hold every server's log in every project.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        ServerLog("filesystem");
+        ServerLog("browser", "C--Users-testuser-src-another");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

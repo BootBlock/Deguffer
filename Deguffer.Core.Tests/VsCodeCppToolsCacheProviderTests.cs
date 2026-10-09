@@ -552,6 +552,19 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         return directory;
     }
 
+    /// <summary>§7.4: the places named without planning hold the precompiled headers and every workspace's database.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var root = CreateCacheRoot();
+        CreateAt(root, "ipch", 1024);
+        CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
+        CreateWorkspaceDatabase(root, "22223333444455556666777788889999");
+        CreateAt(root, "extension-state", 512);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     private static string CreateAt(string root, string child, int bytes)
     {
         var directory = Path.Combine(root, child);

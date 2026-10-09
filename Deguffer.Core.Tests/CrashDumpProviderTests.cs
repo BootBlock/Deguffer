@@ -118,6 +118,19 @@ public sealed class CrashDumpProviderTests : IDisposable
         Assert.True(plan.EstimatedBytes > 65536);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
+        Populate(Path.Combine(WerFolder, "ReportArchive"));
+        Populate(Path.Combine(WerFolder, "ReportQueue"));
+        Populate(Path.Combine(Windows, "Minidump"));
+        Populate(Path.Combine(Windows, "LiveKernelReports"));
+        File.WriteAllBytes(Path.Combine(Windows, "MEMORY.DMP"), new byte[65536]);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// §3, and a correction to the survey that proposed these as Tier 1. Nothing re-creates a crash
     /// dump, because the crash does not happen again to order — which is the property that puts a

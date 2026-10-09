@@ -67,6 +67,16 @@ public sealed class DartAnalysisServerProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var root = CreateServerRoot();
+        CreateAt(root, ".analysis-driver", 8192);
+        CreateAt(root, ".pub-package-details-cache", 1024);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
     public async Task NeverTargetsTheDartServerRootDirectory()
     {
         CreateServerRoot();

@@ -477,4 +477,16 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
 
         Assert.Equal(allowed, policy.MayRemove(Path.Combine(install, relative)).IsAllowed);
     }
+
+    /// <summary>§7.4: the places named without planning hold every game's artwork, in either layout.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        RegisterInstall();
+        Index();
+        ArtworkFor("440");
+        WriteFile(Path.Combine(Container, "620_library_600x900.jpg"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

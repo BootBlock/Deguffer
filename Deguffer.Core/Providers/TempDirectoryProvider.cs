@@ -279,6 +279,14 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         ]);
     }
 
+    /// <summary>
+    /// Every temporary folder this row empties, the machine's included, whole: the clean takes
+    /// anything in them old enough and not in use, so any file there may go. A folder a setting named
+    /// and <see cref="TempRoots"/> refused is not among them, because no step ever reaches into it.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. DeclaredPaths().Select(CleanedPlace.Whole)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var days = ConfiguredDays;

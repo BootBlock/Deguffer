@@ -18,8 +18,8 @@ internal static class ProtectedRegions
         yield return ProtectedRegion.Refusing(
             system.WindowsDirectory,
             RegionScope.PathAndBelow,
-            "This is inside the Windows directory. Deguffer never removes anything there from "
-            + "Explore, and §9 of its specification excludes the component store and the installer "
+            "This is inside the Windows directory. Deguffer never removes anything there that "
+            + "is picked out by hand, and §9 of its specification excludes the component store and the installer "
             + "cache from every removal by path, because a wrong removal there breaks uninstall or "
             + "leaves the machine unable to roll an update back. The component store is cleaned only "
             + "by Windows' own command, from the clean list.");
@@ -50,7 +50,7 @@ internal static class ProtectedRegions
             RegionScope.PathOnly,
             "Windows creates this folder on the drive it is installed on, even where there is no web "
             + "server, as part of a security fix for Windows Update. Removing it reopens the flaw "
-            + "that fix closed, so Explore removes things from inside it, never the folder itself.");
+            + "that fix closed, so Deguffer removes things from inside it, never the folder itself.");
 
         // The user's own profile, in three entries that read as one rule. The profile directory is
         // not a thing to remove and neither is the Users folder, but everything the user keeps
@@ -72,7 +72,7 @@ internal static class ProtectedRegions
             environment.UserProfile,
             RegionScope.PathOnly,
             "This is your whole profile — your documents, your settings and everything Deguffer "
-            + "would otherwise offer to clean. Explore removes things from inside it, never the "
+            + "would otherwise offer to clean. Deguffer removes things from inside it, never the "
             + "profile itself.");
 
         // The folders every program keeps its state in, and the temporary folder, in the profile's
@@ -82,13 +82,13 @@ internal static class ProtectedRegions
             environment.LocalAppData,
             RegionScope.PathOnly,
             "This is where every program keeps its local data for your account: caches, but also "
-            + "settings, sign-ins and saved work. Explore removes things from inside it, never the "
+            + "settings, sign-ins and saved work. Deguffer removes things from inside it, never the "
             + "folder itself.");
 
         yield return ProtectedRegion.Refusing(
             environment.RoamingAppData,
             RegionScope.PathOnly,
-            "This is where every program keeps the settings that roam with your account. Explore "
+            "This is where every program keeps the settings that roam with your account. Deguffer "
             + "removes things from inside it, never the folder itself.");
 
         if (environment.LocalLowAppData is { } localLow)
@@ -97,7 +97,7 @@ internal static class ProtectedRegions
                 localLow,
                 RegionScope.PathOnly,
                 "This is where programs that run with reduced rights, browsers among them, keep their "
-                + "data for your account. Explore removes things from inside it, never the folder "
+                + "data for your account. Deguffer removes things from inside it, never the folder "
                 + "itself.");
         }
 
@@ -105,7 +105,7 @@ internal static class ProtectedRegions
             environment.TempPath,
             RegionScope.PathOnly,
             "This is your temporary folder. Programs expect to find it and Windows does not put it "
-            + "back, so Explore removes things from inside it, never the folder itself.");
+            + "back, so Deguffer removes things from inside it, never the folder itself.");
 
         // Longer than the profile's permission, so it wins over it by the table's own ordering
         // rather than by being written as an exception.

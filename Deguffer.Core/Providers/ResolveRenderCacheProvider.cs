@@ -130,6 +130,16 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
         ]);
     }
 
+    /// <summary>
+    /// Each project folder in a cache folder at the root of a local drive or in the Videos folder that
+    /// the same examination the plan reads recognised as holding only render cache. Named one by one
+    /// rather than as the cache folder, because the optimised and proxy media beside them are often the
+    /// user's only editable copy.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. Examine(ct).RenderFolders.Select(folder => CleanedPlace.Whole(folder.Path))]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var examination = Examine(ct);
