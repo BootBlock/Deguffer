@@ -132,13 +132,18 @@ public abstract class DuplicateMarkingScene : IDisposable
     private protected async Task<DuplicateMarks> MarksAsync(DuplicateSearchResult result, MachineProtections protections) =>
         WithGroups(await DuplicateMarks.ForAsync(result.Finding, protections, _tree.Environment, _cloud, _tree.Volumes, _media), result);
 
-    /// <summary><paramref name="marks"/> with each of <paramref name="result"/>'s groups added, as the search confirmed them.</summary>
+    /// <summary>
+    /// <paramref name="marks"/> with each of <paramref name="result"/>'s groups added, as the search
+    /// confirmed them, and the search ended.
+    /// </summary>
     private protected static DuplicateMarks WithGroups(DuplicateMarks marks, DuplicateSearchResult result)
     {
         foreach (var group in result.Groups)
         {
             marks.Add(group);
         }
+
+        marks.Complete();
 
         return marks;
     }

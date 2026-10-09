@@ -42,6 +42,14 @@ public sealed record RemovalConfirmation(
     IReadOnlyList<string> Warnings,
     ExploreRemovalMode Mode)
 {
+    /// <summary>The dialog's title, which says how many copies go and how.</summary>
+    public string Title => Mode == ExploreRemovalMode.RecycleBin
+        ? $"Move {Count(Copies.Count, "copy", "copies")} to the Recycle Bin?"
+        : $"Permanently delete {Count(Copies.Count, "copy", "copies")}?";
+
+    /// <summary>The button that confirms, which names what it does rather than saying yes.</summary>
+    public string ConfirmLabel => Mode == ExploreRemovalMode.RecycleBin ? "Move to Recycle Bin" : "Delete permanently";
+
     /// <summary>The confirmation of removing the marks that stand in <paramref name="marks"/>.</summary>
     /// <param name="protections">Built afresh for this confirmation, so Explore's policy is read now.</param>
     /// <param name="room">The room in a volume's Recycle Bin, or null where Windows would not say.</param>
@@ -62,6 +70,8 @@ public sealed record RemovalConfirmation(
     internal static RemovalConfirmation For(
         DuplicateMarks marks, CopyKeeping keeping, ExploreRemovalMode mode, Func<LocalVolume, RecycleBinRoom?> room)
     {
+        marks.ThrowUnlessComplete();
+
         List<IReadOnlyList<DuplicateCandidate>> byGroup = [.. marks.Groups.Select(group => group.Standing(keeping)).Where(standing => standing.Count > 0)];
         List<DuplicateCandidate> copies = [.. byGroup.SelectMany(standing => standing)];
         var space = copies.Sum(copy => copy.SizeOnDisk);

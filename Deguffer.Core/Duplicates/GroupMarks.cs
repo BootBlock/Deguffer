@@ -31,6 +31,9 @@ public sealed class GroupMarks
     /// <summary>Whether <paramref name="copy"/> is marked.</summary>
     public bool IsMarked(DuplicateCandidate copy) => _marked.Contains(copy.Identity);
 
+    /// <summary>How many copies are marked, standing or not.</summary>
+    public int MarkedCount => _marked.Count;
+
     /// <summary>
     /// Mark <paramref name="copy"/>, or say why not: it is never marked, it is refused, or no other
     /// copy that can be kept would be left unmarked. Null where it is marked.

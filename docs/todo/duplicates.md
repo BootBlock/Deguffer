@@ -534,6 +534,20 @@ rule or removal runs on them until a search runs again. `DuplicateMarks.Add` run
 thread while `DuplicateMarks.RejudgeAsync`, `RemovalConfirmation` and `DuplicateRemover` read the
 groups off it, so no confirmation or removal starts while a search runs.
 
+Corrected here: both hazards are wider than a role and a removal. A location added or taken away
+after the search leaves its groups in roles the user no longer chose as surely as a role change does
+(a folder added as a reference inside a searched one), so any change to the locations or their roles
+makes the results stale (`DuplicateSearch.WhyResultsDoNotApply`), and they apply again only when the
+locations match the search's, in any order. A rule reads the groups off the page's thread too
+(`DuplicateMarks.Run` opens a folder rule's folder), and so does the judgement every confirmation and
+removal begins with, so Core refuses both until the page says the search has ended
+(`DuplicateMarks.Complete`), and refuses a group added after it. The marks themselves
+(`GroupMarks`) and the refusals' cache (`CopyRefusals`) are not safe to change or ask on two threads,
+so no mark changes, by hand or by rule, while a rule, a confirmation or a removal runs, and no search
+starts under one. After a removal the groups describe the disk as it was, so they take no further
+marks until a search runs again. A mark by hand stays open while the search runs, because it is made
+on the page's thread, as each group is added.
+
 Proves: a rule's marks are what Core decided; the page offers no way past a Core refusal; the dialog
 shows Core's words; a role changed after a search stops every rule and removal until the next
 search; no confirmation or removal can start while a search runs; a removal driven with the `verify` skill moves the marked copies to the Recycle

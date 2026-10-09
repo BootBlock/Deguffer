@@ -95,6 +95,26 @@ public sealed record DuplicateSearch
         return sizes.WhyRefused ?? extensions?.WhyRefused;
     }
 
+    /// <summary>
+    /// Why what this search found no longer answers for the locations <paramref name="chosen"/> now,
+    /// or null where they are the ones it searched, in the same roles, in any order.
+    ///
+    /// <para>A file's role is decided as the search finds it, by the innermost location holding it, so
+    /// a location added, taken away or given another role after the search leaves its groups and
+    /// marks in roles the user no longer chose: a folder made a reference would still offer its
+    /// copies for removal. Paths compare exactly, as the list does, since a case-sensitive folder can
+    /// hold two that differ only in case.</para>
+    /// </summary>
+    public string? WhyResultsDoNotApply(IReadOnlyCollection<SearchLocation> chosen)
+    {
+        ArgumentNullException.ThrowIfNull(chosen);
+
+        return chosen.Count == Locations.Count && Locations.ToHashSet().SetEquals(chosen)
+            ? null
+            : "The locations or their roles changed after this search, so its groups show copies in the roles they had then. "
+              + "Search again to mark or remove copies.";
+    }
+
     public bool Equals(DuplicateSearch? other) =>
         other is not null
         && Criteria == other.Criteria
