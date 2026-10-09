@@ -51,7 +51,6 @@ public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, Fallba
 /// every folder on it, so <paramref name="Node"/> is not always the tree's root, and a caller reads
 /// the folder from it rather than from <see cref="ExploreTree.RootNode"/>.</para>
 /// </summary>
-/// <param name="Folder">The folder's path, as the scan reached it.</param>
 /// <param name="FromIncompleteTable">
 /// Whether the folder was found in a file table that was not read whole, or that held a record the
 /// read could not place. Such a record might have been anywhere, this folder included, so what the
@@ -59,7 +58,7 @@ public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, Fallba
 /// it was refused (<see cref="ExploreTree.ListingWasRefused"/>).
 /// </param>
 public sealed record ScannedFolder(
-    string Folder, ExploreTree Tree, int Node, ScanStrategy Strategy, FallbackReason Fallback, bool FromIncompleteTable)
+    ExploreTree Tree, int Node, ScanStrategy Strategy, FallbackReason Fallback, bool FromIncompleteTable)
 {
     /// <summary>The sentence to show about the route the folder was read by, or null when nothing needs saying.</summary>
     public string? RouteNote => ExploreRouteText.Describe(Strategy, Fallback);

@@ -331,5 +331,5 @@ public sealed class DuplicateCandidateTests : IDisposable
 
     /// <summary><paramref name="node"/> of a tree read whole from a file table.</summary>
     private static ScannedFolder Scanned(ExploreTree tree, int node) =>
-        new(tree.PathOf(node), tree, node, ScanStrategy.MasterFileTable, FallbackReason.None, FromIncompleteTable: false);
+        new(tree, node, ScanStrategy.MasterFileTable, FallbackReason.None, FromIncompleteTable: false);
 }

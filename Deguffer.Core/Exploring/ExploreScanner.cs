@@ -137,7 +137,7 @@ public sealed class ExploreScanner(
                 if (located.Node is { } node)
                 {
                     scans[index] = new ScannedFolder(
-                        volume.FullPath, tree, node, ScanStrategy.MasterFileTable, FallbackReason.None,
+                        tree, node, ScanStrategy.MasterFileTable, FallbackReason.None,
                         FromIncompleteTable: !everyRecordRead);
                 }
                 else
@@ -153,8 +153,7 @@ public sealed class ExploreScanner(
             {
                 var walked = Walk(folders[i], reasons[i], progress, ct);
                 scans[i] = new ScannedFolder(
-                    walked.Tree.RootPath, walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback,
-                    FromIncompleteTable: false);
+                    walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback, FromIncompleteTable: false);
             }
         }
 
