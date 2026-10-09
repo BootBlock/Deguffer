@@ -34,10 +34,9 @@ internal enum ContentReadResult
 
 /// <summary>What <see cref="ContentReader.Read"/> answered.</summary>
 /// <param name="Checksum">The checksum of what was read, where <paramref name="Result"/> is <see cref="ContentReadResult.Read"/>.</param>
-/// <param name="Whole">Whether the read covered every byte, so the checksum is the file's own.</param>
-internal readonly record struct ContentReading(ContentReadResult Result, ContentChecksum Checksum, bool Whole)
+internal readonly record struct ContentReading(ContentReadResult Result, ContentChecksum Checksum)
 {
-    public static ContentReading LeftOut(ContentReadResult result) => new(result, default, Whole: false);
+    public static ContentReading LeftOut(ContentReadResult result) => new(result, default);
 }
 
 /// <summary>
@@ -99,8 +98,12 @@ internal sealed class ContentReader
         _open = open;
     }
 
-    /// <summary>Whether a file of <paramref name="length"/> bytes is read whole by its first and last blocks.</summary>
-    public static bool EndsAreWhole(long length) => length <= 2L * BlockBytes;
+    /// <summary>
+    /// Whether a read of <paramref name="part"/> of a file of <paramref name="length"/> bytes covers
+    /// every byte, so its checksum is the file's own: the first and last blocks of a file no longer
+    /// than the two are the whole file, read once.
+    /// </summary>
+    public static bool IsWhole(ContentPart part, long length) => part is ContentPart.Whole || length <= 2L * BlockBytes;
 
     /// <summary>
     /// The checksum of <paramref name="part"/> of <paramref name="file"/>'s content, or the reason it
@@ -165,7 +168,7 @@ internal sealed class ContentReader
                 return ContentReading.LeftOut(after);
             }
 
-            return new ContentReading(ContentReadResult.Read, value, part is ContentPart.Whole || EndsAreWhole(file.Length));
+            return new ContentReading(ContentReadResult.Read, value);
         }
     }
 
@@ -214,7 +217,7 @@ internal sealed class ContentReader
     /// </summary>
     private static ContentChecksum? Checksum(SafeFileHandle content, long length, ContentPart part, Checksum checksum, CancellationToken ct)
     {
-        var whole = part is ContentPart.Whole || EndsAreWhole(length);
+        var whole = IsWhole(part, length);
         var buffer = ArrayPool<byte>.Shared.Rent(whole ? WholeReadBytes : BlockBytes);
         var finished = false;
 

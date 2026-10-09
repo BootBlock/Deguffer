@@ -202,7 +202,7 @@ public sealed class ContentReaderTests : IDisposable
         var ends = ContentReader.Default.Read(file, ContentPart.Ends, checksum, default);
         var whole = ContentReader.Default.Read(file, ContentPart.Whole, checksum, default);
 
-        Assert.True(ends.Whole);
+        Assert.True(ContentReader.IsWhole(ContentPart.Ends, file.Length));
         Assert.Equal(whole.Checksum, ends.Checksum);
         Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(content)), ends.Checksum.Hex);
     }
