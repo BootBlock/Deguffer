@@ -122,7 +122,7 @@ public sealed class SearchLocations
             return (null, NotLocal);
         }
 
-        if (FileInformation.FinalPath(followed) is not { } final)
+        if (FileInformation.Default.FinalPath(followed) is not { } final)
         {
             // Not "it is not there": a refusal reads the same, and the folder may well be there.
             return (null, "Windows would not open this folder, so Deguffer cannot tell where it is or what it holds.");

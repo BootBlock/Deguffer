@@ -177,7 +177,7 @@ public sealed class CloudFiles : ICloudFiles
 
     public string? Resolve(string path)
     {
-        return FileInformation.FinalPath(path) is { } final ? Comparable(final) : null;
+        return FileInformation.Default.FinalPath(path) is { } final ? Comparable(final) : null;
     }
 
     public ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible)
@@ -190,7 +190,7 @@ public sealed class CloudFiles : ICloudFiles
                 Unopened().Presence is PathPresence.Absent ? ReleaseResult.Gone : ReleaseResult.Refused);
         }
 
-        if (FileInformation.FinalPath(handle) is not { } final
+        if (FileInformation.FinalPathOf(handle) is not { } final
             || !string.Equals(Comparable(final), Comparable(resolvedPath), StringComparison.OrdinalIgnoreCase))
         {
             return new ReleaseAnswer(ReleaseResult.NoLongerEligible);

@@ -23,7 +23,7 @@ internal sealed class DuplicateTree : IDisposable
 
     public DuplicateTree()
     {
-        Top = LongPath.Display(FileInformation.FinalPath(_temp.Path)!);
+        Top = LongPath.Display(FileInformation.Default.FinalPath(_temp.Path)!);
         Volumes = new FakeVolumeInventory().With(Top + Path.DirectorySeparatorChar);
         System = new FakeSystemDirectories(Top);
         Environment = new FakeUserEnvironment(Path.Combine(Top, "Users"));
