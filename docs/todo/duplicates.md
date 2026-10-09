@@ -482,7 +482,9 @@ whose file ID is not the compared copy's stops the run and is named; the permane
 route keeps every refusal; the path reaching Win32 is in its `\\?\` form. Added here: a copy the
 confirmation did not list never goes, and a listed copy whose mark no longer stands stays with its
 reason; a reference copy lost during the removal fails §5.6; a bin that does not say where it put a
-copy stops the run.
+copy stops the run; a copy whose attributes changed, before or during the comparison, is not
+removed; a copy that is only the start of the copy kept is not removed; a copy partly locked by
+another program stays and the run still reports; the bin is handed the path in its display form.
 
 ### Phase 6 — The page: searching (App)
 
@@ -658,7 +660,9 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   page. Decided: the removal takes its mode and its list from the confirmation, so a mark the
   confirmation dropped never goes even where it stands again by the removal; the policy and the
   keeping rule are decided once as the removal begins; the copy kept is chosen by identity, never by
-  path. Measured: the shell's progress sink names the item it binned, with its file ID unchanged; a
+  path; the lengths are compared before the bytes, because a group matched by name or time alone
+  can hold a copy that is only the start of the copy kept; and a read another program's lock
+  refuses leaves that copy where it is, with its reason, never ending the run unreported. Measured: the shell's progress sink names the item it binned, with its file ID unchanged; a
   handle opened by number refuses a write but not a rename or a delete, and cannot delete its file;
   a named stream opens relative to a held handle; the stream listing answers through an
   attributes-only handle. Corrected here: step 1 (what is shared), step 2 (both copies held by
