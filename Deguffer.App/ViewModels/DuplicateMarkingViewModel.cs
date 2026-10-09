@@ -77,7 +77,11 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
     /// <summary>Whether a rule, a confirmation or a removal is running, so the page waits for it.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     public partial bool IsBusy { get; private set; }
+
+    /// <summary>Whether nothing is running, so the locations may change.</summary>
+    public bool IsIdle => !IsBusy;
 
     /// <summary>What the last rule or removal did, or an empty string.</summary>
     [ObservableProperty]

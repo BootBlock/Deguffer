@@ -186,9 +186,9 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         Assert.True(File.Exists(other.Path));
     }
 
-    /// <summary>A rule asked to stop stops before the next group, and marks nothing in the groups it did not reach.</summary>
+    /// <summary>A rule asked to stop before it reaches a group throws, and marks nothing in a group it did not reach.</summary>
     [Fact]
-    public void ARuleStopsBetweenGroupsWhenAskedTo()
+    public void ARuleAskedToStopMarksNoGroupItHasNotReached()
     {
         var marks = Marks(
             [Copy(Path.Combine(Documents, "a.jpg"), modified: Older), Copy(Path.Combine(Downloads, "a.jpg"), modified: Newer)],

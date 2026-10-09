@@ -113,6 +113,10 @@
         <!-- Where to search, beside what makes a match. Each control writes straight through: a
              location to the list, a criterion or a filter to the preferences. -->
         <Grid Grid.Row="1" ColumnSpacing="24" ColumnDefinitions="*,*">
+            <!-- Held while a rule or a removal runs: a location or role changed then would change
+                 what the marks mean under a removal the user has already confirmed. -->
+            <ContentControl IsTabStop="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                            IsEnabled="{x:Bind ViewModel.Marking.IsIdle, Mode=OneWay}">
             <StackPanel Spacing="8">
                 <TextBlock Text="Where to search" Style="{StaticResource BodyStrongTextBlockStyle}" />
 
@@ -154,6 +158,7 @@
                     </ListView.ItemTemplate>
                 </ListView>
             </StackPanel>
+            </ContentControl>
 
             <StackPanel Grid.Column="1" Spacing="8">
                 <TextBlock Text="What makes a match" Style="{StaticResource BodyStrongTextBlockStyle}" />
