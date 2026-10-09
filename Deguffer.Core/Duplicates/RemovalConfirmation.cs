@@ -48,6 +48,7 @@ public sealed record RemovalConfirmation(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(marks);
+        ArgumentNullException.ThrowIfNull(room);
 
         return For(marks, await marks.RejudgeAsync(protections, ct).ConfigureAwait(false), mode, room);
     }
@@ -56,10 +57,6 @@ public sealed record RemovalConfirmation(
     internal static RemovalConfirmation For(
         DuplicateMarks marks, CopyKeeping keeping, ExploreRemovalMode mode, Func<LocalVolume, RecycleBinRoom?> room)
     {
-        ArgumentNullException.ThrowIfNull(marks);
-        ArgumentNullException.ThrowIfNull(keeping);
-        ArgumentNullException.ThrowIfNull(room);
-
         List<IReadOnlyList<DuplicateCandidate>> byGroup = [.. marks.Groups.Select(group => group.Standing(keeping)).Where(standing => standing.Count > 0)];
         List<DuplicateCandidate> copies = [.. byGroup.SelectMany(standing => standing)];
         var space = copies.Sum(copy => copy.SizeOnDisk);

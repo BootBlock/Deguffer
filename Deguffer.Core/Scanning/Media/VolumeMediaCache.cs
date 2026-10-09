@@ -28,6 +28,15 @@ public sealed class VolumeMediaCache(IStorageQueries queries)
     public VolumeMedia Of(LocalVolume volume) =>
         Remembered(_byVolume, volume.RootPath, () => MediaClassifier.ClassifyVolume(volume, queries, DiskOf));
 
+    /// <summary>
+    /// What <paramref name="volume"/> sits on now, asked of its disks again and remembered nowhere,
+    /// for a question no earlier answer may settle: a disk moved from an internal bay into a USB dock
+    /// keeps its volume and every file ID on it, and only its bus says it can now be unplugged. Blocks
+    /// on the device, so never call it on the UI thread.
+    /// </summary>
+    public VolumeMedia Now(LocalVolume volume) =>
+        MediaClassifier.ClassifyVolume(volume, queries, disk => MediaClassifier.ClassifyDisk(disk, queries));
+
     /// <summary>Forget every answer, so the next operation sees disks attached or swapped since.</summary>
     public void Invalidate()
     {

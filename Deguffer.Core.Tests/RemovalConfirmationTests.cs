@@ -87,6 +87,24 @@ public sealed class RemovalConfirmationTests : IDisposable
         Assert.Empty(confirmation.Warnings);
     }
 
+    /// <summary>
+    /// A copy moved to the Recycle Bin frees nothing until the bin is emptied, so the summary says so
+    /// for a removal to the bin, and not for a permanent one, which frees the space when it is done.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin, true)]
+    [InlineData(ExploreRemovalMode.Permanent, false)]
+    public void TheSummarySaysTheRecycleBinFreesNothingUntilItIsEmptiedOnlyForTheBin(ExploreRemovalMode mode, bool says)
+    {
+        var marks = Marks([Copy(Documents, "1.jpg"), Copy(Path.Combine(Documents, "B"), "1.jpg")]);
+        MarkAllButFirst(marks);
+
+        var summary = RemovalConfirmation.For(marks, marks.Keeping, mode, _ => Room(0, long.MaxValue)).Summary;
+
+        Assert.Contains("the removal may free less", summary, StringComparison.Ordinal);
+        Assert.Equal(says, summary.Contains("only when it is emptied", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void TheConfirmationNamesTheBinsRoomWhereTheCopiesExceedIt()
     {

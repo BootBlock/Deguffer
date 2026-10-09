@@ -74,7 +74,8 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// <summary>Every plan it was handed to clean, in order, as the planner narrowed it.</summary>
     public List<CleanupPlan> Executed { get; } = [];
 
-    public IReadOnlyList<ToolRoot> ToolRoots => [];
+    /// <summary>The tool roots it declares, as a test states them, which Explore's policy refuses beside.</summary>
+    public IReadOnlyList<ToolRoot> ToolRoots { get; set; } = [];
 
     public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>([]);

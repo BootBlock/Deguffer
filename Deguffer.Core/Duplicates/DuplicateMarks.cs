@@ -17,7 +17,8 @@ public sealed record RuleOutcome(int Marked, IReadOnlyList<(GroupMarks Group, st
 /// rule (<see cref="MarkingRule"/>).</para>
 ///
 /// <para><b>No rule marks while a reference went unsearched.</b> Where a location chosen as a
-/// reference was not searched in whole, for whatever reason, Deguffer cannot tell which copies it
+/// reference was not searched (<see cref="CandidateFinding.UnsearchedReferences"/>), for whatever
+/// reason, Deguffer cannot tell which copies it
 /// holds: a link on the way to it, or a share that names this computer's own disk, can put its copies
 /// inside a searched location under another name, in the search role. Marking by hand stays open,
 /// because each such mark is one the user looked at.</para>
@@ -29,36 +30,34 @@ public sealed class DuplicateMarks
         + "and no rule marks anything until it is. Each one says why it was not searched.";
 
     private readonly DuplicateSearchResult _result;
-    private readonly IUserEnvironment _environment;
-    private readonly ICloudFiles _cloud;
+    private readonly KeepingReader _reader;
     private readonly IVolumeInventory _volumes;
-    private readonly Func<LocalVolume, VolumeMedia> _media;
     private readonly FileInformation _files;
 
     private DuplicateMarks(
         DuplicateSearchResult result,
         ExploreActionPolicy policy,
         IReadOnlyList<StorageClean> cleans,
-        IUserEnvironment environment,
-        ICloudFiles cloud,
+        KeepingReader reader,
         IVolumeInventory volumes,
-        Func<LocalVolume, VolumeMedia> media,
         FileInformation files)
     {
         _result = result;
-        _environment = environment;
-        _cloud = cloud;
+        _reader = reader;
         _volumes = volumes;
-        _media = media;
         _files = files;
         UnsearchedReferences = result.Finding.UnsearchedReferences;
-        Keeping = Judge(policy, cleans);
+        Keeping = reader.Read(policy, cleans, result.Finding.ProgramFolders, result.Groups);
 
-        // Sorted once, by the space each group could free, which a mark does not change.
+        // Sorted once, by the space each group could free when the marks were made.
         Groups = [.. result.Groups.Select(group => new GroupMarks(group)).OrderByDescending(marks => marks.FreeableSpace(Keeping))];
     }
 
-    /// <summary>Every group, the one that could free the most first.</summary>
+    /// <summary>
+    /// Every group, the one that could free the most first as the keeping rule was judged when the
+    /// marks were made. A later <see cref="RejudgeAsync"/> does not reorder them, so a page's list
+    /// keeps the reader's place.
+    /// </summary>
     public IReadOnlyList<GroupMarks> Groups { get; }
 
     /// <summary>
@@ -73,10 +72,10 @@ public sealed class DuplicateMarks
     /// <summary>
     /// The marks for <paramref name="result"/>, with everything that decides which copies can be kept
     /// read now: where Storage's cleans delete, the temporary folder, the cloud folders, and what each
-    /// volume's disks are. Blocks on each volume's disks the first time it is asked, so never call it
-    /// on the UI thread.
+    /// volume's disks are. Blocks on each volume's disks, so never call it on the UI thread.
     /// </summary>
     /// <param name="protections">The same protections whose policy the search passed over places by.</param>
+    /// <param name="media">Asked through <see cref="VolumeMediaCache.Now"/>, never its remembered answers.</param>
     public static async Task<DuplicateMarks> ForAsync(
         DuplicateSearchResult result,
         MachineProtections protections,
@@ -96,7 +95,7 @@ public sealed class DuplicateMarks
             environment,
             cloud,
             volumes,
-            media.Of,
+            media.Now,
             FileInformation.Default);
     }
 
@@ -119,73 +118,29 @@ public sealed class DuplicateMarks
         ArgumentNullException.ThrowIfNull(cloud);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        return new DuplicateMarks(result, policy, cleans, environment, cloud, volumes, media, files);
+        return new DuplicateMarks(result, policy, cleans, new KeepingReader(environment, cloud, volumes, media, files), volumes, files);
     }
 
     /// <summary>
-    /// Judge the marks again against the machine as it is now, keeping every mark: Explore's policy
-    /// and Storage's places from <paramref name="protections"/>, and the temporary folder, the cloud
-    /// folders and each volume's disks read again. A confirmation is built from the answer
-    /// (<see cref="RemovalConfirmation.ForAsync"/>), because a folder can become the temporary folder,
-    /// a cache, a cloud folder or a program's folder between the marks and the removal, and a mark
-    /// made before then would leave a group keeping only a copy that can now go without anyone
-    /// choosing it to. Blocks on the disks, so never call it on the UI thread.
+    /// Judge the marks again against the machine as it is now, keeping every mark: Explore's policy,
+    /// Storage's places and the program folders from <paramref name="protections"/>, and the
+    /// temporary folder, the cloud folders and each drive's disks read again. A confirmation is built
+    /// from the answer (<see cref="RemovalConfirmation.ForAsync"/>), because a folder can become the
+    /// temporary folder, a cache, a cloud folder or a program's folder, and a disk can move to a USB
+    /// dock, between the marks and the removal, and a mark made before then would leave a group
+    /// keeping only a copy that can now go without anyone choosing it to. A program folder the search
+    /// knew stays one, because a list of programs Windows will not read now names nothing. Blocks on
+    /// the disks and the registry, so never call it on the UI thread.
     /// </summary>
-    /// <param name="protections">Built afresh for this question, so Explore's policy is read now.</param>
+    /// <param name="protections">Built afresh for this question, so what the machine protects is read now.</param>
     public async Task<CopyKeeping> RejudgeAsync(MachineProtections protections, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(protections);
 
-        return Rejudge(protections.Policy, await protections.StorageCleansAsync(ct).ConfigureAwait(false));
-    }
+        var cleans = await protections.StorageCleansAsync(ct).ConfigureAwait(false);
+        var programs = _reader.ProgramsNow(protections, _result.Finding.ProgramFolders, ct);
 
-    /// <summary>Judge the marks again against <paramref name="policy"/> and <paramref name="cleans"/>, and everything else read now.</summary>
-    internal CopyKeeping Rejudge(ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans)
-    {
-        ArgumentNullException.ThrowIfNull(policy);
-        ArgumentNullException.ThrowIfNull(cleans);
-
-        return Keeping = Judge(policy, cleans);
-    }
-
-    private CopyKeeping Judge(ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans)
-    {
-        // Asked once a volume here, off the UI thread, so the questions a page asks as it draws never
-        // wait on a device.
-        Dictionary<string, StorageMedia> classes = new(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var volume in _result.Groups.SelectMany(group => group.Files).Select(copy => copy.Volume).Distinct())
-        {
-            classes[volume.RootPath] = _media(volume).Class;
-        }
-
-        var temporary = ResolvedPlaces.Resolve(
-            [(CleanedPlace.Whole(_environment.TempPath),
-              "This is in your temporary folder, which programs and Storage empty, so it is not counted on as the copy kept.")],
-            _volumes,
-            _files);
-
-        var cleaned = ResolvedPlaces.Resolve(
-            cleans.Select(clean => (clean.Place,
-                $"Storage's '{clean.Clean}' clean can delete what is here, so it is not counted on as the copy kept.")),
-            _volumes,
-            _files);
-
-        var cloudFolders = _cloud.SyncRoots() is { } roots
-            ? ResolvedPlaces.Resolve(
-                roots.Select(root => (CleanedPlace.Whole(root.Path),
-                    $"This is in '{root.DisplayName}', a cloud folder: removing it removes it from every device that "
-                    + "syncs the folder, and another device can remove it from here.")),
-                _volumes,
-                _files)
-            : null;
-
-        return new CopyKeeping(
-            new CopyRefusals(policy, _result.Finding.ProgramFolders),
-            temporary,
-            cleaned,
-            cloudFolders,
-            volume => classes.TryGetValue(volume.RootPath, out var known) ? known : StorageMedia.Unknown);
+        return Keeping = _reader.Read(protections.Policy, cleans, programs, _result.Groups);
     }
 
     /// <summary>Why no rule can mark anything, or null where rules may run.</summary>
