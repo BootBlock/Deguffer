@@ -210,7 +210,51 @@ public sealed class SearchLocationsTests : IDisposable
         var locations = SearchLocations.Resolve([new(drive)], _tree.Volumes);
 
         Assert.Empty(locations.Roots);
-        Assert.Single(locations.Unsearched);
+        Assert.Contains("network share", Assert.Single(locations.Unsearched).Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A letter mapped to a share (<c>net use Z:</c>): opening anything there is a conversation with
+    /// another machine, so the letter is refused on what the inventory says of it, before anything is
+    /// opened.
+    /// </summary>
+    [Fact]
+    public void AMappedNetworkDriveIsRefusedBeforeAnythingIsOpenedOnIt()
+    {
+        var letter = Enumerable.Range('D', 23).Select(c => $"{(char)c}:{Path.DirectorySeparatorChar}")
+            .Last(root => !Directory.Exists(root));
+        _tree.Volumes.With(letter, DriveType.Network);
+        List<string> opened = [];
+        var files = new FileInformation(path =>
+        {
+            opened.Add(path);
+            return FileInformation.OpenToResolve(path);
+        });
+
+        var locations = SearchLocations.Resolve([new(Path.Combine(letter, "Photos"))], _tree.Volumes, files);
+
+        Assert.Empty(locations.Roots);
+        Assert.Contains("network share", Assert.Single(locations.Unsearched).Reason, StringComparison.Ordinal);
+        Assert.Empty(opened);
+    }
+
+    /// <summary>
+    /// A link on a local disk can lead to a drive the search refuses, which the path as named does not
+    /// show, so the drive is asked again where the link leads.
+    /// </summary>
+    [Theory]
+    [InlineData(DriveType.Network, VolumeFeatures.ReparsePoints, "network share")]
+    [InlineData(DriveType.Fixed, VolumeFeatures.RemoteStorage, "cloud")]
+    public void AFolderALinkLeadsToIsJudgedByTheDriveItIsOn(DriveType kind, VolumeFeatures features, string reason)
+    {
+        _tree.Volumes.With(_tree.Folder("Elsewhere") + Path.DirectorySeparatorChar, kind, features: features);
+        _tree.Folder("Elsewhere", "Photos");
+        Junction.ToDirectory(Path.Combine(_tree.Top, "Link"), Path.Combine(_tree.Top, "Elsewhere", "Photos"));
+
+        var locations = SearchLocations.Resolve([new(Path.Combine(_tree.Top, "Link"))], _tree.Volumes);
+
+        Assert.Empty(locations.Roots);
+        Assert.Contains(reason, Assert.Single(locations.Unsearched).Reason, StringComparison.Ordinal);
     }
 
     /// <summary>

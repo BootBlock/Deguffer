@@ -73,7 +73,14 @@ public sealed class SearchLocations
         [.. Locations.Where(inner => !ReferenceEquals(inner, root) && Holds(root, inner))];
 
     /// <summary>Resolve each of <paramref name="given"/>, in order.</summary>
-    public static SearchLocations Resolve(IReadOnlyList<SearchLocation> given, IVolumeInventory volumes)
+    public static SearchLocations Resolve(IReadOnlyList<SearchLocation> given, IVolumeInventory volumes) =>
+        Resolve(given, volumes, FileInformation.Default);
+
+    /// <param name="files">
+    /// Where each location is opened to learn its final path, so a test can see what is opened, and
+    /// that a location refused before opening is not.
+    /// </param>
+    internal static SearchLocations Resolve(IReadOnlyList<SearchLocation> given, IVolumeInventory volumes, FileInformation files)
     {
         ArgumentNullException.ThrowIfNull(given);
         ArgumentNullException.ThrowIfNull(volumes);
@@ -83,7 +90,7 @@ public sealed class SearchLocations
 
         foreach (var location in given)
         {
-            if (Resolve(location, volumes) is { } why)
+            if (Resolve(location, volumes, files) is { } why)
             {
                 if (why.Location is { } found)
                 {
@@ -111,7 +118,8 @@ public sealed class SearchLocations
         outer.Volume.RootPath.Equals(inner.Volume.RootPath, StringComparison.OrdinalIgnoreCase)
         && LongPath.Contains(outer.Folder, inner.Folder, StringComparison.Ordinal);
 
-    private static (ResolvedLocation? Location, string? Reason)? Resolve(SearchLocation location, IVolumeInventory volumes)
+    private static (ResolvedLocation? Location, string? Reason)? Resolve(
+        SearchLocation location, IVolumeInventory volumes, FileInformation files)
     {
         if (LongPath.Configured(location.Path) is not { } configured)
         {
@@ -120,14 +128,12 @@ public sealed class SearchLocations
 
         var followed = VolumeRoot.Followed(volumes, configured);
 
-        // Before the handle is opened, because opening a file on a share is itself a conversation with
-        // another machine, and the share is refused whatever it would say.
-        if (LongPath.IsShare(followed))
+        if (WhyNotOpened(followed, volumes) is { } unopened)
         {
-            return (null, NotLocal);
+            return (null, unopened);
         }
 
-        if (FileInformation.Default.FinalPath(followed) is not { } final)
+        if (files.FinalPath(followed) is not { } final)
         {
             // Not "it is not there": a refusal reads the same, and the folder may well be there.
             return (null, "Windows would not open this folder, so Deguffer cannot tell where it is or what it holds.");
@@ -138,6 +144,7 @@ public sealed class SearchLocations
             return (null, "Windows names no drive or folder this volume is mounted at, so Deguffer cannot search it.");
         }
 
+        // Again, because a link on a local disk can lead to a share, and the path as named did not say so.
         if (LongPath.IsShare(folder))
         {
             return (null, NotLocal);
@@ -168,11 +175,34 @@ public sealed class SearchLocations
         "This is on a network share. Deguffer searches only the disks of this computer, because a "
         + "file on a share can be one of this computer's own files under a second name.";
 
+    private const string InTheCloud =
+        "This drive keeps its files in the cloud. Reading one would download it, and removing one "
+        + "removes it from the cloud, so Deguffer does not search it.";
+
+    /// <summary>
+    /// Why <paramref name="followed"/> is refused before anything is opened on it, or null where only
+    /// its final path can say.
+    ///
+    /// <para>A share, and a drive letter Windows maps to one, because opening anything there is
+    /// itself a conversation with another machine, and the location is refused whatever it would say.
+    /// A drive that keeps its files in the cloud, because its driver answers an open, and such a drive
+    /// holds no link that could lead back to a local disk. Every other drive waits for the final path:
+    /// a link on it can lead to a local disk, where the location is searched.</para>
+    /// </summary>
+    private static string? WhyNotOpened(string followed, IVolumeInventory volumes) =>
+        LongPath.IsShare(followed)
+            ? NotLocal
+            : HostVolume.For(volumes, followed) switch
+            {
+                { Kind: DriveType.Network } => NotLocal,
+                { StoresContentRemotely: true } => InTheCloud,
+                _ => null,
+            };
+
     private static string? WhyNotLocal(LocalVolume volume) => volume switch
     {
-        { StoresContentRemotely: true } =>
-            "This drive keeps its files in the cloud. Reading one would download it, and removing one "
-            + "removes it from the cloud, so Deguffer does not search it.",
+        { StoresContentRemotely: true } => InTheCloud,
+        { Kind: DriveType.Network } => NotLocal,
         { IsReady: false } => "This drive is not ready, so Deguffer cannot search it.",
         { IsLocalDisk: false } =>
             "This is not a disk in or attached to this computer, so Deguffer does not search it.",
