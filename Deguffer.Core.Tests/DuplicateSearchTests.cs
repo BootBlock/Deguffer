@@ -112,6 +112,18 @@ public sealed class DuplicateSearchTests
     }
 
     /// <summary>
+    /// A filter refused for an entry is not the filter without it, though both list the same
+    /// extensions, so a refused filter never stands in for one that can be searched with.
+    /// </summary>
+    [Fact]
+    public void AFilterRefusedForAnEntryIsNotEqualToOneWithoutIt()
+    {
+        Assert.NotEqual(
+            new ExtensionFilter(ExtensionFilterMode.OnlyThese, ["jpg", "*"]),
+            new ExtensionFilter(ExtensionFilterMode.OnlyThese, ["jpg"]));
+    }
+
+    /// <summary>
     /// A list of extensions to skip that names none skips nothing, and a filter that searches every
     /// extension does not read its list, so neither is refused.
     /// </summary>
