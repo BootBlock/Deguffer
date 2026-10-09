@@ -5,7 +5,8 @@ namespace Deguffer.Core.Duplicates;
 /// look and in what role, and which files to leave out.
 ///
 /// <para><b>Refused at construction</b> where it could find nothing or could not be run: no
-/// criterion, no location, a criterion no member names, or a size range that admits no file. A
+/// criterion, no location, a criterion no member names, a size range that admits no file, or an
+/// extension filter that lists something other than extensions or, to search, lists none. A
 /// search that cannot exist cannot be started, so nothing downstream has to ask again.
 /// <see cref="WhyRefused"/> gives the page the same reason before it builds one.</para>
 /// </summary>
@@ -21,7 +22,7 @@ public sealed record DuplicateSearch
         bool searchSystem = false,
         bool searchPassedOverPlaces = false)
     {
-        if (WhyRefused(criteria, locations, sizes) is { } refusal)
+        if (WhyRefused(criteria, locations, sizes, extensions) is { } refusal)
         {
             throw new ArgumentException(refusal, nameof(criteria));
         }
@@ -60,7 +61,11 @@ public sealed record DuplicateSearch
     public bool SearchPassedOverPlaces { get; }
 
     /// <summary>Why a search with these values cannot be run, or null where it can.</summary>
-    public static string? WhyRefused(MatchCriteria criteria, IReadOnlyCollection<SearchLocation> locations, SizeRange sizes = default)
+    public static string? WhyRefused(
+        MatchCriteria criteria,
+        IReadOnlyCollection<SearchLocation> locations,
+        SizeRange sizes = default,
+        ExtensionFilter? extensions = null)
     {
         ArgumentNullException.ThrowIfNull(locations);
 
@@ -79,7 +84,7 @@ public sealed record DuplicateSearch
             return "Choose at least one drive or folder to search.";
         }
 
-        return sizes.WhyRefused;
+        return sizes.WhyRefused ?? extensions?.WhyRefused;
     }
 
     public bool Equals(DuplicateSearch? other) =>
