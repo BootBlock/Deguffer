@@ -788,6 +788,28 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   folders, and left every kept copy; a role changed after the search closed every mark, rule and
   removal, and the locations were held while the dialog was open. The page was not checked with the backdrop off or in
   high contrast this phase; its new text uses theme brushes and plain text only.
+- 2026-10-09: phase 8 landed. The checksum cache (`ChecksumCache`): each value a search reads, of
+  the first and last blocks and of the whole, kept under the volume serial, file ID, length and
+  last-modified and change times and the algorithm, in a store under `%LOCALAPPDATA%\Deguffer` that
+  holds numbers and no text, sealed by an XXH64 of its contents (`ChecksumStoreFormat`), loaded the
+  first time a search reads content and written as each search stops reading, a stopped one
+  included. Export (`DuplicateCsv`): one row a copy with its group, path, length, last-modified
+  time in UTC, algorithm and checksum, quoted by RFC 4180, UTF-8 with a byte order mark, written
+  beside the file the page's save dialog names (`CsvFileDialog`) under a name of its own and moved
+  over it once whole. Decided: a kept value stands in for reading the bytes and never for opening
+  them, so a file another program holds or this account may not read is left out as before; a value
+  is kept only from a read whose change time did not move; only NTFS and ReFS keep values, by the
+  name the volume gives its file system (`LocalVolume.FileSystem`), and only for files identified by
+  `FileIdInfo`; a store that is damaged, of another version or too large loads empty; a value unused
+  for 180 days goes, and past 500,000 the values used longest ago go first; the page saves only once
+  a search with results has ended, and a search started while the dialog is open stops the save.
+  Measured: on NTFS a rewrite whose last-modified time is put back, a change to the file's security
+  and a rename each move the change time, so a renamed file is read again. Verified by driving the
+  page over a scratch tree of known duplicates: both groups found, the store written with six values
+  and no path, the dialog's save reported on the page, and the file read back with its quoted path,
+  its byte order mark and the larger group first. Corrected here: the change time was not read (the
+  technical facts, "Change time"), which volumes keep values, and that a second search reads no
+  file's content rather than opening none.
 
 ## Limits that stay open
 

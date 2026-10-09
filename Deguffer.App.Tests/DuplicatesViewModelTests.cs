@@ -364,6 +364,10 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
             rows.Select(row => (row[0], Path.GetFileName(row[1]))));
         Assert.Equal(page.Groups.SelectMany(row => row.Copies).Select(copy => copy.Copy.Path), rows.Select(row => row[1]));
         Assert.Equal("Saved 2 groups and 4 copies as results.csv.", page.CsvOutcome);
+
+        // A new search's list is not the one saved, so the line about the save goes with the old list.
+        await page.SearchCommand.ExecuteAsync(null);
+        Assert.Empty(page.CsvOutcome);
     });
 
     /// <summary>

@@ -176,6 +176,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Groups.Clear();
         Notes.Clear();
         NotesHeading = string.Empty;
+        CsvOutcome = string.Empty;
         Marks = null;
         Marking.Started(search.Asked);
         IsSearching = true;
