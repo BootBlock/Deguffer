@@ -41,6 +41,10 @@ public sealed partial class DuplicatesPage : Page
         // Assigned before InitializeComponent so no x:Bind evaluates against a null view-model.
         ViewModel = new DuplicatesViewModel(
             run.RunAsync,
+
+            // The dialog is built per ask: a XamlRoot captured here would be the one from before a
+            // theme change or a reparent.
+            DuplicateActions.ForThisMachine(() => new ContentDialogDuplicateConfirmation(XamlRoot, ActualTheme), App.Running),
             App.Preferences,
             new DriveList(VolumeInventory.Current, TimeProvider.System),
             ElevatedRelaunch.IsElevated,
@@ -87,5 +91,15 @@ public sealed partial class DuplicatesPage : Page
         }
 
         ViewModel.Locations.AddFolder(picked);
+    }
+
+    private async void OnChooseRuleFolder(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindow is not { } window || await FolderDialog.ChooseAsync(window) is not { } picked)
+        {
+            return;
+        }
+
+        ViewModel.Marking.RuleFolder = picked;
     }
 }

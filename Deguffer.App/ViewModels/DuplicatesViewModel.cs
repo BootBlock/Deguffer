@@ -10,10 +10,11 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// The Duplicates page's searching half (§7.4): the locations (<see cref="Locations"/>), the criteria
-/// and filters (<see cref="Filters"/>), the search with its stages and its stop, the groups as they
-/// arrive, and the notes on what the search did not look at. Every decision is Core's: what a search
-/// is (<see cref="Core.Configuration.DuplicatePreferences"/>), where each group goes
+/// The Duplicates page (§7.4): the locations (<see cref="Locations"/>), the criteria and filters
+/// (<see cref="Filters"/>), the search with its stages and its stop, the groups as they arrive, the
+/// notes on what the search did not look at, and the marking and removing that work on its groups
+/// (<see cref="Marking"/>). Every decision is Core's: what a search is
+/// (<see cref="Core.Configuration.DuplicatePreferences"/>), where each group goes
 /// (<see cref="DuplicateMarks.Add"/>) and what the notes say (<see cref="DuplicateSearchNotes"/>).
 /// </summary>
 public sealed partial class DuplicatesViewModel : ObservableObject
@@ -29,9 +30,11 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// <summary>The search running now, or null, so a callback from one that was replaced is ignored.</summary>
     private Search? _search;
 
+    /// <param name="actions">Runs the rules and the removal over what a search found.</param>
     /// <param name="requested">The locations an elevated relaunch was asked to search, or null for an ordinary launch.</param>
     public DuplicatesViewModel(
         RunDuplicateSearch run,
+        DuplicateActions actions,
         PreferenceService preferences,
         DriveList drives,
         bool isElevated,
@@ -44,8 +47,22 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         _running = running;
         Filters = new DuplicateFiltersViewModel(preferences);
         Filters.Changed += (_, _) => Judge();
+        Marking = new DuplicateMarkingViewModel(actions, Groups);
+
+        // A new search would take the groups from under a rule or a removal reading them.
+        Marking.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(DuplicateMarkingViewModel.IsBusy))
+            {
+                SearchCommand.NotifyCanExecuteChanged();
+            }
+        };
         Locations = new DuplicateLocationsViewModel(drives, requested?.Locations ?? []);
-        Locations.Changed += (_, _) => Judge();
+        Locations.Changed += (_, _) =>
+        {
+            Judge();
+            Marking.LocationsChanged(Locations.Chosen);
+        };
         CanElevate = ElevationOffer.ShouldOffer(isElevated);
         IsRequested = requested is not null;
 
@@ -58,6 +75,8 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     public DuplicateFiltersViewModel Filters { get; }
 
     public DuplicateLocationsViewModel Locations { get; }
+
+    public DuplicateMarkingViewModel Marking { get; }
 
     /// <summary>Why the search cannot run as it stands, or an empty string where it can.</summary>
     [ObservableProperty]
@@ -123,7 +142,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// <summary>Raised when an elevated replacement has started, so the page can close this one.</summary>
     public event EventHandler? ReplacedByElevatedInstance;
 
-    private bool CanSearch() => !IsSearching && WhyCannotSearch.Length == 0;
+    private bool CanSearch() => !IsSearching && !Marking.IsBusy && WhyCannotSearch.Length == 0;
 
     /// <summary>
     /// Search the locations with the stored criteria and filters, replacing what the last search
@@ -132,6 +151,13 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanSearch))]
     private async Task SearchAsync()
     {
+        // Asked again, because a command can be invoked without asking whether it may run, and a
+        // search started under a rule or a removal would take the groups from under it.
+        if (!CanSearch())
+        {
+            return;
+        }
+
         var search = new Search(Filters.Current.Search(Locations.Chosen));
         _search = search;
 
@@ -141,6 +167,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Notes.Clear();
         NotesHeading = string.Empty;
         Marks = null;
+        Marking.Started(search.Asked);
         IsSearching = true;
         Headline = "Searching…";
         Show(new DuplicateSearchProgress(DuplicateSearchStage.Finding, 0, Total: null));
@@ -172,6 +199,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             if (ReferenceEquals(_search, search))
             {
                 _search = null;
+                Marking.Ended();
                 IsSearching = false;
                 Stage = string.Empty;
             }
@@ -208,6 +236,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         }
 
         Marks = search.MarksMade;
+        Marking.Made(Marks);
         ShowNotes(DuplicateSearchNotes.Of(finding));
     }
 
@@ -225,8 +254,9 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         // The marks are handed over before the first group, by the search's own thread, and are read
         // here rather than from Marks so a group never waits on the finding's notes being shown.
         var marks = search.MarksMade;
+        Marking.Made(marks);
         var (added, index) = marks.Add(group);
-        Groups.Insert(index, new DuplicateGroupRow(added, marks.Keeping));
+        Groups.Insert(index, new DuplicateGroupRow(added, marks.Keeping, Marking.Toggle, Marking.MayMark));
         Headline = $"Searching… {Groups.Count:N0} {(Groups.Count == 1 ? "group" : "groups")} so far.";
     }
 

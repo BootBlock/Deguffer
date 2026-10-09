@@ -100,6 +100,9 @@ public sealed class DuplicateRemover
         var keeping = await marks.RejudgeAsync(protections, ct).ConfigureAwait(false);
         var (plan, dropped) = Plan(marks.Groups, confirmed.Copies, keeping);
 
+        // From here the disk can change under the groups, however the run ends.
+        marks.RemovalBegan();
+
         // Off the calling thread, which is a page resuming on the UI thread after its dialog: every
         // copy is read whole, twice. Not cancelled by the token here, because a run that has begun
         // reports what it did and verifies it, however it ends.
@@ -128,8 +131,7 @@ public sealed class DuplicateRemover
                 .Select(copy => new CopyRemoval(
                     copy,
                     RemovalCheck.MarkNoLongerStands,
-                    CopyRefusals.WhyNeverMarked(copy)
-                    ?? keeping.Refusals.WhyRefused(copy)
+                    keeping.WhyNotMarked(copy)
                     ?? (group.IsMarked(copy)
                         ? "Removing it now would leave its group with no copy that can be kept, so it was not removed."
                         : "It is no longer marked, so it was not removed."))));

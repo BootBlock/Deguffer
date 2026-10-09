@@ -8,7 +8,34 @@ namespace Deguffer.Core.Duplicates;
 
 /// <summary>What one rule did: how many copies it marked, and each group it marked nothing in, with why.</summary>
 /// <param name="Refused">Why the rule marked nothing anywhere, or null where it ran.</param>
-public sealed record RuleOutcome(int Marked, IReadOnlyList<(GroupMarks Group, string Reason)> Untouched, string? Refused = null);
+public sealed record RuleOutcome(int Marked, IReadOnlyList<(GroupMarks Group, string Reason)> Untouched, string? Refused = null)
+{
+    /// <summary>What the rule did, in a sentence for the page: why it ran nowhere, or what it marked and what it left.</summary>
+    public string Summary
+    {
+        get
+        {
+            if (Refused is { } refused)
+            {
+                return refused;
+            }
+
+            var marked = Marked switch
+            {
+                0 => "The rule marked nothing.",
+                1 => "The rule marked 1 copy.",
+                _ => $"The rule marked {Marked:N0} copies.",
+            };
+
+            return Untouched.Count switch
+            {
+                0 => marked,
+                1 => $"{marked} It left 1 group as it was, which says why.",
+                _ => $"{marked} It left {Untouched.Count:N0} groups as they were, each saying why.",
+            };
+        }
+    }
+}
 
 /// <summary>
 /// The marks on every group of one search (§7.4), and the rules that make them.
@@ -22,6 +49,17 @@ public sealed record RuleOutcome(int Marked, IReadOnlyList<(GroupMarks Group, st
 /// holds: a link on the way to it, or a share that names this computer's own disk, can put its copies
 /// inside a searched location under another name, in the search role. Marking by hand stays open,
 /// because each such mark is one the user looked at.</para>
+///
+/// <para><b>Nothing reads the groups off the thread that adds them until the search has ended.</b>
+/// Groups are added on the page's thread as the search confirms them (<see cref="Add"/>), while a
+/// rule, a confirmation and a removal read them on another. So a rule
+/// (<see cref="Run"/>) and a judgement (<see cref="RejudgeAsync"/>, which every confirmation and
+/// removal begins with) refuse to start until the thread that adds the groups says the last one is
+/// in (<see cref="Complete"/>), and no group is added after it.</para>
+///
+/// <para><b>One removal per search.</b> A removal changes the disk the groups describe, so once one
+/// has begun (<see cref="WasRemovedFrom"/>) no rule runs and no confirmation or removal is built on
+/// these marks again: a search must run first.</para>
 /// </summary>
 public sealed class DuplicateMarks
 {
@@ -32,6 +70,8 @@ public sealed class DuplicateMarks
     private readonly CandidateFinding _finding;
     private readonly KeepingReader _reader;
     private readonly List<GroupMarks> _groups = [];
+    private volatile bool _complete;
+    private volatile bool _removedFrom;
 
     private DuplicateMarks(
         CandidateFinding finding, ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans, KeepingReader reader)
@@ -130,8 +170,14 @@ public sealed class DuplicateMarks
     /// runs.
     /// </summary>
     /// <returns>The marks for the group, and where in <see cref="Groups"/> they were placed.</returns>
+    /// <exception cref="InvalidOperationException">The search was said to have ended (<see cref="Complete"/>).</exception>
     public (GroupMarks Marks, int Index) Add(DuplicateGroup group)
     {
+        if (_complete)
+        {
+            throw new InvalidOperationException("The search has ended, so no group is added to its marks.");
+        }
+
         var marks = new GroupMarks(group);
         var space = marks.FreeableSpace(Keeping);
 
@@ -149,6 +195,22 @@ public sealed class DuplicateMarks
         return (marks, index);
     }
 
+    /// <summary>Whether the search has ended, so a rule, a confirmation and a removal may read the groups.</summary>
+    public bool IsComplete => _complete;
+
+    /// <summary>
+    /// Say the search has ended and its last group is added, on the thread that added them, so a
+    /// rule, a confirmation and a removal may read them on another. Stopped or not, every group it
+    /// confirmed is in.
+    /// </summary>
+    public void Complete() => _complete = true;
+
+    /// <summary>Whether a removal has begun on these marks, so the groups describe the disk as it was before it.</summary>
+    public bool WasRemovedFrom => _removedFrom;
+
+    /// <summary>Say a removal has begun on these marks, which closes them to every later rule, confirmation and removal.</summary>
+    internal void RemovalBegan() => _removedFrom = true;
+
     /// <summary>
     /// Judge the marks again against the machine as it is now, keeping every mark: Explore's policy,
     /// Storage's places and the program folders from <paramref name="protections"/>, and the
@@ -161,9 +223,11 @@ public sealed class DuplicateMarks
     /// the disks and the registry, so never call it on the UI thread.
     /// </summary>
     /// <param name="protections">Built afresh for this question, so what the machine protects is read now.</param>
+    /// <exception cref="InvalidOperationException">The search has not ended, or a removal has begun on these marks.</exception>
     public async Task<CopyKeeping> RejudgeAsync(MachineProtections protections, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(protections);
+        ThrowUnlessOpen();
 
         var cleans = await protections.StorageCleansAsync(ct).ConfigureAwait(false);
         var programs = _reader.ProgramsNow(protections, _finding.ProgramFolders, ct);
@@ -178,9 +242,13 @@ public sealed class DuplicateMarks
     /// Run <paramref name="rule"/> over every group, adding to the marks there are. A rule that names a
     /// folder opens it to follow it to its final path, so never call it on the UI thread.
     /// </summary>
-    public RuleOutcome Run(MarkingRule rule)
+    /// <param name="ct">Stops the rule between groups, keeping the marks it made in the groups before.</param>
+    /// <exception cref="InvalidOperationException">The search has not ended, or a removal has begun on these marks.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    public RuleOutcome Run(MarkingRule rule, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(rule);
+        ThrowUnlessOpen();
 
         if (WhyRulesCannotMark is { } blocked)
         {
@@ -199,6 +267,8 @@ public sealed class DuplicateMarks
 
         foreach (var group in Groups)
         {
+            ct.ThrowIfCancellationRequested();
+
             var (count, why) = Apply(rule, group, folder);
             marked += count;
 
@@ -209,6 +279,25 @@ public sealed class DuplicateMarks
         }
 
         return new RuleOutcome(marked, untouched);
+    }
+
+    /// <summary>
+    /// Refuses to read the groups off the thread that adds them while it may still be adding one, and
+    /// to act on them once a removal has changed the disk they describe.
+    /// </summary>
+    internal void ThrowUnlessOpen()
+    {
+        if (!_complete)
+        {
+            throw new InvalidOperationException(
+                "The search is still adding groups, so no rule, confirmation or removal may read them yet.");
+        }
+
+        if (_removedFrom)
+        {
+            throw new InvalidOperationException(
+                "A removal has begun on these marks, so their groups describe the disk as it was. Search again first.");
+        }
     }
 
     private (int Marked, string? Why) Apply(MarkingRule rule, GroupMarks group, ResolvedPlaces? folder)

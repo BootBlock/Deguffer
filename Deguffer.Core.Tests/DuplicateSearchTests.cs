@@ -176,4 +176,26 @@ public sealed class DuplicateSearchTests
         Assert.Null(DuplicateSearch.WhyRefused(criteria, OneLocation));
         Assert.Equal(criteria, new DuplicateSearch(criteria, OneLocation).Criteria);
     }
+
+    /// <summary>
+    /// What a search found answers for the locations chosen only while they are the ones it searched,
+    /// in the same roles: a folder made a reference afterwards, a location added or taken away, or a
+    /// path that differs only in case each leaves its groups in roles the user no longer chose. The
+    /// same locations listed in another order are the same search.
+    /// </summary>
+    [Fact]
+    public void ASearchsResultsApplyOnlyToTheLocationsItSearchedInTheirRoles()
+    {
+        SearchLocation pictures = new(@"C:\Users\testuser\Pictures");
+        SearchLocation backup = new(@"D:\Backup", LocationRole.Reference);
+        var search = new DuplicateSearch(MatchCriteria.Content, [pictures, backup]);
+
+        Assert.Null(search.WhyResultsDoNotApply([backup, pictures]));
+
+        Assert.NotNull(search.WhyResultsDoNotApply([pictures with { Role = LocationRole.Reference }, backup]));
+        Assert.NotNull(search.WhyResultsDoNotApply([pictures, backup with { Role = LocationRole.Search }]));
+        Assert.NotNull(search.WhyResultsDoNotApply([pictures, backup, new(@"C:\Users\testuser\Pictures\Trips", LocationRole.Reference)]));
+        Assert.NotNull(search.WhyResultsDoNotApply([pictures]));
+        Assert.NotNull(search.WhyResultsDoNotApply([new(@"C:\Users\testuser\pictures"), backup]));
+    }
 }

@@ -534,6 +534,25 @@ rule or removal runs on them until a search runs again. `DuplicateMarks.Add` run
 thread while `DuplicateMarks.RejudgeAsync`, `RemovalConfirmation` and `DuplicateRemover` read the
 groups off it, so no confirmation or removal starts while a search runs.
 
+Corrected here: both hazards are wider than a role and a removal. A location added or taken away
+after the search leaves its groups in roles the user no longer chose as surely as a role change does
+(a folder added as a reference inside a searched one), so any change to the locations or their roles
+makes the results stale (`DuplicateSearch.WhyResultsDoNotApply`), and they apply again only when the
+locations match the search's, in any order. A rule reads the groups off the page's thread too
+(`DuplicateMarks.Run` opens a folder rule's folder), and so does the judgement every confirmation and
+removal begins with, so Core refuses both until the page says the search has ended
+(`DuplicateMarks.Complete`), and refuses a group added after it. The marks themselves
+(`GroupMarks`) and the refusals' cache (`CopyRefusals`) are not safe to change or ask on two threads,
+so no mark changes, by hand or by rule, while a rule, a confirmation or a removal runs, and no search
+starts under one, and the page holds its locations meanwhile. Because a page's controls are not
+the only way to change them, a removal also asks the page again, once the confirmation is built and
+once the user has answered, whether its marks still apply, and asks or removes nothing where they
+do not (`DuplicateActions.RemoveAsync`). After a
+removal has begun the groups describe the disk as it was, so Core refuses every later rule,
+confirmation and removal on those marks (`DuplicateMarks.WasRemovedFrom`) until a search runs again.
+A mark by hand stays open while the search runs, because it is made on the page's thread, as each
+group is added.
+
 Proves: a rule's marks are what Core decided; the page offers no way past a Core refusal; the dialog
 shows Core's words; a role changed after a search stops every rule and removal until the next
 search; no confirmation or removal can start while a search runs; a removal driven with the `verify` skill moves the marked copies to the Recycle
@@ -719,6 +738,31 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   marks a path difference by weight and underline as well as colour. Corrected here: how the
   groups are ordered as they stream (the technical facts, "Ordering the groups"), and what phase 6
   decides in Core.
+- 2026-10-09: phase 7 landed. Marking by hand, each check box asking Core and showing its refusal
+  on the row, with why each copy may not be marked or kept listed beneath it
+  (`CopyKeeping.WhyNotMarked`, `CopyKeeping.Standing`); the named rules, run off the page's thread
+  and stoppable between groups, each group a rule left alone saying why (`RuleOutcome.Summary`);
+  the confirmation dialog with Core's title, summary and warnings and every copy that goes
+  (`RemovalConfirmation.Title`, `ConfirmLabel`), to the Recycle Bin by default and permanently only
+  from its own button; and the removal and what became of each copy, through one Core flow
+  (`DuplicateActions`, `IDuplicateConfirmationPrompt`) that asks nothing where no mark stands and
+  records the removal as running until it reports. Both hazards phase 6 left are closed, wider than
+  they were stated (see phase 7, "Corrected here"): any change to the locations or their roles makes
+  the results stale (`DuplicateSearch.WhyResultsDoNotApply`), and Core refuses a rule, a judgement,
+  a confirmation or a removal until the search has said its last group is in
+  (`DuplicateMarks.Complete`), and again once a removal has begun (`DuplicateMarks.WasRemovedFrom`).
+  Decided: a location change of any kind, not only a role, makes the results stale, and putting the
+  locations back as they were makes them apply again; a mark by hand stays open while the search
+  runs, because it is made on the page's thread; nothing changes the marks, the locations or the
+  search while a rule, a confirmation or a removal runs, and a removal asks the page again, once the
+  confirmation is built and once the user has answered, whether its marks still apply; one removal
+  per search, since the groups then describe the disk as it was. Verified by driving the page over a
+  scratch tree of known duplicates: a mark Core refused showed unchecked with its reason; "keep the
+  copy with the shortest path" marked the two longer copies; the dialog listed every copy with
+  Cancel as its default; confirming moved the marked copies to the Recycle Bin, from their own
+  folders, and left every kept copy; a role changed after the search closed every mark, rule and
+  removal, and the locations were held while the dialog was open. The page was not checked with the backdrop off or in
+  high contrast this phase; its new text uses theme brushes and plain text only.
 
 ## Limits that stay open
 

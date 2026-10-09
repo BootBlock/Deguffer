@@ -216,4 +216,27 @@ public sealed class DuplicateKeepingTests : DuplicateMarkingScene
         Assert.Contains("not something Deguffer recognises", Only(marks).Mark(settings, marks.Keeping));
         Assert.Null(Only(marks).Mark(cached, marks.Keeping));
     }
+
+    /// <summary>
+    /// What a page lists beside a copy: why it may not be marked, and why it may not be kept where
+    /// that says something more. A refused copy is not kept for the reason it is refused, so that
+    /// reason is listed once; a reference copy may be kept, and a copy in the temporary folder may be
+    /// marked.
+    /// </summary>
+    [Fact]
+    public void ACopysStandingListsEachReasonOnce()
+    {
+        var reference = Copy(Path.Combine(Documents, "a.jpg"), role: LocationRole.Reference);
+        var online = Copy(Path.Combine(Documents, "b.jpg"), storage: FileStorage.CloudOnly);
+        var temporary = Copy(InTemp("c.jpg"));
+        var marks = Marks([reference, online, temporary, Copy(Path.Combine(Downloads, "a.jpg"))]);
+
+        Assert.Equal(new CopyStanding(CopyRefusals.WhyNeverMarked(reference), null), marks.Keeping.Standing(reference));
+        Assert.Equal(new CopyStanding(marks.Keeping.Refusals.WhyRefused(online), null), marks.Keeping.Standing(online));
+        Assert.NotNull(marks.Keeping.Standing(online).WhyNotMarked);
+
+        var standing = marks.Keeping.Standing(temporary);
+        Assert.Null(standing.WhyNotMarked);
+        Assert.Contains("temporary folder", standing.WhyNotKept, StringComparison.Ordinal);
+    }
 }

@@ -1,23 +1,26 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// One group as the page lists it: what matched, what its copies that could go occupy, and the
-/// copies. Built once, as the group arrives, and never rebuilt.
+/// One group as the page lists it: what matched, what its copies that could go occupy, the copies,
+/// and why a rule left it as it was. Built once, as the group arrives, and never rebuilt.
 /// </summary>
-public sealed class DuplicateGroupRow
+public sealed partial class DuplicateGroupRow : ObservableObject
 {
     /// <param name="keeping">The keeping rule the marks were made under, which says what the group could free.</param>
-    public DuplicateGroupRow(GroupMarks marks, CopyKeeping keeping)
+    /// <param name="toggle">Marks or unmarks a copy, answering Core's refusal, or null where it was done.</param>
+    /// <param name="mayMark">Whether the page lets any mark change now.</param>
+    public DuplicateGroupRow(GroupMarks marks, CopyKeeping keeping, Func<DuplicateCopyRow, string?> toggle, Func<bool> mayMark)
     {
         Marks = marks;
 
         var group = marks.Group;
         var paths = PathDifference.Of([.. group.Files.Select(copy => copy.Path)]);
 
-        Copies = [.. group.Files.Select((copy, i) => new DuplicateCopyRow(copy, paths[i]))];
+        Copies = [.. group.Files.Select((copy, i) => new DuplicateCopyRow(copy, paths[i], marks, keeping, toggle, mayMark))];
         Title = group.Length is { } length
             ? $"{group.Files.Count:N0} files of {FreeSpace.Format(length)}"
             : $"{group.Files.Count:N0} files";
@@ -26,7 +29,7 @@ public sealed class DuplicateGroupRow
             ? $"Matched on {group.Criteria.Described()}: {checksum.Algorithm.Name()} {checksum.Hex}"
             : $"Matched on {group.Criteria.Described()}";
         MayDiffer = group.MayDiffer ?? string.Empty;
-        Description = $"{Title}. {Freeable}. {Matched}." + (group.MayDiffer is { } differ ? " " + differ : string.Empty);
+        Note = marks.WhyNothingCanBeKept(keeping) ?? string.Empty;
     }
 
     public GroupMarks Marks { get; }
@@ -49,6 +52,23 @@ public sealed class DuplicateGroupRow
 
     public bool HasMayDiffer => MayDiffer.Length > 0;
 
+    /// <summary>
+    /// Why no copy here can be kept, or why the last rule left the group as it was, or an empty
+    /// string.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNote))]
+    [NotifyPropertyChangedFor(nameof(Description))]
+    public partial string Note { get; private set; }
+
+    public bool HasNote => Note.Length > 0;
+
     /// <summary>Everything the group's heading shows, in one sentence, for a screen reader.</summary>
-    public string Description { get; }
+    public string Description =>
+        $"{Title}. {Freeable}. {Matched}."
+        + (MayDiffer.Length > 0 ? " " + MayDiffer : string.Empty)
+        + (Note.Length > 0 ? " " + Note : string.Empty);
+
+    /// <summary>Say why the last rule left the group as it was, or, where it did not, why no copy here can be kept.</summary>
+    internal void Noted(string? note) => Note = note ?? string.Empty;
 }

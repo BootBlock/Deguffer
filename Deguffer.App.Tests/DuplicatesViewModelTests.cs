@@ -15,77 +15,8 @@ namespace Deguffer.App.Tests;
 /// row already shown, and the elevated reopen carries every location in its role. What a search
 /// finds and where a group belongs is proved in Core.
 /// </summary>
-public sealed class DuplicatesViewModelTests : IDisposable
+public sealed class DuplicatesViewModelTests : DuplicatesPageScene
 {
-    private readonly TempDirectory _temp = new();
-    private readonly DuplicateScene _scene = new();
-    private readonly PreferenceService _preferences;
-    private readonly FakeVolumeInventory _volumes = new FakeVolumeInventory().With(@"C:\").With(@"D:\");
-    private readonly List<DuplicateSearch> _searches = [];
-    private readonly List<ElevationRequest> _relaunches = [];
-
-    public DuplicatesViewModelTests() =>
-        _preferences = new PreferenceService(new PreferenceStore(new FakeUserEnvironment(_temp.Path)));
-
-    public void Dispose()
-    {
-        _scene.Dispose();
-        _temp.Dispose();
-    }
-
-    private string Photos => _scene.Folder("Photos");
-
-    /// <summary>A search that finds <paramref name="groups"/> and hands them over as Core's search does.</summary>
-    private RunDuplicateSearch Finds(params DuplicateGroup[] groups) => async (search, marksMade, finding, found, progress, ct) =>
-    {
-        _searches.Add(search);
-        var candidates = DuplicateScene.Finding(groups);
-
-        // Off the page's thread, as the search hands them over.
-        await Task.Run(() => marksMade(_scene.Marks(candidates)), ct);
-        finding.Report(candidates);
-
-        foreach (var group in groups)
-        {
-            found.Report(group);
-        }
-
-        // After the groups' posts, as the search returns after its last group.
-        await Task.Yield();
-
-        return new DuplicateSearchResult(candidates, groups, default, Stopped: false);
-    };
-
-    private DuplicatesViewModel Page(RunDuplicateSearch? run = null, DuplicatesRequest? requested = null) =>
-        new(
-            run ?? Finds(),
-            _preferences,
-            new DriveList(_volumes, new ManualTimeProvider()),
-            isElevated: false,
-            request =>
-            {
-                _relaunches.Add(request);
-                return false;
-            },
-            new RunningActions(),
-            requested);
-
-    /// <summary>A page with one location, ready to search.</summary>
-    private DuplicatesViewModel PageWithPhotos(RunDuplicateSearch? run = null)
-    {
-        var page = Page(run);
-        page.Locations.AddFolder(Photos);
-
-        return page;
-    }
-
-    private async Task<DuplicateSearch> SearchedWith(DuplicatesViewModel page)
-    {
-        await page.SearchCommand.ExecuteAsync(null);
-
-        return _searches[^1];
-    }
-
     public static TheoryData<string> Controls =>
     [
         nameof(DuplicateFiltersViewModel.MatchName),
