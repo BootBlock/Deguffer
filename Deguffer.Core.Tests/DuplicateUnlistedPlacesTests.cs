@@ -120,6 +120,36 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
             Assert.Single(read.Groups).Files.Select(file => file.Path).Order());
     }
 
+    /// <summary>
+    /// The search's own walk lists nothing below a place it passes over. Its progress counts every
+    /// entry the walk lists, which must be every entry on the drive except those inside a place the
+    /// search named as passed over; the places themselves are listed by the folder holding them.
+    /// </summary>
+    [Fact]
+    public async Task TheSearchsOwnWalkListsNothingBelowAPlaceItPassesOver()
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            _tree.File(Length, "Windows", "System32", $"{i}.dll");
+        }
+
+        _tree.File(Length, "Data", "m.txt");
+        _tree.File(Length, "Data", "Other", "m.txt");
+        long listed = 0;
+
+        var found = await _tree.Finder().FindAsync(
+            new DuplicateSearch(MatchCriteria.Size, [new SearchLocation(_tree.Top)]),
+            _tree.Policy(),
+            new CallbackProgress<ExploreProgress>(progress => listed = Math.Max(listed, progress.Done)));
+
+        var places = found.PassedOver.Select(place => place.Path + Path.DirectorySeparatorChar).ToList();
+        var outside = Directory.EnumerateFileSystemEntries(_tree.Top, "*", SearchOption.AllDirectories)
+            .Count(entry => !places.Any(place => entry.StartsWith(place, StringComparison.Ordinal)));
+
+        Assert.Contains(found.PassedOver, place => place.Path == _tree.System.WindowsDirectory);
+        Assert.Equal(outside, listed);
+    }
+
     private static int Child(ExploreTree tree, int folder, string name) =>
         tree.ChildrenOf(folder).ToArray().Single(child => tree.NameOf(child) == name);
 
