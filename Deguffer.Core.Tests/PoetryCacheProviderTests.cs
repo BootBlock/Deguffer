@@ -272,6 +272,23 @@ public sealed class PoetryCacheProviderTests : IDisposable
             path => Assert.DoesNotContain(path, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultCacheThePlanCleans()
+    {
+        CreateCache();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(Poetry())));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheCachePoetryReportsElsewhere()
+    {
+        var elsewhere = _temp.CreateDirectory("relocated-cache");
+        CreateCache(elsewhere);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(Poetry(elsewhere))));
+    }
+
     /// <summary>
     /// A cache Poetry names and Windows will not describe is named in turn and gets no command,
     /// rather than being dropped as though it were not there. The artifacts beside it are still

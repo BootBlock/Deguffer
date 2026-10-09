@@ -229,4 +229,26 @@ public sealed class UvCacheProviderTests : IDisposable
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("does not exist yet", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultCacheTheCommandIsSentTo()
+    {
+        _environment.WithExecutable("uv");
+        CreateCache();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(UvAnsweringNothing())));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheCacheUvReportsElsewhere()
+    {
+        _environment.WithExecutable("uv");
+        var elsewhere = Path.Combine(_temp.Path, "relocated-cache");
+        Directory.CreateDirectory(elsewhere);
+        File.WriteAllBytes(Path.Combine(elsewhere, "payload.bin"), new byte[2048]);
+
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", elsewhere);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(runner)));
+    }
 }

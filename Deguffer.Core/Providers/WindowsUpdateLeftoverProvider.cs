@@ -102,6 +102,12 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryMayExist));
 
+    /// <summary>
+    /// Both folders at the top of the system drive, whole: each goes whole or not at all.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. DeclaredPaths().Select(CleanedPlace.Whole)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var scan = DeclaredLocations.Examine(_roots, ct);

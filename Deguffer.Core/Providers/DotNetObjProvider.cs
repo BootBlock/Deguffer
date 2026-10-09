@@ -150,6 +150,16 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             Questions,
             ct));
 
+    /// <summary>
+    /// Every <c>obj</c> below an approved source folder, which is the whole of where the search looks.
+    /// Named by name rather than by recognition, because one declined today, by the signature or by
+    /// git, is a target once its files agree or git stops tracking it. <c>bin</c> is never one: it is
+    /// a survivor (<see cref="BuildProtectedPaths"/>).
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. ApprovedRoots.Select(root => CleanedPlace.FoldersNamed(root.Path, DirectoryNames))]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (ApprovedRoots.Count == 0)

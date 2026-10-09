@@ -332,4 +332,15 @@ public sealed class EpicLauncherLogProviderTests : IDisposable
         Assert.Equal(root.RecognisesFolder("Crashes"), fromWebCache.RecognisesFolder("Crashes"));
         Assert.Equal(root.RecognisesFolder("webcache_4430"), fromWebCache.RecognisesFolder("webcache_4430"));
     }
+
+    /// <summary>§7.4: the places named without planning hold the logs and crash reports the plan removes.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        AddLauncherState();
+        CreateDirectory(Path.Combine(Saved, "Logs"));
+        CreateDirectory(Path.Combine(Saved, "Crashes", "UECC-Windows-0001"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

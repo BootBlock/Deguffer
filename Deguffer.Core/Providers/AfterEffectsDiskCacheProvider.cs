@@ -175,6 +175,23 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
         ]);
     }
 
+    /// <summary>
+    /// This computer's cache in every version's folder below each folder the preferences name, read
+    /// from the same preferences the plan reads. Named by the cache's name rather than by the versions
+    /// on disk today, so a version installed after this is asked is held as well; the folder the user
+    /// chose, and another computer's cache beside this one's, are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        var cacheName = AfterEffectsDiskCacheLayout.CacheName(Environment.MachineName);
+
+        return Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. Settings.Folders.Select(folder =>
+                CleanedPlace.FoldersNamed(AfterEffectsDiskCacheLayout.VersionsUnder(folder), [cacheName])),
+        ]);
+    }
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var settings = Settings;

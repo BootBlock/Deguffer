@@ -679,4 +679,27 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
         Assert.Equal(2, (await provider.PlanAsync()).TargetedPaths.Count);
         Assert.Equal(4, provider.ToolRoots.Count);
     }
+
+    /// <summary>§7.4: the places named without planning hold each game's shader cache in the library beside the program.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var install = RegisterInstall();
+        CacheFor(install, "440");
+        CacheFor(install, "620");
+        Manifest(install, "440", "Team Fortress 2");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 for a library only Steam's own list names: the shader caches there are held too.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverALibraryOnlySteamsListNames()
+    {
+        var install = RegisterInstall();
+        WriteLibraryList(install, SecondLibrary);
+        CacheFor(SecondLibrary, "440");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

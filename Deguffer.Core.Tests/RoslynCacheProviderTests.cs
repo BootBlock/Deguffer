@@ -69,6 +69,15 @@ public sealed class RoslynCacheProviderTests : IDisposable
         Assert.Contains(new ItemFacet("Solutions", "2"), step.Facets);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        CreateHost(Cache, Host, Solution, OtherSolution);
+        CreateHost(Cache, OtherHost, Solution);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// §5.2 and §5.6 together. No folder above a set is a target, and each is asserted to survive —
     /// Visual Studio's own folder and the unsaved-document recovery beside the cache included.

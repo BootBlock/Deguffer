@@ -75,6 +75,15 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
             claimed.Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        AbandonedProfile("playwright_chromiumdev_profile-a1B2c3");
+        AbandonedProfile("puppeteer_dev_firefox_profile-j1K2l3");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// §5.2 in a folder that belongs to nobody: every name either tool writes is offered, and every
     /// sibling survives the clean — including the near misses a looser rule would take.

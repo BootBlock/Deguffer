@@ -276,6 +276,22 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The command names no path, so the plan gives coverage nothing to check. What it clears is
+    /// the cache inside the service's folder, and that has to be a cleaned place.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesHoldTheCacheWindowsOwnCommandClears()
+    {
+        var cached = Path.Combine(
+            _system.WindowsDirectory, "ServiceProfiles", "NetworkService", "AppData", "Local", "Microsoft",
+            "Windows", "DeliveryOptimization", "Cache", "0a1b2c3d", "payload");
+
+        var places = await CreateProvider().CleanedPlacesAsync();
+
+        Assert.Contains(places, place => place.Holds(cached));
+    }
+
+    /// <summary>
     /// §5.6's tool root. What the service's folder holds is the command's to clear, so a run that
     /// empties it is the ordinary run and raises no alarm, and a run that took the folder itself fails.
     /// </summary>

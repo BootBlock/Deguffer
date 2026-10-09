@@ -544,4 +544,15 @@ public sealed class EpicLauncherWebCacheProviderTests : IDisposable
         Assert.False(Directory.Exists(cache));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
+
+    /// <summary>§7.4: the places named without planning hold every cache in every web cache folder.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        AddLauncherState();
+        AddWebCache();
+        AddWebCache("webcache");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

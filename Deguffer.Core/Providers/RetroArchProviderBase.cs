@@ -222,6 +222,15 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
     /// <para>While RetroArch runs nothing is recognised. Every other path a plan names as protected is
     /// refused outright.</para>
     /// </summary>
+    /// <summary>
+    /// Each entry this row's reading offers, in every RetroArch install the discovery finds and every
+    /// folder its settings name, whether or not RetroArch is running. Named entry by entry because each
+    /// sits beside the user's own: presets beside the shader sets, and saves, BIOS files and settings
+    /// beside those folders.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. Examine(ct).Targets.Select(target => CleanedPlace.Whole(target.Path))]);
+
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var readings = _discovery.Rows.Select(row => row.Examine(ct)).ToList();

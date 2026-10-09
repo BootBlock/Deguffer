@@ -64,6 +64,19 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
     /// <summary>Read this server's settings and say where its transcoder's files are.</summary>
     protected abstract MediaServerLayout FindLayout();
 
+    /// <summary>
+    /// Every transcoder folder the server's layout names, at its default and wherever a setting moved
+    /// it, including one in a data folder Windows would not describe. Read from the same layout the plan
+    /// examines, so the two cannot disagree, and each folder is named whole because the plan empties
+    /// it, whatever the transcoder left inside.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. Layout.Roots.SelectMany(root => root.Locations.Select(location =>
+                CleanedPlace.Whole(Path.Combine(root.Path, location.RelativePath)))),
+        ]);
+
     public override void InvalidateCaches()
     {
         _layout = null;

@@ -168,6 +168,34 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.DoesNotContain(after.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultCacheTheCommandIsSentTo()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache", "_cacache", "content-v2");
+        Directory.CreateDirectory(cache);
+        File.WriteAllBytes(Path.Combine(cache, "blob"), new byte[4096]);
+
+        // npm declines to answer, so the plan sends its command to the documented default.
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", string.Empty, exitCode: 1);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheCacheNpmReportsElsewhere()
+    {
+        var relocated = _temp.CreateDirectory("elsewhere", "npm-cache");
+        _temp.CreateFile(2048, "elsewhere", "npm-cache", "_cacache", "content", "blob");
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", relocated);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+    }
+
     private async Task<CleanupPlan> PlanWithPopulatedCache(
         int cacheQueryExitCode = 0,
         IDirectoryScanner? scanner = null)

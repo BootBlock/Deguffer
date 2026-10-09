@@ -154,6 +154,14 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
         ]);
     }
 
+    /// <summary>
+    /// Each of Adobe's cache folders, in the default folder and in every folder a release's settings
+    /// move the cache to, read from the same settings the plan reads. Only their contents go, and
+    /// Adobe's shared folder and the folders the settings name are the user's.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. CacheFolders().Select(CleanedPlace.Whole)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var layout = Layout;

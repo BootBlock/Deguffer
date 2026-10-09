@@ -149,6 +149,19 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Leftover("Windows.old", PastTheWindow);
+        Leftover("$Windows.~BT", PastTheWindow);
+        Leftover("$Windows.~WS", PastTheWindow);
+        Leftover(Path.Combine("ESD", "Windows"), PastTheWindow);
+        Leftover(Path.Combine("ESD", "Download"), PastTheWindow);
+        Aged(Path.Combine(Volume, "ESD"), PastTheWindow);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// §6.3 at this boundary is the display form: the handler takes <c>C:\</c>, never
     /// <c>\\?\C:\</c>. Only what crossed can show which form it was, so the fake records it. After

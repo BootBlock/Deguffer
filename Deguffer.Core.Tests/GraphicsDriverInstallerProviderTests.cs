@@ -123,6 +123,22 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §7.4 keeps no duplicate copy where the next clean could remove it, so every payload the plan
+    /// removes, in each vendor's folder, is in a place the provider names.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPayloadThePlanRemoves()
+    {
+        NvidiaRelease("546.33");
+        Populate(Path.Combine(Downloader, "latest"));
+        Populate(Path.Combine(Downloader, "3f0c2a9d8b7e4c1a9d2e6f5a4b3c2d1e"));
+        Populate(Path.Combine(Amd, "AMD-Software-Installer"), Path.Combine("Bin64", "AMDSoftwareInstaller.exe.tmp"));
+        AmdRelease("AMD_Software_Installer_22.10.3");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
     /// §5.2 and §5.6, proved by running a plan. Every folder the provider passes through, every
     /// sibling a vendor keeps for something else and every unrecognised child is still there, and the
     /// top of the drive was never a target.

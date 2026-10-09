@@ -538,6 +538,24 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Both routes: the logs removed by path, and every folder the reset logs' cleanup clears, the
+    /// ones it carries beside its first among them.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+        Populate(Path.Combine("Logs", "WindowsUpdate"), file: "WindowsUpdate.20260901.etl");
+        Populate("Panther", file: "setupact.log");
+        Populate(Path.Combine("System32", "LogFiles", "WMI", "RtBackup"), file: "EtwRT.etl");
+        AtTheTop(Path.Combine("$SysReset", "Logs"));
+        AtTheTop(Path.Combine("$SysReset", "OldOSLogs"));
+        Populate(Path.Combine("Logs", "PBR"), file: "PBR.log");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
     /// The logs a reset of this PC leaves are named by Windows' own <em>System recovery log files</em>
     /// cleanup, so §5.1 sends them there: one row for the three directories it clears, and Windows,
     /// not Deguffer, removes them. The <c>$SysReset</c> folder holding two of them is asserted to

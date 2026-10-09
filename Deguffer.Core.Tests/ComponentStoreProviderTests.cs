@@ -458,4 +458,28 @@ public sealed class ComponentStoreProviderTests : IDisposable
         Assert.False(result.Verification!.Passed);
         Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(emptied, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// §7.4 keeps no duplicate copy where the next clean could remove it. DISM's command names no
+    /// path, so the plan's command has nothing to cover and the places are asked about directly: the
+    /// store and the update record DISM prunes, and not the rest of Windows, which shares the store's
+    /// files without the cleanup removing anything from it.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesNameTheStoreAndTheUpdateRecordAndNotWindows()
+    {
+        Analyses(null, 21 * Gigabyte);
+
+        foreach (var provider in new ICleanupProvider[] { Cleanup(), Reset() })
+        {
+            Assert.IsType<RunCommandStep>(Assert.Single((await provider.PlanAsync()).Steps));
+
+            var places = await provider.CleanedPlacesAsync();
+
+            Assert.Contains(places, place => place.Holds(Path.Combine(_store, "Manifests", "component.manifest")));
+            Assert.Contains(places, place => place.Holds(Path.Combine(_packages, "Package_for_RollupFix.mum")));
+            Assert.DoesNotContain(places, place => place.Holds(Path.Combine(_system32, "kernel32.dll")));
+            Assert.DoesNotContain(places, place => place.Holds(Path.Combine(_installer, "patch.msp")));
+        }
+    }
 }

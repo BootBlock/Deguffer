@@ -99,6 +99,13 @@ public sealed class RestorePointProvider : CleanupProviderBase
         return listing.Answer is not ListingAnswer.Listed || listing.Points.Count > 1;
     }
 
+    /// <summary>
+    /// None: System Restore removes each point as a shadow copy of a volume, so no file a duplicate
+    /// search can see is deleted.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var listing = await ListingAsync(ct).ConfigureAwait(false);

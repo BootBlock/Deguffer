@@ -164,6 +164,13 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryMayExist));
 
+    /// <summary>
+    /// Each declared log folder whole, the reset logs Windows' own cleanup clears among them: every
+    /// file in one is a log this row offers.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. DeclaredPaths().Select(CleanedPlace.Whole)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         // One examination of both declarations, so the drive's contents are asserted once and the

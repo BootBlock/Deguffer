@@ -487,4 +487,14 @@ public sealed class EpicLauncherContentCacheProviderTests : IDisposable
         Assert.False(File.Exists(old));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
+
+    /// <summary>§7.4: the places named without planning hold the artwork cache the plan removes.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Populate(ContentCache);
+        Populate(Path.Combine(DataFolder, "Manifests"), name: "installed.item");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

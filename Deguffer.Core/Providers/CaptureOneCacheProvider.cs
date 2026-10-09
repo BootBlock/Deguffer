@@ -255,8 +255,6 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     private CaptureOneExamination Examine(CancellationToken ct)
     {
         var examination = new CaptureOneExamination();
-        var profile = Reached(Environment.UserProfile);
-        ReachedFolder[] applicationData = [.. Reached(Environment.LocalAppData), .. Reached(Environment.RoamingAppData)];
 
         foreach (var catalog in Documents.Catalogs)
         {
@@ -267,10 +265,45 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         foreach (var session in Documents.Sessions)
         {
             ct.ThrowIfCancellationRequested();
-            CollectSession(session, profile, applicationData, examination, ct);
+            CollectSession(session, examination, ct);
         }
 
         return examination;
+    }
+
+    /// <summary>
+    /// The <c>Cache</c> inside each catalog Capture One lists, and every <c>Cache</c> below each session
+    /// it lists that may be searched, read from the same settings the plan reads. Only a sidecar's
+    /// <c>Cache</c> is ever taken from a session, and naming every folder of that name below it is the
+    /// narrowest place that holds a sidecar found later; the catalog's database, the session file and
+    /// the user's images are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. Documents.Catalogs.Select(catalog => CleanedPlace.Whole(Path.Combine(catalog, CaptureOneLayout.CacheFolderName))),
+            .. Documents.Sessions
+                .Where(IsSearchableSession)
+                .Select(session => CleanedPlace.FoldersNamed(session, [CaptureOneLayout.CacheFolderName])),
+        ]);
+
+    /// <summary>
+    /// Whether <paramref name="session"/> may be walked as a session. A session file at or above the
+    /// profile would make everything it holds a session to walk, and one at the top of a volume, a folder
+    /// the volume is mounted at included, the whole volume. One anywhere in an application-data folder
+    /// is no photographer's session either, and a walk there would reach Capture One's own styles and
+    /// presets. Asked at every path each is reachable at, because Capture One records a session by the
+    /// path it was opened at.
+    /// </summary>
+    private bool IsSearchableSession(string session)
+    {
+        var folder = Reach(session);
+        var profile = Reached(Environment.UserProfile);
+        ReachedFolder[] applicationData = [.. Reached(Environment.LocalAppData), .. Reached(Environment.RoamingAppData)];
+
+        return !folder.IsVolumeTop
+            && !Array.Exists(profile, folder.Holds)
+            && !Array.Exists(applicationData, data => folder.Holds(data) || data.Holds(folder));
     }
 
     /// <summary>The folder at <paramref name="path"/>, or none where the environment names no such folder.</summary>
@@ -334,25 +367,9 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// One session: prove it by its database, then walk it for the <c>CaptureOne</c> folder beside
     /// each folder of images, and offer the <c>Cache</c> in each.
     /// </summary>
-    /// <param name="profile">The profile, or nothing where the environment names none.</param>
-    /// <param name="applicationData">The local and roaming application data the environment names.</param>
-    private void CollectSession(
-        string session,
-        ReachedFolder[] profile,
-        ReachedFolder[] applicationData,
-        CaptureOneExamination examination,
-        CancellationToken ct)
+    private void CollectSession(string session, CaptureOneExamination examination, CancellationToken ct)
     {
-        // A session file at or above the profile would make everything it holds a session to walk,
-        // and one at the top of a volume, a folder the volume is mounted at included, the whole volume.
-        // One anywhere in an application-data folder is no photographer's session either, and a walk
-        // there would reach Capture One's own styles and presets. Asked at every path each is
-        // reachable at, because Capture One records a session by the path it was opened at.
-        var folder = Reach(session);
-
-        if (folder.IsVolumeTop
-            || Array.Exists(profile, folder.Holds)
-            || Array.Exists(applicationData, data => folder.Holds(data) || data.Holds(folder)))
+        if (!IsSearchableSession(session))
         {
             examination.Decline(
                 session,

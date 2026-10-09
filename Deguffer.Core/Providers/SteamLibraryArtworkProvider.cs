@@ -136,6 +136,18 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
                 IsOffered)]
             : [];
 
+    /// <summary>
+    /// Steam's artwork folder beside the program wherever Windows records Steam as installed. Each
+    /// game's artwork is named by its app ID, so the folder is the narrowest place that holds a game
+    /// added after this is asked; its index is the only other thing in it, and the games and cloud saves
+    /// beside it are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            _discovery.Install.Root is { } install
+                ? [CleanedPlace.Whole(Path.Combine(install, LibraryCacheDirectory))]
+                : []);
+
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();

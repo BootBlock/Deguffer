@@ -127,6 +127,26 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
         ]);
     }
 
+    /// <summary>
+    /// Each of this account's temporary folders whole, and each place the row examines outside them
+    /// whole, such as Node's cache where <c>NODE_COMPILE_CACHE</c> moves it. The folders rather than
+    /// the places inside them, because what a row recognises there is decided entry by entry, and a
+    /// copy beside one of its entries is the "Temporary files" row's to take on its age anyway.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        var folders = AccountFolders;
+        var temporary = folders.Select(CleanedPlace.Whole).ToList();
+
+        return Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. temporary,
+            .. PlacesIn(folders)
+                .Where(place => !temporary.Exists(folder => folder.Holds(place.Directory)))
+                .Select(place => CleanedPlace.Whole(place.Directory)),
+        ]);
+    }
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var findings = Examine(ct);

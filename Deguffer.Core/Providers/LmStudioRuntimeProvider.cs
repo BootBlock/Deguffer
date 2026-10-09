@@ -143,6 +143,14 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     /// it, because the plan is the only place the user is told so. Read as absent, the row said LM
     /// Studio is not installed. See <see cref="PathPresence"/>.</para>
     /// </summary>
+    /// <summary>
+    /// The runtimes folder, whole: LM Studio's remove command takes a runtime's folder and also the
+    /// shared libraries in <c>vendor</c> that only that runtime used. Never LM Studio's own folder
+    /// above it, which holds the models and chats.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(Backends)]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(HoldsSupersededVersions());
 

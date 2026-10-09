@@ -62,6 +62,21 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The row names no cleaned place, which holds only while its plan deletes no file and sends no
+    /// command anywhere a file could be.
+    /// </summary>
+    [Fact]
+    public async Task ThePlanCleansNoPathSoItNamesNoCleanedPlace()
+    {
+        _cloud.File(At("report.docx"), onDisk: 4_000);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        OnlyStep(plan);
+        Assert.Empty(CleanedPlaceCoverage.Cleaned(plan));
+    }
+
+    /// <summary>
     /// §5.2 and §5.6 from the other side: this step destroys nothing, so it names no target, and a run
     /// holding it is not a run whose reach nobody can state.
     /// </summary>

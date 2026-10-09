@@ -201,6 +201,15 @@ public sealed class FileHistoryProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// This machine's saved versions on every target the configuration names that is there, whole.
+    /// Windows' command trims only the target it is assigned, but which one that is can change before
+    /// the next clean, and any version past the retention age in it may go.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. _discovery.Locate().Seen.Select(target => CleanedPlace.Whole(target.DataDirectory))]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var located = _discovery.Locate();

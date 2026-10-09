@@ -124,6 +124,14 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
     /// <summary>§5.2 as §7.1 needs it read from outside. The declaration is the shared one.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => [EpicLauncherSaved.Root(Environment)];
 
+    /// <summary>
+    /// The launcher's log and crash report folders. Its settings, cloud saves and the store's browser
+    /// folder beside them are never reached, so its own folder is not a place.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. EpicLauncherSaved.Diagnostics.DisposableNames.Select(name => CleanedPlace.Whole(Path.Combine(SavedPath, name)))]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var folder = Look();

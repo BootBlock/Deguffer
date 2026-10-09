@@ -737,6 +737,29 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.Equal(1024 + 2048, plan.EstimatedBytes);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Abandoned(1024, "temp", "old.tmp");
+        Abandoned(2048, "Windows", "Temp", "older.tmp");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// A folder only <c>%TEMP%</c> names is emptied as surely as the default one, so it is a cleaned
+    /// place too.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverATemporaryFolderOnlyASettingNames()
+    {
+        var other = _temp.CreateDirectory("second", "Temp");
+        _environment.WithEnvironmentVariable("TEMP", other);
+        Abandoned(2048, "second", "Temp", "old.tmp");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// One folder named twice is one step. The default location and the resolved one are the same
     /// directory on an ordinary machine, and a plan offering it twice would double its own estimate.

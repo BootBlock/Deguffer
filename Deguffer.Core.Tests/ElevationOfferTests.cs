@@ -201,6 +201,9 @@ public sealed class ElevationOfferTests
         public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ToolRoot>>([]);
 
+        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
         public string Id => "stub";
 
         public string Name => "Stub cache";

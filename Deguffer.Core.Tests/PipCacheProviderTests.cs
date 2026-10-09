@@ -201,4 +201,28 @@ public sealed class PipCacheProviderTests : IDisposable
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
         Assert.True(plan.EstimatedBytes > 0, "A cache past MAX_PATH was measured as empty.");
     }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultCacheTheCommandIsSentTo()
+    {
+        _environment.WithExecutable("pip");
+        CreateCache();
+
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(runner)));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheCachePipReportsElsewhere()
+    {
+        _environment.WithExecutable("pip");
+        var elsewhere = Path.Combine(_temp.Path, "relocated-cache");
+        Directory.CreateDirectory(elsewhere);
+        File.WriteAllBytes(Path.Combine(elsewhere, "payload.bin"), new byte[2048]);
+
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", elsewhere);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(runner)));
+    }
 }

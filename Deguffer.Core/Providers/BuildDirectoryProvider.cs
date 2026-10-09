@@ -139,6 +139,16 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             ct));
 
     /// <summary>
+    /// Every folder below an approved source folder that has one of the kind's names, which is the
+    /// whole of where the search looks for what it removes. Named by name rather than by recognition,
+    /// because a directory declined today becomes a target once its project gains the manifest or the
+    /// marker it lacks. Sealed for the reason <see cref="Grain"/> is.
+    /// </summary>
+    public sealed override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. ApprovedRoots.Select(root => CleanedPlace.FoldersNamed(root.Path, Kind.DirectoryNames))]);
+
+    /// <summary>
     /// What the veto asks about a directory: its project, and the files its tool holds open.
     ///
     /// <para>No <see cref="LiveTreeQuery.Workspaces"/>, because none of these toolchains has a file

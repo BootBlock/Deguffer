@@ -736,6 +736,29 @@ public sealed class VcpkgCacheProviderTests : IDisposable
         Assert.DoesNotContain(Path.Combine(root, "downloads"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultBinaryCacheAndTheClonesScratch()
+    {
+        Populate(DefaultBinaryCache);
+        _environment.WithEnvironmentVariable(VcpkgDiscovery.RootVariable, CreateClone());
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheCachesTheVariablesMoveElsewhere()
+    {
+        var root = CreateClone();
+        var archives = PopulateBinaryCache(Path.Combine(_temp.Path, "shared", "vcpkg-archives"));
+        var downloads = PopulateDownloads(Path.Combine(_temp.Path, "shared", "vcpkg-downloads"));
+        _environment
+            .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
+            .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, archives)
+            .WithEnvironmentVariable(VcpkgDiscovery.DownloadsVariable, downloads);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// A variable set to the place vcpkg would have used anyway must not declare the same directory
     /// twice — that would be two steps over one path, and §5.6 reporting one survivor as two.

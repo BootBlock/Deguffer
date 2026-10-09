@@ -158,4 +158,13 @@ public sealed class BattleNetLogProviderTests : IDisposable
             ["Account", "CachedData.db", "BrowserCaches", @"BrowserCaches\LocalPrefs.json", "Cache"],
             root.ProtectedNames.Select(p => p.RelativePath));
     }
+
+    /// <summary>§7.4: the places named without planning hold the logs the plan removes.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        _battleNet.CreateMeasuredLayout();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

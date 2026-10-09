@@ -129,6 +129,22 @@ public sealed class VirtualDiskProviderTests : IDisposable
         Assert.Contains(plan.Notes, note => note.Message == VirtualDiskRoutes.ReportOnly);
     }
 
+    /// <summary>
+    /// The row names no cleaned place, which holds only while its report deletes no file and sends no
+    /// command anywhere a file could be.
+    /// </summary>
+    [Fact]
+    public async Task ThePlanCleansNoPathSoItNamesNoCleanedPlace()
+    {
+        Register(Ubuntu, "Ubuntu", Folder("wsl", "Ubuntu"));
+        Disk(Path.Combine(_temp.Path, "wsl", "Ubuntu"));
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.NotEmpty(plan.Notes);
+        Assert.Empty(CleanedPlaceCoverage.Cleaned(plan));
+    }
+
     [Fact]
     public async Task AMissingDiskIsReportedAsMissingRatherThanAsZero()
     {

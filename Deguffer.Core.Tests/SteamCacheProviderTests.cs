@@ -432,4 +432,16 @@ public sealed class SteamCacheProviderTests : IDisposable
 
         Assert.Empty(CreateProvider().Roots);
     }
+
+    /// <summary>§7.4: the places named without planning hold the HTTP cache beside the install Steam records.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var install = RegisterInstall();
+        Populate(Path.Combine(install, "appcache", "httpcache"));
+        Populate(Path.Combine(install, "appcache", "librarycache"));
+        Populate(Path.Combine(install, "steamapps", "common", "Portal"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

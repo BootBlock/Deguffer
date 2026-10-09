@@ -95,6 +95,14 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.FileMayExist(_cache.ModuleManifest));
 
+    /// <summary>
+    /// The service's own folder in the Network Service profile, whole. The command names no path, and
+    /// Windows rather than Deguffer decides what in there it clears, so the folder it works in is the
+    /// narrowest place that is certain to hold all of it.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(_serviceFolder)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (LongPath.ProbeFile(_cache.ModuleManifest) is PathPresence.Absent)

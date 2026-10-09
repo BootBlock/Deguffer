@@ -2050,6 +2050,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
         IReadOnlyList<ToolRoot> roots,
         IReadOnlyList<ToolRoot>? discovered = null) : ICleanupProvider
     {
+        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
         public string Id => "stub";
 
         public string Name => "Stub";

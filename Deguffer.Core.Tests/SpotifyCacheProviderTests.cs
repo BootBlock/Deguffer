@@ -606,4 +606,16 @@ public sealed class SpotifyCacheProviderTests : IDisposable
             provider.Roots.SelectMany(
                 root => root.Locations.Select(l => Path.Combine(root.Path, l.RelativePath))));
     }
+
+    /// <summary>§7.4: the places named without planning hold the streaming cache of both editions.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Populate(Path.Combine(LocalFolder, "Data"));
+        Populate(Path.Combine(LocalFolder, "Storage"));
+        Populate(Path.Combine(StoreCacheFolder, "Data"));
+        WriteSettings(RoamingFolder, "app.autostart-mode=\"off\"", "storage.size=1024");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

@@ -816,6 +816,23 @@ public sealed class ChromiumCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// §7.4: the places named without planning hold every cache the plan removes, at every level and in
+    /// every profile.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var app = CreateApplication("Browserish");
+        CreateDirectory(Path.Combine(app, "GPUCache"));
+        CreateDirectory(Path.Combine(app, "Cache", "Cache_Data"));
+        CreateDirectory(Path.Combine(app, "Default", "Code Cache"));
+        CreateDirectory(Path.Combine(app, "Profile 1", "Code Cache"));
+        CreateDirectory(Path.Combine(CreateApplication("Localiser", _environment.LocalAppData), "GPUCache"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);

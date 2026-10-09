@@ -710,6 +710,20 @@ public sealed class VsCodeCacheProviderTests : IDisposable
     /// Whether deleting <paramref name="target"/> would destroy <paramref name="protectedPath"/> —
     /// which is true when the protected path is the target or sits inside it.
     /// </summary>
+    /// <summary>§7.4: the places named without planning hold every cache, the webview ones included, in every editor.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var editor = CreateEditor();
+        CreateDirectory(Path.Combine(editor, "CachedData"));
+        CreateDirectory(Path.Combine(editor, "CachedExtensionVSIXs"));
+        CreateDirectory(Path.Combine(editor, "WebStorage", "42", "CacheStorage"));
+        CreateDirectory(Path.Combine(editor, "WebStorage", "7", "CacheStorage"));
+        CreateDirectory(Path.Combine(CreateEditor("Cursor"), "CachedProfilesData"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     private static bool WouldTakeWithIt(string target, string protectedPath) =>
         protectedPath.Equals(target, StringComparison.OrdinalIgnoreCase) ||
         protectedPath.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);

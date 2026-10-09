@@ -153,6 +153,16 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             || storage.Moved.Count > 0);
     }
 
+    /// <summary>
+    /// The streaming cache of each edition of Spotify, read from the same settings the plan reads,
+    /// including one held back today because a setting might put the downloads in it: a change to the
+    /// settings is all it takes for the clean to reach it. The downloads, the settings and the folders
+    /// a setting names are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. Storage.Installs.Select(install => CleanedPlace.Whole(install.Edition.Cache))]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var storage = Storage;

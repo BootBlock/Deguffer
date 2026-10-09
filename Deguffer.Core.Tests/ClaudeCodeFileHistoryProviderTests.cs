@@ -546,4 +546,26 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
 
         Assert.Equal([session], (await provider.PlanAsync()).TargetedPaths);
     }
+
+    /// <summary>§7.4: the places named without planning hold each ended session's snapshots.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        OldSession(SessionA);
+        OldSession(SessionB);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 where Claude Code's folder variable moves its folder: the snapshots there are held too.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheFolderTheConfigDirectoryVariableNames()
+    {
+        var moved = new ClaudeCodeFixture(Path.Combine(_temp.Path, "elsewhere", "claude-config"));
+        moved.RewindSnapshots(SessionA, folderAge: Old, snapshotAge: Old);
+
+        _environment.WithEnvironmentVariable(ClaudeCodeHome.ConfigDirectoryVariable, moved.Home);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

@@ -115,6 +115,26 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §7.4 keeps no duplicate copy where the next clean could remove it, so every payload the plan
+    /// removes is in a place the provider names. The deployment images beside them are not, because
+    /// an administrator's image is as likely as anything to be the copy a duplicate search keeps.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPayloadThePlanRemovesAndNotTheDeployments()
+    {
+        Extracted("AutoCAD_2024_English_Win_64bit_dlm");
+        Populate(Path.Combine(Autodesk, "WI", "ACD_2026_english_us_win_db_002_002"));
+        Populate(Path.Combine(Autodesk, "IM"), Path.Combine("packages", "payload.7z"));
+        var deployments = Populate(
+            Path.Combine(Autodesk, "Deployments", "Revit2022.0.1"), Path.Combine("image", "Collection.xml"));
+
+        var provider = CreateProvider();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Holds(deployments));
+    }
+
+    /// <summary>
     /// §5.2 and §5.6, proved by running a plan. The folder itself, the licence server, the deployment
     /// images, Autodesk Access's updates and every unrecognised child are still there, and the top of
     /// the drive was never a target.

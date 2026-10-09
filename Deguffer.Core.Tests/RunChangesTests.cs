@@ -194,6 +194,9 @@ public sealed class RunChangesTests
         public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public void InvalidateCaches() => throw new NotSupportedException();
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => throw new NotSupportedException();

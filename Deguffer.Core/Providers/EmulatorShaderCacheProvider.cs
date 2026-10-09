@@ -168,6 +168,20 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         return Task.FromResult<IReadOnlyList<ToolRoot>>(roots);
     }
 
+    /// <summary>
+    /// Each cache folder of each emulator found where it keeps its data by default or in an emulator
+    /// folder the user added, as the same examination the plan reads names it, including one a setting
+    /// moved. Whole, because each layout recognises its caches by a rule rather than a list of names; the
+    /// emulator's own folder, with the saves, firmware and installed games, is never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. Examine(ct).Roots
+                .SelectMany(root => root.CacheFolders)
+                .Select(folder => CleanedPlace.Whole(folder.Path)),
+        ]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var examination = Examine(ct);

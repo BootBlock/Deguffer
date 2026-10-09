@@ -272,4 +272,28 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
         Assert.True(plan.WasNotExamined);
         Assert.True(Directory.Exists(boxArt));
     }
+
+    /// <summary>§7.4: the places named without planning hold each kind of picture for every system.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        _retroArch.Install().Declare();
+        _retroArch.Pictures(Nes, "Named_Boxarts");
+        _retroArch.Pictures(Nes, "Named_Snaps");
+        _retroArch.Pictures(Snes, "Named_Titles");
+        RetroArchFixture.Folder(Path.Combine(_retroArch.Thumbnails, Nes, "Custom"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 for a thumbnails folder the settings move: the pictures there are held too.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverAThumbnailsFolderTheSettingsMove()
+    {
+        var moved = Path.Combine(_temp.Path, "art");
+        _retroArch.Install($"thumbnails_directory = \"{moved}\"").Declare();
+        _retroArch.Pictures(Nes, "Named_Boxarts", moved);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

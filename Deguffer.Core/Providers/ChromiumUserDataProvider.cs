@@ -207,6 +207,22 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// <para>A browser Deguffer did not look inside, because a link or a refused segment stood in
     /// front of it, counts as present for the same reason: the plan is where that is said.</para>
     /// </summary>
+    /// <summary>
+    /// Each disposable child this row recognises, at each of its levels, in every profile of every
+    /// application the discovery finds, whether or not one is there today. The data folder, the profile
+    /// and the sign-in cookies and passwords beside the caches are never reached, so none of them is a
+    /// place.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from application in _discovery.Discover(ct)
+               from profile in application.Profiles
+               from level in CacheLevels
+               from name in level.Children.DisposableNames
+               select CleanedPlace.Whole(Path.Combine(level.Resolve(profile), name)),
+        ]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(
             Applications(ct).Count > 0

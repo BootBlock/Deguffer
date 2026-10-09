@@ -151,6 +151,13 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(DeclaredPaths().Any(LongPath.DirectoryMayExist) || InstallUnreached() is not null);
 
+    /// <summary>
+    /// The one HTTP cache this provider declares, beside the program wherever Windows records Steam as
+    /// installed. The games, cloud saves, configuration and indexes beside it are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. DeclaredPaths().Select(CleanedPlace.Whole)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var scan = DeclaredLocations.Examine(Roots, ct);

@@ -107,6 +107,14 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             DisposableChildren),
     ];
 
+    /// <summary>
+    /// The two disposable children of the store and nothing beside them, because <c>.prompts</c>
+    /// and the server's other state share the folder with them.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. DisposableChildren.DisposableNames.Select(child => CleanedPlace.Whole(Path.Combine(_root, child)))]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_root));
 

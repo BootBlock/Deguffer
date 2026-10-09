@@ -647,4 +647,62 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(Data, "cache")).IsAllowed);
         Assert.False(policy.MayRemove(moved).IsAllowed);
     }
+
+    // ---- §7.4: what the clean can reach --------------------------------------------------------
+
+    /// <summary>§7.4 keeps no duplicate copy where the next clean could remove it.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultTranscoderFolder()
+    {
+        CreateData(Data);
+        Transcoding(Transcodes);
+        Record(JellyfinServerLayout.DataFolderValue, Data);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// A setting moves the transcoder outside the data folder, either straight to a folder or with the
+    /// cache it sits in, and the place has to follow it there.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CleanedPlacesFollowAMovedTranscoderFolder(bool movesCache)
+    {
+        CreateData(Data);
+        var moved = Path.Combine(_temp.Path, "Scratch", "JellyfinCache");
+        Transcoding(movesCache ? Path.Combine(moved, "transcodes") : moved);
+        Write(
+            Path.Combine(Data, "config", movesCache ? "system.xml" : "encoding.xml"),
+            Old,
+            Settings(movesCache ? "CachePath" : "TranscodingTempPath", moved));
+        Record(JellyfinServerLayout.DataFolderValue, Data);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// A data folder Windows would not describe is still one the next clean, run with the rights to
+    /// read it, empties the transcoder folder of. Its plan cleans nothing today, so the place is asked
+    /// about directly.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesNameTheTranscoderFolderOfADataFolderWindowsWouldNotDescribe()
+    {
+        var service = Path.Combine(_system.ProgramData, "Jellyfin", "Server");
+        CreateData(service);
+        var segment = Path.Combine(service, "cache", "transcodes", "0b1c2d.ts");
+
+        IReadOnlyList<CleanedPlace> places;
+
+        using (DeniedDirectory.WithUnreadableAttributes(service))
+        {
+            Assert.Equal(PathPresence.Refused, LongPath.ProbeDirectory(service));
+            places = await CreateProvider().CleanedPlacesAsync();
+        }
+
+        Assert.Contains(places, place => place.Holds(segment));
+        Assert.DoesNotContain(places, place => place.Holds(Path.Combine(service, "data", "jellyfin.db")));
+    }
 }

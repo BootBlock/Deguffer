@@ -195,6 +195,14 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(RecognisedCachePaths().Any(LongPath.DirectoryMayExist));
 
+    /// <summary>
+    /// Each cache every vendor's folder recognises, and Direct3D's own cache in the local application
+    /// data. The vendors' folders hold driver settings and account state beside the caches, so none of
+    /// them is a place.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. RecognisedCachePaths().Select(CleanedPlace.Whole)]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var notes = new List<PlanNote>();

@@ -79,6 +79,9 @@ public sealed class CombinedFallbackTests : IDisposable
     private sealed class TargetsProvider(IUserEnvironment environment, IDirectoryScanner scanner, params DeletionTarget[] targets)
         : CleanupProviderBase(environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner)
     {
+        public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
         public override string Id => "targets";
 
         public override string Name => "Targets";

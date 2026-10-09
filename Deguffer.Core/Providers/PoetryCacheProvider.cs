@@ -222,6 +222,29 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         ];
     }
 
+    /// <summary>
+    /// The downloaded archives the plan deletes and the repository caches Poetry's own clear empties,
+    /// in the cache directory Poetry reports and in the default one, because <c>cache-dir</c> can be
+    /// unset again after a duplicate search has asked. Never the virtual environments beside them.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        List<string> roots = [DefaultCacheRoot];
+
+        if (Environment.FindExecutable("poetry") is { } poetry)
+        {
+            var (cacheRoot, _) = await _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
+            roots.Add(cacheRoot);
+        }
+
+        return
+        [
+            .. roots.Distinct(StringComparer.OrdinalIgnoreCase).SelectMany(root => DisposableChildren.DisposableNames
+                .Select(child => CleanedPlace.Whole(Path.Combine(root, child)))
+                .Append(CleanedPlace.Whole(Path.Combine(root, "cache", "repositories")))),
+        ];
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("poetry") is not null);
 

@@ -126,6 +126,13 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
             _ => false),
     ];
 
+    /// <summary>
+    /// The folder holding the sets, because any program's set inside it can go, and nothing above it:
+    /// Visual Studio's own folder holds the recovery copies of unsaved documents.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(_cache)]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_cache));
 

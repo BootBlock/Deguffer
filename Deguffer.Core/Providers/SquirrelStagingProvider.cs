@@ -253,6 +253,31 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     /// answer false here and the sentence explaining that would be unreachable. The row would then
     /// read "Not installed" about applications that are installed.</para>
     /// </summary>
+    /// <summary>
+    /// The staging folder the variable names and the default one, because the variable can be unset
+    /// again after a duplicate search has read it, and the packages folder of each installation the
+    /// sweep finds, where the spent packages are. Each whole: a staging directory is any child with a
+    /// name of Squirrel's shape and a spent package any file the index stops naming, which no
+    /// narrower place can say. Never an installation's own version folders.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        List<string> places =
+        [
+            Path.Combine(Environment.LocalAppData, SquirrelDiscovery.StagingDirectoryName),
+            .. _discovery.Look(ct).Installations
+                .Select(installation => Path.Combine(installation.Root, SquirrelDiscovery.PackagesDirectoryName)),
+        ];
+
+        if (_discovery.StagingRoot is { } staging)
+        {
+            places.Add(staging);
+        }
+
+        return Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. places.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)]);
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
         var sweep = _discovery.Look(ct);

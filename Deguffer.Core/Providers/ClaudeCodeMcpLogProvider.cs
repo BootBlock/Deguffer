@@ -125,6 +125,14 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     /// project's folder under them. The plan names it, and recognising nothing refuses everything
     /// inside it.</para>
     /// </summary>
+    /// <summary>
+    /// The per-project log folders. Every server's log is a folder named by a prefix inside one of them,
+    /// so no narrower place holds a log a server writes after this is asked; the command-line tool's
+    /// own folder above them is never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(CacheFolder)]);
+
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
     public override void InvalidateCaches()

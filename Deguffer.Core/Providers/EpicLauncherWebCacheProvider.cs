@@ -216,6 +216,21 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                    level.Children),
         ];
 
+    /// <summary>
+    /// Each cache this row recognises, at each of its levels, in every one of the store's browser
+    /// folders the same look the plan reads finds, whether or not one is there today. The sign-in
+    /// cookies and the store's saved data beside them are never reached, so neither the browser folder
+    /// nor the launcher's own is a place.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from cache in WebCaches(ct)
+               from level in Levels
+               from name in level.Children.DisposableNames
+               select CleanedPlace.Whole(Path.Combine(level.Resolve(cache), name)),
+        ]);
+
     public override void InvalidateCaches()
     {
         _scan = null;

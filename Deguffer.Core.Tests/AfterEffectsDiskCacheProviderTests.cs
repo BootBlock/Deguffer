@@ -532,4 +532,15 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
         Assert.False(File.Exists(abandoned));
         Assert.True(Directory.Exists(_environment.TempPath));
     }
+
+    /// <summary>§7.4: the places named without planning hold the cache in the folder the preferences name.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Preferences(Version, Chosen);
+        Cache(Chosen, Version, CacheName);
+        Cache(Chosen, Version, AfterEffectsDiskCacheLayout.CacheName("ANOTHER-PC"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

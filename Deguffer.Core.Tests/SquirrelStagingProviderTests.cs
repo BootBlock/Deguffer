@@ -630,6 +630,30 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         Assert.True(Directory.Exists(untouched), $"{untouched} was removed");
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultStagingFolderAndEverySpentPackage()
+    {
+        Populate(Path.Combine(StagingRoot, "tempa"));
+        var root = CreateApplication("Chatterbox", "1.0.9254");
+        CreatePackages(
+            root,
+            ["Chatterbox-1.0.9254-full.nupkg"],
+            "Chatterbox-1.0.9254-full.nupkg",
+            "Chatterbox-1.0.9007-full.nupkg");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheConfiguredStagingFolder()
+    {
+        var elsewhere = Path.Combine(_temp.Path, "squirrel-staging");
+        Populate(Path.Combine(elsewhere, "tempa"));
+        _environment.WithEnvironmentVariable(SquirrelDiscovery.StagingVariable, elsewhere);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// A configured value that is not a full path. Squirrel resolves it against whichever process is
     /// updating, which Deguffer is not — so the folder is declined by name rather than guessed at,

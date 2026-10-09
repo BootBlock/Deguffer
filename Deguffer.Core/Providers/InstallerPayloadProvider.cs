@@ -327,7 +327,30 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     /// exactly as the plan finds them, walk and link rule included, so the two cannot disagree about
     /// which folders are payloads.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. Veto(Recognised(ct), ct).Vetoed.Select(vetoed => new ToolRoot(
+                vetoed.Directory,
+                InUseReason + (vetoed.Holders.Count > 0 ? $" ({string.Join("; ", vetoed.Holders)})" : string.Empty),
+                static _ => false)),
+        ]);
+
+    /// <summary>
+    /// Every payload the rows recognise, found as the plan finds them, whether or not it is empty or in
+    /// use, since either can change before the next clean. Each payload rather than its vendor folder,
+    /// because beside the payloads sit what the vendor or an administrator keeps there, such as
+    /// Autodesk's deployment images, which can hold the very copy a duplicate search should keep.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. Recognised(ct).Select(payload => CleanedPlace.Whole(payload.Path))]);
+
+    /// <summary>
+    /// Every child the rows recognise, below each folder the walk reaches, before emptiness or the veto
+    /// has a say: the plan's own search, walk and link rule included, so that what Explore refuses and
+    /// what the cleaned places name cannot disagree with it about which folders are payloads.
+    /// </summary>
+    private List<Payload> Recognised(CancellationToken ct)
     {
         var found = new List<Payload>();
 
@@ -347,13 +370,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
                 .Select(child => new Payload(root, child.Name, LongPath.Display(child.FullName), string.Empty)));
         }
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
-        [
-            .. Veto(found, ct).Vetoed.Select(vetoed => new ToolRoot(
-                vetoed.Directory,
-                InUseReason + (vetoed.Holders.Count > 0 ? $" ({string.Join("; ", vetoed.Holders)})" : string.Empty),
-                static _ => false)),
-        ]);
+        return found;
     }
 
     /// <summary>A recognised payload, before the veto has said whether it may be offered.</summary>

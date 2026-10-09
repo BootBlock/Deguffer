@@ -245,6 +245,21 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     /// <c>.cargo</c> with nothing in it but <c>bin</c>, and reporting that as a source would offer
     /// the user a row the plan then has nothing to say about.
     /// </summary>
+    /// <summary>
+    /// The archives, the unpacked sources and the git checkouts, in the home in use and in the
+    /// default home, because the variable can be unset again after a duplicate search has read it.
+    /// Never the index or the bare clones beside them, and never a home this declines.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. new[] { ResolveHome(), DefaultHome }
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .SelectMany(RecognisedCachePaths)
+                .Select(CleanedPlace.Whole),
+        ]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveHome() is { } home && RecognisedCachePaths(home).Any(LongPath.DirectoryMayExist));
 

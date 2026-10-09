@@ -667,6 +667,31 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
         Assert.True(await CreateProvider().IsPresentAsync());
     }
 
+    /// <summary>§7.4: the places named without planning hold the filesystem cache and both default stores.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Populate(Path.Combine(LegacyCache, "Buckets", "Shaders"));
+        PopulateStore(CurrentStore);
+        PopulateStore(OlderStore);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 for stores a setting names: one a local cache path moves, and one Zen's own data path names.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheStoresASettingNames()
+    {
+        var chosen = _temp.CreateDirectory("Caches", "Unreal");
+        PopulateStore(Path.Combine(chosen, "Zen"));
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", chosen);
+
+        var store = PopulateStore(Path.Combine(_temp.CreateDirectory("Stores"), "ZenData"));
+        _environment.WithEnvironmentVariable("UE-ZenDataPath", store);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     private Task<ExploreActionPolicy> ExplorePolicy(ICleanupProvider provider) =>
         ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 }

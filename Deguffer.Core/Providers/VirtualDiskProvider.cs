@@ -104,6 +104,12 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
                     [Path.GetFileName(disk.Path)])),
         ]);
 
+    /// <summary>
+    /// None: the row only reports how large each disk is, and its plan holds no step at all.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var inventory = Inventory();

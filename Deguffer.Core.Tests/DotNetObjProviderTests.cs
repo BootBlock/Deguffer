@@ -178,6 +178,20 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §7.4 keeps no duplicate copy where the next clean could remove it, so every <c>obj</c> the plan
+    /// removes is in a place the provider names. Two folders down, because the search finds one at any
+    /// depth.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryObjThePlanRemoves()
+    {
+        var root = ApproveRoot();
+        ProjectFixture.CreateProject(Path.Combine(root, "team", "Example"), "Example");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
     /// The consent model. The index knows every directory on the volume, and a cheap answer must
     /// not become permission — an <c>obj</c> outside every approved root is never offered, however
     /// plainly it is intermediate output.

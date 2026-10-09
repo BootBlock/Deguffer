@@ -87,6 +87,25 @@ public sealed class NpmCacheProvider : CleanupProviderBase
         Task.FromResult(Environment.FindExecutable("npm") is not null);
 
     /// <summary>
+    /// The cache <c>npm cache clean</c> is sent to: the one npm reports, and the documented default
+    /// as well, because configuration can move the cache back to it after a duplicate search has
+    /// asked.
+    /// </summary>
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        var npm = Environment.FindExecutable("npm");
+
+        if (npm is null)
+        {
+            return [CleanedPlace.Whole(DefaultCacheDirectory)];
+        }
+
+        var reported = await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false);
+
+        return [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(reported)];
+    }
+
+    /// <summary>
     /// npm's cache location is configuration, not a constant — <c>npm config set cache</c> and the
     /// <c>npm_config_cache</c> environment variable both move it. Keeping the resolved answer across
     /// an invalidation would measure a directory npm has stopped using.

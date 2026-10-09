@@ -304,6 +304,37 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Assert.True(step.Estimated.IsApproximate);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultCacheAndPackagesTheCommandsAreSentTo()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        CreateInstalledToolchains();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(Reporting(ASupersededToolchain))));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverTheCacheAndPackagesPlatformIoReportsElsewhere()
+    {
+        _environment.WithExecutable("pio");
+        var cache = _temp.CreateDirectory("elsewhere", "pio-cache");
+        var packages = _temp.CreateDirectory("elsewhere", "toolchains");
+        File.WriteAllBytes(Path.Combine(cache, "payload.bin"), new byte[2048]);
+        File.WriteAllBytes(Path.Combine(packages, "payload.bin"), new byte[8192]);
+
+        var report = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["cache_dir"] = cache,
+            ["packages_dir"] = packages,
+        });
+        var runner = new FakeProcessRunner()
+            .Responding(Pio, "system info", report)
+            .Responding(Pio, "--dry-run", ASupersededToolchain);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(runner)));
+    }
+
     /// <summary>
     /// The two figures are different kinds of number and must stay apart. Deguffer's probe counts
     /// every toolchain in <c>packages</c>, most of which stays; PlatformIO's estimate counts only

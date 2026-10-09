@@ -795,4 +795,27 @@ public sealed class ClaudeCodeConversationProviderTests : IDisposable
         Assert.True(Directory.Exists(outside));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
+
+    /// <summary>§7.4: the places named without planning hold an ended session's conversation and its folder.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        OldSession(SessionA);
+        OldSession(SessionB, OtherProjectFolder, OtherProjectPath);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>§7.4 where Claude Code's folder variable moves its folder: the conversations there are held too.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheFolderTheConfigDirectoryVariableNames()
+    {
+        var moved = new ClaudeCodeFixture(Path.Combine(_temp.Path, "elsewhere", "claude-config"));
+        moved.Conversation(SessionA, ProjectFolder, ProjectPath, age: Old);
+        moved.SessionFolder(SessionA, ProjectFolder, Old);
+
+        _environment.WithEnvironmentVariable(ClaudeCodeHome.ConfigDirectoryVariable, moved.Home);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

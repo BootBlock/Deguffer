@@ -414,4 +414,46 @@ public sealed class PlexTranscodeProviderTests : IDisposable
         Assert.Equal(3, reads);
         Assert.Equal(6, _environment.RegistryReads);
     }
+
+    // ---- §7.4: what the clean can reach --------------------------------------------------------
+
+    /// <summary>§7.4 keeps no duplicate copy where the next clean could remove it.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverTheDefaultTranscoderFolders()
+    {
+        CreateLayout();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// The place follows a moved transcoder to the <c>Transcode\Sessions</c> Plex writes there, and
+    /// stops at it: the folder the setting names is the user's.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesFollowAMovedTranscoderFolderAndNoFurther()
+    {
+        var moved = Path.Combine(_temp.Path, "PlexTemp");
+        Write(Path.Combine(moved, "Transcode", "Sessions", "plex-transcode-e5f6", "media-00001.ts"), Old);
+        var beside = Write(Path.Combine(moved, "notes.txt"), Old);
+        WithSetting(PlexServerLayout.TranscoderValue, moved);
+
+        var provider = CreateProvider();
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Holds(beside));
+    }
+
+    /// <summary>A moved data folder takes the transcoder's folders with it, and the place follows.</summary>
+    [Fact]
+    public async Task CleanedPlacesFollowAMovedDataFolder()
+    {
+        var moved = Path.Combine(_temp.Path, "PlexData");
+        var movedData = Path.Combine(moved, PlexServerLayout.FolderName);
+        Write(Path.Combine(movedData, "Cache", "Transcode", "Sessions", "plex-transcode-a1b2", "media-00001.ts"), Old);
+        Write(Path.Combine(movedData, "Cache", "PhotoTranscoder", "3f", "3f0a.jpg"), Old);
+        WithSetting(PlexServerLayout.DataFolderValue, moved);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

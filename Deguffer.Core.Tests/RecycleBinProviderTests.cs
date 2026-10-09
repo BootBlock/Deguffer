@@ -105,6 +105,18 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var c = CreateVolume("C");
+        var d = CreateVolume("D");
+        CreateBin(c, Sid, 8192);
+        CreateBin(d, Sid, 2048);
+        CreateBin(d, AnotherAccount);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
     public async Task PlansOneStepPerVolumeThatHoldsThisUsersBin()
     {
         var c = CreateVolume("C");

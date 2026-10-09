@@ -79,6 +79,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>([]);
 
+    /// <summary>What it says its clean can delete in, as a test states it.</summary>
+    public IReadOnlyList<CleanedPlace> Cleaned { get; set; } = [];
+
+    public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult(Cleaned);
+
     public void InvalidateCaches()
     {
     }

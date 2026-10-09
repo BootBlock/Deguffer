@@ -98,6 +98,17 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     private static readonly IReadOnlyList<CacheLevel> HomeLevel = [new CacheLevel(string.Empty, HomeChildren)];
 
+    /// <summary>The folders in Claude Code's own folder that the leftovers of each kind are taken from.</summary>
+    private static readonly IReadOnlyList<string> LeftoverFolders =
+    [
+        ClaudeCodeHome.Projects,
+        ClaudeCodeHome.SessionEnvironments,
+        ClaudeCodeHome.Ide,
+        ClaudeCodeHome.Sessions,
+        ClaudeCodeHome.ShellSnapshots,
+        ClaudeCodeHome.Telemetry,
+    ];
+
     /// <summary>
     /// Files in Claude Code's folder whose reason is worth stating. Every file there is asserted to
     /// survive whether or not it is named, because nothing at that level is ever a target.
@@ -219,6 +230,22 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// nothing, because the plan names them as paths that must survive and §7.1 has Explore refuse
     /// every such path.
     /// </summary>
+    /// <summary>
+    /// Each folder this row takes leftovers from, in Claude Code's default folder and in the one its folder
+    /// variable names. The projects folder is whole because a session's spilled output is a folder named
+    /// for the session in any project's folder; the files at the top of Claude Code's folder, the rewind
+    /// snapshots and the configuration beside it are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. from home in Homes()
+               from folder in LeftoverFolders
+               select CleanedPlace.Whole(Path.Combine(home, folder)),
+        ]);
+
+    private IReadOnlyList<string> Homes() => ClaudeCodeHome.EveryHome(Environment, _system, Volumes);
+
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
     public override void InvalidateCaches()

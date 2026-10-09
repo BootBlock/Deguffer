@@ -215,6 +215,27 @@ public sealed class PuppeteerBrowsersProviderTests : IDisposable
         Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path == Path.Combine(_environment.UserProfile, ".cache"));
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryBuildThePlanCleansInTheDefaultCache()
+    {
+        CreateRoot(@"chrome\win64-127.0.6533.88", @"chromium\win64-1108766", @"firefox\win64-stable_129.0");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    [Fact]
+    public async Task CleanedPlacesCoverEveryBuildThePlanCleansWhereTheVariableMovedTheCache()
+    {
+        var elsewhere = Path.Combine(_temp.Path, "browsers");
+        var build = Path.Combine(elsewhere, "chrome", "win64-127.0.6533.88");
+        Directory.CreateDirectory(build);
+        File.WriteAllBytes(Path.Combine(build, "payload.bin"), new byte[4096]);
+
+        _environment.WithEnvironmentVariable(PuppeteerBrowsersProvider.LocationVariable, elsewhere);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// A variable naming the default cache through another mount of the profile's volume names the
     /// default place, so the shared <c>.cache</c> around it is still asserted to survive, as it is

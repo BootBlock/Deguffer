@@ -775,4 +775,13 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
 
         Assert.DoesNotContain(roots, r => r.Path.Equals(session, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>§7.4: the places named without planning hold a catalog's cache and each sidecar's in a session.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        List(Catalog("Wedding"), Session("Studio"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
 }

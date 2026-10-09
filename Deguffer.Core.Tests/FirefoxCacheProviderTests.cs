@@ -846,6 +846,21 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>§7.4: the places named without planning hold every cache in every profile's local half.</summary>
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        var first = AddProfile();
+        var second = AddProfile("work");
+        CreateUserData(first);
+        CreateDirectory(Path.Combine(first.Local, "cache2"));
+        CreateDirectory(Path.Combine(first.Local, "startupCache"));
+        CreateDirectory(Path.Combine(second.Local, "safebrowsing"));
+        CreateDirectory(Path.Combine(second.Local, "remote-settings"));
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
         candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         candidate.StartsWith(ancestor + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);

@@ -126,6 +126,17 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         Task.FromResult(ClaudeCodeHome.Resolve(Environment, _system, Volumes) is { } home
             && LongPath.DirectoryMayExist(Path.Combine(home, ClaudeCodeHome.Projects)));
 
+    /// <summary>
+    /// The projects folder in Claude Code's default folder and in the one its folder variable names, since
+    /// a conversation and its session folder are named for a session and can be in any project's folder.
+    /// The settings and sign-in beside it are never reached.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. Homes().Select(home => CleanedPlace.Whole(Path.Combine(home, ClaudeCodeHome.Projects)))]);
+
+    private IReadOnlyList<string> Homes() => ClaudeCodeHome.EveryHome(Environment, _system, Volumes);
+
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
 
     public override void InvalidateCaches()

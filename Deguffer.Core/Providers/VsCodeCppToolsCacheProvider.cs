@@ -122,6 +122,20 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
             DisposableChildren),
     ];
 
+    /// <summary>
+    /// The precompiled headers, whether or not they are there today, and each workspace's folder the
+    /// plan's own test recognises as holding nothing but its browse database. A workspace's folder is
+    /// named by a hash, so only that test can tell one from the extension's own state beside it.
+    /// </summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. DisposableChildren.DisposableNames.Select(name => CleanedPlace.Whole(Path.Combine(_root, name))),
+            .. ChildDirectories.Under(_root).Directories
+                .Where(child => Classify(child, ct).IsPerWorkspace)
+                .Select(child => CleanedPlace.Whole(LongPath.Display(child.FullName))),
+        ]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_root));
 

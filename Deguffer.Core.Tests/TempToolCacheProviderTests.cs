@@ -216,6 +216,30 @@ public sealed class TempToolCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    [Fact]
+    public async Task CleanedPlacesCoverEveryPathThePlanCleans()
+    {
+        Entry(4096, "node-compile-cache", "v26.7.0-x64-8d7ad2ee", "0a1b2c3d");
+        Entry(2048, "flutter_tools.1a2b3c", "app.dill");
+        Entry(1024, "mozilla-temp-files", "mozilla-temp-41");
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// A cache <c>NODE_COMPILE_CACHE</c> moves outside every temporary folder is a place the clean
+    /// reaches, and only the setting names it.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesCoverAConfiguredNodeCache()
+    {
+        var configured = _temp.CreateDirectory("profile", "node-cache");
+        _temp.CreateFile(4096, "profile", "node-cache", "v24.15.0-x64-1a2b3c4d", "0a1b2c3d");
+        _environment.WithEnvironmentVariable(TempToolCacheProvider.NodeCompileCacheVariable, configured);
+
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
     /// <summary>
     /// A setting naming the temporary folder's own <c>node-compile-cache</c> through another mount of
     /// its volume names the folder the temporary-folder marker already takes whole. Examined again as
