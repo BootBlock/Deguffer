@@ -15,8 +15,8 @@ namespace Deguffer.Core.Duplicates;
 /// the marks ask it when they are made and again at each confirmation, and it holds no mark.</para>
 ///
 /// <para><b>Each read asks afresh.</b> Every place is followed to its final path again and the sync
-/// roots are listed again. Each drive is taken as the search found it for the marks made straight
-/// after the search, and asked of its disks again at a confirmation (<see cref="Now"/>), because a
+/// roots are listed again. Each drive is taken as the search found it for the marks made as the
+/// search runs, and asked of its disks again at a confirmation (<see cref="Now"/>), because a
 /// disk moved from an internal bay into a USB dock keeps its volume and every file ID on it, and only
 /// its bus says it can now be unplugged.</para>
 /// </summary>
@@ -31,7 +31,7 @@ internal sealed class KeepingReader
 
     /// <param name="searchedMedia">
     /// What a volume's disks are as the search just found them (<see cref="VolumeMediaCache.Of"/>),
-    /// for the marks made straight after it, which do not ask a device the search has just asked.
+    /// for the marks made as it runs, which do not ask a device the search has just asked.
     /// </param>
     /// <param name="mediaNow">
     /// What a volume's disks are now, asked of the device again (<see cref="VolumeMediaCache.Now"/>),
@@ -54,36 +54,38 @@ internal sealed class KeepingReader
         _files = files;
     }
 
-    /// <summary>The keeping rule for the marks made straight after the search, with each drive as the search found it.</summary>
+    /// <summary>The keeping rule for the marks made as the search runs, with each drive as the search found it.</summary>
     /// <param name="programs">Every folder a program is installed in, which a copy is refused in.</param>
-    public CopyKeeping AfterTheSearch(
+    /// <param name="copies">Every copy a group can hold, whose drives are asked once here.</param>
+    public CopyKeeping AsSearched(
         ExploreActionPolicy policy,
         IReadOnlyList<StorageClean> cleans,
         IReadOnlyList<ProgramFolder> programs,
-        IEnumerable<DuplicateGroup> groups) =>
-        Read(policy, cleans, programs, groups, _searchedMedia);
+        IEnumerable<DuplicateCandidate> copies) =>
+        Read(policy, cleans, programs, copies, _searchedMedia);
 
     /// <summary>The keeping rule as the machine is now, with each drive's disks asked again.</summary>
     /// <param name="programs">Every folder a program is installed in, which a copy is refused in.</param>
+    /// <param name="copies">Every copy of every group, whose drives are asked again here.</param>
     public CopyKeeping Now(
         ExploreActionPolicy policy,
         IReadOnlyList<StorageClean> cleans,
         IReadOnlyList<ProgramFolder> programs,
-        IEnumerable<DuplicateGroup> groups) =>
-        Read(policy, cleans, programs, groups, _mediaNow);
+        IEnumerable<DuplicateCandidate> copies) =>
+        Read(policy, cleans, programs, copies, _mediaNow);
 
     private CopyKeeping Read(
         ExploreActionPolicy policy,
         IReadOnlyList<StorageClean> cleans,
         IReadOnlyList<ProgramFolder> programs,
-        IEnumerable<DuplicateGroup> groups,
+        IEnumerable<DuplicateCandidate> copies,
         Func<LocalVolume, VolumeMedia> media)
     {
         // Asked once a volume here, off the UI thread, so the questions a page asks as it draws never
         // wait on a device.
         Dictionary<string, StorageMedia> classes = new(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var volume in groups.SelectMany(group => group.Files).Select(copy => copy.Volume).Distinct())
+        foreach (var volume in copies.Select(copy => copy.Volume).Distinct())
         {
             classes[volume.RootPath] = media(volume).Class;
         }

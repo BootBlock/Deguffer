@@ -38,13 +38,11 @@ public sealed class RemovalConfirmationTests : IDisposable
             Volume = _volume,
         };
 
-    private DuplicateMarks Marks(params DuplicateCandidate[][] groups) =>
-        DuplicateMarks.For(
-            new DuplicateSearchResult(
-                new CandidateFinding([], [], [], [], [], [], [], [], [], default),
-                [.. groups.Select(files => new DuplicateGroup(MatchCriteria.Content, files[0].Length, Checksum: null, files))],
-                default,
-                Stopped: false),
+    private DuplicateMarks Marks(params DuplicateCandidate[][] groups)
+    {
+        var marks = DuplicateMarks.For(
+            new CandidateFinding(
+                [.. groups.Select(files => new CandidateGroup(files[0].Length, Name: null, Modified: null, files))], [], [], [], [], [], [], [], [], default),
             _tree.Policy(),
             [],
             _tree.Environment,
@@ -53,6 +51,14 @@ public sealed class RemovalConfirmationTests : IDisposable
             _ => new VolumeMedia(StorageMedia.Nvme, [0]),
             _ => new VolumeMedia(StorageMedia.Nvme, [0]),
             FileInformation.Default);
+
+        foreach (var files in groups)
+        {
+            marks.Add(new DuplicateGroup(MatchCriteria.Content, files[0].Length, Checksum: null, files));
+        }
+
+        return marks;
+    }
 
     /// <summary>Marks every copy in each group but its first.</summary>
     private static void MarkAllButFirst(DuplicateMarks marks)

@@ -12,4 +12,14 @@ public sealed record DuplicateGroup(
     MatchCriteria Criteria,
     long? Length,
     ContentChecksum? Checksum,
-    IReadOnlyList<DuplicateCandidate> Files);
+    IReadOnlyList<DuplicateCandidate> Files)
+{
+    /// <summary>
+    /// The sentence a group not matched on its content carries, or null for one that was. A name,
+    /// size or time says nothing about the bytes, and §7.4 has the group say so plainly: two videos of
+    /// exactly the same size are not the same video.
+    /// </summary>
+    public string? MayDiffer => Criteria.ReadsContent()
+        ? null
+        : "Not compared by content, so these files may differ. A copy is removed only where its bytes match the copy kept.";
+}

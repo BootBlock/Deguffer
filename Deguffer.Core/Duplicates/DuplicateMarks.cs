@@ -29,27 +29,29 @@ public sealed class DuplicateMarks
         "A location chosen as a reference was not searched, so Deguffer cannot tell which copies it holds, "
         + "and no rule marks anything until it is. Each one says why it was not searched.";
 
-    private readonly DuplicateSearchResult _result;
+    private readonly CandidateFinding _finding;
     private readonly KeepingReader _reader;
+    private readonly List<GroupMarks> _groups = [];
 
     private DuplicateMarks(
-        DuplicateSearchResult result, ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans, KeepingReader reader)
+        CandidateFinding finding, ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans, KeepingReader reader)
     {
-        _result = result;
+        _finding = finding;
         _reader = reader;
-        UnsearchedReferences = result.Finding.UnsearchedReferences;
-        Keeping = reader.AfterTheSearch(policy, cleans, result.Finding.ProgramFolders, result.Groups);
+        UnsearchedReferences = finding.UnsearchedReferences;
 
-        // Sorted once, by the space each group could free when the marks were made.
-        Groups = [.. result.Groups.Select(group => new GroupMarks(group)).OrderByDescending(marks => marks.FreeableSpace(Keeping))];
+        // Every copy a group can hold is among the candidates, so each of their drives is asked here,
+        // before the first group arrives, and never as one is placed.
+        Keeping = reader.AsSearched(policy, cleans, finding.ProgramFolders, finding.Groups.SelectMany(group => group.Files));
     }
 
     /// <summary>
-    /// Every group, the one that could free the most first as the keeping rule was judged when the
-    /// marks were made. A later <see cref="RejudgeAsync"/> does not reorder them, so a page's list
-    /// keeps the reader's place.
+    /// Every group added, the one that could free the most first as the keeping rule was judged when
+    /// the marks were made, and groups that could free the same in the order they were added. Each is
+    /// placed as it is added and never moved, and a later <see cref="RejudgeAsync"/> does not reorder
+    /// them, so a page's list keeps the reader's place.
     /// </summary>
-    public IReadOnlyList<GroupMarks> Groups { get; }
+    public IReadOnlyList<GroupMarks> Groups => _groups;
 
     /// <summary>
     /// What decides which copies can be kept and which are refused, as it was judged last: when the
@@ -61,9 +63,12 @@ public sealed class DuplicateMarks
     public IReadOnlyList<UnsearchedLocation> UnsearchedReferences { get; }
 
     /// <summary>
-    /// The marks for <paramref name="result"/>, with everything that decides which copies can be kept
-    /// read now: where Storage's cleans delete, the temporary folder, the cloud folders, and what each
-    /// volume's disks are. Blocks on each volume's disks, so never call it on the UI thread.
+    /// The marks for the search that found <paramref name="finding"/>, holding no group until each is
+    /// added as the search confirms it (<see cref="Add"/>), with everything that decides which copies
+    /// can be kept read now: where Storage's cleans delete, the temporary folder, the cloud folders,
+    /// and what each candidate's drive is. Made as soon as the candidates are found
+    /// (<see cref="DuplicateSearcher.SearchAsync"/>), so each group can be placed by the space it
+    /// could free as it arrives. Blocks on each volume's disks, so never call it on the UI thread.
     /// </summary>
     /// <param name="protections">The same protections whose policy the search passed over places by.</param>
     /// <param name="media">
@@ -71,7 +76,7 @@ public sealed class DuplicateMarks
     /// <see cref="VolumeMediaCache.Now"/> a confirmation asks again.
     /// </param>
     public static async Task<DuplicateMarks> ForAsync(
-        DuplicateSearchResult result,
+        CandidateFinding finding,
         MachineProtections protections,
         IUserEnvironment environment,
         ICloudFiles cloud,
@@ -83,7 +88,7 @@ public sealed class DuplicateMarks
         ArgumentNullException.ThrowIfNull(media);
 
         return For(
-            result,
+            finding,
             protections.Policy,
             await protections.StorageCleansAsync(ct).ConfigureAwait(false),
             environment,
@@ -98,7 +103,7 @@ public sealed class DuplicateMarks
     /// <param name="mediaNow">What a volume's disks are when a confirmation asks again.</param>
     /// <param name="files">Where each place is followed to its final path, so a test can stand for a junction.</param>
     internal static DuplicateMarks For(
-        DuplicateSearchResult result,
+        CandidateFinding finding,
         ExploreActionPolicy policy,
         IReadOnlyList<StorageClean> cleans,
         IUserEnvironment environment,
@@ -108,14 +113,40 @@ public sealed class DuplicateMarks
         Func<LocalVolume, VolumeMedia> mediaNow,
         FileInformation files)
     {
-        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(finding);
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(cleans);
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(cloud);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        return new DuplicateMarks(result, policy, cleans, new KeepingReader(environment, cloud, volumes, searchedMedia, mediaNow, files));
+        return new DuplicateMarks(finding, policy, cleans, new KeepingReader(environment, cloud, volumes, searchedMedia, mediaNow, files));
+    }
+
+    /// <summary>
+    /// Add a group the search confirmed, placed after every group that could free more or the same,
+    /// as the keeping rule was judged when the marks were made, and before every group that could
+    /// free less. Call it on one thread, the one that reads <see cref="Groups"/> while the search
+    /// runs.
+    /// </summary>
+    /// <returns>The marks for the group, and where in <see cref="Groups"/> they were placed.</returns>
+    public (GroupMarks Marks, int Index) Add(DuplicateGroup group)
+    {
+        var marks = new GroupMarks(group);
+        var space = marks.FreeableSpace(Keeping);
+
+        // Before the first group that could free less, so groups that could free the same stay in
+        // the order the search confirmed them.
+        var index = _groups.FindIndex(placed => placed.FreeableSpace(Keeping) < space);
+
+        if (index < 0)
+        {
+            index = _groups.Count;
+        }
+
+        _groups.Insert(index, marks);
+
+        return (marks, index);
     }
 
     /// <summary>
@@ -135,9 +166,9 @@ public sealed class DuplicateMarks
         ArgumentNullException.ThrowIfNull(protections);
 
         var cleans = await protections.StorageCleansAsync(ct).ConfigureAwait(false);
-        var programs = _reader.ProgramsNow(protections, _result.Finding.ProgramFolders, ct);
+        var programs = _reader.ProgramsNow(protections, _finding.ProgramFolders, ct);
 
-        return Keeping = _reader.Now(protections.Policy, cleans, programs, _result.Groups);
+        return Keeping = _reader.Now(protections.Policy, cleans, programs, _groups.SelectMany(group => group.Group.Files));
     }
 
     /// <summary>Why no rule can mark anything, or null where rules may run.</summary>

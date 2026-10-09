@@ -46,4 +46,37 @@ public static class MatchCriteriaRules
     /// its content.
     /// </summary>
     public static bool ReadsContent(this MatchCriteria criteria) => criteria.HasFlag(MatchCriteria.Content);
+
+    /// <summary>The criteria in words, such as "the name, size and last-modified time", for the page's sentences.</summary>
+    public static string Described(this MatchCriteria criteria)
+    {
+        List<string> words = [];
+
+        if (criteria.HasFlag(MatchCriteria.Name))
+        {
+            words.Add("name");
+        }
+
+        if (criteria.HasFlag(MatchCriteria.Size))
+        {
+            words.Add("size");
+        }
+
+        if (criteria.HasFlag(MatchCriteria.Modified))
+        {
+            words.Add("last-modified time");
+        }
+
+        if (criteria.HasFlag(MatchCriteria.Content))
+        {
+            words.Add("content");
+        }
+
+        return words.Count switch
+        {
+            0 => "nothing",
+            1 => "the " + words[0],
+            _ => "the " + string.Join(", ", words[..^1]) + " and " + words[^1],
+        };
+    }
 }

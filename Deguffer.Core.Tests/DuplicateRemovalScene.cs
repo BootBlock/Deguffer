@@ -62,7 +62,17 @@ public abstract class DuplicateRemovalScene : DuplicateMarkingScene
     /// <summary>The marks for groups whose checksum, where one is given, every file shares.</summary>
     private protected DuplicateMarks MarksWithChecksum(ContentChecksum? checksum, params DuplicateCandidate[][] groups) =>
         MarksOf(new DuplicateSearchResult(
-            new CandidateFinding([], [], _unsearchedReferences, [], [], [], [], _programs, [], default),
+            new CandidateFinding(
+                [.. groups.Select(files => new CandidateGroup(files[0].Length, Name: null, Modified: null, files))],
+                [],
+                _unsearchedReferences,
+                [],
+                [],
+                [],
+                [],
+                _programs,
+                [],
+                default),
             [.. groups.Select(files => new DuplicateGroup(MatchCriteria.Content, files[0].Length, checksum, files))],
             default,
             Stopped: false));

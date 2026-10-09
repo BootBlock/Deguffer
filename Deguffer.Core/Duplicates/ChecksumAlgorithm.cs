@@ -37,4 +37,17 @@ public static class ChecksumAlgorithms
         [.. Enum.GetValues<ChecksumAlgorithm>().Where(algorithm => algorithm is not ChecksumAlgorithm.Sha3_256 || SHA3_256.IsSupported)];
 
     public static bool IsOffered(ChecksumAlgorithm algorithm) => Offered.Contains(algorithm);
+
+    /// <summary>The name other tools print the algorithm under, so a value can be compared with theirs.</summary>
+    public static string Name(this ChecksumAlgorithm algorithm) => algorithm switch
+    {
+        ChecksumAlgorithm.XxHash128 => "XXH128",
+        ChecksumAlgorithm.Sha256 => "SHA-256",
+        ChecksumAlgorithm.Sha512 => "SHA-512",
+        ChecksumAlgorithm.Sha1 => "SHA-1",
+        ChecksumAlgorithm.Md5 => "MD5",
+        ChecksumAlgorithm.Crc32 => "CRC-32",
+        ChecksumAlgorithm.Sha3_256 => "SHA3-256",
+        _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "No checksum has that name."),
+    };
 }

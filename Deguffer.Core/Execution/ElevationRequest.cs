@@ -1,3 +1,5 @@
+using Deguffer.Core.Duplicates;
+
 namespace Deguffer.Core.Execution;
 
 /// <summary>
@@ -43,6 +45,8 @@ public abstract record ElevationRequest
         var explore = false;
         var preview = false;
         var installedApps = false;
+        var duplicates = false;
+        List<SearchLocation> locations = [];
         string? drive = null;
         string? folder = null;
 
@@ -60,6 +64,18 @@ public abstract record ElevationRequest
             {
                 installedApps = true;
             }
+            else if (argument.Equals(DuplicatesSwitch, StringComparison.OrdinalIgnoreCase))
+            {
+                duplicates = true;
+            }
+            else if (argument.StartsWith(SearchPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                AddLocation(ValueOf(argument, SearchPrefix), LocationRole.Search);
+            }
+            else if (argument.StartsWith(ReferencePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                AddLocation(ValueOf(argument, ReferencePrefix), LocationRole.Reference);
+            }
             else if (argument.StartsWith(DrivePrefix, StringComparison.OrdinalIgnoreCase))
             {
                 drive = ValueOf(argument, DrivePrefix);
@@ -72,11 +88,20 @@ public abstract record ElevationRequest
 
         // Explore wins where both are somehow present: it is the more specific request, and nothing
         // writes the two together. The alternative silently starts a whole-machine preview the user
-        // did not ask for. Installed apps comes before a preview for the same reason.
+        // did not ask for. Duplicates and Installed apps come before a preview for the same reason.
         return explore ? new ExploreRequest(drive, folder)
+            : duplicates ? new DuplicatesRequest(locations)
             : installedApps ? InstalledApps
             : preview ? Preview
             : null;
+
+        void AddLocation(string? path, LocationRole role)
+        {
+            if (path is not null)
+            {
+                locations.Add(new SearchLocation(path, role));
+            }
+        }
     }
 
     /// <summary>
@@ -89,6 +114,12 @@ public abstract record ElevationRequest
     private protected const string PreviewSwitch = "--rescan";
 
     private protected const string InstalledAppsSwitch = "--installed-apps";
+
+    private protected const string DuplicatesSwitch = "--duplicates";
+
+    private protected const string SearchPrefix = "--duplicates-search=";
+
+    private protected const string ReferencePrefix = "--duplicates-reference=";
 
     private protected const string DrivePrefix = "--explore-drive=";
 
@@ -113,6 +144,38 @@ public abstract record ElevationRequest
 public sealed record InstalledAppsRequest : ElevationRequest
 {
     public override IReadOnlyList<string> ToArguments() => [InstalledAppsSwitch];
+}
+
+/// <summary>
+/// Open on the Duplicates page with the locations the previous instance was given, in their roles and
+/// their order, and search them, so the elevated search reads each volume's file table rather than
+/// walking (§5.5). The criteria and filters are preferences, so they are already where the new
+/// instance reads them.
+///
+/// <para>Each location is its own argument, its role in its switch, so a path holding a comma, a
+/// quote or a space reaches the replacement whole. A location given in both roles travels twice, as
+/// it was given, and the search makes it a reference.</para>
+/// </summary>
+public sealed record DuplicatesRequest : ElevationRequest
+{
+    public DuplicatesRequest(IReadOnlyList<SearchLocation> locations)
+    {
+        ArgumentNullException.ThrowIfNull(locations);
+
+        Locations = [.. locations];
+    }
+
+    public IReadOnlyList<SearchLocation> Locations { get; }
+
+    public override IReadOnlyList<string> ToArguments() =>
+    [
+        DuplicatesSwitch,
+        .. Locations.Select(location => (location.Role == LocationRole.Reference ? ReferencePrefix : SearchPrefix) + location.Path),
+    ];
+
+    public bool Equals(DuplicatesRequest? other) => other is not null && Locations.SequenceEqual(other.Locations);
+
+    public override int GetHashCode() => Locations.Count;
 }
 
 /// <summary>Open on the Storage page and preview again. See <see cref="ElevationRequest.Preview"/>.</summary>

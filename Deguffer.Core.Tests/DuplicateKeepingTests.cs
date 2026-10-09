@@ -25,8 +25,7 @@ public sealed class DuplicateKeepingTests : DuplicateMarkingScene
         Assert.Equal([new StorageClean(CleanedPlace.Whole(cache), "Fake cache")], await protections.StorageCleansAsync());
 
         var cached = Copy(Path.Combine(cache, "a.bin"));
-        var marks = await DuplicateMarks.ForAsync(
-            Result([cached, Copy(Path.Combine(Documents, "a.bin"))]), protections, _tree.Environment, _cloud, _tree.Volumes, _media);
+        var marks = await MarksAsync(Result([cached, Copy(Path.Combine(Documents, "a.bin"))]), protections);
 
         Assert.Contains("Storage's 'Fake cache' clean", marks.Keeping.WhyNotKept(cached));
     }

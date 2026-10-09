@@ -117,6 +117,55 @@ public sealed class DuplicateMarkingTests : DuplicateMarkingScene
         Assert.Equal([16384L, 8192L, 4096L], marks.Groups.Select(group => group.FreeableSpace(marks.Keeping)));
     }
 
+    /// <summary>
+    /// Groups arrive one at a time while a search runs, and each is placed where the space it could
+    /// free puts it, at the index the page inserts its row at, so no group already placed moves.
+    /// Groups that could free the same stay in the order they arrived.
+    /// </summary>
+    [Fact]
+    public void EachGroupIsPlacedAsItArrivesAndNoneMoves()
+    {
+        DuplicateCandidate[] Pair(string name, long size) =>
+            [Copy(Path.Combine(Documents, name), sizeOnDisk: size), Copy(Path.Combine(Downloads, name), sizeOnDisk: size)];
+
+        DuplicateCandidate[][] arriving = [Pair("a.jpg", 8192), Pair("b.jpg", 4096), Pair("c.jpg", 16384), Pair("d.jpg", 8192), Pair("e.jpg", 2048)];
+        var result = Result(arriving);
+        var marks = DuplicateMarks.For(result.Finding, _tree.Policy(), _cleans, _tree.Environment, _cloud, _tree.Volumes, _media.Of, _media.Now, FileInformation.Default);
+
+        Assert.Empty(marks.Groups);
+
+        List<string> shown = [];
+
+        foreach (var group in result.Groups)
+        {
+            var (added, index) = marks.Add(group);
+
+            Assert.Same(added, marks.Groups[index]);
+            shown.Insert(index, group.Files[0].Name);
+            Assert.Equal(shown, marks.Groups.Select(placed => placed.Group.Files[0].Name));
+        }
+
+        Assert.Equal(["c.jpg", "a.jpg", "d.jpg", "b.jpg", "e.jpg"], shown);
+    }
+
+    /// <summary>
+    /// The keeping rule a group is placed by is read before the first group arrives, from the
+    /// candidates: a drive the candidates are on is asked then, so a group on a USB disk is placed by
+    /// what it could free there, which is nothing.
+    /// </summary>
+    [Fact]
+    public void AGroupIsPlacedByTheKeepingRuleReadBeforeItArrived()
+    {
+        DuplicateCandidate[] internalPair = [Copy(Path.Combine(Documents, "a.jpg"), sizeOnDisk: 4096), Copy(Path.Combine(Downloads, "a.jpg"), sizeOnDisk: 4096)];
+        DuplicateCandidate[] usbPair = [OnUsb("b.jpg"), OnUsb("c.jpg")];
+        var result = Result(usbPair, internalPair);
+        var marks = DuplicateMarks.For(result.Finding, _tree.Policy(), _cleans, _tree.Environment, _cloud, _tree.Volumes, _media.Of, _media.Now, FileInformation.Default);
+
+        Assert.Equal(0, marks.Add(result.Groups[0]).Index);
+        Assert.Equal(0, marks.Add(result.Groups[1]).Index);
+        Assert.Equal([4096L, 0L], marks.Groups.Select(group => group.FreeableSpace(marks.Keeping)));
+    }
+
     /// <summary>The oldest copy here is not the one with the shortest path, so the two rules keep different copies.</summary>
     [Fact]
     public void KeepTheOldestAndKeepTheShortestPathKeepDifferentCopies()

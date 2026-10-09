@@ -43,7 +43,7 @@ public sealed class DuplicateRejudgingTests : DuplicateMarkingScene
     {
         DuplicateCandidate[] files = [Copy(Path.Combine(Documents, "a.jpg")), Copy(Path.Combine(Downloads, "a.jpg"))];
         var provider = new FakeCleanupProvider("downloads") { Name = "Old downloads" };
-        var marks = await DuplicateMarks.ForAsync(Result(files), await Protections(provider), _tree.Environment, _cloud, _tree.Volumes, _media);
+        var marks = await MarksAsync(Result(files), await Protections(provider));
         var group = Only(marks);
         Assert.Null(group.Mark(files[0], marks.Keeping));
 
@@ -63,7 +63,7 @@ public sealed class DuplicateRejudgingTests : DuplicateMarkingScene
     {
         provider ??= new FakeCleanupProvider("none");
         DuplicateCandidate[] files = [Copy(Path.Combine(Documents, "a.dll")), Copy(Path.Combine(Downloads, "b", "a.dll"))];
-        var marks = await DuplicateMarks.ForAsync(Result(files), await Protections(provider), _tree.Environment, _cloud, _tree.Volumes, _media);
+        var marks = await MarksAsync(Result(files), await Protections(provider));
         Assert.Null(Only(marks).Mark(files[0], marks.Keeping));
 
         change();
@@ -93,7 +93,7 @@ public sealed class DuplicateRejudgingTests : DuplicateMarkingScene
         var tool = Path.Combine(Downloads, "b");
         _programs.Add(new ProgramFolder(tool, ReachedFolder.At(tool, _tree.Volumes), "Tool", Final: null));
         DuplicateCandidate[] files = [Copy(Path.Combine(Documents, "a.dll")), Copy(Path.Combine(tool, "a.dll"))];
-        var marks = await DuplicateMarks.ForAsync(Result(files), await Protections(), _tree.Environment, _cloud, _tree.Volumes, _media);
+        var marks = await MarksAsync(Result(files), await Protections());
 
         _tree.Registry.Refusing(InstalledApps.UninstallScope.Machine64);
         await marks.RejudgeAsync(await Protections());
