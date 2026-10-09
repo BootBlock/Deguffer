@@ -13,9 +13,9 @@ namespace Deguffer.Core.Exploring.Acting;
 ///
 /// <para>It decides in two passes, because the two kinds of refusal come from different places.
 /// The first is <see cref="ProtectedRegions"/>, a table of regions — the operating system's own directories, the signed-in user's
-/// profile and Outlook's own folder — plus what Windows reserves at the top of any volume, which
-/// <see cref="VolumeReservations"/> names and which is read from where the path's volume is mounted
-/// rather than from a list of drives. Apart from Outlook's folder, all of that is a fact about
+/// profile and Outlook's own folder — plus what Windows and NTFS reserve at the top of any volume,
+/// which <see cref="TopOfVolumeRefusals"/> answers for and which is read from where the path's volume
+/// is mounted rather than from a list of drives. Apart from Outlook's folder, all of that is a fact about
 /// Windows and is stated beside this policy. The second is
 /// §5.2, which is a fact about a tool and belongs to whichever provider knows the tool: Explore
 /// reads it through <see cref="ToolRoot"/> rather than restating it, because a safety rule written
@@ -37,9 +37,6 @@ namespace Deguffer.Core.Exploring.Acting;
 /// </summary>
 public sealed class ExploreActionPolicy
 {
-    private static readonly char[] Separators =
-        [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
-
     /// <summary>
     /// How many providers <see cref="ForAsync"/> asks at once (G4). Not derived from the processor
     /// count, because what the handful of probing providers wait on is a subprocess or the process
@@ -47,16 +44,6 @@ public sealed class ExploreActionPolicy
     /// see ten console windows' worth of work start at the same instant.
     /// </summary>
     private const int Discovery = 8;
-
-    /// <summary>
-    /// The names NTFS reserves in a volume's root directory, from <c>[MS-FSCC]</c>. See
-    /// <see cref="ReservedByTheFilesystem"/> for why they are refused and why the set stops here.
-    /// </summary>
-    private static readonly HashSet<string> NtfsReserved = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "$MFT", "$MFTMirr", "$LogFile", "$Volume", "$AttrDef", "$Bitmap",
-        "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend",
-    };
 
     private readonly RegionTable _regions;
     private readonly IReadOnlyList<DeclaredRoot> _toolRoots;
@@ -204,7 +191,7 @@ public sealed class ExploreActionPolicy
         // Each rule at every place the item is reachable and on every reading of each, because a
         // refusal that holds at any of them holds: VolumeRoot says why the drive letter's reading is
         // kept beside the mount point's, and why the volume's other mounts are asked about.
-        if (AtTheTopOfAVolume(places) is { } top)
+        if (TopOfVolumeRefusals.Refusal(places) is { } top)
         {
             return top;
         }
@@ -268,7 +255,7 @@ public sealed class ExploreActionPolicy
             return null;
         }
 
-        if (AtTheTopOfAVolume(places) is { } top)
+        if (TopOfVolumeRefusals.Refusal(places) is { } top)
         {
             return top;
         }
@@ -292,19 +279,6 @@ public sealed class ExploreActionPolicy
     /// <param name="root">The folder the caller starts from, which it asks about itself.</param>
     public RefusalWatch WatchBelow(string root) =>
         new(ReachedFolder.At(root, _volumes).IsVolumeTop, [.. _regions.BoundaryPlaces]);
-
-    /// <summary>
-    /// What Windows and NTFS keep at the top of a volume, and every Recycle Bin, read on every
-    /// reading of every path the item is reachable at. Each refuses a name and everything in it.
-    /// </summary>
-    private static ExploreVerdict? AtTheTopOfAVolume(IReadOnlyList<VolumePlace> places)
-    {
-        IReadOnlyList<string> readings = [.. places.SelectMany(place => place.Readings)];
-
-        return OnAnyReading(readings, ReservedByTheFilesystem)
-            ?? OnAnyReading(readings, InARecycleBin)
-            ?? OnAnyReading(readings, VolumeReservations.Refusal);
-    }
 
     /// <summary>
     /// The refusal of one place the item is reachable at that holds for everything in it too: Outlook's
@@ -340,78 +314,6 @@ public sealed class ExploreActionPolicy
         // names, and pooled with the declared roots a Maven setting naming 'settings-security.xml'
         // made a root beside Maven's own that recognised the master-password file, and allowed it.
         return verdict.IsAllowed && ProbedRefusal(target, children) is { } probed ? probed : verdict;
-    }
-
-    /// <summary>
-    /// NTFS's own records, which §7.1 puts out of reach: they are live filesystem state, so the tier
-    /// model calls them Tier 4, and Explore "refuses whatever the tier model would call Tier 4, and
-    /// it does not get to decide what that is".
-    ///
-    /// <para>Separate from <see cref="VolumeReservations"/> and not folded into it, because the two
-    /// sets come from different owners. What Windows keeps at the top of a volume changes with
-    /// Windows, and this set is closed by the filesystem's specification. Both ask about the first
-    /// segment below the root, because NTFS's optional features live a level down in
-    /// <c>$Extend</c>.</para>
-    ///
-    /// <para>They are refused at all because §5.5's file-table route <em>draws</em> them. A walk
-    /// never sees these names — Windows hides the reserved records from directory enumeration — but
-    /// reading the table directly puts <c>$MFT</c> at the top of a scanned drive at several hundred
-    /// megabytes, which is exactly the shape of thing a size picture invites somebody to act on.
-    /// Offering a deletion the filesystem will refuse teaches a user that saying yes is how you find
-    /// out what happens, and §7.1 wants the reason stated instead.</para>
-    ///
-    /// <para>The set is closed and comes from the filesystem's own specification rather than from
-    /// observation, so it needs no maintenance: <c>[MS-FSCC]</c> names what NTFS reserves in a
-    /// volume's root directory. It is deliberately <em>not</em> every name beginning with <c>$</c>.
-    /// <c>$Recycle.Bin</c> is Windows' rather than NTFS's and is refused below for its own reason,
-    /// and <c>$WinREAgent</c> and <c>$Windows.~BT</c> are ordinary leftovers a user may legitimately
-    /// want gone — refusing those would take away a capability rather than add a protection.</para>
-    /// </summary>
-    private static ExploreVerdict? ReservedByTheFilesystem(string below) =>
-        below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
-        && NtfsReserved.Contains(first)
-            ? ExploreVerdict.Refuse(
-                $"'{first}' is part of NTFS itself rather than something stored on the drive — it is "
-                + "how the filesystem records where every other file is. Windows does not let it be "
-                + "deleted, and the space it holds is not recoverable while the drive is in use.")
-            : null;
-
-    /// <summary>
-    /// A volume's Recycle Bin and everything in it.
-    ///
-    /// <para>Everything in it, not only the folder, because the bin holds a folder for each account
-    /// that has deleted something on the drive. <see cref="Providers.RecycleBinProvider"/> empties
-    /// this user's own and names every other one as a path that must survive, and §7.1 refuses every
-    /// such path. Refusing the bin alone left another account's deleted files one level down, and
-    /// removable wherever Deguffer runs elevated. This user's own is refused too: the Storage page is
-    /// where it is emptied, and a deleted file is two entries there, its contents and the record of
-    /// where it came from, so removing either leaves a file the bin cannot put back.</para>
-    ///
-    /// <para>By the first segment below the volume root, as <see cref="ReservedByTheFilesystem"/>
-    /// asks, so a folder somebody named <c>$Recycle.Bin</c> inside their own documents stays
-    /// theirs.</para>
-    /// </summary>
-    private static ExploreVerdict? InARecycleBin(string below) =>
-        below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
-        && first.Equals("$Recycle.Bin", StringComparison.OrdinalIgnoreCase)
-            ? ExploreVerdict.Refuse(
-                "This is the drive's Recycle Bin, where each account on this computer keeps what it "
-                + "deleted. Emptying yours is offered on the Storage page, where Deguffer can tell your "
-                + "own deleted files from another account's.")
-            : null;
-
-    private static ExploreVerdict? OnAnyReading(
-        IReadOnlyList<string> readings, Func<string, ExploreVerdict?> rule)
-    {
-        foreach (var below in readings)
-        {
-            if (rule(below) is { } refusal)
-            {
-                return refusal;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>
