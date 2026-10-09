@@ -44,7 +44,9 @@ internal sealed class ResolvedPlaces
                 starts.UnionWith(final.Places);
             }
 
-            resolved.Add((place, [.. starts], what));
+            // Made comparable once here, rather than at each question, because that asks the file
+            // system and a search asks about every copy of every group.
+            resolved.Add((place, [.. starts.Select(ReachedFolder.Comparable)], what));
         }
 
         return new ResolvedPlaces(resolved);
@@ -71,9 +73,11 @@ internal sealed class ResolvedPlaces
     /// <param name="path">A full path, in display form.</param>
     public string? WhatHolds(string path)
     {
+        var target = ReachedFolder.Comparable(path);
+
         foreach (var (place, starts, what) in _places)
         {
-            if (starts.Any(start => place.Holds(start, path)))
+            if (starts.Any(start => place.HoldsComparable(start, target)))
             {
                 return what;
             }

@@ -61,11 +61,16 @@ public sealed record CleanedPlace
     /// </summary>
     /// <param name="start">Where the place starts, which is <see cref="Path"/> or another path to the same folder.</param>
     /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
-    public bool Holds(string start, string path)
-    {
-        var top = ReachedFolder.Comparable(start);
-        var target = ReachedFolder.Comparable(path);
+    public bool Holds(string start, string path) =>
+        HoldsComparable(ReachedFolder.Comparable(start), ReachedFolder.Comparable(path));
 
+    /// <summary>
+    /// <see cref="Holds(string, string)"/> for a start and a path each already made comparable
+    /// (<see cref="ReachedFolder.Comparable"/>), for a caller that asks about many of either and makes
+    /// each comparable once, since that asks the file system.
+    /// </summary>
+    internal bool HoldsComparable(string top, string target)
+    {
         if (!LongPath.Contains(top, target))
         {
             return false;

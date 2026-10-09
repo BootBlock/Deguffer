@@ -70,6 +70,15 @@ public sealed class DuplicateMarks
     private readonly CandidateFinding _finding;
     private readonly KeepingReader _reader;
     private readonly List<GroupMarks> _groups = [];
+
+    /// <summary>
+    /// What each group in <see cref="_groups"/> could free, in the same order, as it was judged when
+    /// the group was placed, so placing the next asks the keeping rule about its own copies alone.
+    /// Asked again of every group placed, a search of a few hundred groups spent minutes on the page's
+    /// thread (measured on 2026-10-09), and the rule it was judged by does not change while groups are
+    /// added.
+    /// </summary>
+    private readonly List<long> _placedBy = [];
     private volatile bool _complete;
     private volatile bool _removedFrom;
 
@@ -182,15 +191,27 @@ public sealed class DuplicateMarks
         var space = marks.FreeableSpace(Keeping);
 
         // Before the first group that could free less, so groups that could free the same stay in
-        // the order the search confirmed them.
-        var index = _groups.FindIndex(placed => placed.FreeableSpace(Keeping) < space);
+        // the order the search confirmed them. The figures fall as the list goes on, so the first
+        // smaller one is found by halving.
+        int low = 0, high = _placedBy.Count;
 
-        if (index < 0)
+        while (low < high)
         {
-            index = _groups.Count;
+            var middle = (low + high) / 2;
+
+            if (_placedBy[middle] < space)
+            {
+                high = middle;
+            }
+            else
+            {
+                low = middle + 1;
+            }
         }
 
-        _groups.Insert(index, marks);
+        _groups.Insert(low, marks);
+        _placedBy.Insert(low, space);
+        var index = low;
 
         return (marks, index);
     }
