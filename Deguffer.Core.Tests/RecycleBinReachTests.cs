@@ -11,16 +11,34 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class RecycleBinReachTests : IDisposable
 {
+    private const string VolumeName = @"\\?\Volume{11111111-2222-3333-4444-555555555555}\";
+
+    private const string BinKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume\{11111111-2222-3333-4444-555555555555}";
+
     private readonly TempDirectory _temp = new();
 
+    /// <summary>A volume whose bin's settings say nothing, so only the paths decide.</summary>
+    private readonly RecycleBinReach _reach;
+
+    public RecycleBinReachTests() => _reach = Reach(new FakeUserEnvironment(Path.GetTempPath()));
+
     public void Dispose() => _temp.Dispose();
+
+    /// <summary>What the bin on the volume the scratch tree is on can take, as <paramref name="settings"/> say.</summary>
+    private RecycleBinReach Reach(FakeUserEnvironment settings) =>
+        new(new FakeVolumeInventory().With(_temp.Path + Path.DirectorySeparatorChar, volumeName: VolumeName), new RecycleBinRooms(_ => 0, settings));
+
+    private static FakeUserEnvironment Limit(int megabytes, bool keepsNothing = false) =>
+        new FakeUserEnvironment(Path.GetTempPath())
+            .WithRegistryNumber(BinKey, "MaxCapacity", megabytes)
+            .WithRegistryNumber(BinKey, "NukeOnDelete", keepsNothing ? 1 : 0);
 
     [Fact]
     public void AFileWhosePathIsTheLongestTheBinTakesIsTaken()
     {
         var file = FileOfLength(RecycleBinReach.LongestPath, "file");
 
-        Assert.Null(RecycleBinReach.WhyNot(file));
+        Assert.Null(_reach.WhyNot(file));
     }
 
     [Fact]
@@ -28,7 +46,7 @@ public sealed class RecycleBinReachTests : IDisposable
     {
         var file = FileOfLength(RecycleBinReach.LongestPath + 1, "file");
 
-        Assert.Contains("260 characters long", RecycleBinReach.WhyNot(file));
+        Assert.Contains("260 characters long", _reach.WhyNot(file));
     }
 
     /// <summary>
@@ -42,7 +60,7 @@ public sealed class RecycleBinReachTests : IDisposable
         _temp.CreateFile(10, "folder", "short.txt");
         FileOfLength(RecycleBinReach.LongestPath + 1, Path.Combine("folder", "deep"));
 
-        Assert.Contains("whose path is 260 characters long", RecycleBinReach.WhyNot(folder));
+        Assert.Contains("whose path is 260 characters long", _reach.WhyNot(folder));
     }
 
     [Fact]
@@ -51,7 +69,7 @@ public sealed class RecycleBinReachTests : IDisposable
         var folder = _temp.CreateDirectory("folder");
         FileOfLength(RecycleBinReach.LongestPath, Path.Combine("folder", "deep"));
 
-        Assert.Null(RecycleBinReach.WhyNot(folder));
+        Assert.Null(_reach.WhyNot(folder));
     }
 
     /// <summary>A link inside a folder is moved as a link, so what lies on its far side is not the folder's.</summary>
@@ -63,7 +81,39 @@ public sealed class RecycleBinReachTests : IDisposable
         FileOfLength(RecycleBinReach.LongestPath + 40, Path.Combine("target", "deep"));
         Junction.ToDirectory(Path.Combine(folder, "link"), target);
 
-        Assert.Null(RecycleBinReach.WhyNot(folder));
+        Assert.Null(_reach.WhyNot(folder));
+    }
+
+    /// <summary>The shell deletes outright a file longer than its drive's bin can hold, and compares the length.</summary>
+    [Fact]
+    public void AFileLongerThanItsBinsLimitIsRefusedAndOneAsLongIsTaken()
+    {
+        var reach = Reach(Limit(megabytes: 1));
+        var fits = _temp.CreateFile(1024 * 1024, "fits.bin");
+        var over = _temp.CreateFile(1024 * 1024 + 1, "over.bin");
+
+        Assert.Null(reach.WhyNot(fits));
+        Assert.Contains("more than this drive's Recycle Bin can hold", reach.WhyNot(over));
+    }
+
+    /// <summary>The shell deletes a folder outright, whole, where its files together are longer than the bin can hold.</summary>
+    [Fact]
+    public void AFolderWhoseFilesTogetherAreLongerThanItsBinsLimitIsRefused()
+    {
+        var reach = Reach(Limit(megabytes: 1));
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(600 * 1024, "folder", "a.bin");
+        _temp.CreateFile(600 * 1024, "folder", "inner", "b.bin");
+
+        Assert.Contains("more than this drive's Recycle Bin can hold", reach.WhyNot(folder));
+    }
+
+    [Fact]
+    public void NothingGoesToABinSetToKeepNothing()
+    {
+        var file = _temp.CreateFile(10, "small.bin");
+
+        Assert.Contains("set to delete what it is sent", Reach(Limit(megabytes: 1024, keepsNothing: true)).WhyNot(file));
     }
 
     /// <summary>
@@ -75,12 +125,14 @@ public sealed class RecycleBinReachTests : IDisposable
     {
         var file = FileOfLength(RecycleBinReach.LongestPath + 1, "file");
         List<string> handed = [];
-        var bin = new ShellRecycleBin(path =>
-        {
-            handed.Add(path);
-            File.Delete(LongPath.Extended(path));
-            return new RecycleOutcome(Removed: true);
-        });
+        var bin = new ShellRecycleBin(
+            path =>
+            {
+                handed.Add(path);
+                File.Delete(LongPath.Extended(path));
+                return new RecycleOutcome(Removed: true);
+            },
+            _reach);
 
         var outcome = bin.Recycle(file);
 

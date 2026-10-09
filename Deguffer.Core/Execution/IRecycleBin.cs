@@ -75,29 +75,25 @@ public interface IRecycleBin
 /// </summary>
 public sealed class ShellRecycleBin : IRecycleBin
 {
-    public static ShellRecycleBin Default { get; } = new(Perform);
+    public static ShellRecycleBin Default { get; } = new(Perform, RecycleBinReach.Default);
 
     // FOF_SILENT | FOF_NOCONFIRMATION | FOF_ALLOWUNDO | FOF_NOERRORUI, with FOFX_RECYCLEONDELETE
     // and FOFX_EARLYFAILURE.
     //
-    // FOF_ALLOWUNDO alone is not enough, and that is the whole reason FOFX_RECYCLEONDELETE is here.
     // ALLOWUNDO *asks* for the Recycle Bin; the shell falls back to deleting outright whenever the
-    // item cannot go there — over the volume's bin quota, the bin switched off for that volume, a
-    // removable or network volume with no bin at all. Ordinarily it warns first, and the three
-    // suppression flags below are exactly what silences that warning. So without RECYCLEONDELETE
-    // this route would report "moved to the Recycle Bin" about a file that no longer exists
-    // anywhere, and §5.6 would not catch it because the siblings genuinely did survive. Explore
-    // ranks by size and points the user at the largest thing on the drive, which is precisely what
-    // exceeds a default bin allocation. With the flag the operation fails instead, and a failure is
-    // something this reports.
+    // item cannot go there. Ordinarily it warns first, and the three suppression flags below are
+    // exactly what silences that warning. FOFX_RECYCLEONDELETE was set to make the operation fail
+    // instead, and measured on 2026-10-09 it does not: an item longer than its volume's bin limit,
+    // anything sent to a bin set to keep nothing, and a path of MAX_PATH or more were each deleted
+    // outright, the operation reporting success. So RecycleBinReach is asked first, and the
+    // progress sink's word on what reached the bin is read afterwards. Without either, this route
+    // would report "moved to the Recycle Bin" about a file that no longer exists anywhere, and §5.6
+    // would not catch it because the siblings did survive. Explore ranks by size and points the
+    // user at the largest thing on the drive, which is precisely what exceeds a bin's limit.
     //
     // The suppression flags cover the shell's own windows: this app has already asked the user, and
     // a second modal dialog it does not own — parentless, because handing an HWND down here would
     // put a UI concept in Core — is a dialog appearing behind the window that caused it.
-    //
-    // It does not cover a path of MAX_PATH or more, measured: the shell deletes that outright and
-    // reports success whatever these flags say, which is why RecycleBinReach is asked first and why
-    // the progress sink's word on what reached the bin is read afterwards.
     //
     // FOFX_EARLYFAILURE stops at the first refusal rather than carrying on. The caller recycles one
     // item per call, so what it buys is that a failure is reported as one rather than swallowed into
@@ -108,18 +104,24 @@ public sealed class ShellRecycleBin : IRecycleBin
     private static readonly Guid FileOperationClass = new("3ad05575-8857-4850-9277-11b85bdb8e09");
 
     private readonly Func<string, RecycleOutcome> _perform;
+    private readonly RecycleBinReach _reach;
 
     /// <param name="perform">
     /// The shell's move of one item. A seam, so a test can show that an item the bin cannot take
     /// never reaches the shell without asking the shell to delete anything.
     /// </param>
-    internal ShellRecycleBin(Func<string, RecycleOutcome> perform) => _perform = perform;
+    /// <param name="reach">What the bin can take, asked before the shell is.</param>
+    internal ShellRecycleBin(Func<string, RecycleOutcome> perform, RecycleBinReach reach)
+    {
+        _perform = perform;
+        _reach = reach;
+    }
 
     public RecycleOutcome Recycle(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        if (RecycleBinReach.WhyNot(path) is { } cannotTake)
+        if (_reach.WhyNot(path) is { } cannotTake)
         {
             return new RecycleOutcome(Removed: false, cannotTake);
         }
