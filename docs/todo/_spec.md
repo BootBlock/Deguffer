@@ -1119,6 +1119,10 @@ on: what the established duplicate finders do, and the ways their users have los
 - **A rule chooses the copy it keeps only from the copies that can be kept.** "Keep the newest"
   keeps the newest copy that can be kept, so a newer copy on a USB drive is marked and the newest
   internal copy stays, and a rule that can keep nothing in a group marks nothing there.
+- **No rule marks while a reference went unsearched.** Where a location chosen as a reference
+  could not be opened, Deguffer cannot tell which copies it holds: a link on the way to it can put
+  its copies inside a searched location under another name. So the search passes over the place it
+  names, no rule marks any copy until it is searched, and the page says why.
 - **Some copies are never marked, and some are refused.** A reference copy is never marked, and nor
   is one name of a file with several, because removing it frees nothing; either can still be the
   copy a group keeps. A copy is refused where §7.1's policy would not let Explore remove it: Tier 4,
