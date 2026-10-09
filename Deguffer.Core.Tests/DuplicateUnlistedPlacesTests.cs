@@ -8,7 +8,7 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The walk is told what a search passes over and does not list it (§7.4, and the walk measured in
-/// <c>docs/todo/duplicates.md</c>, phase 3): the places passed over by default were 41% of a warm
+/// <c>docs/todo/done/duplicates.md</c>, phase 3): the places passed over by default were 41% of a warm
 /// walk of a system drive. The search must come out exactly as it did when the walk listed them.
 /// </summary>
 public sealed class DuplicateUnlistedPlacesTests : IDisposable
