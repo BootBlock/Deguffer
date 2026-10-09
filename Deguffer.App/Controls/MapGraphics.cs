@@ -46,6 +46,9 @@ internal sealed class MapGraphics
         _device.DeviceLost += OnDeviceLost;
 
         _graphics = CanvasComposition.CreateCompositionGraphicsDevice(compositor, _device);
+
+        // A geometry is the factory's, not the device's, so this one outlives a replacement.
+        Nothing = new CompositionPath(CanvasGeometry.CreatePath(new CanvasPathBuilder(_device)));
         _graphics.RenderingDeviceReplaced += (_, _) =>
         {
             Generation++;
@@ -58,6 +61,14 @@ internal sealed class MapGraphics
     /// Raised on the UI thread. Each map draws its picture again, and keeps none of what it had.
     /// </summary>
     public event EventHandler? Replaced;
+
+    /// <summary>
+    /// A path with nothing in it, for a geometry with nothing to draw. Never a null path: setting
+    /// <see cref="CompositionPathGeometry.Path"/> to null ended the process with an access violation
+    /// inside the setter on the Windows App SDK 1.8. Not at every such call, but once at the first of
+    /// them and once many calls in, so no number of calls that survive makes it safe.
+    /// </summary>
+    public CompositionPath Nothing { get; }
 
     /// <summary>
     /// How many times the device has been replaced, so a map that was off the screen when it happened
@@ -143,16 +154,16 @@ internal sealed class MapGraphics
 
     /// <summary>
     /// A geometry round every outline, in the canvas's own pixels, for an outline drawn in the
-    /// composition tree. Null where there is nothing to outline.
+    /// composition tree. <see cref="Nothing"/> where there is nothing to outline.
     ///
     /// <para>One geometry for all of them rather than one per outline, because the list view selects
     /// any number of rows at once and a shape apiece would be hundreds of them (G4).</para>
     /// </summary>
-    public CompositionPath? Trace(IReadOnlyList<ExploreOutline> outlines)
+    public CompositionPath Trace(IReadOnlyList<ExploreOutline> outlines)
     {
         if (outlines.Count == 0)
         {
-            return null;
+            return Nothing;
         }
 
         // Not disposed: making the geometry takes the builder over.

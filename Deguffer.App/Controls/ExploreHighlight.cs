@@ -75,8 +75,8 @@ internal sealed class ExploreHighlight
         _camera.Children.InsertAtTop(_placed);
         camera.Follow(_camera);
 
-        _hovered = compositor.CreatePathGeometry();
-        _picked = compositor.CreatePathGeometry();
+        _hovered = compositor.CreatePathGeometry(graphics.Nothing);
+        _picked = compositor.CreatePathGeometry(graphics.Nothing);
         _accent = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
 
         // Drawn in this order, so what is picked is over what the pointer is over where they meet.
@@ -125,8 +125,8 @@ internal sealed class ExploreHighlight
     /// <summary>Take every outline off, for a map that is no longer showing anything.</summary>
     public void Clear()
     {
-        _hovered.Path = null;
-        _picked.Path = null;
+        _hovered.Path = _graphics.Nothing;
+        _picked.Path = _graphics.Nothing;
     }
 
     private static Color Shade(byte level, double opacity) =>
