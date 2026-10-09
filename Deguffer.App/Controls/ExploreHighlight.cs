@@ -1,29 +1,28 @@
+using System.Numerics;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
-using Microsoft.UI;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
+using Microsoft.UI.Composition;
 using Windows.UI;
-
-// Aliased because System.IO.Path arrives through the project's implicit usings and would otherwise
-// make every mention of the shape ambiguous.
-using Path = Microsoft.UI.Xaml.Shapes.Path;
 
 namespace Deguffer.App.Controls;
 
 /// <summary>
 /// The outlines drawn over the map: what is picked, and what the pointer is over.
 ///
-/// <para>Over the bitmap rather than in it, which is what the reference implementation does and for
-/// the reason it does it — WinDirStat renders the shapes into a cached surface once and draws only
-/// the selection live over the top. Baked into the bitmap instead, every click would rasterise the
-/// whole volume again to move one outline.</para>
+/// <para>Over the picture rather than in it, which is what the reference implementation does and for
+/// the reason it does it: WinDirStat renders the shapes into a cached surface once and draws only the
+/// selection live over the top. Baked into the picture instead, every click would rasterise the whole
+/// volume again to move one outline.</para>
+///
+/// <para>In the same composition tree as the drawings, placed in the picture the way the drawing it
+/// outlines is and moved by the same camera, so an outline goes wherever its shape goes on screen,
+/// through a zoom, a drag or a resize, by construction.</para>
 ///
 /// <para>Separate from <see cref="ExploreMap"/> because the two answer different questions. That one
 /// is about which tree is drawn and what the pointer found; this one is about marking a shape out
 /// once somebody else has decided which shape it is (G1).</para>
 /// </summary>
-internal sealed class ExploreHighlight : Canvas
+internal sealed class ExploreHighlight
 {
     /// <summary>
     /// Two strokes, dark under light, rather than one in a colour chosen to contrast.
@@ -35,177 +34,133 @@ internal sealed class ExploreHighlight : Canvas
     /// against every one of them, is the same in both themes, and is what a selection marquee has
     /// looked like for long enough that nobody has to be told what it means.</para>
     /// </summary>
-    private const double PickedHaloWidth = 3.5;
+    private const float PickedHaloWidth = 3.5f;
 
-    private const double PickedEdgeWidth = 1.75;
+    private const float PickedEdgeWidth = 1.75f;
 
     /// <summary>
     /// The system accent colour over a dark halo, where the picked outline is white. What the
     /// pointer is over is about to be picked; what is picked is what Delete acts on, and the two
-    /// must not read as the same claim — so they differ by colour, which a glance takes in, rather
+    /// must not read as the same claim, so they differ by colour, which a glance takes in, rather
     /// than by strength.
     ///
     /// <para>The halo is nearly opaque because it is what carries a line across every hue: a faint
     /// one all but vanishes along the dark edge of a shaded tile. The accent is the colour Windows
     /// marks hover and focus with, so it needs no explaining.</para>
     /// </summary>
-    private const double HoveredHaloWidth = 4.5;
+    private const float HoveredHaloWidth = 4.5f;
 
-    private const double HoveredEdgeWidth = 2;
+    private const float HoveredEdgeWidth = 2;
 
-    private readonly CompositeTransform _stretch = new();
+    private readonly MapGraphics _graphics;
 
-    private readonly Path _hoveredHalo = Stroke(Colors.Black, 0.75);
-    private readonly Path _hoveredEdge = Stroke(Colors.White, 1);
-    private readonly Path _pickedHalo = Stroke(Colors.Black, 0.6);
-    private readonly Path _pickedEdge = Stroke(Colors.White, 1);
+    /// <summary>Where the picture is on the screen: the map's camera, followed.</summary>
+    private readonly ContainerVisual _camera;
 
-    public ExploreHighlight()
+    /// <summary>The outlines, in the canvas's own pixels, placed where that canvas lies in the picture.</summary>
+    private readonly ShapeVisual _placed;
+
+    private readonly CompositionPathGeometry _hovered;
+
+    private readonly CompositionPathGeometry _picked;
+
+    private readonly CompositionColorBrush _accent;
+
+    public ExploreHighlight(Compositor compositor, MapGraphics graphics, MapCamera camera)
     {
-        // Never the thing being clicked. An outline sits on the boundary between two shapes, so a
-        // click it swallowed would be a click on whichever of them the outline happened to cover.
-        IsHitTestVisible = false;
+        _graphics = graphics;
 
-        // The geometry is in the bitmap's own pixels, and this is what puts it over the bitmap
-        // wherever that has been stretched or moved to. While a resize settles the map is the old
-        // picture scaled to fit, and while a zoom moves it is the old picture magnified and moved,
-        // and the outlines have to go with it or they mark out the wrong shapes for as long as that
-        // lasts.
-        RenderTransform = _stretch;
+        _camera = compositor.CreateContainerVisual();
+        _placed = compositor.CreateShapeVisual();
+        _camera.Children.InsertAtTop(_placed);
+        camera.Follow(_camera);
 
-        Children.Add(_hoveredHalo);
-        Children.Add(_hoveredEdge);
-        Children.Add(_pickedHalo);
-        Children.Add(_pickedEdge);
+        _hovered = compositor.CreatePathGeometry();
+        _picked = compositor.CreatePathGeometry();
+        _accent = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
+
+        // Drawn in this order, so what is picked is over what the pointer is over where they meet.
+        _placed.Shapes.Add(Stroke(compositor, camera, _hovered, compositor.CreateColorBrush(Shade(0, 0.75)), HoveredHaloWidth));
+        _placed.Shapes.Add(Stroke(compositor, camera, _hovered, _accent, HoveredEdgeWidth));
+        _placed.Shapes.Add(Stroke(compositor, camera, _picked, compositor.CreateColorBrush(Shade(0, 0.6)), PickedHaloWidth));
+        _placed.Shapes.Add(Stroke(compositor, camera, _picked, compositor.CreateColorBrush(Shade(255, 1)), PickedEdgeWidth));
     }
+
+    /// <summary>The top of the outlines in the composition tree.</summary>
+    public Visual Root => _camera;
 
     /// <summary>Mark out what the user picked.</summary>
-    public void ShowPicked(IReadOnlyList<ExploreOutline> outlines)
-    {
-        _pickedHalo.Data = Trace(outlines);
-        _pickedEdge.Data = Trace(outlines);
-    }
+    public void ShowPicked(IReadOnlyList<ExploreOutline> outlines) => _picked.Path = _graphics.Trace(outlines);
 
     /// <summary>
     /// Draw what the pointer is over in <paramref name="accent"/>. Told rather than read here,
     /// because the map already follows the system's settings and a second listener would be a
     /// second copy of the same window onto them (G5).
     /// </summary>
-    public void TintHovered(Color accent) => ((SolidColorBrush)_hoveredEdge.Stroke).Color = accent;
+    public void TintHovered(Color accent) => _accent.Color = accent;
 
     /// <summary>Mark out what the pointer is over.</summary>
-    public void ShowHovered(IReadOnlyList<ExploreOutline> outlines)
-    {
-        _hoveredHalo.Data = Trace(outlines);
-        _hoveredEdge.Data = Trace(outlines);
-    }
+    public void ShowHovered(IReadOnlyList<ExploreOutline> outlines) => _hovered.Path = _graphics.Trace(outlines);
 
     /// <summary>
-    /// Lay the outlines over a bitmap of <paramref name="canvasWidth"/> by
-    /// <paramref name="canvasHeight"/> pixels drawn across <paramref name="onto"/>, in the control's
-    /// own coordinates.
-    ///
-    /// <para>The stroke widths are divided by the same ratio, so a line stays the width it was asked
-    /// for rather than thickening with the display's scale or with a zoom that has not yet been
-    /// drawn.</para>
+    /// Lay the outlines over a canvas <paramref name="width"/> by <paramref name="height"/> pixels
+    /// across that lies at <paramref name="placed"/> in the picture.
     /// </summary>
-    public void StretchOver(double canvasWidth, double canvasHeight, Rect onto)
+    public void PlaceOver(int width, int height, MapTransform placed)
     {
-        if (canvasWidth <= 0 || canvasHeight <= 0)
-        {
-            return;
-        }
-
-        _stretch.ScaleX = onto.Width / canvasWidth;
-        _stretch.ScaleY = onto.Height / canvasHeight;
-        _stretch.TranslateX = onto.X;
-        _stretch.TranslateY = onto.Y;
-
-        // Divided by the larger of the two, which makes the asked-for width an upper bound: the
-        // line is exactly that on the axis stretched most and a shade under it on the other. The
-        // two differ only while a resize is settling, and an outline briefly a shade thin reads
-        // better than one briefly heavy — heavy is what swamps a shape a few pixels across.
-        var scale = Math.Max(0.0001, Math.Max(_stretch.ScaleX, _stretch.ScaleY));
-
-        _hoveredHalo.StrokeThickness = HoveredHaloWidth / scale;
-        _hoveredEdge.StrokeThickness = HoveredEdgeWidth / scale;
-        _pickedHalo.StrokeThickness = PickedHaloWidth / scale;
-        _pickedEdge.StrokeThickness = PickedEdgeWidth / scale;
+        _placed.Size = new Vector2(width, height);
+        _placed.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
+        _placed.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
     }
 
     /// <summary>
     /// Take the outlines off the screen while the picture under them is on its way to being another,
     /// keeping them to put back. The labels are hidden on the same terms.
     /// </summary>
-    public void Hide() => Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+    public void Hide() => _camera.IsVisible = false;
 
     /// <summary>Put the outlines back once the picture they mark out is the one on screen.</summary>
-    public void Reveal() => Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+    public void Reveal() => _camera.IsVisible = true;
 
     /// <summary>Take every outline off, for a map that is no longer showing anything.</summary>
     public void Clear()
     {
-        _hoveredHalo.Data = null;
-        _hoveredEdge.Data = null;
-        _pickedHalo.Data = null;
-        _pickedEdge.Data = null;
+        _hovered.Path = null;
+        _picked.Path = null;
     }
 
-    private static Path Stroke(Color colour, double opacity) => new()
-    {
-        Stroke = new SolidColorBrush(colour),
-        StrokeLineJoin = PenLineJoin.Round,
-        Opacity = opacity,
-    };
+    private static Color Shade(byte level, double opacity) =>
+        Color.FromArgb((byte)Math.Round(opacity * 255), level, level, level);
 
     /// <summary>
-    /// One geometry round every outline, in the bitmap's own pixels.
+    /// One stroke round <paramref name="geometry"/>, <paramref name="width"/> device-independent
+    /// pixels wide on screen whatever the picture is magnified by.
     ///
-    /// <para>One shape for all of them rather than one per outline, because the list view selects
-    /// any number of rows at once and a control apiece would put hundreds of elements on the page to
-    /// draw a few hundred lines (G4).</para>
-    ///
-    /// <para>Built again for each of the two strokes rather than shared between them. A geometry is
-    /// cheap to build and this is only ever a few hundred points; what it is not is a value, and two
-    /// elements holding the same one is the kind of sharing that works until the day it does not.</para>
+    /// <para>The geometry is in the canvas's pixels, which the camera and the canvas's placement
+    /// magnify, so the stroke is divided by both, by an expression the compositor works out at every
+    /// frame of a move. Divided by the larger of the two axes, which makes the width an upper bound:
+    /// the two differ only while a resize settles, and an outline briefly a shade thin reads better
+    /// than one briefly heavy, which is what swamps a shape a few pixels across.</para>
     /// </summary>
-    private static PathGeometry? Trace(IReadOnlyList<ExploreOutline> outlines)
+    private CompositionSpriteShape Stroke(
+        Compositor compositor,
+        MapCamera camera,
+        CompositionGeometry geometry,
+        CompositionBrush brush,
+        float width)
     {
-        if (outlines.Count == 0)
-        {
-            return null;
-        }
+        var shape = compositor.CreateSpriteShape(geometry);
+        shape.StrokeBrush = brush;
+        shape.StrokeLineJoin = CompositionStrokeLineJoin.Round;
 
-        var geometry = new PathGeometry();
+        var thickness = compositor.CreateExpressionAnimation(
+            "Width / Max(0.0001, Max(camera.Scale.X * placed.Scale.X, camera.Scale.Y * placed.Scale.Y))");
+        thickness.SetScalarParameter("Width", width);
+        thickness.SetReferenceParameter("camera", camera.Properties);
+        thickness.SetReferenceParameter("placed", _placed);
 
-        foreach (var outline in outlines)
-        {
-            var points = outline.Points;
+        shape.StartAnimation(nameof(CompositionSpriteShape.StrokeThickness), thickness);
 
-            if (points.Count == 0)
-            {
-                continue;
-            }
-
-            var line = new PolyLineSegment();
-
-            for (var i = 1; i < points.Count; i++)
-            {
-                line.Points.Add(new Point(points[i].X, points[i].Y));
-            }
-
-            geometry.Figures.Add(new PathFigure
-            {
-                StartPoint = new Point(points[0].X, points[0].Y),
-                Segments = { line },
-
-                // Closed and unfilled: the outline is a line round the shape, and a fill would hide
-                // the colour the picture spent its whole palette establishing.
-                IsClosed = true,
-                IsFilled = false,
-            });
-        }
-
-        return geometry;
+        return shape;
     }
 }

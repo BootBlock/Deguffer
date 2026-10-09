@@ -1,8 +1,12 @@
+using System.Numerics;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.UI;
@@ -10,11 +14,15 @@ using Windows.UI;
 namespace Deguffer.App.Controls;
 
 /// <summary>
-/// The names laid over the map, as real text rather than as pixels in the bitmap.
+/// The names laid over the map, as real text rather than as pixels in the picture.
 ///
 /// <para>Text controls, so they scale with the user's text size and a screen reader could reach
-/// them — neither of which a name burnt into a bitmap offers. There are only ever a few dozen,
+/// them — neither of which a name burnt into the picture offers. There are only ever a few dozen,
 /// because a shape too small to read is a shape the drawing gives no label.</para>
+///
+/// <para>Placed in the picture the way the drawing they name is, and moved by the map's camera, as the
+/// drawings and the outlines are. They are still taken off while the picture moves, because text
+/// magnified with a picture is not text at the reader's size.</para>
 ///
 /// <para>Separate from <see cref="ExploreMap"/> for the reason <see cref="ExploreHighlight"/> is.
 /// That one is about which tree is drawn and what the pointer found; this is about putting a few
@@ -22,15 +30,60 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class ExploreLabels : Canvas
 {
-    public ExploreLabels() =>
+    /// <summary>
+    /// Where the drawing the names were laid out for lies in the picture, per device-independent
+    /// pixel of that drawing: a <c>Scale</c> and an <c>Offset</c>, combined with the camera's by the
+    /// compositor.
+    /// </summary>
+    private readonly CompositionPropertySet _placed;
 
+    /// <summary>
+    /// Names that move with <paramref name="camera"/>, wherever <see cref="Place"/> puts them in the
+    /// picture. Through this element's own visual, which XAML lays out at the map's corner and
+    /// leaves the scale and the translation of to whoever sets them.
+    /// </summary>
+    public ExploreLabels(MapCamera camera)
+    {
         // Never the thing being clicked. A click that landed on a name rather than the shape under
         // it would select whatever that name happened to overlap.
         IsHitTestVisible = false;
 
+        var visual = ElementCompositionPreview.GetElementVisual(this);
+        var compositor = visual.Compositor;
+
+        _placed = compositor.CreatePropertySet();
+        _placed.InsertVector3(nameof(Visual.Scale), Vector3.One);
+        _placed.InsertVector3(nameof(Visual.Offset), Vector3.Zero);
+
+        var scale = compositor.CreateExpressionAnimation(
+            "Vector3(camera.Scale.X * placed.Scale.X, camera.Scale.Y * placed.Scale.Y, 1)");
+        var translation = compositor.CreateExpressionAnimation(
+            "Vector3((camera.Scale.X * placed.Offset.X) + camera.Offset.X, (camera.Scale.Y * placed.Offset.Y) + camera.Offset.Y, 0)");
+
+        foreach (var expression in new[] { scale, translation })
+        {
+            expression.SetReferenceParameter("camera", camera.Properties);
+            expression.SetReferenceParameter("placed", _placed);
+        }
+
+        ElementCompositionPreview.SetIsTranslationEnabled(this, true);
+        visual.StartAnimation(nameof(Visual.Scale), scale);
+        visual.StartAnimation("Translation", translation);
+    }
+
+    /// <summary>
+    /// Put the names where <paramref name="placed"/> says one device-independent pixel of the drawing
+    /// they name lies in the picture.
+    /// </summary>
+    public void Place(MapTransform placed)
+    {
+        _placed.InsertVector3(nameof(Visual.Scale), new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1));
+        _placed.InsertVector3(nameof(Visual.Offset), new Vector3((float)placed.X, (float)placed.Y, 0));
+    }
+
     /// <summary>
     /// Put <paramref name="caption"/>'s text on each shape <paramref name="drawing"/> chose to label,
-    /// at <paramref name="scale"/> bitmap pixels to the device-independent pixel.
+    /// at <paramref name="scale"/> canvas pixels to the device-independent pixel.
     ///
     /// <para>The caption comes from the page rather than from here, because only it knows what the
     /// tree's nodes are: a drive's are a file name and a size, and a memory picture's are a process or
@@ -80,9 +133,9 @@ internal sealed class ExploreLabels : Canvas
     /// <summary>
     /// Take the names off until the layout that places them arrives.
     ///
-    /// <para>For while a resize settles. The bitmap stretches with the control and these do not,
-    /// because they are controls at fixed positions rather than part of the picture — so left up
-    /// they would sit over whichever shape had moved under them, naming it wrongly.</para>
+    /// <para>For while a resize settles or the picture moves. The names go with the picture, but
+    /// stretched or magnified with it they are text out of shape and away from the reader's size,
+    /// and a name the layout gave room to at one size can run over its neighbours at another.</para>
     /// </summary>
     public void Hide() => Visibility = Visibility.Collapsed;
 

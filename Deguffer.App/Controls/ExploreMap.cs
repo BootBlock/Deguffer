@@ -4,11 +4,13 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
@@ -19,14 +21,17 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// Draws a scanned tree, and says what the pointer is over.
 ///
-/// <para>The geometry is a bitmap. A full volume lays out to tens of thousands of shapes, and the
-/// framework's own performance guidance is that a vector element repeated enough times should
-/// become an image instead — which is also what every reference implementation does, WinDirStat
-/// rendering into a cached surface and blitting it rather than keeping a shape per file. A zoomed
-/// picture keeps a few, one per part of it drawn: see <see cref="ExploreLayers"/>.</para>
+/// <para>The geometry is painted into a picture rather than kept as shapes. A full volume lays out to
+/// tens of thousands of them, and the framework's own performance guidance is that a vector element
+/// repeated enough times should become an image instead — which is also what every reference
+/// implementation does, WinDirStat rendering into a cached surface and blitting it rather than
+/// keeping a shape per file. The picture is in the composition layer: each drawing a surface written
+/// a region at a time, placed in the whole picture once, and the whole picture placed on the screen
+/// by one camera (<see cref="MapCamera"/>), so a move writes the camera and nothing else. A zoomed
+/// picture keeps a few drawings, one per part of it drawn: see <see cref="ExploreLayers"/>.</para>
 ///
-/// <para>Two things are not in the bitmap, and each has a control of its own:
-/// <see cref="ExploreLabels"/> for the names, so they scale with the user's text size, and
+/// <para>Two things are not in the picture, and each has a part of its own that the camera moves
+/// with it: <see cref="ExploreLabels"/> for the names, so they scale with the user's text size, and
 /// <see cref="ExploreHighlight"/> for the lines round what is picked and what the pointer is over,
 /// so a click moves a line rather than rasterising a volume again.</para>
 ///
@@ -95,9 +100,24 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private bool _tapPress = true;
 
-    private readonly ExploreLabels _labels = new();
+    private readonly ExploreLabels _labels;
 
-    private readonly ExploreHighlight _highlight = new();
+    private readonly ExploreHighlight _highlight;
+
+    /// <summary>The device every drawing is written through. See <see cref="MapGraphics"/>.</summary>
+    private readonly MapGraphics _graphics;
+
+    /// <summary>Where the whole picture is on the screen. Written at each frame of a move, and nothing else is.</summary>
+    private readonly MapCamera _camera;
+
+    /// <summary>The map's composition tree: the two sets of drawings, then the outlines over them.</summary>
+    private readonly ContainerVisual _root;
+
+    /// <summary>
+    /// How many times the device had been replaced when the drawings kept were written. See
+    /// <see cref="MapGraphics.Generation"/>.
+    /// </summary>
+    private int _generation;
 
     private readonly DispatcherQueueTimer _settled;
 
@@ -215,30 +235,42 @@ public sealed class ExploreMap : UserControl
 
     public ExploreMap()
     {
-        _pictures = new ExploreLayers(_buffers);
-        _departing = new ExploreLayers(_buffers);
+        var compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
+
+        _graphics = MapGraphics.For(compositor);
+        _generation = _graphics.Generation;
+        _camera = new MapCamera(compositor);
+        _pictures = new ExploreLayers(compositor, _graphics, _camera);
+        _departing = new ExploreLayers(compositor, _graphics, _camera);
+        _highlight = new ExploreHighlight(compositor, _graphics, _camera);
+        _labels = new ExploreLabels(_camera);
         _redraws = new CanvasRedraws(new DispatcherQueueSynchronizationContext(DispatcherQueue));
 
-        // The outlines go over the picture and under the labels. A label is inset from its shape's
-        // edge and an outline runs along it, so the two rarely meet — and where they do, the name
-        // of the thing is worth more than the last pixel of the line round it. The picture a folder
-        // is opening out of goes under the one opening, which grows over it. Ordered by index rather
-        // than by position, because the two pictures change places at every opening.
-        //
+        _pictures.Follow();
+
+        // The outlines go over the picture, and the labels over both. A label is inset from its
+        // shape's edge and an outline runs along it, so the two rarely meet — and where they do, the
+        // name of the thing is worth more than the last pixel of the line round it. The picture a
+        // folder is opening out of goes under the one opening, which grows over it.
+        _root = compositor.CreateContainerVisual();
+        _root.Children.InsertAtTop(_departing.Root);
+        _root.Children.InsertAtTop(_pictures.Root);
+        _root.Children.InsertAtTop(_highlight.Root);
+
+        // The composition tree is hosted under an element of its own, so the labels, which are XAML,
+        // can go over it: a hosted visual is drawn over its host's children.
+        var picture = new Border();
+        ElementCompositionPreview.SetElementChildVisual(picture, _root);
+
         // The ground is transparent rather than absent, so the whole control takes the pointer. The
-        // pictures themselves take none of it, so what is under the pointer is always this
-        // control's own answer rather than whichever bitmap happens to be topmost there.
+        // picture itself takes none of it, so what is under the pointer is always this control's own
+        // answer rather than whichever drawing happens to be topmost there.
         _layers = new Grid
         {
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            Children = { _departing.Element, _pictures.Element, _highlight, _labels },
+            Children = { picture, _labels },
         };
         Content = _layers;
-
-        Canvas.SetZIndex(_departing.Element, 0);
-        Canvas.SetZIndex(_pictures.Element, 1);
-        Canvas.SetZIndex(_highlight, 2);
-        Canvas.SetZIndex(_labels, 3);
 
         _zoom.Moved += OnZoomMoved;
         _zoom.Arrived += (_, _) =>
@@ -288,6 +320,16 @@ public sealed class ExploreMap : UserControl
             SystemSettings.ColorValuesChanged += OnSystemColoursChanged;
             TintHighlight();
 
+            _graphics.Replaced += OnDeviceReplaced;
+
+            // The device was replaced while the map was away, so nothing it kept is on its surfaces
+            // any more, and every redraw the rest of this would ask for is owed in full.
+            if (_generation != _graphics.Generation)
+            {
+                OnDeviceReplaced(_graphics, EventArgs.Empty);
+                return;
+            }
+
             // A resize that arrived while this was on screen, and was still waiting to be drawn
             // when the page was navigated away from, is dropped below rather than rasterised for a
             // page nobody is looking at. Coming back at that same size raises no SizeChanged, so
@@ -334,9 +376,9 @@ public sealed class ExploreMap : UserControl
             _redraws.Cancel();
 
             // The page is kept alive while it is away (NavigationCacheMode), so what it holds stays
-            // held: at 4K, 33 MB for each drawing kept, the spare bitmap and the paint buffer. Only
-            // the drawing on screen is needed to come back to, and the rest is asked for again when
-            // the picture next moves.
+            // held: at 4K, 33 MB for each drawing kept and for the paint buffer. Only the drawing on
+            // screen is needed to come back to, and the rest is asked for again when the picture next
+            // moves.
             _pictures.Trim();
             _buffers.Release();
 
@@ -353,6 +395,7 @@ public sealed class ExploreMap : UserControl
 
             SystemSettings.TextScaleFactorChanged -= OnTextScaleChanged;
             SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
+            _graphics.Replaced -= OnDeviceReplaced;
         };
 
         // The ground is baked into the bitmap, so unlike every themed control around it the map
@@ -518,6 +561,7 @@ public sealed class ExploreMap : UserControl
         // picture, and the part of this one the reader had magnified means nothing in it. So is the
         // same root with the volume beside it or without it, which is the root opened or closed. A
         // new colouring, scheme or spacing is the same picture, so the zoom stays.
+        var was = _zoom.Shown;
         var another = !ReferenceEquals(tree, _tree) || node != _node || view != _view || volume != _volume;
 
         // A shape opened by a double-click, in the same tree and the same view, opens out of that
@@ -546,8 +590,14 @@ public sealed class ExploreMap : UserControl
             {
                 (_pictures, _departing) = (_departing, _pictures);
 
-                Canvas.SetZIndex(_departing.Element, 0);
-                Canvas.SetZIndex(_pictures.Element, 1);
+                // The old picture stays where the camera had it as the folder was double-clicked,
+                // and the camera goes on to the new one, which grows over it.
+                _departing.Freeze(was.Camera(ActualWidth, ActualHeight));
+                _pictures.Follow();
+                _pictures.Fit(ActualWidth, ActualHeight);
+
+                _root.Children.Remove(_departing.Root);
+                _root.Children.InsertAtBottom(_departing.Root);
 
                 // The drawing on screen is the one being opened out of now, carried away with the
                 // old picture, so nothing is resolved against it again. The pointer is over nothing
@@ -651,20 +701,21 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        // Every drawing kept stretches over the new size, and so does one landing.
+        Fit();
+
         if (_drawing is null)
         {
             Redraw();
             return;
         }
 
-        // The bitmap stretches with the control and the labels do not, because they are real
-        // controls at fixed positions rather than part of the picture. Left visible they would sit
-        // over whichever shape had moved under them, naming it wrongly. They come back with the
-        // layout that puts them where they belong.
+        // The names stretch with the picture, out of shape and away from the reader's text size.
+        // They come back with the layout that puts them where they belong.
         _labels.Hide();
 
-        // The outlines do stretch with it, because a polygon scales exactly where a line of text
-        // does not, so they go on marking out the same shapes throughout the drag.
+        // The outlines stretch with it too, and a polygon scales exactly where a line of text does
+        // not, so they go on marking out the same shapes throughout the drag.
         Place();
 
         // Stopped and started rather than started, so each size change puts the whole wait back and
@@ -674,33 +725,46 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Put the drawings, and the outlines over them, where the zoom on screen says each belongs:
-    /// the one worked from over the whole control, unless a zoom is on its way and it is of where the
-    /// zoom started, and the others where their parts of the picture are.
+    /// Put the picture where the zoom on screen says it is: the camera, which every drawing, the
+    /// outlines and the names follow. The one thing written at each frame of a move.
     /// </summary>
     private void Place()
     {
-        _edges.Rect = new Rect(0, 0, ActualWidth, ActualHeight);
-
         // Cut only while something can run past the edges. Unzoomed, nothing does except the halo of
         // an outline round a shape at the edge, which has always been drawn whole.
-        _layers.Clip = _zoom.Shown.IsWhole && _drawn.IsWhole && !_descent.IsMoving ? null : _edges;
+        var cut = !(_zoom.Shown.IsWhole && _drawn.IsWhole && !_descent.IsMoving);
 
-        _pictures.Place(_zoom.Shown, ActualWidth, ActualHeight);
-
-        var placement = _zoom.Shown.PlacementOf(_drawn);
-
-        if (_drawing is { } drawing)
+        if (cut)
         {
-            _highlight.StretchOver(
-                drawing.Width,
-                drawing.Height,
-                new Rect(
-                    placement.X * ActualWidth,
-                    placement.Y * ActualHeight,
-                    placement.Scale * ActualWidth,
-                    placement.Scale * ActualHeight));
+            _edges.Rect = new Rect(0, 0, ActualWidth, ActualHeight);
         }
+
+        _layers.Clip = cut ? _edges : null;
+
+        _camera.Show(_zoom.Shown.Camera(ActualWidth, ActualHeight));
+    }
+
+    /// <summary>
+    /// Put each drawing, and the outlines and the names of the one worked from, where they lie in the
+    /// picture at the control's size now. For a new size or a new drawing: a move changes only the
+    /// camera.
+    /// </summary>
+    private void Fit()
+    {
+        _pictures.Fit(ActualWidth, ActualHeight);
+
+        if (_drawing is not { } drawing)
+        {
+            return;
+        }
+
+        var placed = _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight);
+
+        _highlight.PlaceOver(drawing.Width, drawing.Height, placed);
+
+        // The names are laid out in device-independent pixels of the drawing, at the display scale
+        // it was drawn at.
+        _labels.Place(placed with { ScaleX = placed.ScaleX * _scale, ScaleY = placed.ScaleY * _scale });
     }
 
     private void Redraw()
@@ -917,6 +981,7 @@ public sealed class ExploreMap : UserControl
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
         // now, and so is whatever the pointer is over.
+        Fit();
         Place();
         ShowPicked();
         ReportWhatThePointerIsOver();
@@ -963,7 +1028,7 @@ public sealed class ExploreMap : UserControl
             _buffers.PixelsFor(drawing.Width, drawing.Height),
             Ground(),
             focus: null,
-            _pictures.Arrival(onTop: false, _ => Place()));
+            _pictures.Arrival(onTop: false, static _ => { }));
     }
 
     /// <summary>
@@ -1313,6 +1378,29 @@ public sealed class ExploreMap : UserControl
         {
             Redraw();
         }
+    }
+
+    /// <summary>
+    /// The device was replaced, and every surface lost what it held: the picture on screen is not
+    /// the one any drawing describes. Nothing is under the pointer, and nothing is kept, until the
+    /// picture has been drawn again on the new device.
+    /// </summary>
+    private void OnDeviceReplaced(object? sender, EventArgs e)
+    {
+        _generation = _graphics.Generation;
+
+        _descent.Finish();
+        _redraws.Cancel();
+        _departing.Clear();
+        _pictures.Clear();
+
+        _drawing = null;
+        _hovered = null;
+        _labels.Hide();
+        _highlight.Clear();
+        Report(null);
+
+        Redraw();
     }
 
     /// <summary>
