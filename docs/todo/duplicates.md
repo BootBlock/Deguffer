@@ -96,9 +96,12 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   the open to another file, a share, or a cloud file that opening recalls; an open by number walks
   no path. While the described handle is held, Windows refuses to rename any folder above the file,
   so only the file's own name can be replaced. Where a volume will not open a file by number, the
-  path is opened only if the volume reports no reparse-point support, since no link can exist
-  there. Which error a FAT or exFAT driver gives is **(unverified)**: no such volume was attached,
-  and the rule does not depend on it.
+  path is opened only where the volume answered that it supports no reparse points
+  (`LocalVolume.CannotHoldLinks`; a volume that refused the question may be NTFS and never
+  qualifies) and the path starts at that volume's own drive letter, since a volume reached through
+  a folder of another is reached through folders that can be links. Anywhere else the file is a
+  failed read. Which error a FAT or exFAT driver gives is **(unverified)**: no such volume was
+  attached, and the rule does not depend on it.
 - **Identity.** `GetFileInformationByHandleEx(FileIdInfo)` returns the volume serial and the 128-bit
   file ID, which ReFS needs because its 64-bit index is not unique. A handle opened for
   `FILE_READ_ATTRIBUTES` with `FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS` reads it

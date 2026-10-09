@@ -65,10 +65,13 @@ internal readonly record struct ContentReading(ContentReadResult Result, Content
 /// on the way replaced by a link after the description cannot send the open to another file, to a
 /// share, or to a cloud file that opening would recall.</para>
 ///
-/// <para><b>The path is opened only where no link can be.</b> Where Windows will not open a file by
-/// its number, the path is opened instead only on a volume that says it supports no reparse points,
-/// such as FAT or exFAT, on which no link, junction or mount can exist; anywhere else the file is
-/// left out as a failed read, never as gone, because the held handle shows it was there.</para>
+/// <para><b>The path is opened only where no link can be on it.</b> Where Windows will not open a
+/// file by its number, the path is opened instead only where the volume answered that it supports no
+/// reparse points, such as FAT or exFAT (<see cref="LocalVolume.CannotHoldLinks"/>), and the path
+/// starts at that volume's own drive letter. A volume that refused the question may be NTFS, and one
+/// reached only through a folder of another volume is reached through that volume's folders, either
+/// of which can hold a link. Anywhere else the file is left out as a failed read, never as gone,
+/// because the held handle shows it was there.</para>
 ///
 /// <para><b>Held while it is read, and checked through what it is read by.</b> The content is opened
 /// sharing only reading, so nobody can write to it while it is read, and the handle is described
@@ -205,10 +208,9 @@ internal sealed class ContentReader
         content.Dispose();
 
         // Another program holding the file without sharing it for reading, or an access rule that
-        // refuses its data, is refused by number as it would be by path. Only the volume decides
-        // whether the path may be tried, because on one that supports reparse points a link can be
-        // on the way.
-        if (file.Volume.Features.HasFlag(VolumeFeatures.ReparsePoints))
+        // refuses its data, is refused by number as it would be by path, so only whether a link can
+        // be on the way decides whether the path may be tried.
+        if (!MayOpenByPath(file))
         {
             return null;
         }
@@ -224,6 +226,14 @@ internal sealed class ContentReader
             return null;
         }
     }
+
+    /// <summary>
+    /// Whether no link can be anywhere on the file's path: its volume answered that it supports no
+    /// reparse points, and the path starts at that volume's own root rather than in a folder of the
+    /// volume it is mounted in, whose folders can be links.
+    /// </summary>
+    private static bool MayOpenByPath(DuplicateCandidate file) =>
+        file.Volume.CannotHoldLinks && HostVolume.IsMountPoint(file.Volume.RootPath, Path.GetPathRoot(file.Path)!);
 
     /// <summary>
     /// Why a file as described now must not be read, or have its reading kept, or null where it is

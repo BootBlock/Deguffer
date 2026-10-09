@@ -300,9 +300,9 @@ public sealed class ContentReaderTests : IDisposable
     }
 
     /// <summary>
-    /// Where Windows will not open a file by its number, the path is opened instead only on a volume
-    /// that supports no reparse points, where no link can be on the way, and it is opened in its
-    /// extended form (§6.3).
+    /// Where Windows will not open a file by its number, the path is opened instead where the volume
+    /// answered that it supports no reparse points and the path starts at its own drive letter, so
+    /// no link can be on the way, and it is opened in its extended form (§6.3).
     /// </summary>
     [Fact]
     public void AVolumeWithNoLinksIsReadByPathWhereItWillNotOpenByNumber()
@@ -322,6 +322,34 @@ public sealed class ContentReaderTests : IDisposable
     }
 
     /// <summary>
+    /// A volume that refused to say what it supports may be NTFS and hold links, so its refusal is
+    /// never read as an answer of no reparse points: a file it will not open by number is a failed
+    /// read, and its path is never opened.
+    /// </summary>
+    [Fact]
+    public void AVolumeThatWouldNotSayWhatItSupportsIsNeverReadByPath()
+    {
+        var file = Candidate(_temp.CreateFile(100, "a.bin"), VolumeFeatures.None, answered: false);
+        var reader = new ContentReader(FileInformation.Default, FileInformation.Default.Hold, Unsupported, NoPath);
+
+        Assert.Equal(ContentReadResult.ReadFailed, Read(reader, file).Result);
+    }
+
+    /// <summary>
+    /// A volume with no reparse points mounted only in a folder of another volume is reached through
+    /// that volume's folders, any of which can be replaced by a junction, so its path is never
+    /// opened either. The scratch folder stands for the folder it is mounted at.
+    /// </summary>
+    [Fact]
+    public void AVolumeReachedThroughAFolderOfAnotherIsNeverReadByPath()
+    {
+        var file = Candidate(_temp.CreateFile(100, "a.bin"), VolumeFeatures.None, mountedAt: _temp.Path + Path.DirectorySeparatorChar);
+        var reader = new ContentReader(FileInformation.Default, FileInformation.Default.Hold, Unsupported, NoPath);
+
+        Assert.Equal(ContentReadResult.ReadFailed, Read(reader, file).Result);
+    }
+
+    /// <summary>
     /// On a volume that supports reparse points, a link can be on the way, so a file Windows will
     /// not open by its number is never opened by path: it is left out as a failed read, and never
     /// as gone, because it was there when it was described.
@@ -338,7 +366,13 @@ public sealed class ContentReaderTests : IDisposable
 
     /// <summary>The file as the search identified it, which is what every check compares against.</summary>
     /// <param name="features">What the file's volume says it supports: an NTFS volume's reparse points, unless a test says otherwise.</param>
-    internal static DuplicateCandidate Candidate(string path, VolumeFeatures features = VolumeFeatures.ReparsePoints)
+    /// <param name="answered">Whether the volume answered what it supports, rather than refusing the question.</param>
+    /// <param name="mountedAt">Where the volume is mounted, or the drive the file's path starts at where none is given.</param>
+    internal static DuplicateCandidate Candidate(
+        string path,
+        VolumeFeatures features = VolumeFeatures.ReparsePoints,
+        bool answered = true,
+        string? mountedAt = null)
     {
         var description = FileInformation.Default.Describe(path, IdentityRoute.FileId).Description!;
 
@@ -353,7 +387,12 @@ public sealed class ContentReaderTests : IDisposable
             StorageAttributes.Of(description.Attributes),
             LocationRole.Search)
         {
-            Volume = new LocalVolume(Path.GetPathRoot(description.Path)!, DriveType.Fixed, VolumeReadiness.Ready, Features: features),
+            Volume = new LocalVolume(
+                mountedAt ?? Path.GetPathRoot(description.Path)!,
+                DriveType.Fixed,
+                VolumeReadiness.Ready,
+                Features: features,
+                FeaturesAnswered: answered),
         };
     }
 
