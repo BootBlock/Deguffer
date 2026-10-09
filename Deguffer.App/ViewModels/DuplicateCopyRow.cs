@@ -36,7 +36,7 @@ public sealed partial class DuplicateCopyRow : ObservableObject
         Size = FreeSpace.Format(copy.Length);
         Modified = copy.Modified.ToLocalTime().ToString("d MMM yyyy HH:mm:ss", System.Globalization.CultureInfo.CurrentCulture);
         Names = copy.HasSeveralNames
-            ? $"One file with {copy.NameCount:N0} names, so removing one name frees nothing: {string.Join("; ", copy.Names)}"
+            ? $"Its names: {string.Join("; ", copy.Names)}."
             : string.Empty;
         Show(keeping.Standing(copy));
     }
@@ -62,7 +62,10 @@ public sealed partial class DuplicateCopyRow : ObservableObject
 
     public bool HasSeveralNames => Copy.HasSeveralNames;
 
-    /// <summary>Every name of a file with several, or an empty string, because a binding cannot show null.</summary>
+    /// <summary>
+    /// Every name of a file with several, as a sentence the row shows under the path (§7.4: such a
+    /// file is listed with every one of its names), or an empty string, because a binding cannot show null.
+    /// </summary>
     public string Names { get; }
 
     /// <summary>Whether the copy is marked, as its group's marks say.</summary>
@@ -82,10 +85,10 @@ public sealed partial class DuplicateCopyRow : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasReasons))]
     public partial string WhyNotKept { get; private set; } = string.Empty;
 
-    /// <summary>Both reasons, a line each, as the row shows them under the path.</summary>
-    public string Reasons => string.Join(Environment.NewLine, new[] { WhyNotMarked, WhyNotKept }.Where(reason => reason.Length > 0));
+    /// <summary>A file's names, then both reasons, a line each, as the row shows them under the path.</summary>
+    public string Reasons => string.Join(Environment.NewLine, new[] { Names, WhyNotMarked, WhyNotKept }.Where(line => line.Length > 0));
 
-    public bool HasReasons => WhyNotMarked.Length > 0 || WhyNotKept.Length > 0;
+    public bool HasReasons => Names.Length > 0 || WhyNotMarked.Length > 0 || WhyNotKept.Length > 0;
 
     /// <summary>Why the last mark asked of it was refused, or what a removal did with it, or an empty string.</summary>
     [ObservableProperty]
@@ -95,12 +98,20 @@ public sealed partial class DuplicateCopyRow : ObservableObject
 
     public bool HasNote => Note.Length > 0;
 
-    /// <summary>Everything the row shows, in one sentence, for a screen reader.</summary>
-    public string Description =>
-        $"{Copy.Path}, {Size}, last modified {Modified}"
-        + (IsReference ? ", in a reference location" : string.Empty)
-        + (Copy.HasSeveralNames ? $", one file with {Copy.NameCount:N0} names" : string.Empty)
-        + Sentence(WhyNotMarked) + Sentence(WhyNotKept) + Sentence(Note);
+    /// <summary>
+    /// Everything the row shows, for a screen reader: what the copy is, then each sentence under it
+    /// once, so a refusal that repeats why the copy is never marked is not read twice.
+    /// </summary>
+    public string Description => string.Join(
+        " ",
+        new[]
+        {
+            $"{Copy.Path}, {Size}, last modified {Modified}{(IsReference ? ", in a reference location" : string.Empty)}.",
+            Names,
+            WhyNotMarked,
+            WhyNotKept,
+            Note,
+        }.Where(sentence => sentence.Length > 0).Distinct(StringComparer.Ordinal));
 
     /// <summary>The check box's name for a screen reader, which says which copy it marks.</summary>
     public string MarkName => $"Mark {Copy.Path} for removal";
@@ -138,5 +149,4 @@ public sealed partial class DuplicateCopyRow : ObservableObject
     /// <summary>Whether the page lets marks change has changed.</summary>
     internal void GateChanged() => ToggleCommand.NotifyCanExecuteChanged();
 
-    private static string Sentence(string text) => text.Length == 0 ? string.Empty : ". " + text;
 }

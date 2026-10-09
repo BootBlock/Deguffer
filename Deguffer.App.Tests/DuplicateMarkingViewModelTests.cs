@@ -137,6 +137,31 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
 
         Assert.False(referenceRow.IsMarked);
         Assert.Equal(never, referenceRow.Note);
+
+        // The refusal repeats why the copy is never marked, and a screen reader hears it once.
+        Assert.Equal(2, referenceRow.Description.Split(never).Length);
+        Assert.DoesNotContain("..", referenceRow.Description, StringComparison.Ordinal);
+    });
+
+    /// <summary>
+    /// A file with several names is listed with every one of them (§7.4), as text under its path that
+    /// pointer, keyboard and screen reader all reach, never in a tooltip alone.
+    /// </summary>
+    [Fact]
+    public void AFileWithSeveralNamesShowsEveryName() => UiThread.Run(async () =>
+    {
+        var alias = Path.Combine(_scene.Folder("Music"), "song-alias.mp3");
+        var linked = Copy(_scene.Folder("Music"), "song.mp3", 1) with { NameCount = 2 };
+        linked = linked with { Names = [linked.Path, alias] };
+        var page = PageWithPhotos(Finds(Group(Copy(_scene.Folder("Documents"), "song.mp3", 1), linked)));
+        await page.SearchCommand.ExecuteAsync(null);
+
+        var row = Row(page, linked);
+
+        Assert.True(row.HasReasons);
+        Assert.Contains(alias, row.Reasons, StringComparison.Ordinal);
+        Assert.Contains(linked.Path, row.Reasons, StringComparison.Ordinal);
+        Assert.Contains(alias, row.Description, StringComparison.Ordinal);
     });
 
     /// <summary>

@@ -81,6 +81,27 @@ public sealed class DuplicateSearchNotesTests
         notes);
     }
 
+    /// <summary>A note about one file speaks of it, never of "them".</summary>
+    [Fact]
+    public void ANoteAboutOneFileAgreesWithIt()
+    {
+        var notes = DuplicateSearchNotes.Of(Finding(leftOut: new LeftOutFiles(
+            Links: 1, Empty: 1, UnknownLength: 1, OnlyInTheCloud: 1, Gone: 1, Unidentified: 1, ReadFailed: 1, Changed: 1)));
+
+        Assert.Equal(
+        [
+            "1 link was not followed: a link is never a file to match.",
+            "1 empty file was left out: empty files are never matched.",
+            "1 file was left out because the scan could not tell how long it is.",
+            "1 cloud file was left out because it is not on this device, and reading it would download it.",
+            "1 file was gone by the time the search looked at it.",
+            "1 file was left out because Windows would not describe it. It may still be there.",
+            "1 file was left out because it could not be read: another program held it, or Windows refused. It may still be there.",
+            "1 file was left out because it changed while the search read it.",
+        ],
+        notes);
+    }
+
     /// <summary>
     /// The end of a search adds the files its reading left out and whether it was stopped, after
     /// the notes the finding gave, so those keep their places on the page.
@@ -96,7 +117,7 @@ public sealed class DuplicateSearchNotesTests
         Assert.Equal(atFinding, atEnd.Take(atFinding.Count));
         Assert.Equal(
             [
-                "1 file was left out because they could not be read: another program held them, or Windows refused. They may still be there.",
+                "1 file was left out because it could not be read: another program held it, or Windows refused. It may still be there.",
                 DuplicateSearchNotes.Stopped,
             ],
             atEnd.Skip(atFinding.Count));

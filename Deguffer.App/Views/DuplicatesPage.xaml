@@ -37,7 +37,7 @@
                                     AutomationProperties.AccessibilityView="Raw" />
                     <ContentControl Content="Several names" Style="{StaticResource StandingChip}"
                                     Visibility="{x:Bind HasSeveralNames}"
-                                    ToolTipService.ToolTip="{x:Bind Names}"
+                                    ToolTipService.ToolTip="Removing one name of a file with several frees nothing, so none is marked."
                                     AutomationProperties.AccessibilityView="Raw" />
                 </StackPanel>
 
@@ -240,6 +240,7 @@
              that found nothing there (§7.4). -->
         <Expander Grid.Row="3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                   Header="{x:Bind ViewModel.NotesHeading, Mode=OneWay}"
+                  AutomationProperties.Name="{x:Bind ViewModel.NotesHeading, Mode=OneWay}"
                   Visibility="{x:Bind ViewModel.HasNotes, Mode=OneWay}">
             <ListView MaxHeight="180" SelectionMode="None" ItemsSource="{x:Bind ViewModel.Notes}"
                       AutomationProperties.Name="Notes on what the search did not look at">
