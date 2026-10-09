@@ -141,7 +141,7 @@ public sealed class SearchLocations
         switch (LongPath.ProbeDirectory(folder))
         {
             case PathPresence.Absent:
-                return (null, "This is a file, not a drive or a folder.");
+                return (null, "This is not a folder: it is a file, or it is no longer there.");
             case PathPresence.Refused:
                 return (null, "Windows would not say whether this is a folder, so Deguffer will not search it.");
         }

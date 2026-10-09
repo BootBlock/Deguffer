@@ -107,6 +107,28 @@ public sealed class DuplicatePassedOverTests : IDisposable
         Assert.Equal(2, Assert.Single(found.Groups).Files.Count);
     }
 
+    /// <summary>
+    /// What Windows keeps at the top of a volume is passed over on every volume, a data drive that
+    /// holds none of Windows' own folders included.
+    /// </summary>
+    [Fact]
+    public async Task WhatWindowsKeepsAtTheTopOfADataDriveIsPassedOver()
+    {
+        var drive = _tree.Folder("DataDrive") + Path.DirectorySeparatorChar;
+        _tree.Volumes.With(drive);
+        _tree.File(Length, "DataDrive", "$Recycle.Bin", "S-1-5-21-1", "a.txt");
+        _tree.File(Length, "DataDrive", "System Volume Information", "b.dat");
+        _tree.File(Length, "DataDrive", "Photos", "c.jpg");
+        _tree.File(Length, "DataDrive", "Backup", "c.jpg");
+
+        var found = await _tree.FindAsync(MatchCriteria.Size, new SearchLocation(drive));
+
+        Assert.Equal(2, Assert.Single(found.Groups).Files.Count);
+        Assert.Equal(
+            ["$Recycle.Bin", "System Volume Information"],
+            found.PassedOver.Select(place => Path.GetFileName(place.Path)).Order(StringComparer.Ordinal));
+    }
+
     [Fact]
     public async Task ALocationThatIsItselfExcludedIsPassedOverAndNamed()
     {
