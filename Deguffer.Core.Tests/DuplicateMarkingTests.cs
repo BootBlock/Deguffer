@@ -118,13 +118,15 @@ public sealed class DuplicateMarkingTests : IDisposable
     private Task<MachineProtections> Protections(params ICleanupProvider[] providers) =>
         MachineProtections.ForAsync(_tree.System, _tree.Environment, _tree.Volumes, providers);
 
-    private ProgramFolderReading ReadProgramFolders(params string[] chosen) =>
+    private ProgramFolderReading ReadProgramFolders(params string[] chosen) => ReadProgramFolders(FileInformation.Default, chosen);
+
+    private ProgramFolderReading ReadProgramFolders(FileInformation files, params string[] chosen) =>
         ProgramFolders.Read(
             _tree.Registry,
             _tree.Environment,
             _tree.System,
             _tree.Volumes,
-            FileInformation.Default,
+            files,
             SearchLocations.Resolve([.. chosen.Select(folder => new SearchLocation(folder))], _tree.Volumes).Locations,
             CancellationToken.None);
 
@@ -368,6 +370,30 @@ public sealed class DuplicateMarkingTests : IDisposable
 
         Assert.Contains(reading.SetAside, entry => entry.Program == "Tool");
         Assert.DoesNotContain(reading.Installed, folder => folder.Program == "Tool");
+    }
+
+    /// <summary>
+    /// An install location on a share is never opened to follow it to its final path, as a search
+    /// location on one is not: opening it is itself a conversation with another machine.
+    /// </summary>
+    [Fact]
+    public void AnInstallLocationOnAShareIsNeverOpened()
+    {
+        List<string> opened = [];
+        var files = new FileInformation(
+            (path, use) =>
+            {
+                opened.Add(path);
+                return FileInformation.Open(path, use);
+            },
+            FileInformation.ReadIdentity);
+        _tree.Registry.With(InstalledApps.UninstallScope.Machine64, "Shared", ("DisplayName", "Shared"), ("InstallLocation", @"\\server.test\apps\Tool"));
+        _tree.Registry.With(InstalledApps.UninstallScope.Machine32, "Local", ("DisplayName", "Local"), ("InstallLocation", _tree.Folder("Apps", "Local")));
+
+        ReadProgramFolders(files);
+
+        Assert.Contains(opened, path => path.EndsWith(@"\Apps\Local", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(opened, path => path.Contains("server.test", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
