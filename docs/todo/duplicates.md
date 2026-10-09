@@ -87,10 +87,16 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Identity.** `GetFileInformationByHandleEx(FileIdInfo)` returns the volume serial and the 128-bit
   file ID, which ReFS needs because its 64-bit index is not unique. A handle opened for
   `FILE_READ_ATTRIBUTES` with `FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS` reads it
-  without following a link or recalling a cloud file. `FindFirstFileNameW` lists every name of a
-  file, and `FindFirstStreamW` every named stream. On FAT and exFAT a file ID can change after a
-  defragmentation or a rename, so it identifies a file for one search and never for the cache.
-  Whether `FileIdInfo` answers on FAT and exFAT at all is **(unverified)**.
+  without following a link or recalling a cloud file. On NTFS, measured on 2026-10-09, it gives the
+  64-bit serial while the older `GetFileInformationByHandle` gives only its low 32 bits, so a file
+  identified once by each would read as two files. `FindFirstFileNameW` lists every name of a file,
+  each from the top of its volume (`GetVolumePathNameW`), and `FindFirstStreamW` every named stream;
+  `GetFileInformationByHandleEx(FileStreamInfo)` lists the streams through a handle already held,
+  and whether a handle opened for attributes alone may ask it is **(unverified)**. On FAT and exFAT
+  a file ID can change after a defragmentation or a rename, so it identifies a file for one search
+  and never for the cache. Whether `FileIdInfo` or the older call answers on FAT and exFAT is
+  **(unverified)**: measuring it needs a scratch disk attached with administrator rights, and phase 2
+  ran without them, so the search decides it for each volume as it runs (phase 2, step 5).
 - **Cloud files.** Reading the data of a file marked `RECALL_ON_DATA_ACCESS` downloads it, and no
   documented call lets a process read it without that. `RtlSetProcessPlaceholderCompatibilityMode`
   changes how a placeholder looks, not whether it downloads, and two Microsoft pages disagree about
@@ -152,8 +158,11 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   every link on the way to a path, its own name included, and a substituted letter, to the path an
   opened handle gives, and is the one declaration of `GetFinalPathNameByHandle`: it moved there from
   `CloudFilesNative`, whose `CloudFiles.Resolve` already followed every link and now calls it.
-- **File information.** `HardLinkAwareScanner` (`FileStandardInfo`) and `CloudFilesNative`
-  (`FileBasicInfo`, `FileAttributeTagInfo`) each declare their own `GetFileInformationByHandleEx`.
+- **File information.** `FileInformation` (phase 2) is the one declaration of each call that
+  describes a file through a handle, and of the attributes-only handle itself (`FileInformation.Open`):
+  `HardLinkAwareScanner`, `CloudFiles` and `OccupancyProbe` read through it, where before the first
+  two each declared their own `GetFileInformationByHandleEx`. `FileInformation.Describe` answers
+  identified, gone or unreadable.
 - **Refusals.** `ExploreActionPolicy.MayRemove` decides one path. Asked of a folder, it also refuses
   a folder that *holds* something refused (`HeldLocations`), so it cannot serve as a skip list
   (`C:\Users` would be skipped). `ExploreActionPolicy.RefusedAtAndBelow` (phase 1) answers for a
@@ -277,15 +286,23 @@ ignoring case.
    Windows refused to describe may still be there, and reading it as gone would let its copy be
    removed. `HardLinkAwareScanner` and `CloudFilesNative` move onto it, so the declarations are not
    duplicated a third time.
-2. **Names and streams.** Every name of a file through `FindFirstFileNameW`, and its named streams
-   through `FindFirstStreamW`, on both routes.
+2. **Names.** Every name of a file with several, through `FindFirstFileNameW`, on both routes. Its
+   named streams are not listed here: nothing in a search reads them, and the comparison before a
+   removal lists them through the handle it holds (phase 5), so a list taken by path at search time
+   would answer for whatever is at the path by then.
 3. **One file is one file.** Candidates with one identity become one file with all its names, never a
    group, which is the end-to-end proof that a file is searched once however it was reached. A file
    with several names is never marked and never counted, and it can still be the copy a group keeps.
+   A file reached once in a reference location is a reference.
 4. **Full-precision times.** The modified-time criterion and every later check use the identity's
-   times, never the tree's.
-5. **FAT and exFAT.** Measured: whether `FileIdInfo` answers there, and what the older call gives
-   if it does not. A volume where no identity can be had is not searched, and the search says so.
+   times, never the tree's. The tree groups first by its minute, which both routes truncate the same
+   time to, so only files that may match are opened; a file the tree holds no time for is identified
+   first and placed by the minute Windows gives.
+5. **FAT and exFAT.** Not measured: attaching a scratch FAT disk needs administrator rights, and
+   phase 9's verification, which runs elevated, measures it. The search decides it for each volume
+   as it runs instead: `FileIdInfo` where the volume answers it, else the older call, never a mix on
+   one volume, and where neither answers, the volume is not searched and each location on it is
+   named.
 
 Proves: hard links are one file on both scan routes, with every name; two locations that alias one
 folder yield each file once; a refusal is never read as absence; the times compare to the tick; a
@@ -374,7 +391,8 @@ where the copies exceed it.
    decided again; the kept copy opened and held open, refusing write and delete, until the removal
    has finished; the copy to remove held open refusing write; the two proved to be different files;
    both identified again with the same file ID, size, time and attributes, neither online-only; then
-   the same bytes and the same named streams apart from `Zone.Identifier`. Then the removal, files
+   the same bytes and the same named streams apart from `Zone.Identifier`, each file's streams listed
+   through the handle held on it (`FileStreamInfo`), never by its path. Then the removal, files
    only: permanently through the compared handle (`FileDispositionInfoEx`), or to the Recycle Bin
    with the item the bin received checked by its file ID. A mismatch, or an item that cannot be
    identified, stops the run at that copy and names what went to the bin. If the shell turns out not
@@ -442,8 +460,10 @@ store loads empty; the CSV round-trips hostile paths and a long path whole.
 Drive the whole feature with the `verify` skill, unelevated and elevated, over a scratch tree that
 holds hard links, a junction loop, a substituted drive, a case-sensitive folder, a named stream, a
 long path, an empty file, a locked file, a reference folder, a file the bin cannot take and, where
-the machine has one, a OneDrive online-only file. Measure a search of a real drive and record the
-figures here, redacted. Update `README.md`. Flip this banner to complete, move this file to `done/`
+the machine has one, a OneDrive online-only file. Attach a scratch disk with a FAT32 and an exFAT
+volume, measure whether each answers `FileIdInfo` or only the older call, and whether a file keeps
+its ID across a rename and a move, record it under the technical facts, and search both. Measure a
+search of a real drive and record the figures here, redacted. Update `README.md`. Flip this banner to complete, move this file to `done/`
 with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link becomes
 `done/duplicates.md`), and close #297.
 
@@ -479,8 +499,27 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   its copies from that match. Corrected here: candidates group by length only where the size or
   the content is a criterion, not always; `CloudFiles.Resolve` already followed every link, so the
   final-path call moved from it rather than being new.
+- 2026-10-09: phase 2 landed. One file-information seam (`FileInformation`): the attributes-only
+  handle, identity, length, names, time, attributes and reparse tag, answering identified, gone or
+  unreadable (`FileInformation.Describe`), with the cloud files, the occupancy probe and the
+  hard-link scanner moved onto it. The files that share a group by what the tree holds are
+  identified (`CandidateIdentification`) and grouped again by what Windows says now
+  (`CandidateGrouping.ByTheFiles`): one file however many paths reached it, with every name where it
+  has several, a reference where any path reaching it is one, and times compared to the tick. A
+  file gone, refused, empty or a link by the time it is opened is left out and counted, a refusal
+  apart from a file that is gone. Decided: the route that identifies a volume's files is chosen
+  once a volume, because the older call gives the serial number at half the width, and a volume
+  neither call identifies is not searched, with each location on it named, a reference included.
+  Corrected here: named streams are listed in phase 5 through the held handle, not at search time
+  by path; the FAT and exFAT measurement moves to phase 9, which runs elevated.
 
 ## Limits that stay open
+
+- **A name search on the file-table route.** The table keeps one name a record, so a file with
+  several names is matched by name only under the name the table kept, while the walk matches it
+  under each name it lists. The file is still found with every name; only a match under its other
+  names is missed, which leaves a copy unshown and never removes one. Closing it needs the table's
+  reader to keep every name.
 
 - **Whole duplicate folders.** Shown as their files. Matching folders as units needs a rule for
   folders that only look alike (a program's folder, a project), and §7.4 does not authorise

@@ -44,14 +44,6 @@ internal static unsafe partial class CloudFilesNative
     /// <summary>Two <c>WCHAR[256]</c> names after the status.</summary>
     public const int ProviderInfoBufferSize = 4 + (2 * 256 * sizeof(char));
 
-    private const uint FileReadAttributes = 0x0080;
-    private const uint ShareAll = 0x0007;
-    private const uint OpenExisting = 3;
-    private const uint BackupSemantics = 0x0200_0000;
-    private const uint OpenReparsePoint = 0x0020_0000;
-    private const int FileBasicInfoClass = 0;
-    private const int FileAttributeTagInfoClass = 9;
-
     /// <summary><c>PHCM_EXPOSE_PLACEHOLDERS</c>.</summary>
     public const sbyte ExposePlaceholders = 2;
 
@@ -59,55 +51,6 @@ internal static unsafe partial class CloudFilesNative
     public const int FindExSearchNameMatch = 0;
     public const uint FindFirstExLargeFetch = 0x0002;
     public static readonly nint InvalidHandle = -1;
-
-    /// <summary>
-    /// A handle that can read a placeholder's state and change its pin, and nothing else.
-    ///
-    /// <para><b>Attributes only</b>, which is the access Microsoft documents as enough for both calls,
-    /// and which cannot read the file's data, so it cannot start a download. <b>The link itself,
-    /// never its target</b>: a file replaced by a link between the preview and the clean is then
-    /// read as the ordinary reparse point it is, and nothing outside the sync root is reached.</para>
-    /// </summary>
-    public static SafeFileHandle OpenForState(string extendedPath) =>
-        CreateFile(
-            extendedPath,
-            FileReadAttributes,
-            ShareAll,
-            securityAttributes: 0,
-            OpenExisting,
-            BackupSemantics | OpenReparsePoint,
-            templateFile: 0);
-
-    public static bool TryBasicInfo(SafeFileHandle handle, out FileBasicInfo info) =>
-        GetFileInformationByHandleEx(handle, FileBasicInfoClass, out info, sizeof(FileBasicInfo));
-
-    /// <summary>
-    /// The reparse tag of what <paramref name="handle"/> is open on, which is the link itself where
-    /// it was opened by <see cref="OpenForState"/>. Zero for an entry that carries none.
-    /// </summary>
-    public static bool TryReparseTag(SafeFileHandle handle, out uint tag)
-    {
-        var read = GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out FileAttributeTagInfo info, sizeof(FileAttributeTagInfo));
-        tag = info.ReparseTag;
-        return read;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FileAttributeTagInfo
-    {
-        public uint FileAttributes;
-        public uint ReparseTag;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FileBasicInfo
-    {
-        public long CreationTime;
-        public long LastAccessTime;
-        public long LastWriteTime;
-        public long ChangeTime;
-        public uint FileAttributes;
-    }
 
     /// <summary>The fixed part of <c>CF_PLACEHOLDER_STANDARD_INFO</c>; the file identity follows it.</summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -145,32 +88,6 @@ internal static unsafe partial class CloudFilesNative
         public fixed char FileName[260];
         public fixed char AlternateFileName[14];
     }
-
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial SafeFileHandle CreateFile(
-        string fileName,
-        uint desiredAccess,
-        uint shareMode,
-        nint securityAttributes,
-        uint creationDisposition,
-        uint flagsAndAttributes,
-        nint templateFile);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetFileInformationByHandleEx(
-        SafeFileHandle file,
-        int informationClass,
-        out FileBasicInfo information,
-        int bufferSize);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetFileInformationByHandleEx(
-        SafeFileHandle file,
-        int informationClass,
-        out FileAttributeTagInfo information,
-        int bufferSize);
 
     [LibraryImport("kernel32.dll", EntryPoint = "FindFirstFileExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     public static partial nint FindFirstFileEx(

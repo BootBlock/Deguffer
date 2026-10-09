@@ -38,6 +38,8 @@ public static class MatchCriteriaRules
 
     public static bool GroupsByName(this MatchCriteria criteria) => criteria.HasFlag(MatchCriteria.Name);
 
+    public static bool GroupsByTime(this MatchCriteria criteria) => criteria.HasFlag(MatchCriteria.Modified);
+
     /// <summary>
     /// Whether the bytes are compared, which is what a file not on this device must never be read
     /// for. A cloud file that is online-only can be matched by its name, size or time, and never by

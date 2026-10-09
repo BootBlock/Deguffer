@@ -17,7 +17,7 @@ public sealed record UnreadPlace(string Path, string Reason);
 public sealed record ReadLocation(string Folder, string? RouteNote);
 
 /// <summary>What <see cref="CandidateFinder.FindAsync"/> found, and everything it did not look at.</summary>
-/// <param name="Groups">The files that may match, by what was compared without reading them.</param>
+/// <param name="Groups">The files that may match, by what was compared without reading their content.</param>
 /// <param name="Unsearched">The chosen locations that were not searched, each with its reason.</param>
 /// <param name="PassedOver">The places inside the locations that were passed over, each with its reason.</param>
 /// <param name="Unread">The places inside the locations that could not be read, each with its reason.</param>
@@ -35,16 +35,27 @@ public sealed record CandidateFinding(
     LeftOutFiles LeftOut);
 
 /// <summary>
-/// The first stage of a duplicate search (§7.4): resolves the locations, decides what to pass over,
-/// reads each location's tree and groups the files it keeps by length and name. It reads no file.
+/// The stages of a duplicate search before any content is read (§7.4): resolves the locations,
+/// decides what to pass over, reads each location's tree, keeps the files that may match, and
+/// identifies them, grouped by their length, name and time. It reads no file's content, and opens a
+/// file only for its attributes.
 ///
 /// <para>Orchestration only. <see cref="SearchLocations"/> decides where a location is,
 /// <see cref="ProgramFolders"/> and <see cref="ExploreActionPolicy"/> what is passed over,
+/// <see cref="FileInformation"/> whether a volume's files can be identified,
 /// <see cref="ExploreScanner"/> which route reads a tree, <see cref="CandidateWalk"/> which files are
-/// kept and <see cref="CandidateGrouping"/> how they are grouped.</para>
+/// kept, <see cref="CandidateIdentification"/> which are identified and
+/// <see cref="CandidateGrouping"/> how they are grouped.</para>
+///
+/// <para><b>A volume whose files cannot be identified is not searched</b>, and each location on it
+/// is named with the reason. Without an identity a file reached by two paths cannot be told from two
+/// copies, which is how a finder offers a file as its own duplicate.</para>
 /// </summary>
 public sealed class CandidateFinder
 {
+    private const string Unidentifiable =
+        "Windows would not say which file is which on this drive, so a file reached by two paths could not be told from two copies, and this location was not searched.";
+
     private readonly ExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
     private readonly IUninstallRegistry _registry;
@@ -63,8 +74,9 @@ public sealed class CandidateFinder
     }
 
     /// <param name="files">
-    /// Where each location is opened to learn its final path, so a test can make Windows refuse to
-    /// open one location and see what the search does with the locations around it.
+    /// Where each location is opened to learn its final path and each file to learn its identity, so
+    /// a test can make Windows refuse to open one location or describe one file, or stand for a
+    /// volume that identifies its files by the older call or not at all, and see what the search does.
     /// </param>
     internal CandidateFinder(
         ExploreScanner scanner,
@@ -104,6 +116,8 @@ public sealed class CandidateFinder
 
         var passedOver = search.SearchPassedOverPlaces ? null : new PassedOverPlaces(policy, programs.Folders);
         List<ResolvedLocation> roots = [];
+        List<IdentityRoute> routes = [];
+        List<UnsearchedLocation> unidentifiable = [];
 
         foreach (var root in locations.Roots)
         {
@@ -113,9 +127,17 @@ public sealed class CandidateFinder
             {
                 walk.PassOver(new PassedOverPlace(root.Folder, why));
             }
-            else
+            else if (_files.IdentityRouteOf(root.Folder) is { } route)
             {
                 roots.Add(root);
+                routes.Add(route);
+            }
+            else
+            {
+                // Every location inside it is on the same volume, so none of them can be searched
+                // either, and each is named: a reference among them is one no rule may mark around.
+                unidentifiable.Add(new UnsearchedLocation(root.Given, Unidentifiable));
+                unidentifiable.AddRange(locations.Within(root).Select(inner => new UnsearchedLocation(inner.Given, Unidentifiable)));
             }
         }
 
@@ -123,17 +145,20 @@ public sealed class CandidateFinder
 
         for (var i = 0; i < roots.Count; i++)
         {
-            walk.Read(scans[i], roots[i], locations.Within(roots[i]), passedOver?.Within(roots[i].Folder), ct);
+            walk.Read(scans[i], roots[i], locations.Within(roots[i]), passedOver?.Within(roots[i].Folder), routes[i], ct);
         }
 
+        var identification = new CandidateIdentification(_files, search.Criteria);
+        var groups = identification.Group(walk.Found, ct);
+
         return new CandidateFinding(
-            CandidateGrouping.Group(walk.Found, search.Criteria),
-            locations.Unsearched,
+            groups,
+            [.. locations.Unsearched, .. unidentifiable],
             walk.PassedOver,
             walk.Unread,
             [.. roots.Select((root, i) => new ReadLocation(root.Folder, scans[i].RouteNote))],
             programs.SetAside,
             programs.Unread,
-            walk.LeftOut);
+            walk.LeftOut + identification.LeftOut);
     }
 }

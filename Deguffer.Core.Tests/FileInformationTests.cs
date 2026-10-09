@@ -27,11 +27,13 @@ public sealed class FileInformationTests
 
         Directory.CreateDirectory(LongPath.Extended(deep));
         List<string> opened = [];
-        var information = new FileInformation(path =>
-        {
-            opened.Add(path);
-            return FileInformation.OpenToResolve(path);
-        });
+        var information = new FileInformation(
+            (path, use) =>
+            {
+                opened.Add(path);
+                return FileInformation.Open(path, use);
+            },
+            FileInformation.ReadIdentity);
 
         var final = information.FinalPath(deep);
 
@@ -60,5 +62,64 @@ public sealed class FileInformationTests
         using var temp = new TempDirectory();
 
         Assert.Null(FileInformation.Default.FinalPath(Path.Combine(temp.Path, "Nowhere")));
+    }
+
+    /// <summary>§6.3 for the handle a file is described through, asserted by the form of the path, as above.</summary>
+    [Fact]
+    public void AFileIsDescribedOnThePathInItsExtendedForm()
+    {
+        using var temp = new TempDirectory();
+        var deep = temp.Path;
+
+        while (deep.Length <= 300)
+        {
+            deep = Path.Combine(deep, new string('d', 40));
+        }
+
+        Directory.CreateDirectory(LongPath.Extended(deep));
+        var file = Path.Combine(deep, "a.bin");
+        File.WriteAllBytes(LongPath.Extended(file), new byte[7]);
+        List<string> opened = [];
+        var information = new FileInformation(
+            (path, use) =>
+            {
+                opened.Add(path);
+                return FileInformation.Open(path, use);
+            },
+            FileInformation.ReadIdentity);
+
+        var reading = information.Describe(file, IdentityRoute.FileId);
+
+        Assert.Equal(LongPath.Extended(file), Assert.Single(opened));
+        Assert.Equal(FileReadingResult.Identified, reading.Result);
+        Assert.Equal(7, reading.Description!.Length);
+    }
+
+    [Fact]
+    public void AFileThatIsNotThereIsGone()
+    {
+        using var temp = new TempDirectory();
+
+        Assert.Equal(
+            FileReadingResult.Gone,
+            FileInformation.Default.Describe(Path.Combine(temp.Path, "Nowhere", "a.bin"), IdentityRoute.FileId).Result);
+    }
+
+    /// <summary>Two names of one file are one identity, and the file says it has both.</summary>
+    [Fact]
+    public void TwoNamesOfOneFileShareItsIdentityAndAreBothListed()
+    {
+        using var temp = new TempDirectory();
+        var first = temp.CreateFile(5, "a.bin");
+        var second = HardLink.To(first, Path.Combine(temp.Path, "Other", "b.bin"));
+
+        var one = FileInformation.Default.Describe(first, IdentityRoute.FileId).Description!;
+        var other = FileInformation.Default.Describe(second, IdentityRoute.FileId).Description!;
+
+        Assert.Equal(one.Identity, other.Identity);
+        Assert.Equal(2, one.Names);
+        Assert.Equal(
+            new[] { first, second }.Select(name => LongPath.Display(FileInformation.Default.FinalPath(name)!)).Order(StringComparer.Ordinal),
+            FileInformation.NamesOf(first)!.Order(StringComparer.Ordinal));
     }
 }

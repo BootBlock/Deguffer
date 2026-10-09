@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
-using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Scanning;
 
@@ -28,7 +26,7 @@ namespace Deguffer.Core.Scanning;
 /// each other — so the cheap reading under-reports in the rare case rather than over-reporting in
 /// any, which is the direction §5.4 allows.</para>
 /// </summary>
-public sealed partial class HardLinkAwareScanner : IDirectoryScanner
+public sealed class HardLinkAwareScanner : IDirectoryScanner
 {
     /// <summary>The walk at the shipped values, for a scanner built outside the app (G5).</summary>
     public static readonly HardLinkAwareScanner Default = new(ScanTuner.Shipped);
@@ -222,59 +220,10 @@ public sealed partial class HardLinkAwareScanner : IDirectoryScanner
     /// One file's link count and both sizes, from a single attributes-only handle, or null where
     /// the file could not be opened — which skips the file, under-reporting rather than guessing.
     /// </summary>
-    private static FileStandardInfo? TryQuery(string extendedPath)
+    private static FileInformation.FileStandardInfo? TryQuery(string extendedPath)
     {
-        using var handle = CreateFile(
-            extendedPath,
-            FileReadAttributes,
-            ShareAll,
-            securityAttributes: 0,
-            OpenExisting,
-            OpenReparsePoint,
-            templateFile: 0);
+        using var handle = FileInformation.Open(extendedPath, HandleUse.Describe);
 
-        if (handle.IsInvalid)
-        {
-            return null;
-        }
-
-        return GetFileInformationByHandleEx(
-            handle, FileStandardInfoClass, out var info, Marshal.SizeOf<FileStandardInfo>())
-                ? info
-                : null;
+        return !handle.IsInvalid && FileInformation.TryStandard(handle, out var info) ? info : null;
     }
-
-    private const uint FileReadAttributes = 0x0080;
-    private const uint ShareAll = 0x0007;
-    private const uint OpenExisting = 3;
-    private const uint OpenReparsePoint = 0x0020_0000;
-    private const int FileStandardInfoClass = 1;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct FileStandardInfo
-    {
-        public readonly long AllocationSize;
-        public readonly long EndOfFile;
-        public readonly uint NumberOfLinks;
-        public readonly byte DeletePending;
-        public readonly byte Directory;
-    }
-
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial SafeFileHandle CreateFile(
-        string fileName,
-        uint desiredAccess,
-        uint shareMode,
-        nint securityAttributes,
-        uint creationDisposition,
-        uint flagsAndAttributes,
-        nint templateFile);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetFileInformationByHandleEx(
-        SafeFileHandle file,
-        int informationClass,
-        out FileStandardInfo information,
-        int bufferSize);
 }

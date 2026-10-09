@@ -1,5 +1,4 @@
 using Deguffer.Core.Safety;
-using System.Runtime.InteropServices;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
@@ -46,12 +45,7 @@ public sealed class PnpmStoreProviderTests : IDisposable
     /// <summary>One store file, hard-linked into a "project" outside the store.</summary>
     private void LinkIntoProject(string storeFile)
     {
-        var link = Path.Combine(_temp.Path, "project", "node_modules", Path.GetFileName(storeFile));
-        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
-
-        Assert.True(
-            CreateHardLink(link, storeFile, securityAttributes: 0),
-            $"CreateHardLink failed with error {Marshal.GetLastWin32Error()}.");
+        HardLink.To(storeFile, Path.Combine(_temp.Path, "project", "node_modules", Path.GetFileName(storeFile)));
     }
 
     [Fact]
@@ -285,8 +279,6 @@ public sealed class PnpmStoreProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning);
     }
 
-    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CreateHardLink(string fileName, string existingFileName, nint securityAttributes);
 
     /// <summary>
     /// §7.1 over a store outside pnpm's home, which is where one <c>store-dir</c> moved, or one on a

@@ -1,10 +1,12 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Duplicates;
 
 /// <summary>A file a walk kept, by its place in the tree, so no path is built until it has a match.</summary>
-internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRole Role);
+/// <param name="Route">The route that identifies the files of the volume it was found on.</param>
+internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRole Role, IdentityRoute Route);
 
 /// <summary>
 /// Goes through the tree of one searched location and keeps the files a search may match (§7.4).
@@ -62,7 +64,7 @@ internal sealed class CandidateWalk
 
     public IReadOnlyList<UnreadPlace> Unread => _unread;
 
-    public LeftOutFiles LeftOut => new(_links, _empty, _unknownLength, _onlyInTheCloud);
+    public LeftOutFiles LeftOut => new(_links, _empty, _unknownLength, _onlyInTheCloud, Gone: 0, Unidentified: 0);
 
     /// <summary>Note a place passed over before its tree was read, such as a whole location.</summary>
     public void PassOver(PassedOverPlace place) => _passedOver.Add(place);
@@ -70,11 +72,13 @@ internal sealed class CandidateWalk
     /// <param name="scan">The scan of <paramref name="root"/>'s folder: its tree, and its node in that tree.</param>
     /// <param name="within">The locations inside <paramref name="root"/>, whose roles its files may take.</param>
     /// <param name="below">What to pass over below the root, or null where nothing is passed over.</param>
+    /// <param name="route">The route that identifies the files on the root's volume.</param>
     public void Read(
         ScannedFolder scan,
         ResolvedLocation root,
         IReadOnlyList<ResolvedLocation> within,
         PassedOverPlaces.Below? below,
+        IdentityRoute route,
         CancellationToken ct)
     {
         var tree = scan.Tree;
@@ -117,13 +121,13 @@ internal sealed class CandidateWalk
                 }
                 else
                 {
-                    Consider(tree, child, name, folder.Role);
+                    Consider(tree, child, name, folder.Role, route);
                 }
             }
         }
     }
 
-    private void Consider(ExploreTree tree, int file, string name, LocationRole role)
+    private void Consider(ExploreTree tree, int file, string name, LocationRole role, IdentityRoute route)
     {
         var length = tree.LengthOf(file);
 
@@ -159,7 +163,7 @@ internal sealed class CandidateWalk
             return;
         }
 
-        _found.Add(new FoundFile(tree, file, role));
+        _found.Add(new FoundFile(tree, file, role, route));
     }
 
     /// <summary>
