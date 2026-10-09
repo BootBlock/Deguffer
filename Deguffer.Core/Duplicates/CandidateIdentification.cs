@@ -38,7 +38,7 @@ internal sealed class CandidateIdentification
     }
 
     /// <summary>What this stage left out, to add to what the walk left out.</summary>
-    public LeftOutFiles LeftOut => new(Links: 0, _empty, UnknownLength: 0, _onlyInTheCloud, _gone, _unidentified);
+    public LeftOutFiles LeftOut => new(Links: 0, _empty, UnknownLength: 0, _onlyInTheCloud, _gone, _unidentified, ReadFailed: 0, Changed: 0);
 
     public IReadOnlyList<CandidateGroup> Group(IReadOnlyList<FoundFile> found, CancellationToken ct)
     {

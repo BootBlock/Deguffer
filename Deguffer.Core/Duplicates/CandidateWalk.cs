@@ -64,7 +64,7 @@ internal sealed class CandidateWalk
 
     public IReadOnlyList<UnreadPlace> Unread => _unread;
 
-    public LeftOutFiles LeftOut => new(_links, _empty, _unknownLength, _onlyInTheCloud, Gone: 0, Unidentified: 0);
+    public LeftOutFiles LeftOut => new(_links, _empty, _unknownLength, _onlyInTheCloud, Gone: 0, Unidentified: 0, ReadFailed: 0, Changed: 0);
 
     /// <summary>Note a place passed over before its tree was read, such as a whole location.</summary>
     public void PassOver(PassedOverPlace place) => _passedOver.Add(place);

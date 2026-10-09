@@ -4,8 +4,8 @@ using System.Security.Principal;
 namespace Deguffer.Testing;
 
 /// <summary>
-/// A directory the current account may not read, in one of two ways, or a file whose attributes it
-/// may not read, for the length of a <c>using</c> block.
+/// A directory the current account may not read, in one of two ways, or a file whose attributes or
+/// whose data it may not read, for the length of a <c>using</c> block.
 ///
 /// <para>Three rules in the suite are about what happens when the filesystem refuses — §5.3's
 /// "treat access denied as normal and skip silently", the reach an enumerating route does not have,
@@ -78,6 +78,30 @@ public sealed class DeniedDirectory : IDisposable
     public static DeniedDirectory WithUnreadableFile(string file) =>
         new(new FileInfo(file), Path.GetDirectoryName(file)
             ?? throw new ArgumentException("A file has a directory holding it.", nameof(file)));
+
+    /// <summary>
+    /// Refuse the right to read the data of the file at <paramref name="file"/>, and nothing else, so
+    /// it can still be described through a handle opened for its attributes alone, which is a file
+    /// that is plainly there and still cannot be read.
+    /// </summary>
+    public static DeniedDirectory WithUnreadableContent(string file)
+    {
+        var denied = new DeniedDirectory();
+
+        denied.Build(() =>
+        {
+            denied.Deny(new FileInfo(file), FileSystemRights.ReadData);
+
+            Assert.Throws<UnauthorizedAccessException>(() => File.ReadAllBytes(file));
+            File.GetAttributes(file);
+        });
+
+        return denied;
+    }
+
+    private DeniedDirectory()
+    {
+    }
 
     public void Dispose()
     {

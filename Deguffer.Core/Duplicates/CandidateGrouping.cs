@@ -129,7 +129,10 @@ internal static class CandidateGrouping
             description.Length,
             description.Modified,
             StorageOf(first),
-            paths.Any(path => path.Found.Role == LocationRole.Reference) ? LocationRole.Reference : LocationRole.Search);
+            paths.Any(path => path.Found.Role == LocationRole.Reference) ? LocationRole.Reference : LocationRole.Search)
+        {
+            Route = first.Found.Route,
+        };
     }
 
     /// <summary>

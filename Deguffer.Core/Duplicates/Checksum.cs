@@ -37,7 +37,7 @@ public readonly record struct ContentChecksum
 /// </summary>
 internal abstract class Checksum : IDisposable
 {
-    private protected Checksum(ChecksumAlgorithm algorithm) => Algorithm = algorithm;
+    protected Checksum(ChecksumAlgorithm algorithm) => Algorithm = algorithm;
 
     public ChecksumAlgorithm Algorithm { get; }
 

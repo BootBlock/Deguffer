@@ -152,6 +152,20 @@ internal sealed unsafe partial class FileInformation
                 : FileReading.Unreadable;
         }
 
+        return Describe(handle, route);
+    }
+
+    /// <summary>
+    /// The file <paramref name="handle"/> is open on, described as <see cref="Describe(string, IdentityRoute)"/>
+    /// describes a path, or <see cref="FileReadingResult.Unreadable"/> where Windows would not say.
+    /// Never <see cref="FileReadingResult.Gone"/>: a file held open is there.
+    ///
+    /// <para>For a handle already held, such as one opened to read a file's content, so the file
+    /// read can be checked to be the file that was described by its path, through the handle the
+    /// bytes came from rather than a path that can name another file by then.</para>
+    /// </summary>
+    public FileReading Describe(SafeFileHandle handle, IdentityRoute route)
+    {
         if (!_identify(handle, route, out var identity)
             || !TryStandard(handle, out var standard)
             || !TryBasic(handle, out var basic)
