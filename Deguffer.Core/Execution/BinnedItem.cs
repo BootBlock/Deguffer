@@ -27,24 +27,20 @@ internal sealed class BinnedItem : IFileOperationProgressSink
             return 0;
         }
 
+        // An item with no path in the file system leaves the answer unknown, which a caller reads as a
+        // move it cannot confirm, never as one it can.
+        if (created.GetDisplayName(FileSystemPath, out var name) < 0)
+        {
+            return 0;
+        }
+
         try
         {
-            created.GetDisplayName(FileSystemPath, out var name);
-
-            try
-            {
-                Path = Marshal.PtrToStringUni(name);
-            }
-            finally
-            {
-                Marshal.FreeCoTaskMem(name);
-            }
+            Path = Marshal.PtrToStringUni(name);
         }
-        catch (COMException)
+        finally
         {
-            // An item with no path in the file system leaves the answer unknown, which a caller reads
-            // as a move it cannot confirm, never as one it can.
-            Path = null;
+            Marshal.FreeCoTaskMem(name);
         }
 
         return 0;

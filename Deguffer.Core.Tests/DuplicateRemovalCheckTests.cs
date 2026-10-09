@@ -3,6 +3,7 @@ using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
+using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Tests;
 
@@ -150,6 +151,87 @@ public sealed class DuplicateRemovalCheckTests : DuplicateRemovalScene
 
         Assert.Equal(RemovalCheck.Removed, outcome.Check);
         Assert.False(File.Exists(copy));
+    }
+
+    /// <summary>
+    /// An attribute changed since the search, which leaves the bytes and the times alone: only the
+    /// check that the copy's attributes are as the search found them stops it.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public void ACopyWhoseAttributesChangedAfterTheSearchIsNotRemoved(ExploreRemovalMode mode)
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+
+        File.SetAttributes(copy.Path, File.GetAttributes(copy.Path) | FileAttributes.Hidden);
+
+        var outcome = Assert.Single(Remove(marks, mode).Copies);
+
+        Assert.Equal(RemovalCheck.Changed, outcome.Check);
+        Assert.True(File.Exists(copy.Path));
+    }
+
+    /// <summary>
+    /// Sharing refuses a write while the copies are compared, not a change to their attributes. The
+    /// copy is hidden at the moment the copy kept is described again after the comparison, which is
+    /// the last description before the removal, so only that final check stops it.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public void ACopyChangedWhileItWasComparedIsNotRemoved(ExploreRemovalMode mode)
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        var removing = false;
+        var described = 0;
+        var files = new FileInformation(
+            FileInformation.Open,
+            (SafeFileHandle handle, IdentityRoute route, out FileIdentity identity) =>
+            {
+                // After the copy to remove is opened: its own description, then the copy kept's
+                // after the comparison, then the copy's own again.
+                if (removing && ++described == 2)
+                {
+                    File.SetAttributes(copy.Path, File.GetAttributes(copy.Path) | FileAttributes.Hidden);
+                }
+
+                return FileInformation.ReadIdentity(handle, route, out identity);
+            });
+
+        var outcome = Assert.Single(Remove(marks, mode, files: files, open: (extended, use) =>
+        {
+            removing |= use is HeldFor.Removing;
+            return FileInformation.OpenHeld(extended, use);
+        }).Copies);
+
+        Assert.True(described >= 2, "The copy kept was never described again after the comparison.");
+        Assert.Equal(RemovalCheck.Changed, outcome.Check);
+        Assert.True(File.Exists(copy.Path));
+    }
+
+    /// <summary>
+    /// The shell refuses the extended-length prefix §6.3 requires everywhere else, so the Recycle
+    /// Bin is handed the copy's path in its display form.
+    /// </summary>
+    [Fact]
+    public void TheRecycleBinIsHandedThePathInTheFormTheShellParses()
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        var bin = FakeRecycleBin.MovingTo(Bin);
+
+        Assert.True(Assert.Single(Remove(marks, ExploreRemovalMode.RecycleBin, bin: bin).Copies).Removed);
+        Assert.Equal([copy.Path], bin.Paths);
+        Assert.DoesNotContain(@"\?\", bin.Paths[0], StringComparison.Ordinal);
     }
 
     /// <summary>

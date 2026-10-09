@@ -138,7 +138,14 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         var marks = Marks([kept, copy]);
         Mark(marks, copy);
 
-        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: new FakeRecycleBin());
+        var bin = new FakeRecycleBin(path =>
+        {
+            Directory.CreateDirectory(Bin);
+            File.Move(path, Path.Combine(Bin, "moved.bin"));
+            return new RecycleOutcome(Removed: true);
+        });
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: bin);
 
         Assert.Equal(RemovalCheck.BinUnconfirmed, Assert.Single(report.Copies).Check);
         Assert.NotNull(report.StoppedAt);
