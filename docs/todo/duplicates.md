@@ -532,24 +532,30 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   neither call identifies is not searched, with each location on it named, a reference included.
   Corrected here: named streams are listed in phase 5 through the held handle, not at search time
   by path; the FAT and exFAT measurement moves to phase 9, which runs elevated.
-
 - 2026-10-09: phase 3 landed. Checksums behind one running `Checksum` over System.IO.Hashing and
   `IncrementalHash`, each pinned to a published vector, SHA3-256 offered only where Windows has it
   (`ChecksumAlgorithms`); a content seam (`ContentReader`) that describes the path through the
-  attributes-only handle and leaves an online-only file out unopened, opens the content by its
-  file ID through that held handle, sharing only reading, and describes it again through that handle before the first byte and after the last
-  (`FileInformation.Describe` of a held handle), counting a failed read and a changed file apart
-  from a gone one (`LeftOutFiles`); staged matching (`ContentMatching`) of the first and last
-  64 KiB, then the whole of larger files, read in lanes by physical disk (`ReadingLanes`: one
-  reader unless solid state, four there); and the searcher (`DuplicateSearcher`), which streams
-  each `DuplicateGroup` and reports progress by stage. Decided: a stop while reading content
-  answers what was confirmed, marked stopped, even where that is nothing, and a stop before the
-  candidates were all found throws; a group whose last read finishes after the stop is not
-  confirmed. Measured: a warm walk of a system drive took a median 6,578 ms, of which the places
-  passed over by default took 2,701 ms (41%, and 661,852 of 2.49 M entries), so the walk is now told
-  what to pass over (`PassedOverBelow`, asked by both the walk and the candidate walk) and leaves
-  it unlisted; the file table, read whole anyway, ignores it. Corrected here: CRC-32's byte order,
-  the throughput figures and the placeholder mode, in the technical facts above.
+  attributes-only handle, leaves an online-only file out unopened, opens the content by its file
+  ID through that held handle (`FileInformation.Hold`, `FileInformation.OpenById`) sharing only
+  reading, and describes it again through the content handle before the first byte and after the
+  last, counting a failed read and a changed file apart from a gone one (`LeftOutFiles`); staged
+  matching (`ContentMatching`) of the first and last 64 KiB, then the whole of larger files, read
+  in lanes by physical disk (`ReadingLanes`: one reader unless solid state, four there), each file
+  carrying the volume its location was resolved to; and the searcher (`DuplicateSearcher`), which
+  streams each `DuplicateGroup` and reports progress by stage. Decided: content is opened by file
+  ID, because a path open follows any link put on the path after the description and can reach a
+  share or recall a cloud file before a check could stop it; where Windows will not open a file by
+  its ID, the path is opened only on a volume that answered that it holds no reparse points and is
+  reached by its own drive letter (`LocalVolume.CannotHoldLinks`), a volume that would not answer
+  never qualifying, and otherwise the read fails; a stop while reading content answers what was
+  confirmed, marked stopped, even where that is nothing, and a stop before the candidates were all
+  found throws; a group whose last read finishes after the stop is not confirmed. Measured: a warm
+  walk of a system drive took a median 6,578 ms, of which the places passed over by default took
+  2,701 ms (41%, and 661,852 of 2.49 M entries), so the walk is now told what to pass over
+  (`PassedOverBelow`, asked by both the walk and the candidate walk) and leaves it unlisted; the
+  file table, read whole anyway, ignores it. Corrected here: CRC-32's byte order, the throughput
+  figures, the placeholder mode, and how the content is opened (by file ID, not `File.OpenHandle`
+  on the path), in the technical facts above.
 
 ## Limits that stay open
 
