@@ -170,6 +170,66 @@ public sealed class DuplicateSearcherTests : IDisposable
             new DuplicateSearch(MatchCriteria.Content, [Searched("Data")]), _tree.Policy(), ct: stop.Token));
     }
 
+    /// <summary>
+    /// What the content stage leaves out is counted through the search, each in its own count and
+    /// added to what finding the candidates left out: a file held by another program and one whose
+    /// data is refused are failed reads, one whose time moves before it is read has changed, one
+    /// deleted has gone, and one Windows will no longer describe is unidentified, never gone.
+    /// </summary>
+    [Fact]
+    public async Task WhatTheContentStageLeavesOutIsCountedThroughTheSearch()
+    {
+        var content = Random(5000, 7);
+        _tree.File(content, "Data", "a.bin");
+        _tree.File(content, "Data", "b.bin");
+        var locked = _tree.File(content, "Data", "locked.bin");
+        var refused = _tree.File(content, "Data", "refused.bin");
+        _tree.File(content, "Data", "changes.bin");
+        _tree.File(content, "Data", "vanishes.bin");
+        _tree.File(content, "Data", "Shut", "undescribed.bin");
+        _tree.File(0, "Data", "empty.bin");
+        using var held = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        using var denied = DeniedDirectory.WithUnreadableContent(refused);
+        DeniedDirectory? undescribed = null;
+
+        try
+        {
+            var result = await _tree.Searcher((file, part, checksum, ct) =>
+            {
+                switch (file.Name)
+                {
+                    case "changes.bin":
+                        File.SetLastWriteTimeUtc(file.Path, file.Modified.AddSeconds(1));
+                        break;
+
+                    case "vanishes.bin":
+                        File.Delete(file.Path);
+                        break;
+
+                    case "undescribed.bin":
+                        undescribed = DeniedDirectory.WithUnreadableFile(file.Path);
+                        break;
+                }
+
+                return ContentReader.Default.Read(file, part, checksum, ct);
+            }).SearchAsync(new DuplicateSearch(MatchCriteria.Content, [Searched("Data")]), _tree.Policy());
+
+            Assert.Equal(["a.bin", "b.bin"], Assert.Single(result.Groups).Files.Select(file => file.Name).Order());
+            Assert.Equal(2, result.LeftOut.ReadFailed);
+            Assert.Equal(1, result.LeftOut.Changed);
+            Assert.Equal(1, result.LeftOut.Gone);
+            Assert.Equal(1, result.LeftOut.Unidentified);
+            Assert.Equal(1, result.LeftOut.Empty);
+            Assert.Equal(
+                new LeftOutFiles(Links: 0, Empty: 1, UnknownLength: 0, OnlyInTheCloud: 0, Gone: 1, Unidentified: 1, ReadFailed: 2, Changed: 1),
+                result.LeftOut);
+        }
+        finally
+        {
+            undescribed?.Dispose();
+        }
+    }
+
     /// <summary>Progress names each content stage it reaches, with the files it reads.</summary>
     [Fact]
     public async Task ProgressNamesEachStage()
