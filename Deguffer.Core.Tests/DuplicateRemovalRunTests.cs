@@ -152,6 +152,40 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
     }
 
     /// <summary>
+    /// Windows deleting a copy outright when asked to move it to the bin stops the run, and the copy
+    /// is said to be gone and not in the bin, never moved there or still in place. §5.6 does not count
+    /// it as a loss beside it, since the report names it.
+    /// </summary>
+    [Fact]
+    public void ACopyWindowsDeletedOutrightStopsTheRunAndIsNotSaidToBeInTheBin()
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var keptB = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
+        var copyB = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        var marks = Marks([kept, copy], [keptB, copyB]);
+        Mark(marks, copy);
+        Mark(marks, copyB);
+
+        var bin = new FakeRecycleBin(path =>
+        {
+            File.Delete(path);
+            return new RecycleOutcome(Removed: true, "Deleted outright.") { DeletedOutright = true };
+        });
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: bin);
+
+        var first = report.Copies.Single(outcome => outcome.Check is RemovalCheck.DeletedOutright);
+        Assert.Same(first, report.StoppedAt);
+        Assert.Contains("outright", first.Message);
+        Assert.Equal(RemovalCheck.NotReached, report.Copies.Single(outcome => outcome != first).Check);
+        Assert.Empty(report.Removed);
+        Assert.DoesNotContain(first, report.Kept);
+        Assert.True(report.Verification.Passed);
+        Assert.DoesNotContain("Moved", report.Summary);
+    }
+
+    /// <summary>
     /// A folder that is case-sensitive holds the copy <c>a.bin</c> and a different file, <c>A.bin</c>.
     /// A bin that takes both must fail §5.6, which compares every name exactly: compared without regard
     /// to case, the removed <c>a.bin</c> would stand in for the lost <c>A.bin</c>.

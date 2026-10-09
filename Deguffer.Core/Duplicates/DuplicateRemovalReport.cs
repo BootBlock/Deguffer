@@ -61,6 +61,12 @@ public enum RemovalCheck
     /// </summary>
     BinUnconfirmed,
 
+    /// <summary>
+    /// Windows deleted it outright when it was asked to move it to the Recycle Bin, so it is gone and
+    /// not in the bin to restore. The run stops.
+    /// </summary>
+    DeletedOutright,
+
     /// <summary>The run stopped before it reached this copy, cancelled or at a copy the bin could not be shown to have taken.</summary>
     NotReached,
 }
@@ -71,8 +77,17 @@ public sealed record CopyRemoval(DuplicateCandidate Copy, RemovalCheck Check, st
 {
     public bool Removed => Check == RemovalCheck.Removed;
 
-    /// <summary>Whether this copy stops the run, because the bin cannot be shown to hold the file compared.</summary>
-    public bool StopsTheRun => Check is RemovalCheck.BinReceivedAnother or RemovalCheck.BinUnconfirmed;
+    /// <summary>
+    /// Whether the copy is gone from where it was: removed as the confirmation said, or deleted
+    /// outright by Windows in place of the bin, which §5.6 then does not count as a loss beside it.
+    /// </summary>
+    public bool Went => Check is RemovalCheck.Removed or RemovalCheck.DeletedOutright;
+
+    /// <summary>
+    /// Whether this copy stops the run, because the bin cannot be shown to hold the file compared, or
+    /// Windows deleted it outright instead.
+    /// </summary>
+    public bool StopsTheRun => Check is RemovalCheck.BinReceivedAnother or RemovalCheck.BinUnconfirmed or RemovalCheck.DeletedOutright;
 }
 
 /// <summary>What one duplicate removal did, and the §5.6 evidence that it did no more.</summary>
@@ -89,7 +104,7 @@ public sealed record DuplicateRemovalReport(
 {
     public IReadOnlyList<CopyRemoval> Removed => [.. Copies.Where(copy => copy.Removed)];
 
-    public IReadOnlyList<CopyRemoval> Kept => [.. Copies.Where(copy => !copy.Removed)];
+    public IReadOnlyList<CopyRemoval> Kept => [.. Copies.Where(copy => !copy.Went)];
 
     /// <summary>The copy at which the run stopped because the bin could not be shown to hold the file compared, if any.</summary>
     public CopyRemoval? StoppedAt => Copies.FirstOrDefault(copy => copy.StopsTheRun);

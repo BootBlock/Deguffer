@@ -209,10 +209,10 @@ public sealed class DuplicateRemover
             }
         }
 
-        HashSet<FileIdentity> removed = [.. outcomes.Where(outcome => outcome.Removed).Select(outcome => outcome.Copy.Identity)];
+        HashSet<FileIdentity> removed = [.. outcomes.Where(outcome => outcome.Went).Select(outcome => outcome.Copy.Identity)];
         List<VerificationCheck> checks =
         [
-            .. siblings.Verify(outcomes.Where(outcome => outcome.Removed).Select(outcome => outcome.Copy.Path)),
+            .. siblings.Verify(outcomes.Where(outcome => outcome.Went).Select(outcome => outcome.Copy.Path)),
             .. survivors.Verify(removed),
         ];
 
@@ -307,6 +307,13 @@ public sealed class DuplicateRemover
         {
             return new CopyRemoval(copy, RemovalCheck.BinRefused,
                 $"{recycled.Message ?? "Windows would not move it to the Recycle Bin."} Deguffer never deletes a copy outright in its place.");
+        }
+
+        if (recycled.DeletedOutright)
+        {
+            return new CopyRemoval(copy, RemovalCheck.DeletedOutright,
+                $"Windows deleted '{copy.Path}' outright rather than moving it to the Recycle Bin, so it cannot be restored "
+                + "from there, and Deguffer stopped.");
         }
 
         if (recycled.Binned is not { } binned)

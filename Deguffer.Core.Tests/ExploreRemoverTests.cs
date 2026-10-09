@@ -56,6 +56,35 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// An item Windows deleted outright when asked to move it to the bin is said to be gone and not in
+    /// the bin, so the user does not look for it there, while one the bin took is still said to be in it.
+    /// </summary>
+    [Fact]
+    public async Task AnItemWindowsDeletedOutrightIsNotSaidToBeInTheBin()
+    {
+        var lost = _temp.CreateFile(64, "profile", "Downloads", "lost.bin");
+        var binned = _temp.CreateFile(32, "profile", "Downloads", "binned.bin");
+        var bin = new FakeRecycleBin(path =>
+        {
+            File.Delete(path);
+            return path == lost
+                ? new RecycleOutcome(Removed: true, "Deleted outright.") { DeletedOutright = true }
+                : new RecycleOutcome(Removed: true);
+        });
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(lost, IsDirectory: false, Bytes: 64), new ExploreItem(binned, IsDirectory: false, Bytes: 32)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin);
+
+        Assert.True(report.Verification.Passed);
+        Assert.Contains("Moved 'binned.bin' (32 B) to the Recycle Bin.", report.Summary);
+        Assert.Contains("Windows deleted 'lost.bin' (64 B) outright rather than moving it to the Recycle Bin", report.Summary);
+        Assert.True(report.Removed.Single(item => item.Path == lost).DeletedOutright);
+    }
+
+    /// <summary>
     /// §6.3, at the one boundary in Core that requires the <em>opposite</em> form from all the
     /// others: the shell namespace refuses <c>\\?\</c>, so what crosses here is the display path —
     /// but still fully qualified and fully resolved, because a value carrying a <c>.</c> or
