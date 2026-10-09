@@ -36,7 +36,7 @@ internal static class OutlookDataFiles
     /// Matched by name at any depth rather than resolved, because OneDrive and folder redirection
     /// both move Documents, and a refusal resolved against the default would miss the moved one.
     /// </summary>
-    private const string SavedDataFilesFolder = "Outlook Files";
+    internal const string SavedDataFilesFolder = "Outlook Files";
 
     /// <summary>Why Explore will not remove <paramref name="target"/>, or null where this rule has nothing to say.</summary>
     /// <param name="target">A path already through <see cref="LongPath.Configured(string?)"/>.</param>

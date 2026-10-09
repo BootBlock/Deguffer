@@ -94,9 +94,19 @@ public static partial class LongPath
     /// appending another would build a prefix nothing can match — so a caller asking whether
     /// something is under a whole volume would be told no.</para>
     /// </summary>
-    public static bool Contains(string ancestor, string candidate)
+    public static bool Contains(string ancestor, string candidate) =>
+        Contains(ancestor, candidate, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <see cref="Contains(string, string)"/>, comparing the text by <paramref name="comparison"/>.
+    ///
+    /// <para>For a caller holding paths in the case the disk holds, such as the final path of an
+    /// opened handle, where <see cref="StringComparison.Ordinal"/> is right: NTFS lets a folder be
+    /// case-sensitive, and there <c>Photos</c> does not hold <c>photos\a</c>.</para>
+    /// </summary>
+    public static bool Contains(string ancestor, string candidate, StringComparison comparison)
     {
-        if (candidate.Equals(ancestor, StringComparison.OrdinalIgnoreCase))
+        if (candidate.Equals(ancestor, comparison))
         {
             return true;
         }
@@ -106,7 +116,7 @@ public static partial class LongPath
                 ? ancestor
                 : ancestor + Path.DirectorySeparatorChar;
 
-        return candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        return candidate.StartsWith(prefix, comparison);
     }
 
     /// <summary>

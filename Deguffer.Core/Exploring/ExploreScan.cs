@@ -44,6 +44,27 @@ public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, Fallba
 }
 
 /// <summary>
+/// One folder of <see cref="ExploreScanner.ScanFoldersAsync"/>: the tree its content is in, and the
+/// node of that tree that is the folder.
+///
+/// <para>The tree is shared where the file table answered, because one read of a volume answers for
+/// every folder on it, so <paramref name="Node"/> is not always the tree's root, and a caller reads
+/// the folder from it rather than from <see cref="ExploreTree.RootNode"/>.</para>
+/// </summary>
+/// <param name="FromIncompleteTable">
+/// Whether the folder was found in a file table that was not read whole, or that held a record the
+/// read could not place. Such a record might have been anywhere, this folder included, so what the
+/// tree holds for the folder may be short. False for a walked folder, whose tree names each folder
+/// it was refused (<see cref="ExploreTree.ListingWasRefused"/>).
+/// </param>
+public sealed record ScannedFolder(
+    ExploreTree Tree, int Node, ScanStrategy Strategy, FallbackReason Fallback, bool FromIncompleteTable)
+{
+    /// <summary>The sentence to show about the route the folder was read by, or null when nothing needs saying.</summary>
+    public string? RouteNote => ExploreRouteText.Describe(Strategy, Fallback);
+}
+
+/// <summary>
 /// What to tell the user about the route an Explore scan took.
 ///
 /// <para>Separate from <see cref="FallbackReasonText"/>, which says the opposite thing for good

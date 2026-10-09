@@ -82,4 +82,52 @@ internal sealed class RegionTable
 
         return innermost;
     }
+
+    /// <summary>
+    /// Every path a region that covers what is below it is reachable at, refusing or permitting:
+    /// the only folders at which <see cref="RefusingAtAndBelow"/> can answer differently for a folder
+    /// than for the one holding it.
+    /// </summary>
+    public IEnumerable<string> BoundaryPlaces =>
+        _regions
+            .Where(r => r.Region.Scope == RegionScope.PathAndBelow)
+            .SelectMany(r => r.Folder.Places);
+
+    /// <summary>
+    /// The refusal that holds for <paramref name="place"/> and everything in it, or null where none
+    /// does: the innermost region covering what is below it refuses, and no permitting region inside
+    /// <paramref name="place"/> carves part of it back out. The Users folder is refused, and the
+    /// signed-in profile inside it is not, so the Users folder is not refused with everything in it.
+    /// </summary>
+    /// <param name="place">One path the item is reachable at, in <see cref="ReachedFolder.Comparable"/> form.</param>
+    public ExploreVerdict? RefusingAtAndBelow(string place)
+    {
+        ProtectedRegion? innermost = null;
+        int? levels = null;
+
+        foreach (var (region, folder) in _regions)
+        {
+            if (region.Scope != RegionScope.PathAndBelow
+                || folder.LevelsTo(place) is not { } below
+                || below >= levels)
+            {
+                continue;
+            }
+
+            innermost = region;
+            levels = below;
+        }
+
+        if (innermost is not { Verdict.IsAllowed: false } refusing)
+        {
+            return null;
+        }
+
+        var carvedOut = _regions.Any(r =>
+            r.Region.Verdict.IsAllowed
+            && r.Folder.Places.Any(inside =>
+                LongPath.Contains(place, inside) && !inside.Equals(place, StringComparison.OrdinalIgnoreCase)));
+
+        return carvedOut ? null : refusing.Verdict;
+    }
 }

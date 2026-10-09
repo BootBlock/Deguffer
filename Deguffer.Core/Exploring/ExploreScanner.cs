@@ -69,6 +69,133 @@ public sealed class ExploreScanner(
         return await Task.Run(() => Scan(root, progress, ct), ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Scan each of <paramref name="folders"/>, reading each volume's file table once however many
+    /// of them are on it, and walking where the table cannot answer.
+    ///
+    /// <para><b>One read per volume, because each read is the whole table.</b>
+    /// <see cref="MftExploreReader.Read"/> cannot reach a folder without reading every record, so
+    /// asking it once per folder would read a volume as many times as a search names folders on it.
+    /// The tree is rooted at the volume's top and each folder is found in it.</para>
+    ///
+    /// <para>Where the route is chosen stays here, for the reason <see cref="ScanAsync"/> chooses
+    /// it: a caller asking about several folders has no more business knowing there are two routes
+    /// than one asking about a single folder.</para>
+    /// </summary>
+    /// <param name="folders">Full paths of folders, in either form <see cref="Safety.LongPath"/> produces.</param>
+    /// <returns>One scan per folder, in the order they were asked for.</returns>
+    public async ValueTask<IReadOnlyList<ScannedFolder>> ScanFoldersAsync(
+        IReadOnlyList<string> folders,
+        IProgress<ExploreProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(folders);
+
+        return await Task.Run(() => ScanFolders(folders, progress, ct), ct).ConfigureAwait(false);
+    }
+
+    private ScannedFolder[] ScanFolders(IReadOnlyList<string> folders, IProgress<ExploreProgress>? progress, CancellationToken ct)
+    {
+        var scans = new ScannedFolder?[folders.Count];
+        var reasons = new FallbackReason[folders.Count];
+        var onVolumes = new Dictionary<char, List<(int Index, VolumePath Path)>>();
+
+        _tuning.Invalidate();
+
+        for (var i = 0; i < folders.Count; i++)
+        {
+            if (!VolumePath.TryParse(folders[i], out var volume))
+            {
+                reasons[i] = FallbackReason.VolumeNotAddressable;
+                continue;
+            }
+
+            if (!onVolumes.TryGetValue(volume.DriveLetter, out var held))
+            {
+                onVolumes[volume.DriveLetter] = held = [];
+            }
+
+            held.Add((i, volume));
+        }
+
+        foreach (var (letter, held) in onVolumes)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var (tree, reason, everyRecordRead) = ReadVolume(letter, progress, ct);
+
+            foreach (var (index, volume) in held)
+            {
+                if (tree is null)
+                {
+                    reasons[index] = reason;
+                    continue;
+                }
+
+                var located = MftExploreReader.Locate(tree, volume.Components);
+
+                if (located.Node is { } node)
+                {
+                    scans[index] = new ScannedFolder(
+                        tree, node, ScanStrategy.MasterFileTable, FallbackReason.None,
+                        FromIncompleteTable: !everyRecordRead);
+                }
+                else
+                {
+                    reasons[index] = located.Reason;
+                }
+            }
+        }
+
+        for (var i = 0; i < folders.Count; i++)
+        {
+            if (scans[i] is null)
+            {
+                var walked = Walk(folders[i], reasons[i], progress, ct);
+                scans[i] = new ScannedFolder(
+                    walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback, FromIncompleteTable: false);
+            }
+        }
+
+        return [.. scans.Select(scan => scan!)];
+    }
+
+    /// <summary>
+    /// The whole of the volume at <paramref name="letter"/> read from its file table into a tree
+    /// rooted at its top, or null and why the table could not answer, and whether every record in
+    /// use was read and placed (<see cref="MftExploreRead.EveryRecordRead"/>).
+    /// </summary>
+    private (ExploreTree? Tree, FallbackReason Reason, bool EveryRecordRead) ReadVolume(
+        char letter, IProgress<ExploreProgress>? progress, CancellationToken ct)
+    {
+        if (_tuning.WalkOnly)
+        {
+            return (null, FallbackReason.WalkChosen, false);
+        }
+
+        if (_sources.TryOpen(letter, out var reason) is not { } source)
+        {
+            return (null, reason, false);
+        }
+
+        using (source)
+        {
+            try
+            {
+                var top = new VolumePath(letter, [], $"{letter}:{Path.DirectorySeparatorChar}");
+                var read = Read(source, top, _tuning.ForVolume(letter).Table, progress, ct);
+
+                return (read.Tree, read.Reason, read.EveryRecordRead);
+            }
+            catch (IOException)
+            {
+                // The volume went away mid-read, or the driver refused a read. Neither should end
+                // the search, and the walk still answers for every folder on the volume.
+                return (null, FallbackReason.MasterFileTableIncomplete, false);
+            }
+        }
+    }
+
     private ExploreScan Scan(string root, IProgress<ExploreProgress>? progress, CancellationToken ct)
     {
         if (!VolumePath.TryParse(root, out var volume))

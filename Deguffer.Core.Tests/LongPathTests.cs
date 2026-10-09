@@ -28,6 +28,22 @@ public class LongPathTests
         string ancestor, string candidate, bool expected) =>
         Assert.Equal(expected, LongPath.Contains(ancestor, candidate));
 
+    /// <summary>
+    /// A case-sensitive folder can hold <c>Photos</c> and <c>photos</c>, which are two folders, so a
+    /// caller comparing paths in the case the disk holds asks ordinally, and is answered so.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Photos", @"C:\photos\a", false)]
+    [InlineData(@"C:\Photos", @"C:\photos", false)]
+    [InlineData(@"C:\Photos", @"C:\Photos\a", true)]
+    [InlineData(@"C:\Photos", @"C:\Photos", true)]
+    [InlineData(@"C:\", @"C:\Photos", true)]
+    public void ContainsComparesByTheComparisonItIsGiven(string ancestor, string candidate, bool expected)
+    {
+        Assert.Equal(expected, LongPath.Contains(ancestor, candidate, StringComparison.Ordinal));
+        Assert.True(LongPath.Contains(ancestor, candidate), "the two-argument form ignores case");
+    }
+
     [Fact]
     public void PrefixesALocalPathForTheWin32DeviceNamespace() =>
         Assert.Equal(@"\\?\C:\Users\me\.gradle", LongPath.Extended(@"C:\Users\me\.gradle"));

@@ -45,6 +45,11 @@ namespace Deguffer.Core.Scanning.Mft;
 /// Why the file occupies less than its length, as far as anything says. Explains
 /// <paramref name="Size"/> and never decides it.
 /// </param>
+/// <param name="Visibility">
+/// Whether the entry is hidden or a system file, from the same <c>$STANDARD_INFORMATION</c> the
+/// dates and the storage come from, so the table answers it for nothing more than the read it
+/// already makes.
+/// </param>
 public readonly record struct MftRecord(
     uint ParentRecordNumber,
     string Name,
@@ -53,7 +58,8 @@ public readonly record struct MftRecord(
     bool IsReparsePoint,
     long CreatedFileTime,
     long LastWrittenFileTime,
-    FileStorage Storage = FileStorage.Plain)
+    FileStorage Storage = FileStorage.Plain,
+    FileVisibility Visibility = FileVisibility.Shown)
 {
     /// <summary>
     /// The root directory always occupies record 5. Path resolution starts here, and the root is

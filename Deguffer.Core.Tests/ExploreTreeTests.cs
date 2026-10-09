@@ -245,6 +245,7 @@ public class ExploreTreeTests
             sizeUnknown: [false, false, false, false, false, false],
             created: new ExploreTimestamp[6],
             modified: new ExploreTimestamp[6],
+            visibility: new FileVisibility[6],
             present: [true, true, true, true, true, false],
             childOrder: ExploreChildOrder.BySize);
 

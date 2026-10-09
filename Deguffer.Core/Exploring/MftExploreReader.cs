@@ -16,7 +16,13 @@ namespace Deguffer.Core.Exploring;
 /// Whether every record in use was read. Where it is false the tree is drawn from part of the table,
 /// and its root says its totals are lower bounds.
 /// </param>
-internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason Reason, bool WholeTable);
+/// <param name="EveryRecordRead">
+/// Whether every record in use was read and placed: <paramref name="WholeTable"/>, and no record the
+/// pass could not read. A record it could not read might have been anywhere on the volume, so where
+/// this is false no folder in the tree can be taken to hold all it holds, however whole the table
+/// read was.
+/// </param>
+internal readonly record struct MftExploreRead(ExploreTree? Tree, FallbackReason Reason, bool WholeTable, bool EveryRecordRead);
 
 /// <summary>
 /// Builds an <see cref="ExploreTree"/> straight from a volume's master file table — §5.5's fast
@@ -101,6 +107,10 @@ internal static class MftExploreReader
         var created = new ExploreTimestamp[count];
         var modified = new ExploreTimestamp[count];
 
+        // A byte a record, which is the whole cost: the attributes come from the
+        // $STANDARD_INFORMATION the dates are already read from.
+        var visibility = new FileVisibility[count];
+
         var present = new bool[count];
 
         Array.Fill(names, string.Empty);
@@ -164,6 +174,7 @@ internal static class MftExploreReader
                 sizeUnknown[number] = record.Size is null;
                 created[number] = ExploreTimestamp.FromFileTime(record.CreatedFileTime);
                 modified[number] = ExploreTimestamp.FromFileTime(record.LastWrittenFileTime);
+                visibility[number] = record.Visibility;
                 present[number] = true;
 
                 return true;
@@ -182,7 +193,8 @@ internal static class MftExploreReader
         var resolved = Resolve(components, names, parents, isDirectory, isLink, present, count);
         if (resolved.Node is not { } root)
         {
-            return new MftExploreRead(Tree: null, resolved.Reason, !couldNotReadWholeTable);
+            return new MftExploreRead(
+                Tree: null, resolved.Reason, !couldNotReadWholeTable, !couldNotReadWholeTable && !sawUnreadableRecord);
         }
 
         // The scan's root carries the path the user chose rather than the name NTFS holds for it —
@@ -207,9 +219,10 @@ internal static class MftExploreReader
         return new MftExploreRead(
             ExploreTree.Create(
                 rootPath, root, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-                created, modified, present, ExploreChildOrder.BySize),
+                created, modified, visibility, present, ExploreChildOrder.BySize),
             FallbackReason.None,
-            !couldNotReadWholeTable);
+            !couldNotReadWholeTable,
+            !couldNotReadWholeTable && !sawUnreadableRecord);
     }
 
     /// <summary>
@@ -230,19 +243,74 @@ internal static class MftExploreReader
         bool[] isDirectory,
         bool[] isLink,
         bool[] present,
-        int count)
+        int count) =>
+        Descend(
+            components,
+            (int)MftRecord.RootRecordNumber,
+            node => isLink[node],
+            node => isDirectory[node],
+            (directory, name) => FindChild(directory, name, names, parents, present, count));
+
+    /// <summary>
+    /// The node of <paramref name="tree"/>, a tree rooted at its volume's top, that holds the folder
+    /// <paramref name="components"/> name, or why the table cannot answer for it: the two failures
+    /// <see cref="Resolve"/> tells apart, for the same reasons.
+    ///
+    /// <para>For a caller that read the table once to answer for several folders, so the folders are
+    /// found in the tree rather than in the arrays it was built from, which the tree has taken.</para>
+    ///
+    /// <para><b>Each name matched exactly, with no fallback to one that differs only in case.</b> The
+    /// caller's folders are final paths, which carry the case the disk holds, so a name that matches
+    /// only when case is ignored is another folder: in a case-sensitive directory, <c>photos</c> beside
+    /// a <c>Photos</c> the table did not place. Taking it would read one folder's content under the
+    /// other's name, and a search naming both would list that content twice. A folder found no other
+    /// way is walked.</para>
+    /// </summary>
+    public static (int? Node, FallbackReason Reason) Locate(ExploreTree tree, IReadOnlyList<string> components) =>
+        Descend(
+            components,
+            tree.RootNode,
+            tree.IsLink,
+            tree.IsDirectory,
+            (directory, name) => ExactChild(tree, directory, name));
+
+    private static int? ExactChild(ExploreTree tree, int directory, string name)
     {
-        var current = (int)MftRecord.RootRecordNumber;
+        foreach (var child in tree.ChildrenOf(directory))
+        {
+            if (tree.NameOf(child).Equals(name, StringComparison.Ordinal))
+            {
+                return child;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Follow <paramref name="components"/> down from <paramref name="start"/>, asking each step's
+    /// child of <paramref name="childNamed"/>: the one descent <see cref="Resolve"/> and
+    /// <see cref="Locate"/> share, which says how the table fails to answer as <see cref="Resolve"/>
+    /// describes. A link anywhere on the way, the folder itself included, is a route that never
+    /// existed; anything else missing is one that was lost.
+    /// </summary>
+    private static (int? Node, FallbackReason Reason) Descend(
+        IReadOnlyList<string> components,
+        int start,
+        Func<int, bool> isLink,
+        Func<int, bool> isDirectory,
+        Func<int, string, int?> childNamed)
+    {
+        var current = start;
 
         foreach (var component in components)
         {
-            if (isLink[current])
+            if (isLink(current))
             {
                 return (null, FallbackReason.None);
             }
 
-            if (!isDirectory[current]
-                || FindChild(current, component, names, parents, present, count) is not { } next)
+            if (!isDirectory(current) || childNamed(current, component) is not { } next)
             {
                 return (null, FallbackReason.MasterFileTableIncomplete);
             }
@@ -250,12 +318,12 @@ internal static class MftExploreReader
             current = next;
         }
 
-        if (isLink[current])
+        if (isLink(current))
         {
             return (null, FallbackReason.None);
         }
 
-        return isDirectory[current]
+        return isDirectory(current)
             ? (current, FallbackReason.None)
             : (null, FallbackReason.MasterFileTableIncomplete);
     }

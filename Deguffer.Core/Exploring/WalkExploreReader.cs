@@ -53,14 +53,15 @@ internal static class WalkExploreReader
                 {
                     // §5.3 keeps the walk quiet about this, and it stays quiet — but the bytes
                     // behind a refused directory are real, so the totals above it are marked as
-                    // lower bounds rather than presented as measurements.
+                    // lower bounds rather than presented as measurements, and the directory is
+                    // named, so a caller going through its files can tell it from an empty one.
                     //
                     // Whatever was listed before the refusal is still recorded below rather than
                     // discarded. Enumeration can fail part way through, and the entries already in
                     // hand are as real as any others — dropping them would make the picture worse
                     // and the total shorter for no gain, and it is what the file-callback walk
                     // does with them too.
-                    builder.MarkSizeUnknown(parent);
+                    builder.MarkListingRefused(parent);
                 }
 
                 var children = Describe(contents, probe);
@@ -107,7 +108,9 @@ internal static class WalkExploreReader
         foreach (var entry in contents.Entries)
         {
             children.Add(entry.IsDirectory
-                ? new ExploreChild(entry.Name, IsDirectory: true, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry))
+                ? new ExploreChild(
+                    entry.Name, IsDirectory: true, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
+                    Visibility: VisibilityOf(entry))
                 : File(entry, probe));
         }
 
@@ -121,7 +124,8 @@ internal static class WalkExploreReader
             // right answer for the same reason the size is zero: the target is somewhere else in
             // this tree, carrying its own.
             children.Add(new ExploreChild(
-                link.Name, IsDirectory: true, IsLink: true, Size: 0, CreatedOf(link), WrittenOf(link)));
+                link.Name, IsDirectory: true, IsLink: true, Size: 0, CreatedOf(link), WrittenOf(link),
+                Visibility: VisibilityOf(link)));
         }
 
         // Drawn like any other file, as the file table draws them. Leaving them out drew nothing for
@@ -147,7 +151,9 @@ internal static class WalkExploreReader
     {
         if (!StorageAttributes.MayDifferFromLength(entry.Attributes))
         {
-            return new ExploreChild(entry.Name, IsDirectory: false, IsLink: false, entry.Length, CreatedOf(entry), WrittenOf(entry));
+            return new ExploreChild(
+                entry.Name, IsDirectory: false, IsLink: false, entry.Length, CreatedOf(entry), WrittenOf(entry),
+                Visibility: VisibilityOf(entry));
         }
 
         var storage = StorageAttributes.Of(entry.Attributes);
@@ -155,19 +161,22 @@ internal static class WalkExploreReader
         return probe.Measure(entry.FullName, entry.Attributes) switch
         {
             { IsLink: true } => new ExploreChild(
-                entry.Name, IsDirectory: false, IsLink: true, Size: 0, CreatedOf(entry), WrittenOf(entry), Length: 0),
+                entry.Name, IsDirectory: false, IsLink: true, Size: 0, CreatedOf(entry), WrittenOf(entry), Length: 0,
+                Visibility: VisibilityOf(entry)),
             { } occupied => new ExploreChild(
                 entry.Name, IsDirectory: false, IsLink: false, occupied.Bytes, CreatedOf(entry), WrittenOf(entry),
-                entry.Length, storage),
+                entry.Length, storage, Visibility: VisibilityOf(entry)),
             null => new ExploreChild(
                 entry.Name, IsDirectory: false, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
-                entry.Length, storage, SizeUnknown: true),
+                entry.Length, storage, SizeUnknown: true, VisibilityOf(entry)),
         };
     }
 
     private static ExploreTimestamp CreatedOf(WalkEntry entry) => ExploreTimestamp.FromUtc(entry.CreationTimeUtc);
 
     private static ExploreTimestamp WrittenOf(WalkEntry entry) => ExploreTimestamp.FromUtc(entry.LastWriteTimeUtc);
+
+    private static FileVisibility VisibilityOf(WalkEntry entry) => FileVisibilities.Of(entry.Attributes);
 
     /// <summary>When the root was made, or unknown where nothing could say.</summary>
     private static ExploreTimestamp Created(DirectoryInfo root) =>

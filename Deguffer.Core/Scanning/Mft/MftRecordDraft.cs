@@ -211,7 +211,8 @@ internal struct MftRecordDraft
         var isReparsePoint = _isReparsePoint && list?.Lost.HasFlag(MftAttributeKinds.ReparsePoint) != true;
 
         result = new MftRecord(
-            _parent, _name, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten, StorageOf(isDirectory));
+            _parent, _name, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten, StorageOf(isDirectory),
+            FileVisibilities.Of(_attributes));
         return MftParseOutcome.Parsed;
     }
 
