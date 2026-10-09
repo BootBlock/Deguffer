@@ -210,7 +210,7 @@ internal sealed class ContentReader
         // Another program holding the file without sharing it for reading, or an access rule that
         // refuses its data, is refused by number as it would be by path, so only whether a link can
         // be on the way decides whether the path may be tried.
-        if (!MayOpenByPath(file))
+        if (!file.NoLinkOnItsPath)
         {
             return null;
         }
@@ -228,19 +228,11 @@ internal sealed class ContentReader
     }
 
     /// <summary>
-    /// Whether no link can be anywhere on the file's path: its volume answered that it supports no
-    /// reparse points, and the path starts at that volume's own root rather than in a folder of the
-    /// volume it is mounted in, whose folders can be links.
-    /// </summary>
-    private static bool MayOpenByPath(DuplicateCandidate file) =>
-        file.Volume.CannotHoldLinks && HostVolume.IsMountPoint(file.Volume.RootPath, Path.GetPathRoot(file.Path)!);
-
-    /// <summary>
     /// Why a file as described now must not be read, or have its reading kept, or null where it is
     /// still the file the search identified, on this device.
     /// </summary>
     /// <param name="attributes">The attributes described before the content was opened, which must not have changed since.</param>
-    private static ContentReadResult? Judge(FileReading reading, DuplicateCandidate file, FileAttributes? attributes)
+    internal static ContentReadResult? Judge(FileReading reading, DuplicateCandidate file, FileAttributes? attributes)
     {
         switch (reading.Result)
         {

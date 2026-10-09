@@ -61,6 +61,21 @@ public sealed class FakeRecycleBin : IRecycleBin
         return new RecycleOutcome(Removed: true);
     });
 
+    /// <summary>
+    /// A bin that moves the item into <paramref name="bin"/> under a new name and says where, as the
+    /// shell's progress sink does: a move on one volume, which keeps the file's ID.
+    /// </summary>
+    /// <param name="alongside">Run on the item's path before it is moved, to take or change something else as the bin does.</param>
+    public static FakeRecycleBin MovingTo(string bin, Action<string>? alongside = null) => new(path =>
+    {
+        alongside?.Invoke(path);
+        Directory.CreateDirectory(bin);
+        var binned = Path.Combine(bin, $"$R{Guid.NewGuid():N}{Path.GetExtension(path)}");
+        File.Move(path, binned);
+
+        return new RecycleOutcome(Removed: true) { Binned = binned };
+    });
+
     /// <summary>A bin that refuses, as the shell does for a path it will not parse.</summary>
     public static FakeRecycleBin Refusing(string message) =>
         new(_ => new RecycleOutcome(Removed: false, message));

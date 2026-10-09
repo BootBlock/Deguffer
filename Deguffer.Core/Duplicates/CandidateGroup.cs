@@ -64,6 +64,21 @@ public sealed record DuplicateCandidate(
     /// can exist on the way to it, rather than each asking the machine again for each file.
     /// </summary>
     internal LocalVolume Volume { get; init; }
+
+    /// <summary>
+    /// Its attributes when it was identified, which a removal finds unchanged before the copy goes,
+    /// as it finds its identity, length and last-modified time (§7.4).
+    /// </summary>
+    internal FileAttributes Attributes { get; init; }
+
+    /// <summary>
+    /// Whether no link can be anywhere on the file's path: its volume answered that it supports no
+    /// reparse points, and the path starts at that volume's own root rather than in a folder of the
+    /// volume it is mounted in, whose folders can be links. Only then may the file be opened by its
+    /// path where Windows will not open it by its number.
+    /// </summary>
+    internal bool NoLinkOnItsPath =>
+        Volume.CannotHoldLinks && HostVolume.IsMountPoint(Volume.RootPath, System.IO.Path.GetPathRoot(Path)!);
 }
 
 /// <summary>

@@ -685,6 +685,30 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// In a case-sensitive folder, <c>a.bin</c> and <c>A.bin</c> are two files. A removal of the first
+    /// that also takes the second fails §5.6, which compares every name exactly: compared without
+    /// regard to case, the removed <c>a.bin</c> would excuse the lost <c>A.bin</c>.
+    /// </summary>
+    [Fact]
+    public async Task ANeighbourWhoseNameDiffersOnlyInCaseIsStillAsserted()
+    {
+        var folder = CaseSensitiveFolder.Create(Path.Combine(_temp.Path, "profile", "Exact"));
+        var target = _temp.CreateFile(8, "profile", "Exact", "a.bin");
+        _temp.CreateFile(8, "profile", "Exact", "A.bin");
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            FakeRecycleBin.TakingAlso("A.bin"));
+
+        Assert.True(Directory.Exists(folder));
+        Assert.Contains(
+            report.Verification.Failures,
+            c => c.Detail.Contains("'A.bin'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A same-named neighbour in a different folder is not excused.
     ///
     /// <para>The removed set is keyed by whole path rather than by leaf name. Pooling the names

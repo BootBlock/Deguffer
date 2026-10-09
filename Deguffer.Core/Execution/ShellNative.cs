@@ -80,7 +80,7 @@ internal interface IShellItem
 }
 
 /// <summary>
-/// The shell's file-operation engine. <c>SetOperationFlags</c>, <c>DeleteItem</c>,
+/// The shell's file-operation engine. <c>Advise</c>, <c>SetOperationFlags</c>, <c>DeleteItem</c>,
 /// <c>PerformOperations</c> and <c>GetAnyOperationsAborted</c> are called; the rest hold their
 /// vtable slots.
 /// </summary>
@@ -89,7 +89,7 @@ internal interface IShellItem
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IFileOperation
 {
-    void Advise(IntPtr sink, out uint cookie);
+    void Advise(IFileOperationProgressSink sink, out uint cookie);
 
     void Unadvise(uint cookie);
 

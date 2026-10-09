@@ -17,6 +17,9 @@ public enum RunningAction
 
     /// <summary>Programs being uninstalled, one at a time, on the Installed apps page.</summary>
     Uninstall,
+
+    /// <summary>A removal of the copies marked on the Duplicates page.</summary>
+    DuplicateRemoval,
 }
 
 /// <summary>

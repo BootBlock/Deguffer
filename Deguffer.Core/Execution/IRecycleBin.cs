@@ -10,7 +10,15 @@ namespace Deguffer.Core.Execution;
 /// it will not recycle onto a volume with no bin — and "nothing happened" with no sentence beside it
 /// is the answer a user cannot act on.
 /// </param>
-public sealed record RecycleOutcome(bool Removed, string? Message = null);
+public sealed record RecycleOutcome(bool Removed, string? Message = null)
+{
+    /// <summary>
+    /// Where the bin put the item, as the shell said once it had moved it, or null where the shell
+    /// did not say. A duplicate removal identifies what is there, to check that the file the bin
+    /// received is the file it compared (§7.4).
+    /// </summary>
+    public string? Binned { get; init; }
+}
 
 /// <summary>
 /// Moving one item to the Recycle Bin, behind an interface for the reason
@@ -119,7 +127,10 @@ public sealed class ShellRecycleBin : IRecycleBin
             operation = Activator.CreateInstance(Type.GetTypeFromCLSID(FileOperationClass)!);
             var file = (IFileOperation)operation!;
 
+            var binned = new BinnedItem();
+
             file.SetOperationFlags(OperationFlags);
+            file.Advise(binned, out _);
             file.DeleteItem(item, IntPtr.Zero);
             file.PerformOperations();
             file.GetAnyOperationsAborted(out var aborted);
@@ -128,7 +139,7 @@ public sealed class ShellRecycleBin : IRecycleBin
                 ? new RecycleOutcome(
                     Removed: false,
                     "Windows stopped before moving this to the Recycle Bin.")
-                : new RecycleOutcome(Removed: true);
+                : new RecycleOutcome(Removed: true) { Binned = binned.Path };
         }
         catch (COMException ex)
         {

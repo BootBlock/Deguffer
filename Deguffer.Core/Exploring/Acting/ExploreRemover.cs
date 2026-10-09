@@ -183,7 +183,7 @@ public static class ExploreRemover
         // it. The caller is a shell resuming on the UI thread after its own dialog, and this listing
         // is of a folder that may hold two hundred thousand entries. Everything after this stays on
         // the pool, because every await below is ConfigureAwait(false).
-        var before = await Task.Run(() => Containers(allowed, fs), ct).ConfigureAwait(false);
+        var before = await Task.Run(() => SiblingCheck.Take(allowed.Select(item => item.Path), fs), ct).ConfigureAwait(false);
 
         var outcomes = new List<ExploreItemOutcome>(items.Count);
         var cancelled = false;
@@ -217,7 +217,7 @@ public static class ExploreRemover
 
         outcomes.AddRange(refused);
 
-        return new ExploreRemovalReport(mode, outcomes, Verify(before, outcomes, fs), cancelled);
+        return new ExploreRemovalReport(mode, outcomes, Verify(before, outcomes), cancelled);
     }
 
     /// <summary>
@@ -381,100 +381,21 @@ public static class ExploreRemover
     }
 
     /// <summary>
-    /// The immediate contents of every directory a removal will take something out of, by name.
+    /// §5.6: the folder each item was taken out of and everything beside it, by exact name
+    /// (<see cref="SiblingCheck"/>), and every Outlook data file the removal left inside an item.
     ///
-    /// <para>Names rather than paths, and one listing per container rather than one probe per
-    /// sibling: a folder in a size picture can hold two hundred thousand entries, and §5.6's
-    /// question — did anything <em>else</em> go? — is answered by comparing two listings, not by
-    /// asking the disk about each of them twice.</para>
+    /// <para>The second sibling assertion is the one that bites. Asserting the target went away is
+    /// half a test, and it is the half an over-broad removal passes.</para>
     /// </summary>
-    private static Dictionary<string, IReadOnlyList<string>?> Containers(
-        IReadOnlyList<ExploreItem> items, IFileSystem fs)
+    private static VerificationResult Verify(SiblingCheck before, IReadOnlyList<ExploreItemOutcome> outcomes)
     {
-        var containers = new Dictionary<string, IReadOnlyList<string>?>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var item in items)
-        {
-            if (Path.GetDirectoryName(item.Path) is not { } parent || containers.ContainsKey(parent))
-            {
-                continue;
-            }
-
-            containers[parent] = Names(parent, fs);
-        }
-
-        return containers;
-    }
-
-    private static IReadOnlyList<string>? Names(string directory, IFileSystem fs)
-    {
-        try
-        {
-            return [.. fs.EnumerateEntries(LongPath.Extended(directory)).Select(e => Path.GetFileName(e.FullName))];
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Nothing rather than a partial view, on ChildDirectories.Under's reasoning: half a
-            // listing would let a missing sibling read as one that was never there.
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// §5.6. Two assertions per containing directory: that it is still there, and that everything
-    /// beside the removed items is still in it.
-    ///
-    /// <para>The second is the one that bites. Asserting the target went away is half a test, and
-    /// it is the half an over-broad removal passes.</para>
-    /// </summary>
-    private static VerificationResult Verify(
-        Dictionary<string, IReadOnlyList<string>?> before,
-        IReadOnlyList<ExploreItemOutcome> outcomes,
-        IFileSystem fs)
-    {
-        // Keyed by the whole path rather than by the leaf name. Pooling names across containers
-        // excuses a same-named sibling somewhere else: with 'projA\bin' removed, a removal that also
-        // took 'projB\bin' would pass, and that is exactly the over-broad case this check exists
-        // for.
-        var removed = outcomes
-            .Where(o => o.Removed)
-            .Select(o => o.Path)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var checks = new List<VerificationCheck>(before.Count * 2);
-
-        foreach (var (parent, names) in before)
-        {
-            // No outcome here is ever VerificationOutcome.RemovedFromOutside, and that is a property
-            // of this flow rather than an omission: the "before" listing is taken immediately before
-            // the removal, so there is no preview sitting on screen for the machine to change under.
-            // What PlanVerifier has to disentangle cannot arise.
-            checks.Add(Survival(
-                parent,
-                "The folder the item was taken out of must survive.",
-                fs.ProbeDirectory(LongPath.Extended(parent)),
-                "MISSING — it was there before the removal."));
-
-            // A listing that never happened is recorded as a failure rather than as a pass. §5.6
-            // is what turns "I think it worked" into evidence, and filing a non-assertion as
-            // evidence is the one thing that undoes it — the more so here, because a passing report
-            // says nothing at all, so the sentence explaining that this folder was never read would
-            // reach nobody.
-            checks.Add(names is null
-                ? new VerificationCheck(
-                    parent,
-                    "Everything beside the removed item must survive.",
-                    VerificationOutcome.Failed,
-                    "NOT ESTABLISHED — this folder would not list its contents, so nothing beside "
-                    + "the removed item could be checked.")
-                : SiblingsSurvived(parent, names, removed, fs));
-        }
+        List<VerificationCheck> checks = [.. before.Verify(outcomes.Where(o => o.Removed).Select(o => o.Path))];
 
         // §9's stores, asserted by path. They were inside the item rather than beside it, so neither
         // check above is about them, and a removal that took one would otherwise pass.
         foreach (var store in outcomes.SelectMany(o => o.MailStores))
         {
-            checks.Add(Survival(
+            checks.Add(SiblingCheck.Survival(
                 store,
                 "An Outlook data file inside the removed item must survive.",
                 LongPath.ProbeFile(store),
@@ -482,55 +403,5 @@ public static class ExploreRemover
         }
 
         return new VerificationResult { Checks = checks };
-    }
-
-    /// <summary>
-    /// One path's survival. A path Windows will not describe afterwards is a check that could not be
-    /// made, as <see cref="PlanVerifier"/> reports it: reading it as missing claims a deletion nobody
-    /// saw, and reading it as a survivor claims what nobody saw either.
-    /// </summary>
-    private static VerificationCheck Survival(string path, string reason, PathPresence after, string missing) =>
-        after switch
-        {
-            PathPresence.Present => new VerificationCheck(path, reason, VerificationOutcome.Survived, "Still present."),
-            PathPresence.Refused => new VerificationCheck(
-                path,
-                reason,
-                VerificationOutcome.Unverified,
-                "NOT CHECKED — it was there before the removal, and Windows would not describe it "
-                + "afterwards, so nothing shows whether it survived."),
-            _ => new VerificationCheck(path, reason, VerificationOutcome.Failed, missing),
-        };
-
-    private static VerificationCheck SiblingsSurvived(
-        string parent,
-        IReadOnlyList<string> before,
-        HashSet<string> removed,
-        IFileSystem fs)
-    {
-        const string Reason = "Everything beside the removed item must survive.";
-
-        if (Names(parent, fs) is not { } after)
-        {
-            return new VerificationCheck(
-                parent, Reason, VerificationOutcome.Failed,
-                "Could not be checked: this folder listed its contents before the removal and would "
-                + "not afterwards.");
-        }
-
-        bool WasRemoved(string name) => removed.Contains(Path.Combine(parent, name));
-
-        var standing = after.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var missing = before.Where(n => !WasRemoved(n) && !standing.Contains(n)).ToList();
-        var expected = before.Count(n => !WasRemoved(n));
-
-        return missing.Count == 0
-            ? new VerificationCheck(
-                parent, Reason, VerificationOutcome.Survived,
-                $"All {expected} other item(s) are still there.")
-            : new VerificationCheck(
-                parent, Reason, VerificationOutcome.Failed,
-                $"MISSING — {missing.Count} of {expected} other item(s) went too, starting with "
-                + $"'{string.Join("', '", missing.Take(3))}'.");
     }
 }
