@@ -136,7 +136,9 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   holds as the sum of its items' lengths, and takes a drive's top, a folder on it, the extended form
   of either, or the volume's `\?\Volume{GUID}\` name alike; the limit is the `MaxCapacity` number,
   in megabytes, under the account's `Explorer\BitBucket\Volume\{GUID}` key, with `NukeOnDelete`
-  beside it for a bin set to keep nothing (`RecycleBinRooms`). Whether
+  beside it for a bin set to keep nothing (`RecycleBinRooms`). The measurement ran in a 64-bit
+  process, where `SHQUERYRBINFO` is 24 bytes with the size at offset 8; the 20-byte layout a 32-bit
+  process uses, packed as the SDK header packs it there, is **(unverified)**. Whether
   `IFileOperation`'s progress sink hands back the item it put in the bin, so that its file ID can be
   read, is **(unverified)**.
 - **Deleting through a handle.** `SetFileInformationByHandle` with `FileDispositionInfoEx` deletes
@@ -503,7 +505,9 @@ holds hard links, a junction loop, a substituted drive, a case-sensitive folder,
 long path, an empty file, a locked file, a reference folder, a file the bin cannot take and, where
 the machine has one, a OneDrive online-only file. Attach a scratch disk with a FAT32 and an exFAT
 volume, measure whether each answers `FileIdInfo` or only the older call, and whether a file keeps
-its ID across a rename and a move, record it under the technical facts, and search both. Measure a
+its ID across a rename and a move, record it under the technical facts, and search both. Read a
+Recycle Bin's size from the x86 build, which asks for it with the packed 20-byte `SHQUERYRBINFO`
+that only a 32-bit process can confirm, and record it there too. Measure a
 search of a real drive and record the figures here, redacted. Update `README.md`. Flip this banner to complete, move this file to `done/`
 with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link becomes
 `done/duplicates.md`), and close #297.
@@ -594,8 +598,14 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   volume whose files cannot be identified, and one at or inside a place passed over or not read,
   but not one that was searched and holds such a place, since every whole drive holds one; a
   reference named so stops every rule while marking by hand stays open; a rule adds to the marks there are, and a keep
-  rule breaks a tie by the shorter path, then the path's text; the freed figure is what the copies
-  occupy, as Windows reports it. Measured: what a bin holds and its limit, in the technical facts.
+  rule breaks a tie by the shorter path, then the path's text; the space shown is what the copies
+  occupy, as Windows reports it, which a removal may free less than, since shared clusters count in
+  full and the Recycle Bin frees nothing until it is emptied (§7.4 reworded); the confirmation
+  judges the marks again against the machine as it is then (`DuplicateMarks.RejudgeAsync`,
+  `RemovalConfirmation.ForAsync`), keeping every mark; a program folder, like a place Storage
+  cleans, is asked as named and at the final path a link on the way leads to, and an entry that
+  leads to a folder naming no program is set aside; neither is opened on a share, a network drive
+  or a cloud drive to follow it (`ResolvedPlaces.FollowedTo`). Measured: what a bin holds and its limit, in the technical facts.
   Corrected here: step 1 (not the tool roots), the internal-drive test, and the facts on the
   Recycle Bin and on provider targets.
 
