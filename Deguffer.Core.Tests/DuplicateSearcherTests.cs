@@ -107,9 +107,10 @@ public sealed class DuplicateSearcherTests : IDisposable
     /// <summary>
     /// Stopped while the first and last blocks are read, the search keeps the groups it confirmed and
     /// says it stopped. Each group of small files is confirmed as soon as both are read, and the
-    /// drive's disks are unknown, so one file is read at a time: the stop comes as the third group's
-    /// first file is read, after two groups were confirmed. No read starts after it, and no group is
-    /// confirmed after it.
+    /// drive's disks are unknown, so one file is read at a time: the stop comes as the second group's
+    /// second file is read, after the first group was confirmed. The read it came during completes
+    /// the second group, which is not confirmed, because the search was stopped by then. No read
+    /// starts after it.
     /// </summary>
     [Fact]
     public async Task AStopWhileReadingBlocksKeepsWhatWasConfirmedAndStartsNoMoreReads()
@@ -121,10 +122,10 @@ public sealed class DuplicateSearcherTests : IDisposable
             _tree.File(content, "Data", $"{length}-b.bin");
         }
 
-        var (result, readsAfterTheStop, confirmedAfterTheStop) = await StopAtRead(5, MatchCriteria.Content);
+        var (result, readsAfterTheStop, confirmedAfterTheStop) = await StopAtRead(4, MatchCriteria.Content);
 
         Assert.True(result.Stopped);
-        Assert.Equal([4000L, 3000L], result.Groups.Select(group => group.Length!.Value));
+        Assert.Equal([4000L], result.Groups.Select(group => group.Length!.Value));
         Assert.Equal(0, readsAfterTheStop);
         Assert.Equal(0, confirmedAfterTheStop);
     }
