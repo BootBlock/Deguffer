@@ -6,7 +6,11 @@ namespace Deguffer.Core.Duplicates;
 
 /// <summary>A file a walk kept, by its place in the tree, so no path is built until it has a match.</summary>
 /// <param name="Route">The route that identifies the files of the volume it was found on.</param>
-internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRole Role, IdentityRoute Route);
+/// <param name="Volume">
+/// The volume it was found on: its location's, as the search resolved it, because the enumeration of
+/// a location never crosses into a volume mounted in one of its folders.
+/// </param>
+internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRole Role, IdentityRoute Route, LocalVolume Volume);
 
 /// <summary>
 /// Goes through the tree of one searched location and keeps the files a search may match (§7.4).
@@ -114,13 +118,13 @@ internal sealed class CandidateWalk
                 }
                 else
                 {
-                    Consider(tree, child, name, folder.Role, route);
+                    Consider(tree, child, name, folder.Role, route, root.Volume);
                 }
             }
         }
     }
 
-    private void Consider(ExploreTree tree, int file, string name, LocationRole role, IdentityRoute route)
+    private void Consider(ExploreTree tree, int file, string name, LocationRole role, IdentityRoute route, LocalVolume volume)
     {
         var length = tree.LengthOf(file);
 
@@ -156,7 +160,7 @@ internal sealed class CandidateWalk
             return;
         }
 
-        _found.Add(new FoundFile(tree, file, role, route));
+        _found.Add(new FoundFile(tree, file, role, route, volume));
     }
 
     /// <summary>

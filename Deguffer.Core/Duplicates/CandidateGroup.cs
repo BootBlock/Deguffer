@@ -50,6 +50,13 @@ public sealed record DuplicateCandidate(
     /// width, so the same file would read as a different one.
     /// </summary>
     internal IdentityRoute Route { get; init; }
+
+    /// <summary>
+    /// The volume the file is on, as the search resolved the location it was found in: the one
+    /// answer every later stage reads, for the disk its content is read from and for whether a link
+    /// can exist on the way to it, rather than each asking the machine again for each file.
+    /// </summary>
+    internal LocalVolume Volume { get; init; }
 }
 
 /// <summary>

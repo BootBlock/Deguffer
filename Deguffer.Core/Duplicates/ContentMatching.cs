@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Duplicates;
@@ -30,7 +29,6 @@ internal sealed class ContentMatching
     private const long ReportEveryMilliseconds = 100;
 
     private readonly ReadContent _read;
-    private readonly IVolumeInventory _volumes;
     private readonly VolumeMediaCache _media;
     private readonly Lock _confirming = new();
 
@@ -40,10 +38,9 @@ internal sealed class ContentMatching
     private int _readFailed;
     private int _changed;
 
-    public ContentMatching(ReadContent read, IVolumeInventory volumes, VolumeMediaCache media)
+    public ContentMatching(ReadContent read, VolumeMediaCache media)
     {
         _read = read;
-        _volumes = volumes;
         _media = media;
     }
 
@@ -100,8 +97,7 @@ internal sealed class ContentMatching
 
         var lanes = ReadingLanes.Of(
             groups.SelectMany((group, g) => group.Select((file, f) => (Group: g, File: f))),
-            item => groups[item.Group][item.File].Path,
-            _volumes,
+            item => groups[item.Group][item.File].Volume,
             _media);
 
         try

@@ -17,6 +17,9 @@ public sealed class DuplicateIdentityTests : IDisposable
 {
     private const int AccessDenied = 5;
 
+    /// <summary>The drive of the trees these tests build by hand, which no test reads from.</summary>
+    private static readonly LocalVolume DriveX = new(@"X:\", DriveType.Fixed, VolumeReadiness.Ready);
+
     private readonly DuplicateTree _tree = new();
 
     public void Dispose() => _tree.Dispose();
@@ -359,7 +362,7 @@ public sealed class DuplicateIdentityTests : IDisposable
         var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
 
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
-            new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId),
+            new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, DriveX),
             new FileDescription(new FileIdentity(1, (UInt128)number), Path.Combine(@"X:\Data", name), 100, 1, DateTime.UnixEpoch, attributes, ReparseTag: 0));
 
         var files = Assert.Single(CandidateGrouping.ByTheFiles(

@@ -132,6 +132,7 @@ internal static class CandidateGrouping
             paths.Any(path => path.Found.Role == LocationRole.Reference) ? LocationRole.Reference : LocationRole.Search)
         {
             Route = first.Found.Route,
+            Volume = first.Found.Volume,
         };
     }
 

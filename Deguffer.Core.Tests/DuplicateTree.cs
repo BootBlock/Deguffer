@@ -82,7 +82,7 @@ internal sealed class DuplicateTree : IDisposable
     /// </summary>
     /// <param name="read">Reads each file's content, for a test that counts, holds or stops the reads.</param>
     public DuplicateSearcher Searcher(ReadContent? read = null) =>
-        new(Finder(), Volumes, new VolumeMediaCache(new FakeStorageQueries()), read ?? ContentReader.Default.Read);
+        new(Finder(), new VolumeMediaCache(new FakeStorageQueries()), read ?? ContentReader.Default.Read);
 
     public Task<CandidateFinding> FindAsync(DuplicateSearch search) => Finder().FindAsync(search, Policy());
 

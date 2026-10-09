@@ -94,7 +94,7 @@ public sealed class ContentMatchingTests
     }
 
     private static ContentMatching Matching(FakeStorageQueries queries, ReadContent read) =>
-        new(read, new FakeVolumeInventory().With(@"X:\").With(@"Y:\"), new VolumeMediaCache(queries));
+        new(read, new VolumeMediaCache(queries));
 
     private static CandidateGroup Group(string root, long length, int files) =>
         new(length, null, null, [.. Enumerable.Range(0, files).Select(i => File(Path.Combine(root, $"{length}-{i}.bin"), length))]);
@@ -108,7 +108,10 @@ public sealed class ContentMatchingTests
         length,
         DateTime.UnixEpoch,
         FileStorage.Plain,
-        LocationRole.Search);
+        LocationRole.Search)
+    {
+        Volume = new LocalVolume(Path.GetPathRoot(path)!, DriveType.Fixed, VolumeReadiness.Ready),
+    };
 
     /// <summary>Every file the same, so every group matches and nothing about the reads depends on content.</summary>
     private static ContentReading Same(Checksum checksum)

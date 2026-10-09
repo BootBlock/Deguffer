@@ -33,23 +33,17 @@ internal static class ReadingLanes
     /// </summary>
     public const int SolidStateReaders = 4;
 
-    /// <param name="pathOf">The path of the file an item reads, which places it on its volume.</param>
-    public static IReadOnlyList<ReadingLane<T>> Of<T>(
-        IEnumerable<T> items,
-        Func<T, string> pathOf,
-        IVolumeInventory volumes,
-        VolumeMediaCache media)
+    /// <param name="volumeOf">
+    /// The volume of the file an item reads, as the search resolved it
+    /// (<see cref="DuplicateCandidate.Volume"/>), so no file sends a question to the machine.
+    /// </param>
+    public static IReadOnlyList<ReadingLane<T>> Of<T>(IEnumerable<T> items, Func<T, LocalVolume> volumeOf, VolumeMediaCache media)
     {
         Dictionary<string, (LocalVolume Volume, List<T> Files)> byVolume = new(StringComparer.OrdinalIgnoreCase);
-        List<T> nowhere = [];
 
         foreach (var item in items)
         {
-            if (HostVolume.For(volumes, pathOf(item)) is not { } volume)
-            {
-                nowhere.Add(item);
-                continue;
-            }
+            var volume = volumeOf(item);
 
             if (!byVolume.TryGetValue(volume.RootPath, out var held))
             {
@@ -59,23 +53,14 @@ internal static class ReadingLanes
             held.Files.Add(item);
         }
 
-        List<ReadingLane<T>> lanes = [];
-
-        foreach (var shared in SharingADisk([.. byVolume.Values.Select(held => (held.Volume, media.Of(held.Volume)))]))
-        {
-            lanes.Add(new ReadingLane<T>(
-                shared.All(volume => IsSolidState(volume.Media)) ? SolidStateReaders : 1,
-                [.. shared.SelectMany(volume => byVolume[volume.Volume.RootPath].Files)]));
-        }
-
-        // A path no volume of this machine holds is not one a search reaches, since every location
-        // is resolved onto a local disk first; read alone if one ever is, where nothing is known.
-        if (nowhere.Count > 0)
-        {
-            lanes.Add(new ReadingLane<T>(1, nowhere));
-        }
-
-        return lanes;
+        // Asked once a volume, and remembered by the cache for the life of the app.
+        return
+        [
+            .. SharingADisk([.. byVolume.Values.Select(held => (held.Volume, media.Of(held.Volume)))])
+                .Select(shared => new ReadingLane<T>(
+                    shared.All(volume => IsSolidState(volume.Media)) ? SolidStateReaders : 1,
+                    [.. shared.SelectMany(volume => byVolume[volume.Volume.RootPath].Files)])),
+        ];
     }
 
     /// <summary>The volumes in sets, each set every volume that shares a disk with another in it.</summary>

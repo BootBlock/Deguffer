@@ -1,6 +1,5 @@
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
-using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Duplicates;
@@ -40,14 +39,15 @@ public sealed record DuplicateSearchResult(
 public sealed class DuplicateSearcher
 {
     private readonly CandidateFinder _finder;
-    private readonly IVolumeInventory _volumes;
     private readonly VolumeMediaCache _media;
     private readonly ReadContent _read;
 
-    /// <param name="volumes">Places each file on its volume, so files are read in lanes by disk.</param>
-    /// <param name="media">The disks behind each volume, and their kind, remembered for the life of the app.</param>
-    public DuplicateSearcher(CandidateFinder finder, IVolumeInventory volumes, VolumeMediaCache media)
-        : this(finder, volumes, media, ContentReader.Default.Read)
+    /// <param name="media">
+    /// The disks behind each volume, and their kind, remembered for the life of the app, so files are
+    /// read in lanes by disk.
+    /// </param>
+    public DuplicateSearcher(CandidateFinder finder, VolumeMediaCache media)
+        : this(finder, media, ContentReader.Default.Read)
     {
     }
 
@@ -55,10 +55,9 @@ public sealed class DuplicateSearcher
     /// Reads one file's content, so a test can count reads, hold them to see how many run at once, or
     /// stop the search partway.
     /// </param>
-    internal DuplicateSearcher(CandidateFinder finder, IVolumeInventory volumes, VolumeMediaCache media, ReadContent read)
+    internal DuplicateSearcher(CandidateFinder finder, VolumeMediaCache media, ReadContent read)
     {
         _finder = finder;
-        _volumes = volumes;
         _media = media;
         _read = read;
     }
@@ -104,7 +103,7 @@ public sealed class DuplicateSearcher
             return new DuplicateSearchResult(finding, confirmed, finding.LeftOut, Stopped: false);
         }
 
-        var matching = new ContentMatching(_read, _volumes, _media);
+        var matching = new ContentMatching(_read, _media);
         var stopped = false;
 
         try
