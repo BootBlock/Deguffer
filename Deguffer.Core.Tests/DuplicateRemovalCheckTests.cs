@@ -2,6 +2,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -174,24 +175,28 @@ public sealed class DuplicateRemovalCheckTests : DuplicateRemovalScene
     }
 
     /// <summary>
-    /// A stale group naming one file twice, by two spellings of its path: the copy marked and a copy
-    /// the group would keep are one file. The kept copy is chosen by identity, never by path, so the
-    /// file is not held as kept, nothing else can be, and nothing goes.
+    /// A stale group naming one file twice, by two of its names: the copy marked and a copy the group
+    /// would keep are one file. Each name is its own final path, so only the choice of the copy kept
+    /// by identity, never by path, keeps the file from being held as kept while it goes. Nothing
+    /// else can be kept, so nothing goes.
     /// </summary>
     [Theory]
     [InlineData(ExploreRemovalMode.RecycleBin)]
     [InlineData(ExploreRemovalMode.Permanent)]
     public void TheSameFileReachedByTwoPathsIsNeverRemovedAgainstItself(ExploreRemovalMode mode)
     {
-        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
-        var alias = copy with { Path = Path.Combine(Path.GetDirectoryName(copy.Path)!, "A.BIN"), Names = [Path.Combine(Path.GetDirectoryName(copy.Path)!, "A.BIN")] };
+        var path = Write(Path.Combine(Downloads, "a.bin"), Content());
+        var other = HardLink.To(path, Path.Combine(Documents, "a.bin"));
+        var copy = Found(path);
+        var alias = Found(other);
+        Assert.Equal(copy.Identity, alias.Identity);
         var marks = Marks([copy, alias]);
         var plan = new PlannedGroup(marks.Groups[0].Group, [copy]);
 
         var report = Remover().Remove([plan], [], marks.Keeping, mode, CancellationToken.None);
 
         Assert.Equal(RemovalCheck.NoKeptCopy, Assert.Single(report.Copies).Check);
-        Assert.True(File.Exists(copy.Path));
+        Assert.True(File.Exists(path));
     }
 
     /// <summary>
