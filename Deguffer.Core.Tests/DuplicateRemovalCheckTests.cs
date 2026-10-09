@@ -99,6 +99,51 @@ public sealed class DuplicateRemovalCheckTests : DuplicateRemovalScene
         Assert.Equal(other, File.ReadAllBytes(copy.Path));
     }
 
+    /// <summary>
+    /// A group matched on its name alone holds an earlier, shorter version of a log and the log it
+    /// grew into. Every byte of the shorter is the start of the longer, so only the lengths show they
+    /// differ.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public void ACopyThatIsOnlyTheStartOfTheCopyKeptIsNotRemoved(ExploreRemovalMode mode)
+    {
+        var content = Content();
+        var kept = Found(Write(Path.Combine(Documents, "notes.log"), content));
+        var copy = Found(Write(Path.Combine(Downloads, "notes.log"), content[..(content.Length / 2)]));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+
+        var outcome = Assert.Single(Remove(marks, mode).Copies);
+
+        Assert.Equal(RemovalCheck.ContentDiffers, outcome.Check);
+        Assert.True(File.Exists(copy.Path));
+    }
+
+    /// <summary>
+    /// Another program shares the copy for reading and holds part of it locked, as a database does, so
+    /// reading it fails. The copy stays with its reason, and the run still reports and verifies.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public void ACopyAnotherProgramHoldsPartlyLockedStaysAndTheRunStillReports(ExploreRemovalMode mode)
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        using var locker = new FileStream(copy.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        locker.Lock(0, copy.Length);
+
+        var report = Remove(marks, mode);
+
+        Assert.Equal(RemovalCheck.Unreadable, Assert.Single(report.Copies).Check);
+        Assert.True(File.Exists(copy.Path));
+        Assert.True(report.Verification.Passed, report.Summary);
+    }
+
     [Theory]
     [InlineData(ExploreRemovalMode.RecycleBin)]
     [InlineData(ExploreRemovalMode.Permanent)]

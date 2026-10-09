@@ -26,10 +26,45 @@ internal static class CopyComparison
 
     /// <summary>
     /// Why <paramref name="copy"/> does not hold what <paramref name="kept"/> holds, with a sentence,
-    /// or null where both hold the same <paramref name="length"/> bytes and the same named streams.
+    /// or null where both hold the same bytes and the same named streams.
+    ///
+    /// <para><b>The lengths first.</b> A group matched on its name or time alone can hold a copy that
+    /// is only the start of the copy kept, and a comparison of the shorter length would find them
+    /// equal. Each length is the one the search found, which each held handle was shown to still
+    /// have.</para>
+    ///
+    /// <para><b>A read that fails leaves the copy where it is.</b> Another program can hold part of
+    /// either file locked while sharing it for reading, and the read then fails. That is this copy's
+    /// answer, never the run's: a run that has begun reports what it did and verifies it.</para>
     /// </summary>
     /// <param name="copyStreams">The copy's named streams as they were compared, for the caller to find unchanged before the removal.</param>
     public static (RemovalCheck Check, string Why)? Compare(
+        SafeFileHandle kept,
+        long keptLength,
+        SafeFileHandle copy,
+        long copyLength,
+        out IReadOnlyList<NamedStream> copyStreams,
+        CancellationToken ct)
+    {
+        copyStreams = [];
+
+        if (keptLength != copyLength)
+        {
+            return (RemovalCheck.ContentDiffers, "It is not the length of the copy kept, so the two do not hold the same bytes.");
+        }
+
+        try
+        {
+            return CompareContent(kept, copy, copyLength, out copyStreams, ct);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return (RemovalCheck.Unreadable,
+                "Windows would not let Deguffer read all of it or of the copy kept: another program may hold part of one locked.");
+        }
+    }
+
+    private static (RemovalCheck Check, string Why)? CompareContent(
         SafeFileHandle kept, SafeFileHandle copy, long length, out IReadOnlyList<NamedStream> copyStreams, CancellationToken ct)
     {
         copyStreams = [];

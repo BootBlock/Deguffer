@@ -259,7 +259,7 @@ public sealed class DuplicateRemover
 
         using (held)
         {
-            if (CopyComparison.Compare(kept.Content, held.Content, copy.Length, out var streams, ct) is { } differs)
+            if (CopyComparison.Compare(kept.Content, kept.Copy.Length, held.Content, copy.Length, out var streams, ct) is { } differs)
             {
                 return new CopyRemoval(copy, differs.Check, differs.Why);
             }
