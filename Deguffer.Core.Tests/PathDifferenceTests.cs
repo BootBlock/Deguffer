@@ -33,6 +33,33 @@ public sealed class PathDifferenceTests
         Assert.Equal(@"\a.jpg", parts[0].SameEnd);
     }
 
+    /// <summary>
+    /// The two near twins are compared with each other, whatever sorts before them: here a copy on
+    /// another drive sorts first, and a path that differs from it at once still shares its start
+    /// with its twin.
+    /// </summary>
+    [Fact]
+    public void ANearTwinIsFoundWhateverSortsFirst()
+    {
+        var parts = PathDifference.Of([@"A:\x\a.jpg", @"C:\Photos 2023\a.jpg", @"C:\Photos 2O23\a.jpg"]);
+
+        Assert.Equal("0", parts[1].Differs);
+        Assert.Equal("O", parts[2].Differs);
+    }
+
+    /// <summary>
+    /// The paths are ordered case and all. Ordered without regard to case, <c>AB5</c> would fall
+    /// between <c>ab1</c> and <c>ab9</c>, and those two would not be found to share <c>ab</c>.
+    /// </summary>
+    [Fact]
+    public void ThePathsAreOrderedCaseAndAll()
+    {
+        var parts = PathDifference.Of([@"C:\ab1\x", @"C:\AB5\x", @"C:\ab9\x"]);
+
+        Assert.Equal("1", parts[0].Differs);
+        Assert.Equal("9", parts[2].Differs);
+    }
+
     /// <summary>Case is a difference: a case-sensitive folder can hold both.</summary>
     [Fact]
     public void CaseIsADifference()
