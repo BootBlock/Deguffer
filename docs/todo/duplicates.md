@@ -116,6 +116,11 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   and never for the cache. Whether `FileIdInfo` or the older call answers on FAT and exFAT is
   **(unverified)**: measuring it needs a scratch disk attached with administrator rights, and phase 2
   ran without them, so the search decides it for each volume as it runs (phase 2, step 5).
+- **Change time.** Corrected in phase 8: nothing read a file's change time before, though the
+  `FileBasicInfo` the description already read holds it (`FileDescription.Changed`). Measured on
+  NTFS: a rewrite whose last-modified time is put back, a change to the file's security, and a
+  rename each move it, so it is what tells a cached checksum it is still the file's, and a renamed
+  file is read again. A program can set it back on purpose, as it can the other times.
 - **Cloud files.** Reading the data of a file marked `RECALL_ON_DATA_ACCESS` downloads it, and no
   documented call lets a process read it without that. `RtlSetProcessPlaceholderCompatibilityMode`
   changes how a placeholder looks, not whether it downloads. Measured in phase 3: an unpackaged
@@ -181,7 +186,9 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   not store its content remotely, which leaves out a cloud client's drive that Windows reports as
   fixed. It takes `DriveType` at face value, and most USB disks report `Fixed`; `StorageMedia`
   classes a disk by its bus, and its `Removable` covers USB, SD, MMC and FireWire, so that is what
-  decides whether a drive is internal.
+  decides whether a drive is internal. Since phase 8 a volume also names its file system, from the
+  same `GetVolumeInformation` call (`LocalVolume.FileSystem`), and only NTFS and ReFS keep a file's
+  number with the file (`LocalVolume.KeepsFileNumbers`).
 - **Cloud folders.** `ICloudFiles.SyncRoots` lists the roots registered with the Cloud Files API and
   returns null where Windows will not list them. It leaves out a root Windows will not hand back,
   such as one under `AppData\Local`, and a client that does not register at all.
@@ -568,9 +575,25 @@ Bin and leaves every kept copy.
    quoted so a path holding a comma or a quote reads back as itself, written where the page's save
    dialog says.
 
+Corrected here: the change time was not read by anything, so the file description gained it (see
+"Change time"). Whether a volume's numbers stay with its files is decided by the name it gives its
+file system, NTFS or ReFS, and its files' identification by `FileIdInfo`, rather than by naming
+FAT and exFAT, so a file system Deguffer does not know, or a volume that will not name one, keeps
+nothing either (`ChecksumCache.Keeps`). Both stages' values are kept, the first and last blocks as
+well as the whole, so a second search over an unchanged tree opens no file at all. A value is used
+only once the file is described now and judged as before a read, and kept only from a read whose
+change time did not move while it ran. The store is bounded: a value unused for 180 days goes, and
+past 500,000 the values used longest ago go first. The page's save dialog is the Windows App SDK
+`FileSavePicker`, for the reason the folder picker is (`CsvFileDialog`), and the file is written
+beside the one chosen under a name of its own and moved over it once whole.
+
 Proves: a second search over an unchanged tree reads no file in full; a change to any key field
 misses the cache; the store holds no path (a test reads it); a FAT volume is never cached; a corrupt
-store loads empty; the CSV round-trips hostile paths and a long path whole.
+store loads empty; the CSV round-trips hostile paths and a long path whole. Added here: a file
+rewritten with its old last-modified time put back is read again; a file that went online-only is
+not answered from the cache; a value read while the file's change time moved is not kept; a value
+unused too long, or past the bound, goes; the page saves only once a search with results has
+ended, in the order the groups are shown.
 
 ### Phase 9 — Verification and close
 
@@ -582,7 +605,8 @@ letter, holding a program's install location and a place a Storage clean names, 
 their final paths in the `\\?\Volume{GUID}\` form that `ResolvedPlaces.FollowedTo` names by the
 mount (no test can produce that form without mounting such a volume). Attach a scratch disk with a FAT32 and an exFAT
 volume, measure whether each answers `FileIdInfo` or only the older call, and whether a file keeps
-its ID across a rename and a move, record it under the technical facts, and search both. Read a
+its ID across a rename and a move, record it under the technical facts, and search both, seeing
+that the searches leave the checksum store as it was. Read a
 Recycle Bin's size from the x86 build, which asks for it with the packed 20-byte `SHQUERYRBINFO`
 that only a 32-bit process can confirm, and record it there too. Measure a
 search of a real drive and record the figures here, redacted. Update `README.md`. Flip this banner to complete, move this file to `done/`
@@ -795,5 +819,9 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   another program adding a named stream beside its content. The copy's streams are listed again
   once it is compared and must be the streams compared, which leaves only the moment between that
   listing and the removal itself.
+- **Times set back on purpose.** A program that rewrites a file and then sets both its
+  last-modified and change times back, at the same length, leaves its cached checksum standing, so
+  the file can be grouped by its old content until it changes again. It is never removed on that,
+  because a removal compares the bytes.
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

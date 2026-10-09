@@ -23,6 +23,22 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
+    /// The volume the scratch folder is on names its file system, which is what decides whether a
+    /// checksum is kept between searches there: read wrongly as unnamed, no volume would ever keep
+    /// one. The suite runs on NTFS, as the rest of its scratch-folder tests need.
+    /// </summary>
+    [Fact]
+    public void NamesTheFileSystemOfTheScratchVolume()
+    {
+        using var temp = new TempDirectory();
+
+        var volume = VolumeInventory.Describe([Path.GetPathRoot(temp.Path)!]);
+
+        Assert.Equal("NTFS", volume.FileSystem);
+        Assert.True(volume.KeepsFileNumbers);
+    }
+
+    /// <summary>
     /// A mount point Windows would not describe is told apart from an empty drive. Asked of a folder
     /// standing in for a mount point, because no test may mount a volume, and the readiness is decided
     /// from the mount point's own attributes whatever is mounted there.

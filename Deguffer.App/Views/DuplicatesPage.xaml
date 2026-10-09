@@ -287,12 +287,16 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="5" RowSpacing="6" RowDefinitions="Auto,*">
-            <TextBlock Text="{x:Bind ViewModel.SpaceNote}" TextWrapping="Wrap" Style="{StaticResource SecondaryText}" />
+        <Grid Grid.Row="5" RowSpacing="6" ColumnSpacing="12" RowDefinitions="Auto,Auto,*" ColumnDefinitions="*,Auto">
+            <TextBlock Text="{x:Bind ViewModel.SpaceNote}" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource SecondaryText}" />
+            <Button Grid.Column="1" Content="Save resultsâ€¦" Command="{x:Bind ViewModel.SaveCsvCommand}"
+                    ToolTipService.ToolTip="Save every group as a CSV file where you choose: one row a copy, with its group, path, size, last-modified time and checksum. Deguffer keeps no other copy." />
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                       Text="{x:Bind ViewModel.CsvOutcome, Mode=OneWay}" AutomationProperties.LiveSetting="Polite" />
 
             <!-- Groups arrive while the reader reads, each inserted where its space puts it. Keeping
                  the items in view holds the rows on screen still while one goes in above them. -->
-            <ListView Grid.Row="1" SelectionMode="None"
+            <ListView Grid.Row="2" Grid.ColumnSpan="2" SelectionMode="None"
                       AutomationProperties.Name="Duplicate groups"
                       ItemsSource="{x:Bind ViewModel.Groups}"
                       ItemTemplate="{StaticResource GroupTemplate}"

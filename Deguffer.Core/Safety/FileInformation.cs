@@ -243,6 +243,7 @@ internal sealed unsafe partial class FileInformation
             standard.AllocationSize,
             (int)standard.NumberOfLinks,
             DateTime.FromFileTimeUtc(basic.LastWriteTime),
+            DateTime.FromFileTimeUtc(basic.ChangeTime),
             (FileAttributes)basic.FileAttributes,
             tag.ReparseTag));
     }

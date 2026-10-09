@@ -22,10 +22,11 @@ internal sealed class DuplicateTree : IDisposable
 {
     private readonly TempDirectory _temp = new();
 
-    public DuplicateTree()
+    /// <param name="fileSystem">What the scratch volume says its file system is: the NTFS the scratch folder is on, unless a test stands for another.</param>
+    public DuplicateTree(string? fileSystem = "NTFS")
     {
         Top = LongPath.Display(FileInformation.Default.FinalPath(_temp.Path)!);
-        Volumes = new FakeVolumeInventory().With(Top + Path.DirectorySeparatorChar);
+        Volumes = new FakeVolumeInventory().With(Top + Path.DirectorySeparatorChar, fileSystem: fileSystem);
         System = new FakeSystemDirectories(Top);
         Environment = new FakeUserEnvironment(Path.Combine(Top, "Users"));
     }
@@ -81,8 +82,9 @@ internal sealed class DuplicateTree : IDisposable
     /// read one at a time, as on a disk Windows did not describe.
     /// </summary>
     /// <param name="read">Reads each file's content, for a test that counts, holds or stops the reads.</param>
-    public DuplicateSearcher Searcher(ReadContent? read = null) =>
-        new(Finder(), new VolumeMediaCache(new FakeStorageQueries()), read ?? ContentReader.Default.Read);
+    /// <param name="remembered">The checksum cache <paramref name="read"/> uses, stored as each search stops reading.</param>
+    public DuplicateSearcher Searcher(ReadContent? read = null, ChecksumCache? remembered = null) =>
+        new(Finder(), new VolumeMediaCache(new FakeStorageQueries()), read ?? ContentReader.Default.Read, remembered);
 
     public Task<CandidateFinding> FindAsync(DuplicateSearch search) => Finder().FindAsync(search, Policy());
 

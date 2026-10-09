@@ -344,4 +344,69 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         await Assert.ThrowsAsync<InvalidOperationException>(() => page.SearchCommand.ExecuteAsync(null));
         Assert.Empty(page.Groups);
     });
+
+    /// <summary>
+    /// The results are saved where the dialog says, one row a copy, with the groups numbered in the
+    /// order the page shows them, which is not the order they arrived in.
+    /// </summary>
+    [Fact]
+    public void TheResultsAreSavedWhereTheDialogSaysInTheOrderShown() => UiThread.Run(async () =>
+    {
+        var page = PageWithPhotos(Finds(_scene.Pair("small.jpg", 4096), _scene.Pair("large.jpg", 16384)));
+        await page.SearchCommand.ExecuteAsync(null);
+        CsvChosen = Path.Combine(_temp.Path, "results.csv");
+
+        await page.SaveCsvCommand.ExecuteAsync(null);
+
+        var rows = File.ReadAllLines(CsvChosen).Skip(1).Select(row => row.Split(',')).ToArray();
+        Assert.Equal(
+            [("1", "large.jpg"), ("1", "large.jpg"), ("2", "small.jpg"), ("2", "small.jpg")],
+            rows.Select(row => (row[0], Path.GetFileName(row[1]))));
+        Assert.Equal(page.Groups.SelectMany(row => row.Copies).Select(copy => copy.Copy.Path), rows.Select(row => row[1]));
+        Assert.Equal("Saved 2 groups and 4 copies as results.csv.", page.CsvOutcome);
+    });
+
+    /// <summary>
+    /// Nothing can be saved before a search has found a group, or while one runs, since the list is
+    /// then part of the results; a dialog the user cancels saves nothing and says nothing.
+    /// </summary>
+    [Fact]
+    public void SavingWaitsForASearchWithResultsAndACancelledDialogSavesNothing() => UiThread.Run(async () =>
+    {
+        var release = new TaskCompletionSource();
+        var group = _scene.Pair("a.jpg", 4096);
+        var page = PageWithPhotos(async (search, marksMade, finding, found, progress, ct) =>
+        {
+            var candidates = DuplicateScene.Finding(group);
+            await Task.Run(() => marksMade(_scene.Marks(candidates)), ct);
+            finding.Report(candidates);
+            found.Report(group);
+
+            // Held with a group shown, so only the running search can keep the results from being saved.
+            await release.Task;
+
+            return new DuplicateSearchResult(candidates, [group], default, Stopped: false);
+        });
+
+        Assert.False(page.SaveCsvCommand.CanExecute(null));
+
+        var searching = page.SearchCommand.ExecuteAsync(null);
+
+        while (page.Groups.Count == 0)
+        {
+            await Task.Yield();
+        }
+
+        Assert.True(page.IsSearching);
+        Assert.False(page.SaveCsvCommand.CanExecute(null));
+        release.SetResult();
+        await searching;
+        Assert.True(page.SaveCsvCommand.CanExecute(null));
+
+        CsvChosen = null;
+        await page.SaveCsvCommand.ExecuteAsync(null);
+
+        Assert.Empty(page.CsvOutcome);
+        Assert.Empty(Directory.EnumerateFiles(_temp.Path, "*.csv", SearchOption.AllDirectories));
+    });
 }
