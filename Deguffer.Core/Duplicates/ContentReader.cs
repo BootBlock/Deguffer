@@ -80,9 +80,10 @@ internal readonly record struct ContentReading(ContentReadResult Result, Content
 /// sharing does not prevent) are each left out. What was read is never taken for the file's on any
 /// other evidence.</para>
 ///
-/// <para><b>A checksum read before stands in for a read</b> where a cache is given
-/// (<see cref="ChecksumCache"/>): asked only once the file is described now and judged as before a
-/// read, and kept only from a read that found nothing changed, its change time included.</para>
+/// <para><b>A checksum read before stands in for reading the bytes</b> where a cache is given
+/// (<see cref="ChecksumCache"/>), never for opening them: it is asked only once the content is
+/// open and judged as before a read, and kept only from a read that found nothing changed, its
+/// change time included.</para>
 ///
 /// <para><b>A refusal is never absence.</b> A file Windows would not describe is counted as
 /// unidentified, and one it would not let the search read as a failed read, never as gone, because a
@@ -168,13 +169,6 @@ internal sealed class ContentReader
         var attributes = described.Attributes;
         var remembers = _remembered is not null && ChecksumCache.Keeps(file);
 
-        // Asked only once the file is described now and found unchanged and on this device, so a
-        // remembered value never stands for a file a read would have left out.
-        if (remembers && _remembered!.Find(described, part, checksum.Algorithm) is { } known)
-        {
-            return new ContentReading(ContentReadResult.Read, known);
-        }
-
         if (Open(held.Handle!, file) is not { } content)
         {
             return ContentReading.LeftOut(ContentReadResult.ReadFailed);
@@ -182,9 +176,19 @@ internal sealed class ContentReader
 
         using (content)
         {
-            if (Judge(_files.Describe(content, file.Route), file, attributes) is { } opened)
+            var opened = _files.Describe(content, file.Route);
+
+            if (Judge(opened, file, attributes) is { } refused)
             {
-                return ContentReading.LeftOut(opened);
+                return ContentReading.LeftOut(refused);
+            }
+
+            // Asked only once the content is open and judged, so a remembered value stands in for
+            // reading the bytes and never for the open: a file another program holds now, or one
+            // this account may not read, is left out as a read would leave it (§7.4).
+            if (remembers && _remembered!.Find(opened.Description!, part, checksum.Algorithm) is { } known)
+            {
+                return new ContentReading(ContentReadResult.Read, known);
             }
 
             ContentChecksum? read;

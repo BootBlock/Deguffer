@@ -39,9 +39,10 @@ internal readonly record struct RememberedChecksum(ContentChecksum Value, int La
 /// rename moves a file's change time on NTFS, so a renamed file is read again. A volume whose
 /// numbers do not stay with their files keeps nothing here (<see cref="Keeps"/>).</para>
 ///
-/// <para><b>It groups, and never licenses a removal.</b> A remembered value is used only where the
-/// file is described now, through an attributes-only handle, with every part of the key unchanged,
-/// and a removal reads the bytes again whatever any checksum said.</para>
+/// <para><b>It groups, and never licenses a removal.</b> A remembered value stands in for reading a
+/// file's bytes, never for opening them: it is used only once the content is open and the file is
+/// judged as a read would judge it, with every part of the key unchanged, and a removal reads the
+/// bytes again whatever any checksum said.</para>
 ///
 /// <para><b>A store that cannot be read loads empty.</b> Missing, refused, torn, hand-edited or of a
 /// format this build does not know, it costs one search the reads it would have saved, and a store

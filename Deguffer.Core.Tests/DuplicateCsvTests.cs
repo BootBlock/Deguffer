@@ -120,6 +120,46 @@ public sealed class DuplicateCsvTests : IDisposable
         Assert.Equal(["results.csv", "results.csv.tmp"], Directory.EnumerateFileSystemEntries(folder).Select(Path.GetFileName).Order());
     }
 
+    /// <summary>
+    /// §6.3, asserted by the form of every path the save hands Windows, both the file it writes and
+    /// the one it moves that over, in a folder deeper than <c>MAX_PATH</c>. A deep folder is written
+    /// to whether or not the path carries the prefix, so only the form shows it was given.
+    /// </summary>
+    [Fact]
+    public async Task EveryPathTheSaveHandsWindowsIsInItsExtendedForm()
+    {
+        var deep = _temp.Path;
+
+        while (deep.Length <= 300)
+        {
+            deep = Path.Combine(deep, new string('d', 40));
+        }
+
+        Directory.CreateDirectory(LongPath.Extended(deep));
+        var saved = Path.Combine(deep, "results.csv");
+        List<string> handed = [];
+        var files = new CsvFiles(
+            path =>
+            {
+                handed.Add(path);
+                return CsvFiles.Windows.Create(path);
+            },
+            (from, to) =>
+            {
+                handed.Add(from);
+                handed.Add(to);
+                CsvFiles.Windows.Replace(from, to);
+            },
+            CsvFiles.Windows.Delete);
+
+        var saving = await DuplicateCsv.SaveAsync(saved, [Group(checksum: null, @"C:\a.jpg", @"C:\b.jpg")], files, default);
+
+        Assert.True(saving.Saved, saving.Summary);
+        Assert.Equal(3, handed.Count);
+        Assert.All(handed, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+        Assert.Equal(LongPath.Extended(saved), handed[2]);
+    }
+
     /// <summary>A file the save cannot write is reported as not saved, and leaves nothing behind.</summary>
     [Fact]
     public async Task ASaveThatCannotBeWrittenSaysSoAndLeavesNothing()

@@ -221,7 +221,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// <summary>Saving waits for the search to end, so the file never holds part of the results as though it were all of them.</summary>
     private bool CanSaveCsv() => !IsSearching && Groups.Count > 0;
 
-    /// <summary>Save the groups, in the order shown, as a CSV file where the user says (Â§7.4).</summary>
+    /// <summary>Save the groups, in the order shown, as a CSV file where the user says (§7.4).</summary>
     [RelayCommand(CanExecute = nameof(CanSaveCsv))]
     private async Task SaveCsvAsync()
     {

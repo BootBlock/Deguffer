@@ -5,6 +5,7 @@ using System.Security.Principal;
 using System.Text;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
 using Microsoft.Win32.SafeHandles;
 
@@ -22,7 +23,8 @@ public sealed class ChecksumCacheTests : IDisposable
 
     private readonly DuplicateTree _tree = new();
     private readonly ManualTimeProvider _clock = new();
-    private int _opened;
+    /// <summary>How many bytes of content were read into a checksum, across every read.</summary>
+    private long _read;
 
     public void Dispose() => _tree.Dispose();
 
@@ -30,8 +32,8 @@ public sealed class ChecksumCacheTests : IDisposable
 
     /// <summary>
     /// The first search reads every file; a second over the same unchanged files, by a cache that
-    /// has only the store to go on, as the next launch of the app would, opens none for its content,
-    /// and finds the same groups with the same checksums.
+    /// has only the store to go on, as the next launch of the app would, reads no byte of any of
+    /// them, and finds the same groups with the same checksums.
     /// </summary>
     [Fact]
     public async Task ASecondSearchOverAnUnchangedTreeReadsNoFile()
@@ -39,12 +41,12 @@ public sealed class ChecksumCacheTests : IDisposable
         WriteTree();
 
         var first = await SearchAsync(new ChecksumCache(Store, _clock));
-        var openedFirst = _opened;
-        _opened = 0;
+        var readFirst = _read;
+        _read = 0;
         var second = await SearchAsync(new ChecksumCache(Store, _clock));
 
-        Assert.True(openedFirst >= 5, $"The first search opened {openedFirst} files.");
-        Assert.Equal(0, _opened);
+        Assert.True(readFirst > 6 * Block, $"The first search read {readFirst} bytes.");
+        Assert.Equal(0, _read);
         Assert.Equal(2, first.Groups.Count);
         Assert.Equal(Described(first), Described(second));
     }
@@ -154,12 +156,12 @@ public sealed class ChecksumCacheTests : IDisposable
         var store = ChecksumCache.FileOf(tree.Environment);
 
         var first = await SearchAsync(tree, new ChecksumCache(store, _clock));
-        var openedFirst = _opened;
-        _opened = 0;
+        var readFirst = _read;
+        _read = 0;
         await SearchAsync(tree, new ChecksumCache(store, _clock));
 
         Assert.Single(first.Groups);
-        Assert.Equal(openedFirst, _opened);
+        Assert.Equal(readFirst, _read);
         Assert.False(File.Exists(store), "A store was written for a volume whose numbers do not stay with their files.");
     }
 
@@ -263,6 +265,25 @@ public sealed class ChecksumCacheTests : IDisposable
     }
 
     /// <summary>
+    /// A kept checksum stands in for reading the bytes, never for opening them: a file another
+    /// program now holds without sharing it is left out as a failed read, as it would be with no
+    /// cache, though nothing about it changed (§7.4, "A read that fails leaves the file out").
+    /// </summary>
+    [Fact]
+    public void AFileAnotherProgramNowHoldsIsLeftOutThoughItsChecksumIsKept()
+    {
+        var path = _tree.File(Random(5000, 12), "Data", "a.bin");
+        var file = Candidate(path);
+        var cache = new ChecksumCache(Store, _clock);
+        Assert.Equal(ContentReadResult.Read, Read(Reader(cache), file).Result);
+        Assert.NotNull(cache.Find(Describe(path), ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+
+        using var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        Assert.Equal(ContentReadResult.ReadFailed, Read(Reader(cache), file).Result);
+    }
+
+    /// <summary>
     /// A file whose security was changed while it was read is read as before, since its bytes could
     /// not change, but its checksum is not kept: its change time moved, so the value would be kept
     /// under a key the file no longer has, or under one it does not yet have.
@@ -292,6 +313,83 @@ public sealed class ChecksumCacheTests : IDisposable
     }
 
     /// <summary>
+    /// The searcher the page builds, from the app's one cache, reads through that cache and stores
+    /// what it read once the search ends, so the next search, or the next launch, can use it.
+    /// </summary>
+    [Fact]
+    public async Task ThePagesSearcherReadsThroughTheCacheAndStoresWhatItRead()
+    {
+        var (a, _) = WriteTree();
+        var searcher = new DuplicateSearcher(_tree.Finder(), new VolumeMediaCache(new FakeStorageQueries()), new ChecksumCache(Store, _clock));
+
+        await searcher.SearchAsync(new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(_tree.Top, "Data"))]), _tree.Policy());
+
+        var stored = new ChecksumCache(Store, _clock);
+        Assert.NotNull(stored.Find(Describe(a), ContentPart.Ends, ChecksumAlgorithm.XxHash128));
+        Assert.NotNull(stored.Find(Describe(a), ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+    }
+
+    /// <summary>
+    /// A file identified by the older call carries the volume's serial number at half its width, so
+    /// its key could name another volume's file: nothing is kept for it, even on NTFS.
+    /// </summary>
+    [Fact]
+    public void AFileIdentifiedByTheOlderCallIsNeverCached()
+    {
+        var path = _tree.File(Random(5000, 11), "Data", "a.bin");
+        var legacy = FileInformation.Default.Describe(path, IdentityRoute.Legacy).Description!;
+        var file = Candidate(path) with { Identity = legacy.Identity, Route = IdentityRoute.Legacy };
+        var cache = new ChecksumCache(Store, _clock);
+
+        Assert.Equal(ContentReadResult.Read, Read(Reader(cache), file).Result);
+        Assert.Equal(ContentReadResult.Read, Read(Reader(cache), file).Result);
+
+        Assert.Equal(2 * 5000, _read);
+        Assert.Null(cache.Find(legacy, ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+    }
+
+    /// <summary>
+    /// A search stopped while it reads content keeps what it had read by then: each value is as true
+    /// of its file as it was, so the store is written as it is when a search ends.
+    /// </summary>
+    [Fact]
+    public async Task AStoppedSearchStoresWhatItHadRead()
+    {
+        for (var i = 0; i < 6; i++)
+        {
+            var content = Random(5000 + i, 20 + i);
+            _tree.File(content, "Data", $"{i}.bin");
+            _tree.File(content, "Data", "Other", $"{i}.bin");
+        }
+
+        var cache = new ChecksumCache(Store, _clock);
+        using var stop = new CancellationTokenSource();
+        List<string> read = [];
+
+        var result = await _tree.Searcher(
+            (file, part, checksum, ct) =>
+            {
+                var reading = Reader(cache).Read(file, part, checksum, ct);
+
+                lock (read)
+                {
+                    read.Add(file.Path);
+
+                    if (read.Count == 1)
+                    {
+                        stop.Cancel();
+                    }
+                }
+
+                return reading;
+            },
+            cache).SearchAsync(new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(_tree.Top, "Data"))]), _tree.Policy(), ct: stop.Token);
+
+        Assert.True(result.Stopped);
+        Assert.NotNull(new ChecksumCache(Store, _clock).Find(Describe(read[0]), ContentPart.Ends, ChecksumAlgorithm.XxHash128));
+    }
+
+    /// <summary>
     /// Two copies of three blocks, a file of their length differing only in its middle, and two
     /// small copies read whole by their ends: every stage of a content search has something to read.
     /// </summary>
@@ -314,20 +412,20 @@ public sealed class ChecksumCacheTests : IDisposable
     private Task<DuplicateSearchResult> SearchAsync(ChecksumCache cache) => SearchAsync(_tree, cache);
 
     private Task<DuplicateSearchResult> SearchAsync(DuplicateTree tree, ChecksumCache cache) =>
-        tree.Searcher(Reader(cache).Read, cache).SearchAsync(
+        tree.Searcher(Counted(Reader(cache)), cache).SearchAsync(
             new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(tree.Top, "Data"))]), tree.Policy());
 
-    /// <summary>A reader using <paramref name="cache"/> that counts each file it opens for its content.</summary>
-    private ContentReader Reader(ChecksumCache cache) => new(
-        FileInformation.Default,
-        FileInformation.Default.Hold,
-        (held, identity, route) =>
-        {
-            Interlocked.Increment(ref _opened);
-            return FileInformation.OpenById(held, identity, route);
-        },
-        NoPath,
-        cache);
+    /// <summary>A reader using <paramref name="cache"/>.</summary>
+    private static ContentReader Reader(ChecksumCache cache) =>
+        new(FileInformation.Default, FileInformation.Default.Hold, FileInformation.OpenById, NoPath, cache);
+
+    /// <summary><paramref name="reader"/>, counting the bytes each read puts into its checksum.</summary>
+    private ReadContent Counted(ContentReader reader) => (file, part, checksum, ct) =>
+    {
+        using var counted = new Counting(checksum, bytes => Interlocked.Add(ref _read, bytes));
+
+        return reader.Read(file, part, counted, ct);
+    };
 
     private static IReadOnlyList<string> Described(DuplicateSearchResult result) =>
         [.. result.Groups
@@ -344,11 +442,11 @@ public sealed class ChecksumCacheTests : IDisposable
         return file with { Volume = file.Volume with { FileSystem = "NTFS" } };
     }
 
-    private static ContentReading Read(ContentReader reader, DuplicateCandidate file)
+    private ContentReading Read(ContentReader reader, DuplicateCandidate file)
     {
         using var checksum = Checksum.For(ChecksumAlgorithm.XxHash128);
 
-        return reader.Read(file, ContentPart.Whole, checksum, default);
+        return Counted(reader)(file, ContentPart.Whole, checksum, default);
     }
 
     private static FileDescription Description() => new(
@@ -386,6 +484,21 @@ public sealed class ChecksumCacheTests : IDisposable
 
     private static SafeFileHandle NoPath(string extended) =>
         throw new InvalidOperationException("The content was opened by its path on a volume that can hold links.");
+
+    /// <summary>
+    /// A running checksum that tells <paramref name="read"/> how many bytes each append carries, and
+    /// otherwise is <paramref name="inner"/>, which the search owns and disposes.
+    /// </summary>
+    private sealed class Counting(Checksum inner, Action<int> read) : Checksum(inner.Algorithm)
+    {
+        public override void Append(ReadOnlySpan<byte> data)
+        {
+            read(data.Length);
+            inner.Append(data);
+        }
+
+        public override ContentChecksum Finish() => inner.Finish();
+    }
 
     /// <summary>An XXH128 checksum that runs <paramref name="first"/> as the first bytes arrive.</summary>
     private sealed class OnFirstAppend(Action first) : Checksum(ChecksumAlgorithm.XxHash128)

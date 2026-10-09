@@ -580,9 +580,10 @@ Corrected here: the change time was not read by anything, so the file descriptio
 file system, NTFS or ReFS, and its files' identification by `FileIdInfo`, rather than by naming
 FAT and exFAT, so a file system Deguffer does not know, or a volume that will not name one, keeps
 nothing either (`ChecksumCache.Keeps`). Both stages' values are kept, the first and last blocks as
-well as the whole, so a second search over an unchanged tree opens no file at all. A value is used
-only once the file is described now and judged as before a read, and kept only from a read whose
-change time did not move while it ran. The store is bounded: a value unused for 180 days goes, and
+well as the whole, so a second search over an unchanged tree reads no file's content. A value stands in
+for reading the bytes, never for opening them: it is used only once the content is open and judged
+as a read would judge it, so a file another program holds or this account may not read is left out
+as before, and it is kept only from a read whose change time did not move while it ran. The store is bounded: a value unused for 180 days goes, and
 past 500,000 the values used longest ago go first. The page's save dialog is the Windows App SDK
 `FileSavePicker`, for the reason the folder picker is (`CsvFileDialog`), and the file is written
 beside the one chosen under a name of its own and moved over it once whole.
@@ -591,7 +592,7 @@ Proves: a second search over an unchanged tree reads no file in full; a change t
 misses the cache; the store holds no path (a test reads it); a FAT volume is never cached; a corrupt
 store loads empty; the CSV round-trips hostile paths and a long path whole. Added here: a file
 rewritten with its old last-modified time put back is read again; a file that went online-only is
-not answered from the cache; a value read while the file's change time moved is not kept; a value
+not answered from the cache, and nor is one another program now holds; a value read while the file's change time moved is not kept; a value
 unused too long, or past the bound, goes; the page saves only once a search with results has
 ended, in the order the groups are shown.
 
@@ -823,5 +824,9 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   last-modified and change times back, at the same length, leaves its cached checksum standing, so
   the file can be grouped by its old content until it changes again. It is never removed on that,
   because a removal compares the bytes.
+- **A range locked after a checksum was kept.** A program that locks part of a file, rather than
+  holding the whole of it, refuses only a read of that part, so a search that uses the file's kept
+  checksum does not see the lock, where a read would have left the file out. The file is grouped,
+  and a removal still reads it.
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

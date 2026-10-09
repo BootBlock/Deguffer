@@ -409,4 +409,41 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         Assert.Empty(page.CsvOutcome);
         Assert.Empty(Directory.EnumerateFiles(_temp.Path, "*.csv", SearchOption.AllDirectories));
     });
+
+    /// <summary>
+    /// A search started while the save dialog is open replaces the list the user asked to save, so
+    /// nothing is written, and the page says why rather than saving part of the new results.
+    /// </summary>
+    [Fact]
+    public void ASearchStartedWhileTheDialogIsOpenStopsTheSave() => UiThread.Run(async () =>
+    {
+        var release = new TaskCompletionSource();
+        var finds = Finds(_scene.Pair("a.jpg", 4096));
+        var searches = 0;
+        var page = PageWithPhotos(async (search, marksMade, finding, found, progress, ct) =>
+        {
+            if (++searches > 1)
+            {
+                await release.Task;
+            }
+
+            return await finds(search, marksMade, finding, found, progress, ct);
+        });
+        await page.SearchCommand.ExecuteAsync(null);
+        var saved = Path.Combine(_temp.Path, "results.csv");
+        Task? searching = null;
+        ChooseCsv = () =>
+        {
+            searching = page.SearchCommand.ExecuteAsync(null);
+            return Task.FromResult<string?>(saved);
+        };
+
+        await page.SaveCsvCommand.ExecuteAsync(null);
+
+        Assert.True(page.IsSearching);
+        Assert.False(File.Exists(saved));
+        Assert.Equal("The results were not saved, because a search started while the file was being chosen.", page.CsvOutcome);
+        release.SetResult();
+        await searching!;
+    });
 }

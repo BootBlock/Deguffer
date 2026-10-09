@@ -9,6 +9,22 @@ namespace Deguffer.Core.Duplicates;
 public sealed record DuplicateCsvSaving(bool Saved, string Summary);
 
 /// <summary>
+/// The three things saving does to the disk, each given a path in the form it reaches Windows, so a
+/// test can see that form (§6.3): a deep folder is written to whether or not the path carries the
+/// extended prefix, so only the form can show it was given.
+/// </summary>
+/// <param name="Create">Creates a file that must not be there yet, for writing.</param>
+/// <param name="Replace">Moves the first file over the second.</param>
+/// <param name="Delete">Deletes a file.</param>
+internal sealed record CsvFiles(Func<string, Stream> Create, Action<string, string> Replace, Action<string> Delete)
+{
+    public static CsvFiles Windows { get; } = new(
+        path => new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None),
+        (from, to) => File.Move(from, to, overwrite: true),
+        File.Delete);
+}
+
+/// <summary>
 /// A duplicate search's results as a CSV file the user names and places (§7.4): one row for each
 /// copy, with its group's number, its path, its length in bytes, its last-modified time and, for a
 /// group matched on content, the checksum and its algorithm. Deguffer writes no copy anywhere else.
@@ -63,7 +79,10 @@ public static class DuplicateCsv
     /// Save the CSV of <paramref name="groups"/> as <paramref name="path"/>, the file the user chose,
     /// replacing it where it is there.
     /// </summary>
-    public static async Task<DuplicateCsvSaving> SaveAsync(string path, IReadOnlyList<DuplicateGroup> groups, CancellationToken ct)
+    public static Task<DuplicateCsvSaving> SaveAsync(string path, IReadOnlyList<DuplicateGroup> groups, CancellationToken ct) =>
+        SaveAsync(path, groups, CsvFiles.Windows, ct);
+
+    internal static async Task<DuplicateCsvSaving> SaveAsync(string path, IReadOnlyList<DuplicateGroup> groups, CsvFiles files, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(groups);
@@ -76,19 +95,19 @@ public static class DuplicateCsv
             await Task.Run(
                 () =>
                 {
-                    using (var stream = new FileStream(LongPath.Extended(written), FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    using (var stream = files.Create(LongPath.Extended(written)))
                     using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true)))
                     {
                         Write(writer, groups);
                     }
 
-                    File.Move(LongPath.Extended(written), LongPath.Extended(path), overwrite: true);
+                    files.Replace(LongPath.Extended(written), LongPath.Extended(path));
                 },
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            TryDelete(written);
+            TryDelete(written, files);
 
             return new DuplicateCsvSaving(false, $"The results were not saved: {ex.Message}");
         }
@@ -126,11 +145,11 @@ public static class DuplicateCsv
         writer.WriteLine();
     }
 
-    private static void TryDelete(string path)
+    private static void TryDelete(string path, CsvFiles files)
     {
         try
         {
-            File.Delete(LongPath.Extended(path));
+            files.Delete(LongPath.Extended(path));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
