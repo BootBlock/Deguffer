@@ -3,6 +3,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -53,6 +54,16 @@ internal sealed class DuplicateTree : IDisposable
         return path;
     }
 
+    /// <summary>A file holding <paramref name="content"/> at <paramref name="segments"/> below the top.</summary>
+    public string File(byte[] content, params string[] segments)
+    {
+        var path = Path.Combine([Top, .. segments]);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        global::System.IO.File.WriteAllBytes(path, content);
+
+        return path;
+    }
+
     public string Folder(params string[] segments) =>
         Directory.CreateDirectory(Path.Combine([Top, .. segments])).FullName;
 
@@ -64,6 +75,14 @@ internal sealed class DuplicateTree : IDisposable
     public CandidateFinder Finder(ExploreScanner? scanner = null, FileInformation? files = null) =>
         new(scanner ?? new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated)),
             Volumes, Registry, Environment, System, files ?? FileInformation.Default);
+
+    /// <summary>
+    /// The whole search, reading by walking. The drive's disks are not described, so its files are
+    /// read one at a time, as on a disk Windows did not describe.
+    /// </summary>
+    /// <param name="read">Reads each file's content, for a test that counts, holds or stops the reads.</param>
+    public DuplicateSearcher Searcher(ReadContent? read = null) =>
+        new(Finder(), new VolumeMediaCache(new FakeStorageQueries()), read ?? ContentReader.Default.Read);
 
     public Task<CandidateFinding> FindAsync(DuplicateSearch search) => Finder().FindAsync(search, Policy());
 

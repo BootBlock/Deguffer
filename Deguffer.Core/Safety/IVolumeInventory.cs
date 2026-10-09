@@ -93,6 +93,12 @@ public enum VolumeReadiness
 /// Every other path this volume is reachable at, or null where there is none — which is the
 /// ordinary case, since most volumes wear one drive letter and nothing else.
 /// </param>
+/// <param name="FeaturesAnswered">
+/// Whether the volume answered when it was asked what it supports, so <paramref name="Features"/> is
+/// its answer rather than the <see cref="VolumeFeatures.None"/> recorded for a volume that refused or
+/// was not asked. Kept apart because the two read alike and mean opposite things to
+/// <see cref="CannotHoldLinks"/>: a refusal is never an answer of "nothing supported".
+/// </param>
 /// <param name="VolumeName">
 /// The <c>\\?\Volume{GUID}\</c> name Windows knows the volume by wherever it is mounted, or null for
 /// a letter that stands for somewhere else, such as a mapped share. What tells one disk from another
@@ -108,7 +114,8 @@ public readonly record struct LocalVolume(
     long? FreeBytes = null,
     VolumeFeatures Features = VolumeFeatures.None,
     IReadOnlyList<string>? AlsoMountedAt = null,
-    string? VolumeName = null)
+    string? VolumeName = null,
+    bool FeaturesAnswered = false)
 {
     /// <summary>Whether the volume answers. See <see cref="Readiness"/>.</summary>
     public bool IsReady => Readiness is VolumeReadiness.Ready;
@@ -165,6 +172,13 @@ public readonly record struct LocalVolume(
     /// </summary>
     public bool StoresContentRemotely =>
         Features.HasFlag(VolumeFeatures.RemoteStorage) && !Features.HasFlag(VolumeFeatures.ReparsePoints);
+
+    /// <summary>
+    /// Whether the volume said it supports no reparse points, so no symbolic link, junction or mount
+    /// can be on a path inside it: FAT and exFAT. Only a volume that answered qualifies; one that
+    /// refused the question, or was not asked, may be NTFS and hold links anywhere.
+    /// </summary>
+    public bool CannotHoldLinks => FeaturesAnswered && !Features.HasFlag(VolumeFeatures.ReparsePoints);
 
     /// <summary>
     /// Whether this is a disk in or attached to this machine, readable now, whose files are here.
@@ -416,9 +430,10 @@ public sealed class VolumeInventory : IVolumeInventory
         }
 
         // The label and the flags come from one call, so a volume that refuses cannot be recorded
-        // as having answered one and not the other. Flags of None reach StoresContentRemotely as
-        // "said nothing about remote storage", which is walked — the same answer a volume with no
-        // such driver gives.
+        // as having answered one and not the other. A refusal is recorded as flags of None, which
+        // reach StoresContentRemotely as "said nothing about remote storage" and so are walked — the
+        // same answer a volume with no such driver gives — and as unanswered, so it is never taken
+        // for a volume that said it cannot hold links.
         var (label, features) = VolumeCalls.InformationOf(root);
         var space = VolumeCalls.SpaceOf(root);
 
@@ -429,7 +444,8 @@ public sealed class VolumeInventory : IVolumeInventory
             Label: label,
             TotalBytes: space?.Total,
             FreeBytes: space?.Free,
-            Features: features,
-            AlsoMountedAt: elsewhere);
+            Features: features ?? VolumeFeatures.None,
+            AlsoMountedAt: elsewhere,
+            FeaturesAnswered: features is not null);
     }
 }

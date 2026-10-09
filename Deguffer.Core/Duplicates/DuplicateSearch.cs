@@ -5,9 +5,9 @@ namespace Deguffer.Core.Duplicates;
 /// look and in what role, and which files to leave out.
 ///
 /// <para><b>Refused at construction</b> where it could find nothing or could not be run: no
-/// criterion, no location, a criterion no member names, a size range that admits no file, or an
-/// extension filter that lists something other than extensions or, to search, lists none. A
-/// search that cannot exist cannot be started, so nothing downstream has to ask again.
+/// criterion, no location, a criterion or a checksum no member names, a size range that admits no
+/// file, or an extension filter that lists something other than extensions or, to search, lists
+/// none. A search that cannot exist cannot be started, so nothing downstream has to ask again.
 /// <see cref="WhyRefused"/> gives the page the same reason before it builds one.</para>
 /// </summary>
 public sealed record DuplicateSearch
@@ -25,6 +25,14 @@ public sealed record DuplicateSearch
         if (WhyRefused(criteria, locations, sizes, extensions) is { } refusal)
         {
             throw new ArgumentException(refusal, nameof(criteria));
+        }
+
+        // Not among WhyRefused's sentences: the page offers only the algorithms there are, so a
+        // value no member names is a fault in the caller rather than a choice to explain. Whether
+        // this machine offers a named one is asked when the search runs, not of the value.
+        if (!Enum.IsDefined(algorithm))
+        {
+            throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "No checksum has that name.");
         }
 
         Criteria = criteria;

@@ -4,6 +4,15 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
+/// Whether a walk leaves a folder unlisted, with everything in it: a place its caller passes over,
+/// where listing it would cost the walk time and tell the caller nothing.
+/// </summary>
+/// <param name="parent">The folder holding it, in display form.</param>
+/// <param name="parentIsRoot">Whether <paramref name="parent"/> is the folder the walk began at.</param>
+/// <param name="folder">The folder's own path, in display form.</param>
+internal delegate bool LeavesUnlisted(string parent, bool parentIsRoot, string folder, string name);
+
+/// <summary>
 /// Builds an <see cref="ExploreTree"/> by walking directories — §5.5's guaranteed route, the one
 /// that needs no rights beyond the ones the user already has.
 ///
@@ -22,13 +31,19 @@ internal static class WalkExploreReader
     /// cadence §5.5 wants for a UI: coarse enough to be worth marshalling and frequent enough that a
     /// large scan does not look stalled. It is never called beside itself.
     /// </summary>
+    /// <param name="unlisted">
+    /// The folders not to list, or null to list every one. A folder left unlisted is still in the
+    /// tree, with nothing below it, so a caller going through the tree meets it and can name it; and
+    /// it is never marked as refused, because nothing asked Windows for its listing.
+    /// </param>
     public static ExploreTree Read(
         string root,
         ScanTuner tuning,
         IOccupancyProbe probe,
         Action<ExploreTreeBuilder, long, long>? onProgress,
         TimeProvider clock,
-        CancellationToken ct)
+        CancellationToken ct,
+        LeavesUnlisted? unlisted = null)
     {
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
         // the parent it was handed — so the whole traversal stays past MAX_PATH. The tree keeps the
@@ -75,12 +90,29 @@ internal static class WalkExploreReader
                 Interlocked.Add(ref items, children.Count);
                 Interlocked.Add(ref bytes, children.Sum(c => c.Size));
 
+                // Every entry of one listing shares its directory, so its display form is made once.
+                string? folder = null;
+
                 for (var i = 0; i < contents.Entries.Count; i++)
                 {
-                    if (contents.Entries[i].IsDirectory)
+                    var entry = contents.Entries[i];
+
+                    if (!entry.IsDirectory)
                     {
-                        descend(contents.Entries[i], first + i);
+                        continue;
                     }
+
+                    if (unlisted is not null)
+                    {
+                        folder ??= LongPath.Display(entry.Directory);
+
+                        if (unlisted(folder, parent == ExploreTreeBuilder.RootNode, Path.Join(folder, entry.Name), entry.Name))
+                        {
+                            continue;
+                        }
+                    }
+
+                    descend(entry, first + i);
                 }
             },
             () => onProgress?.Invoke(builder, Interlocked.Read(ref items), Interlocked.Read(ref bytes)),

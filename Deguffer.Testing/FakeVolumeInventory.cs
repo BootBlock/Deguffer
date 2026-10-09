@@ -63,7 +63,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
             FreeBytes: freeBytes,
             Features: features,
             AlsoMountedAt: alsoMountedAt,
-            VolumeName: volumeName));
+            VolumeName: volumeName,
+            FeaturesAnswered: true));
 
         return this;
     }

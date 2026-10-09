@@ -6,7 +6,11 @@ namespace Deguffer.Core.Duplicates;
 
 /// <summary>A file a walk kept, by its place in the tree, so no path is built until it has a match.</summary>
 /// <param name="Route">The route that identifies the files of the volume it was found on.</param>
-internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRole Role, IdentityRoute Route);
+/// <param name="Volume">
+/// The volume it was found on: its location's, as the search resolved it, because the enumeration of
+/// a location never crosses into a volume mounted in one of its folders.
+/// </param>
+internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRole Role, IdentityRoute Route, LocalVolume Volume);
 
 /// <summary>
 /// Goes through the tree of one searched location and keeps the files a search may match (§7.4).
@@ -38,7 +42,6 @@ internal sealed class CandidateWalk
         "Part of this drive's file table could not be read, so some of the files here may not have been searched.";
 
     private readonly DuplicateSearch _search;
-    private readonly UnresolvedReferences _unresolvedReferences;
     private readonly List<FoundFile> _found = [];
     private readonly List<PassedOverPlace> _passedOver = [];
     private readonly List<UnreadPlace> _unread = [];
@@ -48,15 +51,7 @@ internal sealed class CandidateWalk
     private int _unknownLength;
     private int _onlyInTheCloud;
 
-    /// <param name="unresolvedReferences">
-    /// The places of the reference locations that were not resolved, passed over wherever the walk
-    /// reaches one, because the role their files should take is what is not known.
-    /// </param>
-    public CandidateWalk(DuplicateSearch search, UnresolvedReferences unresolvedReferences)
-    {
-        _search = search;
-        _unresolvedReferences = unresolvedReferences;
-    }
+    public CandidateWalk(DuplicateSearch search) => _search = search;
 
     public IReadOnlyList<FoundFile> Found => _found;
 
@@ -64,20 +59,23 @@ internal sealed class CandidateWalk
 
     public IReadOnlyList<UnreadPlace> Unread => _unread;
 
-    public LeftOutFiles LeftOut => new(_links, _empty, _unknownLength, _onlyInTheCloud, Gone: 0, Unidentified: 0);
+    public LeftOutFiles LeftOut => new(_links, _empty, _unknownLength, _onlyInTheCloud, Gone: 0, Unidentified: 0, ReadFailed: 0, Changed: 0);
 
     /// <summary>Note a place passed over before its tree was read, such as a whole location.</summary>
     public void PassOver(PassedOverPlace place) => _passedOver.Add(place);
 
     /// <param name="scan">The scan of <paramref name="root"/>'s folder: its tree, and its node in that tree.</param>
     /// <param name="within">The locations inside <paramref name="root"/>, whose roles its files may take.</param>
-    /// <param name="below">What to pass over below the root, or null where nothing is passed over.</param>
+    /// <param name="passOver">
+    /// What to pass over below the root, which the scan of it was given too: on the walk route a
+    /// place passed over is in the tree, with nothing listed below it.
+    /// </param>
     /// <param name="route">The route that identifies the files on the root's volume.</param>
     public void Read(
         ScannedFolder scan,
         ResolvedLocation root,
         IReadOnlyList<ResolvedLocation> within,
-        PassedOverPlaces.Below? below,
+        PassedOverBelow passOver,
         IdentityRoute route,
         CancellationToken ct)
     {
@@ -106,8 +104,7 @@ internal sealed class CandidateWalk
                 var name = tree.NameOf(child);
                 var path = Path.Join(folder.Path, name);
 
-                if ((_unresolvedReferences.WhyPassedOver(path)
-                        ?? below?.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name)) is { } why)
+                if (passOver.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name) is { } why)
                 {
                     _passedOver.Add(new PassedOverPlace(path, why));
                 }
@@ -121,13 +118,13 @@ internal sealed class CandidateWalk
                 }
                 else
                 {
-                    Consider(tree, child, name, folder.Role, route);
+                    Consider(tree, child, name, folder.Role, route, root.Volume);
                 }
             }
         }
     }
 
-    private void Consider(ExploreTree tree, int file, string name, LocationRole role, IdentityRoute route)
+    private void Consider(ExploreTree tree, int file, string name, LocationRole role, IdentityRoute route, LocalVolume volume)
     {
         var length = tree.LengthOf(file);
 
@@ -163,7 +160,7 @@ internal sealed class CandidateWalk
             return;
         }
 
-        _found.Add(new FoundFile(tree, file, role, route));
+        _found.Add(new FoundFile(tree, file, role, route, volume));
     }
 
     /// <summary>

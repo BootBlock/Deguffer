@@ -183,8 +183,8 @@ public sealed class DuplicateCandidateTests : IDisposable
             new(@"X:\Data\Photos", LocationRole.Reference), @"X:\Data\Photos", ReachedFolder.At(@"X:\Data\Photos", volumes),
             LocationRole.Reference, DriveX);
 
-        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]), new UnresolvedReferences([]));
-        walk.Read(Scanned(tree, tree.RootNode), root, [reference], below: null, IdentityRoute.FileId, default);
+        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]));
+        walk.Read(Scanned(tree, tree.RootNode), root, [reference], new PassedOverBelow(new UnresolvedReferences([]), below: null), IdentityRoute.FileId, default);
 
         var group = Assert.Single(CandidateGrouping.ByTheTree(walk.Found, MatchCriteria.Size, CandidateGrouping.TreeMinuteOf));
         Assert.Equal(LocationRole.Reference, group.Single(file => tree.NameOf(file.Node) == "a.jpg").Role);
@@ -464,9 +464,9 @@ public sealed class DuplicateCandidateTests : IDisposable
     {
         var volumes = new FakeVolumeInventory();
         var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search, DriveX);
-        var walk = new CandidateWalk(new DuplicateSearch(criteria, [root.Given]), new UnresolvedReferences([]));
+        var walk = new CandidateWalk(new DuplicateSearch(criteria, [root.Given]));
 
-        walk.Read(Scanned(tree, node), root, [], below: null, IdentityRoute.FileId, default);
+        walk.Read(Scanned(tree, node), root, [], new PassedOverBelow(new UnresolvedReferences([]), below: null), IdentityRoute.FileId, default);
 
         return (CandidateGrouping.ByTheTree(walk.Found, criteria, CandidateGrouping.TreeMinuteOf), walk.LeftOut);
     }

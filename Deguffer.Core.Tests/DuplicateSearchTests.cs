@@ -31,6 +31,17 @@ public sealed class DuplicateSearchTests
         Assert.Throws<ArgumentException>(() => new DuplicateSearch((MatchCriteria)16 | MatchCriteria.Size, OneLocation));
     }
 
+    /// <summary>
+    /// The same for a checksum: a value no member names would reach the searcher and fail there with
+    /// no sentence a user could act on.
+    /// </summary>
+    [Fact]
+    public void ASearchNamingAChecksumNoMemberNamesIsRefused()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new DuplicateSearch(MatchCriteria.Content, OneLocation, (ChecksumAlgorithm)99));
+    }
+
     [Theory]
     [InlineData(20L, 10L)]
     [InlineData(-1L, null)]

@@ -43,6 +43,20 @@ public sealed record DuplicateCandidate(
 {
     /// <summary>Whether the file has hard links, so removing one name would free nothing.</summary>
     public bool HasSeveralNames => NameCount > 1;
+
+    /// <summary>
+    /// The route the file's volume identifies its files by, which is the route it is identified by
+    /// again before its content is read: the other gives the volume's serial number at another
+    /// width, so the same file would read as a different one.
+    /// </summary>
+    internal IdentityRoute Route { get; init; }
+
+    /// <summary>
+    /// The volume the file is on, as the search resolved the location it was found in: the one
+    /// answer every later stage reads, for the disk its content is read from and for whether a link
+    /// can exist on the way to it, rather than each asking the machine again for each file.
+    /// </summary>
+    internal LocalVolume Volume { get; init; }
 }
 
 /// <summary>
@@ -65,12 +79,23 @@ public sealed record CandidateGroup(long? Length, string? Name, DateTime? Modifi
 /// <param name="UnknownLength">Files whose length the scan could not establish.</param>
 /// <param name="OnlyInTheCloud">
 /// Cloud files not on this device, left out of a search that compares content because reading one
-/// would download it.
+/// would download it: as the scan or the identification saw them, or as Windows said immediately
+/// before the content would have been read.
 /// </param>
-/// <param name="Gone">Files no longer there as a file when they were identified.</param>
+/// <param name="Gone">Files no longer there as a file when they were identified, or when their content was to be read.</param>
 /// <param name="Unidentified">
-/// Files Windows would not describe when they were identified. They may still be there, and are
-/// never counted as gone.
+/// Files Windows would not describe when they were identified, or again before their content was
+/// read. They may still be there, and are never counted as gone.
+/// </param>
+/// <param name="ReadFailed">
+/// Files whose content could not be read: held by another program that would not share it, refused
+/// by an access rule, or failing as they were read. They may still be there, and are never counted
+/// as gone.
+/// </param>
+/// <param name="Changed">
+/// Files that were not the file the search identified by the time their content was read, or that
+/// changed while it was: another file at the path, or a different length, last-modified time or
+/// attributes. Their bytes cannot be said to be the file's.
 /// </param>
 public readonly record struct LeftOutFiles(
     int Links,
@@ -78,7 +103,9 @@ public readonly record struct LeftOutFiles(
     int UnknownLength,
     int OnlyInTheCloud,
     int Gone,
-    int Unidentified)
+    int Unidentified,
+    int ReadFailed,
+    int Changed)
 {
     /// <summary>What two stages of one search left out between them.</summary>
     public static LeftOutFiles operator +(LeftOutFiles left, LeftOutFiles right) => new(
@@ -87,5 +114,7 @@ public readonly record struct LeftOutFiles(
         left.UnknownLength + right.UnknownLength,
         left.OnlyInTheCloud + right.OnlyInTheCloud,
         left.Gone + right.Gone,
-        left.Unidentified + right.Unidentified);
+        left.Unidentified + right.Unidentified,
+        left.ReadFailed + right.ReadFailed,
+        left.Changed + right.Changed);
 }

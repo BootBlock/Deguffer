@@ -1,3 +1,5 @@
+using Microsoft.Win32.SafeHandles;
+
 namespace Deguffer.Core.Safety;
 
 /// <summary>
@@ -65,4 +67,14 @@ public readonly record struct FileReading(FileReadingResult Result, FileDescript
     public static FileReading Gone => new(FileReadingResult.Gone, null);
 
     public static FileReading Unreadable => new(FileReadingResult.Unreadable, null);
+}
+
+/// <summary>
+/// What <see cref="FileInformation.Hold"/> answered, and the attributes-only handle the file was
+/// described through where it was identified, held until this is disposed.
+/// </summary>
+/// <param name="Handle">The handle, open on the entry itself, or null where the file was not identified.</param>
+internal sealed record HeldFile(FileReading Reading, SafeFileHandle? Handle) : IDisposable
+{
+    public void Dispose() => Handle?.Dispose();
 }

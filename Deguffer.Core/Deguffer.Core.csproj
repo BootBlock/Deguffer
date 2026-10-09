@@ -22,6 +22,15 @@
 
   <ItemGroup>
     <!--
+      XXH128 and CRC-32 for the duplicate search's content checksums (§7.4), which Windows' own
+      cryptographic providers do not offer. Microsoft's, MIT-licensed, and with no dependencies on
+      net8.0 and later. The only package Core references: keep it so.
+    -->
+    <PackageReference Include="System.IO.Hashing" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
       These rules are internal because nothing outside Core has any business calling them, and each
       decides from inputs a test can hand it directly, where going through a public type would mean
       going through this machine.

@@ -69,7 +69,10 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 
 - **System.IO.Hashing is a NuGet package, not part of .NET 10**: version 10.0.12, MIT, from
   Microsoft, no dependencies on `net8.0` and later. It provides `XxHash128`, `XxHash3`, `XxHash64`,
-  `Crc32` and `Crc64` behind `NonCryptographicHashAlgorithm`. It is the first package
+  `Crc32` and `Crc64` behind `NonCryptographicHashAlgorithm`. Measured in phase 3: `Crc32` writes
+  its value least significant byte first, so its bytes are reversed to print `cbf43926` for
+  "123456789" as other tools do, while `XxHash128` already writes the canonical order `xxh128sum`
+  prints. It is the first package
   `Deguffer.Core` references, and the only one this plan adds. The App ships untrimmed (see
   [the AOT evaluation](aot-and-single-file-evaluation.md)), so trimming does not apply. BLAKE3 is
   not offered, because its maintained .NET port would be a second dependency for the role XXH128
@@ -77,13 +80,28 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Cryptographic checksums come from Windows (CNG)** through `System.Security.Cryptography`. MD5,
   SHA-1 and the SHA-2 family work on every supported Windows; SHA3-256 needs Windows 11 build 25324
   or later, so it is offered only where `SHA3_256.IsSupported`.
-- **Throughput.** Native XXH3 runs near 60 GB/s and MD5 near 0.6 GB/s on an i7-9700K; .NET 10's
-  SHA-256 measured about 2.8 GB/s on one Ryzen 9 9950X thread. The managed `XxHash128` has no
-  published figure **(unverified)**. fclones' author reports that the choice of checksum barely
+- **Throughput.** Measured in phase 3 on an i9-13900K, one thread hashing in memory: XXH128
+  54.6 GB/s, CRC-32 27.5, SHA-256 2.61, SHA-1 0.92, SHA-512 and MD5 0.74, SHA3-256 0.56. An NVMe
+  SSD read with unbuffered, aligned 1 MiB reads of 64 files of 64 MiB levelled off near 3.3 GB/s,
+  reached by XXH128 with two readers and by SHA-256 with four; eight or sixteen added nothing, so
+  four readers is a solid-state disk's bound. fclones' author reports that the choice of checksum barely
   matters except on a fast SSD or cached data, because the disk sets the pace, and that several
   readers on one spinning disk are much slower than one.
-- **Reading.** `File.OpenHandle` and `RandomAccess.Read(handle, span, offset)` read the first and
-  last blocks and the full content without a shared position.
+- **Reading.** Corrected in phase 3: the content is opened by the file's number with
+  `OpenFileById` (`ExtendedFileIdType` with the 128-bit ID, `FileIdType` with the 64-bit one on the
+  older route), using the attributes-only handle it was described through as the volume hint, and
+  `RandomAccess.Read(handle, span, offset)` reads the first and last blocks and the full content
+  without a shared position. A path opened by `File.OpenHandle` is walked again and follows every
+  link on it, its own name included, so a name replaced by a link after the description would send
+  the open to another file, a share, or a cloud file that opening recalls; an open by number walks
+  no path. While the described handle is held, Windows refuses to rename any folder above the file,
+  so only the file's own name can be replaced. Where a volume will not open a file by number, the
+  path is opened only where the volume answered that it supports no reparse points
+  (`LocalVolume.CannotHoldLinks`; a volume that refused the question may be NTFS and never
+  qualifies) and the path starts at that volume's own drive letter, since a volume reached through
+  a folder of another is reached through folders that can be links. Anywhere else the file is a
+  failed read. Which error a FAT or exFAT driver gives is **(unverified)**: no such volume was
+  attached, and the rule does not depend on it.
 - **Identity.** `GetFileInformationByHandleEx(FileIdInfo)` returns the volume serial and the 128-bit
   file ID, which ReFS needs because its 64-bit index is not unique. A handle opened for
   `FILE_READ_ATTRIBUTES` with `FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS` reads it
@@ -99,9 +117,11 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   ran without them, so the search decides it for each volume as it runs (phase 2, step 5).
 - **Cloud files.** Reading the data of a file marked `RECALL_ON_DATA_ACCESS` downloads it, and no
   documented call lets a process read it without that. `RtlSetProcessPlaceholderCompatibilityMode`
-  changes how a placeholder looks, not whether it downloads, and two Microsoft pages disagree about
-  the default an unpackaged process sees **(unverified)**; `CloudFiles` already sets the thread's
-  mode where it needs to see placeholders. Opening a `RECALL_ON_OPEN` file for its content can
+  changes how a placeholder looks, not whether it downloads. Measured in phase 3: an unpackaged
+  process's default is `PHCM_DISGUISE_PLACEHOLDER` (1), which its threads follow, and through it an
+  attributes-only handle on an online-only placeholder shows no reparse point and still shows
+  `RECALL_ON_DATA_ACCESS`, so the check before a read needs no mode set; `CloudFiles` sets the
+  thread's mode where it needs to see placeholders themselves. Opening a `RECALL_ON_OPEN` file for its content can
   download it before any check on that handle runs, so the check uses an attributes-only handle
   first. A fully downloaded OneDrive file keeps
   its cloud reparse tag, so the tag is no sign of a file being online-only; the attributes are.
@@ -316,8 +336,8 @@ form.
    and SHA-256 throughput is measured here, and the figures set the per-disk bound in step 3.
 2. **Reading.** A content seam that first reads the attributes through phase 2's attributes-only
    handle and refuses an online-only file there, whatever the tree said, and only then opens the
-   content through `File.OpenHandle` and `RandomAccess`. The default placeholder mode an unpackaged
-   Deguffer sees is measured here.
+   content by its file ID through that held handle and reads it with `RandomAccess`. The default
+   placeholder mode an unpackaged Deguffer sees is measured here.
 3. **Staged matching.** First and last blocks, then the full content, each stage only over what the
    last left. Readers are bounded per physical disk from `VolumeMediaCache.Of`: one on a disk with
    a seek penalty, the measured bound on one without, and one where the media is unknown or
@@ -512,6 +532,30 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   neither call identifies is not searched, with each location on it named, a reference included.
   Corrected here: named streams are listed in phase 5 through the held handle, not at search time
   by path; the FAT and exFAT measurement moves to phase 9, which runs elevated.
+- 2026-10-09: phase 3 landed. Checksums behind one running `Checksum` over System.IO.Hashing and
+  `IncrementalHash`, each pinned to a published vector, SHA3-256 offered only where Windows has it
+  (`ChecksumAlgorithms`); a content seam (`ContentReader`) that describes the path through the
+  attributes-only handle, leaves an online-only file out unopened, opens the content by its file
+  ID through that held handle (`FileInformation.Hold`, `FileInformation.OpenById`) sharing only
+  reading, and describes it again through the content handle before the first byte and after the
+  last, counting a failed read and a changed file apart from a gone one (`LeftOutFiles`); staged
+  matching (`ContentMatching`) of the first and last 64 KiB, then the whole of larger files, read
+  in lanes by physical disk (`ReadingLanes`: one reader unless solid state, four there), each file
+  carrying the volume its location was resolved to; and the searcher (`DuplicateSearcher`), which
+  streams each `DuplicateGroup` and reports progress by stage. Decided: content is opened by file
+  ID, because a path open follows any link put on the path after the description and can reach a
+  share or recall a cloud file before a check could stop it; where Windows will not open a file by
+  its ID, the path is opened only on a volume that answered that it holds no reparse points and is
+  reached by its own drive letter (`LocalVolume.CannotHoldLinks`), a volume that would not answer
+  never qualifying, and otherwise the read fails; a stop while reading content answers what was
+  confirmed, marked stopped, even where that is nothing, and a stop before the candidates were all
+  found throws; a group whose last read finishes after the stop is not confirmed. Measured: a warm
+  walk of a system drive took a median 6,578 ms, of which the places passed over by default took
+  2,701 ms (41%, and 661,852 of 2.49 M entries), so the walk is now told what to pass over
+  (`PassedOverBelow`, asked by both the walk and the candidate walk) and leaves it unlisted; the
+  file table, read whole anyway, ignores it. Corrected here: CRC-32's byte order, the throughput
+  figures, the placeholder mode, and how the content is opened (by file ID, not `File.OpenHandle`
+  on the path), in the technical facts above.
 
 ## Limits that stay open
 

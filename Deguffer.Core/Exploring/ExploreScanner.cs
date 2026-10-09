@@ -84,17 +84,39 @@ public sealed class ExploreScanner(
     /// </summary>
     /// <param name="folders">Full paths of folders, in either form <see cref="Safety.LongPath"/> produces.</param>
     /// <returns>One scan per folder, in the order they were asked for.</returns>
-    public async ValueTask<IReadOnlyList<ScannedFolder>> ScanFoldersAsync(
+    public ValueTask<IReadOnlyList<ScannedFolder>> ScanFoldersAsync(
         IReadOnlyList<string> folders,
         IProgress<ExploreProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        ScanFoldersAsync(folders, unlisted: null, progress, ct);
+
+    /// <summary>
+    /// <see cref="ScanFoldersAsync(IReadOnlyList{string}, IProgress{ExploreProgress}?, CancellationToken)"/>,
+    /// told which folders below each one its caller passes over, so the walk does not list them.
+    ///
+    /// <para><b>Only the walk is told.</b> Listing a folder is the walk's cost, and on a system drive
+    /// the places a duplicate search passes over by default were measured at 41% of a warm walk's
+    /// time and a quarter of its entries. The file table is read whole whatever is asked of it, so
+    /// the route that reads it leaves nothing out, and the caller passes over the same places in
+    /// what it reads.</para>
+    /// </summary>
+    /// <param name="unlisted">For each folder, what not to list below it, or null where everything is listed.</param>
+    internal async ValueTask<IReadOnlyList<ScannedFolder>> ScanFoldersAsync(
+        IReadOnlyList<string> folders,
+        IReadOnlyList<LeavesUnlisted?>? unlisted,
+        IProgress<ExploreProgress>? progress,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(folders);
 
-        return await Task.Run(() => ScanFolders(folders, progress, ct), ct).ConfigureAwait(false);
+        return await Task.Run(() => ScanFolders(folders, unlisted, progress, ct), ct).ConfigureAwait(false);
     }
 
-    private ScannedFolder[] ScanFolders(IReadOnlyList<string> folders, IProgress<ExploreProgress>? progress, CancellationToken ct)
+    private ScannedFolder[] ScanFolders(
+        IReadOnlyList<string> folders,
+        IReadOnlyList<LeavesUnlisted?>? unlisted,
+        IProgress<ExploreProgress>? progress,
+        CancellationToken ct)
     {
         var scans = new ScannedFolder?[folders.Count];
         var reasons = new FallbackReason[folders.Count];
@@ -151,7 +173,7 @@ public sealed class ExploreScanner(
         {
             if (scans[i] is null)
             {
-                var walked = Walk(folders[i], reasons[i], progress, ct);
+                var walked = Walk(folders[i], reasons[i], progress, ct, unlisted?[i]);
                 scans[i] = new ScannedFolder(
                     walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback, FromIncompleteTable: false);
             }
@@ -278,7 +300,8 @@ public sealed class ExploreScanner(
         string root,
         FallbackReason reason,
         IProgress<ExploreProgress>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        LeavesUnlisted? unlisted = null)
     {
         var since = _time.GetTimestamp();
 
@@ -310,7 +333,8 @@ public sealed class ExploreScanner(
             },
             // The scan's own clock, so the walk's reports and the snapshots above keep one time.
             _time,
-            ct);
+            ct,
+            unlisted);
 
         return ExploreScan.Walked(tree, reason);
     }
