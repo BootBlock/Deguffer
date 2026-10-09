@@ -384,11 +384,11 @@ public sealed class DuplicateIdentityTests : IDisposable
         var folder = Path.Combine(top, "Data");
         var volume = new LocalVolume(_tree.Top + Path.DirectorySeparatorChar, DriveType.Fixed, VolumeReadiness.Ready);
         var root = new ResolvedLocation(new(folder, role), folder, ReachedFolder.At(folder, _tree.Volumes), role, volume);
-        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]), new UnresolvedReferences([]));
+        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]));
 
         walk.Read(
             new ScannedFolder(tree, node, ScanStrategy.MasterFileTable, FallbackReason.None, FromIncompleteTable: false),
-            root, [], below: null, IdentityRoute.FileId, default);
+            root, [], new PassedOverBelow(new UnresolvedReferences([]), below: null), IdentityRoute.FileId, default);
 
         return walk.Found;
     }

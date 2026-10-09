@@ -38,7 +38,6 @@ internal sealed class CandidateWalk
         "Part of this drive's file table could not be read, so some of the files here may not have been searched.";
 
     private readonly DuplicateSearch _search;
-    private readonly UnresolvedReferences _unresolvedReferences;
     private readonly List<FoundFile> _found = [];
     private readonly List<PassedOverPlace> _passedOver = [];
     private readonly List<UnreadPlace> _unread = [];
@@ -48,15 +47,7 @@ internal sealed class CandidateWalk
     private int _unknownLength;
     private int _onlyInTheCloud;
 
-    /// <param name="unresolvedReferences">
-    /// The places of the reference locations that were not resolved, passed over wherever the walk
-    /// reaches one, because the role their files should take is what is not known.
-    /// </param>
-    public CandidateWalk(DuplicateSearch search, UnresolvedReferences unresolvedReferences)
-    {
-        _search = search;
-        _unresolvedReferences = unresolvedReferences;
-    }
+    public CandidateWalk(DuplicateSearch search) => _search = search;
 
     public IReadOnlyList<FoundFile> Found => _found;
 
@@ -71,13 +62,16 @@ internal sealed class CandidateWalk
 
     /// <param name="scan">The scan of <paramref name="root"/>'s folder: its tree, and its node in that tree.</param>
     /// <param name="within">The locations inside <paramref name="root"/>, whose roles its files may take.</param>
-    /// <param name="below">What to pass over below the root, or null where nothing is passed over.</param>
+    /// <param name="passOver">
+    /// What to pass over below the root, which the scan of it was given too: on the walk route a
+    /// place passed over is in the tree, with nothing listed below it.
+    /// </param>
     /// <param name="route">The route that identifies the files on the root's volume.</param>
     public void Read(
         ScannedFolder scan,
         ResolvedLocation root,
         IReadOnlyList<ResolvedLocation> within,
-        PassedOverPlaces.Below? below,
+        PassedOverBelow passOver,
         IdentityRoute route,
         CancellationToken ct)
     {
@@ -106,8 +100,7 @@ internal sealed class CandidateWalk
                 var name = tree.NameOf(child);
                 var path = Path.Join(folder.Path, name);
 
-                if ((_unresolvedReferences.WhyPassedOver(path)
-                        ?? below?.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name)) is { } why)
+                if (passOver.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name) is { } why)
                 {
                     _passedOver.Add(new PassedOverPlace(path, why));
                 }

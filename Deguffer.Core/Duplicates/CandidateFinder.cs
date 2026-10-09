@@ -108,7 +108,7 @@ public sealed class CandidateFinder
         ArgumentNullException.ThrowIfNull(policy);
 
         var locations = SearchLocations.Resolve(search.Locations, _volumes, _files);
-        var walk = new CandidateWalk(search, locations.UnresolvedReferences);
+        var walk = new CandidateWalk(search);
 
         var programs = search.SearchPassedOverPlaces
             ? new ProgramFolderReading([], [], [])
@@ -150,11 +150,21 @@ public sealed class CandidateFinder
                 ? known
                 : routeOfVolume[root.Volume] = _files.IdentityRouteOf(root.Folder);
 
-        var scans = await _scanner.ScanFoldersAsync([.. roots.Select(root => root.Folder)], progress, ct).ConfigureAwait(false);
+        // Asked by the walk before it lists a folder and by the candidate walk as it reads the tree,
+        // so a place the scan did not list is still one the search names.
+        PassedOverBelow[] passOver =
+            [.. roots.Select(root => new PassedOverBelow(locations.UnresolvedReferences, passedOver?.Within(root.Folder)))];
+
+        var scans = await _scanner.ScanFoldersAsync(
+            [.. roots.Select(root => root.Folder)],
+            [.. passOver.Select(below => (LeavesUnlisted)((parent, parentIsRoot, folder, name) =>
+                below.WhyPassedOver(parent, parentIsRoot, folder, name) is not null))],
+            progress,
+            ct).ConfigureAwait(false);
 
         for (var i = 0; i < roots.Count; i++)
         {
-            walk.Read(scans[i], roots[i], locations.Within(roots[i]), passedOver?.Within(roots[i].Folder), routes[i], ct);
+            walk.Read(scans[i], roots[i], locations.Within(roots[i]), passOver[i], routes[i], ct);
         }
 
         var identification = new CandidateIdentification(_files, search.Criteria);

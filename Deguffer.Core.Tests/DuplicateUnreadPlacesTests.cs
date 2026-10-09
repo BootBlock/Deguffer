@@ -91,8 +91,8 @@ public sealed class DuplicateUnreadPlacesTests : IDisposable
         var location = new ResolvedLocation(
             new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", new FakeVolumeInventory()), LocationRole.Search,
             new LocalVolume(@"X:\", DriveType.Fixed, VolumeReadiness.Ready));
-        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [location.Given]), new UnresolvedReferences([]));
-        walk.Read(scan, location, [], below: null, IdentityRoute.FileId, default);
+        var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [location.Given]));
+        walk.Read(scan, location, [], new PassedOverBelow(new UnresolvedReferences([]), below: null), IdentityRoute.FileId, default);
 
         Assert.Equal(damage == Damage.None ? 3 : 2, Assert.Single(CandidateGrouping.ByTheTree(walk.Found, MatchCriteria.Size, CandidateGrouping.TreeMinuteOf)).Count);
 
