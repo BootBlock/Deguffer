@@ -10,7 +10,12 @@ namespace Deguffer.Core.Duplicates;
 /// </param>
 /// <param name="Reached">The folder at every path it is reachable at.</param>
 /// <param name="Role">Its role, which is a reference where the folder was given in both roles.</param>
-public sealed record ResolvedLocation(SearchLocation Given, string Folder, ReachedFolder Reached, LocationRole Role);
+/// <param name="Volume">
+/// The volume <paramref name="Folder"/> is stored on, as <see cref="HostVolume.For"/> answers it. A
+/// location on one volume never holds a location on another, whatever their paths say.
+/// </param>
+public sealed record ResolvedLocation(
+    SearchLocation Given, string Folder, ReachedFolder Reached, LocationRole Role, LocalVolume Volume);
 
 /// <summary>A chosen location the search will not enumerate, and why, in a sentence the page shows.</summary>
 public sealed record UnsearchedLocation(SearchLocation Given, string Reason);
@@ -30,6 +35,13 @@ public sealed record UnsearchedLocation(SearchLocation Given, string Reason);
 /// the case the disk holds, so the comparison is ordinal. The places a folder is also reachable at,
 /// through a volume mounted in more than one place, are asked of <see cref="ReachedFolder"/> as well,
 /// for a folder whose final path Windows gives through a different mount.</para>
+///
+/// <para><b>Held only on one volume.</b> A volume mounted in a folder is named by that folder where
+/// it has no drive letter, so <c>C:\mnt\v\Photos</c> reads as inside <c>C:\</c> while its files are
+/// on another volume. The enumeration of <c>C:\</c> never crosses the mount point, which is a link in
+/// its tree, so a location held by text alone would be enumerated by nothing, and the search would
+/// read as one that found nothing there. A location holds another only where both are on one
+/// volume, and one on another volume is enumerated in its own right.</para>
 ///
 /// <para><b>Local disks only.</b> A share can be this machine's own disk under a second name that no
 /// identity reveals, and a cloud client's drive downloads what it is asked to read, so a location on
@@ -58,7 +70,7 @@ public sealed class SearchLocations
 
     /// <summary>The locations strictly inside <paramref name="root"/>, which its enumeration reaches.</summary>
     public IReadOnlyList<ResolvedLocation> Within(ResolvedLocation root) =>
-        [.. Locations.Where(inner => !ReferenceEquals(inner, root) && Holds(root.Folder, inner.Folder))];
+        [.. Locations.Where(inner => !ReferenceEquals(inner, root) && Holds(root, inner))];
 
     /// <summary>Resolve each of <paramref name="given"/>, in order.</summary>
     public static SearchLocations Resolve(IReadOnlyList<SearchLocation> given, IVolumeInventory volumes)
@@ -86,25 +98,18 @@ public sealed class SearchLocations
 
         return new SearchLocations(
             resolved,
-            [.. resolved.Where(location => !resolved.Exists(outer => !ReferenceEquals(outer, location) && Holds(outer.Folder, location.Folder)))],
+            [.. resolved.Where(location => !resolved.Exists(outer => !ReferenceEquals(outer, location) && Holds(outer, location)))],
             unsearched);
     }
 
     /// <summary>
-    /// Whether <paramref name="outer"/> is <paramref name="inner"/> or holds it, as their final paths
-    /// say: ordinally, because a folder may be case-sensitive.
+    /// Whether <paramref name="outer"/> is <paramref name="inner"/> or holds it: both on one volume,
+    /// and the final paths saying so ordinally, because a folder may be case-sensitive. See the class
+    /// comment for why the volume is asked as well as the text.
     /// </summary>
-    internal static bool Holds(string outer, string inner)
-    {
-        if (inner.Equals(outer, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        var prefix = Path.EndsInDirectorySeparator(outer) ? outer : outer + Path.DirectorySeparatorChar;
-
-        return inner.StartsWith(prefix, StringComparison.Ordinal);
-    }
+    internal static bool Holds(ResolvedLocation outer, ResolvedLocation inner) =>
+        outer.Volume.RootPath.Equals(inner.Volume.RootPath, StringComparison.OrdinalIgnoreCase)
+        && LongPath.Contains(outer.Folder, inner.Folder, StringComparison.Ordinal);
 
     private static (ResolvedLocation? Location, string? Reason)? Resolve(SearchLocation location, IVolumeInventory volumes)
     {
@@ -146,21 +151,25 @@ public sealed class SearchLocations
                 return (null, "Windows would not say whether this is a folder, so Deguffer will not search it.");
         }
 
-        if (WhyNotLocal(HostVolume.For(volumes, folder)) is { } notLocal)
+        if (HostVolume.For(volumes, folder) is not { } volume)
+        {
+            return (null, "Deguffer cannot tell which drive this is on, so it cannot tell whether its files are on this computer.");
+        }
+
+        if (WhyNotLocal(volume) is { } notLocal)
         {
             return (null, notLocal);
         }
 
-        return (new ResolvedLocation(location, folder, ReachedFolder.At(folder, volumes), location.Role), null);
+        return (new ResolvedLocation(location, folder, ReachedFolder.At(folder, volumes), location.Role, volume), null);
     }
 
     private const string NotLocal =
         "This is on a network share. Deguffer searches only the disks of this computer, because a "
         + "file on a share can be one of this computer's own files under a second name.";
 
-    private static string? WhyNotLocal(LocalVolume? volume) => volume switch
+    private static string? WhyNotLocal(LocalVolume volume) => volume switch
     {
-        null => "Deguffer cannot tell which drive this is on, so it cannot tell whether its files are on this computer.",
         { StoresContentRemotely: true } =>
             "This drive keeps its files in the cloud. Reading one would download it, and removing one "
             + "removes it from the cloud, so Deguffer does not search it.",

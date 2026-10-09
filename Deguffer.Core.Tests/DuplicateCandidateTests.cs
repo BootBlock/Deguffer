@@ -13,6 +13,9 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class DuplicateCandidateTests : IDisposable
 {
+    /// <summary>The drive of the trees these tests build by hand, which no test reads from.</summary>
+    private static readonly LocalVolume DriveX = new(@"X:\", DriveType.Fixed, VolumeReadiness.Ready);
+
     private readonly DuplicateTree _tree = new();
 
     public void Dispose() => _tree.Dispose();
@@ -83,9 +86,10 @@ public sealed class DuplicateCandidateTests : IDisposable
         var tree = builder.Build(ExploreChildOrder.BySize);
 
         var volumes = new FakeVolumeInventory();
-        var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search);
+        var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search, DriveX);
         var reference = new ResolvedLocation(
-            new(@"X:\Data\Photos", LocationRole.Reference), @"X:\Data\Photos", ReachedFolder.At(@"X:\Data\Photos", volumes), LocationRole.Reference);
+            new(@"X:\Data\Photos", LocationRole.Reference), @"X:\Data\Photos", ReachedFolder.At(@"X:\Data\Photos", volumes),
+            LocationRole.Reference, DriveX);
 
         var walk = new CandidateWalk(new DuplicateSearch(MatchCriteria.Size, [root.Given]));
         walk.Read(tree, tree.RootNode, root, [reference], below: null, default);
@@ -309,7 +313,7 @@ public sealed class DuplicateCandidateTests : IDisposable
     private static (IReadOnlyList<CandidateGroup> Groups, LeftOutFiles LeftOut) Walk(ExploreTree tree, int node, MatchCriteria criteria)
     {
         var volumes = new FakeVolumeInventory();
-        var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search);
+        var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", volumes), LocationRole.Search, DriveX);
         var walk = new CandidateWalk(new DuplicateSearch(criteria, [root.Given]));
 
         walk.Read(tree, node, root, [], below: null, default);

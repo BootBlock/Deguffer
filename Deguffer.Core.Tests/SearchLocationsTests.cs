@@ -145,10 +145,52 @@ public sealed class SearchLocationsTests : IDisposable
     [Fact]
     public void FoldersWhosePathsDifferOnlyInCaseAreComparedAsWindowsNamesThem()
     {
-        Assert.False(SearchLocations.Holds(@"C:\Data\Photos", @"C:\Data\photos\a"));
-        Assert.True(SearchLocations.Holds(@"C:\Data\Photos", @"C:\Data\Photos\a"));
-        Assert.True(SearchLocations.Holds(@"C:\", @"C:\Data"));
+        var drive = new LocalVolume(@"C:\", DriveType.Fixed, VolumeReadiness.Ready);
+
+        Assert.False(SearchLocations.Holds(Resolved(@"C:\Data\Photos", drive), Resolved(@"C:\Data\photos\a", drive)));
+        Assert.True(SearchLocations.Holds(Resolved(@"C:\Data\Photos", drive), Resolved(@"C:\Data\Photos\a", drive)));
+        Assert.True(SearchLocations.Holds(Resolved(@"C:\", drive), Resolved(@"C:\Data", drive)));
     }
+
+    /// <summary>
+    /// A volume with no letter is named by the folder it is mounted at, so its folders read as inside
+    /// the drive holding that folder. The walk of that drive never crosses the mount point, so a
+    /// location held by its text alone would be searched by nothing.
+    ///
+    /// <para>Asked of the resolution rather than of a search: a test cannot mount a volume, so the
+    /// mount point here is a plain folder the inventory calls a volume, and a walk would enter it.</para>
+    /// </summary>
+    [Fact]
+    public void ALocationOnAVolumeMountedInsideAnotherIsSearchedInItsOwnRight()
+    {
+        _tree.Volumes.With(_tree.Folder("Mount") + Path.DirectorySeparatorChar);
+        var photos = _tree.Folder("Mount", "Photos");
+
+        var locations = SearchLocations.Resolve(
+            [new(_tree.Top), new(photos, LocationRole.Reference)], _tree.Volumes);
+
+        Assert.Equal(2, locations.Roots.Count);
+        var top = locations.Roots.Single(location => location.Folder == _tree.Top);
+        var inner = locations.Roots.Single(location => location.Folder == photos);
+        Assert.Equal(LocationRole.Reference, inner.Role);
+        Assert.Empty(locations.Within(top));
+    }
+
+    /// <summary>The same two folders on one volume: the inner one is enumerated as part of the outer.</summary>
+    [Fact]
+    public void ALocationInsideAnotherOnOneVolumeIsHeldByIt()
+    {
+        var photos = _tree.Folder("Mount", "Photos");
+
+        var locations = SearchLocations.Resolve(
+            [new(_tree.Top), new(photos, LocationRole.Reference)], _tree.Volumes);
+
+        var top = Assert.Single(locations.Roots);
+        Assert.Equal(photos, Assert.Single(locations.Within(top)).Folder);
+    }
+
+    private static ResolvedLocation Resolved(string folder, LocalVolume volume) =>
+        new(new(folder), folder, ReachedFolder.At(folder, new FakeVolumeInventory()), LocationRole.Search, volume);
 
     [Fact]
     public void ANetworkShareIsNotSearched()
