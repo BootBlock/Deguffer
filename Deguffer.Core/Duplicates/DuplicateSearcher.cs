@@ -64,6 +64,11 @@ public sealed class DuplicateSearcher
 
     /// <param name="policy">Explore's policy for this machine, whose refusals the search passes over.</param>
     /// <param name="found">Given each group as it is confirmed, one at a time, from any thread.</param>
+    /// <param name="candidatesFound">
+    /// Awaited once with what finding the candidates found, before any content is read and before the
+    /// first group is confirmed, so a page can read what decides each group's place in its list (the
+    /// space it could free, which needs the program folders finding read) before the first one arrives.
+    /// </param>
     /// <exception cref="ArgumentException">The search compares content by a checksum this machine does not offer.</exception>
     /// <exception cref="OperationCanceledException">The search was stopped before its candidates were all found.</exception>
     public async Task<DuplicateSearchResult> SearchAsync(
@@ -71,6 +76,7 @@ public sealed class DuplicateSearcher
         ExploreActionPolicy policy,
         IProgress<DuplicateGroup>? found = null,
         IProgress<DuplicateSearchProgress>? progress = null,
+        Func<CandidateFinding, CancellationToken, Task>? candidatesFound = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(search);
@@ -84,6 +90,11 @@ public sealed class DuplicateSearcher
 
         var finding = await _finder.FindAsync(search, policy, progress is null ? null : new FindingProgress(progress), ct)
             .ConfigureAwait(false);
+
+        if (candidatesFound is not null)
+        {
+            await candidatesFound(finding, ct).ConfigureAwait(false);
+        }
 
         List<DuplicateGroup> confirmed = [];
 

@@ -107,6 +107,28 @@ public sealed class DuplicateSearchTests
         Assert.Throws<ArgumentException>(() => new DuplicateSearch(MatchCriteria.Size, OneLocation, extensions: filter));
     }
 
+    /// <summary>
+    /// What a person types into the box: a space between two extensions separates them, as a comma
+    /// or a semicolon does. Read as one entry, <c>jpg png</c> would be an extension no file has, and
+    /// the search would find nothing without saying why.
+    /// </summary>
+    [Theory]
+    [InlineData("jpg png")]
+    [InlineData("jpg, png")]
+    [InlineData("*.jpg;*.png")]
+    [InlineData(" .jpg ,\t.PNG ")]
+    public void ATypedListIsSplitAtCommasSemicolonsAndSpaces(string typed)
+    {
+        var filter = ExtensionFilter.Parse(ExtensionFilterMode.OnlyThese, typed);
+
+        Assert.Null(filter.WhyRefused);
+        Assert.Equal([".jpg", ".png"], filter.Extensions, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AnEmptyTypedListToSearchIsRefused() =>
+        Assert.NotNull(ExtensionFilter.Parse(ExtensionFilterMode.OnlyThese, " , ").WhyRefused);
+
     [Theory]
     [InlineData("jpg")]
     [InlineData(".JPG")]

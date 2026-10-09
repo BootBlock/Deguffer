@@ -31,9 +31,9 @@
         </Border>
 
         <!--
-            A rail with permanent labels rather than a collapsible pane: there are six
+            A rail with permanent labels rather than a collapsible pane: there are seven
             destinations and they will not grow much, so nothing has to be opened to find out what
-            is here. The pane toggle is hidden for the same reason — collapsing six items saves no
+            is here. The pane toggle is hidden for the same reason — collapsing seven items saves no
             meaningful width and costs the user the labels.
         -->
         <NavigationView x:Name="Navigation"
@@ -62,6 +62,16 @@
                 <NavigationViewItem x:Name="ExploreItem" Content="Explore" Tag="Explore">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
+                <!-- Duplicates answers "which files are on this disk more than once" (§7.4). Its own
+                     destination for the reason Explore is one: it ranks and matches, and a match
+                     says nothing about whether a copy is safe to remove. It removes only copies the
+                     user marked, and every group keeps one. -->
+                <NavigationViewItem x:Name="DuplicatesItem" Content="Duplicates" Tag="Duplicates">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8C8;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 

@@ -226,7 +226,16 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   names. `ShellRecycleBin` uses `IFileOperation` with `FOFX_RECYCLEONDELETE`, so a file the bin
   cannot take fails rather than going outright, and it refuses a path the shell cannot parse.
 - **Elevation.** `ElevationRequest` has `Preview`, `InstalledApps` and `ExploreRequest`, each a
-  switch on the command line with a round-trip test.
+  switch on the command line with a round-trip test, and since phase 6 `DuplicatesRequest`, which
+  carries each location as its own argument with its role in its switch.
+- **Ordering the groups.** Corrected in phase 6: the space a group could free needs the keeping
+  rule, and the keeping rule needs the program folders that only finding the candidates reads, so
+  before phase 6 the groups could be sorted only once the search had ended (`DuplicateMarks` took
+  the whole result). `DuplicateSearcher.SearchAsync` now hands the candidates to a caller, and waits
+  for it, before any content is read or any group confirmed; `DuplicateSearchRun` makes the marks
+  then, from the finding (`DuplicateMarks.ForAsync(CandidateFinding, …)`), and each confirmed group
+  is placed by `DuplicateMarks.Add` and never moved. Every copy a group can hold is a candidate, so
+  each candidate's drive is asked once, before the first group.
 
 ## How it is built
 
@@ -500,6 +509,13 @@ difference shown. A `DuplicatesRequest` in `ElevationRequest` carries the locati
 across an elevated reopen, for the file-table route. Legible with no backdrop (§6.5), in light, dark
 and high contrast.
 
+Corrected here: groups cannot be sorted as they stream in while the order is decided only at the
+end, so the keeping rule is read once the candidates are found and each group is placed as it
+arrives (see "Ordering the groups"). The list is cleared once, when a new search starts, because it
+is then about something else; within a search each group is one insertion. The notes, the path
+difference and whether a picked location can join the list are decisions, so Core makes them
+(`DuplicateSearchNotes`, `PathDifference`, `LocationChoice`).
+
 Proves: each control hands Core the value it shows (a test per control); the preferences round-trip
 and a file from before them loads; the list keeps the reader's place while groups stream in; a name
 or size group shows its sentence and a content group does not; the elevation request round-trips
@@ -512,8 +528,15 @@ Marking by hand and by rule, the reason for every refusal reachable by pointer, 
 reader, the confirmation dialog with its list, and the result after a removal, including what each
 refused copy's check said.
 
+Two hazards phase 6 leaves to this phase. A location's role changed after a search leaves the groups
+and marks shown in the old role, so a role change clears the results or marks them stale, and no
+rule or removal runs on them until a search runs again. `DuplicateMarks.Add` runs on the page's
+thread while `DuplicateMarks.RejudgeAsync`, `RemovalConfirmation` and `DuplicateRemover` read the
+groups off it, so no confirmation or removal starts while a search runs.
+
 Proves: a rule's marks are what Core decided; the page offers no way past a Core refusal; the dialog
-shows Core's words; a removal driven with the `verify` skill moves the marked copies to the Recycle
+shows Core's words; a role changed after a search stops every rule and removal until the next
+search; no confirmation or removal can start while a search runs; a removal driven with the `verify` skill moves the marked copies to the Recycle
 Bin and leaves every kept copy.
 
 ### Phase 8 — The checksum cache and export
@@ -668,6 +691,34 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   attributes-only handle. Corrected here: step 1 (what is shared), step 2 (both copies held by
   path, decided as the removal begins), and the facts on deleting through a handle, holding a file
   open, the Recycle Bin and Explore's removal.
+- 2026-10-09: phase 6 landed. The Duplicates destination (`DuplicatesPage`): a location list with
+  a drive picker, a folder picker and a reference switch per location
+  (`DuplicateLocationsViewModel`, `LocationChoice`); the criteria, checksum and filters stored as a
+  preferences group (`AppPreferences.Duplicates`, `DuplicatePreferences`, `SizeLimit`,
+  `ExtensionFilter.Parse`), each handed to the search as the control shows it; the search with its
+  stage, progress and stop; the notes on every place not searched, passed over or not read, every
+  install location set aside and every file left out (`DuplicateSearchNotes`); the groups, each
+  placed as it is confirmed by the space it could free and never moved, with the space stated as
+  what the copies occupy, the may-differ sentence on a group not matched on content
+  (`DuplicateGroup.MayDiffer`), the checksum by the name other tools print it under
+  (`ChecksumAlgorithms.Name`), and where each copy's path differs from the others' picked out by
+  weight and underline as well as colour (`PathDifference`); and the elevated reopen
+  (`DuplicatesRequest`), which searches the same locations by the file table. Decided: the searcher
+  hands over the candidates before any content is read and the marks are made then
+  (`DuplicateSearchRun`), so the keeping rule a group is placed by is the one marking reads, and no
+  row moves; a space separates typed extensions, as a comma or a semicolon does; a size keeps its
+  amount and unit as typed, and a unit chosen with no amount stays chosen; a checksum the machine
+  does not offer searches with XXH128; the same path is not listed twice, compared case and all; a
+  drive Explore refuses is refused for the same reason; the drive picker's templates are one
+  dictionary both pages use (`DriveTemplates`). Verified by driving the page over a scratch tree of
+  known duplicates: both groups found, the one-letter folder difference picked out, and a name-only
+  search showing the sentence; an ordinary launch given the elevated reopen's arguments opened on
+  the page and searched them. With the backdrop off the page is legible in dark; in light the rail
+  and title bar draw black on every page, a defect older than this phase (#299); high contrast was
+  not switched on, since that changes the whole desktop, and the page uses only theme brushes and
+  marks a path difference by weight and underline as well as colour. Corrected here: how the
+  groups are ordered as they stream (the technical facts, "Ordering the groups"), and what phase 6
+  decides in Core.
 
 ## Limits that stay open
 

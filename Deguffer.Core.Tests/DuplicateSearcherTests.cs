@@ -83,6 +83,52 @@ public sealed class DuplicateSearcherTests : IDisposable
         Assert.Equal(["a.bin", "copy.bin", "middle.bin"], readInFull.Order());
     }
 
+    /// <summary>
+    /// The candidates are handed over, and waited for, before any content is read and before the
+    /// first group is confirmed, which is what lets a page read the keeping rule each group is
+    /// placed by before the first one arrives.
+    /// </summary>
+    [Theory]
+    [InlineData(MatchCriteria.Content)]
+    [InlineData(MatchCriteria.Name)]
+    public async Task TheCandidatesAreHandedOverBeforeAnythingIsReadOrConfirmed(MatchCriteria criteria)
+    {
+        var content = Random(5000, 6);
+        _tree.File(content, "Data", "a.bin");
+        _tree.File(content, "Data", "Other", "a.bin");
+        List<string> happened = [];
+        CandidateFinding? handed = null;
+
+        void Happened(string step)
+        {
+            lock (happened)
+            {
+                happened.Add(step);
+            }
+        }
+
+        var result = await _tree.Searcher((file, part, checksum, ct) =>
+        {
+            Happened("read");
+            return ContentReader.Default.Read(file, part, checksum, ct);
+        }).SearchAsync(
+            new DuplicateSearch(criteria, [Searched("Data")]),
+            _tree.Policy(),
+            new CallbackProgress<DuplicateGroup>(_ => Happened("confirmed")),
+            candidatesFound: async (finding, _) =>
+            {
+                // Held, so a search that did not wait for this would read or confirm meanwhile.
+                await Task.Delay(50);
+                handed = finding;
+                Happened("handed over");
+            });
+
+        Assert.Same(result.Finding, handed);
+        Assert.Equal("handed over", happened[0]);
+        Assert.Equal(1, happened.Count(step => step == "handed over"));
+        Assert.Contains("confirmed", happened);
+    }
+
     /// <summary>A search on the name never opens a file's content, so a reader that fails if asked proves it.</summary>
     [Fact]
     public async Task ASearchThatDoesNotCompareContentConfirmsWithoutReadingAny()

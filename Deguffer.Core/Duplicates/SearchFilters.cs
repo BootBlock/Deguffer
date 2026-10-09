@@ -90,6 +90,21 @@ public sealed record ExtensionFilter
         };
     }
 
+    /// <summary>
+    /// The filter a person typed: extensions separated by commas, semicolons or spaces, such as
+    /// <c>jpg, png</c> or <c>*.jpg;*.png</c>. A space separates because it is what a person types
+    /// between two words, and an extension holding a space, which no file type in common use has, then
+    /// cannot be named.
+    /// </summary>
+    public static ExtensionFilter Parse(ExtensionFilterMode mode, string typed)
+    {
+        ArgumentNullException.ThrowIfNull(typed);
+
+        return new ExtensionFilter(mode, typed.Split(Separators, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static readonly char[] Separators = [',', ';', ' ', '\t'];
+
     public ExtensionFilterMode Mode { get; }
 
     /// <summary>The extensions listed, each with its leading dot, in order.</summary>

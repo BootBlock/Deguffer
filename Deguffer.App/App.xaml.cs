@@ -36,12 +36,18 @@ public partial class App : Application
         new(new PreferenceStore(UserEnvironment.Current));
 
     /// <summary>
-    /// What each scan runs with, shared by the Storage page, the Explore page and Settings. One
-    /// instance, so each drive's kind is asked of its device once for all three, and Settings
-    /// describes the values the scans will actually use.
+    /// What each volume's disks are, asked of each device once for the life of the app, and shared
+    /// by every page that asks: the scans' tuning, and the Duplicates page, whose search reads files
+    /// in lanes by disk and whose keeping rule takes each drive as the search found it. Declared
+    /// before <see cref="ScanTuning"/>, which is initialised from it.
     /// </summary>
-    public static ScanTuner ScanTuning { get; } =
-        new(Preferences, new VolumeMediaCache(StorageQueries.Machine), VolumeInventory.Current);
+    public static VolumeMediaCache Media { get; } = new(StorageQueries.Machine);
+
+    /// <summary>
+    /// What each scan runs with, shared by the Storage page, the Explore page, the Duplicates page and
+    /// Settings. One instance, so Settings describes the values the scans will actually use.
+    /// </summary>
+    public static ScanTuner ScanTuning { get; } = new(Preferences, Media, VolumeInventory.Current);
 
     /// <summary>
     /// The approved source folders, shared for the same reason <see cref="Preferences"/> is: a

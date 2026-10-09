@@ -75,8 +75,8 @@ public sealed partial class MainWindow : Window
     public void CloseWhenIdle() => _closeGuard.CloseWhenIdle();
 
     /// <summary>
-    /// Open on the destination this instance was started for: Storage ordinarily, and Explore or
-    /// Installed apps where an elevated replacement was told to resume there.
+    /// Open on the destination this instance was started for: Storage ordinarily, and Explore,
+    /// Duplicates or Installed apps where an elevated replacement was told to resume there.
     ///
     /// <para>An elevated instance always replaces one the user was already using, because §6.3 does
     /// not elevate at startup. Opening it at the default destination throws away where they were,
@@ -95,6 +95,7 @@ public sealed partial class MainWindow : Window
         var (page, item) = ElevatedRelaunch.Requested switch
         {
             ExploreRequest => (typeof(ExplorePage), ExploreItem),
+            DuplicatesRequest => (typeof(DuplicatesPage), DuplicatesItem),
             InstalledAppsRequest => (typeof(InstalledAppsPage), InstalledAppsItem),
             _ => (typeof(CleanPage), StorageItem),
         };
@@ -171,6 +172,7 @@ public sealed partial class MainWindow : Window
             "Settings" => typeof(SettingsPage),
             "About" => typeof(AboutPage),
             "Explore" => typeof(ExplorePage),
+            "Duplicates" => typeof(DuplicatesPage),
             "Memory" => typeof(MemoryPage),
             "InstalledApps" => typeof(InstalledAppsPage),
             _ => typeof(CleanPage),

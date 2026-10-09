@@ -375,4 +375,11 @@ public sealed record AppPreferences(
     /// value on Auto.</para>
     /// </summary>
     public ScanPreferences Scanning { get; init; } = ScanPreferences.Default;
+
+    /// <summary>
+    /// What the Duplicates page searches with: the criteria, the checksum and the filters (§7.4).
+    /// A property for the reason <see cref="Scanning"/> is one, and a settings file written before
+    /// it existed reads with §7.4's defaults. See <see cref="DuplicatePreferences"/>.
+    /// </summary>
+    public DuplicatePreferences Duplicates { get; init; } = DuplicatePreferences.Default;
 }

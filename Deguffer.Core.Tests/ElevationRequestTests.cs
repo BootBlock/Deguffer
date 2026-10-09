@@ -1,3 +1,4 @@
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 
 namespace Deguffer.Core.Tests;
@@ -172,6 +173,52 @@ public sealed class ElevationRequestTests
     {
         Assert.IsType<ExploreRequest>(
             ElevationRequest.From(["--verbose", "--explore", @"C:\some\stray\path"]));
+    }
+
+    /// <summary>
+    /// Every location reaches the elevated search in its role and its order: a drive's top, a folder
+    /// holding a space, a comma and a quote, and a folder given in both roles, which travels twice.
+    /// </summary>
+    [Fact]
+    public void ADuplicatesRequestCarriesEveryLocationInItsRole()
+    {
+        DuplicatesRequest request = new(
+        [
+            new(@"D:\"),
+            new(@"C:\Users\testuser\Pictures\Holiday, ""2024""", LocationRole.Reference),
+            new(Folder),
+            new(Folder, LocationRole.Reference),
+        ]);
+
+        var restored = Assert.IsType<DuplicatesRequest>(ElevationRequest.From(request.ToArguments()));
+
+        Assert.Equal(request.Locations, restored.Locations);
+        Assert.Equal(request, restored);
+    }
+
+    /// <summary>A request naming no location still opens the Duplicates page, with nothing to search.</summary>
+    [Fact]
+    public void ADuplicatesRequestWithNoLocationIsStillOne()
+    {
+        var restored = Assert.IsType<DuplicatesRequest>(ElevationRequest.From(new DuplicatesRequest([]).ToArguments()));
+
+        Assert.Empty(restored.Locations);
+    }
+
+    [Fact]
+    public void DuplicatesWinsOverInstalledAppsAndAPreviewAndLosesToExplore()
+    {
+        Assert.IsType<DuplicatesRequest>(ElevationRequest.From(["--rescan", "--installed-apps", "--duplicates"]));
+        Assert.IsType<ExploreRequest>(ElevationRequest.From(["--duplicates", "--explore"]));
+    }
+
+    /// <summary>An empty value is a missing location, as it is a missing path for Explore.</summary>
+    [Fact]
+    public void AnEmptyLocationIsNoLocation()
+    {
+        var restored = Assert.IsType<DuplicatesRequest>(ElevationRequest.From(["--duplicates", "--duplicates-search=", "--duplicates-reference=  "]));
+
+        Assert.Empty(restored.Locations);
     }
 
     private static ExploreRequest RoundTrip(ExploreRequest request) =>

@@ -4,11 +4,15 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Deguffer.App"
+    xmlns:controls="using:Deguffer.App.Controls"
     xmlns:converters="using:Deguffer.App.Converters">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+
+                <!-- The drive picker's two ways of drawing a drive, for Explore and Duplicates. -->
+                <controls:DriveTemplates />
             </ResourceDictionary.MergedDictionaries>
 
             <converters:TierChipStyleConverter x:Key="TierChipStyle" />

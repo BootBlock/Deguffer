@@ -97,7 +97,17 @@ public abstract class DuplicateMarkingScene : IDisposable
 
     private protected DuplicateSearchResult Result(params DuplicateCandidate[][] groups) =>
         new(
-            new CandidateFinding([], [], _unsearchedReferences, [], [], [], [], _programs, [], default),
+            new CandidateFinding(
+                [.. groups.Select(files => new CandidateGroup(100, Name: null, Modified: null, files))],
+                [],
+                _unsearchedReferences,
+                [],
+                [],
+                [],
+                [],
+                _programs,
+                [],
+                default),
             [.. groups.Select(files => new DuplicateGroup(MatchCriteria.Content, 100, Checksum: null, files))],
             default,
             Stopped: false);
@@ -105,16 +115,33 @@ public abstract class DuplicateMarkingScene : IDisposable
     private protected DuplicateMarks Marks(params DuplicateCandidate[][] groups) => MarksOf(Result(groups));
 
     private protected DuplicateMarks MarksOf(DuplicateSearchResult result) =>
-        DuplicateMarks.For(
-            result,
-            _policy ?? _tree.Policy(),
-            _cleans,
-            _tree.Environment,
-            _cloud,
-            _tree.Volumes,
-            _media.Of,
-            _media.Now,
-            FileInformation.Default);
+        WithGroups(
+            DuplicateMarks.For(
+                result.Finding,
+                _policy ?? _tree.Policy(),
+                _cleans,
+                _tree.Environment,
+                _cloud,
+                _tree.Volumes,
+                _media.Of,
+                _media.Now,
+                FileInformation.Default),
+            result);
+
+    /// <summary>The marks a page would make for <paramref name="result"/> with <paramref name="protections"/>.</summary>
+    private protected async Task<DuplicateMarks> MarksAsync(DuplicateSearchResult result, MachineProtections protections) =>
+        WithGroups(await DuplicateMarks.ForAsync(result.Finding, protections, _tree.Environment, _cloud, _tree.Volumes, _media), result);
+
+    /// <summary><paramref name="marks"/> with each of <paramref name="result"/>'s groups added, as the search confirmed them.</summary>
+    private protected static DuplicateMarks WithGroups(DuplicateMarks marks, DuplicateSearchResult result)
+    {
+        foreach (var group in result.Groups)
+        {
+            marks.Add(group);
+        }
+
+        return marks;
+    }
 
     private protected static GroupMarks Only(DuplicateMarks marks) => Assert.Single(marks.Groups);
 
