@@ -528,8 +528,15 @@ Marking by hand and by rule, the reason for every refusal reachable by pointer, 
 reader, the confirmation dialog with its list, and the result after a removal, including what each
 refused copy's check said.
 
+Two hazards phase 6 leaves to this phase. A location's role changed after a search leaves the groups
+and marks shown in the old role, so a role change clears the results or marks them stale, and no
+rule or removal runs on them until a search runs again. `DuplicateMarks.Add` runs on the page's
+thread while `DuplicateMarks.RejudgeAsync`, `RemovalConfirmation` and `DuplicateRemover` read the
+groups off it, so no confirmation or removal starts while a search runs.
+
 Proves: a rule's marks are what Core decided; the page offers no way past a Core refusal; the dialog
-shows Core's words; a removal driven with the `verify` skill moves the marked copies to the Recycle
+shows Core's words; a role changed after a search stops every rule and removal until the next
+search; no confirmation or removal can start while a search runs; a removal driven with the `verify` skill moves the marked copies to the Recycle
 Bin and leaves every kept copy.
 
 ### Phase 8 — The checksum cache and export

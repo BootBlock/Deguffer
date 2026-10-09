@@ -389,10 +389,15 @@ public sealed class DuplicatesViewModelTests : IDisposable
 
         RunDuplicateSearch run = async (search, marksMade, finding, found, progress, ct) =>
         {
+            var candidates = DuplicateScene.Finding(group);
             found.Report(group);
-            await Task.Delay(Timeout.Infinite, ct);
 
-            return new DuplicateSearchResult(DuplicateScene.Finding(group), [group], default, Stopped: false);
+            // After the group's post, and handed over then, so the end of the search finds marks and
+            // only the group itself can say they were missing.
+            await Task.Yield();
+            marksMade(_scene.Marks(candidates));
+
+            return new DuplicateSearchResult(candidates, [group], default, Stopped: false);
         };
 
         await PageWithPhotos(run).SearchCommand.ExecuteAsync(null);
