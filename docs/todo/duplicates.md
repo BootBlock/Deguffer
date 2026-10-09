@@ -340,10 +340,11 @@ without listing the places phase 1 passes over, and the decision it supports.
    once for both pages.
 4. **Marks.** A per-group mark state that refuses any mark leaving the group with no copy that can
    be kept, and the named rules, each of which chooses the copy it keeps only from the copies that
-   can be kept, obeys the policy, and never marks a copy in a cloud folder. The space a group could free, which sorts the groups, comes from
-   the same state. While a reference location went unsearched, no rule marks any copy: phase 1
-   passes over the place it names by matching text, and a link on the way to it can hide it from
-   that match, so a reference copy can still reach a group in the search role.
+   can be kept, obeys the policy, and never marks a copy in a cloud folder. The space a group could
+   free, which sorts the groups, comes from the same state. While a reference location went
+   unsearched, for whatever reason, no rule marks any copy: phase 1 passes over the place it names
+   by matching text, and a link on the way to it, or a share that names this computer's own disk,
+   can hide it from that match, so a reference copy can still reach a group in the search role.
 5. **The confirmation's words.** Built in Core: every copy that goes, the counts, groups and space,
    the sentence for a copy in a cloud folder, and the sentence for a removal larger than a drive's
    Recycle Bin has room for, through a new seam over the bin's size and limit, measured here.
