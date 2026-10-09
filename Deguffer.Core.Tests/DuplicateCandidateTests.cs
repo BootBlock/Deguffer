@@ -82,9 +82,13 @@ public sealed class DuplicateCandidateTests : IDisposable
     /// A reference Windows would not open names no folder the walk can be told is it, so its files
     /// would take the role of the location holding them and be offered for removal. The place it
     /// names is passed over with everything in it, a folder inside it included, and the page says why.
+    /// Searching the places a search passes over by default does not lift it: that choice lets a
+    /// refused copy be matched, and this place is passed over to keep a reference copy unmarked.
     /// </summary>
-    [Fact]
-    public async Task AReferenceWindowsWillNotOpenIsPassedOverByTheLocationHoldingIt()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AReferenceWindowsWillNotOpenIsPassedOverByTheLocationHoldingIt(bool searchPassedOverPlaces)
     {
         _tree.File(100, "Downloads", "a.jpg");
         _tree.File(100, "Downloads", "b.jpg");
@@ -93,7 +97,10 @@ public sealed class DuplicateCandidateTests : IDisposable
         var photos = Path.Combine(_tree.Top, "Photos");
 
         var found = await _tree.Finder(files: Refusing(photos)).FindAsync(
-            new DuplicateSearch(MatchCriteria.Size, [Searched(), new SearchLocation(photos, LocationRole.Reference)]),
+            new DuplicateSearch(
+                MatchCriteria.Size,
+                [Searched(), new SearchLocation(photos, LocationRole.Reference)],
+                searchPassedOverPlaces: searchPassedOverPlaces),
             _tree.Policy());
 
         Assert.Equal(photos, Assert.Single(found.Unsearched).Given.Path);
@@ -106,10 +113,13 @@ public sealed class DuplicateCandidateTests : IDisposable
     /// <summary>
     /// A folder given in both roles is a reference, so where only its reference could not be opened,
     /// the folder is passed over rather than searched in the role that was resolved. The two are
-    /// told apart here by the case they are spelled in, which the place is matched ignoring.
+    /// told apart here by the case they are spelled in, which the place is matched ignoring. As
+    /// below a location, searching every place a search passes over by default does not lift it.
     /// </summary>
-    [Fact]
-    public async Task AFolderGivenInBothRolesIsPassedOverWhereItsReferenceWillNotOpen()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AFolderGivenInBothRolesIsPassedOverWhereItsReferenceWillNotOpen(bool searchPassedOverPlaces)
     {
         _tree.File(100, "Photos", "a.jpg");
         _tree.File(100, "Photos", "b.jpg");
@@ -117,7 +127,10 @@ public sealed class DuplicateCandidateTests : IDisposable
         var shouted = Path.Combine(_tree.Top, "PHOTOS");
 
         var found = await _tree.Finder(files: Refusing(shouted)).FindAsync(
-            new DuplicateSearch(MatchCriteria.Size, [new SearchLocation(photos), new SearchLocation(shouted, LocationRole.Reference)]),
+            new DuplicateSearch(
+                MatchCriteria.Size,
+                [new SearchLocation(photos), new SearchLocation(shouted, LocationRole.Reference)],
+                searchPassedOverPlaces: searchPassedOverPlaces),
             _tree.Policy());
 
         Assert.Equal(shouted, Assert.Single(found.Unsearched).Given.Path);
