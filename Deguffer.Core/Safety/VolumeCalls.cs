@@ -278,7 +278,8 @@ internal static partial class VolumeCalls
     /// volume that has already refused once to refuse again, and would let the label and the flags
     /// come from two readings a moment apart.</para>
     /// </summary>
-    internal static (string? Label, VolumeFeatures Features) InformationOf(string mountPoint)
+    /// <returns>The label, and the flags, or null for both where the volume would not answer.</returns>
+    internal static (string? Label, VolumeFeatures? Features) InformationOf(string mountPoint)
     {
         var buffer = Marshal.AllocHGlobal(LabelLength * sizeof(char));
 
@@ -286,7 +287,7 @@ internal static partial class VolumeCalls
         {
             if (!GetVolumeInformation(mountPoint, buffer, LabelLength, out _, out _, out var flags, IntPtr.Zero, 0))
             {
-                return (null, VolumeFeatures.None);
+                return (null, null);
             }
 
             var label = Marshal.PtrToStringUni(buffer);

@@ -236,6 +236,7 @@ public sealed class VolumeInventoryTests
 
         Assert.NotEmpty(fixedVolumes);
         Assert.Contains(fixedVolumes, v => v.Features.HasFlag(VolumeFeatures.ReparsePoints));
+        Assert.Contains(fixedVolumes, v => v.FeaturesAnswered && v.Features.HasFlag(VolumeFeatures.ReparsePoints));
     }
 
     /// <summary>
