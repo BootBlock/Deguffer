@@ -21,8 +21,6 @@ public sealed record DuplicateSearch
         bool searchSystem = false,
         bool searchPassedOverPlaces = false)
     {
-        ArgumentNullException.ThrowIfNull(locations);
-
         if (WhyRefused(criteria, locations, sizes) is { } refusal)
         {
             throw new ArgumentException(refusal, nameof(criteria));
