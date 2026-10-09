@@ -57,6 +57,8 @@ public sealed class RemovalConfirmationTests : IDisposable
             marks.Add(new DuplicateGroup(MatchCriteria.Content, files[0].Length, Checksum: null, files));
         }
 
+        marks.Complete();
+
         return marks;
     }
 

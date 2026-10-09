@@ -58,6 +58,25 @@ public sealed class CopyKeeping
     /// <summary>The refusals the keeping rule includes, which are the refusals of marking too.</summary>
     public CopyRefusals Refusals => _refusals;
 
+    /// <summary>
+    /// Why <paramref name="copy"/> may not be marked, or null where it may be: it is never marked (a
+    /// reference copy, a file with several names) or it is refused.
+    /// </summary>
+    public string? WhyNotMarked(DuplicateCandidate copy) => CopyRefusals.WhyNeverMarked(copy) ?? _refusals.WhyRefused(copy);
+
+    /// <summary>
+    /// Why <paramref name="copy"/> may not be marked and why it may not be kept, as a page lists them
+    /// beside it: the second only where it says something the first does not, since a refused copy is
+    /// not kept for the same reason.
+    /// </summary>
+    public CopyStanding Standing(DuplicateCandidate copy)
+    {
+        var notMarked = WhyNotMarked(copy);
+        var notKept = WhyNotKept(copy);
+
+        return new CopyStanding(notMarked, notKept == notMarked ? null : notKept);
+    }
+
     /// <summary>Why <paramref name="copy"/> cannot be the copy a group keeps, or null where it can be.</summary>
     public string? WhyNotKept(DuplicateCandidate copy)
     {

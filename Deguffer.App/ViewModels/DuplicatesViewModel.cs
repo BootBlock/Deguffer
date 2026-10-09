@@ -151,6 +151,13 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanSearch))]
     private async Task SearchAsync()
     {
+        // Asked again, because a command can be invoked without asking whether it may run, and a
+        // search started under a rule or a removal would take the groups from under it.
+        if (!CanSearch())
+        {
+            return;
+        }
+
         var search = new Search(Filters.Current.Search(Locations.Chosen));
         _search = search;
 

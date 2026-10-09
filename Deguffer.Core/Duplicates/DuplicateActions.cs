@@ -6,11 +6,13 @@ namespace Deguffer.Core.Duplicates;
 
 /// <summary>What asking for a duplicate removal came to.</summary>
 /// <param name="Confirmation">What the user was asked, or would have been: the marks that stood as it was built.</param>
-/// <param name="Report">What the removal did, or null where nothing was asked or the user declined.</param>
-public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, DuplicateRemovalReport? Report)
+/// <param name="Report">What the removal did, or null where nothing was asked, the user declined, or the marks stopped applying.</param>
+/// <param name="Withdrawn">Why the marks stopped applying before anything was removed, or null.</param>
+public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, DuplicateRemovalReport? Report, string? Withdrawn = null)
 {
     /// <summary>What happened, in a sentence for the page.</summary>
     public string Summary => Report?.Summary
+        ?? Withdrawn
         ?? (Confirmation.Copies.Count == 0
             ? "No marked copy can go as things are now, so nothing was asked or removed. Each copy says why."
             : "Nothing was removed.");
@@ -27,6 +29,11 @@ public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, Du
 /// <see cref="DuplicateRemover.RemoveAsync"/> asks, because a confirmation can stay open for as long
 /// as the user reads it. It is recorded as running from the moment it is confirmed until its §5.6
 /// check has reported, so nothing ends the process under it.</para>
+///
+/// <para><b>Never on marks that stopped applying.</b> The page can change what the marks mean while
+/// the confirmation is built or read: a folder made a reference then still holds copies marked in the
+/// search role. So the page is asked whether its marks still apply once the confirmation is built and
+/// again once the user has answered, and nothing is asked or removed where they do not.</para>
 ///
 /// <para><b>Never while the search runs.</b> The search adds its groups on the page's thread, and
 /// everything here reads them on another, so each refuses marks whose search has not ended
@@ -66,14 +73,15 @@ public sealed class DuplicateActions
         new(MachineProtections.ForThisMachineAsync, RecycleBinRooms.Default.Of, prompt, DuplicateRemover.Default, running);
 
     /// <summary>Run <paramref name="rule"/> over <paramref name="marks"/>, off the calling thread, since a folder rule opens the folder.</summary>
-    /// <exception cref="InvalidOperationException">The search that made the marks has not ended.</exception>
+    /// <param name="ct">Stops the rule between groups, keeping the marks it made before.</param>
+    /// <exception cref="InvalidOperationException">The search that made the marks has not ended, or a removal has begun on them.</exception>
     public Task<RuleOutcome> RunAsync(DuplicateMarks marks, MarkingRule rule, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(marks);
         ArgumentNullException.ThrowIfNull(rule);
-        marks.ThrowUnlessComplete();
+        marks.ThrowUnlessOpen();
 
-        return Task.Run(() => marks.Run(rule), ct);
+        return Task.Run(() => marks.Run(rule, ct), ct);
     }
 
     /// <summary>
@@ -81,15 +89,21 @@ public sealed class DuplicateActions
     /// now, ask the user, and remove them the way <paramref name="mode"/> says if they say yes. Call it
     /// on the page's thread, where the running action is recorded.
     /// </summary>
+    /// <param name="whyNotNow">
+    /// Why the marks no longer apply to what the page shows, or null where they still do, asked on the
+    /// calling thread.
+    /// </param>
     /// <param name="ct">
     /// Stops the removal at the next copy. A removal that has begun still reports what it did and
     /// verifies it.
     /// </param>
-    /// <exception cref="InvalidOperationException">The search that made the marks has not ended.</exception>
-    public async Task<DuplicateRemovalAnswer> RemoveAsync(DuplicateMarks marks, ExploreRemovalMode mode, CancellationToken ct = default)
+    /// <exception cref="InvalidOperationException">The search that made the marks has not ended, or a removal has begun on them.</exception>
+    public async Task<DuplicateRemovalAnswer> RemoveAsync(
+        DuplicateMarks marks, ExploreRemovalMode mode, Func<string?> whyNotNow, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(marks);
-        marks.ThrowUnlessComplete();
+        ArgumentNullException.ThrowIfNull(whyNotNow);
+        marks.ThrowUnlessOpen();
 
         // Off the page's thread: the judgement reads the registry, every provider and each drive's disks.
         var confirmation = await Task.Run(
@@ -97,9 +111,19 @@ public sealed class DuplicateActions
                 marks, await _protections(ct).ConfigureAwait(false), mode, _room, ct).ConfigureAwait(false),
             ct).ConfigureAwait(true);
 
+        if (whyNotNow() is { } before)
+        {
+            return new DuplicateRemovalAnswer(confirmation, Report: null, before);
+        }
+
         if (confirmation.Copies.Count == 0 || !await _prompt().AskAsync(confirmation, ct).ConfigureAwait(true))
         {
             return new DuplicateRemovalAnswer(confirmation, Report: null);
+        }
+
+        if (whyNotNow() is { } after)
+        {
+            return new DuplicateRemovalAnswer(confirmation, Report: null, after);
         }
 
         using var running = _running.Begin(RunningAction.DuplicateRemoval);

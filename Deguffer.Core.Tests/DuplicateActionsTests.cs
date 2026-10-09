@@ -45,7 +45,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         Assert.Throws<InvalidOperationException>(() => RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null));
         // Refused on the calling thread, before the rule goes to another.
         Assert.Throws<InvalidOperationException>(() => { _ = Actions(new FakeDuplicateConfirmation(true)).RunAsync(marks, new MarkingRule.KeepNewest()); });
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Actions(new FakeDuplicateConfirmation(true)).RemoveAsync(marks, ExploreRemovalMode.RecycleBin));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Actions(new FakeDuplicateConfirmation(true)).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null));
 
         marks.Complete();
 
@@ -84,7 +84,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
 
         // The copy that would stay is in the temporary folder by the time the removal is asked for.
         _tree.Environment.WithTempPath(Documents);
-        var answer = await Actions(prompt).RemoveAsync(marks, ExploreRemovalMode.RecycleBin);
+        var answer = await Actions(prompt).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null);
 
         Assert.Empty(prompt.Asked);
         Assert.Null(answer.Report);
@@ -101,7 +101,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         Mark(marks, copy);
         var prompt = new FakeDuplicateConfirmation(false);
 
-        var answer = await Actions(prompt).RemoveAsync(marks, ExploreRemovalMode.Permanent);
+        var answer = await Actions(prompt).RemoveAsync(marks, ExploreRemovalMode.Permanent, () => null);
 
         Assert.Equal([copy], Assert.Single(prompt.Asked).Copies);
         Assert.Equal(ExploreRemovalMode.Permanent, prompt.Asked[0].Mode);
@@ -126,7 +126,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
 
         var answer = await Actions(
             new FakeDuplicateConfirmation(true),
-            FakeRecycleBin.MovingTo(Bin, _ => mayEndWhileRemoving = _running.MayEndProcess)).RemoveAsync(marks, ExploreRemovalMode.RecycleBin);
+            FakeRecycleBin.MovingTo(Bin, _ => mayEndWhileRemoving = _running.MayEndProcess)).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null);
 
         Assert.False(mayEndWhileRemoving);
         Assert.True(_running.MayEndProcess);
@@ -134,5 +134,69 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         Assert.False(File.Exists(copy.Path));
         Assert.True(File.Exists(kept.Path));
         Assert.Equal(answer.Report.Summary, answer.Summary);
+    }
+
+    /// <summary>
+    /// Where the page's marks stop applying while the confirmation is built, nothing is asked; where
+    /// they stop applying while the user reads it, nothing is removed after they say yes. A folder
+    /// made a reference in that time would otherwise lose the copies marked in it.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ARemovalWhoseMarksStopApplyingRemovesNothing(int staleFromQuestion)
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        var prompt = new FakeDuplicateConfirmation(true);
+        var asked = 0;
+
+        var answer = await Actions(prompt).RemoveAsync(
+            marks, ExploreRemovalMode.Permanent, () => ++asked >= staleFromQuestion ? "The locations changed." : null);
+
+        Assert.Equal(staleFromQuestion, asked);
+        Assert.Equal(staleFromQuestion - 1, prompt.Asked.Count);
+        Assert.Null(answer.Report);
+        Assert.Equal("The locations changed.", answer.Summary);
+        Assert.True(File.Exists(copy.Path));
+        Assert.False(marks.WasRemovedFrom);
+    }
+
+    /// <summary>
+    /// A removal changes the disk the groups describe, so once one has begun, the same marks take no
+    /// rule, confirmation or removal: a search must run first.
+    /// </summary>
+    [Fact]
+    public async Task NoRuleOrRemovalRunsOnMarksARemovalHasBegunOn()
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var other = Found(Write(Path.Combine(Downloads, "b", "a.bin"), Content()));
+        var marks = Marks([kept, copy, other]);
+        Mark(marks, copy);
+        var actions = Actions(new FakeDuplicateConfirmation(true));
+
+        await actions.RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null);
+
+        Assert.True(marks.WasRemovedFrom);
+        Assert.Throws<InvalidOperationException>(() => marks.Run(new MarkingRule.KeepNewest()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => actions.RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null));
+        Assert.True(File.Exists(other.Path));
+    }
+
+    /// <summary>A rule asked to stop stops before the next group, and marks nothing in the groups it did not reach.</summary>
+    [Fact]
+    public void ARuleStopsBetweenGroupsWhenAskedTo()
+    {
+        var marks = Marks(
+            [Copy(Path.Combine(Documents, "a.jpg"), modified: Older), Copy(Path.Combine(Downloads, "a.jpg"), modified: Newer)],
+            [Copy(Path.Combine(Documents, "b.jpg"), modified: Older), Copy(Path.Combine(Downloads, "b.jpg"), modified: Newer)]);
+        using var stop = new CancellationTokenSource();
+        stop.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => marks.Run(new MarkingRule.KeepNewest(), stop.Token));
+        Assert.All(marks.Groups, group => Assert.Equal(0, group.MarkedCount));
     }
 }

@@ -269,8 +269,9 @@
                     Command="{x:Bind ViewModel.Marking.DeletePermanentlyCommand}"
                     ToolTipService.ToolTip="Deletes the marked copies outright rather than moving them to the Recycle Bin, once you confirm the list. They cannot be restored." />
             <Button Grid.Row="1" Grid.Column="2" Content="Clear marks" Command="{x:Bind ViewModel.Marking.ClearMarksCommand}" />
-            <Button Grid.Row="1" Grid.Column="3" Content="Stop removing" Command="{x:Bind ViewModel.Marking.StopRemovingCommand}"
-                    ToolTipService.ToolTip="Stop at the next copy. What has gone is reported and checked." />
+            <Button Grid.Row="1" Grid.Column="3" Content="Stop" Command="{x:Bind ViewModel.Marking.StopCommand}"
+                    AutomationProperties.Name="Stop the rule or the removal"
+                    ToolTipService.ToolTip="Stop the rule, keeping the marks it made, or the removal at the next copy. What has gone is reported and checked." />
             <TextBlock Grid.Row="1" Grid.Column="4" VerticalAlignment="Center" Text="{x:Bind ViewModel.Marking.MarkedSummary, Mode=OneWay}" />
 
             <StackPanel Grid.Row="2" Grid.ColumnSpan="5" Spacing="4">

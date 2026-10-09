@@ -38,7 +38,7 @@ public sealed partial class DuplicateCopyRow : ObservableObject
         Names = copy.HasSeveralNames
             ? $"One file with {copy.NameCount:N0} names, so removing one name frees nothing: {string.Join("; ", copy.Names)}"
             : string.Empty;
-        Show(CopyStanding.Of(copy, keeping));
+        Show(keeping.Standing(copy));
     }
 
     public DuplicateCandidate Copy { get; }
@@ -121,8 +121,8 @@ public sealed partial class DuplicateCopyRow : ObservableObject
     /// <summary>Show what Core judged of the copy.</summary>
     internal void Show(CopyStanding standing)
     {
-        WhyNotMarked = standing.WhyNotMarked;
-        WhyNotKept = standing.WhyNotKept;
+        WhyNotMarked = standing.WhyNotMarked ?? string.Empty;
+        WhyNotKept = standing.WhyNotKept ?? string.Empty;
     }
 
     /// <summary>Show the copy's mark again, after a rule or a clear changed the marks, dropping a refusal it no longer answers.</summary>

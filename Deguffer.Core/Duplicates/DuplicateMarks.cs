@@ -56,6 +56,10 @@ public sealed record RuleOutcome(int Marked, IReadOnlyList<(GroupMarks Group, st
 /// (<see cref="Run"/>) and a judgement (<see cref="RejudgeAsync"/>, which every confirmation and
 /// removal begins with) refuse to start until the thread that adds the groups says the last one is
 /// in (<see cref="Complete"/>), and no group is added after it.</para>
+///
+/// <para><b>One removal per search.</b> A removal changes the disk the groups describe, so once one
+/// has begun (<see cref="WasRemovedFrom"/>) no rule runs and no confirmation or removal is built on
+/// these marks again: a search must run first.</para>
 /// </summary>
 public sealed class DuplicateMarks
 {
@@ -67,6 +71,7 @@ public sealed class DuplicateMarks
     private readonly KeepingReader _reader;
     private readonly List<GroupMarks> _groups = [];
     private volatile bool _complete;
+    private volatile bool _removedFrom;
 
     private DuplicateMarks(
         CandidateFinding finding, ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans, KeepingReader reader)
@@ -200,6 +205,12 @@ public sealed class DuplicateMarks
     /// </summary>
     public void Complete() => _complete = true;
 
+    /// <summary>Whether a removal has begun on these marks, so the groups describe the disk as it was before it.</summary>
+    public bool WasRemovedFrom => _removedFrom;
+
+    /// <summary>Say a removal has begun on these marks, which closes them to every later rule, confirmation and removal.</summary>
+    internal void RemovalBegan() => _removedFrom = true;
+
     /// <summary>
     /// Judge the marks again against the machine as it is now, keeping every mark: Explore's policy,
     /// Storage's places and the program folders from <paramref name="protections"/>, and the
@@ -212,11 +223,11 @@ public sealed class DuplicateMarks
     /// the disks and the registry, so never call it on the UI thread.
     /// </summary>
     /// <param name="protections">Built afresh for this question, so what the machine protects is read now.</param>
-    /// <exception cref="InvalidOperationException">The search has not ended (<see cref="Complete"/>).</exception>
+    /// <exception cref="InvalidOperationException">The search has not ended, or a removal has begun on these marks.</exception>
     public async Task<CopyKeeping> RejudgeAsync(MachineProtections protections, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(protections);
-        ThrowUnlessComplete();
+        ThrowUnlessOpen();
 
         var cleans = await protections.StorageCleansAsync(ct).ConfigureAwait(false);
         var programs = _reader.ProgramsNow(protections, _finding.ProgramFolders, ct);
@@ -231,11 +242,13 @@ public sealed class DuplicateMarks
     /// Run <paramref name="rule"/> over every group, adding to the marks there are. A rule that names a
     /// folder opens it to follow it to its final path, so never call it on the UI thread.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The search has not ended (<see cref="Complete"/>).</exception>
-    public RuleOutcome Run(MarkingRule rule)
+    /// <param name="ct">Stops the rule between groups, keeping the marks it made in the groups before.</param>
+    /// <exception cref="InvalidOperationException">The search has not ended, or a removal has begun on these marks.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    public RuleOutcome Run(MarkingRule rule, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(rule);
-        ThrowUnlessComplete();
+        ThrowUnlessOpen();
 
         if (WhyRulesCannotMark is { } blocked)
         {
@@ -254,6 +267,8 @@ public sealed class DuplicateMarks
 
         foreach (var group in Groups)
         {
+            ct.ThrowIfCancellationRequested();
+
             var (count, why) = Apply(rule, group, folder);
             marked += count;
 
@@ -266,13 +281,22 @@ public sealed class DuplicateMarks
         return new RuleOutcome(marked, untouched);
     }
 
-    /// <summary>Refuses to read the groups off the thread that adds them while it may still be adding one.</summary>
-    internal void ThrowUnlessComplete()
+    /// <summary>
+    /// Refuses to read the groups off the thread that adds them while it may still be adding one, and
+    /// to act on them once a removal has changed the disk they describe.
+    /// </summary>
+    internal void ThrowUnlessOpen()
     {
         if (!_complete)
         {
             throw new InvalidOperationException(
                 "The search is still adding groups, so no rule, confirmation or removal may read them yet.");
+        }
+
+        if (_removedFrom)
+        {
+            throw new InvalidOperationException(
+                "A removal has begun on these marks, so their groups describe the disk as it was. Search again first.");
         }
     }
 

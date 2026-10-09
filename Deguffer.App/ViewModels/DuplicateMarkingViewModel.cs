@@ -38,11 +38,9 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
     private DuplicateMarks? _marks;
     private DuplicateSearch? _asked;
-    private bool _searching;
     private string? _stale;
-    private bool _spent;
     private bool _mayMark;
-    private CancellationTokenSource? _removing;
+    private CancellationTokenSource? _stopping;
 
     /// <param name="groups">The page's groups, in the order it shows them.</param>
     public DuplicateMarkingViewModel(DuplicateActions actions, IReadOnlyList<DuplicateGroupRow> groups)
@@ -99,19 +97,18 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     private int Marked => _groups.Sum(group => group.Marks.MarkedCount);
 
     /// <summary>Why no mark may change now, or null where marks may change.</summary>
-    private string? WhyCannotMark => _marks is null ? string.Empty : _stale ?? (_spent ? Spent : null) ?? (IsBusy ? Busy : null);
+    private string? WhyCannotMark =>
+        _marks is not { } marks ? string.Empty : _stale ?? (marks.WasRemovedFrom ? Spent : null) ?? (IsBusy ? Busy : null);
 
     /// <summary>Why no rule or removal may start now, or null where one may.</summary>
-    private string? WhyCannotAct => WhyCannotMark ?? (_searching ? StillSearching : null);
+    private string? WhyCannotAct => WhyCannotMark ?? (_marks!.IsComplete ? null : StillSearching);
 
     /// <summary>A search began, for <paramref name="asked"/>: what the last one found is gone.</summary>
     internal void Started(DuplicateSearch asked)
     {
         _marks = null;
         _asked = asked;
-        _searching = true;
         _stale = null;
-        _spent = false;
         Outcome = string.Empty;
         Refresh();
     }
@@ -130,7 +127,6 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     internal void Ended()
     {
         _marks?.Complete();
-        _searching = false;
         Refresh();
     }
 
@@ -190,10 +186,21 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
             _ => new MarkingRule.MarkInFolder(RuleFolder),
         };
 
-        await RunningAsync(async () =>
+        await StoppableAsync(async stop =>
         {
-            var outcome = await _actions.RunAsync(marks, rule);
-            var untouched = outcome.Untouched.ToDictionary(pair => pair.Group, pair => pair.Reason);
+            RuleOutcome? outcome = null;
+
+            try
+            {
+                outcome = await _actions.RunAsync(marks, rule, stop);
+                Outcome = outcome.Summary;
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                Outcome = "The rule stopped part-way. The marks it made before it stopped stay, and each can be undone.";
+            }
+
+            var untouched = outcome?.Untouched.ToDictionary(pair => pair.Group, pair => pair.Reason) ?? [];
 
             foreach (var group in _groups)
             {
@@ -204,8 +211,6 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                     copy.MarksChanged();
                 }
             }
-
-            Outcome = outcome.Summary;
         });
     }
 
@@ -244,11 +249,14 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRemove))]
     private Task DeletePermanentlyAsync() => RemoveAsync(ExploreRemovalMode.Permanent);
 
-    private bool CanStopRemoving() => _removing is not null;
+    private bool CanStop() => _stopping is not null;
 
-    /// <summary>Stop the removal at the next copy. What has gone is reported and checked.</summary>
-    [RelayCommand(CanExecute = nameof(CanStopRemoving))]
-    private void StopRemoving() => _removing?.Cancel();
+    /// <summary>
+    /// Stop the rule between groups, keeping the marks it made, or the removal at the next copy,
+    /// reporting and checking what has gone.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanStop))]
+    private void Stop() => _stopping?.Cancel();
 
     private async Task RemoveAsync(ExploreRemovalMode mode)
     {
@@ -258,16 +266,14 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         }
 
         var marks = _marks!;
-        using var removing = new CancellationTokenSource();
 
-        await RunningAsync(async () =>
+        await StoppableAsync(async stop =>
         {
-            _removing = removing;
-            StopRemovingCommand.NotifyCanExecuteChanged();
-
             try
             {
-                var answer = await _actions.RemoveAsync(marks, mode, removing.Token);
+                // Asked again once the confirmation is built and once the user answers: the locations
+                // stay open to change meanwhile, and a role changed then makes these marks stale.
+                var answer = await _actions.RemoveAsync(marks, mode, () => _stale, stop);
 
                 // The marks were judged again for the confirmation, so each copy says what it was judged.
                 await ShowJudgedAsync(marks.Keeping);
@@ -280,20 +286,13 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                     {
                         rows[copy.Copy.Identity].Removal(copy.Message);
                     }
-
-                    _spent = true;
                 }
 
                 Outcome = answer.Summary;
             }
-            catch (OperationCanceledException) when (removing.IsCancellationRequested)
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
                 Outcome = "Stopped before anything was removed.";
-            }
-            finally
-            {
-                _removing = null;
-                StopRemovingCommand.NotifyCanExecuteChanged();
             }
         });
     }
@@ -307,9 +306,13 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         List<DuplicateCopyRow> copies = [.. _groups.SelectMany(group => group.Copies)];
         List<DuplicateGroupRow> groups = [.. _groups];
 
-        var (standings, notes) = await Task.Run(() => (
-            copies.Select(row => CopyStanding.Of(row.Copy, keeping)).ToList(),
-            groups.Select(group => group.Marks.WhyNothingCanBeKept(keeping)).ToList()));
+        // Not stopped by the page's Stop: it shows a judgement already made, and rows left half
+        // updated would show some copies as the machine was and others as it is.
+        var (standings, notes) = await Task.Run(
+            () => (
+                copies.Select(row => keeping.Standing(row.Copy)).ToList(),
+                groups.Select(group => group.Marks.WhyNothingCanBeKept(keeping)).ToList()),
+            CancellationToken.None);
 
         for (var i = 0; i < copies.Count; i++)
         {
@@ -319,6 +322,24 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         for (var i = 0; i < groups.Count; i++)
         {
             groups[i].Noted(notes[i]);
+        }
+    }
+
+    /// <summary>Run <paramref name="action"/> with every mark, rule and removal held until it ends, and Stop open meanwhile.</summary>
+    private async Task StoppableAsync(Func<CancellationToken, Task> action)
+    {
+        using var stopping = new CancellationTokenSource();
+        _stopping = stopping;
+        StopCommand.NotifyCanExecuteChanged();
+
+        try
+        {
+            await RunningAsync(() => action(stopping.Token));
+        }
+        finally
+        {
+            _stopping = null;
+            StopCommand.NotifyCanExecuteChanged();
         }
     }
 

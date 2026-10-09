@@ -70,7 +70,7 @@ public sealed record RemovalConfirmation(
     internal static RemovalConfirmation For(
         DuplicateMarks marks, CopyKeeping keeping, ExploreRemovalMode mode, Func<LocalVolume, RecycleBinRoom?> room)
     {
-        marks.ThrowUnlessComplete();
+        marks.ThrowUnlessOpen();
 
         List<IReadOnlyList<DuplicateCandidate>> byGroup = [.. marks.Groups.Select(group => group.Standing(keeping)).Where(standing => standing.Count > 0)];
         List<DuplicateCandidate> copies = [.. byGroup.SelectMany(standing => standing)];

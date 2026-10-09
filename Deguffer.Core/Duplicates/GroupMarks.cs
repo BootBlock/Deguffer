@@ -44,7 +44,7 @@ public sealed class GroupMarks
         ArgumentNullException.ThrowIfNull(keeping);
         Member(copy);
 
-        if ((CopyRefusals.WhyNeverMarked(copy) ?? keeping.Refusals.WhyRefused(copy)) is { } why)
+        if (keeping.WhyNotMarked(copy) is { } why)
         {
             return why;
         }
@@ -99,7 +99,7 @@ public sealed class GroupMarks
         List<DuplicateCandidate> standing =
         [
             .. Group.Files.Where(copy =>
-                IsMarked(copy) && CopyRefusals.WhyNeverMarked(copy) is null && keeping.Refusals.WhyRefused(copy) is null),
+                IsMarked(copy) && keeping.WhyNotMarked(copy) is null),
         ];
 
         var keepsOne = Group.Files.Any(copy => !standing.Exists(marked => marked.Identity == copy.Identity) && keeping.WhyNotKept(copy) is null);
@@ -124,7 +124,7 @@ public sealed class GroupMarks
         ArgumentNullException.ThrowIfNull(keeping);
 
         var markable = Group.Files
-            .Where(copy => CopyRefusals.WhyNeverMarked(copy) is null && keeping.Refusals.WhyRefused(copy) is null)
+            .Where(copy => keeping.WhyNotMarked(copy) is null)
             .ToList();
         var kept = Group.Files.Where(copy => keeping.WhyNotKept(copy) is null).ToList();
 

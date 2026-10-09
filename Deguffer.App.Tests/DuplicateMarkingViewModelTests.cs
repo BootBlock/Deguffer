@@ -57,6 +57,9 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         [
             Group(Copy(camera, "a.jpg", 2), Copy(Path.Combine(_scene.Folder("Documents"), "Trips"), "a.jpg", 3), Copy(_scene.Folder("D"), "a.jpg", 1)),
             Group(Copy(Path.Combine(_scene.Folder("Documents"), "A longer folder"), "b.jpg", 1), Copy(camera, "b.jpg", 2)),
+
+            // Every copy a reference, so every rule leaves this group as it was and says why.
+            Group(Copy(Photos, "c.jpg", 1, LocationRole.Reference), Copy(Path.Combine(Photos, "Old"), "c.jpg", 2, LocationRole.Reference)),
         ];
         MarkingRule[] rules =
         [
@@ -89,6 +92,12 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.NotEmpty(marked);
         Assert.Equal(marked, MarkedOn(page));
         Assert.Equal(outcome.Summary, page.Marking.Outcome);
+
+        // Each group the rule left as it was says why, in Core's words; the others say nothing.
+        var untouched = outcome.Untouched.ToDictionary(pair => pair.Group.Group, pair => pair.Reason);
+        Assert.Equal(
+            page.Groups.Select(row => untouched.GetValueOrDefault(row.Marks.Group) ?? string.Empty),
+            page.Groups.Select(row => row.Note));
     });
 
     /// <summary>
@@ -131,13 +140,14 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
     });
 
     /// <summary>
-    /// The confirmation the page asks with is Core's, word for word, in the way the button chosen
-    /// says: the Recycle Bin by default, and permanent removal only from its own button.
+    /// The confirmation the page asks with is Core's for the marks shown, in the way the button chosen
+    /// says: the Recycle Bin by default, and permanent removal only from its own button. How the
+    /// dialog lays Core's words out is seen by driving the page.
     /// </summary>
     [Theory]
     [InlineData(ExploreRemovalMode.RecycleBin)]
     [InlineData(ExploreRemovalMode.Permanent)]
-    public void TheConfirmationShowsCoresWords(ExploreRemovalMode mode) => UiThread.Run(async () =>
+    public void TheConfirmationIsCoresForTheMarksAndTheButtonChosen(ExploreRemovalMode mode) => UiThread.Run(async () =>
     {
         var group = _scene.Pair("a.jpg", 4096);
         var page = PageWithPhotos(Finds(group));
@@ -281,9 +291,14 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.False(page.Marking.ClearMarksCommand.CanExecute(null));
         Assert.False(page.SearchCommand.CanExecute(null));
 
+        // Invoked anyway, as an automation client can.
+        var shown = page.Groups[0];
         Toggle(page, group.Files[1]);
         page.Marking.ClearMarksCommand.Execute(null);
+        await page.SearchCommand.ExecuteAsync(null);
         Assert.Equal([group.Files[1].Identity], MarkedOn(page));
+        Assert.Single(_searches);
+        Assert.Same(shown, Assert.Single(page.Groups));
 
         answer.SetResult(false);
         await removing;
@@ -319,5 +334,82 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.True(_running.MayEndProcess);
         Assert.All(Open(page), Assert.False);
         Assert.NotEmpty(page.Marking.WhyClosed);
+    });
+
+    /// <summary>
+    /// While a rule runs on another thread, nothing changes the marks it reads and no search takes
+    /// its groups: the hold is in place before the rule leaves the page's thread.
+    /// </summary>
+    [Fact]
+    public void WhileARuleRunsNoMarkChangesAndNoSearchStarts() => UiThread.Run(async () =>
+    {
+        var group = Group(Copy(_scene.Folder("Documents"), "a.jpg", 1), Copy(_scene.Folder("Downloads"), "a.jpg", 2), Copy(_scene.Folder("Pictures"), "a.jpg", 3));
+        var page = PageWithPhotos(Finds(group));
+        await page.SearchCommand.ExecuteAsync(null);
+
+        var ruling = page.Marking.RunRuleCommand.ExecuteAsync(null);
+
+        Assert.True(page.Marking.IsBusy);
+        Assert.All(Open(page), Assert.False);
+        Assert.False(page.Marking.ClearMarksCommand.CanExecute(null));
+        Assert.False(page.SearchCommand.CanExecute(null));
+
+        await ruling;
+
+        Assert.False(page.Marking.IsBusy);
+        Assert.True(page.SearchCommand.CanExecute(null));
+    });
+
+    /// <summary>
+    /// A removal asked for judges the marks again; where none stands now, nothing is asked, and each
+    /// copy and group says how it was judged, so the reason nothing could go is on the page.
+    /// </summary>
+    [Fact]
+    public void AfterARemovalIsAskedForEachCopySaysHowItWasJudgedAgain() => UiThread.Run(async () =>
+    {
+        var group = _scene.Pair("a.jpg", 4096);
+        var page = PageWithPhotos(Finds(group));
+        await page.SearchCommand.ExecuteAsync(null);
+        Toggle(page, group.Files[1]);
+        Assert.Empty(Row(page, group.Files[0]).WhyNotKept);
+
+        // The copy that would stay is in the temporary folder by the time the removal is asked for.
+        _scene.Environment.WithTempPath(_scene.Folder("Documents"));
+        await page.Marking.MoveToRecycleBinCommand.ExecuteAsync(null);
+
+        Assert.Empty(Prompt.Asked);
+        Assert.Contains("temporary folder", Row(page, group.Files[0]).WhyNotKept, StringComparison.Ordinal);
+        Assert.Equal(page.Marks!.Keeping.Standing(group.Files[0]).WhyNotKept, Row(page, group.Files[0]).WhyNotKept);
+        Assert.Equal(page.Groups[0].Marks.WhyNothingCanBeKept(page.Marks.Keeping) ?? string.Empty, page.Groups[0].Note);
+        Assert.StartsWith("No marked copy can go", page.Marking.Outcome, StringComparison.Ordinal);
+    });
+
+    /// <summary>
+    /// A location given another role while the confirmation is open makes the marks stale, so saying
+    /// yes afterwards removes nothing, and the page says why.
+    /// </summary>
+    [Fact]
+    public void ARoleChangedWhileTheConfirmationIsOpenRemovesNothing() => UiThread.Run(async () =>
+    {
+        var content = new byte[200 * 1024];
+        new Random(297).NextBytes(content);
+        var kept = _scene.Written(Path.Combine(_scene.Folder("Documents"), "a.bin"), content);
+        var copy = _scene.Written(Path.Combine(_scene.Folder("Downloads"), "a.bin"), content);
+        var answer = new TaskCompletionSource<bool>();
+        Prompt = new FakeDuplicateConfirmation(answer.Task);
+        var page = PageWithPhotos(Finds(Group(kept, copy)));
+        await page.SearchCommand.ExecuteAsync(null);
+        Toggle(page, copy);
+
+        var removing = page.Marking.MoveToRecycleBinCommand.ExecuteAsync(null);
+        await Eventually.HoldsAsync(() => Prompt.Asked.Count == 1, "the confirmation");
+        page.Locations.Rows[0].IsReference = true;
+        answer.SetResult(true);
+        await removing;
+
+        Assert.True(File.Exists(copy.Path));
+        Assert.False(Directory.Exists(_scene.Bin));
+        Assert.Equal(_searches[^1].WhyResultsDoNotApply(page.Locations.Chosen), page.Marking.Outcome);
+        Assert.False(page.Marks!.WasRemovedFrom);
     });
 }

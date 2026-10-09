@@ -544,9 +544,13 @@ removal begins with, so Core refuses both until the page says the search has end
 (`DuplicateMarks.Complete`), and refuses a group added after it. The marks themselves
 (`GroupMarks`) and the refusals' cache (`CopyRefusals`) are not safe to change or ask on two threads,
 so no mark changes, by hand or by rule, while a rule, a confirmation or a removal runs, and no search
-starts under one. After a removal the groups describe the disk as it was, so they take no further
-marks until a search runs again. A mark by hand stays open while the search runs, because it is made
-on the page's thread, as each group is added.
+starts under one. The locations stay open while a confirmation is built and read, so a removal asks
+the page again, once the confirmation is built and once the user has answered, whether its marks
+still apply, and asks or removes nothing where they do not (`DuplicateActions.RemoveAsync`). After a
+removal has begun the groups describe the disk as it was, so Core refuses every later rule,
+confirmation and removal on those marks (`DuplicateMarks.WasRemovedFrom`) until a search runs again.
+A mark by hand stays open while the search runs, because it is made on the page's thread, as each
+group is added.
 
 Proves: a rule's marks are what Core decided; the page offers no way past a Core refusal; the dialog
 shows Core's words; a role changed after a search stops every rule and removal until the next
