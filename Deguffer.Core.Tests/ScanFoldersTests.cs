@@ -52,6 +52,66 @@ public sealed class ScanFoldersTests
         Assert.Equal("a.bin", scan.Tree.NameOf(Assert.Single(scan.Tree.ChildrenOf(scan.Node).ToArray())));
     }
 
+    /// <summary>
+    /// A folder is a final path, in the case the disk holds, so a table holding the name only in
+    /// another case holds another folder: in a case-sensitive directory, <c>photos</c> beside a
+    /// <c>Photos</c> the table did not place. Read from the table, the wrong folder's content would be
+    /// searched under the right one's name, so the folder is walked.
+    /// </summary>
+    [Fact]
+    public async Task AFolderTheTableHoldsOnlyInAnotherCaseIsWalked()
+    {
+        using var temp = new TempDirectory();
+        var photos = temp.CreateDirectory("Photos");
+        temp.CreateFile(10, "Photos", "a.bin");
+        Assert.True(VolumePath.TryParse(photos, out var volume));
+
+        var (fixture, parent, next) = Through(volume.Components.SkipLast(1));
+        fixture.AddDirectory(next, parent, "photos").AddFile(next + 1, next, "other.bin", allocated: 4096, logical: 100);
+        var sources = FakeMftSourceFactory.Serving(volume.DriveLetter, fixture);
+
+        var scan = Assert.Single(await new ExploreScanner(sources, tuning: RouteTuners.Table).ScanFoldersAsync([photos]));
+
+        Assert.Equal(1, sources.OpenCount);
+        Assert.Equal(ScanStrategy.ParallelEnumeration, scan.Strategy);
+        Assert.Equal("a.bin", scan.Tree.NameOf(Assert.Single(scan.Tree.ChildrenOf(scan.Node).ToArray())));
+    }
+
+    /// <summary>Where the table holds the folder in both cases, the folder asked for is the one read.</summary>
+    [Fact]
+    public async Task AFolderTheTableHoldsInBothCasesIsReadByItsExactName()
+    {
+        var (fixture, parent, next) = Through([]);
+        fixture
+            .AddDirectory(next, parent, "photos")
+            .AddFile(next + 1, next, "other.bin", allocated: 4096, logical: 100)
+            .AddDirectory(next + 2, parent, "Photos")
+            .AddFile(next + 3, next + 2, "a.jpg", allocated: 4096, logical: 100);
+
+        var scan = Assert.Single(await new ExploreScanner(FakeMftSourceFactory.Serving('X', fixture), tuning: RouteTuners.Table)
+            .ScanFoldersAsync([@"X:\Photos"]));
+
+        Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
+        Assert.Equal(@"X:\Photos\a.jpg", scan.Tree.PathOf(Assert.Single(scan.Tree.ChildrenOf(scan.Node).ToArray())));
+    }
+
+    /// <summary>A table holding <paramref name="folders"/>, each inside the one before it, below the volume's top.</summary>
+    /// <returns>The table, the record of the last folder, and the first record number still free.</returns>
+    private static (MftFixture Fixture, uint Parent, uint Next) Through(IEnumerable<string> folders)
+    {
+        var fixture = new MftFixture();
+        uint parent = MftRecord.RootRecordNumber;
+        uint next = MftRecord.ReservedRecordCount;
+
+        foreach (var folder in folders)
+        {
+            fixture.AddDirectory(next, parent, folder);
+            parent = next++;
+        }
+
+        return (fixture, parent, next);
+    }
+
     [Fact]
     public async Task TheWalkSaysWhichFilesAreHiddenOrSystemFiles()
     {
