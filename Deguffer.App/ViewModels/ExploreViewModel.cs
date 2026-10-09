@@ -166,7 +166,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // other down through the one busy flag. One direction each, rather than a flag both write:
         // the selection says when it is working, and this says when the page is free to act.
         Selection.Working += (_, working) => IsBusy = working;
-        Selection.Reported += (_, sentence) => Status = sentence;
+        Selection.Reported += (_, report) => Say(report);
         Selection.Changed += (_, _) => Refresh();
 
         // Two of the four notes are the selection's, so what the card shows in their corner turns
@@ -290,6 +290,38 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string Status { get; set; } = ScanPrompt;
+
+    /// <summary>
+    /// The §5.6 checks a removal could not pass, each by the path it is about and what it found,
+    /// listed beside <see cref="Status"/> while it still holds that removal's sentence. The sentence
+    /// counts them and asks the user to look at the folders, and after a removal that touched many
+    /// folders a count does not say which.
+    /// </summary>
+    public ObservableCollection<VerificationCheck> StatusChecks { get; } = [];
+
+    /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
+    public bool HasStatusChecks => StatusChecks.Count > 0;
+
+    /// <summary>The last statement the selection put on the status line.</summary>
+    private OutcomeStatement _stated = OutcomeStatement.Said(string.Empty);
+
+    /// <summary>Put a statement on the status line and its checks beside it.</summary>
+    private void Say(OutcomeStatement statement)
+    {
+        // Before the sentence, so the change below lists this statement's checks beside it.
+        _stated = statement;
+        Status = statement.Sentence;
+        ListBeside(Status);
+    }
+
+    partial void OnStatusChanged(string value) => ListBeside(value);
+
+    /// <summary>Update the list in place to what <see cref="OutcomeStatement.ChecksBeside"/> says belongs beside <paramref name="shown"/>.</summary>
+    private void ListBeside(string shown)
+    {
+        LiveList.Rewrite(StatusChecks, _stated.ChecksBeside(shown));
+        OnPropertyChanged(nameof(HasStatusChecks));
+    }
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]

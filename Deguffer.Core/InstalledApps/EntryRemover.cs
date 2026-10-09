@@ -21,9 +21,7 @@ public sealed record EntryRemovalReport(IReadOnlyList<EntryRemovalOutcome> Items
     public IReadOnlyList<string> Details =>
     [
         .. NotRemoved.Select(i => $"{i.Entry.Name}: {i.Message}"),
-        .. Verification.Checks
-            .Where(c => c.Outcome is not (VerificationOutcome.Survived or VerificationOutcome.NotPresentBefore))
-            .Select(c => $"{c.Subject}: {c.Detail}"),
+        .. Verification.Unpassed.Select(c => $"{c.Subject}: {c.Detail}"),
     ];
 
     public string Summary =>

@@ -256,4 +256,31 @@ public sealed partial class EntryRemoverTests : IDisposable
         Assert.Equal([first], _registry.Deleted);
         Assert.StartsWith("Not reached", Assert.Single(report.NotRemoved).Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Installed apps names each check that did not pass in its details, by subject and what was
+    /// found, and no check that passed.
+    /// </summary>
+    [Fact]
+    public void AnEntryRemovalNamesEachCheckThatDidNotPass()
+    {
+        var verification = new VerificationResult
+        {
+            Checks =
+            [
+                new(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall", "The Uninstall key itself", VerificationOutcome.Survived, "Still there."),
+                new(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Gone", "A chosen entry Deguffer did not remove", VerificationOutcome.RemovedFromOutside, "Something else removed it."),
+                new(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Beside", "An entry beside the removed ones", VerificationOutcome.Failed, "It is gone."),
+                new(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "The Uninstall key itself", VerificationOutcome.Unverified, "Windows would not read it."),
+            ],
+        };
+
+        Assert.Equal(
+            [
+                @"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Beside: It is gone.",
+                @"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Gone: Something else removed it.",
+                @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall: Windows would not read it.",
+            ],
+            new EntryRemovalReport([], verification).Details);
+    }
 }

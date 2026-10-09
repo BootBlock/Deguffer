@@ -143,7 +143,7 @@ public sealed record DuplicateRemovalReport(
 
             return Verification.Passed
                 ? sentence
-                : $"{sentence} {Verification.Failures.Count + Verification.Unverified.Count} of {Verification.Checks.Count} "
+                : $"{sentence} {Verification.Unpassed.Count} of {Verification.Checks.Count} "
                   + "check(s) on what should have survived did not pass. Look at the folders before doing anything else.";
         }
     }

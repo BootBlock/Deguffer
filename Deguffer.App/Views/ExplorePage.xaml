@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Deguffer.App.Controls"
     xmlns:exploring="using:Deguffer.Core.Exploring"
+    xmlns:views="using:Deguffer.App.Views"
     xmlns:vm="using:Deguffer.App.ViewModels"
     Background="Transparent"
     KeyboardAcceleratorPlacementMode="Hidden">
@@ -1163,8 +1164,8 @@
             </ItemsControl>
             </ScrollViewer>
 
-            <!-- Wraps as far as it needs to, and is never cut short. This is the one surface
-                 that carries what a removal did: §5.6's verification result arrives appended to
+            <!-- Wraps as far as it needs to, and is never cut short. This is the surface that
+                 says what a removal did: §5.6's verification result arrives appended to
                  the end of that sentence, and a wholly refused selection reports the policy's
                  reason here verbatim rather than through a dialog. Trimming the tail would take
                  the sentence saying a deletion may have removed something it was not asked to,
@@ -1174,6 +1175,13 @@
             <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
+
+            <!-- Each check the sentence above counts as not passed, by the folder or file it is
+                 about and what it found. The sentence asks the user to look at the folders, and
+                 after a removal that touched many of them only this says which. -->
+            <views:VerificationCheckList Checks="{x:Bind ViewModel.StatusChecks}"
+                                         Visibility="{x:Bind ViewModel.HasStatusChecks, Mode=OneWay}"
+                                         AutomationProperties.Name="The checks on what should have survived that did not pass" />
         </StackPanel>
     </Grid>
 </Page>

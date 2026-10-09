@@ -8,6 +8,7 @@ using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
 
@@ -501,6 +502,105 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Contains(page.Rows, row => row.Node == again);
         Assert.Null(page.Selection.StaleNote);
+    });
+
+    /// <summary>
+    /// #301: a removal that took something beside what was picked names the check that failed, by
+    /// the folder it failed on and what went, beside the sentence that counts it. The sentence asks
+    /// the user to look at the folders, and a count does not say which. The next sentence takes the
+    /// list with it, because the folders it named are not what a scan is about.
+    /// </summary>
+    [Fact]
+    public void AFailedCheckAfterARemovalIsNamedBesideTheStatus() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!);
+        _explore.Bin = new FakeRecycleBin(path =>
+        {
+            Directory.Delete(path, recursive: true);
+            File.Delete(Path.Combine(Path.GetDirectoryName(path)!, "keep.bin"));
+
+            return new RecycleOutcome(Removed: true);
+        });
+
+        var page = _explore.Page();
+        var (tree, folder) = _explore.OnDisk();
+        var root = tree.PathOf(tree.RootNode);
+
+        page.ScopeTo(root);
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+
+        Assert.False(page.HasStatusChecks);
+
+        page.Selection.Select([folder]);
+        await page.Selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Contains("did not pass", page.Status, StringComparison.Ordinal);
+        Assert.True(page.HasStatusChecks);
+
+        var check = Assert.Single(page.StatusChecks);
+        Assert.Equal(root, check.Subject);
+        Assert.Equal(VerificationOutcome.Failed, check.Outcome);
+        Assert.Contains("'keep.bin'", check.Detail, StringComparison.Ordinal);
+
+        var (rescan, _) = _explore.OnDisk();
+        await _explore.ScanAsync(page, ExploreScan.Fast(rescan));
+
+        Assert.DoesNotContain("did not pass", page.Status, StringComparison.Ordinal);
+        Assert.Empty(page.StatusChecks);
+        Assert.False(page.HasStatusChecks);
+    });
+
+    /// <summary>
+    /// A removal whose checks all pass, straight after one whose check failed, empties the list
+    /// rather than leaving the earlier removal's folders beside a sentence that passed.
+    /// </summary>
+    [Fact]
+    public void ARemovalThatPassesTakesTheEarlierListAway() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!);
+        var takeNeighbour = true;
+        _explore.Bin = new FakeRecycleBin(path =>
+        {
+            Directory.Delete(path, recursive: true);
+
+            if (takeNeighbour)
+            {
+                File.Delete(Path.Combine(Path.GetDirectoryName(path)!, "keep.bin"));
+            }
+
+            return new RecycleOutcome(Removed: true);
+        });
+
+        var root = _explore.Temp.CreateDirectory("scan");
+        _explore.Temp.CreateFile(10, "scan", "first", "a.bin");
+        _explore.Temp.CreateFile(10, "scan", "second", "b.bin");
+        _explore.Temp.CreateFile(5, "scan", "keep.bin");
+
+        var builder = new ExploreTreeBuilder(root);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            ExploreFixture.Folder("first"),
+            ExploreFixture.Folder("second"),
+            ExploreFixture.File("keep.bin", 5),
+        ]);
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        int Named(string name) => tree.ChildrenOf(tree.RootNode).ToArray().Single(node => Path.GetFileName(tree.PathOf(node)) == name);
+        var page = _explore.Page();
+
+        page.ScopeTo(root);
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+
+        page.Selection.Select([Named("first")]);
+        await page.Selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.True(page.HasStatusChecks);
+
+        takeNeighbour = false;
+        page.Selection.Select([Named("second")]);
+        await page.Selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.StartsWith("Moved 'second'", page.Status, StringComparison.Ordinal);
+        Assert.Empty(page.StatusChecks);
+        Assert.False(page.HasStatusChecks);
     });
 
     /// <summary>

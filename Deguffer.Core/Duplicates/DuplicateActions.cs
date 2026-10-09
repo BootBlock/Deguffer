@@ -20,6 +20,14 @@ public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, Du
                     ? "No marked copy can go to the Recycle Bin as things are now, so nothing was asked or removed. Each copy says why."
                     : "No marked copy can go as things are now, so nothing was asked or removed. Each copy says why.");
 
+    /// <summary>
+    /// <see cref="Summary"/>, with every §5.6 check the removal did not pass for the page to list
+    /// beside it, and none where nothing was removed to check.
+    /// </summary>
+    public OutcomeStatement Statement => Report is { } report
+        ? OutcomeStatement.After(Summary, report.Verification)
+        : OutcomeStatement.Said(Summary);
+
     /// <summary>What became of the copies the Recycle Bin could not take, which the removal was not handed.</summary>
     private string Stayed => Confirmation.Staying.Count switch
     {
