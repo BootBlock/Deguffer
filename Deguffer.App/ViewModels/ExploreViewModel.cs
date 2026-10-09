@@ -166,7 +166,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // other down through the one busy flag. One direction each, rather than a flag both write:
         // the selection says when it is working, and this says when the page is free to act.
         Selection.Working += (_, working) => IsBusy = working;
-        Selection.Reported += (_, sentence) => Status = sentence;
+        Selection.Reported += (_, report) => Say(report);
         Selection.Changed += (_, _) => Refresh();
 
         // Two of the four notes are the selection's, so what the card shows in their corner turns
@@ -290,6 +290,44 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string Status { get; set; } = ScanPrompt;
+
+    /// <summary>
+    /// The §5.6 checks a removal could not pass, each by the path it is about and what it found,
+    /// listed beside <see cref="Status"/> while it still holds that removal's sentence. The sentence
+    /// counts them and asks the user to look at the folders, and after a removal that touched many
+    /// folders a count does not say which.
+    /// </summary>
+    public ObservableCollection<VerificationCheck> StatusChecks { get; } = [];
+
+    /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
+    public bool HasStatusChecks => StatusChecks.Count > 0;
+
+    /// <summary>The report whose checks <see cref="StatusChecks"/> lists, or null where it lists none.</summary>
+    private ExploreStatusReport? _listed;
+
+    /// <summary>Put a report's sentence on the status line and its checks beside it, updating the list in place.</summary>
+    private void Say(ExploreStatusReport report)
+    {
+        // Before the sentence, so the change below knows the sentence is this report's own.
+        _listed = report;
+        Status = report.Sentence;
+        LiveList.Rewrite(StatusChecks, report.Checks);
+        OnPropertyChanged(nameof(HasStatusChecks));
+    }
+
+    /// <summary>
+    /// Any other sentence takes the list with it: the folders a removal's report named are not what
+    /// a scan's progress or a refusal is about.
+    /// </summary>
+    partial void OnStatusChanged(string value)
+    {
+        if (_listed is not null && value != _listed.Sentence)
+        {
+            _listed = null;
+            StatusChecks.Clear();
+            OnPropertyChanged(nameof(HasStatusChecks));
+        }
+    }
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]

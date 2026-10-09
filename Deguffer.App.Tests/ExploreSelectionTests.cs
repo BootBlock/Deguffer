@@ -168,7 +168,7 @@ public sealed class ExploreSelectionTests : IDisposable
         var changed = 0;
 
         selection.Working += (_, busy) => working.Add(busy);
-        selection.Reported += (_, sentence) => reported.Add(sentence);
+        selection.Reported += (_, report) => reported.Add(report.Sentence);
         selection.Changed += (_, _) => changed++;
 
         selection.Select([folder]);
@@ -263,7 +263,7 @@ public sealed class ExploreSelectionTests : IDisposable
         var selection = Selection(tree);
         var reported = new List<string>();
 
-        selection.Reported += (_, sentence) => reported.Add(sentence);
+        selection.Reported += (_, report) => reported.Add(report.Sentence);
         selection.Select([folder]);
         await selection.DeleteCommand.ExecuteAsync(null);
 

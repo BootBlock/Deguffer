@@ -1,7 +1,10 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Duplicates;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
 
@@ -86,6 +89,19 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// <summary>What the last rule or removal did, or an empty string.</summary>
     [ObservableProperty]
     public partial string Outcome { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// The §5.6 checks the last removal could not pass, each by the path it is about and what it
+    /// found, listed beside <see cref="Outcome"/> while it still holds that removal's sentence. The
+    /// sentence counts them and asks the user to look at the folders, and a count does not say which.
+    /// </summary>
+    public ObservableCollection<VerificationCheck> OutcomeChecks { get; } = [];
+
+    /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
+    public bool HasOutcomeChecks => OutcomeChecks.Count > 0;
+
+    /// <summary>The sentence whose checks <see cref="OutcomeChecks"/> lists, or null where it lists none.</summary>
+    private string? _listedFor;
 
     /// <summary>Why nothing can be marked, ruled or removed now, or an empty string where something can.</summary>
     public string WhyClosed => WhyCannotAct ?? _marks?.WhyRulesCannotMark ?? string.Empty;
@@ -297,13 +313,37 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                     rows[copy.Copy.Identity].Removal(copy.Message);
                 }
 
-                Outcome = answer.Summary;
+                Say(answer.Summary, answer.Report?.Verification.Unpassed ?? []);
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
                 Outcome = "Stopped before anything was removed.";
             }
         });
+    }
+
+    /// <summary>Put a removal's sentence on the page and its checks beside it, updating the list in place.</summary>
+    private void Say(string sentence, IReadOnlyList<VerificationCheck> checks)
+    {
+        // Before the sentence, so the change below knows the sentence is this removal's own.
+        _listedFor = sentence;
+        Outcome = sentence;
+        LiveList.Rewrite(OutcomeChecks, checks);
+        OnPropertyChanged(nameof(HasOutcomeChecks));
+    }
+
+    /// <summary>
+    /// Any other sentence takes the list with it: the folders a removal's report named are not what
+    /// a rule, a new search or cleared marks are about.
+    /// </summary>
+    partial void OnOutcomeChanged(string value)
+    {
+        if (_listedFor is not null && value != _listedFor)
+        {
+            _listedFor = null;
+            OutcomeChecks.Clear();
+            OnPropertyChanged(nameof(HasOutcomeChecks));
+        }
     }
 
     /// <summary>
