@@ -114,7 +114,9 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         _asked = asked;
         _stale = null;
         Outcome = string.Empty;
-        Refresh();
+
+        // Counted as well as refreshed: the groups the count was of are gone.
+        Counted();
     }
 
     /// <summary>The search handed over the marks it adds its groups to, which may be marked by hand from now on.</summary>
@@ -282,14 +284,17 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                 // The marks were judged again for the confirmation, so each copy says what it was judged.
                 await ShowJudgedAsync(marks.Keeping);
 
-                if (answer.Report is { } report)
-                {
-                    var rows = _groups.SelectMany(group => group.Copies).ToDictionary(row => row.Copy.Identity);
+                var rows = _groups.SelectMany(group => group.Copies).ToDictionary(row => row.Copy.Identity);
 
-                    foreach (var copy in report.Copies)
-                    {
-                        rows[copy.Copy.Identity].Removal(copy.Message);
-                    }
+                // Whether or not anything was asked: a copy the bin cannot take stays either way.
+                foreach (var copy in answer.Confirmation.Staying)
+                {
+                    rows[copy.Copy.Identity].Removal(copy.Why);
+                }
+
+                foreach (var copy in answer.Report?.Copies ?? [])
+                {
+                    rows[copy.Copy.Identity].Removal(copy.Message);
                 }
 
                 Outcome = answer.Summary;

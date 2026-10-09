@@ -47,6 +47,18 @@ public sealed class ContentDialogDuplicateConfirmation(XamlRoot xamlRoot, Elemen
         AutomationProperties.SetName(copies, "Every copy that goes");
         content.Children.Add(copies);
 
+        if (confirmation.Staying.Count > 0)
+        {
+            var staying = new ListView
+            {
+                ItemsSource = confirmation.Staying.Select(copy => $"{copy.Copy.Path}\n{copy.Why}").ToList(),
+                SelectionMode = ListViewSelectionMode.None,
+                MaxHeight = 200,
+            };
+            AutomationProperties.SetName(staying, "Every marked copy that stays");
+            content.Children.Add(staying);
+        }
+
         var dialog = new ContentDialog
         {
             XamlRoot = xamlRoot,

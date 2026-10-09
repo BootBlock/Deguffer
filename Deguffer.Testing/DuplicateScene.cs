@@ -1,4 +1,5 @@
 using Deguffer.Core.Duplicates;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -129,13 +130,16 @@ public sealed class DuplicateScene : IDisposable
     public Task<MachineProtections> ProtectionsAsync(CancellationToken ct = default) =>
         MachineProtections.ForAsync(System, Environment, Volumes, Registry, [], ct);
 
-    /// <summary>The remover as the page runs it, with a Recycle Bin that moves what it takes into <see cref="Bin"/>.</summary>
-    public DuplicateRemover Remover() =>
+    /// <summary>
+    /// The remover as the page runs it, with <paramref name="bin"/>, or where none is given a Recycle
+    /// Bin that moves what it takes into <see cref="Bin"/>.
+    /// </summary>
+    public DuplicateRemover Remover(IRecycleBin? bin = null) =>
         new(
             FileInformation.Default,
             FileInformation.OpenHeld,
             HandleDeletion.Delete,
-            FakeRecycleBin.MovingTo(Bin),
+            bin ?? FakeRecycleBin.MovingTo(Bin),
             WindowsFileSystem.Default);
 
     public void Dispose() => _temp.Dispose();

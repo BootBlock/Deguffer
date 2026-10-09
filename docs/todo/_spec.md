@@ -990,7 +990,7 @@ match on the criteria the user chose, and the claim it adds before anything is r
 two hold the same bytes.
 
 As with the rest of this document, what follows is the target.
-[duplicates.md](duplicates.md) is the build plan, and it records the research every rule here rests
+[duplicates.md](done/duplicates.md) is the build plan, and it records the research every rule here rests
 on: what the established duplicate finders do, and the ways their users have lost data.
 
 **What is searched**
@@ -1164,7 +1164,9 @@ on: what the established duplicate finders do, and the ways their users have los
 - **Every removal is confirmed** by a dialog that lists every copy that goes, and states how many
   there are, from how many groups, and how much space they occupy. A catalogue such as a photo
   library or a music player can name a copy Deguffer cannot see is in use, and the list is where a
-  user can.
+  user can. A marked copy the Recycle Bin cannot take, by the rule above, does not go, so the
+  confirmation lists it apart with why rather than among what goes, as on a removable drive, which
+  has no bin; where nothing else goes, nothing is asked.
 - **§5.6 applies, and adds a question.** Afterwards, every copy a group kept is still there with the
   same file ID, size and last-modified time, every reference copy is untouched, and every sibling of
   a removed copy survived, as Explore asserts. A kept or reference copy is known by its file ID, and

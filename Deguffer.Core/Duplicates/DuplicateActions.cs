@@ -11,11 +11,22 @@ namespace Deguffer.Core.Duplicates;
 public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, DuplicateRemovalReport? Report, string? Withdrawn = null)
 {
     /// <summary>What happened, in a sentence for the page.</summary>
-    public string Summary => Report?.Summary
-        ?? Withdrawn
-        ?? (Confirmation.Copies.Count == 0
-            ? "No marked copy can go as things are now, so nothing was asked or removed. Each copy says why."
-            : "Nothing was removed.");
+    public string Summary => Withdrawn
+        ?? (Report is { } report
+            ? report.Summary + Stayed
+            : Confirmation.Copies.Count > 0
+                ? "Nothing was removed."
+                : Confirmation.Staying.Count > 0
+                    ? "No marked copy can go to the Recycle Bin as things are now, so nothing was asked or removed. Each copy says why."
+                    : "No marked copy can go as things are now, so nothing was asked or removed. Each copy says why.");
+
+    /// <summary>What became of the copies the Recycle Bin could not take, which the removal was not handed.</summary>
+    private string Stayed => Confirmation.Staying.Count switch
+    {
+        0 => string.Empty,
+        1 => " 1 marked copy stayed, because the Recycle Bin cannot take it.",
+        var count => $" {count:N0} marked copies stayed, because the Recycle Bin cannot take them.",
+    };
 }
 
 /// <summary>
@@ -24,7 +35,8 @@ public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, Du
 ///
 /// <para>Separate from the page's view-models for the reason <see cref="ExploreActions"/> is: what it
 /// holds are rules about what gets deleted. Nothing is asked about nothing: where no mark stands
-/// once the marks are judged again, the user is not shown a dialog to say yes to. The removal judges
+/// once the marks are judged again, or the Recycle Bin can take none of the copies bound for it, the
+/// user is not shown a dialog to say yes to. The removal judges
 /// the marks again against protections built afresh after the user said yes, as
 /// <see cref="DuplicateRemover.RemoveAsync"/> asks, because a confirmation can stay open for as long
 /// as the user reads it. It is recorded as running from the moment it is confirmed until its §5.6
@@ -108,7 +120,7 @@ public sealed class DuplicateActions
         // Off the page's thread: the judgement reads the registry, every provider and each drive's disks.
         var confirmation = await Task.Run(
             async () => await RemovalConfirmation.ForAsync(
-                marks, await _protections(ct).ConfigureAwait(false), mode, _room, ct).ConfigureAwait(false),
+                marks, await _protections(ct).ConfigureAwait(false), mode, _room, _remover.WhyTheBinCannotTake, ct).ConfigureAwait(false),
             ct).ConfigureAwait(true);
 
         if (whyNotNow() is { } before)

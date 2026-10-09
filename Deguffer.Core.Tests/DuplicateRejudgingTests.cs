@@ -26,7 +26,7 @@ public sealed class DuplicateRejudgingTests : DuplicateMarkingScene
         Assert.Equal([files[0]], group.Standing(marks.Keeping));
 
         _tree.Environment.WithTempPath(Downloads);
-        var confirmation = await RemovalConfirmation.ForAsync(marks, await Protections(), ExploreRemovalMode.RecycleBin, _ => null);
+        var confirmation = await RemovalConfirmation.ForAsync(marks, await Protections(), ExploreRemovalMode.RecycleBin, _ => null, _ => null);
 
         Assert.True(group.IsMarked(files[0]));
         Assert.Empty(confirmation.Copies);
@@ -48,7 +48,7 @@ public sealed class DuplicateRejudgingTests : DuplicateMarkingScene
         Assert.Null(group.Mark(files[0], marks.Keeping));
 
         provider.Cleaned = [CleanedPlace.Whole(Downloads)];
-        var confirmation = await RemovalConfirmation.ForAsync(marks, await Protections(provider), ExploreRemovalMode.RecycleBin, _ => null);
+        var confirmation = await RemovalConfirmation.ForAsync(marks, await Protections(provider), ExploreRemovalMode.RecycleBin, _ => null, _ => null);
 
         Assert.Empty(confirmation.Copies);
         Assert.Contains("'Old downloads'", marks.Keeping.WhyNotKept(files[1]));
@@ -67,7 +67,7 @@ public sealed class DuplicateRejudgingTests : DuplicateMarkingScene
         Assert.Null(Only(marks).Mark(files[0], marks.Keeping));
 
         change();
-        var confirmation = await RemovalConfirmation.ForAsync(marks, await Protections(provider), ExploreRemovalMode.RecycleBin, _ => null);
+        var confirmation = await RemovalConfirmation.ForAsync(marks, await Protections(provider), ExploreRemovalMode.RecycleBin, _ => null, _ => null);
 
         return (confirmation, marks, files[1]);
     }

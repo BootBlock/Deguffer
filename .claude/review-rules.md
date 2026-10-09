@@ -21,7 +21,7 @@ irreversible data loss.
 | A control inside a `ContentDialog` | *A ContentDialog content subscription can miss changes* |
 | A test | *Deguffer verify by mutation* |
 | A document under `docs/todo/` | *Deguffer plan docs carry a status banner* |
-| A phase of `docs/todo/duplicates.md` | *Running a phase of the Deguffer duplicates plan* |
+| A phase of `docs/todo/done/duplicates.md` | *Running a phase of the Deguffer duplicates plan* |
 | A provider | `docs/cache-locations.md`, which describes every provider that ships |
 
 ## Compliance checklist (lane 1)

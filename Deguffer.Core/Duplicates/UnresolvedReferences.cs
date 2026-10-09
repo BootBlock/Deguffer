@@ -16,7 +16,7 @@ namespace Deguffer.Core.Duplicates;
 /// substituted drive is followed, in display form, and a path the walk reaches matches it whatever
 /// the case of either, which can only pass over more. A link on the way to the place can still hide
 /// it from a match of text, which is why no rule marks a copy while a reference location went
-/// unsearched (<c>docs/todo/duplicates.md</c>, phase 4).</para>
+/// unsearched (<c>docs/todo/done/duplicates.md</c>, phase 4).</para>
 /// </summary>
 internal sealed class UnresolvedReferences
 {

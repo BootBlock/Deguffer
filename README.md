@@ -313,7 +313,7 @@ knowledge.
 File-table-backed full-drive scanning has landed: Explore reads the volume's MFT when the app runs
 elevated, and walks whatever the table cannot account for. The Memory view has landed as well, with
 the one action it will ever have: asking a program you pick to close itself, and nothing stronger.
-So has the Duplicates view, built to [its plan](docs/todo/duplicates.md); it matches no folders as
+So has the Duplicates view, built to [its plan](docs/todo/done/duplicates.md); it matches no folders as
 units and replaces no copy with a link, by design.
 Still to come: VS Code workspace storage with per-workspace
 ages, Docker (reporting reclaim *inside* the VHDX separately from host space), and Android SDK.

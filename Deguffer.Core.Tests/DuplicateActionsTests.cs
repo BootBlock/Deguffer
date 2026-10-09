@@ -42,7 +42,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
 
         Assert.Throws<InvalidOperationException>(() => marks.Run(new MarkingRule.KeepNewest()));
         await Assert.ThrowsAsync<InvalidOperationException>(() => marks.RejudgeAsync(protections));
-        Assert.Throws<InvalidOperationException>(() => RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null));
+        Assert.Throws<InvalidOperationException>(() => RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null, _ => null));
         // Refused on the calling thread, before the rule goes to another.
         Assert.Throws<InvalidOperationException>(() => { _ = Actions(new FakeDuplicateConfirmation(true)).RunAsync(marks, new MarkingRule.KeepNewest()); });
         await Assert.ThrowsAsync<InvalidOperationException>(() => Actions(new FakeDuplicateConfirmation(true)).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null));
@@ -50,7 +50,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         marks.Complete();
 
         Assert.Equal(1, marks.Run(new MarkingRule.KeepNewest()).Marked);
-        Assert.Equal([files[0]], (await RemovalConfirmation.ForAsync(marks, protections, ExploreRemovalMode.RecycleBin, _ => null)).Copies);
+        Assert.Equal([files[0]], (await RemovalConfirmation.ForAsync(marks, protections, ExploreRemovalMode.RecycleBin, _ => null, _ => null)).Copies);
     }
 
     /// <summary>Once the search has said it ended, a group arriving after it is a broken contract, never a group added under a rule's feet.</summary>
@@ -90,6 +90,81 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         Assert.Null(answer.Report);
         Assert.Empty(answer.Confirmation.Copies);
         Assert.True(File.Exists(copy.Path));
+    }
+
+    /// <summary>
+    /// A copy on a drive whose Recycle Bin Windows will not describe, as on a USB stick Windows calls
+    /// removable, is never handed to the shell, which deletes outright what its bin cannot take. The
+    /// confirmation lists it as staying, with the bin's reason, so where nothing else goes nothing is
+    /// asked, and nothing says it went to the bin. The shell's move is stood in for by one that
+    /// deletes, as the real one would.
+    /// </summary>
+    [Fact]
+    public async Task ACopyOnADriveWithNoBinIsNeverHandedToTheShellAndNothingIsAsked()
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        List<string> handed = [];
+        var bin = new ShellRecycleBin(
+            path =>
+            {
+                handed.Add(path);
+                File.Delete(LongPath.Extended(path));
+                return new RecycleOutcome(Removed: true);
+            },
+            new RecycleBinReach(_tree.Volumes, new RecycleBinRooms(_ => null, _tree.Environment)));
+        var prompt = new FakeDuplicateConfirmation(true);
+
+        var answer = await Actions(prompt, bin).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null);
+
+        Assert.Empty(prompt.Asked);
+        Assert.Empty(handed);
+        Assert.Null(answer.Report);
+        Assert.Empty(answer.Confirmation.Copies);
+        var staying = Assert.Single(answer.Confirmation.Staying);
+        Assert.Equal(copy, staying.Copy);
+        Assert.Contains("or the drive has none", staying.Why, StringComparison.Ordinal);
+        Assert.StartsWith("No marked copy can go to the Recycle Bin", answer.Summary, StringComparison.Ordinal);
+        Assert.True(File.Exists(copy.Path));
+    }
+
+    /// <summary>
+    /// Where some copies go and one stays, the user is asked about those that go, the one that stays
+    /// is not handed to the bin, and the result says it stayed rather than counting it as moved.
+    /// </summary>
+    [Fact]
+    public async Task ACopyTheBinCannotTakeStaysWhileTheOthersGo()
+    {
+        var content = Content();
+        var usb = Path.Combine(_tree.Environment.UserProfile, "USB");
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), content));
+        var going = Found(Write(Path.Combine(Downloads, "a.bin"), content));
+        var staying = Found(Write(Path.Combine(usb, "a.bin"), content));
+        var marks = Marks([kept, going, staying]);
+        Mark(marks, going);
+        Mark(marks, staying);
+        var bin = FakeRecycleBin.MovingTo(Bin);
+        bin.CannotTake = path => path.StartsWith(usb, StringComparison.OrdinalIgnoreCase) ? "This drive has no Recycle Bin." : null;
+        var prompt = new FakeDuplicateConfirmation(true);
+
+        var answer = await Actions(prompt, bin).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null);
+
+        Assert.Equal([going], Assert.Single(prompt.Asked).Copies);
+        Assert.Equal(staying, Assert.Single(answer.Confirmation.Staying).Copy);
+
+        // Asked of each marked copy in the form the shell is handed, never the extended form (§6.3).
+        Assert.Equal(
+            new[] { going.Path, staying.Path }.Order(),
+            bin.Asked.Order());
+        Assert.All(bin.Asked, path => Assert.False(path.StartsWith(@"\\?\", StringComparison.Ordinal)));
+        Assert.DoesNotContain(bin.Paths, path => path.StartsWith(usb, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(going, Assert.Single(answer.Report!.Copies).Copy);
+        Assert.EndsWith("1 marked copy stayed, because the Recycle Bin cannot take it.", answer.Summary, StringComparison.Ordinal);
+        Assert.False(File.Exists(going.Path));
+        Assert.True(File.Exists(staying.Path));
+        Assert.True(File.Exists(kept.Path));
     }
 
     [Fact]

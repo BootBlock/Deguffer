@@ -23,8 +23,14 @@ public abstract class DuplicatesPageScene : IDisposable
     private protected readonly List<ElevationRequest> _relaunches = [];
     private protected readonly RunningActions _running = new();
 
-    protected DuplicatesPageScene() =>
+    protected DuplicatesPageScene()
+    {
         _preferences = new PreferenceService(new PreferenceStore(new FakeUserEnvironment(_temp.Path)));
+        RecycleBin = FakeRecycleBin.MovingTo(_scene.Bin);
+    }
+
+    /// <summary>The Recycle Bin the page removes to, moving what it takes into the scene's bin folder.</summary>
+    private protected FakeRecycleBin RecycleBin { get; }
 
     /// <summary>What the page's confirmation is answered with; declining unless a test says otherwise.</summary>
     private protected FakeDuplicateConfirmation Prompt { get; set; } = new(false);
@@ -70,7 +76,7 @@ public abstract class DuplicatesPageScene : IDisposable
             run ?? Finds(),
 
             // Asked through the property, so a test can change the answer after the page is built.
-            new DuplicateActions(_scene.ProtectionsAsync, _ => null, () => Prompt, _scene.Remover(), _running),
+            new DuplicateActions(_scene.ProtectionsAsync, _ => null, () => Prompt, _scene.Remover(RecycleBin), _running),
             () => ChooseCsv?.Invoke() ?? Task.FromResult(CsvChosen),
             _preferences,
             new DriveList(_volumes, new ManualTimeProvider()),

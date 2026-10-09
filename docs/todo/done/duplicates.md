@@ -1,10 +1,9 @@
 # Duplicates — build plan
 
-> **Status:** 🟢 ACTIVE — the build plan for [_spec.md §7.4](_spec.md#74-duplicates--the-files-that-are-there-twice),
-> tracked by [#297](https://github.com/BootBlock/Deguffer/issues/297). Phase 0 (the spec and this
-> plan) is done; the status log says which later phases have landed. The spec decides what is
-> built; this file records the research it rests on, the order it is built in, and what each phase
-> landed.
+> **Status:** ✅ COMPLETE — the build plan for [_spec.md §7.4](../_spec.md#74-duplicates--the-files-that-are-there-twice),
+> tracked by [#297](https://github.com/BootBlock/Deguffer/issues/297), every phase landed on
+> 2026-10-09. The spec decides what is built; this file records the research it rests on, the order
+> it was built in, and what each phase landed.
 
 Duplicates finds files that are on the disk more than once, across one drive or several, matched on
 the name, size, last-modified time or content the user chooses, and removes the copies the user
@@ -74,7 +73,7 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   "123456789" as other tools do, while `XxHash128` already writes the canonical order `xxh128sum`
   prints. It is the first package
   `Deguffer.Core` references, and the only one this plan adds. The App ships untrimmed (see
-  [the AOT evaluation](aot-and-single-file-evaluation.md)), so trimming does not apply. BLAKE3 is
+  [the AOT evaluation](../aot-and-single-file-evaluation.md)), so trimming does not apply. BLAKE3 is
   not offered, because its maintained .NET port would be a second dependency for the role XXH128
   already fills.
 - **Cryptographic checksums come from Windows (CNG)** through `System.Security.Cryptography`. MD5,
@@ -140,7 +139,11 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   first. A fully downloaded OneDrive file keeps
   its cloud reparse tag, so the tag is no sign of a file being online-only; the attributes are.
   Deleting an online-only OneDrive file deletes it everywhere; the OneDrive recycle bin keeps it for
-  30 days (personal) or 93 (work or school).
+  30 days (personal) or 93 (work or school). Measured in phase 10 on a personal OneDrive: a synced
+  file made online-only with `attrib +U -P` read first as unpinned alone (`0x00100020`), and about a
+  minute later, once OneDrive had freed it, as `0x00501620`: `RECALL_ON_DATA_ACCESS`, `UNPINNED`,
+  `OFFLINE`, sparse and a reparse point. Its attributes read the same after a content search and after
+  a removal had been asked of it, so neither recalled it.
 - **Space.** ReFS block cloning, which Windows 11 24H2 uses for ordinary copies on a Dev Drive, and
   Windows Server deduplication (`IO_REPARSE_TAG_DEDUP`) let copies share clusters. No user-mode API
   reports what a cloned file shares **(unverified)**, so there a removal can free less than the
@@ -166,7 +169,14 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   item not having been recycled. So such an item is refused before the shell is asked
   (`RecycleBinReach`), and a sink handed no item reports the item deleted outright
   (`RecycleOutcome.DeletedOutright`). A FAT32 or exFAT bin keeps its items at its top
-  (`$RECYCLE.BIN\$R…`), with no folder for each account.
+  (`$RECYCLE.BIN\$R…`), with no folder for each account. Measured in phase 10 on a FAT32 USB stick
+  Windows calls removable (`DriveType` 2, bus USB): it has no bin. `SHQueryRecycleBin` answers
+  `E_FAIL` for its letter and for its `\\?\Volume{GUID}\` name, the account has no `BitBucket\Volume`
+  key for it, and it holds no `$RECYCLE.BIN` folder, so `RecycleBinRooms.Of` answers null and
+  `RecycleBinReach` refuses every item on it: a copy there never reaches the shell, which was not
+  asked what it would do with one. Corrected in phase 10: the confirmation asks the same question
+  before anything is asked (`IRecycleBin.WhyItCannotTake`), because until then it promised the bin
+  for such a copy, saying only that it could not tell whether the copies fit.
 - **Deleting through a handle.** Corrected in phase 5, measured on NTFS: `SetFileInformationByHandle`
   with `FileDispositionInfoEx` deletes the file a handle holds, whatever its path names by then, but
   only through a handle opened by path. Through one opened by its number with `OpenFileById` it is
@@ -706,6 +716,36 @@ Proves: an online-only file is never read, by either recall attribute, and a cop
 online-only after the search is not removed; a copy on a removable drive is never sent to a bin
 that would delete it outright, and the result never says it is in a bin it is not in.
 
+Corrected here: the removal already refused a copy on the removable drive, but the confirmation
+before it promised the Recycle Bin for that copy, saying only that it could not tell whether the
+copies fit and that Windows would delete the bin's oldest items. Its bin warnings were written in
+phase 4, before phase 9 made the bin route refuse anything its bin cannot take, and so described a
+removal that never happens. The bin seam now answers what it cannot take before anything is asked
+(`IRecycleBin.WhyItCannotTake`, from the `RecycleBinReach` it refuses on, which now states the
+reason alone), and the confirmation asks the remover's own bin with the removal's own path
+(`DuplicateRemover.WhyTheBinCannotTake`): such a copy is listed apart with why
+(`RemovalConfirmation.Staying`), never among what goes or against the bin's room, its row says why,
+the result says how many stayed, and where nothing else goes nothing is asked (§7.4 amended). Driving
+found a second defect: a new search left the last search's count of marked copies on the page.
+Explore's prompt makes the same promise about an item its bin will refuse, but asking before the
+prompt means walking a folder, which Explore decided against, so that is
+[#302](https://github.com/BootBlock/Deguffer/issues/302).
+
+Measured: on a personal OneDrive, unelevated, a content search over a local folder and a OneDrive
+folder left the online-only copy out with the note "1 cloud file was left out because it is not on
+this device, and reading it would download it", and its attributes were unchanged afterwards (see
+"Cloud files"). A size search showed both online-only copies, each saying it is not on this
+computer to compare, keep or remove; a mark by hand was refused and "keep the newest" marked
+nothing. A local OneDrive copy marked by hand, then made online-only, was refused by the removal
+("It went online-only since the search, so it is not on this computer to compare") and stayed
+online-only. On a FAT32 USB stick with no bin (see "Recycle Bin"), its copy said it is not counted
+on as the copy kept, so a mark on the internal copy was refused as leaving the group nothing to
+keep; with the stick's folder a reference, the internal copy could be marked. Before the fix the
+confirmation offered the stick's copy to the bin and the removal then refused it, leaving it in
+place; after it, no question was asked, the row gave the bin's reason, and the page said nothing
+could go to the Recycle Bin. Whether OneDrive's own activity list showed a transfer was not
+watched; the attributes are the evidence that nothing was recalled.
+
 ## What every phase passes before the next starts
 
 1. `dotnet build Deguffer.sln` and `dotnet test Deguffer.sln` pass, read rather than assumed.
@@ -928,6 +968,20 @@ that would delete it outright, and the result never says it is in a bin it is no
   makes the shell fail where the bin cannot take an item, and §7.1 and §7.4 on the bin's rule and
   how its item is identified. Not driven: an online-only OneDrive file and a removable drive, which
   the machine did not have, so phase 10 drives both and closes the plan.
+- 2026-10-09: phase 10 landed, and the plan is complete. An online-only OneDrive file and a FAT32
+  USB stick driven on the page (phase 10, "Measured"): the online-only file left out of a content
+  search unread and unrecalled, shown and never marked by a size search, and a copy that went
+  online-only after the search refused by the removal; the stick's copy never counted as kept unless
+  its location is a reference, and never handed to the shell. Fixed, each with a test seen to fail
+  without it: the confirmation lists a copy the Recycle Bin cannot take as staying, with why, rather
+  than promising the bin for it (`IRecycleBin.WhyItCannotTake`, `DuplicateRemover.WhyTheBinCannotTake`,
+  `RemovalConfirmation.Staying`), and asks nothing where nothing else goes; and a new search drops
+  the last search's count of marked copies. Decided: the bin's answer comes from the seam that
+  refuses on it, asked with the removal's own path, so the confirmation and the removal cannot
+  disagree; a copy that stays is counted neither among what goes nor against the bin's room; and
+  Explore's prompt, which needs a folder walk to ask the same question, is left to #302. Measured: a
+  removable drive has no bin Windows describes, and what OneDrive sets on a file it frees, in the
+  technical facts. Corrected here: the bin warnings phase 4 wrote, and §7.4 on the confirmation.
 
 ## Limits that stay open
 
@@ -970,7 +1024,11 @@ that would delete it outright, and the result never says it is in a bin it is no
   and a removal still reads it.
 - **A bin whose limit cannot be read.** Where Windows will not say what a drive's Recycle Bin may
   hold, or which volume holds an item, the item is refused rather than handed to a shell that may
-  delete it outright, so it can be removed only permanently, as a deliberate choice. A removable
-  drive with no bin at all was not measured (phase 10).
+  delete it outright, so it can be removed only permanently, as a deliberate choice. A drive
+  Windows calls removable has no bin at all (measured in phase 10), so the same holds for every copy
+  on one.
+- **Explore's prompt promises the bin.** Explore asks to move an item to the Recycle Bin without
+  asking the bin whether it can take it, which for a folder needs a walk; the removal refuses it
+  and the report says so. [#302](https://github.com/BootBlock/Deguffer/issues/302).
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.
