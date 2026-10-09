@@ -162,6 +162,39 @@ public sealed class DuplicateMarkingTests : IDisposable
         Assert.False(Only(marks).IsMarked(keptOnly));
     }
 
+    /// <summary>
+    /// A rule that keeps the copies in a folder marks nothing in a group with no copy there that can
+    /// be kept, though the group could keep another.
+    /// </summary>
+    [Fact]
+    public void KeepInAFolderMarksNothingInAGroupWithNoCopyThere()
+    {
+        DuplicateCandidate[] files = [Copy(Path.Combine(Documents, "a.jpg")), Copy(Path.Combine(Downloads, "a.jpg"))];
+        var marks = Marks(files);
+
+        var outcome = marks.Run(new MarkingRule.KeepInFolder(Path.Combine(Documents, "Camera")));
+
+        Assert.Equal(0, outcome.Marked);
+        Assert.All(files, file => Assert.False(Only(marks).IsMarked(file)));
+    }
+
+    /// <summary>
+    /// A rule that marks the copies in a folder marks nothing in a group whose every copy that can be
+    /// kept is there, rather than all but one of them.
+    /// </summary>
+    [Fact]
+    public void MarkInAFolderMarksNothingWhereEveryCopyThatCanBeKeptIsThere()
+    {
+        var camera = Path.Combine(Documents, "Camera");
+        DuplicateCandidate[] files = [Copy(Path.Combine(camera, "a.jpg")), Copy(Path.Combine(camera, "Old", "a.jpg")), OnUsb("a.jpg")];
+        var marks = Marks(files);
+
+        var outcome = marks.Run(new MarkingRule.MarkInFolder(camera));
+
+        Assert.Equal(0, outcome.Marked);
+        Assert.All(files, file => Assert.False(Only(marks).IsMarked(file)));
+    }
+
     [Fact]
     public void AStaleMarkStateKeepsNoMarkThatWouldLeaveNothingToKeep()
     {
@@ -187,7 +220,7 @@ public sealed class DuplicateMarkingTests : IDisposable
         var group = Only(marks);
 
         Assert.NotNull(group.WhyNothingCanBeKept(marks.Keeping));
-        Assert.All(files, file => Assert.NotNull(group.Mark(file, marks.Keeping)));
+        Assert.All(files, file => Assert.Equal(group.WhyNothingCanBeKept(marks.Keeping), group.Mark(file, marks.Keeping)));
         Assert.All(files, file => Assert.NotNull(marks.Keeping.WhyNotKept(file)));
 
         var outcome = marks.Run(new MarkingRule.KeepNewest());
@@ -221,6 +254,24 @@ public sealed class DuplicateMarkingTests : IDisposable
 
         Assert.All(marks.Groups, group => Assert.Contains("Storage's", marks.Keeping.WhyNotKept(group.Group.Files[0])));
         Assert.All(marks.Groups, group => Assert.Null(marks.Keeping.WhyNotKept(group.Group.Files[1])));
+    }
+
+    /// <summary>
+    /// A clean's place named through a junction is the folder the junction leads to, which is the
+    /// path a copy found there carries.
+    /// </summary>
+    [Fact]
+    public void APlaceNamedThroughAJunctionHoldsTheCopiesAtTheFolderItLeadsTo()
+    {
+        var real = _tree.Folder("Caches", "npm-cache");
+        var named = Path.Combine(_tree.Environment.LocalAppData, "npm-cache");
+        Directory.CreateDirectory(_tree.Environment.LocalAppData);
+        Junction.ToDirectory(named, real);
+        _cleans.Add(new StorageClean(CleanedPlace.Whole(named), "npm cache"));
+
+        var marks = Marks([Copy(Path.Combine(real, "a.tgz")), Copy(Path.Combine(Documents, "a.tgz"))]);
+
+        Assert.Contains("Storage's", marks.Keeping.WhyNotKept(Only(marks).Group.Files[0]));
     }
 
     [Fact]
