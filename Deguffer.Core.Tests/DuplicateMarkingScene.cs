@@ -113,6 +113,7 @@ public abstract class DuplicateMarkingScene : IDisposable
             _cloud,
             _tree.Volumes,
             _media.Of,
+            _media.Now,
             FileInformation.Default);
 
     private protected static GroupMarks Only(DuplicateMarks marks) => Assert.Single(marks.Groups);

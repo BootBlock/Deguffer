@@ -51,6 +51,7 @@ public sealed class RemovalConfirmationTests : IDisposable
             _cloud,
             _tree.Volumes,
             _ => new VolumeMedia(StorageMedia.Nvme, [0]),
+            _ => new VolumeMedia(StorageMedia.Nvme, [0]),
             FileInformation.Default);
 
     /// <summary>Marks every copy in each group but its first.</summary>

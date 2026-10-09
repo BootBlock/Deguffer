@@ -31,23 +31,14 @@ public sealed class DuplicateMarks
 
     private readonly DuplicateSearchResult _result;
     private readonly KeepingReader _reader;
-    private readonly IVolumeInventory _volumes;
-    private readonly FileInformation _files;
 
     private DuplicateMarks(
-        DuplicateSearchResult result,
-        ExploreActionPolicy policy,
-        IReadOnlyList<StorageClean> cleans,
-        KeepingReader reader,
-        IVolumeInventory volumes,
-        FileInformation files)
+        DuplicateSearchResult result, ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans, KeepingReader reader)
     {
         _result = result;
         _reader = reader;
-        _volumes = volumes;
-        _files = files;
         UnsearchedReferences = result.Finding.UnsearchedReferences;
-        Keeping = reader.Read(policy, cleans, result.Finding.ProgramFolders, result.Groups);
+        Keeping = reader.AfterTheSearch(policy, cleans, result.Finding.ProgramFolders, result.Groups);
 
         // Sorted once, by the space each group could free when the marks were made.
         Groups = [.. result.Groups.Select(group => new GroupMarks(group)).OrderByDescending(marks => marks.FreeableSpace(Keeping))];
@@ -75,7 +66,10 @@ public sealed class DuplicateMarks
     /// volume's disks are. Blocks on each volume's disks, so never call it on the UI thread.
     /// </summary>
     /// <param name="protections">The same protections whose policy the search passed over places by.</param>
-    /// <param name="media">Asked through <see cref="VolumeMediaCache.Now"/>, never its remembered answers.</param>
+    /// <param name="media">
+    /// The cache the search read the drives through, whose answers these marks take, and whose
+    /// <see cref="VolumeMediaCache.Now"/> a confirmation asks again.
+    /// </param>
     public static async Task<DuplicateMarks> ForAsync(
         DuplicateSearchResult result,
         MachineProtections protections,
@@ -95,11 +89,13 @@ public sealed class DuplicateMarks
             environment,
             cloud,
             volumes,
+            media.Of,
             media.Now,
             FileInformation.Default);
     }
 
-    /// <param name="media">What a volume's disks are, so a test can stand for a USB disk that says it is fixed.</param>
+    /// <param name="searchedMedia">What a volume's disks are as the search found them, so a test can stand for a USB disk that says it is fixed.</param>
+    /// <param name="mediaNow">What a volume's disks are when a confirmation asks again.</param>
     /// <param name="files">Where each place is followed to its final path, so a test can stand for a junction.</param>
     internal static DuplicateMarks For(
         DuplicateSearchResult result,
@@ -108,7 +104,8 @@ public sealed class DuplicateMarks
         IUserEnvironment environment,
         ICloudFiles cloud,
         IVolumeInventory volumes,
-        Func<LocalVolume, VolumeMedia> media,
+        Func<LocalVolume, VolumeMedia> searchedMedia,
+        Func<LocalVolume, VolumeMedia> mediaNow,
         FileInformation files)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -118,7 +115,7 @@ public sealed class DuplicateMarks
         ArgumentNullException.ThrowIfNull(cloud);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        return new DuplicateMarks(result, policy, cleans, new KeepingReader(environment, cloud, volumes, media, files), volumes, files);
+        return new DuplicateMarks(result, policy, cleans, new KeepingReader(environment, cloud, volumes, searchedMedia, mediaNow, files));
     }
 
     /// <summary>
@@ -140,13 +137,16 @@ public sealed class DuplicateMarks
         var cleans = await protections.StorageCleansAsync(ct).ConfigureAwait(false);
         var programs = _reader.ProgramsNow(protections, _result.Finding.ProgramFolders, ct);
 
-        return Keeping = _reader.Read(protections.Policy, cleans, programs, _result.Groups);
+        return Keeping = _reader.Now(protections.Policy, cleans, programs, _result.Groups);
     }
 
     /// <summary>Why no rule can mark anything, or null where rules may run.</summary>
     public string? WhyRulesCannotMark => UnsearchedReferences.Count > 0 ? ReferenceUnsearched : null;
 
-    /// <summary>Run <paramref name="rule"/> over every group, adding to the marks there are.</summary>
+    /// <summary>
+    /// Run <paramref name="rule"/> over every group, adding to the marks there are. A rule that names a
+    /// folder opens it to follow it to its final path, so never call it on the UI thread.
+    /// </summary>
     public RuleOutcome Run(MarkingRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
@@ -158,8 +158,8 @@ public sealed class DuplicateMarks
 
         var folder = rule switch
         {
-            MarkingRule.KeepInFolder keepIn => Folder(keepIn.Folder),
-            MarkingRule.MarkInFolder markIn => Folder(markIn.Folder),
+            MarkingRule.KeepInFolder keepIn => _reader.Folder(keepIn.Folder),
+            MarkingRule.MarkInFolder markIn => _reader.Folder(markIn.Folder),
             _ => null,
         };
 
@@ -250,7 +250,4 @@ public sealed class DuplicateMarks
 
         return ordered.ThenBy(copy => copy.Path.Length).ThenBy(copy => copy.Path, StringComparer.Ordinal).First();
     }
-
-    private ResolvedPlaces Folder(string folder) =>
-        ResolvedPlaces.Resolve([(CleanedPlace.Whole(folder), folder)], _volumes, _files);
 }

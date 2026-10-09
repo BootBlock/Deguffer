@@ -4,7 +4,8 @@ namespace Deguffer.Core.Scanning.Media;
 
 /// <summary>
 /// The storage behind each volume, asked once per volume and once per disk for the life of an
-/// operation (G4).
+/// operation (G4), and asked again, remembered nowhere, where no earlier answer may settle the
+/// question (<see cref="Now"/>).
 ///
 /// <para>Its own type rather than a member of <see cref="LocalVolume"/>, because
 /// <see cref="IVolumeInventory.Volumes"/> is read on the UI thread and this is not to be (#181):
