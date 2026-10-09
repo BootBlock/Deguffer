@@ -80,9 +80,28 @@ public sealed class FakeRecycleBin : IRecycleBin
     public static FakeRecycleBin Refusing(string message) =>
         new(_ => new RecycleOutcome(Removed: false, message));
 
+    /// <summary>
+    /// What the bin cannot take, by path, as <see cref="ShellRecycleBin"/> answers from the item and
+    /// its drive's bin; nothing where a test does not say. <see cref="Recycle"/> refuses on it, as the
+    /// real bin does.
+    /// </summary>
+    public Func<string, string?> CannotTake { get; set; } = _ => null;
+
+    /// <summary>Every path the bin was asked whether it can take.</summary>
+    public List<string> Asked { get; } = [];
+
+    public string? WhyItCannotTake(string path)
+    {
+        Asked.Add(path);
+        return CannotTake(path);
+    }
+
     public RecycleOutcome Recycle(string path)
     {
         Paths.Add(path);
-        return _behaviour(path);
+
+        return CannotTake(path) is { } why
+            ? new RecycleOutcome(Removed: false, why)
+            : _behaviour(path);
     }
 }

@@ -85,7 +85,7 @@ public sealed class RemovalConfirmationTests : IDisposable
         var marks = Marks([Copy(a, "1.jpg"), Copy(b, "1.jpg"), Copy(c, "1.jpg")], [Copy(a, "2.jpg"), Copy(b, "2.jpg")]);
         MarkAllButFirst(marks);
 
-        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(0, long.MaxValue));
+        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(0, long.MaxValue), _ => null);
 
         Assert.Equal(
             marks.Groups.SelectMany(group => group.Group.Files.Skip(1)).Select(copy => copy.Path).Order(),
@@ -108,7 +108,7 @@ public sealed class RemovalConfirmationTests : IDisposable
         var marks = Marks([Copy(Documents, "1.jpg"), Copy(Path.Combine(Documents, "B"), "1.jpg")]);
         MarkAllButFirst(marks);
 
-        var summary = RemovalConfirmation.For(marks, marks.Keeping, mode, _ => Room(0, long.MaxValue)).Summary;
+        var summary = RemovalConfirmation.For(marks, marks.Keeping, mode, _ => Room(0, long.MaxValue), _ => null).Summary;
 
         Assert.Contains("the removal may free less", summary, StringComparison.Ordinal);
         Assert.Equal(says, summary.Contains("only when it is emptied", StringComparison.Ordinal));
@@ -121,22 +121,68 @@ public sealed class RemovalConfirmationTests : IDisposable
         MarkAllButFirst(marks);
 
         // Two copies of 1,000,000 bytes go; a bin with 1,500,000 bytes of room left cannot take both.
-        var tight = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(held: 500_000, limit: 2_000_000));
-        var roomy = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(held: 0, limit: 2_000_000));
+        var tight = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(held: 500_000, limit: 2_000_000), _ => null);
+        var roomy = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(held: 0, limit: 2_000_000), _ => null);
 
         Assert.Contains(tight.Warnings, warning => warning.Contains("more than it has room for", StringComparison.Ordinal));
         Assert.Empty(roomy.Warnings);
     }
 
+    /// <summary>
+    /// A copy the Recycle Bin cannot take, as on a removable drive with no bin, does not go, so it is
+    /// listed apart with the bin's reason and counted nowhere among what goes, where before the
+    /// confirmation promised the bin for it. A permanent removal takes it like any other, and does not
+    /// ask the bin.
+    /// </summary>
     [Fact]
-    public void TheConfirmationSaysWhereTheBinsRoomIsNotKnownOrItKeepsNothing()
+    public void ACopyTheBinCannotTakeIsListedAsStayingWithWhyAndNotAsGoing()
     {
-        var marks = Marks([Copy(Documents, "1.jpg"), Copy(Path.Combine(Documents, "B"), "1.jpg")]);
+        var b = Path.Combine(Documents, "B");
+        var usb = Path.Combine(Documents, "USB");
+        var marks = Marks([Copy(Documents, "1.jpg"), Copy(b, "1.jpg"), Copy(usb, "1.jpg")], [Copy(Documents, "2.jpg"), Copy(usb, "2.jpg")]);
+        MarkAllButFirst(marks);
+        List<DuplicateCandidate> asked = [];
+        string? NoBinOnTheStick(DuplicateCandidate copy)
+        {
+            asked.Add(copy);
+            return copy.Path.StartsWith(usb, StringComparison.Ordinal) ? "This drive has no Recycle Bin." : null;
+        }
+
+        var toBin = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(0, long.MaxValue), NoBinOnTheStick);
+
+        Assert.Equal([Path.Combine(b, "1.jpg")], toBin.Copies.Select(copy => copy.Path));
+        Assert.Equal(1, toBin.Groups);
+        Assert.Equal(4096, toBin.Space);
+        Assert.Equal("Move 1 copy to the Recycle Bin?", toBin.Title);
+        Assert.Equal([Path.Combine(usb, "1.jpg"), Path.Combine(usb, "2.jpg")], toBin.Staying.Select(copy => copy.Copy.Path).Order());
+        Assert.All(toBin.Staying, copy => Assert.Equal("This drive has no Recycle Bin.", copy.Why));
+        Assert.Contains(toBin.Warnings, warning => warning.StartsWith("2 marked copies stay", StringComparison.Ordinal));
+
+        asked.Clear();
+        var permanent = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.Permanent, _ => null, NoBinOnTheStick);
+
+        Assert.Equal(3, permanent.Copies.Count);
+        Assert.Empty(permanent.Staying);
+        Assert.Empty(asked);
+    }
+
+    /// <summary>
+    /// Copies the bin can each take, but not all together, still say that Windows makes room by
+    /// deleting the bin's oldest items; the copies that stay are not counted against its room.
+    /// </summary>
+    [Fact]
+    public void ACopyThatStaysIsNotCountedAgainstTheBinsRoom()
+    {
+        var usb = Path.Combine(Documents, "USB");
+        var marks = Marks([Copy(Documents, "1.jpg"), Copy(Path.Combine(Documents, "B"), "1.jpg"), Copy(usb, "1.jpg")]);
         MarkAllButFirst(marks);
 
-        Assert.Contains("would not say", Assert.Single(RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null).Warnings));
-        Assert.Contains("rather than keep them", Assert.Single(
-            RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => new RecycleBinRoom(0, 1_000_000_000, KeepsNothing: true)).Warnings));
+        // Room for one copy of 1,000,000 bytes, not two.
+        var confirmation = RemovalConfirmation.For(
+            marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => Room(held: 0, limit: 1_500_000),
+            copy => copy.Path.StartsWith(usb, StringComparison.Ordinal) ? "No bin." : null);
+
+        Assert.DoesNotContain(confirmation.Warnings, warning => warning.Contains("more than it has room for", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -147,7 +193,7 @@ public sealed class RemovalConfirmationTests : IDisposable
         var marks = Marks([Copy(Documents, "1.jpg"), Copy(oneDrive, "1.jpg")]);
         MarkAllButFirst(marks);
 
-        var warnings = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.Permanent, _ => null).Warnings;
+        var warnings = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.Permanent, _ => null, _ => null).Warnings;
 
         Assert.Contains(warnings, warning => warning.Contains("other devices that sync it lose it too", StringComparison.Ordinal)
             && warning.Contains("OneDrive - Personal", StringComparison.Ordinal));

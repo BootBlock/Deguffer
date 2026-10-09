@@ -43,6 +43,8 @@ internal sealed class RecycleBinReach
     private static readonly string TakesNoLongerPath =
         $"Windows' Recycle Bin takes nothing whose path is longer than {LongestPath}";
 
+    private const string DeletesWhatItCannotTake = "Windows deletes outright what its bin cannot take.";
+
     private readonly IVolumeInventory _volumes;
     private readonly RecycleBinRooms _rooms;
 
@@ -54,14 +56,17 @@ internal sealed class RecycleBinReach
         _rooms = rooms;
     }
 
-    /// <summary>Why the bin cannot take the item at <paramref name="path"/>, or null where it can.</summary>
+    /// <summary>
+    /// Why the bin cannot take the item at <paramref name="path"/>, or null where it can: the reason
+    /// alone, which a confirmation states before anything is asked and a refusal after, each adding
+    /// what became of the item.
+    /// </summary>
     /// <param name="path">The item in display form, as the shell is handed it.</param>
     internal string? WhyNot(string path)
     {
         if (path.Length > LongestPath)
         {
-            return $"Its path is {path.Length:N0} characters long. {TakesNoLongerPath}, and deletes "
-                + "it outright instead, so Deguffer did not ask. It is still where it was.";
+            return $"Its path is {path.Length:N0} characters long. {TakesNoLongerPath}, and deletes it outright instead.";
         }
 
         FileSystemInfo item;
@@ -80,7 +85,7 @@ internal sealed class RecycleBinReach
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
         {
             return "Windows would not describe it, so Deguffer cannot tell whether the Recycle Bin can take it "
-                + "whole. It is still where it was.";
+                + $"whole, and {DeletesWhatItCannotTake}";
         }
 
         var (length, inside) = item is DirectoryInfo folder ? Walk(path, folder) : (((FileInfo)item).Length, null);
@@ -114,8 +119,7 @@ internal sealed class RecycleBinReach
                     if (shown.Length > LongestPath)
                     {
                         return (length, $"It holds '{shown[(path.Length + 1)..]}', whose path is {shown.Length:N0} characters long. "
-                            + $"{TakesNoLongerPath}, and deletes the whole folder outright instead, so Deguffer did "
-                            + "not ask. It is still where it was.");
+                            + $"{TakesNoLongerPath}, and deletes the whole folder outright instead.");
                     }
 
                     if (entry is FileInfo file)
@@ -131,8 +135,7 @@ internal sealed class RecycleBinReach
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
             {
                 return (length, $"Windows would not list '{LongPath.Display(next)}', so Deguffer cannot tell whether "
-                    + "the Recycle Bin can take the folder whole, and it deletes outright what it cannot take. "
-                    + "It is still where it was.");
+                    + $"the Recycle Bin can take the folder whole, and {DeletesWhatItCannotTake}");
             }
         }
 
@@ -145,8 +148,7 @@ internal sealed class RecycleBinReach
     /// </summary>
     private string? WhyTheBinCannotHold(string path, long length)
     {
-        const string Unknown = ", so nothing shows the Recycle Bin can take it, and Windows deletes outright what its bin "
-            + "cannot take. Deguffer did not ask, and it is still where it was.";
+        const string Unknown = $", so nothing shows the Recycle Bin can take it, and {DeletesWhatItCannotTake}";
 
         if (HostVolume.For(_volumes, path) is not { } volume)
         {
@@ -161,7 +163,7 @@ internal sealed class RecycleBinReach
         if (room.KeepsNothing)
         {
             return "This drive's Recycle Bin is set to delete what it is sent rather than keep it, so Windows would "
-                + "delete this outright, and Deguffer did not ask. It is still where it was.";
+                + "delete this outright.";
         }
 
         if (room.Limit is not { } limit)
@@ -171,8 +173,7 @@ internal sealed class RecycleBinReach
 
         return length > limit
             ? $"It is {FreeSpace.Format(length)} long, more than this drive's Recycle Bin can hold "
-              + $"({FreeSpace.Format(limit)}), and Windows deletes outright what is larger than its bin, so Deguffer "
-              + "did not ask. It is still where it was."
+              + $"({FreeSpace.Format(limit)}), and Windows deletes outright what is larger than its bin."
             : null;
     }
 }

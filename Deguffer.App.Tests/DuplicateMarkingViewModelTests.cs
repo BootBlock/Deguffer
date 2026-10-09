@@ -183,7 +183,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
             .ExecuteAsync(null);
 
         var asked = Assert.Single(Prompt.Asked);
-        var core = await RemovalConfirmation.ForAsync(page.Marks!, await _scene.ProtectionsAsync(), mode, _ => null);
+        var core = await RemovalConfirmation.ForAsync(page.Marks!, await _scene.ProtectionsAsync(), mode, _ => null, _ => null);
 
         Assert.Equal(mode, asked.Mode);
         Assert.Equal([group.Files[1]], asked.Copies);
@@ -359,6 +359,52 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.True(_running.MayEndProcess);
         Assert.All(Open(page), Assert.False);
         Assert.NotEmpty(page.Marking.WhyClosed);
+    });
+
+    /// <summary>
+    /// A marked copy the Recycle Bin cannot take, as on a USB stick with no bin, is not asked about,
+    /// its row says why it stayed, and the page says nothing went, rather than the row staying blank
+    /// as though the removal had not looked at it.
+    /// </summary>
+    [Fact]
+    public void AMarkedCopyTheBinCannotTakeSaysWhyItStayed() => UiThread.Run(async () =>
+    {
+        var content = new byte[200 * 1024];
+        new Random(297).NextBytes(content);
+        var kept = _scene.Written(Path.Combine(_scene.Folder("Documents"), "a.bin"), content);
+        var copy = _scene.Written(Path.Combine(_scene.Folder("USB"), "a.bin"), content);
+        RecycleBin.CannotTake = path => path.EndsWith(Path.Combine("USB", "a.bin"), StringComparison.OrdinalIgnoreCase)
+            ? "This drive has no Recycle Bin."
+            : null;
+        Prompt = new FakeDuplicateConfirmation(true);
+        var page = PageWithPhotos(Finds(Group(kept, copy)));
+        await page.SearchCommand.ExecuteAsync(null);
+        Toggle(page, copy);
+
+        await page.Marking.MoveToRecycleBinCommand.ExecuteAsync(null);
+
+        Assert.Empty(Prompt.Asked);
+        Assert.True(File.Exists(copy.Path));
+        Assert.Equal("This drive has no Recycle Bin.", Row(page, copy).Note);
+        Assert.StartsWith("No marked copy can go to the Recycle Bin", page.Marking.Outcome, StringComparison.Ordinal);
+    });
+
+    /// <summary>A new search drops the count of what the last one marked, since those groups are gone.</summary>
+    [Fact]
+    public void ANewSearchDropsTheCountOfTheLastSearchsMarks() => UiThread.Run(async () =>
+    {
+        var group = Group(Copy(_scene.Folder("Documents"), "a.jpg", 1), Copy(_scene.Folder("Downloads"), "a.jpg", 2));
+        var page = PageWithPhotos(Finds(group));
+        await page.SearchCommand.ExecuteAsync(null);
+        Toggle(page, group.Files[1]);
+        Assert.Equal("1 copy marked.", page.Marking.MarkedSummary);
+        List<string?> told = [];
+        page.Marking.PropertyChanged += (_, changed) => told.Add(changed.PropertyName);
+
+        await page.SearchCommand.ExecuteAsync(null);
+
+        Assert.Contains(nameof(DuplicateMarkingViewModel.MarkedSummary), told);
+        Assert.Equal(string.Empty, page.Marking.MarkedSummary);
     });
 
     /// <summary>

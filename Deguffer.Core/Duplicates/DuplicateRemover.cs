@@ -294,6 +294,19 @@ public sealed class DuplicateRemover
     }
 
     /// <summary>
+    /// Why this remover's Recycle Bin cannot take <paramref name="copy"/> as things are now, or null
+    /// where nothing shows it cannot: the question its removal refuses on, asked of the same bin with
+    /// the same path, so a confirmation lists for the bin only what the bin will take.
+    /// </summary>
+    internal string? WhyTheBinCannotTake(DuplicateCandidate copy) => _bin.WhyItCannotTake(BinPath(copy));
+
+    /// <summary>
+    /// The display form, normalised: the shell namespace refuses the extended-length prefix §6.3
+    /// requires everywhere else. <see cref="IRecycleBin"/> says why that is a second seam.
+    /// </summary>
+    private static string BinPath(DuplicateCandidate copy) => LongPath.Display(LongPath.Extended(copy.Path));
+
+    /// <summary>
     /// Moves the copy to the Recycle Bin, then identifies what the bin received: it must be the file
     /// that was compared. The copy is still held, sharing deleting, so the shell can move it.
     ///
@@ -305,9 +318,7 @@ public sealed class DuplicateRemover
     /// </summary>
     private CopyRemoval Recycle(DuplicateCandidate copy, HeldCopy held)
     {
-        // The display form, normalised: the shell namespace refuses the extended-length prefix
-        // §6.3 requires everywhere else. IRecycleBin says why that is a second seam.
-        var recycled = _bin.Recycle(LongPath.Display(LongPath.Extended(copy.Path)));
+        var recycled = _bin.Recycle(BinPath(copy));
 
         if (!recycled.Removed)
         {

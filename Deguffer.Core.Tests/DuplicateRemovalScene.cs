@@ -101,10 +101,11 @@ public abstract class DuplicateRemovalScene : DuplicateMarkingScene
         CopyOpener? open = null,
         FileInformation? files = null)
     {
-        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, mode, _ => null);
+        var remover = Remover(bin, delete, open, files);
+        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, mode, _ => null, remover.WhyTheBinCannotTake);
         var (plan, dropped) = DuplicateRemover.Plan(marks.Groups, confirmation.Copies, marks.Keeping);
 
-        return Remover(bin, delete, open, files).Remove(plan, dropped, marks.Keeping, confirmation.Mode, CancellationToken.None);
+        return remover.Remove(plan, dropped, marks.Keeping, confirmation.Mode, CancellationToken.None);
     }
 
     private protected DuplicateRemover Remover(

@@ -57,6 +57,15 @@ public interface IRecycleBin
     /// §6.3 assertion above unfalsifiable.
     /// </param>
     RecycleOutcome Recycle(string path);
+
+    /// <summary>
+    /// Why the bin cannot take the item at <paramref name="path"/> as things are now, or null where
+    /// nothing shows it cannot. The answer <see cref="Recycle"/> refuses on, asked before a
+    /// confirmation so it promises the bin only for what the bin will take; <see cref="Recycle"/>
+    /// asks again, because the item or the bin can change while the user reads.
+    /// </summary>
+    /// <param name="path">In the form <see cref="Recycle"/> takes.</param>
+    string? WhyItCannotTake(string path);
 }
 
 /// <summary>
@@ -117,13 +126,15 @@ public sealed class ShellRecycleBin : IRecycleBin
         _reach = reach;
     }
 
+    public string? WhyItCannotTake(string path) => _reach.WhyNot(path);
+
     public RecycleOutcome Recycle(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        if (_reach.WhyNot(path) is { } cannotTake)
+        if (WhyItCannotTake(path) is { } cannotTake)
         {
-            return new RecycleOutcome(Removed: false, cannotTake);
+            return new RecycleOutcome(Removed: false, $"{cannotTake} Deguffer did not ask Windows to move it, and it is still where it was.");
         }
 
         // The shell's apartment requirement, met on a thread of our own rather than by initialising
