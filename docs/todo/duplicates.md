@@ -131,8 +131,11 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   Windows Server deduplication (`IO_REPARSE_TAG_DEDUP`) let copies share clusters. No user-mode API
   reports what a cloned file shares **(unverified)**, so the freed figure is a lower bound there.
 - **Recycle Bin.** When a bin is full, Windows deletes its oldest items outright to make room for
-  new ones. How Deguffer reads a bin's room on a volume (its size from `SHQueryRecycleBin`, its
-  limit from the bin's settings) is **(unverified)**, and nothing in Core asks it yet. Whether
+  new ones. Measured in phase 4: `SHQueryRecycleBin` answers what this account's bin on a volume
+  holds as the sum of its items' lengths, and takes a drive's top, a folder on it, the extended form
+  of either, or the volume's `\?\Volume{GUID}\` name alike; the limit is the `MaxCapacity` number,
+  in megabytes, under the account's `Explorer\BitBucket\Volume\{GUID}` key, with `NukeOnDelete`
+  beside it for a bin set to keep nothing (`RecycleBinRooms`). Whether
   `IFileOperation`'s progress sink hands back the item it put in the bin, so that its file ID can be
   read, is **(unverified)**.
 - **Deleting through a handle.** `SetFileInformationByHandle` with `FileDispositionInfoEx` deletes
@@ -167,17 +170,25 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Cloud folders.** `ICloudFiles.SyncRoots` lists the roots registered with the Cloud Files API and
   returns null where Windows will not list them. It leaves out a root Windows will not hand back,
   such as one under `AppData\Local`, and a client that does not register at all.
-- **Provider targets.** Nothing yet answers "what would Storage delete" without planning: the
-  planner offers only a full plan, which runs subprocesses and depends on the age setting.
-  `ICleanupProvider.ToolRoots` and `DiscoverToolRootsAsync` declare the roots Explore protects: 42
-  of the 68 providers built on `CleanupProviderBase` declare a root, and 57 counting discovered
-  ones.
+- **Provider targets.** Corrected in phase 4: `ICleanupProvider.ToolRoots` and
+  `DiscoverToolRootsAsync` declare what Explore refuses beside a cache, not where a clean deletes.
+  A sweep of every provider found cleans that delete where no root is declared (the temporary
+  folders, crash dumps, build output under the approved source folders, a cache a tool reports
+  elsewhere, Windows' own servicing folders) and roots that recognise every child or none, so the
+  roots answer neither way. Every provider now declares where its clean deletes, without planning
+  (`ICleanupProvider.CleanedPlacesAsync`, `CleanedPlace`), and each provider's tests check that the
+  places cover every path its plan cleans (`CleanedPlaceCoverage`).
 - **Paths.** `LongPath.Canonical` normalises a path's form and expands 8.3 names; it resolves no
   link and no drive letter. `ReachedFolder.At` gives every place a folder is reachable at, through
   substituted drives and volumes mounted in folders. `FileInformation.FinalPath` (phase 1) follows
   every link on the way to a path, its own name included, and a substituted letter, to the path an
   opened handle gives, and is the one declaration of `GetFinalPathNameByHandle`: it moved there from
   `CloudFilesNative`, whose `CloudFiles.Resolve` already followed every link and now calls it.
+- **Size on disk.** The attributes-only handle that identifies a file already reads
+  `FILE_STANDARD_INFO`, whose `AllocationSize` is what the file occupies (`FileDescription.Allocated`,
+  `DuplicateCandidate.SizeOnDisk`, phase 4): less than the length for a compressed or sparse file,
+  nothing for one held in its file record, so a sum of them is a lower bound except where clusters
+  are shared.
 - **File information.** `FileInformation` (phase 2) is the one declaration of each call that
   describes a file through a handle, and of the attributes-only handle itself (`FileInformation.Open`):
   `HardLinkAwareScanner`, `CloudFiles` and `OccupancyProbe` read through it, where before the first
@@ -360,21 +371,28 @@ without listing the places phase 1 passes over, and the decision it supports.
 
 ### Phase 4 — Marking (Core)
 
-1. **What Storage deletes.** A way to ask every provider which roots its clean deletes files under,
-   without planning: the declared and discovered tool roots of each provider whose clean deletes,
-   with a declaration added to each such provider that has none. A provider that only releases a
-   cloud file's local copy names none, because the file stays.
+1. **What Storage deletes.** A way to ask every provider where its clean deletes files, without
+   planning. Corrected here: not the tool roots, which are refusals (see "Provider targets"), but a
+   declaration every provider makes (`CleanedPlacesAsync`), as generous as it needs to be, asking
+   a tool where its cache is as discovery already does, and checked against each provider's plan in
+   its tests. A provider that only releases a cloud file's local copy names none, because the file
+   stays.
 2. **What can be kept.** The §7.4 definition, decided in one place: unmarked, on this device and not
-   online-only, not refused, not in `%TEMP%` and not under a root from step 1, and on an internal
-   drive outside a cloud folder unless its location is a reference. A drive is internal where its
-   `StorageMedia` is not `Removable`, never by its `DriveType`. A file with several names qualifies
-   where any one of its names does. A cloud folder is a root
+   online-only, not refused, not in `%TEMP%` and not under a place from step 1, and on an internal
+   drive outside a cloud folder unless its location is a reference. Corrected here: a drive is
+   internal only where its `StorageMedia` is `Nvme`, `SolidState` or `Rotational`, never by its
+   `DriveType`; `Unknown` (which a USB disk whose bus Windows would not report, or a volume over
+   disks of different kinds, reads as) and `Virtual` are not counted on, as `Removable` is not. A
+   file with several names qualifies where any one of its names does. A cloud folder is a root
    `ICloudFiles.SyncRoots` lists, and where Windows will not list them, no copy counts as outside
-   one.
+   one. Each place is asked at every path it is reachable at and at its final path, because a
+   copy's path is the final one.
 3. **The policy.** A copy is refused where Explore's policy refuses it, in a program folder, or
-   while it is online-only. Reference copies and files with several names are never marked. Explore's
+   while it is online-only. A program folder is every install location that names a program,
+   including one set aside from the places passed over because it holds a chosen location, and they
+   are read whether or not the search passes over them. Reference copies and files with several names are never marked. Explore's
    refusal reasons are reworded so they read correctly on either page, and the refusal set is built
-   once for both pages.
+   once for both pages (`MachineProtections`).
 4. **Marks.** A per-group mark state that refuses any mark leaving the group with no copy that can
    be kept, and the named rules, each of which chooses the copy it keeps only from the copies that
    can be kept, obeys the policy, and never marks a copy in a cloud folder. The space a group could
@@ -556,6 +574,25 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   file table, read whole anyway, ignores it. Corrected here: CRC-32's byte order, the throughput
   figures, the placeholder mode, and how the content is opened (by file ID, not `File.OpenHandle`
   on the path), in the technical facts above.
+- 2026-10-09: phase 4 landed. Every provider declares where its clean deletes, without planning
+  (`ICleanupProvider.CleanedPlacesAsync`, `CleanedPlace`), each checked against its own plan in its
+  tests (`CleanedPlaceCoverage`); the copies that can be kept (`CopyKeeping`), the copies never marked
+  and refused (`CopyRefusals`), a mark state per group that always keeps a copy and judges its marks
+  again at each question (`GroupMarks`), the named rules (`MarkingRule`, `DuplicateMarks`), and the
+  confirmation's words (`RemovalConfirmation`) over a seam on each bin's size and limit
+  (`RecycleBinRooms`); each copy's size on disk, from the handle that identifies it; and Explore's
+  refusal set and Storage's places asked of one set of providers for both pages
+  (`MachineProtections`), with Explore's refusal reasons reworded to read on either page. Decided:
+  the tool roots are refusals, not where a clean deletes, so every provider declares its places,
+  generously, the default and every configured or reported location; a drive is internal only where
+  its disks are NVMe, solid state or rotational; an install location set aside because it holds a
+  chosen location still refuses the copies in it (§7.4 amended); the search names every reference
+  location not searched in whole, for any reason (`CandidateFinding.UnsearchedReferences`), which
+  stops every rule while marking by hand stays open; a rule adds to the marks there are, and a keep
+  rule breaks a tie by the shorter path, then the path's text; the freed figure is what the copies
+  occupy, as Windows reports it. Measured: what a bin holds and its limit, in the technical facts.
+  Corrected here: step 1 (not the tool roots), the internal-drive test, and the facts on the
+  Recycle Bin and on provider targets.
 
 ## Limits that stay open
 
@@ -578,5 +615,11 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
 - **A cloud folder Windows does not list.** A sync client that does not register with the Cloud
   Files API, or a root Windows will not hand back, is not known to be a cloud folder, so a copy there
   can count as kept and is not marked by hand only. The confirmation's list is where the user sees it.
+- **A place a clean deletes that its provider cannot name.** A provider names the places it can
+  find without planning, and a few it cannot: a Delivery Optimization cache a policy moved to another
+  drive, a pnpm `dlx` cache moved by its `cache-dir` setting, a Maven repository named by
+  `-Dmaven.repo.local` or the global `settings.xml`, an app Squirrel installed after the places were
+  asked, and whatever Windows' own cleanups reach beyond the folders their provider declares. A
+  copy in one can count as kept. The confirmation's list is where the user sees it.
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

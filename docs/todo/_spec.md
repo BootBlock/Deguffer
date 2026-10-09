@@ -1016,8 +1016,9 @@ on: what the established duplicate finders do, and the ways their users have los
   installed program's entry names as where it is installed (the entries §7.3 reads), and
   `%LOCALAPPDATA%\Programs`, where per-user installers put programs. An entry that names a drive's
   top, a profile, a folder Windows keeps for the user such as Documents, a folder that holds one of
-  those, or a folder that holds a location the user chose, names nothing usable, and the page says
-  which entry it set aside. Two programs that ship the same
+  those, or a folder that holds a location the user chose, names nothing usable to pass over, and the page
+  says which entry it set aside. One set aside only because it holds a chosen location still names a
+  program's folder, and a copy in it is refused (below). Two programs that ship the same
   library each need their own copy, and a search of them finds thousands of matches nobody should
   act on. The page names what it left out, so a search that skipped a place is never read as one
   that found nothing there. The user may include those places; a copy in one is still matched, and
