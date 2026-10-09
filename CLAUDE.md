@@ -133,7 +133,7 @@ output, logs, fixtures and screenshots are full of real usernames, machine names
 - Never commit a real name, private email or phone number. Use `BootBlock@users.noreply.github.com`,
   `@BootBlock`, `example.com`, `*.test` and `localhost`. Crop or re-capture a screenshot that shows
   any of these.
-- Read `git diff --cached` before every commit. If in doubt, leave it out and ask.
+- If in doubt, leave it out and ask.
 - If a secret is committed, stop and report it. It must be revoked and scrubbed from history.
 
 ## Public-repository hygiene
@@ -150,9 +150,9 @@ Code, comments, commit messages, branch names and history are world-readable.
 ## Actioning a GitHub issue
 
 A Deguffer issue URL, `#<id>` or "issue <id>" with no other instruction asks you to action it end to
-end, reviewed with `/auto-review high`, landed and closed with no pause for approval. A message
-that only wants discussion gets an answer. Memory notes: *Actioning a Deguffer issue end to end*,
-*Close a Deguffer issue once its work has landed*.
+end, reviewed by the global `auto-review` at `high` ([its rules](.claude/review-rules.md)), landed
+and closed with no pause for approval. A message that only wants discussion gets an answer. Memory
+notes: *Actioning a Deguffer issue end to end*, *Close a Deguffer issue once its work has landed*.
 
 Whenever you open, action, comment on or close an issue or pull request, reconcile its whole label
 set. Memory note: *Reconcile a Deguffer issue's labels*.
