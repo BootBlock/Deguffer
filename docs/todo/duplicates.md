@@ -110,7 +110,8 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   identified once by each would read as two files. `FindFirstFileNameW` lists every name of a file,
   each from the top of its volume (`GetVolumePathNameW`), and `FindFirstStreamW` every named stream;
   `GetFileInformationByHandleEx(FileStreamInfo)` lists the streams through a handle already held,
-  and whether a handle opened for attributes alone may ask it is **(unverified)**. On FAT and exFAT
+  one opened for attributes alone included (measured in phase 5), and `NtCreateFile` opens a named
+  stream relative to that handle, given the stream's name alone, so no path is walked to read it. On FAT and exFAT
   a file ID can change after a defragmentation or a rename, so it identifies a file for one search
   and never for the cache. Whether `FileIdInfo` or the older call answers on FAT and exFAT is
   **(unverified)**: measuring it needs a scratch disk attached with administrator rights, and phase 2
@@ -138,11 +139,22 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
   in megabytes, under the account's `Explorer\BitBucket\Volume\{GUID}` key, with `NukeOnDelete`
   beside it for a bin set to keep nothing (`RecycleBinRooms`). The measurement ran in a 64-bit
   process, where `SHQUERYRBINFO` is 24 bytes with the size at offset 8; the 20-byte layout a 32-bit
-  process uses, packed as the SDK header packs it there, is **(unverified)**. Whether
-  `IFileOperation`'s progress sink hands back the item it put in the bin, so that its file ID can be
-  read, is **(unverified)**.
-- **Deleting through a handle.** `SetFileInformationByHandle` with `FileDispositionInfoEx` deletes
-  the file a handle holds, whatever its path names by then.
+  process uses, packed as the SDK header packs it there, is **(unverified)**. Measured in phase 5:
+  `IFileOperation`'s progress sink hands the item it put in the bin to `PostDeleteItem`, its path in
+  the account's `$Recycle.Bin` folder on the same volume, with the file ID the file had before,
+  because the move is a rename on that volume (`BinnedItem`); and the shell moves a file that another
+  handle holds, as long as that handle shares reading and deleting.
+- **Deleting through a handle.** Corrected in phase 5, measured on NTFS: `SetFileInformationByHandle`
+  with `FileDispositionInfoEx` deletes the file a handle holds, whatever its path names by then, but
+  only through a handle opened by path. Through one opened by its number with `OpenFileById` it is
+  refused with `ERROR_INVALID_PARAMETER`. POSIX semantics take the name away as the handle closes,
+  and `FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE` deletes a read-only file without changing its
+  attributes first (`HandleDeletion`).
+- **Holding a file open.** Measured in phase 5 on NTFS: a handle opened by number that shares only
+  reading refuses another program's write, and does not refuse a rename or a delete; one opened by
+  path refuses all three. So a file that must stay is held by its path, never its number. A folder
+  can be made case-sensitive without elevation (`FileCaseSensitiveInfo`), which is how a test builds
+  two files whose names differ only in case.
 
 **This repository**
 
@@ -209,8 +221,9 @@ relying on it. Where a phase finds a fact here wrong, it corrects this section i
 - **Install locations.** `InstallLocation.Of` accepts any fully qualified path an entry gives,
   including a drive's top or a profile.
 - **Removal.** `ExploreRemover.RemoveAsync` partitions the whole batch by the policy once, then
-  removes each item with no hook between items, and its §5.6 check compares sibling paths ignoring
-  case. `ShellRecycleBin` uses `IFileOperation` with `FOFX_RECYCLEONDELETE`, so a file the bin
+  removes each item with no hook between items. Its §5.6 check compared sibling paths ignoring case
+  until phase 5 moved it into `SiblingCheck`, which both removers share and which compares exact
+  names. `ShellRecycleBin` uses `IFileOperation` with `FOFX_RECYCLEONDELETE`, so a file the bin
   cannot take fails rather than going outright, and it refuses a path the shell cannot parse.
 - **Elevation.** `ElevationRequest` has `Preview`, `InstalledApps` and `ExploreRequest`, each a
   switch on the command line with a round-trip test.
@@ -426,22 +439,36 @@ where the copies exceed it.
 
 ### Phase 5 — Removal (Core)
 
-1. **Shared pieces.** The per-item removal and the §5.6 sibling check move out of `ExploreRemover`
-   into page-neutral types that both removers use, and the sibling check compares exact names,
-   never names compared without regard to case.
-2. **The duplicate remover.** Per copy, immediately before it goes: the policy and the keeping rule
-   decided again; the kept copy opened and held open, refusing write and delete, until the removal
-   has finished; the copy to remove held open refusing write; the two proved to be different files;
-   both identified again with the same file ID, size, time and attributes, neither online-only; then
-   the same bytes and the same named streams apart from `Zone.Identifier`, each file's streams listed
-   through the handle held on it (`FileStreamInfo`), never by its path. Then the removal, files
-   only: permanently through the compared handle (`FileDispositionInfoEx`), or to the Recycle Bin
-   with the item the bin received checked by its file ID. A mismatch, or an item that cannot be
-   identified, stops the run at that copy and names what went to the bin. If the shell turns out not
-   to hand back the item it binned, this phase records it here and takes the question back to §7.4
-   before the Recycle Bin route lands, rather than shipping a check that cannot be made.
-3. **§5.6.** Every kept and reference copy still there by its file ID with the same size and time,
-   and every sibling of a removed copy present by its exact name.
+1. **Shared pieces.** The §5.6 sibling check moves out of `ExploreRemover` into a page-neutral
+   type both removers use (`SiblingCheck`), which compares exact names, never names compared without
+   regard to case, and the Recycle Bin seam both call says where it put an item
+   (`RecycleOutcome.Binned`). Corrected here: Explore's per-item removal is not shared, because
+   nothing in it applies to a duplicate. It looks inside a folder for a mail store and deletes by path
+   (`FileRemover`, `DirectoryRemover`), while a duplicate is a file deleted through the handle it was
+   compared through.
+2. **The duplicate remover** (`DuplicateRemover`). It removes only copies the confirmation listed,
+   the way the confirmation says (`RemovalConfirmation.Mode`), and only those whose marks still
+   stand under the policy and the keeping rule decided again as the removal begins
+   (`DuplicateMarks.RejudgeAsync`); a listed copy whose mark no longer stands stays, with why.
+   Corrected here: decided once as the removal begins rather than once a copy, as Explore's remover
+   does, because the judgement reads the registry and every provider and its inputs are the same
+   for every copy of one run. Per copy, immediately before it goes: a copy the group keeps held open
+   refusing write, rename and delete until the group's removals have finished; the copy to remove
+   held open refusing write; both identified again with the same file ID, size, time and attributes,
+   neither online-only (`HeldCopy`); then the same bytes and the same named streams apart from
+   `Zone.Identifier`, each file's streams listed through the handle held on it, never by its path
+   (`CopyComparison`). Corrected here: both are held by their paths, never by their numbers (see
+   "Holding a file open" and "Deleting through a handle"); the path is described first through an
+   attributes-only handle that is held as long as the copy is, so no folder above can be renamed,
+   and the final path of that handle must be the copy's path, so no link is on the way. The two are
+   different files by construction: the copy kept is chosen only among files whose identity no copy
+   going shares. Then the removal, files only: permanently through the compared handle, or to the
+   Recycle Bin with the item the bin received checked by its file ID. A mismatch, or an item that
+   cannot be identified, stops the run at that copy and names what went to the bin. The shell was
+   measured to hand back the item it binned, so the Recycle Bin route lands.
+3. **§5.6.** Every kept and reference copy still there by its file ID with the same size and time it
+   had as the removal began (`CopySurvival`), and every sibling of a removed copy present by its
+   exact name.
 4. **Running actions.** A `RunningAction` member for the page.
 
 Proves: a copy that changed after the search is not removed; a copy whose bytes differ from the kept
@@ -452,7 +479,12 @@ removed copy's path after the comparison is not what a permanent removal deletes
 reached by two paths is never removed against itself; in a case-sensitive folder, removing `a.txt`
 and losing `A.txt` fails §5.6; a removal the bin refuses is never deleted outright; a bin item
 whose file ID is not the compared copy's stops the run and is named; the permanent
-route keeps every refusal; the path reaching Win32 is in its `\\?\` form.
+route keeps every refusal; the path reaching Win32 is in its `\\?\` form. Added here: a copy the
+confirmation did not list never goes, and a listed copy whose mark no longer stands stays with its
+reason; a reference copy lost during the removal fails §5.6; a bin that does not say where it put a
+copy stops the run; a copy whose attributes changed, before or during the comparison, is not
+removed; a copy that is only the start of the copy kept is not removed; a copy partly locked by
+another program stays and the run still reports; the bin is handed the path in its display form.
 
 ### Phase 6 — The page: searching (App)
 
@@ -615,6 +647,27 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   (`ResolvedPlaces.FollowedTo`). Measured: what a bin holds and its limit, in the technical facts.
   Corrected here: step 1 (not the tool roots), the internal-drive test, and the facts on the
   Recycle Bin and on provider targets.
+- 2026-10-09: phase 5 landed. The duplicate remover (`DuplicateRemover`): the copies the
+  confirmation listed whose marks still stand under the judgement made as the removal begins, each
+  held by its path (`HeldCopy`) beside a copy its group keeps, held refusing write, rename and
+  delete, both found unchanged since the search, and compared byte for byte with their named
+  streams apart from `Zone.Identifier` (`CopyComparison`, `NamedStreams`); a permanent removal
+  through the compared handle (`HandleDeletion`), and a Recycle Bin removal whose item is identified
+  by its file ID (`RecycleOutcome.Binned`, `BinnedItem`), the run stopping where it is not the file
+  compared or cannot be told; a result per copy naming the check it failed (`RemovalCheck`,
+  `DuplicateRemovalReport`); §5.6 by file ID for every kept and reference copy (`CopySurvival`) and
+  by exact name for every sibling (`SiblingCheck`, now Explore's too); and a running action for the
+  page. Decided: the removal takes its mode and its list from the confirmation, so a mark the
+  confirmation dropped never goes even where it stands again by the removal; the policy and the
+  keeping rule are decided once as the removal begins; the copy kept is chosen by identity, never by
+  path; the lengths are compared before the bytes, because a group matched by name or time alone
+  can hold a copy that is only the start of the copy kept; and a read another program's lock
+  refuses leaves that copy where it is, with its reason, never ending the run unreported. Measured: the shell's progress sink names the item it binned, with its file ID unchanged; a
+  handle opened by number refuses a write but not a rename or a delete, and cannot delete its file;
+  a named stream opens relative to a held handle; the stream listing answers through an
+  attributes-only handle. Corrected here: step 1 (what is shared), step 2 (both copies held by
+  path, decided as the removal begins), and the facts on deleting through a handle, holding a file
+  open, the Recycle Bin and Explore's removal.
 
 ## Limits that stay open
 
@@ -643,5 +696,9 @@ with its links corrected (`_spec.md` becomes `../_spec.md`, and §7.4's link bec
   `-Dmaven.repo.local` or the global `settings.xml`, an app Squirrel installed after the places were
   asked, and whatever Windows' own cleanups reach beyond the folders their provider declares. A
   copy in one can count as kept. The confirmation's list is where the user sees it.
+- **A stream added to a copy at the last moment.** Holding a file refusing write does not stop
+  another program adding a named stream beside its content. The copy's streams are listed again
+  once it is compared and must be the streams compared, which leaves only the moment between that
+  listing and the removal itself.
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

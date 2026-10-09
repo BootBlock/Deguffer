@@ -30,12 +30,17 @@ namespace Deguffer.Core.Duplicates;
 /// </param>
 /// <param name="Summary">The sentence that heads the confirmation.</param>
 /// <param name="Warnings">Each sentence about a cloud folder, the Recycle Bin, or a permanent removal.</param>
+/// <param name="Mode">
+/// How the copies go, which the removal takes from here, so what the user confirmed and what is done
+/// cannot come to differ.
+/// </param>
 public sealed record RemovalConfirmation(
     IReadOnlyList<DuplicateCandidate> Copies,
     int Groups,
     long Space,
     string Summary,
-    IReadOnlyList<string> Warnings)
+    IReadOnlyList<string> Warnings,
+    ExploreRemovalMode Mode)
 {
     /// <summary>The confirmation of removing the marks that stand in <paramref name="marks"/>.</summary>
     /// <param name="protections">Built afresh for this confirmation, so Explore's policy is read now.</param>
@@ -89,7 +94,7 @@ public sealed record RemovalConfirmation(
             warnings.AddRange(BinWarnings(copies, room));
         }
 
-        return new RemovalConfirmation(copies, byGroup.Count, space, summary, warnings);
+        return new RemovalConfirmation(copies, byGroup.Count, space, summary, warnings, mode);
     }
 
     /// <summary>

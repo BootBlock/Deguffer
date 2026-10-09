@@ -25,6 +25,7 @@ public static class RunningActionText
         RunningAction.EntryRemoval => "a removal of installed app entries",
         RunningAction.BackupRestore => "a restore of a registry backup",
         RunningAction.Uninstall => "an uninstall",
+        RunningAction.DuplicateRemoval => "a removal on the Duplicates page",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 }

@@ -62,7 +62,7 @@ internal static class ShellNative
         [In, Out] byte[] info);
 }
 
-/// <summary>One item in the shell namespace. Declared to <c>Compare</c> and no further.</summary>
+/// <summary>One item in the shell namespace. Declared to <c>Compare</c> and no further; <c>GetDisplayName</c> is called.</summary>
 [ComImport]
 [Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -72,7 +72,13 @@ internal interface IShellItem
 
     void GetParent(out IShellItem parent);
 
-    void GetDisplayName(uint kind, out IntPtr name);
+    /// <summary>
+    /// The item's name of one kind, answering its <c>HRESULT</c> as a value: a caller inside a progress
+    /// sink must not let an exception escape back into the shell, which could then report a finished
+    /// move as stopped.
+    /// </summary>
+    [PreserveSig]
+    int GetDisplayName(uint kind, out IntPtr name);
 
     void GetAttributes(uint mask, out uint attributes);
 
@@ -80,7 +86,7 @@ internal interface IShellItem
 }
 
 /// <summary>
-/// The shell's file-operation engine. <c>SetOperationFlags</c>, <c>DeleteItem</c>,
+/// The shell's file-operation engine. <c>Advise</c>, <c>SetOperationFlags</c>, <c>DeleteItem</c>,
 /// <c>PerformOperations</c> and <c>GetAnyOperationsAborted</c> are called; the rest hold their
 /// vtable slots.
 /// </summary>
@@ -89,7 +95,7 @@ internal interface IShellItem
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IFileOperation
 {
-    void Advise(IntPtr sink, out uint cookie);
+    void Advise(IFileOperationProgressSink sink, out uint cookie);
 
     void Unadvise(uint cookie);
 

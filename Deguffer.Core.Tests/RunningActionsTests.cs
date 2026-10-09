@@ -107,4 +107,17 @@ public sealed class RunningActionsTests
 
         Assert.Equal([RunningAction.StorageClean], shown);
     }
+
+    /// <summary>
+    /// The close prompt names what is running, so an action with no name would throw as the window
+    /// asked whether it may close, which is the moment a run most needs protecting.
+    /// </summary>
+    [Fact]
+    public void EveryActionHasANameForTheCloseToSay()
+    {
+        foreach (var action in Enum.GetValues<RunningAction>())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(RunningActionText.List([action])));
+        }
+    }
 }

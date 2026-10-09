@@ -13,6 +13,19 @@ internal enum HandleUse
     Describe,
 }
 
+/// <summary>What a file opened by <see cref="FileInformation.OpenHeld"/> is held for, which decides what every other program may do to it meanwhile.</summary>
+internal enum HeldFor
+{
+    /// <summary>Kept: every other program may read it, and none may write to it, rename it or delete it.</summary>
+    Keeping,
+
+    /// <summary>
+    /// Removed through this handle: every other program may read it, rename it or delete it, as the
+    /// shell does when it moves it into the Recycle Bin, and none may write to it.
+    /// </summary>
+    Removing,
+}
+
 /// <summary>Opens a handle for attributes alone on a path in the form it reaches Windows.</summary>
 internal delegate SafeFileHandle HandleOpener(string extendedPath, HandleUse use);
 
@@ -51,6 +64,8 @@ internal sealed unsafe partial class FileInformation
     private const uint GenericRead = 0x8000_0000;
     private const uint ShareRead = 0x0001;
     private const uint SequentialScan = 0x0800_0000;
+    private const uint Delete = 0x0001_0000;
+    private const uint ShareDelete = 0x0004;
 
     /// <summary><c>FILE_ID_TYPE</c>'s <c>FileIdType</c>: the 64-bit number the older call gives.</summary>
     private const int FileIdType = 0;
@@ -62,8 +77,20 @@ internal sealed unsafe partial class FileInformation
     private const int FileStandardInfoClass = 1;
     private const int FileAttributeTagInfoClass = 9;
     private const int FileIdInfoClass = 18;
+    private const int FileStreamInfoClass = 7;
 
     private const int ErrorHandleEof = 38;
+    private const int ErrorInvalidParameter = 87;
+    private const int ErrorMoreData = 234;
+
+    /// <summary>The most a listing of one file's streams may take before Windows' answer is given up on.</summary>
+    private const int LongestStreamListing = 16 * 1024 * 1024;
+
+    /// <summary><c>FILE_STREAM_INFO</c>'s fixed part: the next entry's offset, the name's length, the stream's size and allocation.</summary>
+    private const int StreamEntryHeader = 24;
+
+    /// <summary>How Windows names a file's main, unnamed stream in a listing of its streams.</summary>
+    private const string MainStream = "::$DATA";
     private static readonly nint InvalidFind = -1;
 
     /// <summary>The longest path Windows accepts in extended-length form.</summary>
@@ -221,6 +248,39 @@ internal sealed unsafe partial class FileInformation
     }
 
     /// <summary>
+    /// The file numbered <paramref name="identity"/> on the volume <paramref name="volume"/> is open
+    /// on, described through a handle opened by that number for attributes alone, so no path is
+    /// walked and nothing is recalled.
+    ///
+    /// <para>Gone only where Windows answered that no file has that number, which an open by number
+    /// says as <c>ERROR_INVALID_PARAMETER</c>, measured on NTFS. A file system that does not open by
+    /// number may say the same, so a caller reads it as gone only on a volume that opened the file by
+    /// its number before. Every other failure is <see cref="FileReadingResult.Unreadable"/>.</para>
+    /// </summary>
+    /// <param name="volumeRoot">
+    /// A path the file's volume is mounted at, opened to name the volume, following the link a
+    /// folder it is mounted at is.
+    /// </param>
+    public FileReading DescribeById(string volumeRoot, FileIdentity identity, IdentityRoute route)
+    {
+        using var volume = _open(LongPath.Extended(volumeRoot), HandleUse.Resolve);
+
+        if (volume.IsInvalid)
+        {
+            return FileReading.Unreadable;
+        }
+
+        using var handle = OpenFileById(volume, Descriptor(identity, route), FileReadAttributes, ShareAll, securityAttributes: 0, BackupSemantics);
+
+        if (handle.IsInvalid)
+        {
+            return Marshal.GetLastPInvokeError() == ErrorInvalidParameter ? FileReading.Gone : FileReading.Unreadable;
+        }
+
+        return Describe(handle, route);
+    }
+
+    /// <summary>
     /// Every name of the file at <paramref name="path"/>, in display form, or null where Windows
     /// would not list them. Windows gives each name from the top of the file's volume, which is
     /// asked of the same path.
@@ -320,12 +380,107 @@ internal sealed unsafe partial class FileInformation
     /// <param name="route">The route that read the identity, which decides which kind of number it is.</param>
     public static SafeFileHandle OpenById(SafeFileHandle volume, FileIdentity identity, IdentityRoute route)
     {
-        var descriptor = route is IdentityRoute.FileId
+        return OpenFileById(volume, Descriptor(identity, route), GenericRead, ShareRead, securityAttributes: 0, SequentialScan);
+    }
+
+    /// <summary>
+    /// Opens the file at <paramref name="extendedPath"/> to read it and hold it for
+    /// <paramref name="use"/>, never sharing writing, or answers an invalid handle with the error set
+    /// where Windows would not open it.
+    ///
+    /// <para><b>By its path, never its number, for two reasons measured on NTFS on 2026-10-09.</b> A
+    /// handle opened by number refuses another program's write but not a rename or a delete, however
+    /// little it shares, so it cannot hold a copy that must stay; and a disposition set through one is
+    /// refused with <c>ERROR_INVALID_PARAMETER</c>, so it cannot delete the copy it compared either.
+    /// A handle opened by path does both. The path's own name is opened as itself and never followed,
+    /// so a name replaced by a link opens the link, which the caller then finds is not the file it
+    /// described.</para>
+    /// </summary>
+    /// <param name="extendedPath">The path in the extended form §6.3 requires.</param>
+    internal static SafeFileHandle OpenHeld(string extendedPath, HeldFor use) =>
+        CreateFile(
+            extendedPath,
+            use is HeldFor.Removing ? GenericRead | Delete : GenericRead,
+            use is HeldFor.Removing ? ShareRead | ShareDelete : ShareRead,
+            securityAttributes: 0,
+            OpenExisting,
+            OpenReparsePoint | SequentialScan,
+            templateFile: 0);
+
+    /// <summary>
+    /// Every named stream of the file <paramref name="handle"/> is open on, as Windows names them
+    /// (<c>:name:$DATA</c>) with their lengths, its main stream left out, or null where Windows would
+    /// not list them. Asked through a handle already held, so the streams listed are that file's
+    /// whatever its path names by then. An attributes-only handle answers it too, measured on NTFS.
+    /// </summary>
+    public static IReadOnlyList<NamedStream>? StreamsOf(SafeFileHandle handle)
+    {
+        for (var size = 4096; size <= LongestStreamListing; size *= 2)
+        {
+            var buffer = new byte[size];
+
+            fixed (byte* bytes = buffer)
+            {
+                if (GetFileInformationByHandleEx(handle, FileStreamInfoClass, bytes, size))
+                {
+                    return Streams(bytes, size);
+                }
+
+                switch (Marshal.GetLastPInvokeError())
+                {
+                    case ErrorHandleEof:
+                        // Nothing holds data: a folder.
+                        return [];
+
+                    case ErrorMoreData:
+                        continue;
+
+                    default:
+                        return null;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The entries of a <c>FILE_STREAM_INFO</c> listing, or null where one runs past the buffer.</summary>
+    private static List<NamedStream>? Streams(byte* bytes, int size)
+    {
+        List<NamedStream> streams = [];
+        var offset = 0;
+
+        while (true)
+        {
+            var entry = bytes + offset;
+            var next = *(uint*)entry;
+            var nameBytes = *(uint*)(entry + 4);
+
+            if (offset + StreamEntryHeader + nameBytes > size)
+            {
+                return null;
+            }
+
+            var name = new string((char*)(entry + StreamEntryHeader), 0, (int)nameBytes / sizeof(char));
+
+            if (name != MainStream)
+            {
+                streams.Add(new NamedStream(name, *(long*)(entry + 8)));
+            }
+
+            if (next == 0)
+            {
+                return streams;
+            }
+
+            offset += (int)next;
+        }
+    }
+
+    private static FileIdDescriptor Descriptor(FileIdentity identity, IdentityRoute route) =>
+        route is IdentityRoute.FileId
             ? new FileIdDescriptor(ExtendedFileIdType, (ulong)identity.File, (ulong)(identity.File >> 64))
             : new FileIdDescriptor(FileIdType, (ulong)identity.File, 0);
-
-        return OpenFileById(volume, descriptor, GenericRead, ShareRead, securityAttributes: 0, SequentialScan);
-    }
 
     /// <summary>The identity by <paramref name="route"/>, as Windows reads it through the handle.</summary>
     internal static bool ReadIdentity(SafeFileHandle handle, IdentityRoute route, out FileIdentity identity)
@@ -466,6 +621,10 @@ internal sealed unsafe partial class FileInformation
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetFileInformationByHandleEx(SafeFileHandle file, int informationClass, out FileAttributeTagInfo information, int bufferSize);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetFileInformationByHandleEx(SafeFileHandle file, int informationClass, byte* information, int bufferSize);
 
     [LibraryImport("kernel32.dll", EntryPoint = "FindFirstFileNameW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial nint FindFirstFileName(string fileName, uint flags, ref uint length, char* linkName);

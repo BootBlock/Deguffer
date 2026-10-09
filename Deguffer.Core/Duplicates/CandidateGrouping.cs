@@ -134,6 +134,7 @@ internal static class CandidateGrouping
         {
             Route = first.Found.Route,
             Volume = first.Found.Volume,
+            Attributes = description.Attributes,
         };
     }
 

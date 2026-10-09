@@ -84,3 +84,8 @@ internal sealed record HeldFile(FileReading Reading, SafeFileHandle? Handle) : I
 {
     public void Dispose() => Handle?.Dispose();
 }
+
+/// <summary>One named stream of a file, as <see cref="FileInformation.StreamsOf"/> lists it.</summary>
+/// <param name="Name">The stream as Windows names it in a listing: <c>:name:$DATA</c>.</param>
+/// <param name="Length">Its length in bytes.</param>
+internal readonly record struct NamedStream(string Name, long Length);
