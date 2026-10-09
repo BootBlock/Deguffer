@@ -174,7 +174,8 @@ public sealed class DuplicateSearcherTests : IDisposable
     /// What the content stage leaves out is counted through the search, each in its own count and
     /// added to what finding the candidates left out: a file held by another program and one whose
     /// data is refused are failed reads, one whose time moves before it is read has changed, one
-    /// deleted has gone, and one Windows will no longer describe is unidentified, never gone.
+    /// deleted has gone, and one Windows will no longer describe is unidentified, never gone. Each
+    /// count is a different number, so a file counted as another kind changes two of them.
     /// </summary>
     [Fact]
     public async Task WhatTheContentStageLeavesOutIsCountedThroughTheSearch()
@@ -184,8 +185,16 @@ public sealed class DuplicateSearcherTests : IDisposable
         _tree.File(content, "Data", "b.bin");
         var locked = _tree.File(content, "Data", "locked.bin");
         var refused = _tree.File(content, "Data", "refused.bin");
-        _tree.File(content, "Data", "changes.bin");
-        _tree.File(content, "Data", "vanishes.bin");
+        foreach (var i in Enumerable.Range(1, 4))
+        {
+            _tree.File(content, "Data", $"changes{i}.bin");
+        }
+
+        foreach (var i in Enumerable.Range(1, 3))
+        {
+            _tree.File(content, "Data", $"vanishes{i}.bin");
+        }
+
         _tree.File(content, "Data", "Shut", "undescribed.bin");
         _tree.File(0, "Data", "empty.bin");
         using var held = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
@@ -196,19 +205,17 @@ public sealed class DuplicateSearcherTests : IDisposable
         {
             var result = await _tree.Searcher((file, part, checksum, ct) =>
             {
-                switch (file.Name)
+                if (file.Name.StartsWith("changes", StringComparison.Ordinal))
                 {
-                    case "changes.bin":
-                        File.SetLastWriteTimeUtc(file.Path, file.Modified.AddSeconds(1));
-                        break;
-
-                    case "vanishes.bin":
-                        File.Delete(file.Path);
-                        break;
-
-                    case "undescribed.bin":
-                        undescribed = DeniedDirectory.WithUnreadableFile(file.Path);
-                        break;
+                    File.SetLastWriteTimeUtc(file.Path, file.Modified.AddSeconds(1));
+                }
+                else if (file.Name.StartsWith("vanishes", StringComparison.Ordinal))
+                {
+                    File.Delete(file.Path);
+                }
+                else if (file.Name == "undescribed.bin")
+                {
+                    undescribed = DeniedDirectory.WithUnreadableFile(file.Path);
                 }
 
                 return ContentReader.Default.Read(file, part, checksum, ct);
@@ -216,12 +223,12 @@ public sealed class DuplicateSearcherTests : IDisposable
 
             Assert.Equal(["a.bin", "b.bin"], Assert.Single(result.Groups).Files.Select(file => file.Name).Order());
             Assert.Equal(2, result.LeftOut.ReadFailed);
-            Assert.Equal(1, result.LeftOut.Changed);
-            Assert.Equal(1, result.LeftOut.Gone);
+            Assert.Equal(4, result.LeftOut.Changed);
+            Assert.Equal(3, result.LeftOut.Gone);
             Assert.Equal(1, result.LeftOut.Unidentified);
             Assert.Equal(1, result.LeftOut.Empty);
             Assert.Equal(
-                new LeftOutFiles(Links: 0, Empty: 1, UnknownLength: 0, OnlyInTheCloud: 0, Gone: 1, Unidentified: 1, ReadFailed: 2, Changed: 1),
+                new LeftOutFiles(Links: 0, Empty: 1, UnknownLength: 0, OnlyInTheCloud: 0, Gone: 3, Unidentified: 1, ReadFailed: 2, Changed: 4),
                 result.LeftOut);
         }
         finally
