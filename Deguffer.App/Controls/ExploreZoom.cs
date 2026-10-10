@@ -274,7 +274,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
+        // The mouse holds the camera now, which supersedes any move whose rest was still to come.
         _settle.Stop();
+        _moving = false;
         _stretch ??= new MapStretch(MapTracking.Of(Shown, _size.Width, _size.Height), _size.Width, _size.Height, _elastic);
         _fling.Track(handX, handY, at);
 
