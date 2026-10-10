@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    A slim bar for a figure out of 100, drawn as the ProgressBar it replaced was drawn: a hairline
+    track under a rounded fill, in the ProgressBar's own theme brushes, so it follows the theme and
+    high contrast as that did. Hidden from assistive technology, because a figure beside it always
+    says the same thing in words (§6.5).
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.FillBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    IsHitTestVisible="False"
+    AutomationProperties.AccessibilityView="Raw">
+
+    <Grid x:Name="Track">
+        <Border Height="1"
+                VerticalAlignment="Center"
+                Background="{ThemeResource ProgressBarBackground}" />
+        <Border x:Name="Fill"
+                Background="{ThemeResource ProgressBarForeground}" />
+    </Grid>
+</UserControl>

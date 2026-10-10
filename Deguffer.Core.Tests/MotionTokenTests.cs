@@ -12,7 +12,7 @@ public sealed class MotionTokenTests
     [Fact]
     public void WithMotionOnEveryMoveTravels()
     {
-        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page })
+        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome })
         {
             var motion = token.For(animationsEnabled: true);
 
@@ -48,6 +48,30 @@ public sealed class MotionTokenTests
         Assert.False(motion.Travels);
         Assert.False(motion.IsInstant);
         Assert.True(motion.Duration < MotionToken.Page.Full.Duration);
+    }
+
+    /// <summary>A bar stands at its figure at once with motion off: the figure beside it already says the value.</summary>
+    [Fact]
+    public void WithMotionOffABarIsAtItsFigureAtOnce()
+    {
+        var motion = MotionToken.Bar.For(animationsEnabled: false);
+
+        Assert.True(motion.IsInstant);
+        Assert.False(motion.Travels);
+    }
+
+    /// <summary>
+    /// A clean's figures still fade in with motion off, so the reader sees that the run has finished,
+    /// and they do not rise.
+    /// </summary>
+    [Fact]
+    public void WithMotionOffACleansFiguresFadeInPlace()
+    {
+        var motion = MotionToken.Outcome.For(animationsEnabled: false);
+
+        Assert.False(motion.Travels);
+        Assert.False(motion.IsInstant);
+        Assert.True(motion.Duration < MotionToken.Outcome.Full.Duration);
     }
 
     /// <summary>

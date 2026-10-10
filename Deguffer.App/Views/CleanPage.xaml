@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Deguffer.App.ViewModels"
     xmlns:views="using:Deguffer.App.Views"
+    xmlns:controls="using:Deguffer.App.Controls"
     Background="Transparent">
 
     <Page.Resources>
@@ -131,7 +132,7 @@
              link to everything else at the end of it, the sentence saying what happens on next
              use, and the figures. -->
         <DataTemplate x:Key="StandardFinding" x:DataType="vm:FindingViewModel">
-            <Grid RowDefinitions="Auto,Auto" Visibility="{x:Bind IsListed, Mode=OneWay}">
+            <Grid RowDefinitions="Auto,Auto">
 
                 <Grid Grid.Row="0" ColumnSpacing="14" Padding="16,14" ColumnDefinitions="Auto,*,Auto">
 
@@ -225,9 +226,9 @@
                                    FontSize="11"
                                    TextAlignment="Right"
                                    HorizontalAlignment="Right" />
-                        <ProgressBar Style="{StaticResource ShareBar}"
-                                     Value="{x:Bind SharePercent, Mode=OneWay}"
-                                     Margin="0,5,0,0" />
+                        <controls:FillBar Style="{StaticResource ShareBar}"
+                                          Value="{x:Bind SharePercent, Mode=OneWay}"
+                                          Margin="0,5,0,0" />
                     </StackPanel>
                 </Grid>
 
@@ -246,7 +247,7 @@
             there is no such thing here as a row with an empty disclosure.
         -->
         <DataTemplate x:Key="CompactFinding" x:DataType="vm:FindingViewModel">
-            <Grid RowDefinitions="Auto,Auto" Visibility="{x:Bind IsListed, Mode=OneWay}">
+            <Grid RowDefinitions="Auto,Auto">
                 <Expander Grid.Row="0"
                           AutomationProperties.Name="{x:Bind Text.DetailToggleName}"
                           HorizontalAlignment="Stretch"
@@ -341,23 +342,39 @@
                                        Style="{StaticResource SecondaryText}"
                                        VerticalAlignment="Bottom"
                                        Margin="0,0,0,7" />
+
+                            <!-- The space the clean under way has given back, counted up as each
+                                 row's run finishes, beside the free space it is going into. Only
+                                 while a clean runs: once it ends, the card states the same figure
+                                 as what Deguffer removed. -->
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="6"
+                                        Margin="18,0,0,7"
+                                        VerticalAlignment="Bottom"
+                                        Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
+                                <TextBlock Text="{x:Bind ViewModel.RemovedSoFarLabel, Mode=OneWay}"
+                                           Style="{StaticResource Figure}"
+                                           FontSize="16" />
+                                <TextBlock Text="removed so far"
+                                           Style="{StaticResource SecondaryText}"
+                                           VerticalAlignment="Bottom"
+                                           Margin="0,0,0,2" />
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- How full the disk is, at a glance: 40 GB free means nothing until you
                              know whether the volume is 256 GB or 4 TB. The figures beside it say
-                             the same thing in words, so nothing is lost if the bar cannot be seen. -->
-                        <ProgressBar Value="{x:Bind ViewModel.UsedPercent, Mode=OneWay}"
-                                     Maximum="100"
-                                     Height="6"
-                                     CornerRadius="3"
-                                     IsTabStop="False"
-                                     AutomationProperties.AccessibilityView="Raw" />
+                             the same thing in words, so nothing is lost if the bar cannot be seen.
+                             During a clean it drains as the disk gives the space back. -->
+                        <controls:FillBar Value="{x:Bind ViewModel.UsedPercent, Mode=OneWay}"
+                                          Height="6" />
                     </StackPanel>
 
                     <!-- §5.4: the two numbers are reported separately and labelled distinctly. They
                          disagree whenever anything else on the machine writes during the run, and
                          merging them into one figure is how a user stops trusting the tool. -->
-                    <StackPanel Grid.Row="0"
+                    <StackPanel x:Name="RunFiguresPanel"
+                                Grid.Row="0"
                                 Grid.Column="1"
                                 Orientation="Horizontal"
                                 Spacing="28"
@@ -411,7 +428,8 @@
                          RowSpacing, because row spacing is a property of the rows: it stands
                          whether or not anything is in them, and before the first clean of a session
                          that is empty space under the capacity bar. -->
-                    <StackPanel Grid.Row="1"
+                    <StackPanel x:Name="RunVerdictPanel"
+                                Grid.Row="1"
                                 Grid.Column="0"
                                 Grid.ColumnSpan="2"
                                 Margin="0,14,0,0"
@@ -517,15 +535,32 @@
                                    Text="{x:Bind ViewModel.EmptyStateMessage, Mode=OneWay}" />
                     </StackPanel>
 
-                    <ScrollViewer Padding="0,4">
-                        <!-- The template is set from the stored preference in code-behind. The
-                             shipped default is named here as well, so the list is never left
-                             untemplated whatever order the framework loads and shows this page in,
-                             and so the markup does not disagree with what most windows will draw. -->
-                        <ItemsControl x:Name="FindingsList"
-                                      ItemsSource="{x:Bind ViewModel.Findings}"
-                                      ItemTemplate="{StaticResource CompactFinding}" />
-                    </ScrollViewer>
+                    <!-- The template is set from the stored preference in code-behind. The shipped
+                         default is named here as well, so the list is never left untemplated
+                         whatever order the framework loads and shows this page in, and so the
+                         markup does not disagree with what most windows will draw.
+
+                         A list view rather than a plain items control, for the motion every other
+                         list here has: a row arriving fades and slides in, and one leaving fades out
+                         as the rows below close up. Nothing on a row is chosen by selecting it, so
+                         selection is off, and its own controls are the tab stops rather than the
+                         row's container. -->
+                    <ListView x:Name="FindingsList"
+                              ItemsSource="{x:Bind ViewModel.Listed}"
+                              ItemTemplate="{StaticResource CompactFinding}"
+                              SelectionMode="None"
+                              IsItemClickEnabled="False"
+                              TabNavigation="Local"
+                              Padding="0,4">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="MinHeight" Value="0" />
+                                <Setter Property="IsTabStop" Value="False" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
                 </Grid>
 
                 <!-- One row's items, in place of the rows. Filled from code-behind with a list built

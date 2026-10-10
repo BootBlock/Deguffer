@@ -144,21 +144,19 @@ internal sealed class RowGhosts
     /// pointer input, and hiding the layer from assistive technology does not hide what it holds, so
     /// each part is taken out of the tab order and out of what a screen reader reads.
     /// </summary>
-    private static void Inert(DependencyObject part)
+    private static void Inert(DependencyObject root)
     {
-        if (part is UIElement element)
+        foreach (var part in VisualTree.Descendants<DependencyObject>(root).Prepend(root))
         {
-            AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
-        }
+            if (part is UIElement element)
+            {
+                AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
+            }
 
-        if (part is Control control)
-        {
-            control.IsTabStop = false;
-        }
-
-        for (var at = 0; at < VisualTreeHelper.GetChildrenCount(part); at++)
-        {
-            Inert(VisualTreeHelper.GetChild(part, at));
+            if (part is Control control)
+            {
+                control.IsTabStop = false;
+            }
         }
     }
 

@@ -114,8 +114,8 @@ public sealed partial class CleanViewModel : ObservableObject
         FreeSpaceNow = space?.Free;
 
         // Rows arrive one provider at a time and are cleared wholesale between runs; subscribing
-        // covers both without every mutation site having to remember to raise this.
-        Findings.CollectionChanged += (_, _) => NotifyEmptyStateChanged();
+        // covers both without every mutation site having to remember to bring the drawn rows along.
+        Findings.CollectionChanged += (_, _) => ShowListed();
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
@@ -181,6 +181,17 @@ public sealed partial class CleanViewModel : ObservableObject
     public partial bool ShowAlreadyClear { get; set; }
 
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
+
+    /// <summary>
+    /// The rows the list draws: every row in <see cref="Findings"/> that the filters let through, in
+    /// the same order.
+    ///
+    /// <para>A row the filters hide leaves this list rather than collapsing where it stood, and a row
+    /// they show again joins it, so the list can show it going and coming (<see cref="ShowListed"/>).
+    /// The commonest case is the end of a clean: a row the clean emptied is re-planned as already
+    /// clear, and leaves the list as the rows below it close up.</para>
+    /// </summary>
+    public ObservableCollection<FindingViewModel> Listed { get; } = [];
 
     public WhenCompleteViewModel WhenComplete { get; }
 
@@ -266,6 +277,14 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     public string CleanPercentLabel => $"{CleanPercent:0}%";
 
+    /// <summary>
+    /// What the clean under way has removed so far, as each row's run finishes. Counted from the
+    /// run's own results the way <see cref="RemovedLabel"/> is (<see cref="RunFigures"/>), so it never
+    /// runs ahead of what was removed and it lands on the figure the card states when the run ends.
+    /// </summary>
+    [ObservableProperty]
+    public partial string RemovedSoFarLabel { get; set; } = string.Empty;
+
     partial void OnShowNotInstalledChanged(bool value) => RefilterRows();
 
     partial void OnShowAlreadyClearChanged(bool value) => RefilterRows();
@@ -283,7 +302,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // The collection did not change, so the subscription above raises nothing. Without this a
         // filter that empties the list leaves the empty state collapsed behind it.
-        NotifyEmptyStateChanged();
+        ShowListed();
     }
 
     /// <summary>A row is drawn unless a filter the user left on hides it. See <see cref="PreviewFilter"/>.</summary>
@@ -430,7 +449,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// hidden by default. Counting rows instead put a blank card at the end of a run that
     /// worked.</para>
     /// </summary>
-    public bool HasNothingListed => !Findings.Any(f => f.IsListed);
+    public bool HasNothingListed => Listed.Count == 0;
 
     /// <summary>
     /// Whether that empty list is the filters' doing rather than an empty machine. The two need
@@ -446,6 +465,17 @@ public sealed partial class CleanViewModel : ObservableObject
           + "installed” above, or switch on “Show items that are already clear” in Settings."
         : "A scan looks at the locations Deguffer recognises and reports what each one holds. It "
           + "reads only — nothing is removed until you choose to.";
+
+    /// <summary>
+    /// Bring <see cref="Listed"/> up to the rows the filters let through, in place, and say whether
+    /// that leaves the list empty. Asked of every row rather than of the one that changed, because a
+    /// filter changes under rows that are already built.
+    /// </summary>
+    private void ShowListed()
+    {
+        LiveList.Show(Listed, [.. Findings.Where(row => row.IsListed)], row => row);
+        NotifyEmptyStateChanged();
+    }
 
     private void NotifyEmptyStateChanged()
     {
@@ -581,8 +611,11 @@ public sealed partial class CleanViewModel : ObservableObject
 
             var progress = new Progress<string>(message => Report(message));
             var completed = new Progress<double>(SetCleanProgress);
+            List<CleanupResult> removedSoFar = [];
+            var landed = new Progress<CleanupResult>(result => CountRemoved(removedSoFar, result));
 
             CleanPercent = 0;
+            RemovedSoFarLabel = FreeSpace.Format(RunFigures.For(removedSoFar).Removed);
             IsCleaning = true;
 
             // The planner is started whatever the token says, and never throws for it: a clean
@@ -593,7 +626,7 @@ public sealed partial class CleanViewModel : ObservableObject
             {
                 results = await Task.Run(
                     () => _planner.ExecuteAsync(
-                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, ct),
+                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, landed, ct),
                     CancellationToken.None);
             }
             finally
@@ -798,8 +831,9 @@ public sealed partial class CleanViewModel : ObservableObject
         // The row's steps are new, and a re-plan runs while the keep list is not to be changed.
         AllowKeepListChanges(row, !IsBusy);
 
-        // Nothing was inserted, so the subscription that follows the list raises nothing.
-        NotifyEmptyStateChanged();
+        // Nothing was inserted, so the subscription that follows the list raises nothing, and a row
+        // the run emptied is now one the filters may hide.
+        ShowListed();
         UpdateShares();
         UpdateSelectionTotal();
     }
@@ -973,6 +1007,18 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             CleanPercent = percent;
         }
+    }
+
+    /// <summary>
+    /// Count one more row's run into the figure beside the used space, and read the volume again so
+    /// the bar under it drains by what the disk actually gave back. Read rather than worked out from
+    /// the count, because the two differ whenever anything else writes during the run (§5.4).
+    /// </summary>
+    private void CountRemoved(List<CleanupResult> removedSoFar, CleanupResult result)
+    {
+        removedSoFar.Add(result);
+        RemovedSoFarLabel = FreeSpace.Format(RunFigures.For(removedSoFar).Removed);
+        FreeSpaceNow = FreeSpaceOfProfile();
     }
 
     private void Report(string message, InfoBarSeverity severity = InfoBarSeverity.Informational)

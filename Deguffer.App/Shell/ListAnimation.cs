@@ -88,8 +88,14 @@ internal sealed class ListAnimation
         list.Loaded += (_, _) => FindViewport();
     }
 
+    /// <summary>
+    /// Raised for each row as its arrival plays, with the container it arrives in, so what the row
+    /// draws can come in with it. Never for a row only scrolled into sight, which has not arrived.
+    /// </summary>
+    public event Action<SelectorItem>? Arrived;
+
     /// <summary>Give <paramref name="list"/> the motion, for as long as it lives.</summary>
-    public static void Play(ListViewBase list, IMotionPolicy motion) => _ = new ListAnimation(list, motion);
+    public static ListAnimation Play(ListViewBase list, IMotionPolicy motion) => new(list, motion);
 
     /// <summary>
     /// Give the list inside <paramref name="tree"/> the motion. A tree view lays its rows out as a
@@ -282,6 +288,7 @@ internal sealed class ListAnimation
                     break;
                 case RowMove.Arrive when Container(after, row.Key) is { } arriving:
                     _moves.Arrive(arriving, played, slides: !plan.Crossfade);
+                    Arrived?.Invoke(arriving);
                     break;
                 case RowMove.Glide when Container(after, row.Key) is { } gliding:
                     _moves.Glide(gliding, (float)row.From, played);
@@ -387,18 +394,5 @@ internal sealed class ListAnimation
         rows.Find(row => ReferenceEquals(row.Item, item)).Container;
 
     private static T? Descendant<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        for (var at = 0; at < VisualTreeHelper.GetChildrenCount(root); at++)
-        {
-            var child = VisualTreeHelper.GetChild(root, at);
-
-            if ((child as T ?? Descendant<T>(child)) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
-    }
+        where T : DependencyObject => VisualTree.Descendants<T>(root).FirstOrDefault();
 }
