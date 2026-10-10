@@ -95,6 +95,38 @@ public sealed class ShapeChangesTests
         Assert.Contains(changes, change => change.Kind == ShapeChangeKind.Appeared && change.Node == Find(later, "moving"));
     }
 
+    /// <summary>A shape still in the tree but now too small to draw shrinks away like one that went.</summary>
+    [Fact]
+    public void AShapeTooSmallToDrawNowShrinksAway()
+    {
+        var earlier = Scan(("alpha", 300), ("beta", 200), ("gamma", 100));
+        var later = Scan(("alpha", 300), ("beta", 200), ("gamma", 0));
+
+        Assert.DoesNotContain(Treemap(later).Tiles, tile => tile.Node == Find(later, "gamma.bin"));
+
+        Assert.Contains(
+            ShapeChanges.Between(Treemap(earlier), Treemap(later)),
+            change => change.Kind == ShapeChangeKind.Disappeared && change.Node == Find(earlier, "gamma.bin"));
+    }
+
+    /// <summary>
+    /// A lump of shapes too small to draw one by one stands for different files in each layout, so
+    /// it is never matched or moved: it crossfades with the rest.
+    /// </summary>
+    [Fact]
+    public void LumpsOfShapesTooSmallToDrawAreNeverMatched()
+    {
+        var earlier = Crowded(grown: false);
+        var later = Crowded(grown: true);
+
+        Assert.Contains(Treemap(later).Tiles, tile => tile.IsAggregate);
+
+        var changes = ShapeChanges.Between(Treemap(earlier), Treemap(later));
+
+        Assert.NotEmpty(changes);
+        Assert.DoesNotContain(changes, change => change.Node == ExploreTile.Aggregated);
+    }
+
     [Fact]
     public void TheSameLayoutAgainIsNoChange()
     {
@@ -217,6 +249,55 @@ public sealed class ShapeChangesTests
         Assert.Equal(Find(later, "beach.JPG"), find(Find(earlier, "Beach.jpg")));
         Assert.Equal(Find(later, "photos"), find(Find(earlier, "Photos")));
         Assert.Null(find(Find(earlier, "City.png")));
+    }
+
+    /// <summary>
+    /// The same number with the same name in a later scan is the same thing only under the same
+    /// folder: here it stands under another one, which is another path.
+    /// </summary>
+    [Fact]
+    public void TheSameNumberAndNameUnderAnotherFolderIsNotTheSameThing()
+    {
+        var earlier = new ExploreTreeBuilder(@"C:\");
+        var top = earlier.AddChildren(ExploreTreeBuilder.RootNode, [Folder("one"), Folder("two")]);
+        var x = earlier.AddChildren(top, [File("x")]);
+        earlier.AddChildren(top + 1, [File("y")]);
+
+        var later = new ExploreTreeBuilder(@"C:\");
+        var again = later.AddChildren(ExploreTreeBuilder.RootNode, [Folder("one"), Folder("two")]);
+        var moved = later.AddChildren(again + 1, [File("x")]);
+        later.AddChildren(again, [File("y")]);
+
+        var before = earlier.Build(ExploreChildOrder.BySize);
+        var after = later.Build(ExploreChildOrder.BySize);
+
+        Assert.Equal(x, moved);
+        Assert.Equal("x", after.NameOf(moved));
+        Assert.Null(before.CounterpartsIn(after)!(x));
+    }
+
+    private static ExploreChild Folder(string name) => new(name, IsDirectory: true, IsLink: false, Size: 0);
+
+    private static ExploreChild File(string name) => new(name, IsDirectory: false, IsLink: false, Size: 1000);
+
+    /// <summary>
+    /// A few large files and a long tail of thousands of tiny ones in one folder: the tail is what the
+    /// layout lumps together, as siblings of about one size all fit or none do.
+    /// </summary>
+    private static ExploreTree Crowded(bool grown)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var top = builder.AddChildren(ExploreTreeBuilder.RootNode, [Folder("mixed"), Folder("other")]);
+
+        builder.AddChildren(
+            top,
+            [
+                .. Enumerable.Range(0, 6).Select(i => new ExploreChild($"large{i}", IsDirectory: false, IsLink: false, Size: (grown && i == 5 ? 4 : 1) * 50_000_000L)),
+                .. Enumerable.Range(0, 4000).Select(i => new ExploreChild($"tiny{i:d4}", IsDirectory: false, IsLink: false, Size: 1_000 + i)),
+            ]);
+        builder.AddChildren(top + 1, [new ExploreChild("other.bin", IsDirectory: false, IsLink: false, Size: 200_000_000L)]);
+
+        return builder.Build(ExploreChildOrder.BySize);
     }
 
     /// <summary>
