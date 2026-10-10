@@ -64,8 +64,8 @@ public static class VolumeRoot
     /// </summary>
     /// <param name="volumes">Asked where the volume holding the path is mounted.</param>
     /// <param name="path">
-    /// A fully qualified path, ordinarily one <see cref="LongPath.Configured(string?)"/> has already
-    /// normalised. Anything else answers null, because working a remainder out from a path that is
+    /// A fully qualified path, ordinarily one <see cref="LongPath.Configured(string?)"/> or
+    /// <see cref="LongPath.Entry(string?)"/> has already normalised. Anything else answers null, because working a remainder out from a path that is
     /// not anchored anywhere would be inventing where it is.
     ///
     /// <para>Checked here rather than assumed, and that is a contract on a public type rather than

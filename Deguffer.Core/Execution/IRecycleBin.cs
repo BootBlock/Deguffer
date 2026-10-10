@@ -40,7 +40,9 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
 /// parses <c>C:\Users\…</c> and refuses <c>\\?\C:\Users\…</c>. So what crosses this boundary is the
 /// fully-qualified, fully-resolved <em>display</em> path — normalised, because
 /// <see cref="LongPath.Configured"/>'s trap applies to a shell call exactly as it applies to a
-/// deletion, and a value carrying <c>..</c> would recycle a directory nobody named.</para>
+/// deletion, and a value carrying <c>..</c> would recycle a directory nobody named. The shell also
+/// rereads a name ending in a dot, and a last name ending in a space, as another, and no spelling it
+/// takes keeps them, so such an item is refused (<see cref="RecycleBinReach"/>).</para>
 ///
 /// <para>A path too long for the shell is therefore a refusal rather than a truncation, and it is
 /// reported as one. Falling back to an outright delete would be worse than failing: the user asked

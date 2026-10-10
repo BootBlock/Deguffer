@@ -36,6 +36,48 @@ public sealed class RecycleBinReachTests : IDisposable
             .WithRegistryNumber(BinKey, "MaxCapacity", megabytes)
             .WithRegistryNumber(BinKey, "NukeOnDelete", keepsNothing ? 1 : 0);
 
+    /// <summary>
+    /// The shell drops trailing dots from every name on a path it parses, and trailing spaces from
+    /// the last, so a
+    /// <c>report.</c> handed to the bin moves the <c>report</c> beside it, and a file inside
+    /// <c>sub.</c> moves its namesake inside <c>sub</c>. Each is refused, and the sibling whose name
+    /// the shell reads correctly is still taken.
+    /// </summary>
+    [Theory]
+    [InlineData("report.", "report")]
+    [InlineData("notes ", "notes")]
+    [InlineData(@"sub.\report", @"sub\report")]
+    [InlineData(@"sub..\report", @"sub\report")]
+    public void AnItemWithANameTheShellRereadsIsRefused(string name, string read)
+    {
+        var item = Path.Combine(_temp.Path, name);
+        var sibling = Path.Combine(_temp.Path, read);
+
+        foreach (var file in new[] { item, sibling })
+        {
+            Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(file)!));
+            File.WriteAllText(LongPath.Extended(file), "x");
+        }
+
+        Assert.True(File.Exists(LongPath.Extended(item)), "the fixture holds the name as spelled");
+        Assert.Contains("ends in a dot or a space", _reach.WhyNot(item));
+        Assert.Null(_reach.WhyNot(sibling));
+    }
+
+    /// <summary>
+    /// The shell keeps a trailing space on a folder above the item, so such an item is taken: the
+    /// refusal above is for names the shell rereads, not every unusual one.
+    /// </summary>
+    [Fact]
+    public void AnItemInAFolderWhoseNameEndsInASpaceIsTaken()
+    {
+        var item = Path.Combine(_temp.Path, "sp ", "report");
+        Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(item)!));
+        File.WriteAllText(LongPath.Extended(item), "x");
+
+        Assert.Null(_reach.WhyNot(item));
+    }
+
     [Fact]
     public void AFileWhosePathIsTheLongestTheBinTakesIsTaken()
     {

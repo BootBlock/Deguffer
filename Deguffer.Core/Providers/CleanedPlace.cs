@@ -81,7 +81,7 @@ public sealed record CleanedPlace
             return true;
         }
 
-        var relative = System.IO.Path.GetRelativePath(top, target);
+        var relative = LongPath.Relative(top, target);
 
         return relative != "."
             && relative.Split(System.IO.Path.DirectorySeparatorChar).Any(FolderNames.Contains);

@@ -101,7 +101,7 @@ public sealed record ToolRoot(
         {
             var parent = top;
 
-            foreach (var segment in System.IO.Path.GetRelativePath(top, folder).Split(System.IO.Path.DirectorySeparatorChar))
+            foreach (var segment in LongPath.Relative(top, folder).Split(System.IO.Path.DirectorySeparatorChar))
             {
                 if (!next.TryGetValue(parent, out var names))
                 {

@@ -40,6 +40,25 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A pick is judged as the entry it names. <c>Outlook Files.</c> is a folder NTFS keeps apart
+    /// from <c>Outlook Files</c>, and the removal acts on it under that name, so a verdict about
+    /// <c>Outlook Files</c> would be a verdict about something else: here a refusal, and beside an
+    /// allowed sibling an approval of a removal nobody judged.
+    /// </summary>
+    [Theory]
+    [InlineData(".")]
+    [InlineData(" ")]
+    public void APickWhoseNameEndsInADotOrASpaceIsJudgedAsItself(string ending)
+    {
+        var policy = Policy();
+        var outlook = Path.Combine(_environment.UserProfile, "Documents", "Outlook Files");
+
+        Assert.False(policy.MayRemove(outlook).IsAllowed);
+        Assert.True(policy.MayRemove(outlook + ending).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(outlook, "readme.txt" + ending)).IsAllowed);
+    }
+
+    /// <summary>
     /// §9's exclusions inside the Windows directory, by name. They are covered by the rule above,
     /// and naming them anyway is the point: §9 is enforced by nothing except not reaching those
     /// paths, so an assertion that says "we did not reach them" is what turns that into evidence.

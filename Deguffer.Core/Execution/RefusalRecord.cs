@@ -70,14 +70,14 @@ public sealed class RefusalRecord
     /// The places the last clean of <paramref name="stepPath"/> found Windows refusing, in display
     /// form, or none.
     ///
-    /// <para>A step's path is looked up in the one spelling <see cref="LongPath.Configured"/> gives
+    /// <para>A step's path is looked up in the one spelling <see cref="LongPath.Entry"/> gives
     /// it. The executor records against the path it removed and the preview asks with the path it
     /// planned; a trailing separator or §6.3's prefix on either side would otherwise make the record
     /// silently miss, and the row would go back to offering what Windows refuses.</para>
     /// </summary>
     public IReadOnlyList<string> At(string stepPath)
     {
-        if (LongPath.Configured(stepPath) is not { } key)
+        if (LongPath.Entry(stepPath) is not { } key)
         {
             return [];
         }
@@ -104,7 +104,7 @@ public sealed class RefusalRecord
             return;
         }
 
-        if (removal.RefusedAt.Count == 0 || LongPath.Configured(stepPath) is not { } key)
+        if (removal.RefusedAt.Count == 0 || LongPath.Entry(stepPath) is not { } key)
         {
             return;
         }
@@ -134,7 +134,7 @@ public sealed class RefusalRecord
     {
         ArgumentNullException.ThrowIfNull(refusedAt);
 
-        if (LongPath.Configured(stepPath) is not { } key)
+        if (LongPath.Entry(stepPath) is not { } key)
         {
             return;
         }
@@ -179,7 +179,7 @@ public sealed class RefusalRecord
     /// </summary>
     private static IEnumerable<string> Wellformed(IEnumerable<string?>? places) =>
         (places ?? [])
-            .Select(LongPath.Configured)
+            .Select(LongPath.Entry)
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
@@ -202,7 +202,7 @@ public sealed class RefusalRecord
                 // machine has had — and a key that is not a path at all is dropped with it. Only
                 // absence drops one: a location Windows will not describe now may still be there, and
                 // dropping it would let the next save erase what the preview needs to warn about.
-                if (LongPath.Configured(path) is not { } key
+                if (LongPath.Entry(path) is not { } key
                     || LongPath.ProbeEntry(key) is PathPresence.Absent)
                 {
                     continue;

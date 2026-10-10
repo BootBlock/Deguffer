@@ -446,7 +446,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             examination.Candidates.Add(new CaptureOneCandidate(
                 cache,
                 session,
-                $"Previews and thumbnails for the images in '{Path.GetRelativePath(Path.GetDirectoryName(session) ?? session, images)}'. "
+                $"Previews and thumbnails for the images in '{LongPath.Relative(Path.GetDirectoryName(session) ?? session, images)}'. "
                 + "Capture One rebuilds them from the images beside them as you view each one."));
             offered = true;
         }

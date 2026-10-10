@@ -135,6 +135,78 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.All(recorder.Paths, p => Assert.StartsWith(@"\\?\", p, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A picked name ending in a dot or a space is removed under that name, and the sibling Win32
+    /// would read it as is left standing (§5.6). Normalised as a configured value, <c>report.</c>
+    /// became <c>report</c>, so the sibling was removed, and the evidence, taken of the same wrong
+    /// path, excused its loss.
+    ///
+    /// <para>On the real file system, because the fakes do not model Win32's name
+    /// normalisation.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("report.", "report", false)]
+    [InlineData("notes ", "notes", false)]
+    [InlineData("junk.", "junk", true)]
+    public async Task APickedNameEndingInADotOrASpaceIsRemovedAndItsSiblingIsNot(
+        string picked, string sibling, bool isDirectory)
+    {
+        var downloads = _temp.CreateDirectory("profile", "Downloads");
+        var item = Path.Combine(downloads, picked);
+        var other = Path.Combine(downloads, sibling);
+
+        foreach (var path in new[] { item, other })
+        {
+            var target = isDirectory ? Path.Combine(path, "a.bin") : path;
+            Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(target)!));
+            File.WriteAllBytes(LongPath.Extended(target), new byte[16]);
+        }
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(item, isDirectory, Bytes: 16)],
+            ExploreRemovalMode.Permanent,
+            _policy);
+
+        Assert.Equal(item, Assert.Single(report.Removed).Path);
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(item));
+        Assert.Equal(PathPresence.Present, LongPath.ProbeEntry(other));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
+    /// The shell reads <c>report.</c> as <c>report</c>, so the Recycle Bin route refuses such a pick
+    /// before the shell is asked, rather than moving the sibling to the bin in its place.
+    /// </summary>
+    [Fact]
+    public async Task TheRecycleBinRouteRefusesANameTheShellWouldReadAsItsSibling()
+    {
+        var downloads = _temp.CreateDirectory("profile", "Downloads");
+        var item = Path.Combine(downloads, "report.");
+        var sibling = _temp.CreateFile(16, "profile", "Downloads", "report");
+        File.WriteAllBytes(LongPath.Extended(item), new byte[16]);
+
+        var handed = new List<string>();
+        var bin = new ShellRecycleBin(
+            path =>
+            {
+                handed.Add(path);
+                return new RecycleOutcome(Removed: false, "The shell was asked.");
+            },
+            new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => null, _environment)));
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(item, IsDirectory: false, Bytes: 16)],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin);
+
+        Assert.Empty(handed);
+        Assert.Empty(report.Removed);
+        Assert.Contains("ends in a dot or a space", Assert.Single(report.Refused).Message, StringComparison.Ordinal);
+        Assert.True(LongPath.FileExists(item));
+        Assert.True(LongPath.FileExists(sibling));
+    }
+
     [Fact]
     public async Task APermanentRemovalDeletesTheWholeTree()
     {

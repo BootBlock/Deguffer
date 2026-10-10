@@ -81,7 +81,7 @@ internal static class SourceTreeBoundary
         // Asked for rather than derived by slicing the candidate at the root's length: that
         // arithmetic is only correct while this and the scanner's own narrowing spell a path the
         // same way, and a mis-slice would quietly start offering directories outside the root.
-        var relative = Path.GetRelativePath(LongPath.Display(root), LongPath.Display(candidate))
+        var relative = LongPath.Relative(LongPath.Display(root), LongPath.Display(candidate))
             .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
 
         // The root is where the search starts, so it is never one of the search's answers — it

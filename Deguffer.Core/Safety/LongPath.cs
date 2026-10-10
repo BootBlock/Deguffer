@@ -30,7 +30,7 @@ public static partial class LongPath
             return device;
         }
 
-        var full = Path.GetFullPath(path);
+        var full = Resolved(path);
 
         return full.StartsWith(@"\\", StringComparison.Ordinal)
             ? UncDevicePrefix + full[2..]
@@ -57,29 +57,14 @@ public static partial class LongPath
     /// carries the device prefix, though, so the prefix comes off first — otherwise a configured
     /// <c>\\?\C:\Users\me\.m2</c> would keep its <c>..</c> segments and would compare equal to
     /// nothing, walking straight past a caller's check that it is not the tool's own directory.</para>
+    ///
+    /// <para><b>A configured value is read as Win32 reads it</b>, trailing dots and spaces dropped
+    /// from its last segment, because that is the folder the tool configured with it opens. A path
+    /// naming an entry already on the disk is not a configured value: it goes through
+    /// <see cref="Entry"/>, which keeps its name as spelled.</para>
     /// </summary>
-    public static string? Configured(string? value)
-    {
-        var trimmed = value?.Trim();
-
-        if (string.IsNullOrEmpty(trimmed) || !Path.IsPathFullyQualified(trimmed))
-        {
-            return null;
-        }
-
-        try
-        {
-            // A drive root keeps its separator, which is correct: "C:\" is the directory. A UNC root
-            // does lose one, and both then have no containing directory at all — which is how the
-            // callers that must refuse a whole volume come to refuse it.
-            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(Display(trimmed)));
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            // Characters Windows will not accept in a path, so there is nothing here to point at.
-            return null;
-        }
-    }
+    public static string? Configured(string? value) =>
+        Qualified(value?.Trim(), Path.GetFullPath);
 
     /// <summary>
     /// Whether <paramref name="candidate"/> is <paramref name="ancestor"/> itself or sits inside it.

@@ -67,7 +67,7 @@ public sealed class RowDeclarations
     /// </param>
     public bool OfferedByARow(string folder, CancellationToken ct = default) =>
         Path.GetDirectoryName(folder) is { } parent
-        && LongPath.Configured(parent) is { } key
+        && LongPath.Entry(parent) is { } key
         && ByFolder(ct).TryGetValue(key, out var roots)
         && roots.Exists(root => root.Recognises(new ToolRootChild(Path.GetFileName(folder), ChildKind.Folder)));
 

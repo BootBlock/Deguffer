@@ -160,6 +160,21 @@ public sealed class RowDeclarationsTests : IDisposable
     }
 
     /// <summary>
+    /// A folder whose name only adds a trailing dot to the one a row declares is another folder, and
+    /// what it holds is nobody's. Read as Win32 reads it, it was the declared folder.
+    /// </summary>
+    [Fact]
+    public void AFolderBesideTheDeclaredOneWithATrailingDotDeclaresNothing()
+    {
+        var editor = CreateEditor();
+        var declarations = new RowDeclarations();
+        declarations.Admit([new VsCodeCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning)]);
+
+        Assert.True(declarations.OfferedByARow(Path.Combine(editor, "CachedData")));
+        Assert.False(declarations.OfferedByARow(Path.Combine(editor + ".", "CachedData")));
+    }
+
+    /// <summary>
     /// The question is about one folder. A directory carrying an offered name somewhere a row does
     /// not declare is nobody's, and a name no table offers is nobody's either.
     /// </summary>

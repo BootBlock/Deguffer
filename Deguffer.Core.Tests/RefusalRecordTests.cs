@@ -34,6 +34,22 @@ public sealed class RefusalRecordTests : IDisposable
     }
 
     /// <summary>
+    /// A step whose name only adds a trailing dot is another location, so a refusal recorded at one
+    /// is not reported at the other.
+    /// </summary>
+    [Fact]
+    public void ARefusalIsNotReportedAtAStepNamedWithATrailingDot()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var place = _temp.CreateDirectory("temp", "profile");
+
+        RefusalRecord.For(_environment).Replace(step, [place]);
+
+        Assert.Equal([place], new RefusalRecord(_environment).At(step));
+        Assert.Empty(new RefusalRecord(_environment).At(step + "."));
+    }
+
+    /// <summary>
     /// A clean that was refused nothing asked every file it attempted, so an earlier refusal there is
     /// no longer true and must not go on leaving bytes out of the next preview.
     /// </summary>

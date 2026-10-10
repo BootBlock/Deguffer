@@ -60,6 +60,20 @@ public sealed class ItemGuideTests : IDisposable
     }
 
     /// <summary>
+    /// A folder beside the place whose name only adds a trailing dot is another folder. Win32 would
+    /// read <c>Windows.</c> as <c>Windows</c>, and the guide then explained a folder it knows
+    /// nothing about as the Windows directory.
+    /// </summary>
+    [Fact]
+    public void ANameEndingInADotIsNotThePlaceItReadsAs()
+    {
+        var guide = Guide(At(KnownPlace.WindowsDirectory, string.Empty));
+
+        Assert.Null(guide.Describe(_system.WindowsDirectory + "."));
+        Assert.Null(guide.DescribeNearest(Path.Combine(_system.WindowsDirectory + ".", "notes.txt")));
+    }
+
+    /// <summary>
     /// A place is an address on this machine, not a name. The same leaf name somewhere else is a
     /// different thing and gets no explanation — which is the direction that matters, because the
     /// wrong one would tell somebody that a folder of theirs is part of Windows.

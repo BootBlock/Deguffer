@@ -83,7 +83,7 @@ public sealed class EmulatorFolderStore
     private static IReadOnlyList<string> Usable(IEnumerable<string?> folders) =>
     [
         .. folders
-            .Select(LongPath.Configured)
+            .Select(LongPath.Entry)
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase),
     ];

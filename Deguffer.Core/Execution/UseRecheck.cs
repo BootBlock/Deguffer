@@ -72,7 +72,7 @@ internal sealed record UseRecheck(DeleteStep? Step, string? Withheld, IReadOnlyL
                 return null;
             }
 
-            var relative = Path.GetRelativePath(root, path);
+            var relative = LongPath.Relative(root, path);
             var separator = relative.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
             var entry = Path.Combine(root, separator < 0 ? relative : relative[..separator]);
 

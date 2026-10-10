@@ -202,7 +202,7 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
 
     /// <summary>A repository-relative path in the form git speaks: forward slashes, no drive.</summary>
     private static string ToPathspec(string repositoryRoot, string candidate) =>
-        Path.GetRelativePath(repositoryRoot, candidate).Replace(Path.DirectorySeparatorChar, '/');
+        LongPath.Relative(repositoryRoot, candidate).Replace(Path.DirectorySeparatorChar, '/');
 
     /// <summary>
     /// The repository containing <paramref name="candidate"/>, or null if it is not in one.

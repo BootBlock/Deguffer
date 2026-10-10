@@ -33,7 +33,7 @@ public static class PickedFolder
     /// <see cref="Path.GetFullPath(string)"/>. That drops a trailing dot or space from the last
     /// segment, so a folder really named <c>build.</c> would come back as its sibling
     /// <c>build</c>, and Explore would scan a folder nobody picked. The stores that keep a picked
-    /// folder normalise it themselves.</para>
+    /// folder normalise it themselves, through <see cref="Safety.LongPath.Entry"/>.</para>
     /// </summary>
     public static string? OnDisk(string picked) => Path.IsPathFullyQualified(picked) ? picked : null;
 }
