@@ -85,7 +85,7 @@ public sealed class MapRequestsTests
         requests.Asked(7, Target);
 
         Assert.Equal(shortOf, requests.Where(shortOf));
-        Assert.Equal(shortOf.Held, requests.Rest(shortOf));
+        Assert.Equal(shortOf.Held(), requests.Rest(shortOf));
         Assert.Equal(0, requests.Rest(shortOf).Left);
     }
 

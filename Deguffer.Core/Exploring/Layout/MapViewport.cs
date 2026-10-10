@@ -127,8 +127,11 @@ public readonly record struct MapViewport
     /// <summary>
     /// Where this comes to rest: the zoom held between 1 and <see cref="MaximumZoom"/>, and the screen
     /// held inside the picture. Itself for any viewport made by anything but <see cref="Seen"/>.
+    ///
+    /// <para>A method rather than a property: a record prints every property it has, and a property
+    /// of its own type would print that one's, and so on until the stack ran out.</para>
     /// </summary>
-    public MapViewport Held => Within(Zoom, Left, Top);
+    public MapViewport Held() => Within(Zoom, Left, Top);
 
     /// <summary>
     /// The viewport a fraction <paramref name="progress"/> of the way from <paramref name="from"/> to

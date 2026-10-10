@@ -284,7 +284,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _camera.Stretch(held.X - tracking.X, held.Y - tracking.Y);
 
         Shown = tracking.Shown(_size.Width, _size.Height, _elastic);
-        _target = Shown.Held;
+        _target = Shown.Held();
 
         Moved?.Invoke(this, EventArgs.Empty);
     }
@@ -307,7 +307,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         _fling.Clear();
 
-        var held = Shown.Held;
+        var held = Shown.Held();
 
         // Stretched past an edge: it springs back inside rather than coasting on. The map takes it as
         // where it is going from now, which is where a press during the spring lands it.
@@ -430,7 +430,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         var position = args.ModifiedRestingPosition ?? args.NaturalRestingPosition;
         var scale = args.ModifiedRestingScale ?? args.NaturalRestingScale;
 
-        _target = new MapTracking(position.X, position.Y, scale).Shown(_size.Width, _size.Height, _elastic).Held;
+        _target = new MapTracking(position.X, position.Y, scale).Shown(_size.Width, _size.Height, _elastic).Held();
         Retargeted?.Invoke(this, EventArgs.Empty);
     }
 

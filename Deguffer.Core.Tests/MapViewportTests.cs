@@ -416,11 +416,25 @@ public sealed class MapViewportTests
         Assert.True(seen.Left < 0);
         Assert.True(seen.Zoom > MapViewport.MaximumZoom);
 
-        var held = seen.Held;
+        var held = seen.Held();
 
         Assert.Equal(MapViewport.MaximumZoom, held.Zoom);
         Assert.Equal(0, held.Left);
         Assert.Equal(1 - (1 / MapViewport.MaximumZoom), held.Top, Precision);
+    }
+
+    /// <summary>
+    /// A viewport can be written out, as a failed assertion or a log line writes it. With a property
+    /// of its own type it printed that one, and that one's, until the stack ran out and took the test
+    /// host down, so a failing viewport test read as a short green run.
+    /// </summary>
+    [Fact]
+    public void AViewportCanBeWrittenOut()
+    {
+        var text = MapViewport.Seen(4, -0.1, 0.2).ToString();
+
+        Assert.Contains("Zoom = 4", text, StringComparison.Ordinal);
+        Assert.Contains("Left = ", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -428,7 +442,7 @@ public sealed class MapViewportTests
     {
         var viewport = MapViewport.Anchored(6, 0.3, 0.4, 0.2, 0.7);
 
-        Assert.Equal(viewport, viewport.Held);
+        Assert.Equal(viewport, viewport.Held());
     }
 
     [Fact]

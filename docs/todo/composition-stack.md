@@ -2,7 +2,8 @@
 
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
-> composition surfaces: see [what landing it found](#what-landing-274-found). The maintainer has
+> composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -266,6 +267,41 @@ two runs of each:
 At 1080p the memory differences are within the run-to-run noise, because the scan tree dominates.
 The longest stalls, 58–116 ms, came in both builds alike. At rest, 98% of samples at 1080p are
 identical between the builds, one canvas pixel to one screen pixel.
+
+## What landing #276 found
+
+The camera follows an `InteractionTracker`: the camera property set's scale and offset are
+expressions of the tracker's, and the map's own visual is its `VisualInteractionSource`. Three things
+the documentation does not say:
+
+- **The tracker cannot zoom for a plain wheel.** With wheel redirection on and the wheel's position
+  modes turned off, a plain turn of the wheel still reaches the UI thread's `PointerWheelChanged`;
+  only Ctrl+wheel is zoomed on the compositor, by the tracker's own step and with inertia. So a plain
+  wheel starts a glide from the UI thread, which the compositor then plays.
+- **A position placed past the bounds stays on screen.** `TryUpdatePosition` with
+  `InteractionTrackerClampingOption.Disabled` shows the picture past its edge, while every later
+  report, and `Position` read on the UI thread, says it is at the edge. Neither a coast at no speed
+  nor a custom animation back to the edge then moves the picture. The tracker is kept inside its
+  bounds instead, and a drag past an edge is a stretch the camera holds and eases back itself.
+- **A scroller takes the focus from a pressed element.** The page's `ScrollViewer` focuses itself on
+  every press that bubbles to it, after the map's own handlers. The map takes the focus as the press
+  is released, and marks the release handled; the page's Back and Forward buttons listen with
+  `handledEventsToo`, and a click still raises `Tapped`.
+
+Touch injected with `InjectTouchInput` reaches the tracker through `TryRedirectForManipulation`: a
+pinch and a flick both coast and settle. Measured on `C:\Windows` (51.8 GB), a 240 Hz display,
+Debug, one run of each, from DxgKrnl present events and the UI thread's CPU time, over a 140 ms
+mouse drag and the 2.2 s after it:
+
+| | Before | After |
+| --- | --- | --- |
+| Frame interval during the drag | about 16.6 ms, paced by the mouse | the same |
+| After the release | the picture stops | a 1.0 s fling at the display's rate: mean about 4.2 ms, longest 5.5 ms |
+| UI-thread CPU over the window | 31.2 ms | 78.1 ms |
+
+The UI thread follows every report of the tracker while it coasts, about 0.2 ms each, so the readout
+under the map and the hit test go on naming what the screen shows (§7.1). The picture itself moves
+on the compositor, and no frame of the fling was late.
 
 ## Still open
 

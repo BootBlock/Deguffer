@@ -61,7 +61,7 @@ public sealed class MapRequests
     /// <paramref name="reported"/>: where the request was going, if it got there, and otherwise the
     /// report held inside the picture.
     /// </summary>
-    public MapViewport Rest(MapViewport reported) => At(reported) is { } target ? target : reported.Held;
+    public MapViewport Rest(MapViewport reported) => At(reported) is { } target ? target : reported.Held();
 
     /// <summary>Where the request was going, where <paramref name="reported"/> is there, and otherwise null.</summary>
     private MapViewport? At(MapViewport reported) =>
