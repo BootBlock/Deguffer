@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
 > composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
-> follows an `InteractionTracker`: see [what that found](#what-landing-276-found). The maintainer has
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -303,6 +303,17 @@ The UI thread follows every report of the tracker while it coasts, about 0.2 ms 
 under the map and the hit test go on naming what the screen shows (§7.1). The picture itself moves
 on the compositor, and no frame of the fling was late.
 
+## What landing #307 found
+
+The camera is measured from an origin (`MapOrigin`) so it stays exact past 64×, which #306 needs.
+
+- **Only the corner moves, never the zoom.** The tracker's position counts from the origin and its scale stays the zoom, so moving the origin is one `TryUpdatePosition` at rest. A scale and a position asked for in the same frame can leave the position wrong, so a base zoom would have cost a second request.
+- **The camera and the placements change in one UI commit, the tracker a frame later.** The camera is held at its value from the new origin while every placement is fitted again, then follows the tracker once the tracker reports the move. If a hand takes the camera first, the tracker refuses the request and everything goes back. A hand's report before the answer is read in whichever frame it is nearer, because the two are more than `MapOrigin.Reach` apart.
+- **The tracker's bounds take in both origins while the move is unanswered.** The bounds and the request reach the compositor separately, and a tracker outside its bounds springs back by itself.
+- **The far bound is computed on the CPU in double precision** (`1 - origin`) and stored in the camera's property set, because near the far edge it is small and the expression multiplies it by the scale.
+- **Tiles more than 64 canvases off a drawing are cut** before they become single precision. At 64× or less, no tile is cut.
+- **Driven** on a build with the ceiling raised to 1,024× and a temporary log: the origin moved at rest at 64× and the tracker answered within about 10 ms. Outlines and names stayed on their shapes, and a click at 1,024× selected the shape under the pointer.
+- **Left for #306:** the dimming rectangle in `MapGraphics` has a fixed extent of 2^20 canvas pixels, which is enough for a drawing shown zoomed out by up to 64×.
 ## Still open
 
 The Win2D package's licence, open here until #274, was cleared by the maintainer.
