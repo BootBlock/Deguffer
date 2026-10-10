@@ -51,7 +51,6 @@ public sealed class StarFlight
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(speed);
 
         Period = period;
-        Depth = depth;
 
         // The loop flies a whole number of depths, never none, so the mean speed is the nearest to the
         // one asked for that comes out whole.
@@ -63,10 +62,7 @@ public sealed class StarFlight
     /// <summary>How long one loop of the flight takes.</summary>
     public TimeSpan Period { get; }
 
-    /// <summary>How deep the field is, front to back, in device-independent pixels.</summary>
-    public float Depth { get; }
-
-    /// <summary>How far one loop flies: a whole number of <see cref="Depth"/>s.</summary>
+    /// <summary>How far one loop flies: a whole number of the field's depths.</summary>
     public float LoopDistance { get; }
 
     /// <summary>The camera's speed averaged over the loop, in device-independent pixels a second.</summary>

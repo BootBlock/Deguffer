@@ -35,7 +35,7 @@ public sealed partial class AboutPage : Page
             }
 
             _markLanded = true;
-            Field.Land(Mark, SystemMotion.Current.For(MotionToken.Mark));
+            MarkFlight.Play(Mark, Field, SystemMotion.Current.For(MotionToken.Mark));
         };
     }
 

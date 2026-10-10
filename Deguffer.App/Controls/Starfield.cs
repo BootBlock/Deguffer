@@ -27,7 +27,9 @@ namespace Deguffer.App.Controls;
 /// sheet stretched along that line lengthens every streak on it at once.</para>
 ///
 /// <para>It is decoration: it takes no input and assistive technology skips it. What it does is
-/// <see cref="StarfieldModes"/>' decision, asked again whenever an answer that feeds it can change.</para>
+/// <see cref="StarfieldModes"/>' decision, asked again whenever an answer that feeds it changes: the
+/// page coming or going, the window minimised, restored, hidden or shown, high contrast, the
+/// compositor's word on effects, and the reader's animation setting.</para>
 /// </summary>
 public sealed partial class Starfield : Grid
 {
@@ -118,56 +120,6 @@ public sealed partial class Starfield : Grid
         Unloaded += OnUnloaded;
         SizeChanged += (_, _) => Frame();
         ActualThemeChanged += (_, _) => Tint();
-    }
-
-    /// <summary>
-    /// Fly <paramref name="mark"/> out of the depth into its place, as <paramref name="played"/> plays: it
-    /// starts as a speck where the stars come from and grows into place as it comes. Where nothing
-    /// travels it only fades in where it is.
-    /// </summary>
-    public void Land(UIElement mark, Motion played)
-    {
-        ArgumentNullException.ThrowIfNull(mark);
-
-        if (played.IsInstant)
-        {
-            return;
-        }
-
-        var visual = ElementCompositionPreview.GetElementVisual(mark);
-        var size = mark.ActualSize;
-        var ease = _compositor.CreateCubicBezierEasingFunction(Motion.EaseControlPoints.First, Motion.EaseControlPoints.Second);
-
-        var fade = _compositor.CreateScalarKeyFrameAnimation();
-        fade.InsertKeyFrame(0, 0);
-        fade.InsertKeyFrame(played.Travels ? 0.4f : 1, 1, ease);
-        fade.Duration = played.Duration;
-        visual.StartAnimation(nameof(Visual.Opacity), fade);
-
-        if (!played.Travels)
-        {
-            return;
-        }
-
-        // From the vanishing point at the middle of the field to the mark's own middle, in the mark's
-        // terms, which Translation is in.
-        var middle = mark.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(size.X / 2, size.Y / 2));
-        var from = new Vector3((ActualSize / 2) - new Vector2((float)middle.X, (float)middle.Y), 0);
-
-        ElementCompositionPreview.SetIsTranslationEnabled(mark, true);
-        visual.CenterPoint = new Vector3(size / 2, 0);
-
-        var move = _compositor.CreateVector3KeyFrameAnimation();
-        move.InsertKeyFrame(0, from);
-        move.InsertKeyFrame(1, Vector3.Zero, ease);
-        move.Duration = played.Duration;
-        visual.StartAnimation("Translation", move);
-
-        var grow = _compositor.CreateVector3KeyFrameAnimation();
-        grow.InsertKeyFrame(0, new Vector3(0.02f, 0.02f, 1));
-        grow.InsertKeyFrame(1, Vector3.One, ease);
-        grow.Duration = played.Duration;
-        visual.StartAnimation(nameof(Visual.Scale), grow);
     }
 
     /// <summary>
@@ -263,6 +215,7 @@ public sealed partial class Starfield : Grid
         XamlRoot.Changed += OnRootChanged;
         SystemSettings.ColorValuesChanged += OnSystemColoursChanged;
         _capabilities.Changed += OnCapabilitiesChanged;
+        SystemMotion.Current.Changed += OnMotionChanged;
 
         Frame();
         Tint();
@@ -278,6 +231,7 @@ public sealed partial class Starfield : Grid
 
         SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
         _capabilities.Changed -= OnCapabilitiesChanged;
+        SystemMotion.Current.Changed -= OnMotionChanged;
 
         Decide();
     }
@@ -293,11 +247,10 @@ public sealed partial class Starfield : Grid
     private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
         DispatcherQueue.TryEnqueue(Decide);
 
-    /// <summary>
-    /// Put the field in the mode it should be in now. The reader's animation setting is read here too,
-    /// so a change to it is followed the next time anything else is, as <see cref="SystemMotion"/>
-    /// explains it has to be.
-    /// </summary>
+    /// <summary>The reader turned animation effects on or off. Raised on the UI thread.</summary>
+    private void OnMotionChanged(object? sender, EventArgs e) => Decide();
+
+    /// <summary>Put the field in the mode it should be in now.</summary>
     private void Decide()
     {
         var seen = IsLoaded && XamlRoot is { IsHostVisible: true };
@@ -335,7 +288,7 @@ public sealed partial class Starfield : Grid
 
             // Absent and Still alike: nothing moves, and a field shown again later starts from rest.
             default:
-                Land();
+                Rest();
                 break;
         }
     }
@@ -372,7 +325,7 @@ public sealed partial class Starfield : Grid
     }
 
     /// <summary>Stop the loop and put the camera at rest.</summary>
-    private void Land()
+    private void Rest()
     {
         if (_flown)
         {

@@ -363,7 +363,9 @@ Two of these are load-bearing for the safety model rather than merely stylistic:
 Deguffer uses a **glass-like Acrylic** backdrop for its windows: `DesktopAcrylicBackdrop` set as the
 window's `SystemBackdrop`, with `ExtendsContentIntoTitleBar` so the material runs the full height of
 the window rather than stopping under a solid title bar. Layout roots stay transparent; surfaces sit
-on Fluent layer brushes so the material shows through.
+on Fluent layer brushes so the material shows through. The one exception is a surface over moving
+decoration, the About page's starfield: its cards take a solid fill, because a layer brush would let a
+star pass behind the text, and the page's header sits in a row the starfield does not reach.
 
 Deliberate points, and the traps that come with them:
 
