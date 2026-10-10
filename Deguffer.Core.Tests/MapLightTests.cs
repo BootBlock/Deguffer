@@ -75,8 +75,10 @@ public sealed class MapLightTests
         var films = Find(tree, "films");
 
         var outline = Assert.Single(Lit(MapLight.Folder(tree, films).On(Draw(tree, ExploreView.Treemap), NothingGone)));
+        var sector = Assert.Single(Lit(MapLight.Folder(tree, films).On(Draw(tree, ExploreView.Sunburst), NothingGone)));
 
         Assert.Equal(films, outline.Node);
+        Assert.Equal(films, sector.Node);
     }
 
     /// <summary>A folder too deep to be drawn on its own is lit where the screen shows it: the deepest folder above it that is drawn.</summary>
