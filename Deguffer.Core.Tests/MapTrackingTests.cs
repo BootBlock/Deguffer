@@ -36,10 +36,10 @@ public sealed class MapTrackingTests
     /// The compositor keeps the tracker's position in single precision. Measured from an origin near
     /// what is shown it stays small, so a screen a few screens from the origin is placed to a small
     /// fraction of a pixel even at a hundred thousand times; measured from the picture's corner it is
-    /// tens of millions of pixels, and the same screen is out by whole pixels.
+    /// millions of pixels, and the same screen is out by a visible fraction of one or more.
     /// </summary>
     [Theory]
-    [InlineData(64)]
+    [InlineData(4096)]
     [InlineData(1e5)]
     public void FromANearbyOriginTheTrackerIsPlacedToAFractionOfAPixel(double zoom)
     {
@@ -48,10 +48,7 @@ public sealed class MapTrackingTests
 
         Assert.True(Misplaced(origin) < 0.01, $"measured from nearby, out by {Misplaced(origin)} px");
 
-        if (zoom > MapViewport.MaximumZoom)
-        {
-            Assert.True(Misplaced(default) > 1, $"measured from the corner, out by only {Misplaced(default)} px");
-        }
+        Assert.True(Misplaced(default) > 0.01, $"measured from the corner, out by only {Misplaced(default)} px");
 
         double Misplaced(MapOrigin from)
         {
@@ -227,11 +224,15 @@ public sealed class MapTrackingTests
     public void AnOriginHasDriftedOnlyOnceTheScreenIsOutOfReach()
     {
         var origin = new MapOrigin(0.5, 0.5);
-        var near = MapViewport.Seen(64, 0.5 + ((MapOrigin.Reach - 1) / (64 * Width)), 0.5);
-        var far = MapViewport.Seen(64, 0.5, 0.5 - ((MapOrigin.Reach + 1) / (64 * Height)));
+        var nearAcross = MapViewport.Seen(64, 0.5 + ((MapOrigin.Reach - 1) / (64 * Width)), 0.5);
+        var nearDown = MapViewport.Seen(64, 0.5, 0.5 - ((MapOrigin.Reach - 1) / (64 * Height)));
+        var farAcross = MapViewport.Seen(64, 0.5 - ((MapOrigin.Reach + 1) / (64 * Width)), 0.5);
+        var farDown = MapViewport.Seen(64, 0.5, 0.5 + ((MapOrigin.Reach + 1) / (64 * Height)));
 
-        Assert.False(origin.Drifted(near, Width, Height), "an origin within reach was moved");
-        Assert.True(origin.Drifted(far, Width, Height), "an origin out of reach was kept");
+        Assert.False(origin.Drifted(nearAcross, Width, Height), "an origin within reach across was moved");
+        Assert.False(origin.Drifted(nearDown, Width, Height), "an origin within reach down was moved");
+        Assert.True(origin.Drifted(farAcross, Width, Height), "an origin out of reach across was kept");
+        Assert.True(origin.Drifted(farDown, Width, Height), "an origin out of reach down was kept");
     }
 
     /// <summary>

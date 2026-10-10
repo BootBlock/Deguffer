@@ -50,7 +50,8 @@ public sealed class TreemapZoomTests
         Assert.Equal((TreemapLayout.Reach + 1) * Width, root.X + root.Width);
         Assert.Equal((TreemapLayout.Reach + 1) * Height, root.Y + root.Height);
 
-        var deepest = MapViewport.Anchored(MapViewport.MaximumZoom, 0.99, 0.99, 1, 1);
+        // The screen at the picture's far corner: the root runs furthest off the canvas there.
+        var deepest = MapViewport.Anchored(MapViewport.MaximumZoom, 1, 1, 1, 1);
         var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: deepest)
             .Single(tile => tile.Node == tree.RootNode);
 

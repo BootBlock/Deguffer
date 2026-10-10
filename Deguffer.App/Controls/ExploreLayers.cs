@@ -38,6 +38,10 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>Separate from <see cref="ExploreMap"/>, which decides what is drawn and what the pointer is
 /// over; this holds surfaces and places them, and knows nothing of trees (G1).</para>
+///
+/// <para>Over 500 lines because keeping the drawings, landing one a region at a time, stacking them
+/// and carrying them while a folder opens all act on the one set of layers and its order, and each
+/// would otherwise reach into the others' state.</para>
 /// </summary>
 internal sealed class ExploreLayers
 {

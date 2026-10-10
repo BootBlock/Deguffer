@@ -161,7 +161,6 @@ internal sealed class ExploreHighlight
 
         // The dimming first, so the lifted shape and every line are over it.
         _dimBounds = compositor.CreateShapeVisual();
-        _dimBounds.Offset = new Vector3(-Margin, -Margin, 0);
         _dimPlaced = compositor.CreateContainerShape();
         _dimBounds.Shapes.Add(_dimPlaced);
         _dimmed = compositor.CreatePathGeometry(graphics.Nothing);
@@ -174,7 +173,6 @@ internal sealed class ExploreHighlight
         _camera.Children.InsertAtTop(_lift.Root);
 
         _bounds = compositor.CreateShapeVisual();
-        _bounds.Offset = new Vector3(-Margin, -Margin, 0);
         _camera.Children.InsertAtTop(_bounds);
 
         _placed = compositor.CreateContainerShape();
@@ -274,18 +272,26 @@ internal sealed class ExploreHighlight
 
     /// <summary>
     /// Lay all of it over a canvas that lies at <paramref name="placed"/> in a picture
-    /// <paramref name="width"/> by <paramref name="height"/> device-independent pixels across.
+    /// <paramref name="width"/> by <paramref name="height"/> device-independent pixels across, measured
+    /// from <paramref name="origin"/>.
+    ///
+    /// <para>A shape visual draws nothing past its own bounds, so they are the whole picture and a
+    /// margin round it, wherever the origin puts the picture: from the origin, the picture's corner is
+    /// behind and above it.</para>
     /// </summary>
-    public void PlaceOver(MapTransform placed, double width, double height)
+    public void PlaceOver(MapTransform placed, double width, double height, MapOrigin origin)
     {
+        var corner = new Vector3((float)(-origin.Left * width) - Margin, (float)(-origin.Top * height) - Margin, 0);
         var size = new Vector2((float)width + (2 * Margin), (float)height + (2 * Margin));
         var scale = new Vector2((float)placed.ScaleX, (float)placed.ScaleY);
-        var offset = new Vector2((float)placed.X + Margin, (float)placed.Y + Margin);
+        var offset = new Vector2((float)(placed.X - corner.X), (float)(placed.Y - corner.Y));
 
+        _bounds.Offset = corner;
         _bounds.Size = size;
         _placed.Scale = scale;
         _placed.Offset = offset;
 
+        _dimBounds.Offset = corner;
         _dimBounds.Size = size;
         _dimPlaced.Scale = scale;
         _dimPlaced.Offset = offset;

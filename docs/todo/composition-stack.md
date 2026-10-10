@@ -308,12 +308,13 @@ on the compositor, and no frame of the fling was late.
 The camera is measured from an origin (`MapOrigin`) so it stays exact past 64×, which #306 needs.
 
 - **Only the corner moves, never the zoom.** The tracker's position counts from the origin and its scale stays the zoom, so moving the origin is one `TryUpdatePosition` at rest. A scale and a position asked for in the same frame can leave the position wrong, so a base zoom would have cost a second request.
-- **The camera and the placements change in one UI commit, the tracker a frame later.** The camera is held at its value from the new origin while every placement is fitted again, then follows the tracker once the tracker reports the move. If a hand takes the camera first, the tracker refuses the request and everything goes back. A hand's report before the answer is read in whichever frame it is nearer, because the two are more than `MapOrigin.Reach` apart.
+- **The camera and the placements change in one UI commit, the tracker a frame later.** The camera is held at its value from the new origin while every placement is fitted again, then follows the tracker once the tracker reports the move. The tracker answers in the order it did things, so every report before its answer, a hand's included, is read from the old origin (`MapOriginMove`). Only the answer resolves the move. If a hand holds the camera, the tracker refuses the request and everything goes back to the old origin. A turn of the wheel or the touchpad only coasts the tracker, so the request is carried out, and stops the coast where it went.
 - **The tracker's bounds take in both origins while the move is unanswered.** The bounds and the request reach the compositor separately, and a tracker outside its bounds springs back by itself.
 - **The far bound is computed on the CPU in double precision** (`1 - origin`) and stored in the camera's property set, because near the far edge it is small and the expression multiplies it by the scale.
 - **Tiles more than 64 canvases off a drawing are cut** before they become single precision. At 64× or less, no tile is cut.
 - **Driven** on a build with the ceiling raised to 1,024× and a temporary log: the origin moved at rest at 64× and the tracker answered within about 10 ms. Outlines and names stayed on their shapes, and a click at 1,024× selected the shape under the pointer.
 - **Left for #306:** the dimming rectangle in `MapGraphics` has a fixed extent of 2^20 canvas pixels, which is enough for a drawing shown zoomed out by up to 64×.
+
 ## Still open
 
 The Win2D package's licence, open here until #274, was cleared by the maintainer.

@@ -824,7 +824,8 @@ public sealed class ExploreMap : UserControl
         _highlight.PlaceOver(
             _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _zoom.Origin),
             ActualWidth,
-            ActualHeight);
+            ActualHeight,
+            _zoom.Origin);
 
         _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _scale, _zoom.Origin));
     }

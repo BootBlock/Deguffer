@@ -59,7 +59,7 @@ internal sealed class MapCamera
         Rebase(default);
         Settle();
 
-        _scale =compositor.CreateExpressionAnimation("camera.Scale");
+        _scale = compositor.CreateExpressionAnimation("camera.Scale");
         _scale.SetReferenceParameter("camera", Properties);
         _offset = compositor.CreateExpressionAnimation("camera.Offset");
         _offset.SetReferenceParameter("camera", Properties);
@@ -93,8 +93,8 @@ internal sealed class MapCamera
 
         var offset = elastic
             ? $"-tracker.Position + camera.{Stretched}"
-            : $"-Vector3(Clamp(tracker.Position.X, {Least("X", Near, scale)}, {Most("X", Far, scale)}), "
-                + $"Clamp(tracker.Position.Y, {Least("Y", Near, scale)}, {Most("Y", Far, scale)}), 0)";
+            : $"-Vector3(Clamp(tracker.Position.X, {Least("X", Near, scale)}, {Most("X", Near, Far, scale)}), "
+                + $"Clamp(tracker.Position.Y, {Least("Y", Near, scale)}, {Most("Y", Near, Far, scale)}), 0)";
 
         Properties.StartAnimation(nameof(Visual.Scale), Expression($"Vector3({scale}, {scale}, 1)", tracker));
         Properties.StartAnimation(nameof(Visual.Offset), Expression(offset, tracker));
@@ -119,8 +119,8 @@ internal sealed class MapCamera
                 + $"Min({Least("Y", Near, scale)}, {Least("Y", FormerNear, scale)}), 0)",
             tracker);
         var most = Expression(
-            $"Vector3(Max({Most("X", Far, scale)}, {Most("X", FormerFar, scale)}), "
-                + $"Max({Most("Y", Far, scale)}, {Most("Y", FormerFar, scale)}), 0)",
+            $"Vector3(Max({Most("X", Near, Far, scale)}, {Most("X", FormerNear, FormerFar, scale)}), "
+                + $"Max({Most("Y", Near, Far, scale)}, {Most("Y", FormerNear, FormerFar, scale)}), 0)",
             tracker);
 
         tracker.StartAnimation(nameof(InteractionTracker.MinPosition), least);
@@ -168,9 +168,14 @@ internal sealed class MapCamera
     private static string Least(string axis, string near, string scale) =>
         $"(-camera.{near}.{axis} * {scale} * camera.Size.{axis})";
 
-    /// <summary>The tracker's greatest position on <paramref name="axis"/> at <paramref name="scale"/>, from the picture left past the origin in <paramref name="far"/>.</summary>
-    private static string Most(string axis, string far, string scale) =>
-        $"(((camera.{far}.{axis} * {scale}) - 1) * camera.Size.{axis})";
+    /// <summary>
+    /// The tracker's greatest position on <paramref name="axis"/> at <paramref name="scale"/>, from the
+    /// picture left past the origin in <paramref name="far"/>. Never below the least position from the
+    /// origin in <paramref name="near"/>: at a scale of one the two are the same position, and worked
+    /// out apart they can round a hair the wrong way round. <see cref="MapOrigin.Across"/> does the same.
+    /// </summary>
+    private static string Most(string axis, string near, string far, string scale) =>
+        $"Max({Least(axis, near, scale)}, (((camera.{far}.{axis} * {scale}) - 1) * camera.Size.{axis}))";
 
     /// <summary>
     /// Show the picture pulled (<paramref name="x"/>, <paramref name="y"/>) pixels further than the
