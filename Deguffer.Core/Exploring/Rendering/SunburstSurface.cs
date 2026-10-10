@@ -43,6 +43,8 @@ public sealed class SunburstSurface : ExploreSurface
     /// <summary>Null throughout: a sunburst's shapes are sectors.</summary>
     public override ExploreTile? TileAt(float x, float y) => null;
 
+    public override IReadOnlyList<ExploreTile> Tiles => [];
+
     /// <summary>Null throughout, for the same reason.</summary>
     public override MapFrame? FrameOf(int node) => null;
 

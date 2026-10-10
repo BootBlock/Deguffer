@@ -17,7 +17,7 @@ namespace Deguffer.Core.Exploring;
 /// <para>It is drawn through <see cref="Layout.ISizedTree"/>, which is the part of it a layout reads.
 /// The other tree behind that seam is <see cref="Memory.MemoryTree"/>.</para>
 /// </summary>
-public sealed class ExploreTree : Layout.ISizedTree
+public sealed class ExploreTree : Layout.ITrackedTree
 {
     private readonly string[] _names;
     private readonly int[] _parents;
@@ -120,6 +120,15 @@ public sealed class ExploreTree : Layout.ISizedTree
     public int NodeCount => _names.Length;
 
     public string NameOf(int node) => _names[node];
+
+    /// <summary>
+    /// Find each node in <paramref name="later"/> by its path, where that is a scan of the same place.
+    /// See <see cref="ExploreCounterparts"/>.
+    /// </summary>
+    public Func<int, int?>? CounterpartsIn(Layout.ISizedTree later) =>
+        later is ExploreTree scanned && string.Equals(RootPath, scanned.RootPath, StringComparison.OrdinalIgnoreCase)
+            ? new ExploreCounterparts(this, scanned).Find
+            : null;
 
     /// <summary>
     /// The bytes this node occupies on the disk, which is what every picture of the tree draws.
@@ -520,6 +529,21 @@ public sealed class ExploreTree : Layout.ISizedTree
             }
 
             MemoryExtensions.Sort(keys.AsSpan(), slice);
+
+            // Equal sizes are put in name order. Left as the sort leaves them, they can come out in
+            // a different order in each tree of the same disk, and a map moving from one layout to
+            // the next would show equal siblings trading places for no reason (#309).
+            for (int start = 0, end; start < length; start = end)
+            {
+                for (end = start + 1; end < length && keys[end] == keys[start]; end++)
+                {
+                }
+
+                if (end - start > 1)
+                {
+                    MemoryExtensions.Sort(slice[start..end], byName);
+                }
+            }
         }
     }
 
