@@ -1,6 +1,7 @@
 using System.Numerics;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
 
 namespace Deguffer.App.Controls;
@@ -75,6 +76,12 @@ internal sealed class ExploreLayers
 
     private ExploreLayer? _current;
 
+    /// <summary>
+    /// How many drawings are fading in over the pictures before them. While one is, those pictures are
+    /// what shows through it, so none of their surfaces is taken for another drawing.
+    /// </summary>
+    private int _fading;
+
     public ExploreLayers(Compositor compositor, MapGraphics graphics, MapCamera camera)
     {
         _compositor = compositor;
@@ -139,8 +146,13 @@ internal sealed class ExploreLayers
     /// how far it is zoomed, which is how the whole picture is painted under a zoomed one.
     /// <paramref name="arrived"/> is told once all of it has landed.
     /// </summary>
-    public ICanvasRedrawTarget Arrival(bool onTop, Action<ExploreSurface> arrived) =>
-        new Landing(this, onTop, arrived);
+    /// <param name="fade">
+    /// How a drawing on top comes in over the one it replaces. Unseen while it lands and faded in once
+    /// all of it has, for the same picture in a new look, so the old look turns into the new one rather
+    /// than giving way to it a region at a time. <see cref="Motion.Instant"/> lands it as it is painted.
+    /// </param>
+    public ICanvasRedrawTarget Arrival(bool onTop, Action<ExploreSurface> arrived, Motion fade) =>
+        new Landing(this, onTop, arrived, onTop ? fade : Motion.Instant);
 
     /// <summary>
     /// Stop showing any drawing again, for a picture that has changed: another tree, colours, size or
@@ -310,7 +322,7 @@ internal sealed class ExploreLayers
     {
         var layer = Free(width, height)
             ?? _layers
-                .Where(kept => kept.Drawing is not null && kept.Picture != _picture && kept != _current)
+                .Where(kept => kept.Drawing is not null && kept.Picture != _picture && kept != _current && _fading == 0)
                 .MinBy(kept => kept.LastShown);
 
         if (layer is null && !viewport.IsWhole)
@@ -389,7 +401,7 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>One redraw landing in one of these layers. See <see cref="ICanvasRedrawTarget"/>.</summary>
-    private sealed class Landing(ExploreLayers layers, bool onTop, Action<ExploreSurface> arrived)
+    private sealed class Landing(ExploreLayers layers, bool onTop, Action<ExploreSurface> arrived, Motion fade)
         : ICanvasRedrawTarget
     {
         private ExploreLayer? _layer;
@@ -405,6 +417,8 @@ internal sealed class ExploreLayers
             layer.LandsOnTop = onTop;
             layer.Picture = layers._picture;
             layer.Fit(layers._size.Width, layers._size.Height);
+            layer.Sprite.StopAnimation(nameof(Visual.Opacity));
+            layer.Sprite.Opacity = fade.IsInstant ? 1 : 0;
             layer.Sprite.IsVisible = true;
 
             _layer = layer;
@@ -426,14 +440,21 @@ internal sealed class ExploreLayers
 
             if (onTop)
             {
-                // The drawings of the picture this one replaces have been showing round it while it
-                // landed. Covered now, they go.
-                foreach (var other in layers._layers)
+                if (fade.IsInstant)
                 {
-                    if (other.Picture != layer.Picture)
+                    // The drawings of the picture this one replaces have been showing round it while it
+                    // landed. Covered now, they go.
+                    foreach (var other in layers._layers)
                     {
-                        Hide(other);
+                        if (other.Picture != layer.Picture)
+                        {
+                            Hide(other);
+                        }
                     }
+                }
+                else
+                {
+                    FadeIn(layer);
                 }
 
                 layers.Promote(layer);
@@ -444,5 +465,37 @@ internal sealed class ExploreLayers
         }
 
         public void Withdraw(CanvasRedraw redraw) => Hide(_layer!);
+
+        /// <summary>
+        /// Fade <paramref name="layer"/> in over the drawings of the pictures before it, which go once
+        /// it covers them. Only those older than it: a picture handed over during the fade has
+        /// drawings of its own on the way, which are not this fade's to take.
+        /// </summary>
+        private void FadeIn(ExploreLayer layer)
+        {
+            var compositor = layer.Sprite.Compositor;
+            var rise = compositor.CreateScalarKeyFrameAnimation();
+            rise.InsertKeyFrame(0, 0);
+            rise.InsertKeyFrame(1, 1);
+            rise.Duration = fade.Duration;
+
+            var fading = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            layer.Sprite.StartAnimation(nameof(Visual.Opacity), rise);
+            fading.End();
+            layers._fading++;
+
+            fading.Completed += (_, _) =>
+            {
+                layers._fading--;
+
+                foreach (var other in layers._layers)
+                {
+                    if (other.Picture < layer.Picture && other != layers._current && other.Landing is null)
+                    {
+                        Hide(other);
+                    }
+                }
+            };
+        }
     }
 }

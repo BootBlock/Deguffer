@@ -18,8 +18,20 @@ public sealed partial class SettingsPage : Page
         InitializeComponent();
 
         Loaded += OnLoaded;
-        Unloaded += (_, _) => _visit?.Cancel();
+        Unloaded += (_, _) =>
+        {
+            _visit?.Cancel();
+            App.Preferences.Changed -= OnPreferencesChanged;
+        };
     }
+
+    /// <summary>
+    /// The preview follows the stored preferences rather than the box, so it shows what took effect:
+    /// a spacing that could not be saved puts the box back, and the preview with it.
+    /// </summary>
+    private void OnPreferencesChanged(object? sender, EventArgs e) => ShowSpacing();
+
+    private void ShowSpacing() => SpacingPreview.Show(MapLook.From(App.Preferences.Current), ExploreView.Treemap);
 
     /// <summary>The listing of drives for the visit under way, stopped when the page is left.</summary>
     private CancellationTokenSource? _visit;
@@ -29,6 +41,9 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ShowSpacing();
+        App.Preferences.Changed += OnPreferencesChanged;
+
         _visit?.Cancel();
         _visit?.Dispose();
         _visit = new CancellationTokenSource();

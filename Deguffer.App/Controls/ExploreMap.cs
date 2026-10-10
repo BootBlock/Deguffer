@@ -5,6 +5,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
@@ -799,7 +800,26 @@ public sealed class ExploreMap : UserControl
         _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _scale));
     }
 
-    private void Redraw()
+    /// <summary>
+    /// Draw the picture on screen again in a new look: <paramref name="colours"/> and
+    /// <paramref name="spacing"/>, for the same tree, folder and view. The old look fades into the new
+    /// once the new drawing has landed (<see cref="MotionToken.Crossfade"/>), so the difference a choice
+    /// makes is seen as it is made, rather than the new look replacing the old a region at a time.
+    /// </summary>
+    public void Restyle(Func<DateTime, ShapeColours> colours, ExploreSpacing spacing)
+    {
+        ArgumentNullException.ThrowIfNull(colours);
+
+        _colours = colours;
+        _spacing = spacing;
+
+        Redraw(SystemMotion.Current.For(MotionToken.Crossfade));
+    }
+
+    private void Redraw() => Redraw(Motion.Instant);
+
+    /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLayers.Arrival"/>.</param>
+    private void Redraw(Motion fade)
     {
         // Whatever brought us here is more current than a size change still waiting to be drawn, or a
         // redraw stopped when the page was left.
@@ -866,7 +886,7 @@ public sealed class ExploreMap : UserControl
         // for the rest of the move like any other drawing.
         _pictures.Forget();
 
-        Request(_zoom.Shown);
+        Request(_zoom.Shown, fade);
     }
 
     /// <summary>
@@ -903,14 +923,15 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        Request(_zoom.Shown);
+        Request(_zoom.Shown, Motion.Instant);
     }
 
     /// <summary>
     /// Show <paramref name="viewport"/> of the picture: the drawing kept of it, at once, where there
     /// is one, and otherwise a redraw of it, which lands over the picture on screen.
     /// </summary>
-    private void Request(MapViewport viewport)
+    /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLayers.Arrival"/>.</param>
+    private void Request(MapViewport viewport, Motion fade)
     {
         if (_pictures.Show(viewport) is { } kept)
         {
@@ -933,7 +954,7 @@ public sealed class ExploreMap : UserControl
             _buffers.PixelsFor(width, height),
             Ground(),
             Focus(viewport, width, height),
-            _pictures.Arrival(onTop: true, Present));
+            _pictures.Arrival(onTop: true, Present, fade));
     }
 
     /// <summary>
@@ -1049,7 +1070,7 @@ public sealed class ExploreMap : UserControl
             _buffers.PixelsFor(drawing.Width, drawing.Height),
             Ground(),
             focus: null,
-            _pictures.Arrival(onTop: false, static _ => { }));
+            _pictures.Arrival(onTop: false, static _ => { }, Motion.Instant));
     }
 
     /// <summary>
