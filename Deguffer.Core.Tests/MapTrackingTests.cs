@@ -56,7 +56,9 @@ public sealed class MapTrackingTests
             var single = new MapTracking((float)exact.X, (float)exact.Y, exact.Scale, from);
             var shown = single.Shown(Width, Height, elastic: true);
 
-            return Math.Abs(shown.Left - viewport.Left) * zoom * Width;
+            return Math.Max(
+                Math.Abs(shown.Left - viewport.Left) * zoom * Width,
+                Math.Abs(shown.Top - viewport.Top) * zoom * Height);
         }
     }
 

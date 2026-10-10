@@ -110,4 +110,32 @@ public sealed class MapStretchTests
             Assert.Equal(cornered.Top, originated.Top, Precision);
         }
     }
+
+    /// <summary>
+    /// A drag measured from an origin the tracker turned out not to keep goes on from where the hand
+    /// has the picture, measured from the origin it did keep: before and after, it shows the same, and
+    /// so does every pull that follows, edges included.
+    /// </summary>
+    [Fact]
+    public void ADragRemeasuredFromAnotherOriginGoesOnWhereTheHandHasIt()
+    {
+        var shown = Middle.Shown(Width, Height, elastic: true);
+        var before = new MapOrigin(0.4, 0.55);
+        var stretch = new MapStretch(MapTracking.Of(shown, Width, Height, before), Width, Height, elastic: true);
+        var reference = new MapStretch(Middle, Width, Height, elastic: true);
+
+        stretch.Pull(150, -60);
+        reference.Pull(150, -60);
+        stretch.Remeasure(default);
+
+        foreach (var (x, y) in new[] { (0.0, 0.0), (90.0, 30.0), (-1e6, 0.0) })
+        {
+            var remeasured = stretch.Pull(x, y);
+            var expected = reference.Pull(x, y);
+
+            Assert.Equal(default, remeasured.Origin);
+            Assert.Equal(expected.X, remeasured.X, Precision);
+            Assert.Equal(expected.Y, remeasured.Y, Precision);
+        }
+    }
 }

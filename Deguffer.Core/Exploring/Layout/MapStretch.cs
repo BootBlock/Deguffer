@@ -23,11 +23,11 @@ public sealed class MapStretch
     private readonly double _height;
 
     /// <summary>The tracker's position at each edge of the picture, at the drag's scale.</summary>
-    private readonly (double Least, double Most) _across;
+    private (double Least, double Most) _across;
 
-    private readonly (double Least, double Most) _down;
+    private (double Least, double Most) _down;
 
-    private readonly MapOrigin _origin;
+    private MapOrigin _origin;
 
     private readonly bool _elastic;
 
@@ -71,6 +71,19 @@ public sealed class MapStretch
             Hold(_handY, _down, Reach * _height),
             Scale,
             _origin);
+    }
+
+    /// <summary>
+    /// Measure the drag from <paramref name="origin"/> from now on, for a tracker that turned out to
+    /// be measured from it: where the hand has the picture stays where it is.
+    /// </summary>
+    public void Remeasure(MapOrigin origin)
+    {
+        _handX += (_origin.Left - origin.Left) * Scale * _width;
+        _handY += (_origin.Top - origin.Top) * Scale * _height;
+        _origin = origin;
+        _across = origin.Across(Scale, _width);
+        _down = origin.Down(Scale, _height);
     }
 
     private double Hold(double asked, (double Least, double Most) edges, double reach)

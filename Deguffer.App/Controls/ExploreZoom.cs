@@ -81,6 +81,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>The camera's move to a new origin, until the tracker answers it.</summary>
     private MapOriginMove? _move;
 
+    /// <summary>Whether a hand's coast came to rest while the tracker had not yet answered the move.</summary>
+    private bool _restedBeforeAnswer;
+
     public ExploreZoom(Visual source, MapCamera camera, IMotionPolicy motion, DispatcherQueue dispatcher)
     {
         _motion = motion;
@@ -410,6 +413,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         {
             if (!move.CarriedOutBy(args.RequestId))
             {
+                _restedBeforeAnswer |= args.RequestId == 0 && _requests.Reports(0);
                 return;
             }
 
@@ -546,6 +550,10 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         var from = _origin;
 
+        // At rest the tracker is where the screen is, whichever origin it turns out to be measured
+        // from, which is where it stays if the move is refused before a hand reports anything.
+        _reported = Shown;
+        _restedBeforeAnswer = false;
         _origin = MapOrigin.At(Shown);
         _camera.Hold(Shown.Camera(_size.Width, _size.Height, _origin));
         _camera.Rebase(_origin);
@@ -574,30 +582,78 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         {
             _origin = move.From;
             _camera.Rebase(_origin);
+        }
+
+        _camera.Settle();
+        _camera.Track(_tracker, _elastic);
+
+        if (!carriedOut)
+        {
             OriginMoved?.Invoke(this, EventArgs.Empty);
 
             Shown = _reported;
             Moved?.Invoke(this, EventArgs.Empty);
+
+            if (_requests.AskedSince(move.Request))
+            {
+                Reask();
+            }
         }
         else if (_requests.Reports(0))
         {
             // A wheel or a touchpad began to coast before the move, and the move stopped it where the
-            // move went: the tracker is there, and comes to rest there.
+            // move went: the tracker is there. It comes to rest there, unless the coast had already
+            // rested, and a tracker at rest does not report coming to rest again.
             _requests.Asked(move.Request, move.Viewport);
-            _moving = true;
             Shown = move.Viewport;
             _target = move.Viewport;
 
             Moved?.Invoke(this, EventArgs.Empty);
             Retargeted?.Invoke(this, EventArgs.Empty);
-        }
 
-        _camera.Settle();
-        _camera.Track(_tracker, _elastic);
+            _moving = !_restedBeforeAnswer;
+
+            if (_restedBeforeAnswer)
+            {
+                Rest();
+            }
+        }
     }
 
+    /// <summary>
+    /// Ask again for what was asked after a move of the origin the tracker then refused: it was
+    /// measured from the new origin, and the tracker is measured from the old one. A drag goes on from
+    /// where the hand has the picture, and a glide or a jump goes again to where it was going. A fling
+    /// is a speed rather than a place, and needs nothing.
+    /// </summary>
+    private void Reask()
+    {
+        if (_stretch is not null)
+        {
+            _stretch.Remeasure(_origin);
+
+            var held = _stretch.Pull(0, 0).Held(_size.Width, _size.Height);
+
+            _requests.Asked(_tracker.TryUpdatePosition(new Vector3((float)held.X, (float)held.Y, 0)), null);
+            return;
+        }
+
+        if (_requests.Destination is not { } destination)
+        {
+            return;
+        }
+
+        if (_moving)
+        {
+            _requests.Asked(Animate(destination, _motion.For(MotionToken.Camera)), destination);
+            return;
+        }
+
+        Jump(destination);
+    }
     /// <summary>The origin a report caused by request <paramref name="id"/> is measured from.</summary>
     private MapOrigin OriginFor(long id) => _move is { } move ? move.MeasuredFor(id) : _origin;
+
     /// <summary>A hand took the camera on the compositor: every request before it is over.</summary>
     private void TakenByHand()
     {
