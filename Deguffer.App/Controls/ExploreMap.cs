@@ -1,3 +1,4 @@
+using System.Numerics;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
@@ -33,7 +34,8 @@ namespace Deguffer.App.Controls;
 /// <para>Two things are not in the picture, and each has a part of its own that the camera moves
 /// with it: <see cref="ExploreLabels"/> for the names, so they scale with the user's text size, and
 /// <see cref="ExploreHighlight"/> for the lines round what is picked and what the pointer is over,
-/// so a click moves a line rather than rasterising a volume again.</para>
+/// the dimming round a selection, the shape under the pointer lifted and the hatch over what is
+/// being removed, so a click moves a line rather than rasterising a volume again.</para>
 ///
 /// <para>Nothing here knows what a drive is, how one is scanned, or how any of the views are laid
 /// out. It is handed a tree, a node and a view, it asks Core for the matching
@@ -164,6 +166,14 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>What the user picked, as a set because it is asked of every shape in the drawing.</summary>
     private readonly HashSet<int> _picked = [];
+
+    /// <summary>What a removal under way is acting on, and the tree it is in. See <see cref="MarkRemoving"/>.</summary>
+    private readonly HashSet<int> _marked = [];
+
+    private ISizedTree? _markedTree;
+
+    /// <summary>Whether the compositor can draw effects without slowing the picture down, and when that changes.</summary>
+    private readonly CompositionCapabilities _capabilities = new();
 
     /// <summary>
     /// The one node under the pointer, in the shape <see cref="ExploreSurface.Outlines"/> wants.
@@ -318,6 +328,7 @@ public sealed class ExploreMap : UserControl
 
             SystemSettings.TextScaleFactorChanged += OnTextScaleChanged;
             SystemSettings.ColorValuesChanged += OnSystemColoursChanged;
+            _capabilities.Changed += OnCapabilitiesChanged;
             TintHighlight();
 
             _graphics.Replaced += OnDeviceReplaced;
@@ -395,6 +406,7 @@ public sealed class ExploreMap : UserControl
 
             SystemSettings.TextScaleFactorChanged -= OnTextScaleChanged;
             SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
+            _capabilities.Changed -= OnCapabilitiesChanged;
             _graphics.Replaced -= OnDeviceReplaced;
         };
 
@@ -671,6 +683,24 @@ public sealed class ExploreMap : UserControl
         // What the pointer is over may have just become what is picked, in which case it stops
         // being outlined separately. See ShowHovered.
         ShowHovered();
+    }
+
+    /// <summary>
+    /// Mark <paramref name="nodes"/> of <paramref name="tree"/> out on the picture as what a removal
+    /// under way is acting on, and nothing once it is over.
+    ///
+    /// <para>Told, as the selection is, because what is being removed is the removal's to say: it is
+    /// what was picked when the removal was asked for, which a pick made since does not change.</para>
+    /// </summary>
+    public void MarkRemoving(ISizedTree? tree, IReadOnlyList<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        _markedTree = tree;
+        _marked.Clear();
+        _marked.UnionWith(nodes);
+
+        ShowMarked();
     }
 
     /// <summary>
@@ -974,6 +1004,7 @@ public sealed class ExploreMap : UserControl
         Fit();
         Place();
         ShowPicked();
+        ShowMarked();
         ReportWhatThePointerIsOver();
 
         // A folder that finished opening before its picture arrived finishes now, over it.
@@ -1122,9 +1153,28 @@ public sealed class ExploreMap : UserControl
             _under.Add(hit.Node);
         }
 
+        if (Outlining is not { } drawing)
+        {
+            _highlight.ShowHovered([], null, Vector2.Zero);
+            return;
+        }
+
         _highlight.ShowHovered(
-            _under.Count > 0 && Outlining is { } drawing ? drawing.Outlines(_under) : []);
+            _under.Count > 0 ? drawing.Outlines(_under) : [],
+            _pictures.SurfaceOf(drawing),
+            new Vector2(drawing.Width, drawing.Height));
     }
+
+    /// <summary>
+    /// Hatch what a removal under way is acting on, in the drawing on screen while it is of the tree
+    /// those nodes are numbers in: in any other tree the same numbers are other shapes (§7.1).
+    /// </summary>
+    private void ShowMarked() =>
+        _highlight.ShowMarked(
+            _marked.Count > 0 && _drawing is { } drawing && ReferenceEquals(drawing.Tree, _markedTree)
+                ? drawing.Outlines(_marked)
+                : [],
+            _scale);
 
     /// <summary>
     /// What is under <paramref name="point"/>, in the control's own coordinates.
@@ -1398,16 +1448,31 @@ public sealed class ExploreMap : UserControl
     private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(Redraw);
 
     /// <summary>
-    /// Follow a change of accent colour. Raised off the UI thread, like the text size above.
+    /// Follow a change of accent colour, or high contrast turned on or off. Raised off the UI thread,
+    /// like the text size above.
     /// </summary>
     private void OnSystemColoursChanged(UISettings sender, object args) =>
         DispatcherQueue.TryEnqueue(TintHighlight);
 
+    /// <summary>Follow the compositor's word on whether effects are fast, which a remote session changes.</summary>
+    private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
+        DispatcherQueue.TryEnqueue(TintHighlight);
+
     /// <summary>
-    /// The lightest of the accent's shades, because it is drawn over a dark halo in either theme.
+    /// The lightest of the accent's shades for what the pointer is over, because it is drawn over a
+    /// dark halo in either theme; or in high contrast the theme's own colours for selected and hot
+    /// items, over its window colour.
     /// </summary>
     private void TintHighlight() =>
-        _highlight.TintHovered(SystemSettings.GetColorValue(UIColorType.AccentLight2));
+        _highlight.Restyle(
+            SystemSettings.GetColorValue(UIColorType.AccentLight2),
+            HighContrast.IsEnabled()
+                ? new SystemHighlight(
+                    SystemSettings.UIElementColor(UIElementType.Window),
+                    SystemSettings.UIElementColor(UIElementType.Highlight),
+                    SystemSettings.UIElementColor(UIElementType.Hotlight))
+                : null,
+            _capabilities.AreEffectsFast());
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {

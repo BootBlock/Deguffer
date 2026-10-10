@@ -1,3 +1,4 @@
+using System.Numerics;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
@@ -207,24 +208,129 @@ internal sealed class MapGraphics
 
         foreach (var outline in outlines)
         {
-            var points = outline.Points;
-
-            if (points.Count == 0)
-            {
-                continue;
-            }
-
-            path.BeginFigure(points[0].X, points[0].Y);
-
-            for (var i = 1; i < points.Count; i++)
-            {
-                path.AddLine(points[i].X, points[i].Y);
-            }
-
-            path.EndFigure(CanvasFigureLoop.Closed);
+            AddFigure(path, outline);
         }
 
         return new CompositionPath(CanvasGeometry.CreatePath(path));
+    }
+
+    /// <summary>
+    /// A geometry over everything but <paramref name="outlines"/>, as far as any picture reaches, in
+    /// the canvas's own pixels: what the map dims round a selection. <see cref="Nothing"/> where there
+    /// is nothing to leave out, because then nothing is dimmed.
+    /// </summary>
+    public CompositionPath Around(IReadOnlyList<ExploreOutline> outlines)
+    {
+        if (Shapes(outlines) is not { } shapes)
+        {
+            return Nothing;
+        }
+
+        // As far as any picture reaches: a canvas is a 64th of its picture at the deepest zoom, and the
+        // shape visual the dimming is drawn in cuts it to the picture.
+        const float far = 1 << 20;
+
+        var everything = CanvasGeometry.CreateRectangle(_device, -far, -far, 2 * far, 2 * far);
+
+        return new CompositionPath(everything.CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Exclude));
+    }
+
+    /// <summary>
+    /// Stripes across <paramref name="outlines"/> and nowhere else, in the canvas's own pixels: one
+    /// stripe in every <paramref name="spacing"/>, <paramref name="width"/> wide, starting
+    /// <paramref name="phase"/> along. <see cref="Nothing"/> where there is nothing to stripe.
+    /// </summary>
+    public CompositionPath Hatch(IReadOnlyList<ExploreOutline> outlines, float spacing, float width, float phase)
+    {
+        if (Shapes(outlines) is not { } shapes)
+        {
+            return Nothing;
+        }
+
+        // Upright stripes over a square round the shapes wide enough to cover them at any turn, turned
+        // a quarter of the way round about its middle: a hatch reads as a hatch at any size of shape.
+        var bounds = shapes.ComputeBounds();
+        var side = (float)Math.Sqrt((bounds.Width * bounds.Width) + (bounds.Height * bounds.Height));
+        var centre = new Vector2((float)(bounds.X + (bounds.Width / 2)), (float)(bounds.Y + (bounds.Height / 2)));
+        var left = centre.X - (side / 2);
+        var top = centre.Y - (side / 2);
+        var stripes = new List<CanvasGeometry>();
+
+        for (var x = left + phase; x < left + side; x += spacing)
+        {
+            stripes.Add(CanvasGeometry.CreateRectangle(_device, x, top, width, side));
+        }
+
+        var turned = CanvasGeometry.CreateGroup(_device, [.. stripes], CanvasFilledRegionDetermination.Winding)
+            .Transform(Matrix3x2.CreateRotation(MathF.PI / 4, centre));
+
+        return new CompositionPath(turned.CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Intersect));
+    }
+
+    /// <summary>
+    /// The shapes <paramref name="outlines"/> bound, filled, as one geometry, or null where there are
+    /// none.
+    ///
+    /// <para>A node's boundaries are filled together, alternately, which is how a ring keeps its hole.
+    /// Each is then outlined, which leaves a geometry filled the same whichever rule fills it, and the
+    /// nodes are grouped under the rule that fills wherever any of them does: their union, so a folder
+    /// picked with a file inside it is one shape rather than a folder with the file cut out.</para>
+    /// </summary>
+    private CanvasGeometry? Shapes(IReadOnlyList<ExploreOutline> outlines)
+    {
+        var nodes = new List<CanvasGeometry>();
+        var i = 0;
+
+        while (i < outlines.Count)
+        {
+            // Not disposed: making the geometry takes the builder over.
+            var path = new CanvasPathBuilder(_device);
+            path.SetFilledRegionDetermination(CanvasFilledRegionDetermination.Alternate);
+
+            var node = outlines[i].Node;
+            var figures = 0;
+
+            // A node's boundaries come back one after another: see ExploreOutline.
+            for (; i < outlines.Count && outlines[i].Node == node; i++)
+            {
+                figures += AddFigure(path, outlines[i]) ? 1 : 0;
+            }
+
+            if (figures > 0)
+            {
+                nodes.Add(CanvasGeometry.CreatePath(path).Outline());
+            }
+        }
+
+        return nodes.Count == 0
+            ? null
+            : CanvasGeometry.CreateGroup(_device, [.. nodes], CanvasFilledRegionDetermination.Winding);
+    }
+
+    /// <summary>
+    /// Add <paramref name="outline"/> to <paramref name="path"/> as one closed figure, and say whether
+    /// there was anything to add. The one way a boundary becomes a figure, so the line round a shape
+    /// and the area it fills are the same shape.
+    /// </summary>
+    private static bool AddFigure(CanvasPathBuilder path, ExploreOutline outline)
+    {
+        var points = outline.Points;
+
+        if (points.Count == 0)
+        {
+            return false;
+        }
+
+        path.BeginFigure(points[0].X, points[0].Y);
+
+        for (var i = 1; i < points.Count; i++)
+        {
+            path.AddLine(points[i].X, points[i].Y);
+        }
+
+        path.EndFigure(CanvasFigureLoop.Closed);
+
+        return true;
     }
 
     /// <summary>

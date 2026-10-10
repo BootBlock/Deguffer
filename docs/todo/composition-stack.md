@@ -190,8 +190,11 @@ startup.
 
 - **`AreEffectsSupported` false:** no `CompositionEffectBrush` anywhere.
 - **`AreEffectsFast` false:** no blur or anything that samples the backdrop, no pointer lighting
-  (#284), and no shadow or glow for hover and selection (#281). Hover and selection draw as outlines
-  into the surface, and cushions come from `CushionShading` on the CPU, as today.
+  (#284), and no shadow under the shape the pointer is over or dimming round a selection (#281).
+  Hover and selection keep their outlines, which are composition shapes over the picture, and the
+  hatch over what a removal is acting on stays, because it is plain geometry. High contrast turns
+  the shadow and the dimming off in the same way, and gives the outlines and the hatch the theme's
+  colours. Cushions come from `CushionShading` on the CPU, as today.
 - **Either way:** transforms and opacity animations stay, because they cost the compositor almost
   nothing. They follow the motion policy in #273.
 

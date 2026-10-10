@@ -193,6 +193,10 @@ public sealed partial class ExplorePage : Page
             {
                 ShowSelection();
             }
+            else if (changed.PropertyName == nameof(ExploreSelection.Removing))
+            {
+                Map.MarkRemoving(ViewModel.Selection.Removing.Tree, ViewModel.Selection.Removing.Nodes);
+            }
         };
 
         // Once, because the rule does not change — only what it answers, as things are removed. The
