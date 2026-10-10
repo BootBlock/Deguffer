@@ -1224,8 +1224,8 @@ public sealed class ExploreMap : UserControl
             if (_left is { } passed && _through is { } through)
             {
                 _descent.Pass(
-                    drawing.ScreenOf(passed.Node, _zoom.Shown, passed.Viewport) ?? MapFrame.Whole,
-                    drawing.ScreenOf(_node, _zoom.Shown, through.Opened) ?? MapFrame.Whole);
+                    drawing.ScreenOf(passed.Node, _zoom.Shown, passed.Viewport),
+                    drawing.ScreenOf(_node, _zoom.Shown, through.Opened));
             }
             else if (_left is { } left && drawing.ScreenOf(left.Node, _zoom.Shown, left.Viewport) is { } shape)
             {

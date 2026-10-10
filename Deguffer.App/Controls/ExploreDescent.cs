@@ -95,14 +95,15 @@ internal sealed class ExploreDescent
     /// <summary>
     /// Fly out of a folder whose screen lies at <paramref name="outOf"/> on the picture of the folder
     /// that holds it and another, and on into that other one, whose screen lies at
-    /// <paramref name="into"/> on the same picture, as one flight (see <see cref="MapPassage"/>).
+    /// <paramref name="into"/> on the same picture, as one flight (see <see cref="MapPassage"/>). A
+    /// folder with no shape on that picture, null, fades in place on its leg rather than flies.
     /// </summary>
-    public void Pass(MapFrame outOf, MapFrame into)
+    public void Pass(MapFrame? outOf, MapFrame? into)
     {
         var now = _clock.Now;
         var motion = _motion.For(MotionToken.Entrance);
 
-        _passage = new MapPassage(new MapDescent(outOf, motion.Travels), new MapDescent(into, motion.Travels));
+        _passage = new MapPassage(Leg(outOf, motion), Leg(into, motion));
         _pastMidway = false;
         _onward = true;
         _playing = motion;
@@ -110,6 +111,9 @@ internal sealed class ExploreDescent
 
         Go(now);
     }
+
+    private static MapDescent Leg(MapFrame? shape, Motion motion) =>
+        new(shape ?? MapFrame.Whole, motion.Travels && shape is not null);
 
     /// <summary>
     /// Go back the way the flight came, from where it is now and at the speed it has, for a reader

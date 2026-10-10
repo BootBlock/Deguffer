@@ -370,6 +370,26 @@ public sealed class ExploreMotionTests
         }
     }
 
+    /// <summary>
+    /// A folder with no shape on the picture passed through fades in place for half the flight, rather
+    /// than being cut away at the first frame because it has no distance to fly.
+    /// </summary>
+    [Fact]
+    public void AFlightThroughAFolderFromAFolderWithNoShapeFadesItOut()
+    {
+        var clock = new SteppedFrameClock();
+        var (descent, _) = Descent(new ScriptedMotion(animationsEnabled: true), clock);
+        var midways = 0;
+
+        descent.Midway += (_, _) => midways++;
+        descent.Pass(null, Going);
+        clock.Step(OneFrame);
+
+        Assert.Equal(0, midways);
+        Assert.Equal(MapFrame.Whole, descent.Inner);
+        Assert.InRange(descent.Opacity, double.Epsilon, 1 - double.Epsilon);
+    }
+
     private static (ExploreDescent Descent, List<EventArgs> Arrived) Descent(ScriptedMotion motion, SteppedFrameClock clock)
     {
         var descent = new ExploreDescent(motion, clock);
