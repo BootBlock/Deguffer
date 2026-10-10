@@ -56,6 +56,70 @@ public sealed class MapRequestsTests
     }
 
     /// <summary>
+    /// Only a refusal of the request the camera was following leaves it where it was last reported,
+    /// so only then does the map put back what it took the screen to show.
+    /// </summary>
+    [Fact]
+    public void ARefusalSaysWhetherItWasTheRequestFollowed()
+    {
+        var requests = new MapRequests();
+
+        requests.Asked(4, Target);
+        requests.Asked(5, MapViewport.Whole);
+
+        Assert.False(requests.Refused(4), "a refusal of a replaced request was taken as the camera's");
+        Assert.True(requests.Refused(5), "a refusal of the request followed went unnoticed");
+        Assert.False(requests.Refused(5), "a second refusal of the same request was taken as the camera's");
+    }
+
+    /// <summary>
+    /// A press stops a glide where it is. The tracker reports a frame or more late, so the reports of
+    /// the stopped glide already on their way are where the screen is, and dropping them would leave a
+    /// right-click to pick from a frame the screen showed a moment earlier (§7.1).
+    /// </summary>
+    [Fact]
+    public void AHaltedMoveIsBelievedUntilTheCameraRests()
+    {
+        var requests = new MapRequests();
+
+        requests.Asked(9, Target);
+        requests.Halted(10);
+
+        Assert.True(requests.Reports(9), "the stopped glide's reports in flight were dropped");
+        Assert.True(requests.Reports(10));
+
+        requests.Settled();
+
+        Assert.False(requests.Reports(9), "a stopped glide was still believed after the camera rested");
+        Assert.True(requests.Reports(10));
+    }
+
+    /// <summary>
+    /// A halted move stops where it is, so nothing snaps it to where it was going, and a request or a
+    /// hand that follows the halt ends the stopped move's claim at once.
+    /// </summary>
+    [Fact]
+    public void AHaltedMoveGoesNowhereAndIsReplacedByWhatFollows()
+    {
+        var requests = new MapRequests();
+        var near = MapViewport.Seen(Target.Zoom, Target.Left + 1e-7, Target.Top);
+
+        requests.Asked(11, Target);
+        requests.Halted(12);
+
+        Assert.Equal(near, requests.Where(near));
+
+        requests.Asked(13, null);
+
+        Assert.False(requests.Reports(11), "a stopped glide outlived a request made after the halt");
+
+        requests.Halted(14);
+        requests.Taken();
+
+        Assert.False(requests.Reports(13), "a stopped request outlived a hand taking the camera");
+    }
+
+    /// <summary>
     /// A move that arrives comes to rest exactly where it was going, though the single-precision
     /// tracker reports it a rounding error away, so the drawing already made of that place is shown
     /// again rather than painted afresh.

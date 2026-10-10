@@ -23,14 +23,13 @@ public readonly record struct MapGlide(MapViewport From, MapViewport To)
     /// </summary>
     public IReadOnlyList<(double Time, double Zoom)> Zooms()
     {
-        var ratio = To.Zoom / From.Zoom;
         var frames = new (double Time, double Zoom)[Steps + 1];
 
         for (var step = 0; step <= Steps; step++)
         {
             var time = step / (double)Steps;
 
-            frames[step] = (time, From.Zoom * Math.Pow(ratio, Motion.Ease(time)));
+            frames[step] = (time, MapViewport.Between(From, To, Motion.Ease(time)).Zoom);
         }
 
         return frames;

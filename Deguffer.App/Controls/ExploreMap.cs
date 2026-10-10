@@ -47,8 +47,8 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>Over 500 lines because it is where the pointer, the drawings and the page meet, and each
 /// input has to be resolved against whichever picture is on screen at that moment (§7.1). Everything
-/// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the clocks of a zoom
-/// and of a folder opening (<see cref="ExploreZoom"/>, <see cref="ExploreDescent"/>), the names and
+/// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the camera and what
+/// moves it (<see cref="ExploreZoom"/>), the clock of a folder opening (<see cref="ExploreDescent"/>), the names and
 /// the outlines, and in Core the arithmetic and the rule telling a click from a drag
 /// (<see cref="MapDrag"/>). Most of the length is the reasoning behind each ordering.</para>
 /// </summary>
@@ -156,7 +156,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private int _picturesHanded;
 
-    /// <summary>Whether the left button is dragging the picture. See <see cref="MapDrag"/>.</summary>
+    /// <summary>Whether the left or middle button is dragging the picture. See <see cref="MapDrag"/>.</summary>
     private readonly MapDrag _drag = new();
 
     /// <summary>
@@ -295,8 +295,8 @@ public sealed class ExploreMap : UserControl
         };
         _zoom.Retargeted += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
 
-        // A pinch, a touch or the wheel moves the picture on the compositor before the map hears of
-        // it, so a folder still opening is settled and the whole picture painted under the zoomed one
+        // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
+        // map hears of it, so a folder still opening is settled and the whole picture painted under the zoomed one
         // as soon as it does, as they are for a move the map starts itself.
         _zoom.Started += (_, _) =>
         {
@@ -1365,11 +1365,11 @@ public sealed class ExploreMap : UserControl
     private const VirtualKey MinusKey = (VirtualKey)0xBD;
 
     /// <summary>
-    /// One frame of a zoom on its way: move the picture on hand, and say what is under the pointer
-    /// now that the picture has moved beneath it.
+    /// One report of the camera on its way: cut the picture at the edges if it now runs past them, and
+    /// say what is under the pointer now that the picture has moved beneath it.
     ///
-    /// <para>The names follow the camera on the compositor, and fade as their shapes shrink round them,
-    /// so nothing here moves them.</para>
+    /// <para>The picture and the names follow the camera on the compositor, and the names fade as their
+    /// shapes shrink round them, so nothing here moves them.</para>
     /// </summary>
     private void OnZoomMoved(object? sender, EventArgs e)
     {
@@ -1385,7 +1385,7 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Settle any folder still opening, whichever button went down, so what the press resolves
     /// against is the picture on screen rather than one on its way; and get ready to drag the picture
-    /// with the left button, where the page allows it and the picture is zoomed.
+    /// with the left or middle button, where the page allows it and the picture is zoomed.
     ///
     /// <para>Nothing moves yet, and the press is left for the framework to make a click of. Whether
     /// it is a drag is decided by how far it goes: see <see cref="MapDrag"/>.</para>
@@ -1403,7 +1403,6 @@ public sealed class ExploreMap : UserControl
             _drag.Press(point.Position.X, point.Position.Y, movable: false);
             return;
         }
-
 
         // A move on its way stops where it is, so the press lands on what the screen shows.
         _zoom.Halt();
@@ -1431,7 +1430,7 @@ public sealed class ExploreMap : UserControl
         point.Properties.IsLeftButtonPressed || point.Properties.IsMiddleButtonPressed;
 
     /// <summary>
-    /// Drag the picture with the left button held, once it has moved past what a click allows, and
+    /// Drag the picture with the left or middle button held, once it has moved past what a click allows, and
     /// otherwise say what is under the pointer.
     ///
     /// <para>The pointer is captured for the drag, so a hand that leaves the map while dragging goes on
@@ -1480,6 +1479,7 @@ public sealed class ExploreMap : UserControl
 
         OnDragEnded(sender, e);
     }
+
     /// <summary>The button came up, or the pointer was taken away: the drag is over and worth drawing.</summary>
     private void OnDragEnded(object sender, PointerRoutedEventArgs e)
     {

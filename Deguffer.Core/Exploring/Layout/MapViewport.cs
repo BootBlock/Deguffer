@@ -158,12 +158,9 @@ public readonly record struct MapViewport
             return to;
         }
 
-        var ratio = to.Zoom / from.Zoom;
-
         // At one zoom the path above has no length in how much is shown, so the two positions are
-        // simply blended. Compared with a tolerance because a zoom that went up a step and back down
-        // again arrives a rounding error away from where it started.
-        if (Math.Abs(ratio - 1) < 1e-9)
+        // simply blended.
+        if (SameZoom(from, to))
         {
             return Within(
                 from.Zoom,
@@ -171,7 +168,7 @@ public readonly record struct MapViewport
                 from.Top + ((to.Top - from.Top) * progress));
         }
 
-        var zoom = from.Zoom * Math.Pow(ratio, progress);
+        var zoom = from.Zoom * Math.Pow(to.Zoom / from.Zoom, progress);
         var along = ((1 / zoom) - (1 / from.Zoom)) / ((1 / to.Zoom) - (1 / from.Zoom));
 
         return Within(
@@ -179,6 +176,13 @@ public readonly record struct MapViewport
             from.Left + ((to.Left - from.Left) * along),
             from.Top + ((to.Top - from.Top) * along));
     }
+
+    /// <summary>
+    /// Whether a move from <paramref name="from"/> to <paramref name="to"/> keeps one zoom, and so
+    /// has no still point to zoom about. Compared with a tolerance because a zoom that went up a step
+    /// and back down again arrives a rounding error away from where it started.
+    /// </summary>
+    internal static bool SameZoom(MapViewport from, MapViewport to) => Math.Abs((to.Zoom / from.Zoom) - 1) < 1e-9;
 
     /// <summary>Where screen point (<paramref name="screenX"/>, <paramref name="screenY"/>) falls in the whole picture.</summary>
     public (double X, double Y) PictureAt(double screenX, double screenY) =>

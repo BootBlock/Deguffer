@@ -12,8 +12,8 @@
 
     <!--
         Backspace goes back, as Alt+Left does, unless a box being typed in has it. An accelerator
-        rather than a KeyDown handler, because a click on the map focuses nothing and a key then
-        reaches no element to bubble from; an accelerator is heard whatever holds the focus.
+        rather than a KeyDown handler, because a click on a map that cannot zoom focuses nothing and
+        a key then reaches no element to bubble from; an accelerator is heard whatever holds the focus.
     -->
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="Back" Invoked="OnBackspaceInvoked" />

@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Viewing;
@@ -14,10 +13,11 @@ namespace Deguffer.App.Controls;
 /// Where a map's camera is, where it is going, and what moves it: the compositor's interaction
 /// tracker, which the camera follows (see <see cref="MapCamera"/>).
 ///
-/// <para>The tracker takes the touchpad, touch and the wheel on the compositor, so a pinch, a
-/// two-finger pan, a flick and a turn of the wheel move the picture with nothing on the UI thread, and
-/// carry on with inertia once let go. What the compositor cannot take is asked of it from here: a
-/// mouse drag, which flings with the speed the hand had as it let go, the keyboard, and a glide to
+/// <para>The tracker takes the touchpad, touch, and the wheel with Ctrl held on the compositor
+/// (<see cref="MapInteraction"/>), so a pinch, a two-finger pan, a flick and a turn of the wheel with
+/// Ctrl move the picture with nothing on the UI thread, and carry on with inertia once let go. What
+/// the compositor cannot take is asked of it from here: a plain turn of the wheel, which glides; a
+/// mouse drag, which flings with the speed the hand had as it let go; the keyboard; and a glide to
 /// somewhere the map chose, such as a shape double-clicked or the zoom Back returns to.</para>
 ///
 /// <para><see cref="MapViewport"/> stays the one account of what the screen shows. The tracker reports
@@ -29,16 +29,19 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>A reader who has turned animation effects off gets no inertia, no spring at an edge, and a
 /// jump in place of every glide (<see cref="MotionToken.Camera"/>).</para>
+///
+/// <para>Over 500 lines because it is the one party that talks to the tracker: every request is asked
+/// here and every report heard here, so which report is believed and what the map takes the screen
+/// to show stay consistent with each other.</para>
 /// </summary>
 internal sealed class ExploreZoom : IInteractionTrackerOwner
 {
-
     /// <summary>
     /// How long a camera that jumped has to rest before it is drawn afresh where it landed. Drawing at
     /// every jump would rasterise for a camera superseded before the paint finished, and a key held
     /// down repeats many times a second.
     /// </summary>
-    internal static readonly TimeSpan JumpSettleTime = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan JumpSettleTime = TimeSpan.FromMilliseconds(120);
 
     private readonly IMotionPolicy _motion;
 
@@ -46,7 +49,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     private readonly InteractionTracker _tracker;
 
-    private readonly VisualInteractionSource _source;
+    private readonly MapInteraction _interaction;
 
     private readonly DispatcherQueueTimer _settle;
 
@@ -65,9 +68,6 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     /// <summary>Whether the picture may stretch past its limits and coast, which is whether the reader has animation effects on.</summary>
     private bool _elastic;
-
-    /// <summary>Whether the camera may move at all: see <see cref="Movable"/>.</summary>
-    private bool _movable;
 
     /// <summary>Whether the tracker is moving the camera on its own: a glide, a fling or a hand.</summary>
     private bool _moving;
@@ -95,12 +95,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         farthest.SetReferenceParameter("camera", camera.Properties);
         _tracker.StartAnimation(nameof(InteractionTracker.MaxPosition), farthest);
 
-        // The map's own visual, which does not move, takes the hand: what the compositor hit-tests is
-        // the map's bounds rather than the picture moving inside them.
-        _source = VisualInteractionSource.Create(source);
-        _source.IsPositionXRailsEnabled = false;
-        _source.IsPositionYRailsEnabled = false;
-        _tracker.InteractionSources.Add(_source);
+        _interaction = new MapInteraction(source, _tracker);
 
         _settle = dispatcher.CreateTimer();
         _settle.Interval = JumpSettleTime;
@@ -124,7 +119,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     /// <summary>
     /// Raised as the camera starts to move by a hand on the compositor, which the map hears nothing
-    /// of until it has started: a pinch, a two-finger pan, a touch, or the wheel.
+    /// of until it has started: a pinch, a two-finger pan, a touch, or the wheel with Ctrl held.
     /// </summary>
     public event EventHandler? Started;
 
@@ -134,36 +129,42 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>Where the camera is going, which is where it is when nothing is moving it.</summary>
     public MapViewport Target => _target;
 
-    /// <summary>
-    /// Whether the camera can be moved: on a map the page lets zoom, showing a drawing that zooms.
-    /// Elsewhere the touchpad, touch and the wheel go to whatever else would have them, such as the
-    /// page's scroller.
-    /// </summary>
+    /// <summary>Whether the camera can be moved. See <see cref="MapInteraction.Movable"/>.</summary>
     public bool Movable
     {
-        get => _movable;
-        set
-        {
-            if (_movable == value)
-            {
-                return;
-            }
-
-            _movable = value;
-            Configure();
-        }
+        get => _interaction.Movable;
+        set => _interaction.Movable = value;
     }
 
     /// <summary>
     /// Follow the reader's Animation effects setting, which says whether the picture coasts and
     /// stretches. Asked again whenever the setting changes.
+    ///
+    /// <para>A move on its way when the reader turns animation effects off lands where it was going
+    /// at once, as every move does for them from then on, and is drawn there.</para>
     /// </summary>
     public void FollowMotion()
     {
         _elastic = _motion.For(MotionToken.Camera).Travels;
         _camera.Track(_tracker, _elastic);
+        _interaction.Elastic = _elastic;
 
-        Configure();
+        if (_elastic)
+        {
+            return;
+        }
+
+        var springing = _camera.Unstretch();
+
+        if (!_moving && !springing)
+        {
+            return;
+        }
+
+        Stop();
+
+        Moved?.Invoke(this, EventArgs.Empty);
+        Arrived?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -243,7 +244,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     {
         if (_moving)
         {
-            _requests.Asked(_tracker.TryUpdatePositionBy(Vector3.Zero), null);
+            _requests.Halted(_tracker.TryUpdatePositionBy(Vector3.Zero));
         }
 
         _fling.Clear();
@@ -330,27 +331,8 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _requests.Asked(_tracker.TryUpdatePositionWithAdditionalVelocity(new Vector3((float)-x, (float)-y, 0)), null);
     }
 
-    /// <summary>
-    /// Hand a touch on the map to the compositor, which pans, pinches and flicks the picture from here
-    /// on. A tap is left alone: the compositor takes the touch only once it starts to move.
-    /// </summary>
-    public void Redirect(PointerPoint point)
-    {
-        if (!_movable)
-        {
-            return;
-        }
-
-        try
-        {
-            _source.TryRedirectForManipulation(point);
-        }
-        catch (COMException e) when (e.HResult == unchecked((int)0x80070005))
-        {
-            // E_ACCESSDENIED: the system refuses a touch it has already begun to treat as something
-            // else, which happens. The touch stays with the map, which treats it as a tap or a drag.
-        }
-    }
+    /// <summary>Hand a touch on the map to the compositor. See <see cref="MapInteraction.Redirect"/>.</summary>
+    public void Redirect(PointerPoint point) => _interaction.Redirect(point);
 
     /// <summary>
     /// To <paramref name="viewport"/> at once, for a map that has been handed something else to draw:
@@ -400,7 +382,14 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     void IInteractionTrackerOwner.IdleStateEntered(InteractionTracker sender, InteractionTrackerIdleStateEnteredArgs args)
     {
-        if (!_moving || !_requests.Reports(args.RequestId))
+        if (!_requests.Reports(args.RequestId))
+        {
+            return;
+        }
+
+        _requests.Settled();
+
+        if (!_moving)
         {
             return;
         }
@@ -438,19 +427,24 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         InteractionTracker sender,
         InteractionTrackerInteractingStateEnteredArgs args) => TakenByHand();
 
-    void IInteractionTrackerOwner.RequestIgnored(InteractionTracker sender, InteractionTrackerRequestIgnoredArgs args) =>
-        _requests.Refused(args.RequestId);
-
-    void IInteractionTrackerOwner.ValuesChanged(InteractionTracker sender, InteractionTrackerValuesChangedArgs args)
+    void IInteractionTrackerOwner.RequestIgnored(InteractionTracker sender, InteractionTrackerRequestIgnoredArgs args)
     {
-        // While a mouse holds the picture the drag says where it is. The tracker reports a drag past
-        // an edge as held at the edge while the camera shows it past, and a click is resolved against
-        // what the camera shows (§7.1).
-        if (_stretch is not null)
+        // Refused while a hand holds the camera: it never went where it was asked, so the screen still
+        // shows where the tracker last said it was, not what the map took it to show when it asked.
+        if (!_requests.Refused(args.RequestId))
         {
             return;
         }
 
+        Shown = _reported;
+        _target = _reported.Held();
+
+        Moved?.Invoke(this, EventArgs.Empty);
+        Retargeted?.Invoke(this, EventArgs.Empty);
+    }
+
+    void IInteractionTrackerOwner.ValuesChanged(InteractionTracker sender, InteractionTrackerValuesChangedArgs args)
+    {
         if (!_requests.Reports(args.RequestId) || !HasSize)
         {
             return;
@@ -458,6 +452,15 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         _reported = new MapTracking(args.Position.X, args.Position.Y, args.Scale)
             .Shown(_size.Width, _size.Height, _elastic);
+
+        // While a mouse holds the picture the drag says what the screen shows. The tracker reports a
+        // drag past an edge as held at the edge while the camera shows it past, and a click is
+        // resolved against what the camera shows (§7.1).
+        if (_stretch is not null)
+        {
+            return;
+        }
+
         Shown = _requests.Where(_reported);
 
         Moved?.Invoke(this, EventArgs.Empty);
@@ -517,6 +520,8 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     /// <summary>
     /// Put the camera on <paramref name="viewport"/> at once, and take it as what the screen shows.
+    /// Where the tracker is comes only from its reports, so a jump it refuses leaves that as it was
+    /// (see <see cref="IInteractionTrackerOwner.RequestIgnored"/>).
     ///
     /// <para>One request where it can be: a scale about the move's still point carries the position
     /// with it. A scale and a position asked for one after the other in the same frame can leave the
@@ -554,30 +559,5 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _requests.Asked(id, viewport);
 
         Shown = viewport;
-        _reported = viewport;
-    }
-
-    /// <summary>
-    /// Give the compositor the inputs it can take, or none where the camera cannot move. Inertia is on
-    /// only where the reader has animation effects on.
-    /// </summary>
-    private void Configure()
-    {
-        var mode = !_movable
-            ? InteractionSourceMode.Disabled
-            : _elastic ? InteractionSourceMode.EnabledWithInertia : InteractionSourceMode.EnabledWithoutInertia;
-
-        _source.PositionXSourceMode = mode;
-        _source.PositionYSourceMode = mode;
-        _source.ScaleSourceMode = mode;
-
-        // The wheel zooms rather than scrolls: a map has no up and down to scroll through.
-        _source.PointerWheelConfig.PositionXSourceMode = InteractionSourceRedirectionMode.Disabled;
-        _source.PointerWheelConfig.PositionYSourceMode = InteractionSourceRedirectionMode.Disabled;
-        _source.PointerWheelConfig.ScaleSourceMode = InteractionSourceRedirectionMode.Enabled;
-
-        _source.ManipulationRedirectionMode = _movable
-            ? VisualInteractionSourceRedirectionMode.CapableTouchpadAndPointerWheel
-            : VisualInteractionSourceRedirectionMode.Off;
     }
 }

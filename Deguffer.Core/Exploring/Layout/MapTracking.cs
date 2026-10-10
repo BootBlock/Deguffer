@@ -5,8 +5,8 @@ namespace Deguffer.Core.Exploring.Layout;
 /// magnified <paramref name="Scale"/> times, and moved so the screen's top-left corner is
 /// (<paramref name="X"/>, <paramref name="Y"/>) pixels into the magnified picture.
 ///
-/// <para>The tracker is what moves the camera, so a pinch, a fling and a turn of the wheel run on the
-/// compositor with nothing on the UI thread. <see cref="MapViewport"/> stays the one account of what
+/// <para>The tracker is what moves the camera, so a pinch, a fling and a turn of the wheel with Ctrl
+/// held run on the compositor with nothing on the UI thread. <see cref="MapViewport"/> stays the one account of what
 /// the screen shows: this is the same thing in the tracker's units, and every viewport the map works
 /// from is read back through <see cref="Shown"/>. Pixels rather than fractions because the tracker
 /// keeps its bounds, its inertia and its velocities in them.</para>
@@ -51,6 +51,12 @@ public readonly record struct MapTracking(double X, double Y, double Scale)
     /// This held to the tracker's limits on a screen <paramref name="width"/> by
     /// <paramref name="height"/>: the scale between 1 and <see cref="MapViewport.MaximumZoom"/>, then
     /// the position between the picture's edges at that scale.
+    ///
+    /// <para>Held here in pixels rather than by reading this back as a viewport and holding that,
+    /// because the two differ for a scale past its limits: a viewport's edges are fractions of the
+    /// picture at the scale it had, so holding the scale would move the position with it. The camera's
+    /// expression on the compositor holds the tracker's own pixels, as this does, and a click is
+    /// resolved through this, so the two must agree (§7.1).</para>
     /// </summary>
     public MapTracking Held(double width, double height)
     {
@@ -75,8 +81,7 @@ public readonly record struct MapTracking(double X, double Y, double Scale)
     /// </summary>
     public static (double X, double Y)? Pivot(MapViewport from, MapViewport to, double width, double height)
     {
-        // Compared with a tolerance for the reason MapViewport.Between does.
-        if (Math.Abs((to.Zoom / from.Zoom) - 1) < 1e-9)
+        if (MapViewport.SameZoom(from, to))
         {
             return null;
         }
