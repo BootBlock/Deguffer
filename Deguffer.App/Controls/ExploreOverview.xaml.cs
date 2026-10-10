@@ -38,6 +38,12 @@ public sealed partial class ExploreOverview
 
     private readonly IMotionPolicy _motion;
 
+    /// <summary>Where the pointer is over the map, or null while it is elsewhere.</summary>
+    private readonly Func<Point?> _pointer;
+
+    /// <summary>The map's size, which the overview's own and its corners are worked out from.</summary>
+    private (double Width, double Height) _map;
+
     private readonly MapOverviewPress _press = new();
 
     private readonly Visual _visual;
@@ -55,6 +61,9 @@ public sealed partial class ExploreOverview
     /// <summary>The picture's size in the overview, which the rectangle's expression reads.</summary>
     private readonly CompositionPropertySet _properties;
 
+    /// <summary>The overview's entrance: from a short way above its place, as it stands at the top of the map.</summary>
+    private static readonly ElementEntrance Entrance = new(rise: -8);
+
     private MapCorner _corner = MapCorner.TopRight;
 
     /// <summary>Whether the map wants the overview on screen: zoomed in, with a picture of the place on screen.</summary>
@@ -63,12 +72,13 @@ public sealed partial class ExploreOverview
     /// <summary>Whether it is on screen, or on its way: see <see cref="Present"/>.</summary>
     private bool _shown;
 
-    internal ExploreOverview(MapCamera camera, ExploreZoom zoom, IMotionPolicy motion)
+    internal ExploreOverview(MapCamera camera, ExploreZoom zoom, IMotionPolicy motion, Func<Point?> pointer)
     {
         InitializeComponent();
 
         _zoom = zoom;
         _motion = motion;
+        _pointer = pointer;
         _visual = ElementCompositionPreview.GetElementVisual(this);
 
         var compositor = _visual.Compositor;
@@ -114,7 +124,6 @@ public sealed partial class ExploreOverview
         Picture.SizeChanged += (_, e) =>
             _properties.InsertVector2(Size, new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height));
 
-        ElementCompositionPreview.SetIsTranslationEnabled(this, true);
         _visual.Opacity = 0;
         Visibility = Visibility.Collapsed;
 
@@ -130,6 +139,12 @@ public sealed partial class ExploreOverview
 
     /// <summary>Raised before the overview moves the camera, so the map can settle what it must first.</summary>
     public event EventHandler? Moving;
+
+    /// <summary>
+    /// Raised as the overview comes in, so the map says again what the pointer is over: it may be the
+    /// overview now, which nothing on the map is under.
+    /// </summary>
+    public event EventHandler? Entered;
 
     /// <summary>Raised when the reader hides the overview or brings it back.</summary>
     public event EventHandler? HiddenChanged;
@@ -153,9 +168,6 @@ public sealed partial class ExploreOverview
         }
     }
 
-    /// <summary>Whether the overview, or the button standing for it, is on screen or on its way there.</summary>
-    public bool IsShown => _shown;
-
     /// <summary>Show <paramref name="overview"/>, a small copy of the whole picture, or nothing while there is none.</summary>
     public void ShowWhole(ICompositionSurface? overview)
     {
@@ -169,6 +181,8 @@ public sealed partial class ExploreOverview
     /// </summary>
     public void Fit(double width, double height)
     {
+        _map = (width, height);
+
         if (MapOverview.Size(width, height) is { } size)
         {
             Frame.Width = size.Width;
@@ -200,37 +214,54 @@ public sealed partial class ExploreOverview
     }
 
     /// <summary>
-    /// The map is being acted on at <paramref name="point"/> of a map <paramref name="width"/> by
-    /// <paramref name="height"/>: a wheel turned, or a drag holds the picture there. Where that is
-    /// near the overview it comes in at the other corner instead, so it never covers what is acted on.
+    /// The map is being acted on at <paramref name="point"/>: a wheel turned, or a drag holds the
+    /// picture there. Where that is near the overview it comes in at the other corner instead, so it
+    /// never covers what is acted on.
     /// </summary>
-    public void Avoid(Point point, double width, double height)
+    public void Avoid(Point point)
     {
-        var corner = MapOverview.Avoiding(_corner, point.X, point.Y, width, height);
-
-        if (corner == _corner)
-        {
-            return;
-        }
-
-        _corner = corner;
-        HorizontalAlignment = corner == MapCorner.TopRight ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-
-        if (_shown)
+        if (Turn(point) && _shown)
         {
             Enter();
         }
     }
 
+    /// <summary>Stand in the corner away from <paramref name="point"/>, and say whether that is another one.</summary>
+    private bool Turn(Point point)
+    {
+        var corner = MapOverview.Avoiding(_corner, point.X, point.Y, _map.Width, _map.Height);
+
+        if (corner == _corner)
+        {
+            return false;
+        }
+
+        _corner = corner;
+        HorizontalAlignment = corner == MapCorner.TopRight ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+
+        return true;
+    }
+
     /// <summary>
     /// Whether the overview, or the button that brings it back, is at <paramref name="point"/> of the
     /// map, and takes the pointer there. Nothing on the map is under the pointer where it is (§7.1).
+    ///
+    /// <para>The overview's own place is worked out rather than read from the layout, which places it
+    /// a pass after it comes in or changes corner: the map asks as it does. The button standing for a
+    /// hidden overview is read from the layout.</para>
     /// </summary>
     public bool Covers(Point point)
     {
         if (!_shown)
         {
             return false;
+        }
+
+        if (!Hidden && MapOverview.Size(_map.Width, _map.Height) is { } shown)
+        {
+            var (left, top) = MapOverview.Corner(_corner, _map.Width, _map.Height, shown);
+
+            return point.X >= left && point.X < left + shown.Width && point.Y >= top && point.Y < top + shown.Height;
         }
 
         var offset = ActualOffset;
@@ -299,7 +330,14 @@ public sealed partial class ExploreOverview
             return;
         }
 
+        // At the corner away from the pointer, so it never comes in over what the pointer is on.
+        if (_pointer() is { } pointer)
+        {
+            Turn(pointer);
+        }
+
         Enter();
+        Entered?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -308,38 +346,10 @@ public sealed partial class ExploreOverview
     /// </summary>
     private void Enter()
     {
-        var motion = _motion.For(MotionToken.Overview);
-        var compositor = _visual.Compositor;
-
         Visibility = Visibility.Visible;
         IsHitTestVisible = true;
 
-        _visual.StopAnimation(nameof(Visual.Opacity));
-        _visual.StopAnimation("Translation");
-
-        if (motion.IsInstant)
-        {
-            _visual.Opacity = 1;
-            return;
-        }
-
-        var (first, second) = Motion.EaseControlPoints;
-        var ease = compositor.CreateCubicBezierEasingFunction(first, second);
-
-        var fade = compositor.CreateScalarKeyFrameAnimation();
-        fade.InsertKeyFrame(0, 0);
-        fade.InsertKeyFrame(1, 1, ease);
-        fade.Duration = motion.Duration;
-        _visual.StartAnimation(nameof(Visual.Opacity), fade);
-
-        if (motion.Travels)
-        {
-            var rise = compositor.CreateVector3KeyFrameAnimation();
-            rise.InsertKeyFrame(0, new Vector3(0, -8, 0));
-            rise.InsertKeyFrame(1, Vector3.Zero, ease);
-            rise.Duration = motion.Duration;
-            _visual.StartAnimation("Translation", rise);
-        }
+        Entrance.Enter(this, _motion.For(MotionToken.Overview), TimeSpan.Zero);
     }
 
     /// <summary>
@@ -354,13 +364,6 @@ public sealed partial class ExploreOverview
         IsHitTestVisible = false;
         _visual.StopAnimation("Translation");
         _visual.StopAnimation(nameof(Visual.Opacity));
-
-        if (motion.IsInstant)
-        {
-            _visual.Opacity = 0;
-            Visibility = Visibility.Collapsed;
-            return;
-        }
 
         var fade = compositor.CreateScalarKeyFrameAnimation();
         fade.InsertKeyFrame(1, 0);

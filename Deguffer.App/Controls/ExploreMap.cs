@@ -280,7 +280,7 @@ public sealed class ExploreMap : UserControl
         _highlight = new ExploreHighlight(compositor, _graphics, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(new DispatcherQueueSynchronizationContext(DispatcherQueue));
-        _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current);
+        _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer);
 
         _pictures.Follow();
 
@@ -332,6 +332,7 @@ public sealed class ExploreMap : UserControl
             SettleStep();
             Underlay();
         };
+        _overview.Entered += (_, _) => FollowPointer();
         _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
 
         // The camera is held where it was, measured from its new origin, until this returns, so
@@ -559,19 +560,10 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Want the overview on screen while the picture can be moved and is zoomed in, or on its way in
     /// or out, and with no change of folder flying: it is of the picture on screen, and that is on its
-    /// way to being another one. It comes in at the corner away from the pointer.
+    /// way to being another one.
     /// </summary>
-    private void ShowOverview()
-    {
-        var wanted = _zoom.Movable && !Stepping && !(_zoom.Shown.IsWhole && _zoom.Target.IsWhole);
-
-        if (wanted && !_overview.IsShown && _pointer is { } pointer)
-        {
-            _overview.Avoid(pointer, ActualWidth, ActualHeight);
-        }
-
-        _overview.Want(wanted);
-    }
+    private void ShowOverview() =>
+        _overview.Want(_zoom.Movable && !Stepping && !(_zoom.Shown.IsWhole && _zoom.Target.IsWhole));
 
     /// <summary>The overview of the picture the map works from has a new answer.</summary>
     private void OnOverviewChanged(object? sender, EventArgs e)
@@ -599,8 +591,8 @@ public sealed class ExploreMap : UserControl
                     + "Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through "
                     + "the folders opened and the zooms to a shape. While the picture is zoomed in, an overview "
                     + "in a corner shows all of it with the part on the screen marked: drag the mark to move the "
-                    + "picture, or click anywhere in the overview to go there. The keys above do the same, so the "
-                    + "overview is not reached with the keyboard."
+                    + "picture, or click anywhere in the overview to go there. The keys above move the picture as "
+                    + "the overview does, and Tab reaches its button to hide it or bring it back."
                 : string.Empty));
 
     /// <summary>
@@ -1478,7 +1470,7 @@ public sealed class ExploreMap : UserControl
         Underlay();
 
         _pointer = point.Position;
-        _overview.Avoid(point.Position, ActualWidth, ActualHeight);
+        _overview.Avoid(point.Position);
 
         // A wheel tilted right reports a turn away from the reader, and shows what is to the right.
         if (point.Properties.IsHorizontalMouseWheel)
@@ -1629,7 +1621,7 @@ public sealed class ExploreMap : UserControl
                 ProtectedCursor = _dragCursor;
             }
 
-            _overview.Avoid(position, ActualWidth, ActualHeight);
+            _overview.Avoid(position);
             _zoom.Drag(x, y, position.X, position.Y, TimeSpan.FromMicroseconds(point.Timestamp));
 
             e.Handled = true;
