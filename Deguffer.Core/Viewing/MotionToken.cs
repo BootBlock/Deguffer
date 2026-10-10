@@ -39,6 +39,16 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
     /// <summary>
+    /// The overview a zoomed map shows in a corner, coming in as the map is zoomed in, going as it
+    /// shows the whole picture again, and coming in at the other corner when the map is acted on
+    /// beside it. With motion on it drops a short way into place as it fades in. With motion off it
+    /// fades in place, so the reader still sees where it went.
+    /// </summary>
+    public static MotionToken Overview { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(200), Travels: true),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
+    /// <summary>
     /// A page arriving from the navigation rail, rising a short way into place as it fades in, its
     /// header first (see <see cref="PageEntrance"/>). With motion off it fades in place, for the reason
     /// <see cref="Entrance"/> does: the whole page changes, and a fade says that it did.

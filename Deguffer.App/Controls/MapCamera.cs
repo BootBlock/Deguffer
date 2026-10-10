@@ -174,6 +174,15 @@ internal sealed class MapCamera
         Properties.InsertVector3(nameof(Visual.Offset), new Vector3((float)camera.X, (float)camera.Y, 0));
     }
 
+    /// <summary>
+    /// An expression for where the screen's near edge on <paramref name="axis"/>, X or Y, falls in the
+    /// whole picture, as a fraction of it, with these <see cref="Properties"/> as <c>camera</c>: the
+    /// camera read back as a viewport, as <see cref="MapTracking.Shown"/> reads the tracker. Measured
+    /// from the origin, which the camera's offset is, so it stays exact at any zoom.
+    /// </summary>
+    public static string ShownEdge(string axis) =>
+        $"(camera.{Near}.{axis} - (camera.Offset.{axis} / (camera.Scale.{axis} * camera.Size.{axis})))";
+
     /// <summary>The tracker's least position on <paramref name="axis"/> at <paramref name="scale"/>, from the origin in <paramref name="near"/>.</summary>
     private static string Least(string axis, string near, string scale) =>
         $"(-camera.{near}.{axis} * {scale} * camera.Size.{axis})";

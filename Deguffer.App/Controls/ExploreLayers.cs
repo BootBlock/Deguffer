@@ -3,6 +3,7 @@ using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
+using Windows.Graphics;
 
 namespace Deguffer.App.Controls;
 
@@ -89,6 +90,14 @@ internal sealed class ExploreLayers
     /// </summary>
     private int _fading;
 
+    /// <summary>
+    /// A small copy of the latest whole drawing to arrive, for the map's overview, kept until another
+    /// replaces it or the map says the picture is of another place: see <see cref="Overview"/>.
+    /// </summary>
+    private CompositionDrawingSurface? _overview;
+
+    private bool _hasOverview;
+
     public ExploreLayers(Compositor compositor, MapGraphics graphics, MapCamera camera)
     {
         _compositor = compositor;
@@ -102,6 +111,21 @@ internal sealed class ExploreLayers
 
     /// <summary>The top of these drawings in the composition tree.</summary>
     public Visual Root => _carried;
+
+    /// <summary>
+    /// A small copy of the whole picture, for the overview a zoomed map shows in a corner, or null
+    /// while none has arrived of the place on screen.
+    ///
+    /// <para>A copy rather than the whole drawing's own surface, because that surface is taken for
+    /// another drawing as soon as the picture changes, and the overview is of the same place in the
+    /// old look until the new whole drawing arrives. Kept with these drawings rather than by the
+    /// overview, so a change of folder turned round brings back the overview of the folder it returns
+    /// to with its drawings.</para>
+    /// </summary>
+    public ICompositionSurface? Overview => _hasOverview ? _overview : null;
+
+    /// <summary><see cref="Overview"/> has a new answer.</summary>
+    public event EventHandler? OverviewChanged;
 
     /// <summary>
     /// Whether the whole picture is missing under a zoomed drawing on top, and is not landing either.
@@ -169,6 +193,21 @@ internal sealed class ExploreLayers
     public void Forget() => _picture++;
 
     /// <summary>
+    /// The picture is of another place now: another tree, folder or view. The overview of the old
+    /// one goes at once, rather than standing for the new one until its whole drawing arrives.
+    /// </summary>
+    public void ForgetOverview()
+    {
+        if (!_hasOverview)
+        {
+            return;
+        }
+
+        _hasOverview = false;
+        OverviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
     /// Drop every drawing, and the memory its surface held, for a map with nothing to show or nobody
     /// to show it to. Anything landing has been withdrawn first.
     /// </summary>
@@ -183,6 +222,7 @@ internal sealed class ExploreLayers
 
         _current = null;
         Release();
+        ForgetOverview();
     }
 
     /// <summary>
@@ -198,7 +238,10 @@ internal sealed class ExploreLayers
             layer.Renew();
         }
 
+        // Made before the replacement, it would take a write and show nothing (see MapGraphics.Replaced).
         _current = null;
+        _overview = null;
+        ForgetOverview();
     }
 
     /// <summary>
@@ -409,6 +452,34 @@ internal sealed class ExploreLayers
         }
     }
 
+    /// <summary>
+    /// Copy <paramref name="pixels"/>, a whole drawing <paramref name="width"/> by
+    /// <paramref name="height"/> that has just arrived, small, for the overview: at the overview's size
+    /// on the screen now, in the drawing's own pixels to each device-independent one. A map too small
+    /// for an overview keeps none.
+    /// </summary>
+    private void Miniaturise(byte[] pixels, int width, int height)
+    {
+        if (MapOverview.Size(_size.Width, _size.Height) is not { } shown)
+        {
+            ForgetOverview();
+            return;
+        }
+
+        var size = new SizeInt32(
+            Math.Max(1, (int)Math.Round(width * shown.Width / _size.Width)),
+            Math.Max(1, (int)Math.Round(height * shown.Height / _size.Height)));
+
+        if (_graphics.Shrink(_overview, pixels, width, height, size) is not { } overview)
+        {
+            return;
+        }
+
+        _overview = overview;
+        _hasOverview = true;
+        OverviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>One redraw landing in one of these layers. See <see cref="ICanvasRedrawTarget"/>.</summary>
     private sealed class Landing(ExploreLayers layers, bool onTop, Action<ExploreSurface> arrived, Motion fade)
         : ICanvasRedrawTarget
@@ -446,6 +517,11 @@ internal sealed class ExploreLayers
             layer.Landing = null;
             layer.Drawing = drawing;
             layer.LastShown = ++layers._showings;
+
+            if (layer.Viewport.IsWhole)
+            {
+                layers.Miniaturise(redraw.Pixels, drawing.Width, drawing.Height);
+            }
 
             if (onTop)
             {

@@ -256,7 +256,17 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// itself is held to it, so this is a place the reader was, which had detail to show when they
     /// were there. The drawing made there says whether it still has.</para>
     /// </summary>
-    public void GlideTo(MapViewport target)
+    public void GlideTo(MapViewport target) => MoveTo(target, _motion.For(MotionToken.Camera));
+
+    /// <summary>
+    /// Jump from what is on screen to <paramref name="target"/>, whatever the reader's motion setting,
+    /// for a hand that is moving the camera from somewhere other than the picture: the screen goes where
+    /// the hand puts it, as it does for a drag of the picture. It arrives as a jump does.
+    /// </summary>
+    public void JumpTo(MapViewport target) => MoveTo(target, Motion.Instant);
+
+    /// <summary>To <paramref name="target"/> as <paramref name="motion"/> says. See <see cref="GlideTo"/>.</summary>
+    private void MoveTo(MapViewport target, Motion motion)
     {
         // Already going there: at either end of the zoom a further notch asks for nothing, and
         // restarting the move would ease again over a distance of nothing.
@@ -268,8 +278,6 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         Cap(Math.Max(_ceiling, target.Zoom));
         _target = target;
         Retargeted?.Invoke(this, EventArgs.Empty);
-
-        var motion = _motion.For(MotionToken.Camera);
 
         // A map not yet laid out has nothing to glide across: it starts where it was asked to go, and
         // the tracker is put there once the map has a size (see Resize).

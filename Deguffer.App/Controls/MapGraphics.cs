@@ -158,6 +158,64 @@ internal sealed class MapGraphics
     }
 
     /// <summary>
+    /// <paramref name="pixels"/>, a canvas <paramref name="width"/> by <paramref name="height"/>,
+    /// drawn small enough to fill <paramref name="into"/> at <paramref name="size"/> pixels across: the
+    /// overview of a whole picture. A surface is made where there is none to draw into, and the one
+    /// drawn into is returned, or null where the device was lost on the way.
+    ///
+    /// <para>Once per whole picture, which is the one time the whole canvas goes up through the UI
+    /// thread, and only once it has been painted. The GPU shrinks it, with a filter that takes every
+    /// pixel into account, so a treemap's fine lines thin out rather than break up as they do when a
+    /// large surface is shown small.</para>
+    /// </summary>
+    public CompositionDrawingSurface? Shrink(CompositionDrawingSurface? into, byte[] pixels, int width, int height, SizeInt32 size)
+    {
+        var device = _device;
+
+        try
+        {
+            // Resized rather than made again for each whole picture (G5).
+            var surface = into ?? _graphics.CreateDrawingSurface2(
+                size,
+                DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                DirectXAlphaMode.Premultiplied);
+
+            if (surface.SizeInt32 != size)
+            {
+                surface.Resize(size);
+            }
+
+            using var bitmap = CanvasBitmap.CreateFromBytes(
+                device,
+                pixels,
+                width,
+                height,
+                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized);
+            using var session = CanvasComposition.CreateDrawingSession(surface);
+
+            session.Clear(Microsoft.UI.Colors.Transparent);
+            session.DrawImage(
+                bitmap,
+                new Rect(0, 0, size.Width, size.Height),
+                new Rect(0, 0, width, height),
+                1,
+                CanvasImageInterpolation.HighQualityCubic);
+
+            return surface;
+        }
+        catch (Exception exception) when (device.IsDeviceLost(exception.HResult))
+        {
+            // As a lost device is everywhere else here: replaced, and the copy not made.
+            if (device == _device)
+            {
+                device.RaiseDeviceLost();
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
     /// A still of <paramref name="visual"/> and everything drawn under it as it is now, at
     /// <paramref name="size"/> pixels, or null where the device was lost on the way. On this device
     /// rather than a second one, because the window is the one asking and it has the one compositor

@@ -12,7 +12,7 @@ public sealed class MotionTokenTests
     [Fact]
     public void WithMotionOnEveryMoveTravels()
     {
-        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark })
+        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark, MotionToken.Overview })
         {
             var motion = token.For(animationsEnabled: true);
 
@@ -93,6 +93,17 @@ public sealed class MotionTokenTests
         Assert.False(motion.Travels);
         Assert.False(motion.IsInstant);
         Assert.True(motion.Duration < MotionToken.Mark.Full.Duration);
+    }
+
+    /// <summary>With motion off the map's overview fades in where it stands, and does not rise.</summary>
+    [Fact]
+    public void WithMotionOffTheOverviewFadesInPlace()
+    {
+        var motion = MotionToken.Overview.For(animationsEnabled: false);
+
+        Assert.False(motion.Travels);
+        Assert.False(motion.IsInstant);
+        Assert.True(motion.Duration < MotionToken.Overview.Full.Duration);
     }
 
     /// <summary>

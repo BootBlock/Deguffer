@@ -14,6 +14,9 @@ public readonly record struct MapFrame(double X, double Y, double Width, double 
 
     public (double X, double Y) Centre => (X + (Width / 2), Y + (Height / 2));
 
+    /// <summary>Whether the point (<paramref name="x"/>, <paramref name="y"/>) is inside this, its edges included.</summary>
+    public bool Contains(double x, double y) => x >= X && x <= X + Width && y >= Y && y <= Y + Height;
+
     /// <summary>The part of this inside <paramref name="bounds"/>, which is empty where none of it is.</summary>
     public MapFrame Clipped(MapFrame bounds)
     {
