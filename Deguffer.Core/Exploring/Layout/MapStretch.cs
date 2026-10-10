@@ -22,9 +22,12 @@ public sealed class MapStretch
 
     private readonly double _height;
 
-    private readonly double _farthestX;
+    /// <summary>The tracker's position at each edge of the picture, at the drag's scale.</summary>
+    private readonly (double Least, double Most) _across;
 
-    private readonly double _farthestY;
+    private readonly (double Least, double Most) _down;
+
+    private readonly MapOrigin _origin;
 
     private readonly bool _elastic;
 
@@ -42,8 +45,9 @@ public sealed class MapStretch
     {
         _width = width;
         _height = height;
-        _farthestX = (start.Scale - 1) * width;
-        _farthestY = (start.Scale - 1) * height;
+        _across = start.Origin.Across(start.Scale, width);
+        _down = start.Origin.Down(start.Scale, height);
+        _origin = start.Origin;
         _elastic = elastic;
         _handX = start.X;
         _handY = start.Y;
@@ -63,24 +67,25 @@ public sealed class MapStretch
         _handY -= y;
 
         return new MapTracking(
-            Hold(_handX, _farthestX, Reach * _width),
-            Hold(_handY, _farthestY, Reach * _height),
-            Scale);
+            Hold(_handX, _across, Reach * _width),
+            Hold(_handY, _down, Reach * _height),
+            Scale,
+            _origin);
     }
 
-    private double Hold(double asked, double farthest, double reach)
+    private double Hold(double asked, (double Least, double Most) edges, double reach)
     {
         if (!_elastic)
         {
-            return Math.Clamp(asked, 0, farthest);
+            return Math.Clamp(asked, edges.Least, edges.Most);
         }
 
-        if (asked < 0)
+        if (asked < edges.Least)
         {
-            return -Give(-asked, reach);
+            return edges.Least - Give(edges.Least - asked, reach);
         }
 
-        return asked > farthest ? farthest + Give(asked - farthest, reach) : asked;
+        return asked > edges.Most ? edges.Most + Give(asked - edges.Most, reach) : asked;
     }
 
     /// <summary>

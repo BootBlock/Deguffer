@@ -57,19 +57,25 @@ public sealed class MapGlideTests
     /// that zoom puts there. That has to be where the move should be at that moment, which is the path
     /// <see cref="MapViewport.Between"/> describes at the eased progress. A zoom eased by equal steps
     /// rather than equal ratios would leave it at every frame but the two ends.
+    ///
+    /// <para>The same from any origin the tracker is measured from: a scale about a point is one rule
+    /// wherever the position counts from.</para>
     /// </summary>
-    [Fact]
-    public void EveryFrameIsOnThePathFromOneViewportToTheOther()
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(0.6, 0.1)]
+    public void EveryFrameIsOnThePathFromOneViewportToTheOther(double originLeft, double originTop)
     {
         var pivot = MapTracking.Pivot(From, To, Width, Height)!.Value;
-        var start = MapTracking.Of(From, Width, Height);
+        var start = MapTracking.Of(From, Width, Height, new MapOrigin(originLeft, originTop));
 
         foreach (var (time, zoom) in new MapGlide(From, To).Zooms())
         {
             var shown = new MapTracking(
                 (zoom / start.Scale * (start.X + pivot.X)) - pivot.X,
                 (zoom / start.Scale * (start.Y + pivot.Y)) - pivot.Y,
-                zoom).Shown(Width, Height, elastic: true);
+                zoom,
+                start.Origin).Shown(Width, Height, elastic: true);
 
             var expected = MapViewport.Between(From, To, Motion.Ease(time));
 

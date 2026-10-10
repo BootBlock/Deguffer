@@ -74,6 +74,9 @@ internal sealed class ExploreLayers
     /// <summary>The size of the screen the picture is laid out over, so a drawing that starts landing is placed with the rest.</summary>
     private (double Width, double Height) _size;
 
+    /// <summary>What the picture is measured from, so a drawing that starts landing is placed with the rest.</summary>
+    private MapOrigin _origin;
+
     private ExploreLayer? _current;
 
     /// <summary>
@@ -214,18 +217,20 @@ internal sealed class ExploreLayers
 
     /// <summary>
     /// Put each drawing where its part of the picture lies, in a picture laid out over a screen
-    /// <paramref name="width"/> by <paramref name="height"/>. Only for a new size: the camera moves the
-    /// picture, and nothing here changes as it does.
+    /// <paramref name="width"/> by <paramref name="height"/>, measured from <paramref name="origin"/>.
+    /// Only for a new size or a new origin: the camera moves the picture, and nothing here changes as
+    /// it does.
     /// </summary>
-    public void Fit(double width, double height)
+    public void Fit(double width, double height, MapOrigin origin)
     {
         _size = (width, height);
+        _origin = origin;
 
         foreach (var layer in _layers)
         {
             if (layer.IsShown)
             {
-                layer.Fit(width, height);
+                layer.Fit(width, height, origin);
             }
         }
     }
@@ -416,7 +421,7 @@ internal sealed class ExploreLayers
             layer.Viewport = viewport;
             layer.LandsOnTop = onTop;
             layer.Picture = layers._picture;
-            layer.Fit(layers._size.Width, layers._size.Height);
+            layer.Fit(layers._size.Width, layers._size.Height, layers._origin);
             layer.Sprite.StopAnimation(nameof(Visual.Opacity));
             layer.Sprite.Opacity = fade.IsInstant ? 1 : 0;
             layer.Sprite.IsVisible = true;

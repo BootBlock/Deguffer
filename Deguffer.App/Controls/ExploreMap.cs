@@ -295,6 +295,10 @@ public sealed class ExploreMap : UserControl
         };
         _zoom.Retargeted += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
 
+        // The camera is held where it was, measured from its new origin, until this returns, so
+        // everything on it is placed from that origin at once (see ExploreZoom.Rebase).
+        _zoom.OriginMoved += (_, _) => Fit();
+
         // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
         // map hears of it, so a folder still opening is settled and the whole picture painted under the zoomed one
         // as soon as it does, as they are for a move the map starts itself.
@@ -631,9 +635,9 @@ public sealed class ExploreMap : UserControl
 
                 // The old picture stays where the camera had it as the folder was double-clicked,
                 // and the camera goes on to the new one, which grows over it.
-                _departing.Freeze(was.Camera(ActualWidth, ActualHeight));
+                _departing.Freeze(was.Camera(ActualWidth, ActualHeight, _zoom.Origin));
                 _pictures.Follow();
-                _pictures.Fit(ActualWidth, ActualHeight);
+                _pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
                 _labels.Ride(_pictures.Root);
 
                 _root.Children.Remove(_departing.Root);
@@ -805,12 +809,12 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Put each drawing, and the outlines and the names of the one worked from, where they lie in the
-    /// picture at the control's size now. For a new size or a new drawing: a move changes only the
-    /// camera.
+    /// picture at the control's size now. For a new size, a new drawing or a new origin: a move changes
+    /// only the camera.
     /// </summary>
     private void Fit()
     {
-        _pictures.Fit(ActualWidth, ActualHeight);
+        _pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
 
         if (_drawing is not { } drawing)
         {
@@ -818,11 +822,11 @@ public sealed class ExploreMap : UserControl
         }
 
         _highlight.PlaceOver(
-            _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight),
+            _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _zoom.Origin),
             ActualWidth,
             ActualHeight);
 
-        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _scale));
+        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _scale, _zoom.Origin));
     }
 
     /// <summary>

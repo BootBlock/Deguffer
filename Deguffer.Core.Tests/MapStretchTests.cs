@@ -15,7 +15,7 @@ public sealed class MapStretchTests
     private const double Precision = 1e-9;
 
     /// <summary>Zoomed four times, with the screen in the middle of the picture.</summary>
-    private static readonly MapTracking Middle = new(1.5 * Width, 1.5 * Height, 4);
+    private static readonly MapTracking Middle = new(1.5 * Width, 1.5 * Height, 4, default);
 
     [Fact]
     public void InsideThePictureItMovesExactlyWithTheHand()
@@ -83,5 +83,31 @@ public sealed class MapStretchTests
 
         Assert.Equal(0, moved.X);
         Assert.Equal(3 * Height, moved.Y, Precision);
+    }
+
+    /// <summary>
+    /// The picture's edges are where they are whatever the tracker is measured from. A drag measured
+    /// from an origin away from the picture's corner stops, and stretches, at the same edges as one
+    /// measured from the corner, or a camera that has moved its origin would let the screen past the
+    /// picture or stop it short.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AnOriginMovesNoEdge(bool elastic)
+    {
+        var shown = Middle.Shown(Width, Height, elastic: true);
+        var origin = new MapOrigin(0.4, 0.55);
+        var fromCorner = new MapStretch(Middle, Width, Height, elastic);
+        var fromOrigin = new MapStretch(MapTracking.Of(shown, Width, Height, origin), Width, Height, elastic);
+
+        foreach (var (x, y) in new[] { (Middle.X + 300, -1e6), (-1e6, Middle.Y + 40), (120.0, -80.0) })
+        {
+            var cornered = fromCorner.Pull(x, y).Shown(Width, Height, elastic: true);
+            var originated = fromOrigin.Pull(x, y).Shown(Width, Height, elastic: true);
+
+            Assert.Equal(cornered.Left, originated.Left, Precision);
+            Assert.Equal(cornered.Top, originated.Top, Precision);
+        }
     }
 }

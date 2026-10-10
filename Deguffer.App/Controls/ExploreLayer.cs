@@ -106,12 +106,13 @@ internal sealed class ExploreLayer
 
     /// <summary>
     /// Put the canvas where its part of the picture is, in a picture laid out over a screen
-    /// <paramref name="width"/> by <paramref name="height"/>. Only a resize or a new drawing moves it:
-    /// the camera above it is what moves as the picture does.
+    /// <paramref name="width"/> by <paramref name="height"/> and measured from
+    /// <paramref name="origin"/>. Only a resize, a new drawing or a new origin moves it: the camera
+    /// above it is what moves as the picture does.
     /// </summary>
-    public void Fit(double width, double height)
+    public void Fit(double width, double height, MapOrigin origin)
     {
-        var placed = Viewport.Canvas(Size.Width, Size.Height, width, height);
+        var placed = Viewport.Canvas(Size.Width, Size.Height, width, height, origin);
 
         Sprite.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
         Sprite.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);

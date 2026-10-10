@@ -32,6 +32,31 @@ public sealed class TreemapZoomTests
     }
 
     /// <summary>
+    /// A shape running far off the canvas is cut a long way past it before it becomes single
+    /// precision, so its edges stay small numbers at any zoom; one that runs past it by less than that
+    /// comes back whole, as every shape does at the zooms the map allows.
+    /// </summary>
+    [Fact]
+    public void AShapeFarOffTheCanvasIsCutBeforeItIsSinglePrecision()
+    {
+        var tree = FilesOf(400, 300, 200, 100);
+        var deep = MapViewport.Seen(1e5, 0.5, 0.5);
+
+        var root = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: deep)
+            .Single(tile => tile.Node == tree.RootNode);
+
+        Assert.Equal(-TreemapLayout.Reach * Width, root.X);
+        Assert.Equal(-TreemapLayout.Reach * Height, root.Y);
+        Assert.Equal((TreemapLayout.Reach + 1) * Width, root.X + root.Width);
+        Assert.Equal((TreemapLayout.Reach + 1) * Height, root.Y + root.Height);
+
+        var deepest = MapViewport.Anchored(MapViewport.MaximumZoom, 0.99, 0.99, 1, 1);
+        var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: deepest)
+            .Single(tile => tile.Node == tree.RootNode);
+
+        Assert.Equal(Width * MapViewport.MaximumZoom, whole.Width, 2);
+    }
+    /// <summary>
     /// What keeps a zoomed layout the size of the canvas rather than of the picture: nothing wholly off
     /// the canvas is laid out, so at a high zoom most of the tree is never visited.
     /// </summary>
