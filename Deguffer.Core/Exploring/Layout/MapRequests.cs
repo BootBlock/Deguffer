@@ -93,16 +93,20 @@ public sealed class MapRequests
     /// <summary>
     /// Where the camera has come to rest, given that the tracker last reported
     /// <paramref name="reported"/>: where the request was going, if it got there, and otherwise the
-    /// report held inside the picture.
+    /// report held inside the picture and under <paramref name="ceiling"/>.
     /// </summary>
-    public MapViewport Rest(MapViewport reported) => At(reported) is { } target ? target : reported.Held();
+    public MapViewport Rest(MapViewport reported, double ceiling) => At(reported) is { } target ? target : reported.Held(ceiling);
 
-    /// <summary>Where the request was going, where <paramref name="reported"/> is there, and otherwise null.</summary>
+    /// <summary>
+    /// Where the request was going, where <paramref name="reported"/> is there, and otherwise null.
+    /// The edges are compared on the screen, magnified by the zoom: compared as fractions of the
+    /// picture, two places a whole screen apart are a rounding error apart at a deep zoom.
+    /// </summary>
     private MapViewport? At(MapViewport reported) =>
         _target is { } target
         && Math.Abs((reported.Zoom / target.Zoom) - 1) < Arrived
-        && Math.Abs(reported.Left - target.Left) < Arrived
-        && Math.Abs(reported.Top - target.Top) < Arrived
+        && Math.Abs(reported.Left - target.Left) * target.Zoom < Arrived
+        && Math.Abs(reported.Top - target.Top) * target.Zoom < Arrived
             ? target
             : null;
 }

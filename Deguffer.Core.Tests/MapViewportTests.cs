@@ -33,10 +33,10 @@ public sealed class MapViewportTests
     /// </summary>
     [Theory]
     [InlineData(4, 4)]
-    [InlineData(1000, MapViewport.MaximumZoom)]
+    [InlineData(1000, MapCeiling.Least)]
     public void ZoomingAtAPointKeepsWhatIsUnderItUnderIt(double asked, double kept)
     {
-        var viewport = MapViewport.Anchored(asked, pictureX: 0.4, pictureY: 0.55, screenX: 0.3, screenY: 0.6);
+        var viewport = MapViewport.Anchored(asked, pictureX: 0.4, pictureY: 0.55, screenX: 0.3, screenY: 0.6, MapCeiling.Least);
 
         var (x, y) = viewport.PictureAt(0.3, 0.6);
 
@@ -48,10 +48,10 @@ public sealed class MapViewportTests
     [Theory]
     [InlineData(0.25, 1)]
     [InlineData(1, 1)]
-    [InlineData(1000, MapViewport.MaximumZoom)]
+    [InlineData(1000, MapCeiling.Least)]
     public void TheZoomIsHeldBetweenTheWholePictureAndTheMaximum(double asked, double expected)
     {
-        Assert.Equal(expected, MapViewport.Anchored(asked, 0.5, 0.5, 0.5, 0.5).Zoom, Precision);
+        Assert.Equal(expected, MapViewport.Anchored(asked, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least).Zoom, Precision);
     }
 
     /// <summary>
@@ -64,7 +64,7 @@ public sealed class MapViewportTests
     [InlineData(0.5, 0.5, 0.5, 0.5)]
     public void AScreenNeverShowsPastTheEdgeOfThePicture(double pictureX, double pictureY, double screenX, double screenY)
     {
-        var viewport = MapViewport.Anchored(8, pictureX, pictureY, screenX, screenY);
+        var viewport = MapViewport.Anchored(8, pictureX, pictureY, screenX, screenY, MapCeiling.Least);
 
         AssertInside(viewport);
     }
@@ -77,9 +77,9 @@ public sealed class MapViewportTests
     [Fact]
     public void EveryStepOfAZoomAtThePointerKeepsWhatIsUnderItStill()
     {
-        var from = MapViewport.Anchored(2, 0.4, 0.45, 0.5, 0.5);
+        var from = MapViewport.Anchored(2, 0.4, 0.45, 0.5, 0.5, MapCeiling.Least);
         var (pictureX, pictureY) = from.PictureAt(0.35, 0.65);
-        var to = MapViewport.Anchored(16, pictureX, pictureY, 0.35, 0.65);
+        var to = MapViewport.Anchored(16, pictureX, pictureY, 0.35, 0.65, MapCeiling.Least);
 
         for (var step = 0; step <= 20; step++)
         {
@@ -95,7 +95,7 @@ public sealed class MapViewportTests
     public void TheZoomMovesByEqualRatiosRatherThanEqualSteps()
     {
         var from = MapViewport.Whole;
-        var to = MapViewport.Anchored(16, 0.5, 0.5, 0.5, 0.5);
+        var to = MapViewport.Anchored(16, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least);
 
         Assert.Equal(4, MapViewport.Between(from, to, 0.5).Zoom, Precision);
         Assert.Equal(2, MapViewport.Between(from, to, 0.25).Zoom, Precision);
@@ -111,8 +111,8 @@ public sealed class MapViewportTests
     [Fact]
     public void AMoveFromCornerToCornerNeverLeavesThePicture()
     {
-        var from = MapViewport.Anchored(3, 0, 0, 0, 0);
-        var to = MapViewport.Anchored(40, 1, 1, 1, 1);
+        var from = MapViewport.Anchored(3, 0, 0, 0, 0, MapCeiling.Least);
+        var to = MapViewport.Anchored(40, 1, 1, 1, 1, MapCeiling.Least);
 
         // The screen point that shows the same part of the picture at both ends.
         var still = (to.Left - from.Left) / ((1 / from.Zoom) - (1 / to.Zoom));
@@ -135,8 +135,8 @@ public sealed class MapViewportTests
     [Fact]
     public void AMoveAtOneZoomSlidesAcross()
     {
-        var from = MapViewport.Anchored(4, 0, 0, 0, 0);
-        var to = MapViewport.Anchored(4, 1, 1, 1, 1);
+        var from = MapViewport.Anchored(4, 0, 0, 0, 0, MapCeiling.Least);
+        var to = MapViewport.Anchored(4, 1, 1, 1, 1, MapCeiling.Least);
 
         var halfway = MapViewport.Between(from, to, 0.5);
 
@@ -148,7 +148,7 @@ public sealed class MapViewportTests
     [Fact]
     public void ADrawingOfWhatIsOnScreenSitsExactlyOverIt()
     {
-        var viewport = MapViewport.Anchored(6, 0.3, 0.7, 0.2, 0.9);
+        var viewport = MapViewport.Anchored(6, 0.3, 0.7, 0.2, 0.9, MapCeiling.Least);
 
         Assert.Equal(new MapPlacement(1, 0, 0), viewport.PlacementOf(viewport));
     }
@@ -165,8 +165,8 @@ public sealed class MapViewportTests
     [InlineData(0.8, 0.33)]
     public void APlacementTakesAScreenPointToThePartOfTheDrawingThatShowsIt(double pictureX, double pictureY)
     {
-        var drawn = MapViewport.Anchored(2, 0.4, 0.4, 0.5, 0.5);
-        var shown = MapViewport.Anchored(5, 0.5, 0.35, 0.3, 0.6);
+        var drawn = MapViewport.Anchored(2, 0.4, 0.4, 0.5, 0.5, MapCeiling.Least);
+        var shown = MapViewport.Anchored(5, 0.5, 0.35, 0.3, 0.6, MapCeiling.Least);
 
         var screen = ((pictureX - shown.Left) * shown.Zoom, (pictureY - shown.Top) * shown.Zoom);
         var inDrawing = ((pictureX - drawn.Left) * drawn.Zoom, (pictureY - drawn.Top) * drawn.Zoom);
@@ -184,7 +184,7 @@ public sealed class MapViewportTests
     [Fact]
     public void AScreenPointTheDrawingDoesNotReachFallsOutsideIt()
     {
-        var drawn = MapViewport.Anchored(8, 0.5, 0.5, 0.5, 0.5);
+        var drawn = MapViewport.Anchored(8, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least);
         var shown = MapViewport.Whole;
 
         var (x, y) = shown.PlacementOf(drawn).InDrawing(0.02, 0.98);
@@ -203,7 +203,7 @@ public sealed class MapViewportTests
     [InlineData(0.3, 0.3, 0.2, 0.2)]
     public void FittingAShapeFillsTheScreenWithItAlongItsLongerSide(double x, double y, double width, double height)
     {
-        var viewport = MapViewport.Fitting(new MapFrame(x, y, width, height));
+        var viewport = MapViewport.Fitting(new MapFrame(x, y, width, height), MapCeiling.Least);
 
         var (left, top) = viewport.PictureAt(0, 0);
         var (right, bottom) = viewport.PictureAt(1, 1);
@@ -224,15 +224,15 @@ public sealed class MapViewportTests
         }
     }
 
-    /// <summary>A shape smaller than the maximum can show whole is shown at the maximum, still centred on it.</summary>
+    /// <summary>A shape smaller than the ceiling can show whole is shown at the ceiling, still centred on it.</summary>
     [Fact]
-    public void FittingAShapeTooSmallToFillTheScreenStopsAtTheMaximumZoom()
+    public void FittingAShapeTooSmallToFillTheScreenStopsAtTheCeiling()
     {
-        var viewport = MapViewport.Fitting(new MapFrame(0.5, 0.4, 0.001, 0.002));
+        var viewport = MapViewport.Fitting(new MapFrame(0.5, 0.4, 0.001, 0.002), MapCeiling.Least);
 
         var (centreX, centreY) = viewport.PictureAt(0.5, 0.5);
 
-        Assert.Equal(MapViewport.MaximumZoom, viewport.Zoom, Precision);
+        Assert.Equal(MapCeiling.Least, viewport.Zoom, Precision);
         Assert.Equal(0.5005, centreX, Precision);
         Assert.Equal(0.401, centreY, Precision);
     }
@@ -241,7 +241,7 @@ public sealed class MapViewportTests
     [Fact]
     public void FittingAShapeAtAnEdgeStaysInsideThePicture()
     {
-        var viewport = MapViewport.Fitting(new MapFrame(0.9, 0, 0.1, 0.05));
+        var viewport = MapViewport.Fitting(new MapFrame(0.9, 0, 0.1, 0.05), MapCeiling.Least);
 
         Assert.Equal(10, viewport.Zoom, Precision);
         AssertInside(viewport);
@@ -258,7 +258,7 @@ public sealed class MapViewportTests
     [InlineData(-0.2, 0.15)]
     public void DraggingKeepsWhatIsUnderTheHandUnderIt(double byX, double byY)
     {
-        var viewport = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5);
+        var viewport = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least);
         var (pictureX, pictureY) = viewport.PictureAt(0.4, 0.6);
 
         var (x, y) = viewport.Panned(byX, byY).PictureAt(0.4 + byX, 0.6 + byY);
@@ -271,7 +271,7 @@ public sealed class MapViewportTests
     [Fact]
     public void ADragStopsAtTheEdgeOfThePicture()
     {
-        var viewport = MapViewport.Anchored(4, 0.1, 0.1, 0.5, 0.5);
+        var viewport = MapViewport.Anchored(4, 0.1, 0.1, 0.5, 0.5, MapCeiling.Least);
 
         var dragged = viewport.Panned(3, -3);
 
@@ -289,8 +289,8 @@ public sealed class MapViewportTests
     [Fact]
     public void AShapeTakenFromADrawingToTheScreenIsTheSamePartOfThePicture()
     {
-        var drawn = MapViewport.Anchored(3, 0.4, 0.4, 0.5, 0.5);
-        var shown = MapViewport.Anchored(5, 0.45, 0.35, 0.3, 0.6);
+        var drawn = MapViewport.Anchored(3, 0.4, 0.4, 0.5, 0.5, MapCeiling.Least);
+        var shown = MapViewport.Anchored(5, 0.45, 0.35, 0.3, 0.6, MapCeiling.Least);
         var inDrawing = new MapFrame(0.2, 0.3, 0.1, 0.25);
 
         var onScreen = shown.PlacementOf(drawn).OnScreen(inDrawing);
@@ -327,8 +327,8 @@ public sealed class MapViewportTests
         double width,
         double height)
     {
-        var drawn = MapViewport.Anchored(drawnZoom, drawnX, drawnY, 0.5, 0.5);
-        var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6);
+        var drawn = MapViewport.Anchored(drawnZoom, drawnX, drawnY, 0.5, 0.5, MapCeiling.Least);
+        var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6, MapCeiling.Least);
         var placement = shown.PlacementOf(drawn);
 
         foreach (var origin in Origins)
@@ -368,8 +368,8 @@ public sealed class MapViewportTests
         double width,
         double height)
     {
-        var drawn = MapViewport.Anchored(drawnZoom, drawnX, drawnY, 0.5, 0.5);
-        var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6);
+        var drawn = MapViewport.Anchored(drawnZoom, drawnX, drawnY, 0.5, 0.5, MapCeiling.Least);
+        var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6, MapCeiling.Least);
         var placement = shown.PlacementOf(drawn);
 
         foreach (var origin in Origins)
@@ -399,7 +399,7 @@ public sealed class MapViewportTests
     [InlineData(4, 1.5)]
     public void AtRestOneCanvasPixelIsOneDevicePixel(double zoom, double displayScale)
     {
-        var viewport = MapViewport.Anchored(zoom, 0.3, 0.6, 0.5, 0.5);
+        var viewport = MapViewport.Anchored(zoom, 0.3, 0.6, 0.5, 0.5, MapCeiling.Least);
         const double width = 1200;
         const double height = 800;
 
@@ -420,16 +420,16 @@ public sealed class MapViewportTests
     [Fact]
     public void AStretchedViewportIsKeptAsItIsAndRestsInsideThePicture()
     {
-        var seen = MapViewport.Seen(MapViewport.MaximumZoom * 1.2, -0.05, 0.999);
+        var seen = MapViewport.Seen(MapCeiling.Least * 1.2, -0.05, 0.999);
 
         Assert.True(seen.Left < 0);
-        Assert.True(seen.Zoom > MapViewport.MaximumZoom);
+        Assert.True(seen.Zoom > MapCeiling.Least);
 
-        var held = seen.Held();
+        var held = seen.Held(MapCeiling.Least);
 
-        Assert.Equal(MapViewport.MaximumZoom, held.Zoom);
+        Assert.Equal(MapCeiling.Least, held.Zoom);
         Assert.Equal(0, held.Left);
-        Assert.Equal(1 - (1 / MapViewport.MaximumZoom), held.Top, Precision);
+        Assert.Equal(1 - (1 / MapCeiling.Least), held.Top, Precision);
     }
 
     /// <summary>
@@ -446,21 +446,68 @@ public sealed class MapViewportTests
         Assert.Contains("Left = ", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The ceiling is the only limit on how deep a zoom goes: past the least one where a drawing
+    /// raised it, and held to it where it is lower than the zoom asked for, at the pointer as ever.
+    /// </summary>
+    [Theory]
+    [InlineData(1000, 4096, 1000)]
+    [InlineData(1000, 500, 500)]
+    [InlineData(1e7, MapCeiling.Most, 1e7)]
+    public void AZoomGoesAsDeepAsTheCeilingAllows(double asked, double ceiling, double expected)
+    {
+        var anchored = MapViewport.Anchored(asked, 0.4, 0.55, 0.3, 0.6, ceiling);
+        var zoomed = MapViewport.Anchored(2, 0.4, 0.55, 0.3, 0.6, ceiling).ZoomedAt(asked / 2, 0.3, 0.6, ceiling);
+        var fitting = MapViewport.Fitting(new MapFrame(0.4, 0.55, 1 / asked, 1 / asked), ceiling);
+
+        Assert.Equal(expected, anchored.Zoom, expected * 1e-12);
+        Assert.Equal(expected, zoomed.Zoom, expected * 1e-12);
+        Assert.Equal(expected, fitting.Zoom, expected * 1e-12);
+        Assert.Equal(0.4, anchored.PictureAt(0.3, 0.6).X, 1e-12);
+        Assert.Equal(0.55, zoomed.PictureAt(0.3, 0.6).Y, 1e-12);
+    }
+
+    /// <summary>
+    /// A pan and a glide between two deep zooms keep the zoom they have, past the least ceiling: only
+    /// a zoom asks for a ceiling, and a viewport deeper than a ceiling that came down is held to it
+    /// only when it comes to rest.
+    /// </summary>
+    [Fact]
+    public void APanAndAGlideKeepADeepZoomAndRestHoldsItToTheCeiling()
+    {
+        var from = MapViewport.Anchored(1000, 0.4, 0.4, 0.5, 0.5, 4096);
+        var to = MapViewport.Anchored(4000, 0.41, 0.39, 0.5, 0.5, 4096);
+
+        Assert.Equal(1000, from.Panned(0.2, -0.1).Zoom, 1e-9);
+
+        for (var step = 0; step <= 10; step++)
+        {
+            var between = MapViewport.Between(from, to, step / 10.0).Zoom;
+
+            Assert.InRange(between, 1000, 4000);
+        }
+
+        var held = to.Held(500);
+
+        Assert.Equal(500, held.Zoom);
+        AssertInside(held);
+    }
+
     [Fact]
     public void AViewportAlreadyInsideThePictureRestsWhereItIs()
     {
-        var viewport = MapViewport.Anchored(6, 0.3, 0.4, 0.2, 0.7);
+        var viewport = MapViewport.Anchored(6, 0.3, 0.4, 0.2, 0.7, MapCeiling.Least);
 
-        Assert.Equal(viewport, viewport.Held());
+        Assert.Equal(viewport, viewport.Held(MapCeiling.Least));
     }
 
     [Fact]
     public void ZoomingByAFactorAtAPointKeepsWhatIsUnderItUnderIt()
     {
-        var from = MapViewport.Anchored(3, 0.6, 0.4, 0.5, 0.5);
+        var from = MapViewport.Anchored(3, 0.6, 0.4, 0.5, 0.5, MapCeiling.Least);
         var under = from.PictureAt(0.25, 0.8);
 
-        var to = from.ZoomedAt(2.5, 0.25, 0.8);
+        var to = from.ZoomedAt(2.5, 0.25, 0.8, MapCeiling.Least);
 
         Assert.Equal(7.5, to.Zoom, Precision);
         Assert.Equal(under.X, to.PictureAt(0.25, 0.8).X, Precision);

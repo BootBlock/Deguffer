@@ -40,11 +40,11 @@ public static class MapKeys
     /// <summary>How far one press of an arrow moves the picture, as a fraction of the screen.</summary>
     public const double PanStep = 0.2;
 
-    /// <summary>Where <paramref name="key"/> takes a camera going to <paramref name="target"/>.</summary>
-    public static MapViewport Step(MapKey key, MapViewport target) => key switch
+    /// <summary>Where <paramref name="key"/> takes a camera going to <paramref name="target"/>, no deeper than <paramref name="ceiling"/>.</summary>
+    public static MapViewport Step(MapKey key, MapViewport target, double ceiling) => key switch
     {
-        MapKey.ZoomIn => target.ZoomedAt(ZoomStep, 0.5, 0.5),
-        MapKey.ZoomOut => target.ZoomedAt(1 / ZoomStep, 0.5, 0.5),
+        MapKey.ZoomIn => target.ZoomedAt(ZoomStep, 0.5, 0.5, ceiling),
+        MapKey.ZoomOut => target.ZoomedAt(1 / ZoomStep, 0.5, 0.5, ceiling),
 
         // Showing what is to the left is the picture dragged to the right.
         MapKey.Left => target.Panned(PanStep, 0),

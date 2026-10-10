@@ -66,6 +66,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>What the tracker last reported, as it showed it, for where it comes to rest.</summary>
     private MapViewport _reported;
 
+    /// <summary>What the tracker last reported, as it reported it, before anything held it to the ceiling.</summary>
+    private MapTracking? _tracking;
+
     /// <summary>Whether the picture may stretch past its limits and coast, which is whether the reader has animation effects on.</summary>
     private bool _elastic;
 
@@ -84,6 +87,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>Whether a hand's coast came to rest while the tracker had not yet answered the move.</summary>
     private bool _restedBeforeAnswer;
 
+    /// <summary>How far the picture can be magnified: see <see cref="Ceiling"/>.</summary>
+    private double _ceiling = MapCeiling.Least;
+
     public ExploreZoom(Visual source, MapCamera camera, IMotionPolicy motion, DispatcherQueue dispatcher)
     {
         _motion = motion;
@@ -93,7 +99,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         _tracker = InteractionTracker.CreateWithOwner(compositor, this);
         _tracker.MinScale = 1;
-        _tracker.MaxScale = (float)MapViewport.MaximumZoom;
+        _tracker.MaxScale = (float)_ceiling;
         camera.Bound(_tracker);
 
         _interaction = new MapInteraction(source, _tracker);
@@ -143,6 +149,13 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>The viewport on screen at this moment.</summary>
     public MapViewport Shown { get; private set; }
 
+    /// <summary>
+    /// How far the picture can be magnified, which the drawing on screen decides (see
+    /// <see cref="MapCeiling"/>). Every zoom the map asks for is held to it, and so are the tracker and
+    /// the camera.
+    /// </summary>
+    public double Ceiling => _ceiling;
+
     /// <summary>Where the camera is going, which is where it is when nothing is moving it.</summary>
     public MapViewport Target => _target;
 
@@ -191,6 +204,17 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     }
 
     /// <summary>
+    /// The drawing on screen allows a zoom up to <paramref name="ceiling"/>.
+    ///
+    /// <para>Never below where the camera is going, nor below what it shows within the ceiling it had:
+    /// a drawing can arrive while the camera is on its way somewhere deeper than the drawing was made
+    /// at, and a lower ceiling stops the next zoom, never one already made. The drawing made where the
+    /// camera stops sets it again.</para>
+    /// </summary>
+    public void Limit(double ceiling) =>
+        Cap(Math.Max(ceiling, Math.Max(_target.Zoom, Math.Min(Shown.Zoom, _ceiling))));
+
+    /// <summary>
     /// The map is <paramref name="width"/> by <paramref name="height"/> now. The tracker counts in
     /// pixels, so the same part of the picture is a different position at a new size.
     /// </summary>
@@ -215,18 +239,22 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// (<paramref name="x"/>, <paramref name="y"/>) given as fractions of the screen. See
     /// <see cref="MapWheel.Zoom"/>.
     /// </summary>
-    public void Turn(int delta, double x, double y) => GlideTo(MapWheel.Zoom(_target, Shown, delta, x, y));
+    public void Turn(int delta, double x, double y) => GlideTo(MapWheel.Zoom(_target, Shown, delta, x, y, _ceiling));
 
     /// <summary>Pan across by <paramref name="delta"/> of the wheel. See <see cref="MapWheel.Across"/>.</summary>
     public void Slide(int delta) => GlideTo(MapWheel.Across(_target, delta));
 
     /// <summary>Move as <paramref name="key"/> asks. See <see cref="MapKeys"/>.</summary>
-    public void Press(MapKey key) => GlideTo(MapKeys.Step(key, _target));
+    public void Press(MapKey key) => GlideTo(MapKeys.Step(key, _target, _ceiling));
 
     /// <summary>
     /// Move from what is on screen to <paramref name="target"/>, or jump there for a reader who has
     /// turned animation effects off. A jump arrives once it has rested for <see cref="JumpSettleTime"/>,
     /// so a run of them is drawn once.
+    ///
+    /// <para>A target deeper than the <see cref="Ceiling"/> raises it: every target the map works out
+    /// itself is held to it, so this is a place the reader was, which had detail to show when they
+    /// were there. The drawing made there says whether it still has.</para>
     /// </summary>
     public void GlideTo(MapViewport target)
     {
@@ -237,6 +265,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
+        Cap(Math.Max(_ceiling, target.Zoom));
         _target = target;
         Retargeted?.Invoke(this, EventArgs.Empty);
 
@@ -304,13 +333,13 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _fling.Track(handX, handY, at);
 
         var tracking = _stretch.Pull(x, y);
-        var held = tracking.Held(_size.Width, _size.Height);
+        var held = tracking.Held(_size.Width, _size.Height, _ceiling);
 
         _requests.Asked(_tracker.TryUpdatePosition(new Vector3((float)held.X, (float)held.Y, 0)), null);
         _camera.Stretch(held.X - tracking.X, held.Y - tracking.Y);
 
-        Shown = tracking.Shown(_size.Width, _size.Height, _elastic);
-        _target = Shown.Held();
+        Shown = tracking.Shown(_size.Width, _size.Height, _elastic, _ceiling);
+        _target = Shown.Held(_ceiling);
 
         Moved?.Invoke(this, EventArgs.Empty);
     }
@@ -333,7 +362,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         _fling.Clear();
 
-        var held = Shown.Held();
+        var held = Shown.Held(_ceiling);
 
         // Stretched past an edge: it springs back inside rather than coasting on. The map takes it as
         // where it is going from now, which is where a press during the spring lands it.
@@ -362,12 +391,18 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>
     /// To <paramref name="viewport"/> at once, for a map that has been handed something else to draw:
     /// the whole of it, or the part the reader had zoomed to when they were last there.
+    ///
+    /// <para>The <see cref="Ceiling"/> belonged to the drawing of what the map showed before, so it
+    /// goes back to its least, or to the zoom the reader was at, until the new picture's first drawing
+    /// sets it.</para>
     /// </summary>
     public void Reset(MapViewport viewport)
     {
         _settle.Stop();
         _stretch = null;
         _moving = false;
+
+        Cap(Math.Max(MapCeiling.Least, viewport.Zoom));
 
         var moved = viewport != _target;
 
@@ -433,7 +468,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         }
 
         _moving = false;
-        Shown = _requests.Rest(_reported);
+        Shown = _requests.Rest(_reported, _ceiling);
         _target = Shown;
 
         Rest();
@@ -457,7 +492,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         var position = args.ModifiedRestingPosition ?? args.NaturalRestingPosition;
         var scale = args.ModifiedRestingScale ?? args.NaturalRestingScale;
 
-        _target = new MapTracking(position.X, position.Y, scale, OriginFor(args.RequestId)).Shown(_size.Width, _size.Height, _elastic).Held();
+        _target = new MapTracking(position.X, position.Y, scale, OriginFor(args.RequestId))
+            .Shown(_size.Width, _size.Height, _elastic, _ceiling)
+            .Held(_ceiling);
         Retargeted?.Invoke(this, EventArgs.Empty);
     }
 
@@ -480,7 +517,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         }
 
         Shown = _reported;
-        _target = _reported.Held();
+        _target = _reported.Held(_ceiling);
 
         Moved?.Invoke(this, EventArgs.Empty);
         Retargeted?.Invoke(this, EventArgs.Empty);
@@ -498,8 +535,8 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
-        _reported = new MapTracking(args.Position.X, args.Position.Y, args.Scale, OriginFor(args.RequestId))
-            .Shown(_size.Width, _size.Height, _elastic);
+        _tracking = new MapTracking(args.Position.X, args.Position.Y, args.Scale, OriginFor(args.RequestId));
+        _reported = _tracking.Value.Shown(_size.Width, _size.Height, _elastic, _ceiling);
 
         // A hand's report from before the tracker answered a move of the origin: the camera is held,
         // so the screen still shows what it did. Where the tracker is goes on being kept, for a move
@@ -523,6 +560,49 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     }
 
     private bool HasSize => _size.Width > 0 && _size.Height > 0;
+
+    /// <summary>
+    /// Hold every zoom to <paramref name="ceiling"/> from now on: the map's own, the tracker's, and the
+    /// camera's for a reader who has turned animation effects off. Set before anything is asked of the
+    /// tracker at a zoom it allows, which it would otherwise hold to the old one.
+    /// </summary>
+    private void Cap(double ceiling)
+    {
+        ceiling = Math.Min(ceiling, MapCeiling.Most);
+
+        if (ceiling == _ceiling)
+        {
+            return;
+        }
+
+        var before = _ceiling;
+
+        _ceiling = ceiling;
+        _tracker.MaxScale = (float)ceiling;
+        _camera.Limit(ceiling);
+
+        // For a reader who has turned animation effects off, the camera shows the tracker held to the
+        // ceiling, so a new one moves the screen at once wherever the tracker is past either: a pinch
+        // gives a little past the ceiling under the hand. What the map takes the screen to show has to
+        // move with it, or a click is resolved through the zoom the screen showed before (§7.1). Held
+        // to both ceilings alike, the screen has not moved, and nothing changes.
+        if (_elastic
+            || !HasSize
+            || _tracking is not { } tracking
+            || Math.Min(tracking.Scale, before) == Math.Min(tracking.Scale, ceiling))
+        {
+            return;
+        }
+
+        _reported = tracking.Shown(_size.Width, _size.Height, elastic: false, ceiling);
+
+        // A drag and a move of the origin say what the screen shows themselves, as in ValuesChanged.
+        if (_move is null && _stretch is null)
+        {
+            Shown = _requests.Where(_reported);
+            Moved?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>The camera came to rest where the screen shows: measure from there if it is far from the origin, then say so.</summary>
     private void Rest()
@@ -633,13 +713,13 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             _stretch.Remeasure(_origin);
 
             var tracking = _stretch.Pull(0, 0);
-            var held = tracking.Held(_size.Width, _size.Height);
+            var held = tracking.Held(_size.Width, _size.Height, _ceiling);
 
             _requests.Asked(_tracker.TryUpdatePosition(new Vector3((float)held.X, (float)held.Y, 0)), null);
 
             // While a mouse holds the picture the drag says what the screen shows, as in Drag.
-            Shown = tracking.Shown(_size.Width, _size.Height, _elastic);
-            _target = Shown.Held();
+            Shown = tracking.Shown(_size.Width, _size.Height, _elastic, _ceiling);
+            _target = Shown.Held(_ceiling);
             Moved?.Invoke(this, EventArgs.Empty);
             return;
         }

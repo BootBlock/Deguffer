@@ -54,11 +54,14 @@ public sealed class TiledSurface : ExploreSurface
         HasVolumeBeside = volumeBeside;
 
         Labels = BuildLabels();
+        Ceiling = viewport is { } drawn ? MapCeiling.Of(drawn.Zoom, Deeper()) : null;
     }
 
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override bool HasVolumeBeside { get; }
+
+    public override double? Ceiling { get; }
 
     public override CanvasPainter Painter(TileColour background) =>
         new TileRasteriser(_tiles, Width, Height, background, ColourFor);
@@ -203,6 +206,34 @@ public sealed class TiledSurface : ExploreSurface
         }
 
         return labels;
+    }
+
+    /// <summary>
+    /// How many times more the picture has to be magnified for everything in view to be drawn one by
+    /// one, and for the smallest shape drawn to have room for its name: 1 where both already hold.
+    /// Every tile is in view, in part at least: a zoomed layout lays out nothing wholly off the canvas.
+    /// </summary>
+    private double Deeper()
+    {
+        var deeper = 1.0;
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.Finest > 0)
+            {
+                deeper = Math.Max(deeper, MapCeiling.Revealing(tile.Finest, Limits.MinimumTileSize));
+            }
+            else if (tile.IsNode)
+            {
+                deeper = Math.Max(
+                    deeper,
+                    MapCeiling.Naming(tile.Width, tile.Height, Limits.MinimumLabelWidth, Limits.MinimumLabelHeight));
+            }
+        }
+
+        return deeper;
     }
 
     /// <summary>At most <paramref name="count"/> of <paramref name="indices"/>, largest shape first.</summary>

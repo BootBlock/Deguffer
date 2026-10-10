@@ -14,21 +14,6 @@ namespace Deguffer.Core.Exploring.Layout;
 /// </summary>
 public readonly record struct MapViewport
 {
-    /// <summary>
-    /// How far a picture can be magnified.
-    ///
-    /// <para>Sixty-four times is more detail than the picture can use: the smallest shape a treemap
-    /// draws is three pixels, so at this zoom a 4K canvas has room for a shape standing for a few
-    /// hundred bytes of a terabyte volume. Past that the list view reads the same data better.</para>
-    ///
-    /// <para>It is also the precision limit. A shape is laid out in double precision and handed over
-    /// in single precision, relative to the screen, and a shape that runs far off it has a visible edge
-    /// added up from two large numbers. At this zoom a 4K picture is a quarter of a million pixels
-    /// across, where a single-precision step is a sixty-fourth of a pixel, so an edge is out by a few
-    /// hundredths of a pixel at most. Much further and the error would start to show as seams.</para>
-    /// </summary>
-    public const double MaximumZoom = 64;
-
     private readonly double _beyond;
 
     private MapViewport(double zoom, double left, double top)
@@ -41,7 +26,7 @@ public readonly record struct MapViewport
     /// <summary>The whole picture, unmagnified.</summary>
     public static MapViewport Whole => default;
 
-    /// <summary>How many times the whole picture is magnified: 1, which shows all of it, to <see cref="MaximumZoom"/>.</summary>
+    /// <summary>How many times the whole picture is magnified: 1, which shows all of it, to the map's ceiling (<see cref="MapCeiling"/>).</summary>
     public double Zoom => 1 + _beyond;
 
     /// <summary>Where the screen's left edge falls, as a fraction of the whole picture's width.</summary>
@@ -59,13 +44,13 @@ public readonly record struct MapViewport
     /// (<paramref name="screenX"/>, <paramref name="screenY"/>), all four as fractions.
     ///
     /// <para>This is zooming at the pointer: the thing under it stays under it. The zoom is held
-    /// between 1 and <see cref="MaximumZoom"/>, and the position is then held inside the picture, so
+    /// between 1 and <paramref name="ceiling"/>, and the position is then held inside the picture, so
     /// near an edge the thing under the pointer moves as far as it has to and no further. A screen
     /// never shows past the picture's edge, because there is nothing there to show.</para>
     /// </summary>
-    public static MapViewport Anchored(double zoom, double pictureX, double pictureY, double screenX, double screenY)
+    public static MapViewport Anchored(double zoom, double pictureX, double pictureY, double screenX, double screenY, double ceiling)
     {
-        zoom = Math.Clamp(zoom, 1, MaximumZoom);
+        zoom = Math.Clamp(zoom, 1, ceiling);
 
         return Within(zoom, pictureX - (screenX / zoom), pictureY - (screenY / zoom));
     }
@@ -76,13 +61,13 @@ public readonly record struct MapViewport
     ///
     /// <para>The zoom is one factor on both axes, so a part that is not the screen's shape fills it one
     /// way and leaves room beside it the other. Stretching it to fill both would draw every shape in it
-    /// a different shape from the one it has. A part smaller than the maximum zoom can show whole is
-    /// shown at the maximum, still centred, and a part at an edge is held inside the picture like any
-    /// other viewport.</para>
+    /// a different shape from the one it has. A part smaller than <paramref name="ceiling"/> can show
+    /// whole is shown at the ceiling, still centred, and a part at an edge is held inside the picture
+    /// like any other viewport.</para>
     /// </summary>
-    public static MapViewport Fitting(MapFrame part)
+    public static MapViewport Fitting(MapFrame part, double ceiling)
     {
-        var zoom = Math.Clamp(Math.Min(1 / part.Width, 1 / part.Height), 1, MaximumZoom);
+        var zoom = Math.Clamp(Math.Min(1 / part.Width, 1 / part.Height), 1, ceiling);
         var (centreX, centreY) = part.Centre;
 
         return Within(zoom, centreX - (0.5 / zoom), centreY - (0.5 / zoom));
@@ -93,7 +78,8 @@ public readonly record struct MapViewport
     /// <paramref name="screenY"/>) of the screen, so the part that was under the hand stays under it.
     ///
     /// <para>Held inside the picture, so a drag past an edge stops there and the part under the hand
-    /// slips as far as it has to, as it does for a zoom at an edge.</para>
+    /// slips as far as it has to, as it does for a zoom at an edge. The zoom is not held: a pan never
+    /// changes it.</para>
     /// </summary>
     public MapViewport Panned(double screenX, double screenY) =>
         Within(Zoom, Left - (screenX / Zoom), Top - (screenY / Zoom));
@@ -101,13 +87,13 @@ public readonly record struct MapViewport
     /// <summary>
     /// This viewport magnified <paramref name="factor"/> times more about screen point
     /// (<paramref name="screenX"/>, <paramref name="screenY"/>), so the thing there stays there, as
-    /// far as the picture's edges and the zoom's limits allow. See <see cref="Anchored"/>.
+    /// far as the picture's edges, 1 and <paramref name="ceiling"/> allow. See <see cref="Anchored"/>.
     /// </summary>
-    public MapViewport ZoomedAt(double factor, double screenX, double screenY)
+    public MapViewport ZoomedAt(double factor, double screenX, double screenY, double ceiling)
     {
         var (pictureX, pictureY) = PictureAt(screenX, screenY);
 
-        return Anchored(Zoom * factor, pictureX, pictureY, screenX, screenY);
+        return Anchored(Zoom * factor, pictureX, pictureY, screenX, screenY, ceiling);
     }
 
     /// <summary>
@@ -125,13 +111,11 @@ public readonly record struct MapViewport
     }
 
     /// <summary>
-    /// Where this comes to rest: the zoom held between 1 and <see cref="MaximumZoom"/>, and the screen
-    /// held inside the picture. Itself for any viewport made by anything but <see cref="Seen"/>.
-    ///
-    /// <para>A method rather than a property: a record prints every property it has, and a property
-    /// of its own type would print that one's, and so on until the stack ran out.</para>
+    /// Where this comes to rest: the zoom held between 1 and <paramref name="ceiling"/>, and the screen
+    /// held inside the picture. Itself for any viewport made by anything but <see cref="Seen"/>, at a
+    /// zoom the ceiling has not since come down below.
     /// </summary>
-    public MapViewport Held() => Within(Zoom, Left, Top);
+    public MapViewport Held(double ceiling) => Within(Math.Clamp(Zoom, 1, ceiling), Left, Top);
 
     /// <summary>
     /// The viewport a fraction <paramref name="progress"/> of the way from <paramref name="from"/> to
@@ -144,7 +128,8 @@ public readonly record struct MapViewport
     /// the thing under the pointer stays under it throughout rather than only at the two ends.</para>
     ///
     /// <para>Every step is inside the picture if both ends are. Each edge is a straight line in how
-    /// much of the picture is shown, and so is the limit on it.</para>
+    /// much of the picture is shown, and so is the limit on it. The zoom is held between the two ends,
+    /// because an eased step between them can land a rounding error outside them.</para>
     /// </summary>
     public static MapViewport Between(MapViewport from, MapViewport to, double progress)
     {
@@ -168,7 +153,10 @@ public readonly record struct MapViewport
                 from.Top + ((to.Top - from.Top) * progress));
         }
 
-        var zoom = from.Zoom * Math.Pow(to.Zoom / from.Zoom, progress);
+        var zoom = Math.Clamp(
+            from.Zoom * Math.Pow(to.Zoom / from.Zoom, progress),
+            Math.Min(from.Zoom, to.Zoom),
+            Math.Max(from.Zoom, to.Zoom));
         var along = ((1 / zoom) - (1 / from.Zoom)) / ((1 / to.Zoom) - (1 / from.Zoom));
 
         return Within(
@@ -245,13 +233,13 @@ public readonly record struct MapViewport
         new MapTransform(scale, scale, 0, 0).Then(Canvas(canvasWidth, canvasHeight, width, height, origin));
 
     /// <summary>
-    /// A viewport held inside the picture. The zoom is held as well, because an eased step between
-    /// two zooms can land a rounding error outside them, and a zoom a hair under 1 would leave no room
-    /// between the edges to hold the position in.
+    /// A viewport held inside the picture. The zoom is held to at least 1, because a zoom a hair under
+    /// it would leave no room between the edges to hold the position in. How deep it may go is held by
+    /// the caller, against the ceiling it was given.
     /// </summary>
     private static MapViewport Within(double zoom, double left, double top)
     {
-        zoom = Math.Clamp(zoom, 1, MaximumZoom);
+        zoom = Math.Max(zoom, 1);
 
         var span = 1 / zoom;
 

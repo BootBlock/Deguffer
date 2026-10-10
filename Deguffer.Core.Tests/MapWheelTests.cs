@@ -12,10 +12,10 @@ public sealed class MapWheelTests
     [Fact]
     public void ThreeNotchesDoubleTheZoomAndKeepWhatIsUnderThePointerThere()
     {
-        var shown = MapViewport.Anchored(2, 0.4, 0.6, 0.5, 0.5);
+        var shown = MapViewport.Anchored(2, 0.4, 0.6, 0.5, 0.5, MapCeiling.Least);
         var under = shown.PictureAt(0.3, 0.7);
 
-        var to = MapWheel.Zoom(shown, shown, 3 * Notch, 0.3, 0.7);
+        var to = MapWheel.Zoom(shown, shown, 3 * Notch, 0.3, 0.7, MapCeiling.Least);
 
         Assert.Equal(4, to.Zoom, Precision);
         Assert.Equal(under.X, to.PictureAt(0.3, 0.7).X, Precision);
@@ -29,21 +29,21 @@ public sealed class MapWheelTests
     [Fact]
     public void ANotchIsTakenFromWhereTheCameraIsGoing()
     {
-        var shown = MapViewport.Anchored(2, 0.5, 0.5, 0.5, 0.5);
-        var going = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5);
+        var shown = MapViewport.Anchored(2, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least);
+        var going = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least);
 
-        Assert.Equal(8, MapWheel.Zoom(going, shown, 3 * Notch, 0.5, 0.5).Zoom, Precision);
+        Assert.Equal(8, MapWheel.Zoom(going, shown, 3 * Notch, 0.5, 0.5, MapCeiling.Least).Zoom, Precision);
     }
 
     [Fact]
     public void TurningTowardTheReaderZoomsOut() =>
-        Assert.Equal(1, MapWheel.Zoom(MapViewport.Anchored(2, 0.5, 0.5, 0.5, 0.5), MapViewport.Whole, -3 * Notch, 0.5, 0.5).Zoom, Precision);
+        Assert.Equal(1, MapWheel.Zoom(MapViewport.Anchored(2, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least), MapViewport.Whole, -3 * Notch, 0.5, 0.5, MapCeiling.Least).Zoom, Precision);
 
     /// <summary>Across, a turn away from the reader shows what is to the left, as a scroll bar does, by a fifth of the screen a notch.</summary>
     [Fact]
     public void ATurnAcrossAwayFromTheReaderShowsWhatIsToTheLeft()
     {
-        var from = MapViewport.Anchored(8, 0.5, 0.5, 0.5, 0.5);
+        var from = MapViewport.Anchored(8, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least);
 
         var to = MapWheel.Across(from, 2 * Notch);
 

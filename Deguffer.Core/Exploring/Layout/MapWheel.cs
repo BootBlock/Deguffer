@@ -25,13 +25,13 @@ public static class MapWheel
     /// <summary>
     /// The camera going to <paramref name="target"/>, showing <paramref name="shown"/>, after a turn of
     /// <paramref name="delta"/> at screen point (<paramref name="x"/>, <paramref name="y"/>), given as
-    /// fractions of the screen. Away from the reader zooms in.
+    /// fractions of the screen, no deeper than <paramref name="ceiling"/>. Away from the reader zooms in.
     /// </summary>
-    public static MapViewport Zoom(MapViewport target, MapViewport shown, int delta, double x, double y)
+    public static MapViewport Zoom(MapViewport target, MapViewport shown, int delta, double x, double y, double ceiling)
     {
         var (pictureX, pictureY) = shown.PictureAt(x, y);
 
-        return MapViewport.Anchored(target.Zoom * Math.Pow(2, delta / Notch / NotchesPerDoubling), pictureX, pictureY, x, y);
+        return MapViewport.Anchored(target.Zoom * Math.Pow(2, delta / Notch / NotchesPerDoubling), pictureX, pictureY, x, y, ceiling);
     }
 
     /// <summary>

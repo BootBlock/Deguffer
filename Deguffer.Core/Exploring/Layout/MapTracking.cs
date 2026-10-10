@@ -45,13 +45,14 @@ public readonly record struct MapTracking(double X, double Y, double Scale, MapO
     /// <para>Where the picture may be stretched past its limits, <paramref name="elastic"/>, the screen
     /// shows the tracker as it is, a pinch past the zoom's limits and a pan past the picture's edge
     /// included. Where it may not, because the reader has turned animation effects off and a spring
-    /// back is movement, the camera follows the tracker held to its limits, the zoom first and then the
-    /// position at that zoom, and the screen shows that. The camera's expressions on the compositor do
-    /// the same arithmetic, and the two have to agree, because a click is resolved through this (§7.1).</para>
+    /// back is movement, the camera follows the tracker held to its limits, the zoom first, up to
+    /// <paramref name="ceiling"/>, and then the position at that zoom, and the screen shows that. The
+    /// camera's expressions on the compositor do the same arithmetic, and the two have to agree,
+    /// because a click is resolved through this (§7.1).</para>
     /// </summary>
-    public MapViewport Shown(double width, double height, bool elastic)
+    public MapViewport Shown(double width, double height, bool elastic, double ceiling)
     {
-        var shown = elastic ? this : Held(width, height);
+        var shown = elastic ? this : Held(width, height, ceiling);
 
         return MapViewport.Seen(
             shown.Scale,
@@ -61,8 +62,8 @@ public readonly record struct MapTracking(double X, double Y, double Scale, MapO
 
     /// <summary>
     /// This held to the tracker's limits on a screen <paramref name="width"/> by
-    /// <paramref name="height"/>: the scale between 1 and <see cref="MapViewport.MaximumZoom"/>, then
-    /// the position between the picture's edges at that scale.
+    /// <paramref name="height"/>: the scale between 1 and <paramref name="ceiling"/>, then the position
+    /// between the picture's edges at that scale.
     ///
     /// <para>Held here in pixels rather than by reading this back as a viewport and holding that,
     /// because the two differ for a scale past its limits: a viewport's edges are fractions of the
@@ -70,9 +71,9 @@ public readonly record struct MapTracking(double X, double Y, double Scale, MapO
     /// expression on the compositor holds the tracker's own pixels, as this does, and a click is
     /// resolved through this, so the two must agree (§7.1).</para>
     /// </summary>
-    public MapTracking Held(double width, double height)
+    public MapTracking Held(double width, double height, double ceiling)
     {
-        var scale = Math.Clamp(Scale, 1, MapViewport.MaximumZoom);
+        var scale = Math.Clamp(Scale, 1, ceiling);
         var (left, right) = Origin.Across(scale, width);
         var (top, bottom) = Origin.Down(scale, height);
 

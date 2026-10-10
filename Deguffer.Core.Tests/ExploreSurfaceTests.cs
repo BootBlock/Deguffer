@@ -43,7 +43,7 @@ public sealed class ExploreSurfaceTests
     public void OnlyATreemapOnScreenZooms(ExploreView view, bool scanning, bool zooms)
     {
         var tree = scanning ? NamedTree(10) : FlatTree(10);
-        var zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5));
+        var zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5), MapCeiling.Least);
 
         var surface = ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,

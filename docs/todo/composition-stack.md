@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
 > composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
-> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)). The maintainer has
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -313,7 +313,19 @@ The camera is measured from an origin (`MapOrigin`) so it stays exact past 64×,
 - **The far bound is computed on the CPU in double precision** (`1 - origin`) and stored in the camera's property set, because near the far edge it is small and the expression multiplies it by the scale.
 - **Tiles more than 64 canvases off a drawing are cut** before they become single precision. At 64× or less, no tile is cut.
 - **Driven** on a build with the ceiling raised to 1,024× and a temporary log: the origin moved at rest at 64× and the tracker answered within about 10 ms. Outlines and names stayed on their shapes, and a click at 1,024× selected the shape under the pointer.
-- **Left for #306:** the dimming rectangle in `MapGraphics` has a fixed extent of 2^20 canvas pixels, which is enough for a drawing shown zoomed out by up to 64×.
+- **Left for #306:** the dimming rectangle in `MapGraphics` has a fixed extent of 2^20 canvas pixels, which is enough for a drawing shown zoomed out by up to 64×. #306 made it reach as far as each drawing's picture does ([below](#what-landing-306-found)).
+
+## What landing #306 found
+
+The zoom's ceiling follows the detail in view (`MapCeiling`) rather than a fixed 64×.
+
+- **The layout says what it could not draw.** A block standing in for items too small to draw, and a folder drawn as one block, carry how wide their smallest hidden item would be (`ExploreTile.Finest`). A small folder opens with no frame at all, so a folder drawn as one block is in practice one past the depth its zoom opens.
+- **The rule needs a floor of one level of detail per drawing.** Zooming until a hidden block covers the screen got stuck once it did while its items were still too small; an estimate from the smallest item's size alone falls short where the item is a sliver. Each drawing therefore allows at least twice its zoom while anything in view is undrawn.
+- **Stopping where everything is drawn left the files unnamed.** Every one-byte file drawn was about three pixels wide. The ceiling then goes on to where the smallest shape in view has room for its name, with a pixel to spare: aimed at the threshold exactly, equal neighbours fell either side of it by a rounding error and half of them went unnamed.
+- **Every limit reads the one ceiling:** each zoom the map asks for, the tracker's `MaxScale`, and the camera's clamp, which reads it from the property set. A place returned to from history raises it, and a lower one never cuts a zoom already made.
+- **A request counts as arrived by its distance on screen.** As a fraction of the picture, a whole screen is a rounding error at a deep zoom.
+- **The dimming round a selection reaches twice the drawing's picture** at the drawing's zoom, in place of the fixed 2^20 pixels.
+- **Driven** into 20,000 one-byte files past 64×: they were drawn one by one, each named, the zoom stopped there, and a hover and a click resolved to the shape under the pointer. Zooming out from there showed no seam, and the dimming covered the picture throughout.
 
 ## Still open
 

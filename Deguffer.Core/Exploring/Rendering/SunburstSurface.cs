@@ -37,6 +37,9 @@ public sealed class SunburstSurface : ExploreSurface
 
     public override bool HasVolumeBeside => false;
 
+    /// <summary>Null: a sunburst draws the whole picture and is never zoomed.</summary>
+    public override double? Ceiling => null;
+
     /// <summary>Null throughout: a sunburst's shapes are sectors.</summary>
     public override ExploreTile? TileAt(float x, float y) => null;
 

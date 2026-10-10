@@ -215,20 +215,21 @@ internal sealed class MapGraphics
     }
 
     /// <summary>
-    /// A geometry over everything but <paramref name="outlines"/>, as far as any picture reaches, in
-    /// the canvas's own pixels: what the map dims round a selection. <see cref="Nothing"/> where there
-    /// is nothing to leave out, because then nothing is dimmed.
+    /// A geometry over everything but <paramref name="outlines"/> to <paramref name="far"/> pixels
+    /// from the canvas's corner each way, in the canvas's own pixels: what the map dims round a
+    /// selection. <see cref="Nothing"/> where there is nothing to leave out, because then nothing is
+    /// dimmed.
+    ///
+    /// <para>The caller says how far, because a canvas is a part of its picture as small as its zoom
+    /// is deep, and the dimming has to cover the whole picture while the canvas is shown zoomed out.
+    /// The shape visual the dimming is drawn in cuts it to the picture.</para>
     /// </summary>
-    public CompositionPath Around(IReadOnlyList<ExploreOutline> outlines)
+    public CompositionPath Around(IReadOnlyList<ExploreOutline> outlines, float far)
     {
         if (Shapes(outlines) is not { } shapes)
         {
             return Nothing;
         }
-
-        // As far as any picture reaches: a canvas is a 64th of its picture at the deepest zoom, and the
-        // shape visual the dimming is drawn in cuts it to the picture.
-        const float far = 1 << 20;
 
         var everything = CanvasGeometry.CreateRectangle(_device, -far, -far, 2 * far, 2 * far);
 

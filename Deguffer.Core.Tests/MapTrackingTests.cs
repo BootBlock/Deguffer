@@ -21,14 +21,14 @@ public sealed class MapTrackingTests
     [InlineData(64, 0.9, 0.1)]
     public void AViewportHeldByTheTrackerReadsBackAsItself(double zoom, double pictureX, double pictureY)
     {
-        var viewport = MapViewport.Anchored(zoom, pictureX, pictureY, 0.5, 0.5);
+        var viewport = MapViewport.Anchored(zoom, pictureX, pictureY, 0.5, 0.5, MapCeiling.Least);
 
         foreach (var origin in new[] { default, new MapOrigin(0.37, 0.81), MapOrigin.At(viewport) })
         {
             var tracking = MapTracking.Of(viewport, Width, Height, origin);
 
-            AssertSame(viewport, tracking.Shown(Width, Height, elastic: true));
-            AssertSame(viewport, tracking.Shown(Width, Height, elastic: false));
+            AssertSame(viewport, tracking.Shown(Width, Height, elastic: true, MapCeiling.Least));
+            AssertSame(viewport, tracking.Shown(Width, Height, elastic: false, MapCeiling.Least));
         }
     }
 
@@ -54,7 +54,7 @@ public sealed class MapTrackingTests
         {
             var exact = MapTracking.Of(viewport, Width, Height, from);
             var single = new MapTracking((float)exact.X, (float)exact.Y, exact.Scale, from);
-            var shown = single.Shown(Width, Height, elastic: true);
+            var shown = single.Shown(Width, Height, elastic: true, MapCeiling.Least);
 
             return Math.Max(
                 Math.Abs(shown.Left - viewport.Left) * zoom * Width,
@@ -73,17 +73,17 @@ public sealed class MapTrackingTests
     [InlineData(16, 0.5, 0.5, 12)]
     public void AZoomAboutThePointerKeepsWhatIsUnderItUnderIt(double zoom, double screenX, double screenY, double scale)
     {
-        var from = MapViewport.Anchored(zoom, 0.45, 0.55, 0.5, 0.5);
+        var from = MapViewport.Anchored(zoom, 0.45, 0.55, 0.5, 0.5, MapCeiling.Least);
         var under = from.PictureAt(screenX, screenY);
 
         var scaled = ScaledAbout(MapTracking.Of(from, Width, Height, new MapOrigin(0.2, 0.7)), scale, screenX * Width, screenY * Height);
-        var shown = scaled.Shown(Width, Height, elastic: true);
+        var shown = scaled.Shown(Width, Height, elastic: true, MapCeiling.Least);
 
         var (x, y) = shown.PictureAt(screenX, screenY);
 
         Assert.Equal(under.X, x, Precision);
         Assert.Equal(under.Y, y, Precision);
-        AssertSame(MapViewport.Anchored(scale, under.X, under.Y, screenX, screenY), shown);
+        AssertSame(MapViewport.Anchored(scale, under.X, under.Y, screenX, screenY, MapCeiling.Least), shown);
     }
 
     /// <summary>
@@ -97,8 +97,8 @@ public sealed class MapTrackingTests
     public void ScalingAboutThePivotArrivesWhereTheGlideWasGoing(
         double fromZoom, double fromX, double fromY, double toZoom, double toX, double toY)
     {
-        var from = MapViewport.Anchored(fromZoom, fromX, fromY, 0.5, 0.5);
-        var to = MapViewport.Anchored(toZoom, toX, toY, 0.5, 0.5);
+        var from = MapViewport.Anchored(fromZoom, fromX, fromY, 0.5, 0.5, MapCeiling.Least);
+        var to = MapViewport.Anchored(toZoom, toX, toY, 0.5, 0.5, MapCeiling.Least);
 
         var pivot = MapTracking.Pivot(from, to, Width, Height);
 
@@ -106,7 +106,7 @@ public sealed class MapTrackingTests
 
         var arrived = ScaledAbout(MapTracking.Of(from, Width, Height, MapOrigin.At(from)), to.Zoom, pivot.Value.X, pivot.Value.Y);
 
-        AssertSame(to, arrived.Shown(Width, Height, elastic: true));
+        AssertSame(to, arrived.Shown(Width, Height, elastic: true, MapCeiling.Least));
     }
 
     /// <summary>
@@ -116,13 +116,13 @@ public sealed class MapTrackingTests
     [Fact]
     public void AMoveThatBarelyZoomsHasNoStillPointAndIsAPan()
     {
-        var from = MapViewport.Anchored(4, 0.2, 0.2, 0.5, 0.5);
+        var from = MapViewport.Anchored(4, 0.2, 0.2, 0.5, 0.5, MapCeiling.Least);
         var panned = from.Panned(-0.5, 0);
-        var barely = MapViewport.Anchored(4 * (1 + 1e-4), 0.7, 0.2, 0.5, 0.5);
+        var barely = MapViewport.Anchored(4 * (1 + 1e-4), 0.7, 0.2, 0.5, 0.5, MapCeiling.Least);
 
         Assert.Null(MapTracking.Pivot(from, panned, Width, Height));
         Assert.Null(MapTracking.Pivot(from, barely, Width, Height));
-        Assert.NotNull(MapTracking.Pivot(from, MapViewport.Anchored(4.4, 0.7, 0.2, 0.5, 0.5), Width, Height));
+        Assert.NotNull(MapTracking.Pivot(from, MapViewport.Anchored(4.4, 0.7, 0.2, 0.5, 0.5, MapCeiling.Least), Width, Height));
     }
 
     /// <summary>
@@ -132,8 +132,8 @@ public sealed class MapTrackingTests
     [Fact]
     public void ASmallZoomStillHasItsStillPoint()
     {
-        var from = MapViewport.Anchored(4, 0.3, 0.3, 0.5, 0.5);
-        var to = MapViewport.Anchored(4 * 1.001, 0.3, 0.3, 0.5, 0.5);
+        var from = MapViewport.Anchored(4, 0.3, 0.3, 0.5, 0.5, MapCeiling.Least);
+        var to = MapViewport.Anchored(4 * 1.001, 0.3, 0.3, 0.5, 0.5, MapCeiling.Least);
 
         var pivot = MapTracking.Pivot(from, to, Width, Height);
 
@@ -152,7 +152,7 @@ public sealed class MapTrackingTests
         var zoom = 4.0;
         var tracking = new MapTracking(-120, (zoom - 1) * Height + 80, zoom, default);
 
-        var shown = tracking.Shown(Width, Height, elastic: true);
+        var shown = tracking.Shown(Width, Height, elastic: true, MapCeiling.Least);
 
         Assert.True(shown.Left < 0, $"the screen's left edge came back at {shown.Left}");
         Assert.True(shown.Top > 1 - (1 / zoom), $"the screen's top edge came back at {shown.Top}");
@@ -167,11 +167,11 @@ public sealed class MapTrackingTests
     [Fact]
     public void WithStretchingOffTheScreenShowsTheTrackerHeldToItsLimits()
     {
-        var max = MapViewport.MaximumZoom;
+        var max = MapCeiling.Least;
         var over = max * 1.1;
         var tracking = new MapTracking(0.5 * (over - 1) * Width, -40, over, default);
 
-        var shown = tracking.Shown(Width, Height, elastic: false);
+        var shown = tracking.Shown(Width, Height, elastic: false, MapCeiling.Least);
 
         Assert.Equal(max, shown.Zoom, Precision);
         Assert.Equal(tracking.X / (max * Width), shown.Left, Precision);
@@ -187,13 +187,29 @@ public sealed class MapTrackingTests
     [InlineData(-300, 200, 3, 0, 200, 3)]
     [InlineData(5000, -10, 3, 2 * Width, 0, 3)]
     [InlineData(10, 10, 0.8, 0, 0, 1)]
-    [InlineData(1e6, 1e6, 100, (MapViewport.MaximumZoom - 1) * Width, (MapViewport.MaximumZoom - 1) * Height, MapViewport.MaximumZoom)]
+    [InlineData(1e6, 1e6, 100, (MapCeiling.Least - 1) * Width, (MapCeiling.Least - 1) * Height, MapCeiling.Least)]
     public void HeldIsInsideTheTrackersBoundsAtTheHeldScale(
         double x, double y, double scale, double heldX, double heldY, double heldScale)
     {
-        var held = new MapTracking(x, y, scale, default).Held(Width, Height);
+        var held = new MapTracking(x, y, scale, default).Held(Width, Height, MapCeiling.Least);
 
         Assert.Equal(new MapTracking(heldX, heldY, heldScale, default), held);
+    }
+
+    /// <summary>
+    /// The tracker is held to the ceiling the map has, not to the least one: a deep scale under a
+    /// raised ceiling is left as it is, and one over a lower ceiling comes down to it.
+    /// </summary>
+    [Theory]
+    [InlineData(1000, 4096, 1000)]
+    [InlineData(1000, 500, 500)]
+    public void HeldHoldsTheScaleToTheCeiling(double scale, double ceiling, double expected)
+    {
+        var tracking = new MapTracking(0, 0, scale, default);
+
+        Assert.Equal(expected, tracking.Held(Width, Height, ceiling).Scale);
+        Assert.Equal(expected, tracking.Shown(Width, Height, elastic: false, ceiling).Zoom, 1e-9);
+        Assert.Equal(scale, tracking.Shown(Width, Height, elastic: true, ceiling).Zoom, 1e-9);
     }
 
     /// <summary>
@@ -210,11 +226,11 @@ public sealed class MapTrackingTests
     {
         var origin = new MapOrigin(0.3, 0.45);
         var cornered = new MapTracking(x, y, scale, default);
-        var originated = MapTracking.Of(cornered.Shown(Width, Height, elastic: true), Width, Height, origin);
+        var originated = MapTracking.Of(cornered.Shown(Width, Height, elastic: true, MapCeiling.Least), Width, Height, origin);
 
         AssertSame(
-            cornered.Held(Width, Height).Shown(Width, Height, elastic: true),
-            originated.Held(Width, Height).Shown(Width, Height, elastic: true));
+            cornered.Held(Width, Height, MapCeiling.Least).Shown(Width, Height, elastic: true, MapCeiling.Least),
+            originated.Held(Width, Height, MapCeiling.Least).Shown(Width, Height, elastic: true, MapCeiling.Least));
     }
 
     /// <summary>
