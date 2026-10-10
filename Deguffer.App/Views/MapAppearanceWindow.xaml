@@ -3,7 +3,8 @@
     x:Class="Deguffer.App.Views.MapAppearanceWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:vm="using:Deguffer.App.ViewModels">
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:controls="using:Deguffer.App.Controls">
 
     <!--
         A window of its own rather than a dialog on the page, because the point of it is to watch
@@ -17,7 +18,7 @@
           Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
           Padding="20,16,20,20"
           RowSpacing="8"
-          RowDefinitions="Auto,*,Auto,Auto,Auto">
+          RowDefinitions="Auto,Auto,*,Auto,Auto,Auto">
 
         <!-- Which picture the list below changes. One list serves all three, so the heading is
              what tells the reader that choosing here leaves the other two as they were. -->
@@ -25,8 +26,12 @@
                    Text="{x:Bind ViewModel.SchemeHeading, Mode=OneWay}"
                    Style="{StaticResource BodyStrongTextBlockStyle}" />
 
+        <!-- What each choice below does, drawn as it is made, from an invented picture that names no
+             folder on the machine. The map itself can be behind this window or on another page. -->
+        <controls:MapPreview x:Name="Preview" Grid.Row="1" Height="160" />
+
         <ListView x:Name="SchemeList"
-                  Grid.Row="1"
+                  Grid.Row="2"
                   SelectionMode="Single"
                   ItemsSource="{x:Bind ViewModel.Schemes}"
                   SelectedIndex="{x:Bind ViewModel.SchemeIndex, Mode=TwoWay}"
@@ -83,7 +88,7 @@
 
         <!-- Indexed against ExploreSpacing, like the same box on the Settings page. The two write
              one setting, which the Memory page's treemap follows as well. -->
-        <ComboBox Grid.Row="2"
+        <ComboBox Grid.Row="3"
                   Margin="0,8,0,0"
                   MinWidth="200"
                   Header="Room round each folder in the treemap"
@@ -93,12 +98,12 @@
             <ComboBoxItem Content="Spacious" />
         </ComboBox>
 
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="4"
                    Margin="0,8,0,0"
                    Text="Changes show on the map as you make them. Each view keeps its own colours, and the Memory page's map uses them too."
                    Style="{StaticResource SecondaryText}" />
 
-        <Button Grid.Row="4"
+        <Button Grid.Row="5"
                 Margin="0,8,0,0"
                 HorizontalAlignment="Right"
                 Content="Close"

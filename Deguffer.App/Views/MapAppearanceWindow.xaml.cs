@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Microsoft.UI.Windowing;
@@ -15,7 +16,7 @@ namespace Deguffer.App.Views;
 public sealed partial class MapAppearanceWindow : Window
 {
     private const int OpenWidth = 380;
-    private const int OpenHeight = 620;
+    private const int OpenHeight = 800;
 
     private readonly FrameworkElement? _ownerRoot;
 
@@ -51,12 +52,20 @@ public sealed partial class MapAppearanceWindow : Window
             _ownerRoot.ActualThemeChanged += FollowTheme;
         }
 
+        ShowPreview();
+        ViewModel.Changed += OnLookChanged;
+        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+
         Closed += (_, _) =>
         {
             if (_ownerRoot is not null)
             {
                 _ownerRoot.ActualThemeChanged -= FollowTheme;
             }
+
+            // The view-model belongs to the page and outlives this window.
+            ViewModel.Changed -= OnLookChanged;
+            ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         };
     }
 
@@ -65,4 +74,17 @@ public sealed partial class MapAppearanceWindow : Window
     private void FollowTheme(FrameworkElement sender, object? args) => Root.RequestedTheme = sender.ActualTheme;
 
     private void OnCloseClicked(object sender, RoutedEventArgs e) => Close();
+
+    private void OnLookChanged(object? sender, EventArgs e) => ShowPreview();
+
+    /// <summary>The page's View box moved, so the scheme list and the preview speak for another picture.</summary>
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MapAppearanceViewModel.View))
+        {
+            ShowPreview();
+        }
+    }
+
+    private void ShowPreview() => Preview.Show(ViewModel.Look, ViewModel.View);
 }
