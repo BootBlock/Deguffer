@@ -104,6 +104,9 @@ public sealed class MapPassageTests
         Assert.Equal(2 * Math.Log(2), new MapDescent(new MapFrame(0, 0, 0.5, 0.125), Travels: true).Depth, Precision);
         Assert.Equal(0, new MapDescent(new MapFrame(0, 0, 0.5, 0.125), Travels: false).Depth);
         Assert.Equal(0, new MapDescent(MapFrame.Whole, Travels: true).Depth);
+
+        // A shape wholly off the screen has nothing on it to fly to.
+        Assert.Equal(0, new MapDescent(new MapFrame(1.5, 0, 0.5, 0.5), Travels: true).Depth);
     }
 
     private static MapPassage Passage(bool travels) =>

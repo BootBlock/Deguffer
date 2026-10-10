@@ -63,6 +63,10 @@ public sealed class FolderStepsTests
         Assert.Equal(tree.RootNode, FolderSteps.Meeting(tree, mid10, mid01));
         Assert.Equal(top0, FolderSteps.Meeting(tree, mid01, top0));
         Assert.Equal(top0, FolderSteps.Meeting(tree, top0, mid01));
+
+        // Further down, where the nearest folder holding both is neither the root nor a child of it.
+        Assert.Equal(mid00, FolderSteps.Meeting(tree, Find(tree, "f000"), Find(tree, "f001")));
+        Assert.Equal(top0, FolderSteps.Meeting(tree, Find(tree, "f000"), Find(tree, "f010")));
     }
 
     /// <summary>The root opened out of the volume drawn beside it is a step in, and going back to the volume a step out.</summary>
