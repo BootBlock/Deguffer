@@ -11,7 +11,8 @@ namespace Deguffer.App.Controls;
 
 /// <summary>
 /// The GPU device every map draws through, and the one way a painted region of a canvas reaches the
-/// composition surface it is shown in.
+/// composition surface it is shown in. The window takes its stills through it too: see
+/// <see cref="Capture"/>.
 ///
 /// <para>One for the application, because the device is the costly thing and the window has the one
 /// compositor (G5). Each map's surfaces are made here, on the one device, so a device lost is replaced
@@ -152,6 +153,38 @@ internal sealed class MapGraphics
             {
                 device.RaiseDeviceLost();
             }
+        }
+    }
+
+    /// <summary>
+    /// A still of <paramref name="visual"/> and everything drawn under it as it is now, at
+    /// <paramref name="size"/> pixels, or null where the device was lost on the way. On this device
+    /// rather than a second one, because the window is the one asking and it has the one compositor
+    /// (G5).
+    /// </summary>
+    public async Task<ICompositionSurface?> Capture(Visual visual, SizeInt32 size)
+    {
+        var device = _device;
+
+        try
+        {
+            return await _graphics.CaptureAsync(
+                visual,
+                size,
+                DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                DirectXAlphaMode.Premultiplied,
+                1);
+        }
+        catch (Exception exception) when (device.IsDeviceLost(exception.HResult))
+        {
+            // As a lost device is everywhere else here: replaced, and the still not taken. Any other
+            // failure is a defect, and is left to be raised.
+            if (device == _device)
+            {
+                device.RaiseDeviceLost();
+            }
+
+            return null;
         }
     }
 

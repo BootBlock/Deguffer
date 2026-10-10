@@ -6,6 +6,14 @@
 
     <Grid RowDefinitions="Auto,*">
         <!--
+            The window's own ground, shown wherever the Acrylic material is not: the solid colour
+            §6.5 has the UI read on. Under everything, so turning the material on or off fades this
+            rather than repainting the window. WindowBackdrop sets how much of it shows.
+        -->
+        <Border x:Name="Ground" Grid.RowSpan="2"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+
+        <!--
             §6.5: the content extends into the title bar so the material runs the full height.
             This row is the drag region, and carries nothing but the app name — no information
             is placed where it would depend on the backdrop being present.

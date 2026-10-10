@@ -6,12 +6,15 @@ using Deguffer.Core.Safety;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 
 namespace Deguffer.App;
 
 public sealed partial class MainWindow : Window
 {
     private readonly WindowBackdrop _backdrop;
+    private readonly WindowCrossfade _crossfade;
+    private readonly PageArrival _arrival = new(SystemMotion.Current);
     private readonly WindowSizing _sizing;
     private readonly CloseGuard _closeGuard = new(App.Running);
 
@@ -24,7 +27,8 @@ public sealed partial class MainWindow : Window
         SetTitleBar(TitleBar);
         WindowIcon.Apply(this);
 
-        _backdrop = new WindowBackdrop(this);
+        _backdrop = new WindowBackdrop(this, Ground, SystemMotion.Current);
+        _crossfade = new WindowCrossfade((FrameworkElement)Content, SystemMotion.Current);
         _sizing = new WindowSizing(this, new WindowMetricsStore(UserEnvironment.Current));
 
         // Where the window ends up is the user's, so it outlives the session that produced it.
@@ -50,8 +54,19 @@ public sealed partial class MainWindow : Window
             }
         });
 
-        ApplyPreferences();
-        App.Preferences.Changed += (_, _) => ApplyPreferences();
+        ContentFrame.Navigated += (_, e) =>
+        {
+            if (e.Content is Page page)
+            {
+                _arrival.Play(page);
+            }
+        };
+
+        // The backdrop first: it follows theme changes, and one raised as the theme below is applied
+        // would otherwise apply the backdrop before the user's choice of it was known.
+        _backdrop.IsRequested = App.Preferences.Current.BackdropEnabled;
+        ApplyTheme();
+        App.Preferences.Changed += OnPreferencesChanged;
 
         OpenWhereTheLaunchAsked();
 
@@ -100,7 +115,7 @@ public sealed partial class MainWindow : Window
             _ => (typeof(CleanPage), StorageItem),
         };
 
-        ContentFrame.Navigate(page);
+        Go(page);
 
         // The rail second. Assigning it raises OnDestinationChanged, which finds the frame already
         // where it is going and does nothing further. The selection is what the user reads as "where
@@ -112,24 +127,37 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Applying what the user chose is the window's job: the preference service holds the values,
     /// and turning a theme into an <see cref="ElementTheme"/> or a flag into a system backdrop is
-    /// something only whoever owns the window can do.
+    /// something only whoever owns the window can do. A theme chosen while the window is on screen
+    /// fades in from a still of the old one.
     /// </summary>
-    private void ApplyPreferences()
+    private async void OnPreferencesChanged(object? sender, EventArgs e)
     {
-        var preferences = App.Preferences.Current;
+        _backdrop.IsRequested = App.Preferences.Current.BackdropEnabled;
 
-        if (Content is FrameworkElement root)
+        if (((FrameworkElement)Content).RequestedTheme != ChosenTheme())
         {
-            root.RequestedTheme = preferences.Theme switch
-            {
-                AppTheme.Light => ElementTheme.Light,
-                AppTheme.Dark => ElementTheme.Dark,
-                _ => ElementTheme.Default,
-            };
+            await _crossfade.Change(ApplyTheme);
         }
-
-        _backdrop.IsRequested = preferences.BackdropEnabled;
     }
+
+    /// <summary>
+    /// Put the theme chosen now on the window. Read when it is applied rather than when it was asked
+    /// for, so of two choices made while a still is being taken the later one is what stays.
+    /// </summary>
+    private void ApplyTheme() => ((FrameworkElement)Content).RequestedTheme = ChosenTheme();
+
+    private static ElementTheme ChosenTheme() => App.Preferences.Current.Theme switch
+    {
+        AppTheme.Light => ElementTheme.Light,
+        AppTheme.Dark => ElementTheme.Dark,
+        _ => ElementTheme.Default,
+    };
+
+    /// <summary>
+    /// Show <paramref name="page"/> with the entrance <see cref="PageArrival"/> plays, in place of the
+    /// frame's own transition, which would slide the page in under it.
+    /// </summary>
+    private void Go(Type page) => ContentFrame.Navigate(page, null, new SuppressNavigationTransitionInfo());
 
     private async void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
@@ -182,7 +210,7 @@ public sealed partial class MainWindow : Window
         // user may be part-way through acting on.
         if (ContentFrame.CurrentSourcePageType != page)
         {
-            ContentFrame.Navigate(page);
+            Go(page);
         }
     }
 }
