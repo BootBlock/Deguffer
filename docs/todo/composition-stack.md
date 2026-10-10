@@ -313,7 +313,7 @@ The camera is measured from an origin (`MapOrigin`) so it stays exact past 64×,
 - **The far bound is computed on the CPU in double precision** (`1 - origin`) and stored in the camera's property set, because near the far edge it is small and the expression multiplies it by the scale.
 - **Tiles more than 64 canvases off a drawing are cut** before they become single precision. At 64× or less, no tile is cut.
 - **Driven** on a build with the ceiling raised to 1,024× and a temporary log: the origin moved at rest at 64× and the tracker answered within about 10 ms. Outlines and names stayed on their shapes, and a click at 1,024× selected the shape under the pointer.
-- **Left for #306:** the dimming rectangle in `MapGraphics` has a fixed extent of 2^20 canvas pixels, which is enough for a drawing shown zoomed out by up to 64×.
+- **Left for #306:** the dimming rectangle in `MapGraphics` has a fixed extent of 2^20 canvas pixels, which is enough for a drawing shown zoomed out by up to 64×. #306 made it reach as far as each drawing's picture does ([below](#what-landing-306-found)).
 
 ## What landing #306 found
 
