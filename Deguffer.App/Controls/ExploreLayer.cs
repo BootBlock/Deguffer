@@ -1,38 +1,54 @@
-using System.Runtime.InteropServices.WindowsRuntime;
+using System.Numerics;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Composition;
+using Windows.Graphics;
 
 namespace Deguffer.App.Controls;
 
 /// <summary>
-/// One bitmap of a map, the drawing in it or on its way into it, and where it is placed. See
-/// <see cref="ExploreLayers"/>, which decides which drawing goes in which.
+/// One drawing of a map in the composition tree: a sprite painted by a surface, the drawing in it or
+/// on its way into it, and where in the whole picture it lies. See <see cref="ExploreLayers"/>, which
+/// decides which drawing goes in which.
+///
+/// <para>Made once and written through. A new drawing of another size resizes the surface rather than
+/// making another, and a layer nothing is using is emptied rather than thrown away (G5). Only a
+/// replaced device makes it take another surface: see <see cref="Renew"/>.</para>
 /// </summary>
 internal sealed class ExploreLayer
 {
-    public ExploreLayer() =>
-        Image = new Image
-        {
-            // The bitmap is rendered at the display's pixel size and stretched back over the
-            // control's logical size, so this maps one bitmap pixel to one device pixel rather
-            // than resampling.
-            Stretch = Stretch.Fill,
-            RenderTransform = Placed,
-        };
+    private readonly MapGraphics _graphics;
 
-    public Image Image { get; }
+    private readonly CompositionSurfaceBrush _brush;
 
-    public CompositeTransform Placed { get; } = new();
+    private CompositionVirtualDrawingSurface _surface;
 
-    public WriteableBitmap? Bitmap { get; set; }
+    public ExploreLayer(Compositor compositor, MapGraphics graphics)
+    {
+        _graphics = graphics;
+        _surface = graphics.CreateSurface(1, 1);
 
-    /// <summary>The drawing in the bitmap, once all of it is there, or null.</summary>
+        // One surface pixel to one unit of the sprite, from its top-left corner. The sprite's own
+        // scale is what places the canvas in the picture, so the brush stretches nothing itself.
+        _brush = compositor.CreateSurfaceBrush(_surface);
+        _brush.Stretch = CompositionStretch.None;
+        _brush.HorizontalAlignmentRatio = 0;
+        _brush.VerticalAlignmentRatio = 0;
+
+        Sprite = compositor.CreateSpriteVisual();
+        Sprite.Brush = _brush;
+        Sprite.IsVisible = false;
+    }
+
+    public SpriteVisual Sprite { get; }
+
+    /// <summary>The canvas the surface holds, in pixels.</summary>
+    public SizeInt32 Size { get; private set; } = new(1, 1);
+
+    /// <summary>The drawing on the surface, once all of it is there, or null.</summary>
     public ExploreSurface? Drawing { get; set; }
 
-    /// <summary>The redraw landing in the bitmap, while it does, or null.</summary>
+    /// <summary>The redraw landing on the surface, while it does, or null.</summary>
     public CanvasRedraw? Landing { get; set; }
 
     /// <summary>
@@ -50,55 +66,73 @@ internal sealed class ExploreLayer
     /// <summary>When it was last shown, on the count <see cref="ExploreLayers"/> keeps.</summary>
     public long LastShown { get; set; }
 
-    /// <summary>Whether anything of a drawing is in the bitmap to be seen.</summary>
+    /// <summary>Whether anything of a drawing is on the surface to be seen.</summary>
     public bool IsShown => Drawing is not null || Landing is not null;
 
     /// <summary>
-    /// Make every pixel of the bitmap transparent, so a drawing landing in it a region at a time shows
-    /// whatever is under it until each region lands, rather than whatever the bitmap held last.
+    /// Get ready for a canvas <paramref name="width"/> by <paramref name="height"/> to land a region
+    /// at a time: nothing of it shows, so whatever is under it shows until each region lands, rather
+    /// than whatever the surface held last.
     /// </summary>
-    public void Clear()
+    public void Prepare(int width, int height)
     {
-        var bitmap = Bitmap!;
-        var stride = bitmap.PixelWidth * 4;
-        var nothing = new byte[stride];
+        MapGraphics.Empty(_surface);
 
-        using var stream = bitmap.PixelBuffer.AsStream();
-
-        for (var y = 0; y < bitmap.PixelHeight; y++)
+        if (Size.Width != width || Size.Height != height)
         {
-            stream.Write(nothing, 0, stride);
+            Size = new SizeInt32(width, height);
+            _surface.Resize(Size);
+            Sprite.Size = new Vector2(width, height);
         }
-
-        bitmap.Invalidate();
     }
 
     /// <summary>
-    /// Copy <paramref name="regions"/> of <paramref name="pixels"/>, a canvas the bitmap's size, into
-    /// the bitmap, and nothing else of it: the rest of the buffer is still being painted.
-    ///
-    /// <para>Through one stream over the bitmap's own memory, opened once per hand-over. A copy per
-    /// row through the buffer extensions would look the memory up again for every row, and a 4K
-    /// canvas is two thousand rows.</para>
+    /// Write <paramref name="regions"/> of <paramref name="pixels"/>, a canvas this surface's size,
+    /// and nothing else of it: the rest of the buffer is still being painted.
     /// </summary>
     public void Land(byte[] pixels, IReadOnlyList<CanvasRegion> regions)
     {
-        var bitmap = Bitmap!;
-        var stride = bitmap.PixelWidth * 4;
-
-        using var stream = bitmap.PixelBuffer.AsStream();
-
         foreach (var region in regions)
         {
-            for (var y = region.Y; y < region.Bottom; y++)
-            {
-                var offset = (y * stride) + (region.X * 4);
-
-                stream.Position = offset;
-                stream.Write(pixels, offset, region.Width * 4);
-            }
+            _graphics.Write(_surface, pixels, Size.Width, region);
         }
+    }
 
-        bitmap.Invalidate();
+    /// <summary>
+    /// Put the canvas where its part of the picture is, in a picture laid out over a screen
+    /// <paramref name="width"/> by <paramref name="height"/>. Only a resize or a new drawing moves it:
+    /// the camera above it is what moves as the picture does.
+    /// </summary>
+    public void Fit(double width, double height)
+    {
+        var placed = Viewport.Canvas(Size.Width, Size.Height, width, height);
+
+        Sprite.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
+        Sprite.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
+    }
+
+    /// <summary>Let go of the drawing and of everything on the surface, keeping the layer for the next one.</summary>
+    public void Empty()
+    {
+        Drawing = null;
+        Landing = null;
+        Sprite.IsVisible = false;
+
+        MapGraphics.Empty(_surface);
+    }
+
+    /// <summary>
+    /// Take a new surface, of the same size, for a device that has replaced the one this was
+    /// written through. What the old one held is gone, and writing into it again put nothing on
+    /// screen: see <see cref="MapGraphics.Replaced"/>.
+    /// </summary>
+    public void Renew()
+    {
+        Drawing = null;
+        Landing = null;
+        Sprite.IsVisible = false;
+
+        _surface = _graphics.CreateSurface(Size.Width, Size.Height);
+        _brush.Surface = _surface;
     }
 }

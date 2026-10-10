@@ -16,8 +16,9 @@ public static class PaintOrder
     /// <para>Small enough that a 4K canvas is over a hundred regions, so the first of them is on
     /// screen a small fraction of the way through the paint, and so the threads painting them have
     /// spare regions to share out where one region holds far more shapes than another. Large enough
-    /// that putting each one on screen, which is a copy of its rows into the bitmap, is not
-    /// dominated by the cost of starting the copy.</para>
+    /// that putting each one on screen, which is a copy of its rows and one write to the GPU, is not
+    /// dominated by the cost of starting them. A region is never larger than this, so one staging
+    /// buffer of this size serves every write.</para>
     /// </summary>
     public const int RegionSize = 256;
 

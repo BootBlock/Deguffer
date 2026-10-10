@@ -356,6 +356,109 @@ public sealed class MapViewportTests
         Assert.Equal(expected.Height, actual.Height, Precision);
     }
 
+    /// <summary>
+    /// The screen puts each pixel of a drawing where the drawing is placed in the picture, then where
+    /// the camera puts the picture. A click is resolved through <see cref="MapPlacement"/> instead, so
+    /// the two have to agree at every zoom, or the shape a click picks is not the shape on screen
+    /// under it (§7.1). Including a canvas stretched over a new size while a resize settles.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 0.5, 0.5, 1, 0.5, 0.5, 1904, 1072, 1904, 1072)]
+    [InlineData(3, 0.4, 0.4, 5, 0.45, 0.35, 1904, 1072, 1904, 1072)]
+    [InlineData(6, 0.7, 0.2, 2, 0.3, 0.8, 3824, 2152, 2856, 1614)]
+    [InlineData(64, 0.1, 0.9, 1, 0.5, 0.5, 1200, 700, 1800, 1050)]
+    public void TheCameraPutsADrawingWhereAClickIsResolvedThrough(
+        double drawnZoom,
+        double drawnX,
+        double drawnY,
+        double shownZoom,
+        double shownX,
+        double shownY,
+        int canvasWidth,
+        int canvasHeight,
+        double width,
+        double height)
+    {
+        var drawn = MapViewport.Anchored(drawnZoom, drawnX, drawnY, 0.5, 0.5);
+        var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6);
+        var placement = shown.PlacementOf(drawn);
+
+        var onScreen = drawn.Canvas(canvasWidth, canvasHeight, width, height).Then(shown.Camera(width, height));
+
+        foreach (var (pixelX, pixelY) in new[] { (0.0, 0.0), (canvasWidth * 0.3, canvasHeight * 0.7), (canvasWidth, canvasHeight) })
+        {
+            var (x, y) = onScreen.Apply(pixelX, pixelY);
+            var (inX, inY) = placement.InDrawing(x / width, y / height);
+
+            Assert.Equal(pixelX / canvasWidth, inX, Precision);
+            Assert.Equal(pixelY / canvasHeight, inY, Precision);
+        }
+    }
+
+    /// <summary>
+    /// A label is laid out in device-independent pixels of its drawing, at the display scale the
+    /// drawing was made at. Wherever the camera has the picture, it has to sit on the canvas pixels
+    /// it was laid out over, the ones a click there resolves to, or it names a neighbour (§7.1).
+    /// </summary>
+    [Theory]
+    [InlineData(1, 0.5, 0.5, 1, 0.5, 0.5, 1.0, 1904, 1072, 1904, 1072)]
+    [InlineData(3, 0.4, 0.4, 5, 0.45, 0.35, 1.5, 2856, 1608, 1904, 1072)]
+    [InlineData(6, 0.7, 0.2, 2, 0.3, 0.8, 1.25, 3824, 2152, 2856, 1614)]
+    public void ALabelSitsOnTheCanvasPixelsItWasLaidOutOver(
+        double drawnZoom,
+        double drawnX,
+        double drawnY,
+        double shownZoom,
+        double shownX,
+        double shownY,
+        double displayScale,
+        int canvasWidth,
+        int canvasHeight,
+        double width,
+        double height)
+    {
+        var drawn = MapViewport.Anchored(drawnZoom, drawnX, drawnY, 0.5, 0.5);
+        var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6);
+        var placement = shown.PlacementOf(drawn);
+
+        var onScreen = drawn
+            .Labels(canvasWidth, canvasHeight, width, height, displayScale)
+            .Then(shown.Camera(width, height));
+
+        foreach (var (labelX, labelY) in new[] { (0.0, 0.0), (300.0, 500.0), (canvasWidth / displayScale, canvasHeight / displayScale) })
+        {
+            var (x, y) = onScreen.Apply(labelX, labelY);
+            var (inX, inY) = placement.InDrawing(x / width, y / height);
+
+            Assert.Equal(labelX * displayScale / canvasWidth, inX, Precision);
+            Assert.Equal(labelY * displayScale / canvasHeight, inY, Precision);
+        }
+    }
+
+    /// <summary>
+    /// At rest the drawing on screen is of the part of the picture shown, at the screen's own pixel
+    /// size, so one of its pixels is one of the display's. Anything else resamples a picture that was
+    /// drawn to be sharp.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1.0)]
+    [InlineData(4, 1.5)]
+    public void AtRestOneCanvasPixelIsOneDevicePixel(double zoom, double displayScale)
+    {
+        var viewport = MapViewport.Anchored(zoom, 0.3, 0.6, 0.5, 0.5);
+        const double width = 1200;
+        const double height = 800;
+
+        var onScreen = viewport
+            .Canvas((int)(width * displayScale), (int)(height * displayScale), width, height)
+            .Then(viewport.Camera(width, height));
+
+        Assert.Equal(1 / displayScale, onScreen.ScaleX, Precision);
+        Assert.Equal(1 / displayScale, onScreen.ScaleY, Precision);
+        Assert.Equal(0, onScreen.X, Precision);
+        Assert.Equal(0, onScreen.Y, Precision);
+    }
+
     private static void AssertInside(MapViewport viewport)
     {
         var span = 1 / viewport.Zoom;

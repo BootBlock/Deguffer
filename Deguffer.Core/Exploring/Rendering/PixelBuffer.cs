@@ -39,6 +39,23 @@ public static class PixelBuffer
     }
 
     /// <summary>
+    /// Copy <paramref name="region"/> of a canvas <paramref name="width"/> pixels across into
+    /// <paramref name="destination"/>, row after row with no gap between them, which is the shape an
+    /// upload of that region alone takes.
+    /// </summary>
+    public static void CopyRegion(byte[] pixels, int width, CanvasRegion region, Span<byte> destination)
+    {
+        ArgumentNullException.ThrowIfNull(pixels);
+
+        var row = region.Width * 4;
+
+        for (var y = 0; y < region.Height; y++)
+        {
+            pixels.AsSpan((((region.Y + y) * width) + region.X) * 4, row).CopyTo(destination.Slice(y * row, row));
+        }
+    }
+
+    /// <summary>
     /// One BGRA pixel as the single word a vectorised fill can write.
     ///
     /// <para>Assembled through the buffer rather than by shifting, so it holds whatever the machine

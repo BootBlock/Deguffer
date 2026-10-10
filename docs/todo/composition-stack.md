@@ -1,11 +1,11 @@
 # The composition stack for the map — spike
 
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
-> `direct-composition` work (#294) builds on. `Deguffer.App` now references
-> `Microsoft.Graphics.Win2D`, and nothing draws through it yet. Four things stay open, listed under
-> [Open before #274 lands](#open-before-274-lands): the Win2D package's licence terms, a monitor of
-> a different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App
-> SDK or Win2D before trusting the figures.
+> `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
+> composition surfaces: see [what landing it found](#what-landing-274-found). The maintainer has
+> cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
+> different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
+> or Win2D before trusting the figures.
 
 Before the Explore map moves off `WriteableBitmap`s onto the composition layer, this checks that the
 stack it needs works in the build Deguffer ships: unpackaged, self-contained, untrimmed, and for
@@ -176,6 +176,9 @@ The map handles loss in one place:
    tile. The compositor also raises it when its own device is lost. That is documented behaviour,
    and was not observed here.
 
+The map found that step 3 is not enough for its virtual surfaces: it makes every surface again as
+well. See [what landing #274 found](#what-landing-274-found).
+
 ## When effects are slow
 
 The Windows App SDK has no `CompositionCapabilities.GetForCurrentView()`: construct
@@ -222,17 +225,49 @@ not a clean machine. In the probe and in `Deguffer.App` published with Win2D, `M
 app's own folder, and no module loaded from `WindowsApps`. `Deguffer.App` opened its window and exited
 0 when closed.
 
-## Open before #274 lands
+## What landing #274 found
 
-- **The Win2D binary's licence.** The source repository (`microsoft/Win2D`) is MIT. The NuGet
-  package is built by Microsoft and names its licence only by a URL,
-  `https://www.microsoft.com/web/webpi/eula/eula_win2d_10012014.htm`, which now redirects to an
-  unrelated page, so its terms cannot be read. The Windows App SDK packages Deguffer already
-  redistributes carry their own `license.txt`, which permits redistribution of the files they place
-  beside the app. Win2D's package carries none. The maintainer is checking which terms apply. If
-  they do not allow redistribution, the alternatives are building Win2D from its MIT source, or calling Direct2D through
-  `ICompositionDrawingSurfaceInterop` without Win2D. Everything above about composition surfaces
-  holds for either, since Win2D's `CanvasComposition` is a wrapper over that interface.
+The map draws as the rules above describe: one `CompositionVirtualDrawingSurface` per drawing, each
+written a region at a time through a staging `CanvasBitmap`, on a `SpriteVisual` that places the
+drawing in the picture. The sprites sit in a container whose offset and scale follow a camera
+property set by expression, and the outlines and the labels follow the same camera. Two things the spike did not show:
+
+- **A surface made before a device replacement shows nothing written after it.** The spike saw
+  surfaces made before the swap accept a redraw. In the map, after `SetCanvasDevice` and
+  `RenderingDeviceReplaced`, every write into the old virtual surfaces succeeded and none of it
+  appeared: the labels came back over an empty map, and stayed so. Making each surface again (same
+  size, the same brush pointed at it) and then redrawing brought the picture back. Both builds were
+  driven through the same forced replacement and compared on screen.
+- **Never set `CompositionPathGeometry.Path` to null.** On Windows App SDK 1.8 it ended the process
+  with an access violation inside the setter, on hovering a shape and leaving it. Not on every such
+  call: once at the first, once many calls in. An empty path stands in for no outline.
+
+Measured on a large real tree (Release, a 240 Hz display, a desktop GPU), before and after #274,
+two runs of each:
+
+| | Before | After |
+| --- | --- | --- |
+| Frame pacing in a zoom and a drag | 240 fps held, p95 interval about 4.3 ms | the same |
+| Map work per zoom frame, 1080p | 0.074 / 0.072 ms | 0.071 / 0.057 ms |
+| Map work per zoom frame, 4K | 0.077 / 0.101 ms | 0.053 / 0.052 ms |
+| Worst zoom frame, 1080p | 11.6 / 8.8 ms | 5.5 / 4.3 ms |
+| Worst zoom frame, 4K | 9.2 / 15.2 ms | 3.2 / 3.4 ms |
+| Map work per drag frame | 0.040 / 0.056 ms | 0.041 / 0.034 ms |
+| UI-thread CPU per zoom frame, 1080p | 0.374 / 0.373 ms | 0.413 / 0.332 ms |
+| UI-thread CPU per zoom frame, 4K | 0.482 / 0.601 ms | 0.359 / 0.367 ms |
+| Hand-over of one region | 0.03–0.06 ms, without the bitmap upload XAML ran later | 0.06–0.09 ms, the GPU write included |
+| Working set while dragging, 4K | 1,373 / 1,444 MB | 1,245 / 1,302 MB |
+| Private bytes while dragging, 4K | 1,491 / 1,537 MB | 1,414 / 1,467 MB |
+| Dedicated GPU memory while dragging, 4K | 513 MB | 539 MB |
+
+At 1080p the memory differences are within the run-to-run noise, because the scan tree dominates.
+The longest stalls, 58–116 ms, came in both builds alike. At rest, 98% of samples at 1080p are
+identical between the builds, one canvas pixel to one screen pixel.
+
+## Still open
+
+The Win2D package's licence, open here until #274, was cleared by the maintainer.
+
 - **A monitor of a different scale.** Move the map between a 100% and a 150% monitor, and check the
   tiles stay one pixel to one pixel and redraw once.
 - **Remote Desktop.** Record what `AreEffectsFast` reports in a remote session, and that the map
