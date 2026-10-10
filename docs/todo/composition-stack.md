@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
 > composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
-> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). The maintainer has
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -326,6 +326,19 @@ The zoom's ceiling follows the detail in view (`MapCeiling`) rather than a fixed
 - **A request counts as arrived by its distance on screen.** As a fraction of the picture, a whole screen is a rounding error at a deep zoom.
 - **The dimming round a selection reaches twice the drawing's picture** at the drawing's zoom, in place of the fixed 2^20 pixels.
 - **Driven** into 20,000 one-byte files past 64×: they were drawn one by one, each named, the zoom stopped there, and a hover and a click resolved to the shape under the pointer. Zooming out from there showed no seam, and the dimming covered the picture throughout.
+
+## What landing #278 found
+
+Every change of folder on a treemap of one tree is one flight of the map's camera, in or out, however many levels it crosses (`FolderSteps`, `MapDescent`).
+
+- **The spring is Core's, not the compositor's.** A `Vector3NaturalMotionAnimation` on a property set cannot be read back, so a flight turned round part of the way would not know where it was or how fast it went. A critically damped `Spring` in closed form, clocked on the UI thread as the old opening was, knows both exactly, and carries its speed into the turn. Critically damped, because a spring that passed its end would show the screen's edge bare.
+- **The tracker cannot fly a folder.** Its scale is one factor on both axes, and a folder's own picture fills the screen on both, so the outer picture has to stretch by more on one axis than the other. The flight carries the two sets of drawings, as the opening did, and hands the inner one to the tracker's camera exactly at the end.
+- **The flight zooms about the point both ends agree on, by equal ratios,** on each axis apart, as `MapViewport.Between` does for a glide. A straight line between the frames slid the outer picture sideways, and a flight several levels deep lurched at one end.
+- **A step out waits for the picture it goes out to.** The shape to pull back into is only known once that picture is laid out, and the picture left covers the screen until then.
+- **A folder too deep to be drawn is flown to from the deepest folder above it that is**, which is where the screen shows it (`ExploreSurface.FrameOf`).
+- **The direction comes from the tree**, so Back, Forward, Up, a breadcrumb and a double-click fly alike. The double-click no longer hands the map a shape.
+- **With animation effects off the folder fades in place,** as `MotionToken.Entrance` already says, rather than cutting.
+- **Driven** on a fixture of nested folders: in one level and two at once, back out to the root in one pull-back, a flight turned round 70 ms in, and the same with animation effects off. A click after each picked the shape under the pointer.
 
 ## Still open
 

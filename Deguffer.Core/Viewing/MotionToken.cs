@@ -27,10 +27,12 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
     public static MotionToken Camera { get; } = new(new Motion(Glide, Travels: true), Motion.Instant);
 
     /// <summary>
-    /// A new picture coming in over the old one: a folder opening out of its shape on the map. With
-    /// motion off it fades in place rather than growing, because the whole of the screen changes, and
-    /// a cut would leave the reader no hint that the new picture is the inside of the one they opened.
-    /// Shorter than the move it stands in for, as it has no distance to cover.
+    /// A new picture coming in over the old one or giving way to it: the map's camera flying into a
+    /// folder's shape, or pulling back out of it to the folder above, on a spring that settles in this
+    /// long (see <see cref="Spring"/>). With motion off it fades in place rather than moving, because
+    /// the whole of the screen changes, and a cut would leave the reader no hint that the new picture
+    /// is the inside of the one they opened, or the outside of the one they left. Shorter than the move
+    /// it stands in for, as it has no distance to cover.
     /// </summary>
     public static MotionToken Entrance { get; } = new(
         new Motion(Glide, Travels: true),
