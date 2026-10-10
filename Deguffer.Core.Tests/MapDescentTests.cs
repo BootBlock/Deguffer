@@ -25,7 +25,8 @@ public sealed class MapDescentTests
         // error would move it as it did.
         Assert.Equal(MapFrame.Whole, descent.Inner(1));
         Assert.Equal(MapFrame.Whole, descent.Outer(0));
-        AssertClose(shape.Carried(MapFrame.Whole), descent.Outer(1));
+        // Magnified until the shape fills the screen: 1 / 0.3 across and 1 / 0.2 down.
+        AssertClose(new MapFrame(-2, -0.5, 1 / 0.3, 1 / 0.2), descent.Outer(1));
         Assert.Equal(1, descent.Opacity(1));
     }
 

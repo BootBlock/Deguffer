@@ -48,7 +48,7 @@ namespace Deguffer.App.Controls;
 /// <para>Over 500 lines because it is where the pointer, the drawings and the page meet, and each
 /// input has to be resolved against whichever picture is on screen at that moment (§7.1). Everything
 /// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the camera and what
-/// moves it (<see cref="ExploreZoom"/>), the clock of a folder opening (<see cref="ExploreDescent"/>), the names and
+/// moves it (<see cref="ExploreZoom"/>), the clock of a change of folder (<see cref="ExploreDescent"/>), the names and
 /// the outlines, and in Core the arithmetic and the rule telling a click from a drag
 /// (<see cref="MapDrag"/>). Most of the length is the reasoning behind each ordering.</para>
 /// </summary>
@@ -280,7 +280,7 @@ public sealed class ExploreMap : UserControl
         // The outlines go over the picture, and the labels over both. A label is inset from its
         // shape's edge and an outline runs along it, so the two rarely meet — and where they do, the
         // name of the thing is worth more than the last pixel of the line round it. The picture a
-        // folder is opening out of goes under the one opening, which grows over it.
+        // change of folder is leaving is stacked against the new one as each step starts (see Swap).
         _root = compositor.CreateContainerVisual();
         _root.Children.InsertAtTop(_departing.Root);
         _root.Children.InsertAtTop(_pictures.Root);
@@ -314,7 +314,7 @@ public sealed class ExploreMap : UserControl
         _zoom.OriginMoved += (_, _) => Fit();
 
         // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
-        // map hears of it, so a folder still opening is settled and the whole picture painted under the zoomed one
+        // map hears of it, so a change of folder still flying is settled and the whole picture painted under the zoomed one
         // as soon as it does, as they are for a move the map starts itself.
         _zoom.Started += (_, _) =>
         {
@@ -408,8 +408,8 @@ public sealed class ExploreMap : UserControl
         Unloaded += (_, _) =>
         {
             // A pending redraw for a size this control is no longer showing at. Left running it
-            // would rasterise a whole volume for a page that has been navigated away from. A folder
-            // still opening, or a drag still held, is finished where it was going for the same reason.
+            // would rasterise a whole volume for a page that has been navigated away from. A change of
+            // folder still flying, or a drag still held, is finished where it was going for the same reason.
             _settled.Stop();
             _zoom.Stop();
             SettleStep();
@@ -689,8 +689,8 @@ public sealed class ExploreMap : UserControl
         _spacing = spacing;
         _volume = volume;
 
-        // Started before the new picture is drawn, so the drawing arrives into a folder already
-        // opening: its outlines wait for it the way they wait for a zoom, its names ride it in, and
+        // A step in starts before the new picture is drawn, so the drawing arrives into a flight
+        // already on its way: its outlines wait for it the way they wait for a zoom, its names ride it in, and
         // the pointer is over nothing until the picture it is over is the one on screen. The names
         // of the picture left go with it. A step out flies once the picture it goes out to is drawn.
         if (_step != FolderStep.Across && another)
@@ -1082,7 +1082,7 @@ public sealed class ExploreMap : UserControl
 
         Unlock();
 
-        // Over a folder still opening, too: the names ride the picture they name as it grows.
+        // Over a change of folder still flying, too: the names ride the picture they name as it moves.
         _labels.Show(drawing, _scale, LabelText);
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
@@ -1453,7 +1453,7 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Settle any folder still opening, whichever button went down, so what the press resolves
+    /// Settle any change of folder still flying, whichever button went down, so what the press resolves
     /// against is the picture on screen rather than one on its way; and get ready to drag the picture
     /// with the left or middle button, where the page allows it and the picture is zoomed.
     ///
