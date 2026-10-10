@@ -122,6 +122,30 @@ public sealed class MapCeilingTests
         Assert.Equal(100, Draw(tree, ExploreView.Treemap, away).Ceiling!.Value, 9);
     }
 
+    /// <summary>
+    /// What a block needs is decided by the smallest item it stands for: the same tail with one item
+    /// ten times smaller among them needs a deeper ceiling, though its largest item is the same.
+    /// </summary>
+    [Fact]
+    public void TheSmallestItemABlockStandsForDecidesTheCeiling()
+    {
+        var even = FilesOf([10_000_000_000, .. Enumerable.Repeat(10L, 100_000)]);
+        var uneven = FilesOf([10_000_000_000, .. Enumerable.Repeat(10L, 100_000), 1]);
+        var (x, y) = CentreOf(Layout(even, MapViewport.Whole).Single(tile => tile.IsAggregate), MapViewport.Whole);
+        var viewport = MapViewport.Anchored(MapCeiling.Least, x, y, 0.5, 0.5, MapCeiling.Least);
+
+        Assert.Contains(Layout(even, viewport), tile => tile.IsAggregate);
+        Assert.Contains(Layout(uneven, viewport), tile => tile.IsAggregate);
+
+        var evenCeiling = Draw(even, ExploreView.Treemap, viewport).Ceiling!.Value;
+        var unevenCeiling = Draw(uneven, ExploreView.Treemap, viewport).Ceiling!.Value;
+
+        Assert.True(evenCeiling > viewport.Zoom, $"the ceiling {evenCeiling} did not rise above the zoom on screen");
+        Assert.True(
+            unevenCeiling > evenCeiling * 2,
+            $"a block with an item ten times smaller in it allowed {unevenCeiling}, against {evenCeiling} without");
+    }
+
     [Theory]
     [InlineData(ExploreView.Icicle)]
     [InlineData(ExploreView.Sunburst)]

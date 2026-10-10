@@ -210,7 +210,8 @@ public sealed class TiledSurface : ExploreSurface
 
     /// <summary>
     /// How many times more the picture has to be magnified for everything in view this drawing stood
-    /// in for with a block to be drawn one by one: 1 where it drew everything in view.
+    /// in for with a block to be drawn one by one: 1 where it drew everything in view. Every tile is
+    /// in view, in part at least: a zoomed layout lays out nothing wholly off the canvas.
     /// </summary>
     private double Deeper()
     {
@@ -220,7 +221,7 @@ public sealed class TiledSurface : ExploreSurface
         {
             var tile = _tiles[i];
 
-            if (tile.Finest > 0 && OnCanvas(tile) is { Width: > 0, Height: > 0 })
+            if (tile.Finest > 0)
             {
                 deeper = Math.Max(deeper, MapCeiling.Revealing(tile.Finest, Limits.MinimumTileSize));
             }
