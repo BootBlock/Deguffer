@@ -181,7 +181,8 @@ public sealed class TiledSurface : ExploreSurface
                 Rotation: 0,
                 Centred: false,
                 TextColourFor(tile.Node, tile.Depth),
-                tile.Bytes));
+                tile.Bytes,
+                new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Header)));
         }
 
         foreach (var i in Largest(insides, MaximumLabels))
@@ -197,7 +198,8 @@ public sealed class TiledSurface : ExploreSurface
                 Rotation: 0,
                 Centred: false,
                 TextColourFor(tile.Node, tile.Depth),
-                tile.Bytes));
+                tile.Bytes,
+                new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Height)));
         }
 
         return labels;

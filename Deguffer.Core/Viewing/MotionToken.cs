@@ -55,6 +55,16 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(250), Travels: false),
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
+    /// <summary>
+    /// Names arriving on a picture already on screen, with the detail a redraw brought: a zoom or a
+    /// drag that stopped, or a folder opened. They fade in rather than appear, so the names a move
+    /// uncovered come on as the picture settles rather than in a flash after it. Nothing travels, so
+    /// it plays with motion off as well, only shorter, for the reason <see cref="Crossfade"/> does.
+    /// </summary>
+    public static MotionToken Detail { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(200), Travels: false),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
     /// <summary>How this plays, given whether the reader has animation effects on.</summary>
     public Motion For(bool animationsEnabled) => animationsEnabled ? Full : Reduced;
 }

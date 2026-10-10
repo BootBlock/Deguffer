@@ -61,6 +61,21 @@ public sealed class MotionTokenTests
         Assert.False(MotionToken.Crossfade.For(animationsEnabled).IsInstant);
 
     /// <summary>
+    /// Names a move uncovered fade in where they are, with motion on or off: they never fly in, and
+    /// never flash on.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NewNamesOnTheMapFadeInPlace(bool animationsEnabled)
+    {
+        var motion = MotionToken.Detail.For(animationsEnabled);
+
+        Assert.False(motion.Travels);
+        Assert.False(motion.IsInstant);
+    }
+
+    /// <summary>
     /// A page's entrance, its header's and the rest's together, is over in under 300 ms, so it never
     /// stands between the reader and the page, and the rest of the page starts after its header.
     /// </summary>
