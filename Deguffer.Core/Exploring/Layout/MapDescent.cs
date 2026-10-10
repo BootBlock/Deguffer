@@ -69,6 +69,14 @@ public readonly record struct MapDescent(MapFrame Shape, bool Travels)
     /// </summary>
     public double Opacity(double progress) => Math.Clamp(progress, 0, 1);
 
+    /// <summary>
+    /// How far the camera travels, in the natural log of how many times the outer picture is
+    /// magnified from end to end, taken across both axes (their mean): what <see cref="MapPassage"/>
+    /// shares a flight's time out by. Zero where nothing moves.
+    /// </summary>
+    public double Depth =>
+        Flies ? -(Math.Log(OnScreen.Width) + Math.Log(OnScreen.Height)) / 2 : 0;
+
     private MapFrame OnScreen => Shape.Clipped(MapFrame.Whole);
 
     /// <summary>Whether the pictures move at all: not where the motion stays in place, nor for a slot with nothing of it on screen.</summary>

@@ -6,11 +6,13 @@ namespace Deguffer.App.Controls;
 
 /// <summary>
 /// The clock behind a change of folder on the map: where the outer picture and the inner one are at
-/// each frame of the flight between them, into the inner folder or out of it.
+/// each frame of the flight between them, into the inner folder or out of it, or out of one folder
+/// and on into another through the folder that holds both.
 ///
 /// <para>The arithmetic is Core's: where the two pictures are is <see cref="MapDescent"/>'s, how the
 /// flight moves is a <see cref="Spring"/>'s, and how long it takes is
-/// <see cref="MotionToken.Entrance"/>'s. What is left here is following the frames.</para>
+/// <see cref="MotionToken.Entrance"/>'s, and which leg of a flight through a folder is under way is
+/// <see cref="MapPassage"/>'s. What is left here is following the frames.</para>
 /// </summary>
 internal sealed class ExploreDescent
 {
@@ -20,7 +22,16 @@ internal sealed class ExploreDescent
 
     private MapDescent _path;
 
-    /// <summary>How far the flight is from the outer picture, at 0, to the inner one, at 1.</summary>
+    /// <summary>The two legs of a flight through a folder, while one is under way. See <see cref="Pass"/>.</summary>
+    private MapPassage? _passage;
+
+    /// <summary>Whether the flight through a folder under way has reached the middle picture. See <see cref="Midway"/>.</summary>
+    private bool _pastMidway;
+
+    /// <summary>
+    /// How far the flight is from the outer picture, at 0, to the inner one, at 1; or, through a
+    /// folder, from the folder left, at 0, to the folder going to, at 1 (see <see cref="MapPassage"/>).
+    /// </summary>
     private Spring _progress = Spring.At(1);
 
     /// <summary>How the flight under way was asked to play, for the reader's setting at the time.</summary>
@@ -34,6 +45,13 @@ internal sealed class ExploreDescent
 
     /// <summary>Raised at each frame of the flight, and once more at its end.</summary>
     public event EventHandler? Moved;
+
+    /// <summary>
+    /// Raised once in a flight through a folder, at the frame that reaches the middle picture, before
+    /// that frame moves anything: from here the folder left has gone and the folder going to is on its
+    /// way in, so its picture is wanted. Before <see cref="Arrived"/> for a flight finished early.
+    /// </summary>
+    public event EventHandler? Midway;
 
     /// <summary>Raised once when the flight is over, whether it ran its course or was finished early.</summary>
     public event EventHandler? Arrived;
@@ -61,6 +79,7 @@ internal sealed class ExploreDescent
         var inward = step == FolderStep.Into;
 
         _path = new MapDescent(shape, motion.Travels);
+        _passage = null;
         _playing = motion;
         _progress = Spring.At(inward ? 0 : 1).Toward(inward ? 1 : 0, now, motion);
 
@@ -68,9 +87,28 @@ internal sealed class ExploreDescent
     }
 
     /// <summary>
+    /// Fly out of a folder whose screen lies at <paramref name="outOf"/> on the picture of the folder
+    /// that holds it and another, and on into that other one, whose screen lies at
+    /// <paramref name="into"/> on the same picture, as one flight (see <see cref="MapPassage"/>).
+    /// </summary>
+    public void Pass(MapFrame outOf, MapFrame into)
+    {
+        var now = _clock.Now;
+        var motion = _motion.For(MotionToken.Entrance);
+
+        _passage = new MapPassage(new MapDescent(outOf, motion.Travels), new MapDescent(into, motion.Travels));
+        _pastMidway = false;
+        _playing = motion;
+        _progress = Spring.At(0).Toward(1, now, motion);
+
+        Go(now);
+    }
+
+    /// <summary>
     /// Go back the way the flight came, from where it is now and at the speed it has, for a reader
     /// who asked for the folder it left before it arrived. Nothing jumps: the spring carries its speed
-    /// into the turn.
+    /// into the turn. A flight through a folder goes back to where its leg under way began: the folder
+    /// it left, or, past the middle, the folder that holds both.
     /// </summary>
     public void Turn()
     {
@@ -80,8 +118,11 @@ internal sealed class ExploreDescent
         }
 
         var now = _clock.Now;
+        var back = _passage is { } passage
+            ? (_pastMidway ? passage.Midway : 0)
+            : 1 - _progress.Target;
 
-        _progress = _progress.Toward(1 - _progress.Target, now, _playing);
+        _progress = _progress.Toward(back, now, _playing);
 
         Go(now);
     }
@@ -142,9 +183,24 @@ internal sealed class ExploreDescent
 
     private void Follow(double progress)
     {
-        Inner = _path.Inner(progress);
-        Outer = _path.Outer(progress);
-        Opacity = _path.Opacity(progress);
+        var (path, along) = (_path, progress);
+
+        if (_passage is { } passage)
+        {
+            // Turned round on the way out, the flight never reaches the middle picture: its spring
+            // comes to rest without passing where it is going.
+            if (!_pastMidway && progress >= passage.Midway)
+            {
+                _pastMidway = true;
+                Midway?.Invoke(this, EventArgs.Empty);
+            }
+
+            (path, along) = passage.At(progress);
+        }
+
+        Inner = path.Inner(along);
+        Outer = path.Outer(along);
+        Opacity = path.Opacity(along);
 
         Moved?.Invoke(this, EventArgs.Empty);
     }
