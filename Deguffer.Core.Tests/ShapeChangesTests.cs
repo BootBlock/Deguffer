@@ -225,6 +225,24 @@ public sealed class ShapeChangesTests
         AssertClose(Treemap(earlier).FrameOf(was)!.Value, alpha.From);
     }
 
+    /// <summary>
+    /// Once a process's children have gone, its own share is drawn as the process itself, so the share
+    /// is the same thing as the process in the later reading rather than a shape that went.
+    /// </summary>
+    [Fact]
+    public void AProcessesOwnShareIsTheProcessOnceItsChildrenHaveGone()
+    {
+        var earlier = MemoryTreeBuilder.Build(new MemorySnapshotBuilder()
+            .Process(100, 1, "alpha.exe", 300, created: 10)
+            .Process(200, 100, "beta.exe", 100, created: 20)
+            .Build());
+        var later = MemoryTreeBuilder.Build(new MemorySnapshotBuilder().Process(100, 1, "alpha.exe", 300, created: 10).Build());
+
+        var share = earlier.Find(new MemoryNodeKey(MemoryPart.OwnShare, 100, 10))!.Value;
+
+        Assert.Equal(later.Find(new MemoryNodeKey(MemoryPart.Process, 100, 10)), earlier.CounterpartsIn(later)!(share));
+    }
+
     [Fact]
     public void TreesOfDifferentThingsHaveNothingToMatch()
     {
@@ -299,27 +317,6 @@ public sealed class ShapeChangesTests
 
         return builder.Build(ExploreChildOrder.BySize);
     }
-
-    /// <summary>
-    /// Siblings of the same size come out in name order whatever order the scan met them in, so two
-    /// scans of the same disk lay them out the same way.
-    /// </summary>
-    [Fact]
-    public void SiblingsOfTheSameSizeAreInNameOrder()
-    {
-        string[] names = ["delta", "alpha", "echo", "charlie", "bravo", "foxtrot", "golf"];
-
-        var forward = Scan([.. names.Select(name => (name, 100L))]);
-        var backward = Scan([.. names.Reverse().Select(name => (name, 100L))]);
-
-        string[] expected = [.. names.Order(StringComparer.OrdinalIgnoreCase)];
-
-        Assert.Equal(expected, Names(forward));
-        Assert.Equal(expected, Names(backward));
-    }
-
-    private static string[] Names(ExploreTree tree) =>
-        [.. tree.ChildrenOf(tree.RootNode).ToArray().Select(tree.NameOf)];
 
     private static bool Contains(MapFrame outer, MapFrame inner) =>
         inner.X >= outer.X - Precision && inner.Y >= outer.Y - Precision

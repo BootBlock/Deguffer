@@ -121,7 +121,7 @@ public sealed class MemoryTree : ITrackedTree
     /// <summary>The node <paramref name="key"/> names in this tree, or null where this tree has none.</summary>
     public int? Find(MemoryNodeKey key) => _index.TryGetValue(key, out var node) ? node : null;
 
-    /// <summary>Find each node in <paramref name="later"/>, another reading of memory, by what it is (<see cref="KeyOf"/>).</summary>
+    /// <summary>Find each node in <paramref name="later"/>, another reading of memory, as <see cref="MemoryPlace.TryCarry"/> does.</summary>
     public Func<int, int?>? CounterpartsIn(ISizedTree later) =>
-        later is MemoryTree reading ? node => reading.Find(KeyOf(node)) : null;
+        later is MemoryTree reading ? node => MemoryPlace.TryCarry(this, node, reading) : null;
 }

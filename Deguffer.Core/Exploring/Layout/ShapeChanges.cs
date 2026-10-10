@@ -22,11 +22,15 @@ namespace Deguffer.Core.Exploring.Layout;
 public static class ShapeChanges
 {
     /// <summary>
-    /// How many shapes of each layout move on their own at most. Enough that the large shapes a
-    /// reader follows move, and few enough that each frame of the move stays within its budget on a
-    /// tree of a million files, where every other shape crossfades.
+    /// How many shapes of each layout move on their own at most, whatever the drawing holds: the large
+    /// shapes a reader follows move, and the work of each frame of the move is bounded by this rather
+    /// than by the size of the tree, as every other shape crossfades.
     /// </summary>
     public const int MostShapes = 200;
+
+    /// <summary>The largest shape first, and of two the same size the one drawn first, so a cut is the same every time.</summary>
+    private static readonly Comparer<(float Area, int Index)> LargestFirst =
+        Comparer<(float Area, int Index)>.Create((x, y) => y.Area != x.Area ? y.Area.CompareTo(x.Area) : x.Index.CompareTo(y.Index));
 
     /// <summary>
     /// How far a shape has to move, or change size, in pixels of the later drawing, before it is said
@@ -147,8 +151,7 @@ public static class ShapeChanges
             return [.. cut.OrderByDescending(index => Area(tiles[index])).ThenBy(index => index).Take(MostShapes)];
         }
 
-        var open = new PriorityQueue<int, (float Area, int Index)>(
-            Comparer<(float Area, int Index)>.Create((x, y) => y.Area != x.Area ? y.Area.CompareTo(x.Area) : x.Index.CompareTo(y.Index)));
+        var open = new PriorityQueue<int, (float Area, int Index)>(LargestFirst);
 
         foreach (var index in cut)
         {

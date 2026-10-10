@@ -126,7 +126,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// See <see cref="ExploreCounterparts"/>.
     /// </summary>
     public Func<int, int?>? CounterpartsIn(Layout.ISizedTree later) =>
-        later is ExploreTree scanned && string.Equals(RootPath, scanned.RootPath, StringComparison.OrdinalIgnoreCase)
+        later is ExploreTree scanned && ExplorePlace.IsRootedAlike(this, scanned)
             ? new ExploreCounterparts(this, scanned).Find
             : null;
 
@@ -522,9 +522,8 @@ public sealed class ExploreTree : Layout.ITrackedTree
 
             for (var i = 0; i < length; i++)
             {
-                // Negated rather than sorted and then reversed: Array.Sort is not stable, so a
-                // reverse would shuffle equal-sized siblings differently on every scan of the same
-                // disk, and the picture would rearrange for no reason the user can see.
+                // Negated, so the sort puts the largest first; siblings of one size are put in name
+                // order below.
                 keys[i] = -sizes[slice[i]];
             }
 

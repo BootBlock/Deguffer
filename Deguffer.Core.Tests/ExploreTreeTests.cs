@@ -68,38 +68,33 @@ public class ExploreTreeTests
     }
 
     /// <summary>
-    /// The reason <see cref="ExploreTree"/> negates its sort keys rather than sorting ascending and
-    /// reversing the span, stated as an assertion.
-    ///
-    /// <para>Both orderings put the largest child first, so a test that only checks sizes cannot
-    /// tell them apart. What separates them is what happens to siblings of equal size: the runtime's
-    /// sort falls back to a stable insertion sort below its introsort threshold, so a descending sort
-    /// leaves a short directory's equal children in the order they were recorded, while reversing an
-    /// ascending sort inverts them. A user sees that as a set of same-sized folders that swap places
-    /// for no reason they can see.</para>
+    /// Siblings of one size come out in name order whatever order the scan recorded them in, so two
+    /// scans of the same disk lay them out alike, and a map moving from one layout to the next does
+    /// not show equal siblings trading places. Recorded here against name order: a sort that left
+    /// the order it was given, or reversed it, would fail.
     /// </summary>
     [Fact]
-    public void EqualSizedSiblingsKeepTheOrderTheyWereRecordedIn()
+    public void EqualSizedSiblingsAreInNameOrderWhateverOrderTheyWereRecordedIn()
     {
         var builder = new ExploreTreeBuilder(Root);
 
         var first = builder.AddChildren(ExploreTreeBuilder.RootNode, [
-            File("alpha.bin", 4096),
-            File("bravo.bin", 4096),
-            File("charlie.bin", 4096),
             File("delta.bin", 4096),
+            File("bravo.bin", 4096),
+            File("echo.bin", 4096),
+            File("alpha.bin", 4096),
+            File("charlie.bin", 4096),
         ]);
 
         var tree = builder.Build(ExploreChildOrder.BySize);
 
-        Assert.Equal(["alpha.bin", "bravo.bin", "charlie.bin", "delta.bin"], NamesOfChildren(tree, tree.RootNode));
-        Assert.Equal([first, first + 1, first + 2, first + 3], tree.ChildrenOf(tree.RootNode).ToArray());
+        Assert.Equal(["alpha.bin", "bravo.bin", "charlie.bin", "delta.bin", "echo.bin"], NamesOfChildren(tree, tree.RootNode));
+        Assert.Equal([first + 3, first + 1, first + 4, first, first + 2], tree.ChildrenOf(tree.RootNode).ToArray());
     }
-
     /// <summary>
     /// The same tree, assembled twice, orders identically — including a directory of equal-sized
-    /// children large enough that the runtime sorts it rather than inserting it, where no ordering
-    /// among the ties is prescribed and only its repeatability matters.
+    /// children large enough that the runtime sorts it rather than inserting it, whose ties are put
+    /// in name order.
     /// </summary>
     [Fact]
     public void TheSameTreeAssembledTwiceOrdersEveryLevelIdentically()
