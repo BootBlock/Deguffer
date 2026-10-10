@@ -11,6 +11,10 @@ public static class FolderSteps
     /// <para>The same folder with the volume beside it and then without is the root opened out of the
     /// volume, which is a step into it, and the other way round is a step out to it. Any number of
     /// levels is one step: going up three folders at once is one pull-back, not three.</para>
+    ///
+    /// <para>Between folders where neither holds the other, such as two sides of the drive opened one
+    /// after the other, the step goes through the folder that holds both, so the reader sees where the
+    /// one is from the other rather than a picture replaced by another.</para>
     /// </summary>
     public static FolderStep Between(ISizedTree tree, int from, bool fromBeside, int to, bool toBeside)
     {
@@ -31,7 +35,25 @@ public static class FolderSteps
             return FolderStep.Into;
         }
 
-        return Holds(tree, to, from) ? FolderStep.OutOf : FolderStep.Across;
+        return Holds(tree, to, from) ? FolderStep.OutOf : FolderStep.Through;
+    }
+
+    /// <summary>
+    /// The nearest folder that holds both <paramref name="first"/> and <paramref name="second"/>:
+    /// the one a <see cref="FolderStep.Through"/> passes through. One of the two where it holds the
+    /// other, and the root at the furthest.
+    /// </summary>
+    public static int Meeting(ISizedTree tree, int first, int second)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        for (var folder = first; ; folder = tree.ParentOf(folder))
+        {
+            if (Holds(tree, folder, second))
+            {
+                return folder;
+            }
+        }
     }
 
     /// <summary>Whether <paramref name="node"/> is <paramref name="folder"/> or anywhere under it.</summary>

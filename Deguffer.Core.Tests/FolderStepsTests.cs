@@ -7,8 +7,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Which way the map's camera flies for a change of folder, and from which shape: into a folder below
-/// however deep, out to one above however far up, out of the volume and back into it, and not at all
-/// between folders where neither holds the other.
+/// however deep, out to one above however far up, out of the volume and back into it, and through the
+/// nearest folder that holds both between folders where neither holds the other.
 /// </summary>
 public sealed class FolderStepsTests
 {
@@ -34,12 +34,39 @@ public sealed class FolderStepsTests
     }
 
     [Fact]
-    public void FoldersSideBySideAreNoStepInOrOut()
+    public void FoldersSideBySideAreAStepThroughAFolderAndTheSameFolderIsNoStep()
     {
         var tree = Nested();
 
-        Assert.Equal(FolderStep.Across, FolderSteps.Between(tree, Find(tree, "mid01"), false, Find(tree, "top1"), false));
+        Assert.Equal(FolderStep.Through, FolderSteps.Between(tree, Find(tree, "mid01"), false, Find(tree, "top1"), false));
+        Assert.Equal(FolderStep.Through, FolderSteps.Between(tree, Find(tree, "mid00"), false, Find(tree, "mid01"), false));
         Assert.Equal(FolderStep.Across, FolderSteps.Between(tree, Find(tree, "top0"), false, Find(tree, "top0"), false));
+    }
+
+    /// <summary>
+    /// A step through a folder passes through the nearest folder that holds both ends, from either
+    /// end: their parent for two folders side by side, the root for cousins under different folders,
+    /// and the one that holds the other where one does.
+    /// </summary>
+    [Fact]
+    public void TheFolderPassedThroughIsTheNearestThatHoldsBoth()
+    {
+        var tree = Nested();
+        var top0 = Find(tree, "top0");
+        var mid00 = Find(tree, "mid00");
+        var mid01 = Find(tree, "mid01");
+        var mid10 = Find(tree, "mid10");
+
+        Assert.Equal(top0, FolderSteps.Meeting(tree, mid00, mid01));
+        Assert.Equal(top0, FolderSteps.Meeting(tree, mid01, mid00));
+        Assert.Equal(tree.RootNode, FolderSteps.Meeting(tree, mid01, mid10));
+        Assert.Equal(tree.RootNode, FolderSteps.Meeting(tree, mid10, mid01));
+        Assert.Equal(top0, FolderSteps.Meeting(tree, mid01, top0));
+        Assert.Equal(top0, FolderSteps.Meeting(tree, top0, mid01));
+
+        // Further down, where the nearest folder holding both is neither the root nor a child of it.
+        Assert.Equal(mid00, FolderSteps.Meeting(tree, Find(tree, "f000"), Find(tree, "f001")));
+        Assert.Equal(top0, FolderSteps.Meeting(tree, Find(tree, "f000"), Find(tree, "f010")));
     }
 
     /// <summary>The root opened out of the volume drawn beside it is a step in, and going back to the volume a step out.</summary>
