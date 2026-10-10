@@ -36,6 +36,25 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(Glide, Travels: true),
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
+    /// <summary>
+    /// A page arriving from the navigation rail, rising a short way into place as it fades in, its
+    /// header first (see <see cref="PageEntrance"/>). With motion off it fades in place, for the reason
+    /// <see cref="Entrance"/> does: the whole page changes, and a fade says that it did.
+    /// </summary>
+    public static MotionToken Page { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(200), Travels: true),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
+    /// <summary>
+    /// The whole window changing how it looks, for a theme or the backdrop turned on or off: the old
+    /// look fades into the new. Nothing travels, so it plays with motion off as well, only shorter,
+    /// because a window that repaints at once is a flash, which a reader who turned animation off has
+    /// not asked for either.
+    /// </summary>
+    public static MotionToken Crossfade { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(250), Travels: false),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
     /// <summary>How this plays, given whether the reader has animation effects on.</summary>
     public Motion For(bool animationsEnabled) => animationsEnabled ? Full : Reduced;
 }

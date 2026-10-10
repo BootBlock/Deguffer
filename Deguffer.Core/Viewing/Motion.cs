@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Deguffer.Core.Viewing;
 
 /// <summary>
@@ -30,6 +32,15 @@ public readonly record struct Motion(TimeSpan Duration, bool Travels)
 
     /// <summary>Whether an animation started at <paramref name="start"/> has arrived by <paramref name="now"/>.</summary>
     public bool IsOverAt(TimeSpan start, TimeSpan now) => IsInstant || now - start >= Duration;
+
+    /// <summary>
+    /// The same curve as a cubic Bézier's two inner control points, for an animation the compositor
+    /// clocks rather than the app. Exactly the curve, not an approximation of it: a Bézier whose inner
+    /// points sit a third and two thirds of the way across, both at the top, moves evenly across and
+    /// rises as 1 - (1 - t)³.
+    /// </summary>
+    public static (Vector2 First, Vector2 Second) EaseControlPoints { get; } =
+        (new Vector2(1f / 3, 1), new Vector2(2f / 3, 1));
 
     /// <summary>
     /// A cubic ease out: fastest at the start, settling into place. A move that starts at speed is
