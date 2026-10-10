@@ -632,9 +632,15 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         {
             _stretch.Remeasure(_origin);
 
-            var held = _stretch.Pull(0, 0).Held(_size.Width, _size.Height);
+            var tracking = _stretch.Pull(0, 0);
+            var held = tracking.Held(_size.Width, _size.Height);
 
             _requests.Asked(_tracker.TryUpdatePosition(new Vector3((float)held.X, (float)held.Y, 0)), null);
+
+            // While a mouse holds the picture the drag says what the screen shows, as in Drag.
+            Shown = tracking.Shown(_size.Width, _size.Height, _elastic);
+            _target = Shown.Held();
+            Moved?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -650,6 +656,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         }
 
         Jump(destination);
+        Moved?.Invoke(this, EventArgs.Empty);
     }
     /// <summary>The origin a report caused by request <paramref name="id"/> is measured from.</summary>
     private MapOrigin OriginFor(long id) => _move is { } move ? move.MeasuredFor(id) : _origin;
