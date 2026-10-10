@@ -39,6 +39,18 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
     /// <summary>
+    /// The map moving from one layout of the same place to the next: a scan's next snapshot, or a new
+    /// spacing. The large shapes travel from where they were to where they are, those that went shrink
+    /// away and those that came grow in, while the rest of the picture crossfades over the same time.
+    /// With motion off nothing travels and the new layout fades in place. As long as
+    /// <see cref="Crossfade"/>, which it stands in for where nothing moves, and shorter than the time
+    /// between two snapshots of a scan, so one arrives once the last has landed.
+    /// </summary>
+    public static MotionToken Shift { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(250), Travels: true),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
+    /// <summary>
     /// The overview a zoomed map shows in a corner, coming in as the map is zoomed in, going as it
     /// shows the whole picture again, and coming in at the other corner when the map is acted on
     /// beside it. With motion on it drops a short way into place as it fades in. With motion off it

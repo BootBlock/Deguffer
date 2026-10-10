@@ -12,8 +12,8 @@ namespace Deguffer.App.Controls;
 /// to look at Explore. Drawn by the map Explore draws with, from <see cref="MapSample"/>, which names
 /// nothing on the machine.
 ///
-/// <para>Each change of look on the same view fades from the old look into the new
-/// (<see cref="ExploreMap.Restyle"/>). The picture is to be looked at and nothing more: it takes no
+/// <para>Each change of look on the same view fades from the old look into the new, and a change of
+/// spacing moves the shapes to their new places (<see cref="ExploreMap.Restyle"/>). The picture is to be looked at and nothing more: it takes no
 /// pointer, no keyboard and no zoom, and assistive technology skips it, because the choices beside it
 /// already say in words what it shows.</para>
 /// </summary>

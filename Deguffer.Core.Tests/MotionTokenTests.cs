@@ -12,7 +12,7 @@ public sealed class MotionTokenTests
     [Fact]
     public void WithMotionOnEveryMoveTravels()
     {
-        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark, MotionToken.Overview })
+        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark, MotionToken.Overview, MotionToken.Shift })
         {
             var motion = token.For(animationsEnabled: true);
 
@@ -38,6 +38,17 @@ public sealed class MotionTokenTests
         Assert.False(motion.Travels);
         Assert.False(motion.IsInstant);
         Assert.True(motion.Duration < MotionToken.Entrance.Full.Duration);
+    }
+
+    /// <summary>With motion off the map's next layout fades in place: no shape travels to it.</summary>
+    [Fact]
+    public void WithMotionOffANewLayoutFadesInPlace()
+    {
+        var motion = MotionToken.Shift.For(animationsEnabled: false);
+
+        Assert.False(motion.Travels);
+        Assert.False(motion.IsInstant);
+        Assert.True(motion.Duration < MotionToken.Shift.Full.Duration);
     }
 
     [Fact]
