@@ -77,6 +77,12 @@ public sealed class ScanGrowth
 {
     private readonly Dictionary<int, FolderChange> _byNode;
 
+    /// <summary><see cref="Listing"/>, made once: the comparison does not change.</summary>
+    private IReadOnlyList<FolderChange>? _listing;
+
+    /// <summary>The listed folders by node, made the first time a shape is matched to one.</summary>
+    private Dictionary<int, FolderChange>? _listed;
+
     private ScanGrowth(
         ExploreTree tree,
         ScanSummary earlier,
@@ -126,10 +132,38 @@ public sealed class ScanGrowth
     /// </summary>
     public IReadOnlyList<FolderChange> Listing()
     {
+        if (_listing is { } listing)
+        {
+            return listing;
+        }
+
         var grew = Ranked.TakeWhile(change => change.Bytes > 0).Take(ListedGrowths);
         var shrank = Ranked.Reverse().TakeWhile(change => change.Bytes < 0).Take(ListedShrinkages).Reverse();
 
-        return [.. grew, .. shrank];
+        return _listing = [.. grew, .. shrank];
+    }
+
+    /// <summary>
+    /// The entry of <see cref="Listing"/> that speaks for <paramref name="node"/>: its own, or else the
+    /// nearest folder's above it that is listed, as <see cref="BytesAt"/> borrows. What a shape pointed
+    /// at on the map marks in the list beside it. Null where nothing up to the root is listed.
+    /// </summary>
+    public FolderChange? ListedFor(int node)
+    {
+        _listed ??= Listing().Where(change => change.Node >= 0).ToDictionary(change => change.Node);
+
+        for (var at = node; ; at = Tree.ParentOf(at))
+        {
+            if (_listed.TryGetValue(at, out var change))
+            {
+                return change;
+            }
+
+            if (at == Tree.RootNode)
+            {
+                return null;
+            }
+        }
     }
 
     /// <summary>

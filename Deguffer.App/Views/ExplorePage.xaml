@@ -891,7 +891,7 @@
                          small change looks small. -->
                     <StackPanel Grid.Row="3" Spacing="4">
                         <Grid Height="33" VerticalAlignment="Bottom">
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.Growth.UsedSpace}"
+                            <ItemsControl x:Name="UsedSpaceStrip"
                                           VerticalAlignment="Bottom"
                                           AutomationProperties.Name="Used space at each kept scan">
                                 <ItemsControl.ItemsPanel>
@@ -906,10 +906,7 @@
                                         <Grid Width="10" Height="32" Background="Transparent"
                                               ToolTipService.ToolTip="{x:Bind Description}"
                                               AutomationProperties.Name="{x:Bind Description}">
-                                            <Border Height="{x:Bind Height}"
-                                                    VerticalAlignment="Bottom"
-                                                    CornerRadius="2,2,0,0"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                            <controls:ColumnBar Value="{x:Bind Share}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -943,8 +940,19 @@
                                       Background="Transparent"
                                       ColumnDefinitions="*,Auto"
                                       RowDefinitions="Auto,Auto"
+                                      PointerEntered="OnCardRowEntered"
+                                      PointerExited="OnCardRowExited"
                                       ToolTipService.ToolTip="{x:Bind Path}"
                                       AutomationProperties.Name="{x:Bind Description}">
+                                    <!-- Lit while the map points at this folder. See ExploreCards. -->
+                                    <Border x:Name="Mark"
+                                            Grid.RowSpan="2" Grid.ColumnSpan="2"
+                                            Margin="-8,-4"
+                                            CornerRadius="4"
+                                            Opacity="0"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            AutomationProperties.AccessibilityView="Raw" />
+
                                     <TextBlock Grid.Column="0"
                                                Text="{x:Bind Name}"
                                                TextTrimming="CharacterEllipsis" />
@@ -1020,8 +1028,19 @@
                                       Background="Transparent"
                                       ColumnDefinitions="Auto,*,Auto"
                                       RowDefinitions="Auto,Auto,Auto"
+                                      PointerEntered="OnCardRowEntered"
+                                      PointerExited="OnCardRowExited"
                                       ToolTipService.ToolTip="List these files"
-                                      AutomationProperties.Name="{x:Bind Description}">
+                                      AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
+                                    <!-- Lit while the map points at a shape of this kind. See ExploreCards. -->
+                                    <Border x:Name="Mark"
+                                            Grid.RowSpan="3" Grid.ColumnSpan="3"
+                                            Margin="-8,-4"
+                                            CornerRadius="4"
+                                            Opacity="0"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            AutomationProperties.AccessibilityView="Raw" />
+
                                     <Border Grid.Column="0"
                                             Width="12" Height="12" CornerRadius="2"
                                             VerticalAlignment="Center"
@@ -1036,20 +1055,19 @@
                                                TextTrimming="CharacterEllipsis" />
 
                                     <TextBlock Grid.Column="2"
-                                               Text="{x:Bind Size}"
+                                               Text="{x:Bind Size, Mode=OneWay}"
                                                TextAlignment="Right" />
 
                                     <!-- Against the folder, as the folder list's bars are. -->
-                                    <ProgressBar Grid.Row="1"
-                                                 Grid.Column="1"
-                                                 VerticalAlignment="Center"
-                                                 Maximum="100"
-                                                 Value="{x:Bind Share}"
-                                                 AutomationProperties.AccessibilityView="Raw" />
+                                    <controls:FillBar Grid.Row="1"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource ShareBar}"
+                                                      VerticalAlignment="Center"
+                                                      Value="{x:Bind Share, Mode=OneWay}" />
 
                                     <TextBlock Grid.Row="1"
                                                Grid.Column="2"
-                                               Text="{x:Bind Files}"
+                                               Text="{x:Bind Files, Mode=OneWay}"
                                                Style="{StaticResource SecondaryText}"
                                                FontSize="12"
                                                TextAlignment="Right" />
@@ -1057,7 +1075,7 @@
                                     <TextBlock Grid.Row="2"
                                                Grid.Column="1"
                                                Grid.ColumnSpan="2"
-                                               Text="{x:Bind Extensions}"
+                                               Text="{x:Bind Extensions, Mode=OneWay}"
                                                Style="{StaticResource SecondaryText}"
                                                FontSize="12"
                                                TextWrapping="Wrap" />

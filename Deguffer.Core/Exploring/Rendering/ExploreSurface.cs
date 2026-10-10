@@ -441,6 +441,25 @@ public abstract class ExploreSurface
     public abstract MapFrame? FrameOf(int node);
 
     /// <summary>
+    /// The node whose shape shows <paramref name="node"/> on this drawing: its own, or where it is not
+    /// drawn one by one, the deepest folder above it that is. Null where it is not under this drawing's
+    /// root. What a card beside the map lights for a folder, so it lights where the screen shows it.
+    /// </summary>
+    public abstract int? ShownAs(int node);
+
+    /// <summary>
+    /// Where each node <paramref name="nodes"/> takes was drawn with nothing drawn inside its shape: the
+    /// shapes whose own colour is what the screen shows, which are what a card lighting every shape of
+    /// one kind lights. A folder with what it holds drawn inside it is left out, because lighting it
+    /// would light everything inside it whatever its kind. Never an aggregate, as for
+    /// <see cref="Outlines"/>.
+    ///
+    /// <para>A test rather than a set, because the nodes are every one of a kind in the tree, and the
+    /// shapes are far fewer than that (G4).</para>
+    /// </summary>
+    public abstract IReadOnlyList<ExploreOutline> Uncovered(Func<int, bool> nodes);
+
+    /// <summary>
     /// Where a screen showing <paramref name="node"/> drawn on its own at <paramref name="opened"/>
     /// lies on a screen showing this drawing at <paramref name="shown"/>, in fractions of the second:
     /// the shape a change of folder on the map flies into, or pulls back out of. Null where this
@@ -474,6 +493,26 @@ public abstract class ExploreSurface
     /// from above.</para>
     /// </summary>
     internal BranchHue HueOf(int node) => _hues.Of(node);
+
+    /// <summary>
+    /// <paramref name="node"/> and every folder above it, up to this drawing's root, or up to the
+    /// tree's own root for a node outside this drawing. Gathered for each ask rather than kept, because
+    /// it is asked once for a change of folder or a card row lit.
+    /// </summary>
+    protected HashSet<int> PathOf(int node)
+    {
+        var path = new HashSet<int>();
+
+        for (var current = node; ; current = Tree.ParentOf(current))
+        {
+            path.Add(current);
+
+            if (current == Root || Tree.ParentOf(current) == current)
+            {
+                return path;
+            }
+        }
+    }
 
     /// <summary>
     /// What the shape for this node at this depth is painted.

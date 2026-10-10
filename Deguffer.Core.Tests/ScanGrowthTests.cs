@@ -50,6 +50,32 @@ public class ScanGrowthTests
         Assert.Equal(old.Path, listing[^1].Path);
     }
 
+    /// <summary>
+    /// A shape pointed at on the map marks the row that speaks for it: its own, or the nearest folder
+    /// above it that is listed, and none where nothing up to the root is. Two removed folders share the
+    /// node number that says they have no shape, and neither is matched to anything.
+    /// </summary>
+    [Fact]
+    public void AShapeIsMatchedToItsOwnRowOrTheNearestListedFolderAboveIt()
+    {
+        var before = Tree(@"C:\", ("Logs", 10 * Megabyte), ("Old", 20 * Megabyte), ("Older", 10 * Megabyte), ("Same", 20 * Megabyte));
+        var after = Tree(@"C:\", ("Logs", 40 * Megabyte), ("Same", 20 * Megabyte));
+
+        var growth = Compare(before, after);
+        var logs = Child(after, "Logs");
+        var same = Child(after, "Same");
+
+        // The root neither grew nor shrank, so it is not listed and has nothing to lend.
+        Assert.DoesNotContain(growth.Listing(), change => change.Path == @"C:\");
+        Assert.Equal(2, growth.Listing().Count(change => change.Node < 0));
+
+        Assert.Equal(@"C:\Logs", growth.ListedFor(logs)?.Path);
+        Assert.Equal(@"C:\Logs", growth.ListedFor(OnlyChild(after, logs))?.Path);
+        Assert.Null(growth.ListedFor(same));
+        Assert.Null(growth.ListedFor(OnlyChild(after, same)));
+        Assert.Null(growth.ListedFor(after.RootNode));
+    }
+
     [Fact]
     public void TheListRanksGrowthLargestFirstAndShrinkageLargestLast()
     {
@@ -361,6 +387,18 @@ public class ScanGrowthTests
         }
 
         return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    private static int OnlyChild(ExploreTree tree, int folder)
+    {
+        var children = new List<int>();
+
+        foreach (var child in tree.ChildrenOf(folder))
+        {
+            children.Add(child);
+        }
+
+        return Assert.Single(children);
     }
 
     private static int Child(ExploreTree tree, string name)

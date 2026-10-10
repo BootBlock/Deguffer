@@ -46,10 +46,47 @@ public sealed class SunburstSurface : ExploreSurface
     /// <summary>Null throughout, for the same reason.</summary>
     public override MapFrame? FrameOf(int node) => null;
 
+    /// <summary>
+    /// The deepest sector that is the node or a folder above it. A folder's ring holds nothing inside
+    /// it, because what it holds is drawn in the rings further out, so the deepest is the node's own
+    /// sector wherever it was drawn.
+    /// </summary>
+    public override int? ShownAs(int node)
+    {
+        var path = PathOf(node);
+        var sectors = _hits.Sunburst.Sectors;
+        ExploreSector? deepest = null;
+
+        for (var i = 0; i < sectors.Count; i++)
+        {
+            var sector = sectors[i];
+
+            if (!sector.IsAggregate && path.Contains(sector.Node) && (deepest is not { } found || sector.Depth > found.Depth))
+            {
+                deepest = sector;
+            }
+        }
+
+        return deepest?.Node;
+    }
+
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
+        return Traced(nodes.Contains);
+    }
+
+    /// <summary>Every sector of the nodes asked for: no sector is drawn inside another's ring.</summary>
+    public override IReadOnlyList<ExploreOutline> Uncovered(Func<int, bool> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        return Traced(nodes);
+    }
+
+    private List<ExploreOutline> Traced(Func<int, bool> nodes)
+    {
         var sunburst = _hits.Sunburst;
         var sectors = sunburst.Sectors;
         var outlines = new List<ExploreOutline>();
@@ -58,7 +95,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             var sector = sectors[i];
 
-            if (!sector.IsAggregate && nodes.Contains(sector.Node))
+            if (!sector.IsAggregate && nodes(sector.Node))
             {
                 Trace(sunburst, sector, outlines);
             }

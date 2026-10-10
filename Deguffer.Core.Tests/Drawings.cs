@@ -77,7 +77,11 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
 
     public override MapFrame? FrameOf(int node) => drawing.FrameOf(node);
 
+    public override int? ShownAs(int node) => drawing.ShownAs(node);
+
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes) => drawing.Outlines(nodes);
+
+    public override IReadOnlyList<ExploreOutline> Uncovered(Func<int, bool> nodes) => drawing.Uncovered(nodes);
 
     private sealed class GatedPainter(
         CanvasPainter painter, Func<CanvasRegion, bool> painted, ManualResetEventSlim open, TileColour background)

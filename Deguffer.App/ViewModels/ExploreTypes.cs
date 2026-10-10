@@ -9,30 +9,63 @@ using Windows.UI;
 
 namespace Deguffer.App.ViewModels;
 
-/// <summary>One kind of file in the breakdown of the folder on screen, worded for the panel.</summary>
-/// <param name="Swatch">The colour a map coloured by type paints the kind, beside its name.</param>
-/// <param name="Share">How much of the folder the kind is, 0 to 100.</param>
-/// <param name="Extensions">The largest extensions of the kind with their sizes, or empty.</param>
-public sealed record ExploreTypeRow(
-    FileCategory Category, string Label, Color Swatch, string Size, double Share, string Files, string Extensions)
+/// <summary>
+/// One kind of file in the breakdown of the folder on screen, worded for the panel.
+///
+/// <para>The kind is the row's identity and its figures are written over as another folder or tree is
+/// measured, so the row stays and its bar moves from the old share to the new one (G4).</para>
+/// </summary>
+public sealed partial class ExploreTypeRow : ObservableObject
 {
+    public ExploreTypeRow(FileCategory category)
+    {
+        var colour = TypePalette.For(category);
+
+        Category = category;
+        Label = FileCategories.Label(category);
+        Swatch = Color.FromArgb(255, colour.Red, colour.Green, colour.Blue);
+    }
+
+    public FileCategory Category { get; }
+
+    public string Label { get; }
+
+    /// <summary>The colour a map coloured by type paints the kind, beside its name.</summary>
+    public Color Swatch { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Description))]
+    public partial string Size { get; private set; } = string.Empty;
+
+    /// <summary>How much of the folder the kind is, 0 to 100.</summary>
+    [ObservableProperty]
+    public partial double Share { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Description))]
+    public partial string Files { get; private set; } = string.Empty;
+
+    /// <summary>The largest extensions of the kind with their sizes, or empty.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Description))]
+    public partial string Extensions { get; private set; } = string.Empty;
+
     /// <summary>What a screen reader says for the row, which names everything the colour does not.</summary>
     public string Description => Extensions.Length > 0
         ? $"{Label}: {Size} in {Files}. Largest: {Extensions}"
         : $"{Label}: {Size} in {Files}";
 
-    /// <summary>The row <paramref name="share"/> of a folder of <paramref name="total"/> bytes is.</summary>
-    public static ExploreTypeRow For(TypeShare share, long total) => new(
-        share.Category,
-        FileCategories.Label(share.Category),
-        ColourOf(TypePalette.For(share.Category)),
-        FreeSpace.Format(share.Bytes),
-        total > 0 ? 100.0 * share.Bytes / total : 0,
-        share.Files == 1 ? "1 file" : $"{share.Files:N0} files",
-        string.Join(", ", share.Extensions.Select(extension =>
-            $"{(extension.Extension.Length > 0 ? extension.Extension : "no extension")} {FreeSpace.Format(extension.Bytes)}")));
+    /// <summary>Show <paramref name="share"/> of a folder of <paramref name="total"/> bytes.</summary>
+    public void Show(TypeShare share, long total)
+    {
+        ArgumentNullException.ThrowIfNull(share);
 
-    private static Color ColourOf(TileColour colour) => Color.FromArgb(255, colour.Red, colour.Green, colour.Blue);
+        Size = FreeSpace.Format(share.Bytes);
+        Share = total > 0 ? 100.0 * share.Bytes / total : 0;
+        Files = share.Files == 1 ? "1 file" : $"{share.Files:N0} files";
+        Extensions = string.Join(", ", share.Extensions.Select(extension =>
+            $"{(extension.Extension.Length > 0 ? extension.Extension : "no extension")} {FreeSpace.Format(extension.Bytes)}"));
+    }
 }
 
 /// <summary>
@@ -91,8 +124,23 @@ public sealed partial class ExploreTypes : ObservableObject
     /// </summary>
     public DominantTypes? Dominant { get; private set; }
 
+    /// <summary>
+    /// The kind of what the pointer is over on the map, which the panel marks in its list, or null
+    /// where it is over nothing of a kind: a folder not measured yet, a block, or nothing at all.
+    /// </summary>
+    [ObservableProperty]
+    public partial FileCategory? Pointed { get; private set; }
+
     /// <summary>Raised when <see cref="Dominant"/> arrives, so the map is drawn again.</summary>
     public event EventHandler? Changed;
+
+    /// <summary>
+    /// Mark the kind of <paramref name="node"/> of <paramref name="tree"/>, the shape the pointer is
+    /// over on the map, or nothing. The kind the map paints it, by the rule that paints it, so the row
+    /// marked is the row of its colour.
+    /// </summary>
+    public void Point(ExploreTree? tree, int? node) =>
+        Pointed = tree is not null && node is { } over ? DominantTypes.KindOf(tree, over, Dominant) : null;
 
     /// <summary>Point the panel at <paramref name="root"/> of <paramref name="tree"/>, or at nothing.</summary>
     public void Show(ExploreTree? tree, int root)
@@ -135,7 +183,7 @@ public sealed partial class ExploreTypes : ObservableObject
         if (_tree is not { } tree)
         {
             Cancel(ref _breaking);
-            LiveList.Show(Rows, [], row => row.Category);
+            Rows.Clear();
             Summary = string.Empty;
             return;
         }
@@ -163,7 +211,18 @@ public sealed partial class ExploreTypes : ObservableObject
             var total = tree.SizeOf(root);
             var files = breakdown.Shares.Sum(share => share.Files);
 
-            LiveList.Show(Rows, [.. breakdown.Shares.Select(share => ExploreTypeRow.For(share, total))], row => row.Category);
+            LiveList.Show(
+                Rows,
+                breakdown.Shares,
+                row => row.Category,
+                share => share.Category,
+                share =>
+                {
+                    var row = new ExploreTypeRow(share.Category);
+                    row.Show(share, total);
+                    return row;
+                },
+                (row, share) => row.Show(share, total));
 
             Summary = files switch
             {

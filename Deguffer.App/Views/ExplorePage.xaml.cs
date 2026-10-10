@@ -91,6 +91,9 @@ public sealed partial class ExplorePage : Page
     /// <summary>The appearance window while it is open, so the gear brings it forward rather than opening a second.</summary>
     private MapAppearanceWindow? _appearanceWindow;
 
+    /// <summary>The cards beside the map, joined to it. See <see cref="ExploreCards"/>.</summary>
+    private readonly ExploreCards _cards;
+
     public ExplorePage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -143,8 +146,8 @@ public sealed partial class ExplorePage : Page
         InitializeComponent();
 
         ListAnimation.Play(RowsList, SystemMotion.Current);
-        ListAnimation.Play(GrowthList, SystemMotion.Current);
-        ListAnimation.Play(TypesList, SystemMotion.Current);
+
+        _cards = new ExploreCards(ViewModel, Map, GrowthList, TypesList, UsedSpaceStrip);
 
         _rowsMargin = RowsList.Margin;
 
@@ -395,7 +398,8 @@ public sealed partial class ExplorePage : Page
     /// Draw the map. It puts its own outlines back on the new drawing, because it was told what is
     /// selected when the selection last changed and that has not stopped being true.
     /// </summary>
-    private void ShowCurrentNode() =>
+    private void ShowCurrentNode()
+    {
         Map.Show(
             ViewModel.Tree,
             ViewModel.CurrentNode,
@@ -407,6 +411,9 @@ public sealed partial class ExplorePage : Page
             ViewModel.Growth.Comparison,
             ViewModel.Types.Dominant,
             ViewModel.Revisiting);
+
+        _cards.Relight();
+    }
 
     /// <summary>
     /// Put both screens back in step with what is actually selected: the outline on the map, and the
@@ -589,6 +596,13 @@ public sealed partial class ExplorePage : Page
             ViewModel.ShowFolder(row);
         }
     }
+
+    /// <summary>The pointer came over a row of either card beside the map. See <see cref="ExploreCards"/>.</summary>
+    private void OnCardRowEntered(object sender, PointerRoutedEventArgs e) =>
+        _cards.Entered(((FrameworkElement)sender).DataContext);
+
+    private void OnCardRowExited(object sender, PointerRoutedEventArgs e) =>
+        _cards.Exited(((FrameworkElement)sender).DataContext);
 
     /// <summary>
     /// List the files of the kind a row of the breakdown names, in the Files layout. The filter is the
