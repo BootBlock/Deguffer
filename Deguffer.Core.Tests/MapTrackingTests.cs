@@ -92,6 +92,23 @@ public sealed class MapTrackingTests
     }
 
     /// <summary>
+    /// Only a rounding error counts as no zoom. A zoom of a tenth of a percent about the screen's
+    /// centre keeps that point still, and played as a pan it would slide the picture under it instead.
+    /// </summary>
+    [Fact]
+    public void ASmallZoomStillHasItsStillPoint()
+    {
+        var from = MapViewport.Anchored(4, 0.3, 0.3, 0.5, 0.5);
+        var to = MapViewport.Anchored(4 * 1.001, 0.3, 0.3, 0.5, 0.5);
+
+        var pivot = MapTracking.Pivot(from, to, Width, Height);
+
+        Assert.NotNull(pivot);
+        Assert.Equal(0.5 * Width, pivot.Value.X, 1e-6);
+        Assert.Equal(0.5 * Height, pivot.Value.Y, 1e-6);
+    }
+
+    /// <summary>
     /// A hand stretching the picture past its edge, or a pinch past the zoom's limits, is on screen as
     /// it is, so a click then lands on what the screen shows rather than where it will settle.
     /// </summary>
