@@ -7,9 +7,10 @@ namespace Deguffer.Core.Exploring.Layout;
 /// too small to draw, and a folder too small to frame (<see cref="ExploreTile.Finest"/>). While there
 /// is any, a deeper zoom reveals new shapes, so the ceiling is above the zoom on screen, as deep as
 /// the smallest of those items needs to be drawn (see <see cref="Rendering.ExploreSurface.Ceiling"/>).
-/// Once everything in view is drawn, a deeper zoom only magnifies shapes already there, so the ceiling
-/// is where the zoom is. Each drawing sets it afresh, so it rises as the reader zooms into detail and
-/// stops where the detail ends.</para>
+/// Once everything in view is drawn, the ceiling is where the smallest shape in view has room for its
+/// name, which is where the zoom is once every shape has: past that a deeper zoom only magnifies
+/// shapes already drawn and named. Each drawing sets it afresh, so it rises as the reader zooms into
+/// detail and stops where the detail ends.</para>
 /// </summary>
 public static class MapCeiling
 {
@@ -46,9 +47,17 @@ public static class MapCeiling
     public static double Revealing(double finest, double smallest) => Math.Max(Step, 2 * smallest / finest);
 
     /// <summary>
-    /// The ceiling for a drawing made at <paramref name="zoom"/> whose undrawn detail in view is drawn
-    /// once magnified <paramref name="deeper"/> times more, 1 where it drew everything in view: never
-    /// below the zoom, nor below <see cref="Least"/>, nor above <see cref="Most"/>.
+    /// How many times more a picture has to be magnified for a shape <paramref name="width"/> by
+    /// <paramref name="height"/> pixels to have room for a name <paramref name="labelWidth"/> by
+    /// <paramref name="labelHeight"/> pixels: at most 1 where it already has.
+    /// </summary>
+    public static double Naming(double width, double height, double labelWidth, double labelHeight) =>
+        Math.Max(labelWidth / width, labelHeight / height);
+
+    /// <summary>
+    /// The ceiling for a drawing made at <paramref name="zoom"/> whose detail in view is all drawn and
+    /// named once magnified <paramref name="deeper"/> times more, 1 where it already is: never below the
+    /// zoom, nor below <see cref="Least"/>, nor above <see cref="Most"/>.
     /// </summary>
     public static double Of(double zoom, double deeper) => Math.Clamp(zoom * deeper, Least, Most);
 }

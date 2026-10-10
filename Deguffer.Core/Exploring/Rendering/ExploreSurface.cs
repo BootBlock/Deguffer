@@ -265,8 +265,9 @@ public abstract class ExploreSurface
     /// (see <see cref="MapCeiling"/>).
     ///
     /// <para>Said by the drawing because only it knows what in view it could not draw one by one, and
-    /// what it drew is what the screen shows: a ceiling worked out from anything else would stop a zoom
-    /// short of detail the reader can see is there, or let it run on past the last shape.</para>
+    /// how small what it drew is, and what it drew is what the screen shows: a ceiling worked out from
+    /// anything else would stop a zoom short of detail the reader can see is there, or let it run on
+    /// past the last shape.</para>
     /// </summary>
     public abstract double? Ceiling { get; }
 

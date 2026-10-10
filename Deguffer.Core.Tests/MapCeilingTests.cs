@@ -33,11 +33,19 @@ public sealed class MapCeilingTests
     public void AnItemIsRevealedOnceItIsTwiceTheSmallestShapeAcross(double finest, double smallest, double expected) =>
         Assert.Equal(expected, MapCeiling.Revealing(finest, smallest), 9);
 
+    /// <summary>A shape has room for a name once both its sides do: the tighter one decides.</summary>
+    [Theory]
+    [InlineData(3, 3, 16)]
+    [InlineData(100, 10, 1.6)]
+    [InlineData(200, 50, 0.32)]
+    public void AShapeIsNamedOnceItsTighterSideHasRoom(double width, double height, double expected) =>
+        Assert.Equal(expected, MapCeiling.Naming(width, height, labelWidth: 48, labelHeight: 16), 9);
+
     /// <summary>
     /// A long tail of tiny files beside one huge one is still a block standing in for them at the
     /// least ceiling. Zoomed into it to each drawing's ceiling in turn, the ceiling rises above the
     /// zoom while the block is in view, each zoom draws files the one before stood in for, and once
-    /// every file in view is drawn the ceiling stops where the zoom is.
+    /// every file in view is drawn and has room for its name the ceiling stops where the zoom is.
     /// </summary>
     [Fact]
     public void TheCeilingRisesWhileThereIsDetailInViewAndStopsWhereItEnds()
@@ -67,7 +75,19 @@ public sealed class MapCeilingTests
             (viewport, tiles) = (deeper, next);
         }
 
-        Assert.Equal(viewport.Zoom, Draw(tree, ExploreView.Treemap, viewport).Ceiling!.Value, 9);
+        // Every file in view is drawn, the smallest of them too small yet to name: the ceiling goes as
+        // far as gives each room for its name, and there it stops.
+        var naming = Draw(tree, ExploreView.Treemap, viewport).Ceiling!.Value;
+
+        Assert.Contains(tiles, tile => tile.IsNode && OnCanvas(tile) && !tile.HasRoomForALabel(LayoutLimits.Default));
+        Assert.True(naming > viewport.Zoom, $"the ceiling {naming} did not rise to give the files in view room for a name");
+
+        var named = MapViewport.Anchored(naming, x, y, 0.5, 0.5, naming);
+
+        Assert.All(
+            Layout(tree, named).Where(tile => tile.IsNode && OnCanvas(tile)),
+            tile => Assert.True(tile.HasRoomForALabel(LayoutLimits.Default), $"{tile} has no room for a name"));
+        Assert.Equal(named.Zoom, Draw(tree, ExploreView.Treemap, named).Ceiling!.Value, named.Zoom * 1e-9);
     }
 
     /// <summary>

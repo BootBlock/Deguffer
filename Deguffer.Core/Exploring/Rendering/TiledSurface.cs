@@ -209,9 +209,9 @@ public sealed class TiledSurface : ExploreSurface
     }
 
     /// <summary>
-    /// How many times more the picture has to be magnified for everything in view this drawing stood
-    /// in for with a block to be drawn one by one: 1 where it drew everything in view. Every tile is
-    /// in view, in part at least: a zoomed layout lays out nothing wholly off the canvas.
+    /// How many times more the picture has to be magnified for everything in view to be drawn one by
+    /// one, and for the smallest shape drawn to have room for its name: 1 where both already hold.
+    /// Every tile is in view, in part at least: a zoomed layout lays out nothing wholly off the canvas.
     /// </summary>
     private double Deeper()
     {
@@ -224,6 +224,12 @@ public sealed class TiledSurface : ExploreSurface
             if (tile.Finest > 0)
             {
                 deeper = Math.Max(deeper, MapCeiling.Revealing(tile.Finest, Limits.MinimumTileSize));
+            }
+            else if (tile.IsNode)
+            {
+                deeper = Math.Max(
+                    deeper,
+                    MapCeiling.Naming(tile.Width, tile.Height, Limits.MinimumLabelWidth, Limits.MinimumLabelHeight));
             }
         }
 
