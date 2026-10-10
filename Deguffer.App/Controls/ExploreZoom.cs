@@ -75,6 +75,15 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>Where the camera is going, which is where it is when nothing is moving it.</summary>
     private MapViewport _target;
 
+    /// <summary>What the tracker and every placement are measured from: see <see cref="Origin"/>.</summary>
+    private MapOrigin _origin;
+
+    /// <summary>The camera's move to a new origin, until the tracker answers it.</summary>
+    private MapOriginMove? _move;
+
+    /// <summary>Whether a hand's coast came to rest while the tracker had not yet answered the move.</summary>
+    private bool _restedBeforeAnswer;
+
     public ExploreZoom(Visual source, MapCamera camera, IMotionPolicy motion, DispatcherQueue dispatcher)
     {
         _motion = motion;
@@ -85,22 +94,14 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _tracker = InteractionTracker.CreateWithOwner(compositor, this);
         _tracker.MinScale = 1;
         _tracker.MaxScale = (float)MapViewport.MaximumZoom;
-        _tracker.MinPosition = Vector3.Zero;
-
-        // The picture is laid out over the screen at scale 1, so the screen can go as far as the
-        // magnified picture's far edge, and no further.
-        var farthest = compositor.CreateExpressionAnimation(
-            "Vector3((tracker.Scale - 1) * camera.Size.X, (tracker.Scale - 1) * camera.Size.Y, 0)");
-        farthest.SetReferenceParameter("tracker", _tracker);
-        farthest.SetReferenceParameter("camera", camera.Properties);
-        _tracker.StartAnimation(nameof(InteractionTracker.MaxPosition), farthest);
+        camera.Bound(_tracker);
 
         _interaction = new MapInteraction(source, _tracker);
 
         _settle = dispatcher.CreateTimer();
         _settle.Interval = JumpSettleTime;
         _settle.IsRepeating = false;
-        _settle.Tick += (_, _) => Arrived?.Invoke(this, EventArgs.Empty);
+        _settle.Tick += (_, _) => Rest();
 
         FollowMotion();
     }
@@ -122,6 +123,22 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// of until it has started: a pinch, a two-finger pan, a touch, or the wheel with Ctrl held.
     /// </summary>
     public event EventHandler? Started;
+
+    /// <summary>
+    /// Raised when the camera starts measuring from a new <see cref="Origin"/>, or goes back to the old
+    /// one. Every drawing, outline and name has to be placed from it again before this returns: the
+    /// camera has been held where it was, measured from the new origin, and the screen would show
+    /// the two out of step otherwise.
+    /// </summary>
+    public event EventHandler? OriginMoved;
+
+    /// <summary>
+    /// The point of the picture the tracker's position, and every placement on the camera, is measured
+    /// from (see <see cref="MapOrigin"/>). It moves to what the screen shows when the camera comes to
+    /// rest far enough from it, so the single-precision compositor places everything to a small
+    /// fraction of a pixel at any zoom.
+    /// </summary>
+    public MapOrigin Origin => _origin;
 
     /// <summary>The viewport on screen at this moment.</summary>
     public MapViewport Shown { get; private set; }
@@ -146,8 +163,14 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     public void FollowMotion()
     {
         _elastic = _motion.For(MotionToken.Camera).Travels;
-        _camera.Track(_tracker, _elastic);
         _interaction.Elastic = _elastic;
+
+        // A camera held while its origin moves follows the tracker again, as it now asks, once the
+        // move is resolved.
+        if (_move is null)
+        {
+            _camera.Track(_tracker, _elastic);
+        }
 
         if (_elastic)
         {
@@ -164,7 +187,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         Stop();
 
         Moved?.Invoke(this, EventArgs.Empty);
-        Arrived?.Invoke(this, EventArgs.Empty);
+        Rest();
     }
 
     /// <summary>
@@ -277,7 +300,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         // The mouse holds the camera now, which supersedes any move whose rest was still to come.
         _settle.Stop();
         _moving = false;
-        _stretch ??= new MapStretch(MapTracking.Of(Shown, _size.Width, _size.Height), _size.Width, _size.Height, _elastic);
+        _stretch ??= new MapStretch(MapTracking.Of(Shown, _size.Width, _size.Height, _origin), _size.Width, _size.Height, _elastic);
         _fling.Track(handX, handY, at);
 
         var tracking = _stretch.Pull(x, y);
@@ -318,13 +341,13 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         {
             Shown = held;
             _target = held;
-            _camera.SpringBack(_motion.For(MotionToken.Camera), () => Arrived?.Invoke(this, EventArgs.Empty));
+            _camera.SpringBack(_motion.For(MotionToken.Camera), Rest);
             return;
         }
 
         if (!_elastic || (x == 0 && y == 0))
         {
-            Arrived?.Invoke(this, EventArgs.Empty);
+            Rest();
             return;
         }
 
@@ -384,6 +407,19 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     void IInteractionTrackerOwner.IdleStateEntered(InteractionTracker sender, InteractionTrackerIdleStateEnteredArgs args)
     {
+        // A rest before the move is a hand's coast ending. The tracker carries the move out next: it
+        // refuses a request only while a hand holds it.
+        if (_move is { } move)
+        {
+            if (!move.CarriedOutBy(args.RequestId))
+            {
+                _restedBeforeAnswer |= args.RequestId == 0 && _requests.Reports(0);
+                return;
+            }
+
+            Resolve(carriedOut: true);
+        }
+
         if (!_requests.Reports(args.RequestId))
         {
             return;
@@ -400,7 +436,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         Shown = _requests.Rest(_reported);
         _target = Shown;
 
-        Arrived?.Invoke(this, EventArgs.Empty);
+        Rest();
     }
 
     void IInteractionTrackerOwner.InertiaStateEntered(InteractionTracker sender, InteractionTrackerInertiaStateEnteredArgs args)
@@ -421,7 +457,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         var position = args.ModifiedRestingPosition ?? args.NaturalRestingPosition;
         var scale = args.ModifiedRestingScale ?? args.NaturalRestingScale;
 
-        _target = new MapTracking(position.X, position.Y, scale).Shown(_size.Width, _size.Height, _elastic).Held();
+        _target = new MapTracking(position.X, position.Y, scale, OriginFor(args.RequestId)).Shown(_size.Width, _size.Height, _elastic).Held();
         Retargeted?.Invoke(this, EventArgs.Empty);
     }
 
@@ -431,6 +467,11 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     void IInteractionTrackerOwner.RequestIgnored(InteractionTracker sender, InteractionTrackerRequestIgnoredArgs args)
     {
+        if (_move is { } move && move.RefusedBy(args.RequestId))
+        {
+            Resolve(carriedOut: false);
+        }
+
         // Refused while a hand holds the camera: it never went where it was asked, so the screen still
         // shows where the tracker last said it was, not what the map took it to show when it asked.
         if (!_requests.Refused(args.RequestId))
@@ -447,13 +488,26 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     void IInteractionTrackerOwner.ValuesChanged(InteractionTracker sender, InteractionTrackerValuesChangedArgs args)
     {
+        if (_move is { } move && move.CarriedOutBy(args.RequestId))
+        {
+            Resolve(carriedOut: true);
+        }
+
         if (!_requests.Reports(args.RequestId) || !HasSize)
         {
             return;
         }
 
-        _reported = new MapTracking(args.Position.X, args.Position.Y, args.Scale)
+        _reported = new MapTracking(args.Position.X, args.Position.Y, args.Scale, OriginFor(args.RequestId))
             .Shown(_size.Width, _size.Height, _elastic);
+
+        // A hand's report from before the tracker answered a move of the origin: the camera is held,
+        // so the screen still shows what it did. Where the tracker is goes on being kept, for a move
+        // the tracker refuses.
+        if (_move is not null)
+        {
+            return;
+        }
 
         // While a mouse holds the picture the drag says what the screen shows. The tracker reports a
         // drag past an edge as held at the edge while the camera shows it past, and a click is
@@ -469,6 +523,143 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     }
 
     private bool HasSize => _size.Width > 0 && _size.Height > 0;
+
+    /// <summary>The camera came to rest where the screen shows: measure from there if it is far from the origin, then say so.</summary>
+    private void Rest()
+    {
+        Rebase();
+        Arrived?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Measure from what the screen shows, where that is more than <see cref="MapOrigin.Reach"/> from
+    /// the origin, without moving anything on it.
+    ///
+    /// <para>The camera and every placement change together, on the UI thread: the camera is held
+    /// where it is, measured from the new origin, and the map places everything from it again. The
+    /// tracker is then asked to the same place measured from the new origin, and the camera follows
+    /// it again once it answers (<see cref="Resolve"/>). The two cannot change in the same frame,
+    /// because the tracker answers on the compositor.</para>
+    /// </summary>
+    private void Rebase()
+    {
+        if (!HasSize || _stretch is not null || _move is not null || !_origin.Drifted(Shown, _size.Width, _size.Height))
+        {
+            return;
+        }
+
+        var from = _origin;
+
+        // At rest the tracker is where the screen is, whichever origin it turns out to be measured
+        // from, which is where it stays if the move is refused before a hand reports anything.
+        _reported = Shown;
+        _restedBeforeAnswer = false;
+        _origin = MapOrigin.At(Shown);
+        _camera.Hold(Shown.Camera(_size.Width, _size.Height, _origin));
+        _camera.Rebase(_origin);
+        OriginMoved?.Invoke(this, EventArgs.Empty);
+
+        var tracking = MapTracking.Of(Shown, _size.Width, _size.Height, _origin);
+        var request = _tracker.TryUpdatePosition(new Vector3((float)tracking.X, (float)tracking.Y, 0));
+
+        _move = new MapOriginMove(request, from, _origin, Shown);
+        _requests.Asked(request, Shown);
+    }
+
+    /// <summary>
+    /// The tracker answered the move to a new origin: it is measured from it now, where
+    /// <paramref name="carriedOut"/>, or it refused because a hand holds the camera, and everything goes
+    /// back to the old origin, with the screen where the hand has the tracker. Either way the camera
+    /// follows the tracker again.
+    /// </summary>
+    private void Resolve(bool carriedOut)
+    {
+        var move = _move!.Value;
+
+        _move = null;
+
+        if (!carriedOut)
+        {
+            _origin = move.From;
+            _camera.Rebase(_origin);
+        }
+
+        _camera.Settle();
+        _camera.Track(_tracker, _elastic);
+
+        if (!carriedOut)
+        {
+            OriginMoved?.Invoke(this, EventArgs.Empty);
+
+            Shown = _reported;
+            Moved?.Invoke(this, EventArgs.Empty);
+
+            if (_requests.AskedSince(move.Request))
+            {
+                Reask();
+            }
+        }
+        else if (_requests.Reports(0))
+        {
+            // A wheel or a touchpad began to coast before the move, and the move stopped it where the
+            // move went: the tracker is there. It comes to rest there, unless the coast had already
+            // rested, and a tracker at rest does not report coming to rest again.
+            _requests.Asked(move.Request, move.Viewport);
+            Shown = move.Viewport;
+            _target = move.Viewport;
+
+            Moved?.Invoke(this, EventArgs.Empty);
+            Retargeted?.Invoke(this, EventArgs.Empty);
+
+            _moving = !_restedBeforeAnswer;
+
+            if (_restedBeforeAnswer)
+            {
+                Rest();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ask again for what was asked after a move of the origin the tracker then refused: it was
+    /// measured from the new origin, and the tracker is measured from the old one. A drag goes on from
+    /// where the hand has the picture, and a glide or a jump goes again to where it was going. A fling
+    /// is a speed rather than a place, and needs nothing.
+    /// </summary>
+    private void Reask()
+    {
+        if (_stretch is not null)
+        {
+            _stretch.Remeasure(_origin);
+
+            var tracking = _stretch.Pull(0, 0);
+            var held = tracking.Held(_size.Width, _size.Height);
+
+            _requests.Asked(_tracker.TryUpdatePosition(new Vector3((float)held.X, (float)held.Y, 0)), null);
+
+            // While a mouse holds the picture the drag says what the screen shows, as in Drag.
+            Shown = tracking.Shown(_size.Width, _size.Height, _elastic);
+            _target = Shown.Held();
+            Moved?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        if (_requests.Destination is not { } destination)
+        {
+            return;
+        }
+
+        if (_moving)
+        {
+            _requests.Asked(Animate(destination, _motion.For(MotionToken.Camera)), destination);
+            return;
+        }
+
+        Jump(destination);
+        Moved?.Invoke(this, EventArgs.Empty);
+    }
+    /// <summary>The origin a report caused by request <paramref name="id"/> is measured from.</summary>
+    private MapOrigin OriginFor(long id) => _move is { } move ? move.MeasuredFor(id) : _origin;
 
     /// <summary>A hand took the camera on the compositor: every request before it is over.</summary>
     private void TakenByHand()
@@ -508,7 +699,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         }
 
         var (first, second) = Motion.EaseControlPoints;
-        var tracking = MapTracking.Of(target, _size.Width, _size.Height);
+        var tracking = MapTracking.Of(target, _size.Width, _size.Height, _origin);
         var pan = compositor.CreateVector3KeyFrameAnimation();
 
         pan.InsertKeyFrame(
@@ -540,7 +731,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
-        var tracking = MapTracking.Of(viewport, _size.Width, _size.Height);
+        var tracking = MapTracking.Of(viewport, _size.Width, _size.Height, _origin);
         var position = new Vector3((float)tracking.X, (float)tracking.Y, 0);
         int id;
 

@@ -210,35 +210,39 @@ public readonly record struct MapViewport
 
     /// <summary>
     /// Where the whole picture, laid out unmagnified over a screen <paramref name="width"/> by
-    /// <paramref name="height"/>, goes on a screen showing this viewport: the map's camera.
+    /// <paramref name="height"/> with <paramref name="origin"/> at the screen's corner, goes on a
+    /// screen showing this viewport: the map's camera.
     ///
     /// <para>The same placement as <see cref="PlacementOf"/>, split in two so a drawing is placed in
-    /// the picture once (<see cref="Canvas"/>) and only the camera changes as the picture moves.</para>
+    /// the picture once (<see cref="Canvas"/>) and only the camera changes as the picture moves. Both
+    /// halves are measured from the same origin, so each stays small near it (see
+    /// <see cref="MapOrigin"/>), and the origin cancels between them.</para>
     /// </summary>
-    public MapTransform Camera(double width, double height) =>
-        new(Zoom, Zoom, -Left * Zoom * width, -Top * Zoom * height);
+    public MapTransform Camera(double width, double height, MapOrigin origin) =>
+        new(Zoom, Zoom, -(Left - origin.Left) * Zoom * width, -(Top - origin.Top) * Zoom * height);
 
     /// <summary>
     /// Where a canvas <paramref name="canvasWidth"/> by <paramref name="canvasHeight"/> pixels across,
     /// drawn at this viewport, lies in the whole picture laid out unmagnified over a screen
-    /// <paramref name="width"/> by <paramref name="height"/>.
+    /// <paramref name="width"/> by <paramref name="height"/> with <paramref name="origin"/> at the
+    /// screen's corner.
     ///
     /// <para>Scaled on each axis apart, because the canvas and the screen part company while a resize
     /// settles: the canvas is drawn for the old size and stretched over the new one.</para>
     /// </summary>
-    public MapTransform Canvas(int canvasWidth, int canvasHeight, double width, double height) => new(
+    public MapTransform Canvas(int canvasWidth, int canvasHeight, double width, double height, MapOrigin origin) => new(
         width / canvasWidth / Zoom,
         height / canvasHeight / Zoom,
-        Left * width,
-        Top * height);
+        (Left - origin.Left) * width,
+        (Top - origin.Top) * height);
 
     /// <summary>
     /// Where the labels of a canvas <paramref name="canvasWidth"/> by <paramref name="canvasHeight"/>
     /// pixels across lie in the whole picture: <see cref="Canvas"/>, for labels laid out in
     /// device-independent pixels of a canvas drawn at <paramref name="scale"/> pixels to each.
     /// </summary>
-    public MapTransform Labels(int canvasWidth, int canvasHeight, double width, double height, double scale) =>
-        new MapTransform(scale, scale, 0, 0).Then(Canvas(canvasWidth, canvasHeight, width, height));
+    public MapTransform Labels(int canvasWidth, int canvasHeight, double width, double height, double scale, MapOrigin origin) =>
+        new MapTransform(scale, scale, 0, 0).Then(Canvas(canvasWidth, canvasHeight, width, height, origin));
 
     /// <summary>
     /// A viewport held inside the picture. The zoom is held as well, because an eased step between

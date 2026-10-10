@@ -12,6 +12,9 @@ public sealed class MapViewportTests
 {
     private const double Precision = 1e-9;
 
+    /// <summary>The picture's own corner, and an origin away from it, which every placement must cancel out the same.</summary>
+    private static readonly MapOrigin[] Origins = [default, new MapOrigin(0.37, 0.81)];
+
     [Fact]
     public void AViewportNobodySetIsTheWholePicture()
     {
@@ -328,15 +331,18 @@ public sealed class MapViewportTests
         var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6);
         var placement = shown.PlacementOf(drawn);
 
-        var onScreen = drawn.Canvas(canvasWidth, canvasHeight, width, height).Then(shown.Camera(width, height));
-
-        foreach (var (pixelX, pixelY) in new[] { (0.0, 0.0), (canvasWidth * 0.3, canvasHeight * 0.7), (canvasWidth, canvasHeight) })
+        foreach (var origin in Origins)
         {
-            var (x, y) = onScreen.Apply(pixelX, pixelY);
-            var (inX, inY) = placement.InDrawing(x / width, y / height);
+            var onScreen = drawn.Canvas(canvasWidth, canvasHeight, width, height, origin).Then(shown.Camera(width, height, origin));
 
-            Assert.Equal(pixelX / canvasWidth, inX, Precision);
-            Assert.Equal(pixelY / canvasHeight, inY, Precision);
+            foreach (var (pixelX, pixelY) in new[] { (0.0, 0.0), (canvasWidth * 0.3, canvasHeight * 0.7), (canvasWidth, canvasHeight) })
+            {
+                var (x, y) = onScreen.Apply(pixelX, pixelY);
+                var (inX, inY) = placement.InDrawing(x / width, y / height);
+
+                Assert.Equal(pixelX / canvasWidth, inX, Precision);
+                Assert.Equal(pixelY / canvasHeight, inY, Precision);
+            }
         }
     }
 
@@ -366,17 +372,20 @@ public sealed class MapViewportTests
         var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6);
         var placement = shown.PlacementOf(drawn);
 
-        var onScreen = drawn
-            .Labels(canvasWidth, canvasHeight, width, height, displayScale)
-            .Then(shown.Camera(width, height));
-
-        foreach (var (labelX, labelY) in new[] { (0.0, 0.0), (300.0, 500.0), (canvasWidth / displayScale, canvasHeight / displayScale) })
+        foreach (var origin in Origins)
         {
-            var (x, y) = onScreen.Apply(labelX, labelY);
-            var (inX, inY) = placement.InDrawing(x / width, y / height);
+            var onScreen = drawn
+                .Labels(canvasWidth, canvasHeight, width, height, displayScale, origin)
+                .Then(shown.Camera(width, height, origin));
 
-            Assert.Equal(labelX * displayScale / canvasWidth, inX, Precision);
-            Assert.Equal(labelY * displayScale / canvasHeight, inY, Precision);
+            foreach (var (labelX, labelY) in new[] { (0.0, 0.0), (300.0, 500.0), (canvasWidth / displayScale, canvasHeight / displayScale) })
+            {
+                var (x, y) = onScreen.Apply(labelX, labelY);
+                var (inX, inY) = placement.InDrawing(x / width, y / height);
+
+                Assert.Equal(labelX * displayScale / canvasWidth, inX, Precision);
+                Assert.Equal(labelY * displayScale / canvasHeight, inY, Precision);
+            }
         }
     }
 
@@ -395,8 +404,8 @@ public sealed class MapViewportTests
         const double height = 800;
 
         var onScreen = viewport
-            .Canvas((int)(width * displayScale), (int)(height * displayScale), width, height)
-            .Then(viewport.Camera(width, height));
+            .Canvas((int)(width * displayScale), (int)(height * displayScale), width, height, MapOrigin.At(viewport))
+            .Then(viewport.Camera(width, height, MapOrigin.At(viewport)));
 
         Assert.Equal(1 / displayScale, onScreen.ScaleX, Precision);
         Assert.Equal(1 / displayScale, onScreen.ScaleY, Precision);

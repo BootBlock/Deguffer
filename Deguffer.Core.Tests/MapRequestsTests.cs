@@ -153,6 +153,34 @@ public sealed class MapRequestsTests
         Assert.Equal(0, requests.Rest(shortOf).Left);
     }
 
+    /// <summary>
+    /// Whether the map asked for anything after a request, which is what has to be asked again when
+    /// the tracker refuses a move of the origin made before it. A hand taking the camera is not the map
+    /// asking.
+    /// </summary>
+    [Fact]
+    public void ARequestAskedAfterAnotherIsKnownToBeLater()
+    {
+        var requests = new MapRequests();
+
+        requests.Asked(20, Target);
+
+        Assert.False(requests.AskedSince(20), "the request itself was taken as asked since");
+
+        requests.Taken();
+
+        Assert.False(requests.AskedSince(20), "a hand taking the camera was taken as the map asking");
+
+        requests.Asked(21, MapViewport.Whole);
+
+        Assert.True(requests.AskedSince(20), "a request asked after another was not known to be later");
+        Assert.Equal(MapViewport.Whole, requests.Destination);
+
+        requests.Asked(22, null);
+
+        Assert.Null(requests.Destination);
+    }
+
     /// <summary>A fling or a hand goes wherever the tracker stops it, so nothing is snapped to.</summary>
     [Fact]
     public void AFlingRestsWhereTheTrackerStopsIt()

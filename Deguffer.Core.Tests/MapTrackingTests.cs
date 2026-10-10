@@ -22,10 +22,44 @@ public sealed class MapTrackingTests
     public void AViewportHeldByTheTrackerReadsBackAsItself(double zoom, double pictureX, double pictureY)
     {
         var viewport = MapViewport.Anchored(zoom, pictureX, pictureY, 0.5, 0.5);
-        var tracking = MapTracking.Of(viewport, Width, Height);
 
-        AssertSame(viewport, tracking.Shown(Width, Height, elastic: true));
-        AssertSame(viewport, tracking.Shown(Width, Height, elastic: false));
+        foreach (var origin in new[] { default, new MapOrigin(0.37, 0.81), MapOrigin.At(viewport) })
+        {
+            var tracking = MapTracking.Of(viewport, Width, Height, origin);
+
+            AssertSame(viewport, tracking.Shown(Width, Height, elastic: true));
+            AssertSame(viewport, tracking.Shown(Width, Height, elastic: false));
+        }
+    }
+
+    /// <summary>
+    /// The compositor keeps the tracker's position in single precision. Measured from an origin near
+    /// what is shown it stays small, so a screen a few screens from the origin is placed to a small
+    /// fraction of a pixel even at a hundred thousand times; measured from the picture's corner it is
+    /// millions of pixels, and the same screen is out by a visible fraction of one or more.
+    /// </summary>
+    [Theory]
+    [InlineData(4096)]
+    [InlineData(1e5)]
+    public void FromANearbyOriginTheTrackerIsPlacedToAFractionOfAPixel(double zoom)
+    {
+        var origin = new MapOrigin(0.6180339887, 0.3819660113);
+        var viewport = MapViewport.Seen(zoom, origin.Left + (2.5 / zoom), origin.Top - (1.25 / zoom));
+
+        Assert.True(Misplaced(origin) < 0.01, $"measured from nearby, out by {Misplaced(origin)} px");
+
+        Assert.True(Misplaced(default) > 0.01, $"measured from the corner, out by only {Misplaced(default)} px");
+
+        double Misplaced(MapOrigin from)
+        {
+            var exact = MapTracking.Of(viewport, Width, Height, from);
+            var single = new MapTracking((float)exact.X, (float)exact.Y, exact.Scale, from);
+            var shown = single.Shown(Width, Height, elastic: true);
+
+            return Math.Max(
+                Math.Abs(shown.Left - viewport.Left) * zoom * Width,
+                Math.Abs(shown.Top - viewport.Top) * zoom * Height);
+        }
     }
 
     /// <summary>
@@ -42,7 +76,7 @@ public sealed class MapTrackingTests
         var from = MapViewport.Anchored(zoom, 0.45, 0.55, 0.5, 0.5);
         var under = from.PictureAt(screenX, screenY);
 
-        var scaled = ScaledAbout(MapTracking.Of(from, Width, Height), scale, screenX * Width, screenY * Height);
+        var scaled = ScaledAbout(MapTracking.Of(from, Width, Height, new MapOrigin(0.2, 0.7)), scale, screenX * Width, screenY * Height);
         var shown = scaled.Shown(Width, Height, elastic: true);
 
         var (x, y) = shown.PictureAt(screenX, screenY);
@@ -70,7 +104,7 @@ public sealed class MapTrackingTests
 
         Assert.NotNull(pivot);
 
-        var arrived = ScaledAbout(MapTracking.Of(from, Width, Height), to.Zoom, pivot.Value.X, pivot.Value.Y);
+        var arrived = ScaledAbout(MapTracking.Of(from, Width, Height, MapOrigin.At(from)), to.Zoom, pivot.Value.X, pivot.Value.Y);
 
         AssertSame(to, arrived.Shown(Width, Height, elastic: true));
     }
@@ -116,7 +150,7 @@ public sealed class MapTrackingTests
     public void AStretchedPictureIsShownStretched()
     {
         var zoom = 4.0;
-        var tracking = new MapTracking(-120, (zoom - 1) * Height + 80, zoom);
+        var tracking = new MapTracking(-120, (zoom - 1) * Height + 80, zoom, default);
 
         var shown = tracking.Shown(Width, Height, elastic: true);
 
@@ -135,7 +169,7 @@ public sealed class MapTrackingTests
     {
         var max = MapViewport.MaximumZoom;
         var over = max * 1.1;
-        var tracking = new MapTracking(0.5 * (over - 1) * Width, -40, over);
+        var tracking = new MapTracking(0.5 * (over - 1) * Width, -40, over, default);
 
         var shown = tracking.Shown(Width, Height, elastic: false);
 
@@ -157,9 +191,50 @@ public sealed class MapTrackingTests
     public void HeldIsInsideTheTrackersBoundsAtTheHeldScale(
         double x, double y, double scale, double heldX, double heldY, double heldScale)
     {
-        var held = new MapTracking(x, y, scale).Held(Width, Height);
+        var held = new MapTracking(x, y, scale, default).Held(Width, Height);
 
-        Assert.Equal(new MapTracking(heldX, heldY, heldScale), held);
+        Assert.Equal(new MapTracking(heldX, heldY, heldScale, default), held);
+    }
+
+    /// <summary>
+    /// Measured from an origin, the tracker's bounds move by it and the picture's edges do not: what
+    /// a held position shows is the same viewport, measured from the picture's corner or from an
+    /// origin away from it, for a position past either edge and a scale past either limit.
+    /// </summary>
+    [Theory]
+    [InlineData(-300, 200, 3)]
+    [InlineData(5000, -10, 3)]
+    [InlineData(10, 10, 0.8)]
+    [InlineData(1e6, 1e6, 100)]
+    public void HeldFromAnOriginShowsWhatHeldFromTheCornerShows(double x, double y, double scale)
+    {
+        var origin = new MapOrigin(0.3, 0.45);
+        var cornered = new MapTracking(x, y, scale, default);
+        var originated = MapTracking.Of(cornered.Shown(Width, Height, elastic: true), Width, Height, origin);
+
+        AssertSame(
+            cornered.Held(Width, Height).Shown(Width, Height, elastic: true),
+            originated.Held(Width, Height).Shown(Width, Height, elastic: true));
+    }
+
+    /// <summary>
+    /// The camera moves its origin once the screen is far enough from it to lose precision, and only
+    /// then: each move holds the camera for a frame or two, so it is not made for a screen that is
+    /// placed exactly enough already.
+    /// </summary>
+    [Fact]
+    public void AnOriginHasDriftedOnlyOnceTheScreenIsOutOfReach()
+    {
+        var origin = new MapOrigin(0.5, 0.5);
+        var nearAcross = MapViewport.Seen(64, 0.5 + ((MapOrigin.Reach - 1) / (64 * Width)), 0.5);
+        var nearDown = MapViewport.Seen(64, 0.5, 0.5 - ((MapOrigin.Reach - 1) / (64 * Height)));
+        var farAcross = MapViewport.Seen(64, 0.5 - ((MapOrigin.Reach + 1) / (64 * Width)), 0.5);
+        var farDown = MapViewport.Seen(64, 0.5, 0.5 + ((MapOrigin.Reach + 1) / (64 * Height)));
+
+        Assert.False(origin.Drifted(nearAcross, Width, Height), "an origin within reach across was moved");
+        Assert.False(origin.Drifted(nearDown, Width, Height), "an origin within reach down was moved");
+        Assert.True(origin.Drifted(farAcross, Width, Height), "an origin out of reach across was kept");
+        Assert.True(origin.Drifted(farDown, Width, Height), "an origin out of reach down was kept");
     }
 
     /// <summary>
@@ -169,7 +244,8 @@ public sealed class MapTrackingTests
     private static MapTracking ScaledAbout(MapTracking tracking, double scale, double x, double y) => new(
         (scale / tracking.Scale * (tracking.X + x)) - x,
         (scale / tracking.Scale * (tracking.Y + y)) - y,
-        scale);
+        scale,
+        tracking.Origin);
 
     private static void AssertSame(MapViewport expected, MapViewport actual)
     {

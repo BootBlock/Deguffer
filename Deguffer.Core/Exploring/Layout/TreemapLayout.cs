@@ -115,7 +115,7 @@ public static class TreemapLayout
             // rendering of "there is more in here than fits".
             var (header, gap) = level >= 0 ? detail.FrameOf(frame.Width, frame.Height, level) : (0f, 0f);
 
-            tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, header));
+            tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, canvas, header));
 
             if (level < 0)
             {
@@ -147,14 +147,34 @@ public static class TreemapLayout
         && frame.Y + frame.Height > canvas.Y;
 
     /// <summary>
+    /// How many canvases past each edge of the canvas a rectangle may run before it is cut there.
+    /// Further than a picture at <see cref="MapViewport.MaximumZoom"/> reaches, so no rectangle at a zoom
+    /// the map allows today is cut, and near enough that an edge at the cut is still placed in single
+    /// precision to a few hundredths of a pixel on the largest screen.
+    /// </summary>
+    public const double Reach = 64;
+
+    /// <summary>
     /// One rectangle, in single precision once the arithmetic that placed it is done.
     ///
     /// <para>The layout runs in double precision because a zoomed picture's offsets are hundreds of
-    /// thousands of pixels long, and summed in single precision they are visibly wrong.</para>
+    /// thousands of pixels long, and summed in single precision they are visibly wrong. For the same
+    /// reason a rectangle running far off the canvas is cut to <see cref="Reach"/> canvases past it
+    /// first: its visible edge would otherwise be the sum of two numbers as large as the magnified
+    /// picture, rounded. A shape cut that far away is never on screen, even while the drawing is
+    /// shown zoomed out on its way to the next one.</para>
     /// </summary>
-    private static ExploreTile Tile(int node, int depth, long bytes, Rectangle frame, float header = 0) => new(
-        node, depth, bytes,
-        (float)frame.X, (float)frame.Y, (float)frame.Width, (float)frame.Height, header);
+    private static ExploreTile Tile(int node, int depth, long bytes, Rectangle frame, Rectangle canvas, float header = 0)
+    {
+        var left = Math.Max(frame.X, canvas.X - (Reach * canvas.Width));
+        var top = Math.Max(frame.Y, canvas.Y - (Reach * canvas.Height));
+        var right = Math.Min(frame.X + frame.Width, canvas.X + ((Reach + 1) * canvas.Width));
+        var bottom = Math.Min(frame.Y + frame.Height, canvas.Y + ((Reach + 1) * canvas.Height));
+
+        return new ExploreTile(
+            node, depth, bytes,
+            (float)left, (float)top, (float)(right - left), (float)(bottom - top), header);
+    }
 
     /// <summary>
     /// Fit one node's children into <paramref name="area"/>, row by row, largest first.
@@ -405,7 +425,7 @@ public static class TreemapLayout
             return;
         }
 
-        tiles.Add(Tile(ExploreTile.Aggregated, depth, bytes, area));
+        tiles.Add(Tile(ExploreTile.Aggregated, depth, bytes, area, canvas));
     }
 
     /// <summary>
@@ -490,7 +510,7 @@ public static class TreemapLayout
             // Depth zero, beside the root rather than inside it: neither is part of what was scanned.
             if (Visible(slab, canvas))
             {
-                tiles.Add(Tile(node, 0, bytes, slab));
+                tiles.Add(Tile(node, 0, bytes, slab, canvas));
             }
         }
 

@@ -3,7 +3,8 @@ namespace Deguffer.Core.Exploring.Layout;
 /// <summary>
 /// A map's camera in the terms the compositor's interaction tracker holds it in: the picture
 /// magnified <paramref name="Scale"/> times, and moved so the screen's top-left corner is
-/// (<paramref name="X"/>, <paramref name="Y"/>) pixels into the magnified picture.
+/// (<paramref name="X"/>, <paramref name="Y"/>) pixels from <paramref name="Origin"/> in the
+/// magnified picture.
 ///
 /// <para>The tracker is what moves the camera, so a pinch, a fling and a turn of the wheel with Ctrl
 /// held run on the compositor with nothing on the UI thread. <see cref="MapViewport"/> stays the one account of what
@@ -11,10 +12,14 @@ namespace Deguffer.Core.Exploring.Layout;
 /// from is read back through <see cref="Shown"/>. Pixels rather than fractions because the tracker
 /// keeps its bounds, its inertia and its velocities in them.</para>
 ///
-/// <para>The picture is laid out unmagnified over the screen, so at scale 1 it is exactly the screen,
-/// and the tracker can move from (0, 0) to ((scale - 1) × width, (scale - 1) × height).</para>
+/// <para>The picture is laid out unmagnified over the screen, so at scale 1 it is exactly the screen.
+/// Measured from the picture's corner, the tracker can move from (0, 0) to ((scale - 1) × width,
+/// (scale - 1) × height). Measured from an origin near what is shown, those bounds move by the
+/// origin and the position stays small, which the single-precision tracker needs at a deep zoom
+/// (see <see cref="MapOrigin"/>). A scale about a point is the same rule from any origin, so a pinch
+/// keeps what is under the hand under it whatever the origin is.</para>
 /// </summary>
-public readonly record struct MapTracking(double X, double Y, double Scale)
+public readonly record struct MapTracking(double X, double Y, double Scale, MapOrigin Origin)
 {
     /// <summary>
     /// How many screens away a still point of a move may be before the move is played as a pan. A
@@ -24,11 +29,15 @@ public readonly record struct MapTracking(double X, double Y, double Scale)
     /// </summary>
     public const double PivotReach = 64;
 
-    /// <summary>Where the tracker holds <paramref name="viewport"/> on a screen <paramref name="width"/> by <paramref name="height"/>.</summary>
-    public static MapTracking Of(MapViewport viewport, double width, double height) => new(
-        viewport.Left * viewport.Zoom * width,
-        viewport.Top * viewport.Zoom * height,
-        viewport.Zoom);
+    /// <summary>
+    /// Where the tracker holds <paramref name="viewport"/> on a screen <paramref name="width"/> by
+    /// <paramref name="height"/>, measured from <paramref name="origin"/>.
+    /// </summary>
+    public static MapTracking Of(MapViewport viewport, double width, double height, MapOrigin origin) => new(
+        (viewport.Left - origin.Left) * viewport.Zoom * width,
+        (viewport.Top - origin.Top) * viewport.Zoom * height,
+        viewport.Zoom,
+        origin);
 
     /// <summary>
     /// What a screen <paramref name="width"/> by <paramref name="height"/> shows with the tracker here.
@@ -44,7 +53,10 @@ public readonly record struct MapTracking(double X, double Y, double Scale)
     {
         var shown = elastic ? this : Held(width, height);
 
-        return MapViewport.Seen(shown.Scale, shown.X / (shown.Scale * width), shown.Y / (shown.Scale * height));
+        return MapViewport.Seen(
+            shown.Scale,
+            Origin.Left + (shown.X / (shown.Scale * width)),
+            Origin.Top + (shown.Y / (shown.Scale * height)));
     }
 
     /// <summary>
@@ -61,11 +73,10 @@ public readonly record struct MapTracking(double X, double Y, double Scale)
     public MapTracking Held(double width, double height)
     {
         var scale = Math.Clamp(Scale, 1, MapViewport.MaximumZoom);
+        var (left, right) = Origin.Across(scale, width);
+        var (top, bottom) = Origin.Down(scale, height);
 
-        return new MapTracking(
-            Math.Clamp(X, 0, (scale - 1) * width),
-            Math.Clamp(Y, 0, (scale - 1) * height),
-            scale);
+        return new MapTracking(Math.Clamp(X, left, right), Math.Clamp(Y, top, bottom), scale, Origin);
     }
 
     /// <summary>

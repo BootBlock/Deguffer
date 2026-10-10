@@ -75,6 +75,12 @@ public sealed class MapRequests
         return true;
     }
 
+    /// <summary>Where the request the camera is following goes, or null where the tracker decides where it stops.</summary>
+    public MapViewport? Destination => _target;
+
+    /// <summary>Whether the map has asked for a request since request <paramref name="id"/>, rather than leaving the camera to it or to a hand.</summary>
+    public bool AskedSince(long id) => _latest > id;
+
     /// <summary>Whether a report caused by request <paramref name="id"/> says where the camera is now.</summary>
     public bool Reports(long id) => id == _latest || id == _halted;
 
