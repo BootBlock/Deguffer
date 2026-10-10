@@ -892,6 +892,7 @@
                     <StackPanel Grid.Row="3" Spacing="4">
                         <Grid Height="33" VerticalAlignment="Bottom">
                             <ItemsControl x:Name="UsedSpaceStrip"
+                                          ItemsSource="{x:Bind ViewModel.Growth.UsedSpace}"
                                           VerticalAlignment="Bottom"
                                           AutomationProperties.Name="Used space at each kept scan">
                                 <ItemsControl.ItemsPanel>

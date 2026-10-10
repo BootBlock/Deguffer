@@ -183,7 +183,7 @@ public sealed partial class ExploreTypes : ObservableObject
         if (_tree is not { } tree)
         {
             Cancel(ref _breaking);
-            Rows.Clear();
+            LiveList.Show(Rows, [], row => row.Category);
             Summary = string.Empty;
             return;
         }
