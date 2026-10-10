@@ -14,13 +14,12 @@ namespace Deguffer.App.Controls;
 /// composition surface it is shown in.
 ///
 /// <para>One for the application, because the device is the costly thing and the window has the one
-/// compositor (G5). Each map's surfaces are made here, so a device replaced after a loss is replaced
-/// under all of them at once: see <see cref="Replaced"/>.</para>
+/// compositor (G5). Each map's surfaces are made here, on the one device, so a device lost is replaced
+/// for all of them at once, and each map then makes its surfaces again: see <see cref="Replaced"/>.</para>
 ///
 /// <para>The canvas is still painted on the CPU, by <see cref="CanvasPainter"/>, and only what each
-/// region holds is written to the GPU, a region at a time as it lands. The bitmap this replaced was
-/// copied whole and invalidated whole at every hand-over, which at 4K is 33 MB through the UI thread
-/// for regions a fraction of that size.</para>
+/// region holds is written to the GPU, a region at a time as it lands. A whole canvas is 33 MB at 4K,
+/// too much to send through the UI thread at every hand-over for regions a fraction of that size.</para>
 /// </summary>
 internal sealed class MapGraphics
 {

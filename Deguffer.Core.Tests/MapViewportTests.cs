@@ -396,6 +396,46 @@ public sealed class MapViewportTests
     }
 
     /// <summary>
+    /// A label is laid out in device-independent pixels of its drawing, at the display scale the
+    /// drawing was made at. Wherever the camera has the picture, it has to sit on the canvas pixels
+    /// it was laid out over, the ones a click there resolves to, or it names a neighbour (§7.1).
+    /// </summary>
+    [Theory]
+    [InlineData(1, 0.5, 0.5, 1, 0.5, 0.5, 1.0, 1904, 1072, 1904, 1072)]
+    [InlineData(3, 0.4, 0.4, 5, 0.45, 0.35, 1.5, 2856, 1608, 1904, 1072)]
+    [InlineData(6, 0.7, 0.2, 2, 0.3, 0.8, 1.25, 3824, 2152, 2856, 1614)]
+    public void ALabelSitsOnTheCanvasPixelsItWasLaidOutOver(
+        double drawnZoom,
+        double drawnX,
+        double drawnY,
+        double shownZoom,
+        double shownX,
+        double shownY,
+        double displayScale,
+        int canvasWidth,
+        int canvasHeight,
+        double width,
+        double height)
+    {
+        var drawn = MapViewport.Anchored(drawnZoom, drawnX, drawnY, 0.5, 0.5);
+        var shown = MapViewport.Anchored(shownZoom, shownX, shownY, 0.4, 0.6);
+        var placement = shown.PlacementOf(drawn);
+
+        var onScreen = drawn
+            .Labels(canvasWidth, canvasHeight, width, height, displayScale)
+            .Then(shown.Camera(width, height));
+
+        foreach (var (labelX, labelY) in new[] { (0.0, 0.0), (300.0, 500.0), (canvasWidth / displayScale, canvasHeight / displayScale) })
+        {
+            var (x, y) = onScreen.Apply(labelX, labelY);
+            var (inX, inY) = placement.InDrawing(x / width, y / height);
+
+            Assert.Equal(labelX * displayScale / canvasWidth, inX, Precision);
+            Assert.Equal(labelY * displayScale / canvasHeight, inY, Precision);
+        }
+    }
+
+    /// <summary>
     /// At rest the drawing on screen is of the part of the picture shown, at the screen's own pixel
     /// size, so one of its pixels is one of the display's. Anything else resamples a picture that was
     /// drawn to be sharp.

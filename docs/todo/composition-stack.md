@@ -228,9 +228,9 @@ app's own folder, and no module loaded from `WindowsApps`. `Deguffer.App` opened
 ## What landing #274 found
 
 The map draws as the rules above describe: one `CompositionVirtualDrawingSurface` per drawing, each
-written a region at a time through a staging `CanvasBitmap`, on a `SpriteVisual` whose offset and
-scale follow a camera property set by expression. The outlines and the labels follow the same
-camera. Two things the spike did not show:
+written a region at a time through a staging `CanvasBitmap`, on a `SpriteVisual` that places the
+drawing in the picture. The sprites sit in a container whose offset and scale follow a camera
+property set by expression, and the outlines and the labels follow the same camera. Two things the spike did not show:
 
 - **A surface made before a device replacement shows nothing written after it.** The spike saw
   surfaces made before the swap accept a redraw. In the map, after `SetCanvasDevice` and

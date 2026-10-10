@@ -194,6 +194,14 @@ public readonly record struct MapViewport
         Top * height);
 
     /// <summary>
+    /// Where the labels of a canvas <paramref name="canvasWidth"/> by <paramref name="canvasHeight"/>
+    /// pixels across lie in the whole picture: <see cref="Canvas"/>, for labels laid out in
+    /// device-independent pixels of a canvas drawn at <paramref name="scale"/> pixels to each.
+    /// </summary>
+    public MapTransform Labels(int canvasWidth, int canvasHeight, double width, double height, double scale) =>
+        new MapTransform(scale, scale, 0, 0).Then(Canvas(canvasWidth, canvasHeight, width, height));
+
+    /// <summary>
     /// A viewport held inside the picture. The zoom is held as well, because an eased step between
     /// two zooms can land a rounding error outside them, and a zoom a hair under 1 would leave no room
     /// between the edges to hold the position in.

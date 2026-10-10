@@ -52,7 +52,7 @@ public sealed class ExploreMap : UserControl
     /// How long a run of size changes has to stop for before the map is drawn again.
     ///
     /// <para>Dragging a window edge raises <see cref="FrameworkElement.SizeChanged"/> tens of times
-    /// a second, and each one is a whole layout of the tree, a fresh bitmap, and a pass over every
+    /// a second, and each one is a whole layout of the tree, a fresh canvas, and a pass over every
     /// pixel of it — at 3840 by 2160 that is eight million pixels shaded several times over. Drawing
     /// each of those in turn is not merely repeated work: it is work for a size that was superseded
     /// before the paint finished, so the window falls further behind the pointer the longer the drag
@@ -107,7 +107,7 @@ public sealed class ExploreMap : UserControl
     /// <summary>The device every drawing is written through. See <see cref="MapGraphics"/>.</summary>
     private readonly MapGraphics _graphics;
 
-    /// <summary>Where the whole picture is on the screen. Written at each frame of a move, and nothing else is.</summary>
+    /// <summary>Where the whole picture is on the screen: what each frame of a move writes for the picture to follow.</summary>
     private readonly MapCamera _camera;
 
     /// <summary>The map's composition tree: the two sets of drawings, then the outlines over them.</summary>
@@ -305,7 +305,7 @@ public sealed class ExploreMap : UserControl
         RightTapped += OnRightTapped;
 
         // Dragged to a differently scaled display, the control's size in device-independent units
-        // does not change, so nothing above fires and the bitmap stays at the old resolution.
+        // does not change, so nothing above fires and the canvas stays at the old resolution.
         // The scale is read from the XamlRoot rather than from this element: the identically
         // documented property on UIElement does not update on a scale change
         // (microsoft-ui-xaml #9610), and the root is not attached until this is loaded.
@@ -398,7 +398,7 @@ public sealed class ExploreMap : UserControl
             _graphics.Replaced -= OnDeviceReplaced;
         };
 
-        // The ground is baked into the bitmap, so unlike every themed control around it the map
+        // The ground is baked into the canvas, so unlike every themed control around it the map
         // cannot restyle itself. Nothing else here fires on a theme switch — the page is kept alive
         // by NavigationCacheMode, so a trip to Settings and back does not rebuild it either — and
         // the map would keep the old ground until the window was resized. WindowBackdrop subscribes
@@ -695,7 +695,7 @@ public sealed class ExploreMap : UserControl
     /// Wait for the drag to stop before redrawing, on the terms
     /// <see cref="ResizeSettleTime"/> gives.
     ///
-    /// <para>The first size the control is ever given is drawn at once. There is no bitmap to
+    /// <para>The first size the control is ever given is drawn at once. There is no drawing to
     /// stretch in the meantime, so deferring that one would leave the panel empty for the length of
     /// the wait every time the page is opened.</para>
     /// </summary>
@@ -726,7 +726,8 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Put the picture where the zoom on screen says it is: the camera, which every drawing, the
-    /// outlines and the names follow. The one thing written at each frame of a move.
+    /// outlines and the names follow, and the clip at the map's edges while anything runs past them.
+    /// What each frame of a move writes.
     /// </summary>
     private void Place()
     {
@@ -758,13 +759,12 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var placed = _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight);
+        _highlight.PlaceOver(
+            _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight),
+            ActualWidth,
+            ActualHeight);
 
-        _highlight.PlaceOver(drawing.Width, drawing.Height, placed);
-
-        // The names are laid out in device-independent pixels of the drawing, at the display scale
-        // it was drawn at.
-        _labels.Place(placed with { ScaleX = placed.ScaleX * _scale, ScaleY = placed.ScaleY * _scale });
+        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _scale));
     }
 
     private void Redraw()
@@ -780,7 +780,8 @@ public sealed class ExploreMap : UserControl
         //
         // What was drawn is dropped rather than kept, because the page brings the map back with a
         // Show() that draws it again anyway, and the zoomed drawings are 33 MB each at 4K. The
-        // buffer and one bitmap stay, so switching back allocates nothing (G5).
+        // paint buffer stays, and so do the layers with their surfaces emptied, so switching back
+        // allocates neither (G5).
         if (Visibility != Visibility.Visible)
         {
             _redraws.Cancel();
@@ -797,7 +798,7 @@ public sealed class ExploreMap : UserControl
 
         if (_tree is null || width <= 0 || height <= 0 || _tree.SizeOf(_node) <= 0)
         {
-            // Every bitmap goes, and the buffer they were painted through: a map with nothing to
+            // Every drawing goes, and the buffer they were painted through: a map with nothing to
             // show holds no memory for it.
             _redraws.Cancel();
             _pictures.Clear();
@@ -1061,7 +1062,7 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// How many bitmap pixels a control extent of <paramref name="extent"/> device-independent
+    /// How many canvas pixels a control extent of <paramref name="extent"/> device-independent
     /// pixels asks for. One expression, so that a caller asking whether the drawing still matches
     /// the control gets the same answer <see cref="Redraw"/> would lay out to.
     /// </summary>
@@ -1140,7 +1141,7 @@ public sealed class ExploreMap : UserControl
     /// What is under <paramref name="point"/>, in the control's own coordinates.
     ///
     /// <para>Mapped through the drawing's own dimensions rather than through the display scale,
-    /// because the two part company for as long as a resize is still settling. The bitmap is
+    /// because the two part company for as long as a resize is still settling. The canvas is
     /// stretched over the control's new bounds in the meantime, so what is on screen is the old
     /// canvas scaled to fit, and a pointer mapped by the display scale would answer from geometry
     /// that is no longer where it is drawn.</para>
@@ -1231,8 +1232,8 @@ public sealed class ExploreMap : UserControl
     /// now that the picture has moved beneath it.
     ///
     /// <para>The names go until the drawing that places them arrives, for the reason they go during
-    /// a resize: they are controls at fixed positions, and over a moving picture they would name
-    /// whatever shape had moved under them.</para>
+    /// a resize: they would move with the picture, but magnified with it, out of shape and away from
+    /// the reader's text size.</para>
     /// </summary>
     private void OnZoomMoved(object? sender, EventArgs e)
     {

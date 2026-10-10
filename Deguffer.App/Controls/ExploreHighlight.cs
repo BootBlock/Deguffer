@@ -52,13 +52,28 @@ internal sealed class ExploreHighlight
 
     private const float HoveredEdgeWidth = 2;
 
+    /// <summary>
+    /// How far past the picture's edges an outline is still drawn, in the picture's own
+    /// device-independent pixels: as far as the widest stroke reaches past the shape it runs round.
+    /// The camera only ever magnifies, because the zoom is never under 1, so no stroke reaches
+    /// further in the picture's units than it does on screen.
+    /// </summary>
+    private const float Margin = HoveredHaloWidth;
+
     private readonly MapGraphics _graphics;
 
     /// <summary>Where the picture is on the screen: the map's camera, followed.</summary>
     private readonly ContainerVisual _camera;
 
+    /// <summary>
+    /// The area the outlines are drawn in: the picture, and <see cref="Margin"/> round it. A shape
+    /// visual draws nothing past its own size, and the halo round a shape at the picture's edge lies
+    /// half outside it, where it has always been drawn whole.
+    /// </summary>
+    private readonly ShapeVisual _bounds;
+
     /// <summary>The outlines, in the canvas's own pixels, placed where that canvas lies in the picture.</summary>
-    private readonly ShapeVisual _placed;
+    private readonly CompositionContainerShape _placed;
 
     private readonly CompositionPathGeometry _hovered;
 
@@ -71,9 +86,13 @@ internal sealed class ExploreHighlight
         _graphics = graphics;
 
         _camera = compositor.CreateContainerVisual();
-        _placed = compositor.CreateShapeVisual();
-        _camera.Children.InsertAtTop(_placed);
+        _bounds = compositor.CreateShapeVisual();
+        _bounds.Offset = new Vector3(-Margin, -Margin, 0);
+        _camera.Children.InsertAtTop(_bounds);
         camera.Follow(_camera);
+
+        _placed = compositor.CreateContainerShape();
+        _bounds.Shapes.Add(_placed);
 
         _hovered = compositor.CreatePathGeometry(graphics.Nothing);
         _picked = compositor.CreatePathGeometry(graphics.Nothing);
@@ -103,14 +122,14 @@ internal sealed class ExploreHighlight
     public void ShowHovered(IReadOnlyList<ExploreOutline> outlines) => _hovered.Path = _graphics.Trace(outlines);
 
     /// <summary>
-    /// Lay the outlines over a canvas <paramref name="width"/> by <paramref name="height"/> pixels
-    /// across that lies at <paramref name="placed"/> in the picture.
+    /// Lay the outlines over a canvas that lies at <paramref name="placed"/> in a picture
+    /// <paramref name="width"/> by <paramref name="height"/> device-independent pixels across.
     /// </summary>
-    public void PlaceOver(int width, int height, MapTransform placed)
+    public void PlaceOver(MapTransform placed, double width, double height)
     {
-        _placed.Size = new Vector2(width, height);
-        _placed.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
-        _placed.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
+        _bounds.Size = new Vector2((float)width + (2 * Margin), (float)height + (2 * Margin));
+        _placed.Scale = new Vector2((float)placed.ScaleX, (float)placed.ScaleY);
+        _placed.Offset = new Vector2((float)placed.X + Margin, (float)placed.Y + Margin);
     }
 
     /// <summary>
