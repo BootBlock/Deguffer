@@ -233,6 +233,11 @@ public sealed partial class ExplorePage : Page
 
         ViewModel.NotesDismissed = preferences.ExploreNotesDismissed;
 
+        // Kept as the reader leaves it, on the overview itself.
+        Map.OverviewHidden = preferences.ExploreOverviewHidden;
+        Map.OverviewHiddenChanged += (_, _) =>
+            App.Preferences.Update(current => current with { ExploreOverviewHidden = Map.OverviewHidden });
+
         _appearance = new MapAppearanceViewModel(MapLook.From(preferences), App.Preferences);
         _appearance.Changed += (_, _) =>
         {

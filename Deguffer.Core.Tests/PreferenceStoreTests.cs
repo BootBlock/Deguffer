@@ -28,6 +28,7 @@ public class PreferenceStoreTests
             IcicleScheme: ExploreScheme.Soft,
             SunburstScheme: ExploreScheme.Deep,
             ExploreNotesDismissed: true,
+            ExploreOverviewHidden: true,
             ShowNotInstalled: true,
             ShowAlreadyClear: true,
             BackdropEnabled: false,
@@ -65,6 +66,9 @@ public class PreferenceStoreTests
         // what a missing key deserialises to, so asserting false would pass with the preference
         // deleted outright.
         Assert.True(loaded.ExploreNotesDismissed);
+
+        // Not the default, on the same reasoning.
+        Assert.True(loaded.ExploreOverviewHidden);
 
         Assert.True(loaded.ShowNotInstalled);
         Assert.True(loaded.ShowAlreadyClear);

@@ -224,6 +224,12 @@ public enum ExploreScheme
 /// sentence stay one activation away rather than going. What it cannot do is arrive over the
 /// picture uninvited, which is the whole of what it was asked for.</para>
 /// </param>
+/// <param name="ExploreOverviewHidden">
+/// Whether the reader hid the overview Explore's map shows in a corner while it is zoomed in. Off by
+/// default, and only the reader ever turns it on, from the overview itself, which leaves a button in
+/// its place that brings it back. Stored for the reason <paramref name="ExploreNotesDismissed"/> is:
+/// it answers "I do not want this" rather than "not just now". Presentation only.
+/// </param>
 /// <param name="BackdropEnabled">
 /// Whether to ask for the Acrylic backdrop. High contrast overrides this to off regardless — the
 /// backdrop fights the user's stated accessibility requirement, and that is not negotiable by a
@@ -352,6 +358,7 @@ public sealed record AppPreferences(
     ExploreScheme IcicleScheme = ExploreScheme.Standard,
     ExploreScheme SunburstScheme = ExploreScheme.Standard,
     bool ExploreNotesDismissed = false,
+    bool ExploreOverviewHidden = false,
     bool ShowNotInstalled = false,
     bool ShowAlreadyClear = false,
     bool BackdropEnabled = true,

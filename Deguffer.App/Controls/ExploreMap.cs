@@ -130,6 +130,9 @@ public sealed class ExploreMap : UserControl
 
     private readonly ExploreHighlight _highlight;
 
+    /// <summary>The whole picture in a corner, with the part on the screen marked, while the picture is zoomed in.</summary>
+    private readonly ExploreOverview _overview;
+
     /// <summary>The device every drawing is written through. See <see cref="MapGraphics"/>.</summary>
     private readonly MapGraphics _graphics;
 
@@ -277,6 +280,7 @@ public sealed class ExploreMap : UserControl
         _highlight = new ExploreHighlight(compositor, _graphics, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(new DispatcherQueueSynchronizationContext(DispatcherQueue));
+        _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer);
 
         _pictures.Follow();
 
@@ -300,7 +304,7 @@ public sealed class ExploreMap : UserControl
         _layers = new Grid
         {
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            Children = { picture, _labels },
+            Children = { picture, _labels, _overview },
         };
         Content = _layers;
 
@@ -310,7 +314,26 @@ public sealed class ExploreMap : UserControl
             OnZoomArrived();
             ViewportChanged?.Invoke(this, EventArgs.Empty);
         };
-        _zoom.Retargeted += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
+        _zoom.Retargeted += (_, _) =>
+        {
+            ShowOverview();
+            ViewportChanged?.Invoke(this, EventArgs.Empty);
+        };
+
+        // The overview is of the picture the map works from: the set of drawings a change of folder
+        // leaves keeps its own, for a change turned round.
+        _pictures.OverviewChanged += OnOverviewChanged;
+        _departing.OverviewChanged += OnOverviewChanged;
+
+        // A press on the overview moves the camera as any other input does, from a settled screen
+        // with the whole picture under the zoomed one.
+        _overview.Moving += (_, _) =>
+        {
+            SettleStep();
+            Underlay();
+        };
+        _overview.Entered += (_, _) => FollowPointer();
+        _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
 
         // The camera is held where it was, measured from its new origin, until this returns, so
         // everything on it is placed from that origin at once (see ExploreZoom.Rebase).
@@ -515,7 +538,41 @@ public sealed class ExploreMap : UserControl
     /// Let the camera move where the page allows it and the drawing worked from can be zoomed, and
     /// hand the wheel, the touchpad and touch back to the page everywhere else.
     /// </summary>
-    private void Unlock() => _zoom.Movable = Zoomable && _drawing is { Viewport: not null };
+    private void Unlock()
+    {
+        _zoom.Movable = Zoomable && _drawing is { Viewport: not null };
+        ShowOverview();
+    }
+
+    /// <summary>
+    /// Whether the reader hid the overview the zoomed map shows in a corner. The page keeps the
+    /// choice, and hears of the reader changing it through <see cref="OverviewHiddenChanged"/>.
+    /// </summary>
+    public bool OverviewHidden
+    {
+        get => _overview.Hidden;
+        set => _overview.Hidden = value;
+    }
+
+    /// <summary>The reader hid the overview, or brought it back, on the overview itself.</summary>
+    public event EventHandler? OverviewHiddenChanged;
+
+    /// <summary>
+    /// Want the overview on screen while the picture can be moved and is zoomed in, or on its way in
+    /// or out, and with no change of folder flying: it is of the picture on screen, and that is on its
+    /// way to being another one.
+    /// </summary>
+    private void ShowOverview() =>
+        _overview.Want(_zoom.Movable && !Stepping && !(_zoom.Shown.IsWhole && _zoom.Target.IsWhole));
+
+    /// <summary>The overview of the picture the map works from has a new answer.</summary>
+    private void OnOverviewChanged(object? sender, EventArgs e)
+    {
+        if (sender == _pictures)
+        {
+            _overview.ShowWhole(_pictures.Overview);
+        }
+    }
 
     /// <summary>
     /// Say what the map is and how the pointer moves it, for a screen reader on the focused map:
@@ -532,7 +589,10 @@ public sealed class ExploreMap : UserControl
                     + "zoomed picture, and double-click anything else to zoom to it. Plus and minus zoom "
                     + "about the middle, the arrow keys move the picture, and Home shows all of it. The mouse's Back and "
                     + "Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through "
-                    + "the folders opened and the zooms to a shape."
+                    + "the folders opened and the zooms to a shape. While the picture is zoomed in, an overview "
+                    + "in a corner shows all of it with the part on the screen marked: drag the mark to move the "
+                    + "picture, or click anywhere in the overview to go there. The keys above move the picture as "
+                    + "the overview does, and Tab reaches its button to hide it or bring it back."
                 : string.Empty));
 
     /// <summary>
@@ -684,6 +744,13 @@ public sealed class ExploreMap : UserControl
             }
         }
 
+        // The overview of the place left goes with it, rather than standing for this one until its
+        // whole drawing arrives. A change of folder has drawn into the other set, which has none.
+        if (another)
+        {
+            _pictures.ForgetOverview();
+        }
+
         _tree = tree;
         _node = node;
         _view = view;
@@ -721,6 +788,8 @@ public sealed class ExploreMap : UserControl
         {
             _zoom.GlideTo(returning);
         }
+
+        ShowOverview();
     }
 
     /// <summary>
@@ -814,6 +883,7 @@ public sealed class ExploreMap : UserControl
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         _zoom.Resize(ActualWidth, ActualHeight);
+        _overview.Fit(ActualWidth, ActualHeight);
 
         // Every drawing kept stretches over the new size, and so does one landing.
         Fit();
@@ -1350,7 +1420,7 @@ public sealed class ExploreMap : UserControl
     /// shows there, or null where none does. See <see cref="At"/>.
     /// </summary>
     private MapLocation? Locate(Point point) =>
-        ActualWidth <= 0 || ActualHeight <= 0 || Stepping
+        ActualWidth <= 0 || ActualHeight <= 0 || Stepping || _overview.Covers(point)
             ? null
             : MapHitTest.Locate(
                 _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing, _arriving, _tree);
@@ -1400,6 +1470,7 @@ public sealed class ExploreMap : UserControl
         Underlay();
 
         _pointer = point.Position;
+        _overview.Avoid(point.Position);
 
         // A wheel tilted right reports a turn away from the reader, and shows what is to the right.
         if (point.Properties.IsHorizontalMouseWheel)
@@ -1469,6 +1540,7 @@ public sealed class ExploreMap : UserControl
     private void OnZoomMoved(object? sender, EventArgs e)
     {
         Place();
+        ShowOverview();
 
         // Not ReportWhatThePointerIsOver, which marks the shape out again whether or not it changed.
         // That is right once per new drawing and wrong at every frame of a move over the same one:
@@ -1549,6 +1621,7 @@ public sealed class ExploreMap : UserControl
                 ProtectedCursor = _dragCursor;
             }
 
+            _overview.Avoid(position);
             _zoom.Drag(x, y, position.X, position.Y, TimeSpan.FromMicroseconds(point.Timestamp));
 
             e.Handled = true;
@@ -1696,7 +1769,19 @@ public sealed class ExploreMap : UserControl
     /// dark halo in either theme; or in high contrast the theme's own colours for selected and hot
     /// items, over its window colour.
     /// </summary>
-    private void TintHighlight() =>
+    private void TintHighlight()
+    {
+        // The overview's mark in white over a dark halo, which reads over any colour in the picture,
+        // or in high contrast the theme's own colour for what is selected, over its window colour.
+        if (HighContrast.IsEnabled())
+        {
+            _overview.Restyle(SystemSettings.UIElementColor(UIElementType.Highlight), SystemSettings.UIElementColor(UIElementType.Window));
+        }
+        else
+        {
+            _overview.Restyle(Microsoft.UI.Colors.White, Windows.UI.Color.FromArgb(170, 0, 0, 0));
+        }
+
         _highlight.Restyle(
             SystemSettings.GetColorValue(UIColorType.AccentLight2),
             HighContrast.IsEnabled()
@@ -1706,6 +1791,7 @@ public sealed class ExploreMap : UserControl
                     SystemSettings.UIElementColor(UIElementType.Hotlight))
                 : null,
             _capabilities.AreEffectsFast());
+    }
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
     {
@@ -1823,6 +1909,7 @@ public sealed class ExploreMap : UserControl
         _pictures.Follow();
         _pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
         _labels.Ride(_pictures.Root);
+        _overview.ShowWhole(_pictures.Overview);
 
         // The inner picture goes over the outer one: a folder opened grows over the picture it was
         // in, and a folder left shrinks back into the picture it is in. The outlines stay on top.
@@ -1961,6 +2048,7 @@ public sealed class ExploreMap : UserControl
         _labels.Reveal();
         _highlight.Reveal();
         Place();
+        ShowOverview();
         ReportWhatThePointerIsOver();
     }
 
