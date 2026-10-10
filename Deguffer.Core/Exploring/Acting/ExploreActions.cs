@@ -166,9 +166,16 @@ public sealed class ExploreActions
     /// that deletes. A removal decided against a half-built policy is the one thing the deferral
     /// above must never buy, and one whose build failed refuses everything it was given.</para>
     /// </summary>
+    /// <param name="acting">
+    /// Told what the removal will act on, which is the part of <paramref name="items"/> the policy
+    /// allows, once the policy has said and before anything is asked: for a screen marking what is
+    /// about to go, which must never mark what the policy refuses (§7.1). Not told at all where the
+    /// policy could not be built, because then nothing is acted on.
+    /// </param>
     public async Task<ExploreRemovalReport?> RemoveAsync(
         IReadOnlyList<ExploreItem> items,
         ExploreRemovalMode mode,
+        Action<IReadOnlyList<ExploreItem>>? acting = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -194,6 +201,8 @@ public sealed class ExploreActions
 
         var policy = building.Result;
         var (allowed, _) = ExploreRemover.Partition(items, policy);
+
+        acting?.Invoke(allowed);
 
         if (allowed.Count > 0 &&
             !await _prompt().AskAsync(ExploreRemovalPrompt.For(mode, allowed), ct).ConfigureAwait(true))

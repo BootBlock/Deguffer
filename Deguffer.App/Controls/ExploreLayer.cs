@@ -42,6 +42,12 @@ internal sealed class ExploreLayer
 
     public SpriteVisual Sprite { get; }
 
+    /// <summary>
+    /// What the canvas is painted on. Another for each replaced device (see <see cref="Renew"/>), so
+    /// asked for each time rather than kept.
+    /// </summary>
+    public ICompositionSurface Surface => _surface;
+
     /// <summary>The canvas the surface holds, in pixels.</summary>
     public SizeInt32 Size { get; private set; } = new(1, 1);
 

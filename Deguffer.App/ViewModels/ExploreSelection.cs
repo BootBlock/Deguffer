@@ -119,6 +119,19 @@ public sealed partial class ExploreSelection : ObservableObject
     public bool HasNote => _note is not null;
 
     /// <summary>
+    /// What a removal under way is acting on, from the moment the policy has said what it allows
+    /// until the removal has finished, with the tree its nodes are numbers in; nothing while none is.
+    /// The map marks it, so what is about to go is plain on the picture as well as in the dialog.
+    ///
+    /// <para>Exactly what will be acted on: what was picked when the removal was asked for, less what
+    /// the policy refuses, rather than <see cref="Nodes"/>. A pick made while the removal runs is the
+    /// user's next selection, and a refused one stays where it is, so neither is going anywhere
+    /// (§7.1). The tree goes with it because the page can move to another one meanwhile, where the
+    /// same numbers are other things.</para>
+    /// </summary>
+    public (ExploreTree? Tree, IReadOnlyList<int> Nodes) Removing { get; private set; } = (null, []);
+
+    /// <summary>
     /// How the picture now differs from the disk, or null while they still agree. See
     /// <see cref="_removals"/>.
     /// </summary>
@@ -276,7 +289,13 @@ public sealed partial class ExploreSelection : ObservableObject
 
         try
         {
-            if (await _actions.RemoveAsync(items, mode, ct) is not { } report)
+            // Marked once the policy has said what of the selection it allows, and only that: a
+            // refused folder hatched as going would tell the user the opposite of what will happen.
+            // Picked and items were taken together, so they name the same things in the same order.
+            void Acting(IReadOnlyList<ExploreItem> allowed) =>
+                MarkRemoving(tree, [.. picked.Where((_, i) => allowed.Contains(items[i]))]);
+
+            if (await _actions.RemoveAsync(items, mode, Acting, ct) is not { } report)
             {
                 // Declined. Saying so beats leaving the previous sentence standing, which somebody
                 // who has just dismissed a dialog reads as the outcome of it.
@@ -305,8 +324,15 @@ public sealed partial class ExploreSelection : ObservableObject
         }
         finally
         {
+            MarkRemoving(null, []);
             Working?.Invoke(this, false);
         }
+    }
+
+    private void MarkRemoving(ExploreTree? tree, IReadOnlyList<int> nodes)
+    {
+        Removing = (tree, nodes);
+        OnPropertyChanged(nameof(Removing));
     }
 
     private void Stale()

@@ -252,6 +252,75 @@ public sealed class ExploreSelectionTests : IDisposable
     });
 
     /// <summary>
+    /// What the map hatches while a removal runs is what was picked when it was asked for, in the
+    /// tree it was picked in, from the dialog asking until the end: not a pick made meanwhile, which
+    /// is going nowhere, and nothing once it is over (§7.1).
+    /// </summary>
+    [Fact]
+    public void WhatIsBeingRemovedIsWhatWasPickedUntilTheRemovalEnds() => UiThread.Run(async () =>
+    {
+        var (tree, folder, file) = Scanned();
+        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
+        var selection = Selection(tree);
+
+        Assert.Empty(selection.Removing.Nodes);
+
+        selection.Select([folder]);
+        var removing = selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Same(tree, selection.Removing.Tree);
+        Assert.Equal([folder], selection.Removing.Nodes);
+
+        selection.Select([file]);
+
+        Assert.Equal([folder], selection.Removing.Nodes);
+
+        answer.SetResult(true);
+        await removing;
+
+        Assert.Null(selection.Removing.Tree);
+        Assert.Empty(selection.Removing.Nodes);
+    });
+
+    /// <summary>
+    /// A picked folder the policy refuses is not marked as going while the rest of the selection is
+    /// asked about: it stays where it is, and a hatch over it would say the opposite (§7.1).
+    /// </summary>
+    [Fact]
+    public void WhatThePolicyRefusesIsNeverMarkedAsBeingRemoved() => UiThread.Run(async () =>
+    {
+        var (tree, folder, file) = Scanned();
+        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(folder)));
+        var selection = Selection(tree);
+
+        selection.Select([folder, file]);
+        var removing = selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Equal([file], selection.Removing.Nodes);
+
+        answer.SetResult(false);
+        await removing;
+    });
+
+    /// <summary>A removal declined at the dialog marks nothing once the dialog has gone.</summary>
+    [Fact]
+    public void ADeclinedRemovalMarksNothing() => UiThread.Run(async () =>
+    {
+        var (tree, folder, _) = Scanned();
+        _explore.Prompt = new FakeExploreConfirmation(answer: false);
+        var selection = Selection(tree);
+
+        selection.Select([folder]);
+        await selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Empty(selection.Removing.Nodes);
+        Assert.Equal([folder], selection.Nodes);
+    });
+
+    /// <summary>
     /// A dismissed dialog says so. The sentence left standing from before would be read as the
     /// outcome of the dialog just closed.
     /// </summary>

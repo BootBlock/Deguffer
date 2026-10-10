@@ -115,6 +115,13 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>
+    /// The surface <paramref name="drawing"/> is painted on, once all of it is there, or null where
+    /// none of these holds it whole.
+    /// </summary>
+    public ICompositionSurface? SurfaceOf(ExploreSurface drawing) =>
+        _layers.Find(layer => ReferenceEquals(layer.Drawing, drawing))?.Surface;
+
+    /// <summary>
     /// Move with the map's camera, for the drawings of the picture the map works from. The compositor
     /// follows it: nothing here is written as it moves.
     /// </summary>

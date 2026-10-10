@@ -7,7 +7,9 @@ using Windows.UI;
 namespace Deguffer.App.Controls;
 
 /// <summary>
-/// The outlines drawn over the map: what is picked, and what the pointer is over.
+/// What is drawn over the map to say the state of its shapes: the outlines round what is picked and
+/// what the pointer is over, the shape under the pointer lifted with a shadow, the rest of the
+/// picture dimmed round a selection, and a hatch over what a removal under way is acting on.
 ///
 /// <para>Over the picture rather than in it, which is what the reference implementation does and for
 /// the reason it does it: WinDirStat renders the shapes into a cached surface once and draws only the
@@ -15,8 +17,20 @@ namespace Deguffer.App.Controls;
 /// volume again to move one outline.</para>
 ///
 /// <para>In the same composition tree as the drawings, placed in the picture the way the drawing it
-/// outlines is and moved by the same camera, so an outline goes wherever its shape goes on screen,
-/// through a zoom, a drag or a resize, by construction.</para>
+/// marks out is and moved by the same camera, so all of it goes wherever its shape goes on screen,
+/// through a zoom, a drag or a resize, by construction. Every one of them is drawn from the outlines
+/// the drawing gives for the nodes it is told, which are the shapes a click on it resolves to, so
+/// nothing is marked that is not what it says (§7.1).</para>
+///
+/// <para>The shadow and the dimming are effects, for a reader who can see them: off in high contrast,
+/// where the outlines and the hatch take system colours instead (§6.5), and off where the compositor
+/// says effects are slow, over Remote Desktop for one. The hatch is plain geometry and says what is
+/// about to go, so it stays.</para>
+///
+/// <para>One type for all four, past the usual length, because they are one answer: each is drawn
+/// from the outlines of the same drawing, placed over it by the same placement, and turned to the
+/// reader's colours and effects by the same switch, and a mark drawn from a different one would mark a
+/// different shape. How a shape is lifted is apart, in <see cref="ExploreLift"/>.</para>
 ///
 /// <para>Separate from <see cref="ExploreMap"/> because the two answer different questions. That one
 /// is about which tree is drawn and what the pointer found; this one is about marking a shape out
@@ -60,6 +74,20 @@ internal sealed class ExploreHighlight
     /// </summary>
     private const float Margin = HoveredHaloWidth;
 
+    /// <summary>
+    /// How dark the picture goes round a selection: enough that the picked shapes stand out on a dense
+    /// map at a glance, not so much that what is round them can no longer be read.
+    /// </summary>
+    private const float Dimming = 0.3f;
+
+    /// <summary>
+    /// How far apart the hatch's stripes are, and how wide each is, on the screen at rest. They are
+    /// laid out again with each new drawing, and grow and shrink with the picture until it arrives.
+    /// </summary>
+    private const float HatchSpacing = 8;
+
+    private const float HatchWidth = HatchSpacing / 2;
+
     private readonly MapGraphics _graphics;
 
     /// <summary>Where the picture is on the screen: the map's camera, followed.</summary>
@@ -72,84 +100,253 @@ internal sealed class ExploreHighlight
     /// </summary>
     private readonly ShapeVisual _bounds;
 
-    /// <summary>The outlines, in the canvas's own pixels, placed where that canvas lies in the picture.</summary>
+    /// <summary>The outlines and the hatch, in the canvas's own pixels, placed where that canvas lies in the picture.</summary>
     private readonly CompositionContainerShape _placed;
+
+    /// <summary>The dimming, under the lifted shape: the picture, cut to its edges, and its placement in it.</summary>
+    private readonly ShapeVisual _dimBounds;
+
+    private readonly CompositionContainerShape _dimPlaced;
+
+    private readonly CompositionPathGeometry _dimmed;
+
+    /// <summary>The shape under the pointer, lifted out of the picture over the dimming.</summary>
+    private readonly ExploreLift _lift;
 
     private readonly CompositionPathGeometry _hovered;
 
     private readonly CompositionPathGeometry _picked;
 
-    private readonly CompositionColorBrush _accent;
+    private readonly CompositionPathGeometry _marked;
+
+    private readonly CompositionPathGeometry _markedBetween;
+
+    private readonly CompositionColorBrush _hoveredHalo;
+
+    private readonly CompositionColorBrush _hoveredEdge;
+
+    private readonly CompositionColorBrush _pickedHalo;
+
+    private readonly CompositionColorBrush _pickedEdge;
+
+    private readonly CompositionColorBrush _hatch;
+
+    private readonly CompositionColorBrush _hatchBetween;
+
+    private IReadOnlyList<ExploreOutline> _pickedOutlines = [];
+
+    private IReadOnlyList<ExploreOutline> _hoveredOutlines = [];
+
+    private IReadOnlyList<ExploreOutline> _markedOutlines = [];
+
+    /// <summary>
+    /// The canvas the shape under the pointer is drawn on, and its size, kept to lift it from when
+    /// the effects come back.
+    /// </summary>
+    private ICompositionSurface? _hoveredSurface;
+
+    private Vector2 _hoveredCanvas;
+
+    /// <summary>The canvas pixels to each device-independent pixel the hatch was last laid out at.</summary>
+    private double _hatchScale = 1;
+
+    private bool _effects = true;
 
     public ExploreHighlight(Compositor compositor, MapGraphics graphics, MapCamera camera)
     {
         _graphics = graphics;
 
         _camera = compositor.CreateContainerVisual();
+        camera.Follow(_camera);
+
+        // The dimming first, so the lifted shape and every line are over it.
+        _dimBounds = compositor.CreateShapeVisual();
+        _dimBounds.Offset = new Vector3(-Margin, -Margin, 0);
+        _dimPlaced = compositor.CreateContainerShape();
+        _dimBounds.Shapes.Add(_dimPlaced);
+        _dimmed = compositor.CreatePathGeometry(graphics.Nothing);
+        var dim = compositor.CreateSpriteShape(_dimmed);
+        dim.FillBrush = compositor.CreateColorBrush(Shade(0, Dimming));
+        _dimPlaced.Shapes.Add(dim);
+        _camera.Children.InsertAtTop(_dimBounds);
+
+        _lift = new ExploreLift(compositor, graphics, camera);
+        _camera.Children.InsertAtTop(_lift.Root);
+
         _bounds = compositor.CreateShapeVisual();
         _bounds.Offset = new Vector3(-Margin, -Margin, 0);
         _camera.Children.InsertAtTop(_bounds);
-        camera.Follow(_camera);
 
         _placed = compositor.CreateContainerShape();
         _bounds.Shapes.Add(_placed);
 
         _hovered = compositor.CreatePathGeometry(graphics.Nothing);
         _picked = compositor.CreatePathGeometry(graphics.Nothing);
-        _accent = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
+        _marked = compositor.CreatePathGeometry(graphics.Nothing);
+        _markedBetween = compositor.CreatePathGeometry(graphics.Nothing);
 
-        // Drawn in this order, so what is picked is over what the pointer is over where they meet.
-        _placed.Shapes.Add(Stroke(compositor, camera, _hovered, compositor.CreateColorBrush(Shade(0, 0.75)), HoveredHaloWidth));
-        _placed.Shapes.Add(Stroke(compositor, camera, _hovered, _accent, HoveredEdgeWidth));
-        _placed.Shapes.Add(Stroke(compositor, camera, _picked, compositor.CreateColorBrush(Shade(0, 0.6)), PickedHaloWidth));
-        _placed.Shapes.Add(Stroke(compositor, camera, _picked, compositor.CreateColorBrush(Shade(255, 1)), PickedEdgeWidth));
+        _hoveredHalo = compositor.CreateColorBrush();
+        _hoveredEdge = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
+        _pickedHalo = compositor.CreateColorBrush();
+        _pickedEdge = compositor.CreateColorBrush();
+        _hatch = compositor.CreateColorBrush();
+        _hatchBetween = compositor.CreateColorBrush();
+        Colour(null, _hoveredEdge.Color);
+
+        // Drawn in this order: the hatch under every line, so a shape marked for removal is still
+        // outlined, and what is picked over what the pointer is over where they meet.
+        _placed.Shapes.Add(Fill(compositor, _markedBetween, _hatchBetween));
+        _placed.Shapes.Add(Fill(compositor, _marked, _hatch));
+        _placed.Shapes.Add(Stroke(compositor, camera, _hovered, _hoveredHalo, HoveredHaloWidth));
+        _placed.Shapes.Add(Stroke(compositor, camera, _hovered, _hoveredEdge, HoveredEdgeWidth));
+        _placed.Shapes.Add(Stroke(compositor, camera, _picked, _pickedHalo, PickedHaloWidth));
+        _placed.Shapes.Add(Stroke(compositor, camera, _picked, _pickedEdge, PickedEdgeWidth));
     }
 
-    /// <summary>The top of the outlines in the composition tree.</summary>
+    /// <summary>The top of what is drawn over the picture, in the composition tree.</summary>
     public Visual Root => _camera;
 
-    /// <summary>Mark out what the user picked.</summary>
-    public void ShowPicked(IReadOnlyList<ExploreOutline> outlines) => _picked.Path = _graphics.Trace(outlines);
+    /// <summary>Mark out what the user picked, and dim the rest of the picture round it.</summary>
+    public void ShowPicked(IReadOnlyList<ExploreOutline> outlines)
+    {
+        _pickedOutlines = outlines;
+        _picked.Path = _graphics.Trace(outlines);
+        _dimmed.Path = _effects ? _graphics.Around(outlines) : _graphics.Nothing;
+    }
 
     /// <summary>
-    /// Draw what the pointer is over in <paramref name="accent"/>. Told rather than read here,
-    /// because the map already follows the system's settings and a second listener would be a
-    /// second copy of the same window onto them (G5).
+    /// Mark out what the pointer is over, and lift it out of <paramref name="surface"/>, the canvas
+    /// it is drawn on, which is <paramref name="canvas"/> pixels across. Null where that canvas is not
+    /// on screen whole, and the outline alone marks it.
     /// </summary>
-    public void TintHovered(Color accent) => _accent.Color = accent;
+    public void ShowHovered(IReadOnlyList<ExploreOutline> outlines, ICompositionSurface? surface, Vector2 canvas)
+    {
+        _hoveredOutlines = outlines;
+        _hoveredSurface = surface;
+        _hoveredCanvas = canvas;
+        _hovered.Path = _graphics.Trace(outlines);
 
-    /// <summary>Mark out what the pointer is over.</summary>
-    public void ShowHovered(IReadOnlyList<ExploreOutline> outlines) => _hovered.Path = _graphics.Trace(outlines);
+        _lift.Show(_hovered.Path, _effects ? surface : null, canvas);
+    }
 
     /// <summary>
-    /// Lay the outlines over a canvas that lies at <paramref name="placed"/> in a picture
+    /// Hatch what a removal under way is acting on, at <paramref name="scale"/> canvas pixels to each
+    /// device-independent pixel, until it is told the removal is over with nothing to hatch.
+    /// </summary>
+    public void ShowMarked(IReadOnlyList<ExploreOutline> outlines, double scale)
+    {
+        _markedOutlines = outlines;
+        _hatchScale = scale;
+
+        var spacing = (float)(HatchSpacing * scale);
+        var width = (float)(HatchWidth * scale);
+
+        _marked.Path = _graphics.Hatch(outlines, spacing, width, 0);
+        _markedBetween.Path = _graphics.Hatch(outlines, spacing, width, width);
+    }
+
+    /// <summary>
+    /// Take on the reader's colours: <paramref name="accent"/> for what the pointer is over, or the
+    /// high contrast theme's own colours where <paramref name="system"/> gives them, with the effects
+    /// off. <paramref name="effectsFast"/> says whether the compositor can draw effects without
+    /// slowing the picture down. Told rather than read here, because the map already follows the
+    /// system's settings and a second listener would be a second copy of the same window onto them
+    /// (G5).
+    /// </summary>
+    public void Restyle(Color accent, SystemHighlight? system, bool effectsFast)
+    {
+        Colour(system, accent);
+
+        var effects = system is null && effectsFast;
+
+        if (effects == _effects)
+        {
+            return;
+        }
+
+        _effects = effects;
+        _dimBounds.IsVisible = effects;
+
+        ShowPicked(_pickedOutlines);
+        ShowHovered(_hoveredOutlines, _hoveredSurface, _hoveredCanvas);
+        ShowMarked(_markedOutlines, _hatchScale);
+    }
+
+    /// <summary>
+    /// Lay all of it over a canvas that lies at <paramref name="placed"/> in a picture
     /// <paramref name="width"/> by <paramref name="height"/> device-independent pixels across.
     /// </summary>
     public void PlaceOver(MapTransform placed, double width, double height)
     {
-        _bounds.Size = new Vector2((float)width + (2 * Margin), (float)height + (2 * Margin));
-        _placed.Scale = new Vector2((float)placed.ScaleX, (float)placed.ScaleY);
-        _placed.Offset = new Vector2((float)placed.X + Margin, (float)placed.Y + Margin);
+        var size = new Vector2((float)width + (2 * Margin), (float)height + (2 * Margin));
+        var scale = new Vector2((float)placed.ScaleX, (float)placed.ScaleY);
+        var offset = new Vector2((float)placed.X + Margin, (float)placed.Y + Margin);
+
+        _bounds.Size = size;
+        _placed.Scale = scale;
+        _placed.Offset = offset;
+
+        _dimBounds.Size = size;
+        _dimPlaced.Scale = scale;
+        _dimPlaced.Offset = offset;
+
+        _lift.PlaceOver(placed);
     }
 
     /// <summary>
-    /// Take the outlines off the screen while the picture under them is on its way to being another,
-    /// keeping them to put back.
+    /// Take all of it off the screen while the picture under it is on its way to being another,
+    /// keeping it to put back.
     /// </summary>
     public void Hide() => _camera.IsVisible = false;
 
-    /// <summary>Put the outlines back once the picture they mark out is the one on screen.</summary>
+    /// <summary>Put it back once the picture it marks out is the one on screen.</summary>
     public void Reveal() => _camera.IsVisible = true;
 
-    /// <summary>Take every outline off, for a map that is no longer showing anything.</summary>
+    /// <summary>Take all of it off, for a map that is no longer showing anything.</summary>
     public void Clear()
     {
-        _hovered.Path = _graphics.Nothing;
-        _picked.Path = _graphics.Nothing;
+        ShowPicked([]);
+        ShowHovered([], null, _hoveredCanvas);
+        ShowMarked([], _hatchScale);
     }
 
     private static Color Shade(byte level, double opacity) =>
         Color.FromArgb((byte)Math.Round(opacity * 255), level, level, level);
+
+    /// <summary>
+    /// Every colour drawn here: the high contrast theme's where <paramref name="system"/> gives them,
+    /// and the shades that read over every hue of the picture otherwise.
+    /// </summary>
+    private void Colour(SystemHighlight? system, Color accent)
+    {
+        if (system is { } colours)
+        {
+            _hoveredHalo.Color = colours.Ground;
+            _hoveredEdge.Color = colours.Hovered;
+            _pickedHalo.Color = colours.Ground;
+            _pickedEdge.Color = colours.Picked;
+            _hatch.Color = colours.Picked;
+            _hatchBetween.Color = Color.FromArgb(0, 0, 0, 0);
+            return;
+        }
+
+        _hoveredHalo.Color = Shade(0, 0.75);
+        _hoveredEdge.Color = accent;
+        _pickedHalo.Color = Shade(0, 0.6);
+        _pickedEdge.Color = Shade(255, 1);
+
+        // Dark and light by turns, so the hatch reads as one over a pale shape and a deep one alike.
+        _hatch.Color = Shade(0, 0.45);
+        _hatchBetween.Color = Shade(255, 0.3);
+    }
+
+    private static CompositionSpriteShape Fill(Compositor compositor, CompositionGeometry geometry, CompositionBrush brush)
+    {
+        var shape = compositor.CreateSpriteShape(geometry);
+        shape.FillBrush = brush;
+
+        return shape;
+    }
 
     /// <summary>
     /// One stroke round <paramref name="geometry"/>, <paramref name="width"/> device-independent
@@ -183,3 +380,9 @@ internal sealed class ExploreHighlight
         return shape;
     }
 }
+
+/// <summary>
+/// The high contrast theme's colours for what is drawn over the map: the ground the lines are drawn
+/// against, and the colours it gives what is selected and what the pointer is over.
+/// </summary>
+internal readonly record struct SystemHighlight(Color Ground, Color Picked, Color Hovered);

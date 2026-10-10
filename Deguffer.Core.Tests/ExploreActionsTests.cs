@@ -260,6 +260,32 @@ public sealed class ExploreActionsTests : IDisposable
         Assert.Equal(kept.Path, Assert.Single(report.Refused).Path);
     }
 
+    /// <summary>
+    /// A screen marking what is about to go is told what the removal will act on before the user is
+    /// asked, and it is the part the policy allows alone: the refused part is never marked as going,
+    /// because it is not (§7.1).
+    /// </summary>
+    [Fact]
+    public async Task WhatWillBeActedOnIsToldBeforeAskingAndIsOnlyWhatThePolicyAllows()
+    {
+        var kept = Item(_temp.CreateFile(8, "kept", "a.bin"));
+        var loose = Item(_temp.CreateFile(16, "loose.bin"));
+        var prompt = new FakeExploreConfirmation(answer: false);
+        var actions = Actions(_ => Task.FromResult(Policy(refusing: Path.GetDirectoryName(kept.Path)!)), prompt);
+        IReadOnlyList<ExploreItem>? told = null;
+        var askedFirst = -1;
+
+        await actions.RemoveAsync([kept, loose], ExploreRemovalMode.RecycleBin, allowed =>
+        {
+            told = allowed;
+            askedFirst = prompt.Asked.Count;
+        });
+
+        Assert.Equal([loose], told);
+        Assert.Equal(0, askedFirst);
+        Assert.Single(prompt.Asked);
+    }
+
     [Fact]
     public async Task DecliningRemovesNothingAndIsNotAFailure()
     {
