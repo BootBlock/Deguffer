@@ -97,6 +97,25 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(250), Travels: true),
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
+    /// <summary>
+    /// The About page's starfield, flown through on a loop this long (see <see cref="StarFlight"/>).
+    /// With motion off it is a still field, drawn once: a loop that only faded would be a field that
+    /// flickers for ever, and a reader who turned animation off has asked for neither.
+    /// </summary>
+    public static MotionToken Starfield { get; } = new(
+        new Motion(TimeSpan.FromSeconds(40), Travels: true),
+        Motion.Instant);
+
+    /// <summary>
+    /// The Deguffer mark flying in out of the About page's starfield and settling into the page's header,
+    /// the first time the page is visited. Slower than any other move here, because it is the one move
+    /// that is there to be watched. With motion off it fades in where it settles, so the header still
+    /// comes in as every page's does.
+    /// </summary>
+    public static MotionToken Mark { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(900), Travels: true),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
     /// <summary>How this plays, given whether the reader has animation effects on.</summary>
     public Motion For(bool animationsEnabled) => animationsEnabled ? Full : Reduced;
 }

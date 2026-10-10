@@ -12,7 +12,7 @@ public sealed class MotionTokenTests
     [Fact]
     public void WithMotionOnEveryMoveTravels()
     {
-        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome })
+        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark })
         {
             var motion = token.For(animationsEnabled: true);
 
@@ -72,6 +72,27 @@ public sealed class MotionTokenTests
         Assert.False(motion.Travels);
         Assert.False(motion.IsInstant);
         Assert.True(motion.Duration < MotionToken.Outcome.Full.Duration);
+    }
+
+    /// <summary>The About page's starfield is a still field with motion off: it neither flies nor flickers.</summary>
+    [Fact]
+    public void WithMotionOffTheStarfieldStandsStill()
+    {
+        var motion = MotionToken.Starfield.For(animationsEnabled: false);
+
+        Assert.True(motion.IsInstant);
+        Assert.False(motion.Travels);
+    }
+
+    /// <summary>With motion off the mark fades in where it settles in the header, and does not fly.</summary>
+    [Fact]
+    public void WithMotionOffTheMarkFadesInPlace()
+    {
+        var motion = MotionToken.Mark.For(animationsEnabled: false);
+
+        Assert.False(motion.Travels);
+        Assert.False(motion.IsInstant);
+        Assert.True(motion.Duration < MotionToken.Mark.Full.Duration);
     }
 
     /// <summary>

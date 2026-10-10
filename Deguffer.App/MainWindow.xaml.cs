@@ -30,6 +30,7 @@ public sealed partial class MainWindow : Window
         _backdrop = new WindowBackdrop(this, Ground, SystemMotion.Current);
         _crossfade = new WindowCrossfade((FrameworkElement)Content, SystemMotion.Current);
         _sizing = new WindowSizing(this, new WindowMetricsStore(UserEnvironment.Current));
+        SystemMotion.Current.Follow(this);
 
         // Where the window ends up is the user's, so it outlives the session that produced it.
         Closed += (_, _) => _sizing.Remember();
