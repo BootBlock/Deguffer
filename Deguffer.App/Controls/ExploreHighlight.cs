@@ -134,7 +134,7 @@ internal sealed class ExploreHighlight
 
     /// <summary>
     /// Take the outlines off the screen while the picture under them is on its way to being another,
-    /// keeping them to put back. The labels are hidden on the same terms.
+    /// keeping them to put back.
     /// </summary>
     public void Hide() => _camera.IsVisible = false;
 

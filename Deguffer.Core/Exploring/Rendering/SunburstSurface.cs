@@ -195,16 +195,21 @@ public sealed class SunburstSurface : ExploreSurface
             var angle = sector.MidAngle;
             var middle = At(sunburst, sector.MidRadius, angle);
             var width = chord - (Limits.LabelPadding * 2);
+            var left = middle.X - (width / 2);
+            var top = middle.Y - (Limits.MinimumLabelHeight / 2);
 
+            // The room is the label's own box, unturned. A sunburst is never magnified, so the room
+            // is only ever asked whether the text fits where it was drawn, which the chord decided.
             labels.Add(new ExploreLabel(
                 sector.Node,
-                middle.X - (width / 2),
-                middle.Y - (Limits.MinimumLabelHeight / 2),
+                left,
+                top,
                 width,
                 RotationAt(angle),
                 Centred: true,
                 TextColourFor(sector.Node, sector.Depth),
-                sector.Bytes));
+                sector.Bytes,
+                new LabelRoom(left, top, left + width, top + Limits.MinimumLabelHeight)));
         }
 
         return labels;

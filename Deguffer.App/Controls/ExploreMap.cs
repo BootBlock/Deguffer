@@ -243,7 +243,7 @@ public sealed class ExploreMap : UserControl
         _pictures = new ExploreLayers(compositor, _graphics, _camera);
         _departing = new ExploreLayers(compositor, _graphics, _camera);
         _highlight = new ExploreHighlight(compositor, _graphics, _camera);
-        _labels = new ExploreLabels(_camera);
+        _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(new DispatcherQueueSynchronizationContext(DispatcherQueue));
 
         _pictures.Follow();
@@ -595,6 +595,7 @@ public sealed class ExploreMap : UserControl
                 _departing.Freeze(was.Camera(ActualWidth, ActualHeight));
                 _pictures.Follow();
                 _pictures.Fit(ActualWidth, ActualHeight);
+                _labels.Ride(_pictures.Root);
 
                 _root.Children.Remove(_departing.Root);
                 _root.Children.InsertAtBottom(_departing.Root);
@@ -619,8 +620,9 @@ public sealed class ExploreMap : UserControl
         _volume = volume;
 
         // Started before the new picture is drawn, so the drawing arrives into a folder already
-        // opening: its names and outlines wait for it the way they wait for a zoom, and the pointer
-        // is over nothing until the picture it is over is the one on screen.
+        // opening: its outlines wait for it the way they wait for a zoom, its names ride it in, and
+        // the pointer is over nothing until the picture it is over is the one on screen. The names
+        // of the picture opened out of go with it.
         if (opening is { } shape)
         {
             _labels.Hide();
@@ -710,8 +712,8 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        // The names stretch with the picture, out of shape and away from the reader's text size.
-        // They come back with the layout that puts them where they belong.
+        // The picture stretches on each axis apart, and a name the layout gave room to at the old size
+        // can run over its neighbours at the new one. They come back with the layout for it.
         _labels.Hide();
 
         // The outlines stretch with it too, and a polygon scales exactly where a line of text does
@@ -893,13 +895,6 @@ public sealed class ExploreMap : UserControl
         // arrives, the old one answers, and it has to be shown where it is resolved.
         Place();
 
-        // Its names are where its own placement put them, so they go while it is shown anywhere
-        // else, as they do during a zoom. The new drawing brings its own.
-        if (_zoom.Shown != _drawn)
-        {
-            _labels.Hide();
-        }
-
         var width = DevicePixels(ActualWidth);
         var height = DevicePixels(ActualHeight);
 
@@ -971,14 +966,8 @@ public sealed class ExploreMap : UserControl
             _drawn = MapViewport.Whole;
         }
 
+        // Over a folder still opening, too: the names ride the picture they name as it grows.
         _labels.Show(drawing, _scale, LabelText);
-
-        // A resize settling while a folder opens draws the new picture again, and its names wait for
-        // it to finish opening like the first drawing's.
-        if (_descent.IsMoving)
-        {
-            _labels.Hide();
-        }
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
         // now, and so is whatever the pointer is over.
@@ -1231,13 +1220,11 @@ public sealed class ExploreMap : UserControl
     /// One frame of a zoom on its way: move the picture on hand, and say what is under the pointer
     /// now that the picture has moved beneath it.
     ///
-    /// <para>The names go until the drawing that places them arrives, for the reason they go during
-    /// a resize: they would move with the picture, but magnified with it, out of shape and away from
-    /// the reader's text size.</para>
+    /// <para>The names follow the camera on the compositor, and fade as their shapes shrink round them,
+    /// so nothing here moves them.</para>
     /// </summary>
     private void OnZoomMoved(object? sender, EventArgs e)
     {
-        _labels.Hide();
         Place();
 
         // Not ReportWhatThePointerIsOver, which marks the shape out again whether or not it changed.
