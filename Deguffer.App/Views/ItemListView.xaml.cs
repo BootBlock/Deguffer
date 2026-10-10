@@ -1,4 +1,4 @@
-using System.ComponentModel;
+using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -18,7 +18,6 @@ public sealed partial class ItemListView : UserControl
 {
     private readonly Action<FindingViewModel, StepViewModel> _toggleKeep;
     private readonly Action _close;
-    private readonly CollectionViewSource _grouped;
 
     /// <summary>
     /// Assigned before InitializeComponent, so no x:Bind can evaluate against a null model, the same
@@ -39,39 +38,25 @@ public sealed partial class ItemListView : UserControl
         _close = close;
         InitializeComponent();
 
-        _grouped = (CollectionViewSource)Resources["GroupedItems"];
-        ListShownItems();
+        // Each list is brought up to date in place by the search, so it is handed over once.
+        if (ViewModel.IsGrouped)
+        {
+            var grouped = (CollectionViewSource)Resources["GroupedItems"];
+            grouped.Source = ViewModel.Shown;
+            RowsList.ItemsSource = grouped.View;
+        }
+        else
+        {
+            RowsList.ItemsSource = ViewModel.ShownItems;
+        }
 
-        // Subscribed for the life of this control, which is the life of the list: the page discards
-        // both together when the rows come back.
-        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ListAnimation.Play(RowsList, SystemMotion.Current);
 
         // The search is what a reader of a long list reaches for first, so the keyboard starts there.
         Loaded += (_, _) => SearchBox.Focus(FocusState.Programmatic);
     }
 
     public ItemListViewModel ViewModel { get; }
-
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ItemListViewModel.Shown))
-        {
-            ListShownItems();
-        }
-    }
-
-    private void ListShownItems()
-    {
-        if (ViewModel.IsGrouped)
-        {
-            _grouped.Source = ViewModel.Shown;
-            RowsList.ItemsSource = _grouped.View;
-        }
-        else
-        {
-            RowsList.ItemsSource = ViewModel.ShownItems;
-        }
-    }
 
     private void OnKeepClicked(object sender, RoutedEventArgs e)
     {

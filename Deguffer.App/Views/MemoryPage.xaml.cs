@@ -100,6 +100,9 @@ public sealed partial class MemoryPage : Page
 
         InitializeComponent();
 
+        ListAnimation.Play(RowsList, SystemMotion.Current);
+        ListAnimation.Play(TreeList, SystemMotion.Current);
+
         // Required rather than Enabled, as the other destinations are: Enabled is subject to the
         // frame's cache size and Required is not, and a page rebuilt on return loses which picture
         // the reader chose.
