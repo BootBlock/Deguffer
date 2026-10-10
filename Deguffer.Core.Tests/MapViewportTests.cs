@@ -224,9 +224,9 @@ public sealed class MapViewportTests
         }
     }
 
-    /// <summary>A shape smaller than the maximum can show whole is shown at the maximum, still centred on it.</summary>
+    /// <summary>A shape smaller than the ceiling can show whole is shown at the ceiling, still centred on it.</summary>
     [Fact]
-    public void FittingAShapeTooSmallToFillTheScreenStopsAtTheMaximumZoom()
+    public void FittingAShapeTooSmallToFillTheScreenStopsAtTheCeiling()
     {
         var viewport = MapViewport.Fitting(new MapFrame(0.5, 0.4, 0.001, 0.002), MapCeiling.Least);
 
