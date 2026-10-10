@@ -28,11 +28,13 @@ namespace Deguffer.Core.Exploring.Layout;
 /// the layout decided it and the label and the shading have to agree with that decision.
 /// </param>
 /// <param name="Finest">
-/// How wide, in canvas pixels, a square as large as the smallest item this rectangle stands for and
-/// does not draw would be, or zero where it draws all it stands for. Above zero for the block standing
-/// in for items too small to draw, and for a folder drawn as one block with something in it, too small
-/// to frame or past the depth this zoom opens. Said by the layout, which is what decided not to draw
-/// them, and what a deeper zoom would draw them at (see <see cref="MapCeiling"/>).
+/// How wide, in canvas pixels, a square as large as the smallest item directly in this rectangle that
+/// it does not draw would be, or zero where it draws all it stands for. Above zero for the block
+/// standing in for items too small to draw, and for a folder drawn as one block with something in it,
+/// too small to frame or past the depth this zoom opens. Directly in it, because a folder among those
+/// items is measured whole: what it holds is measured by the drawing that opens it. Said by the
+/// layout, which is what decided not to draw them, and what a deeper zoom would draw them at (see
+/// <see cref="MapCeiling"/>).
 /// </param>
 public readonly record struct ExploreTile(
     int Node,

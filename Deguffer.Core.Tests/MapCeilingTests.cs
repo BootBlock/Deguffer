@@ -169,11 +169,24 @@ public sealed class MapCeilingTests
             $"a block with an item ten times smaller in it allowed {unevenCeiling}, against {evenCeiling} without");
     }
 
+    /// <summary>
+    /// A drawing says how far the map can zoom exactly where it can be zoomed at all: the map limits
+    /// the zoom of every drawing with a viewport by its ceiling, and has nothing to limit it by without.
+    /// </summary>
     [Theory]
-    [InlineData(ExploreView.Icicle)]
-    [InlineData(ExploreView.Sunburst)]
-    public void ADrawingThatCannotBeZoomedHasNoCeiling(ExploreView view) =>
-        Assert.Null(Draw(LongTail(), view, MapViewport.Whole).Ceiling);
+    [InlineData(ExploreView.Treemap, true)]
+    [InlineData(ExploreView.Icicle, false)]
+    [InlineData(ExploreView.Sunburst, false)]
+    public void ADrawingHasACeilingExactlyWhereItHasAViewport(ExploreView view, bool zooms)
+    {
+        foreach (var viewport in new[] { MapViewport.Whole, MapViewport.Anchored(100, 0.3, 0.3, 0.5, 0.5, 1000) })
+        {
+            var drawing = Draw(LongTail(), view, viewport);
+
+            Assert.Equal(zooms, drawing.Viewport is not null);
+            Assert.Equal(zooms, drawing.Ceiling is not null);
+        }
+    }
 
     private static ExploreSurface Draw(ExploreTree tree, ExploreView view, MapViewport viewport) =>
         ExploreSurface.Create(

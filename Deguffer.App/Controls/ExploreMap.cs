@@ -1041,7 +1041,7 @@ public sealed class ExploreMap : UserControl
         if (drawing.Viewport is { } viewport)
         {
             _drawn = viewport;
-            _zoom.Limit(drawing.Ceiling ?? MapCeiling.Least);
+            _zoom.Limit(drawing.Ceiling ?? throw new InvalidOperationException("A drawing that can be zoomed says how far."));
         }
         else
         {

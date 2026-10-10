@@ -180,7 +180,7 @@ public static class TreemapLayout
     }
 
     /// <summary>
-    /// How wide the smallest thing in <paramref name="node"/>, drawn as one block in
+    /// How wide the smallest thing directly in <paramref name="node"/>, drawn as one block in
     /// <paramref name="frame"/>, would be as a square: see <see cref="ExploreTile.Finest"/>. Zero for a
     /// file, and for a folder with nothing in it to draw.
     /// </summary>

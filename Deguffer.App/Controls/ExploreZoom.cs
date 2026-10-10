@@ -66,6 +66,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>What the tracker last reported, as it showed it, for where it comes to rest.</summary>
     private MapViewport _reported;
 
+    /// <summary>What the tracker last reported, as it reported it, before anything held it to the ceiling.</summary>
+    private MapTracking? _tracking;
+
     /// <summary>Whether the picture may stretch past its limits and coast, which is whether the reader has animation effects on.</summary>
     private bool _elastic;
 
@@ -532,8 +535,8 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
-        _reported = new MapTracking(args.Position.X, args.Position.Y, args.Scale, OriginFor(args.RequestId))
-            .Shown(_size.Width, _size.Height, _elastic, _ceiling);
+        _tracking = new MapTracking(args.Position.X, args.Position.Y, args.Scale, OriginFor(args.RequestId));
+        _reported = _tracking.Value.Shown(_size.Width, _size.Height, _elastic, _ceiling);
 
         // A hand's report from before the tracker answered a move of the origin: the camera is held,
         // so the screen still shows what it did. Where the tracker is goes on being kept, for a move
@@ -572,9 +575,33 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
+        var before = _ceiling;
+
         _ceiling = ceiling;
         _tracker.MaxScale = (float)ceiling;
         _camera.Limit(ceiling);
+
+        // For a reader who has turned animation effects off, the camera shows the tracker held to the
+        // ceiling, so a new one moves the screen at once wherever the tracker is past either: a pinch
+        // gives a little past the ceiling under the hand. What the map takes the screen to show has to
+        // move with it, or a click is resolved through the zoom the screen showed before (§7.1). Held
+        // to both ceilings alike, the screen has not moved, and nothing changes.
+        if (_elastic
+            || !HasSize
+            || _tracking is not { } tracking
+            || Math.Min(tracking.Scale, before) == Math.Min(tracking.Scale, ceiling))
+        {
+            return;
+        }
+
+        _reported = tracking.Shown(_size.Width, _size.Height, elastic: false, ceiling);
+
+        // A drag and a move of the origin say what the screen shows themselves, as in ValuesChanged.
+        if (_move is null && _stretch is null)
+        {
+            Shown = _requests.Where(_reported);
+            Moved?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>The camera came to rest where the screen shows: measure from there if it is far from the origin, then say so.</summary>

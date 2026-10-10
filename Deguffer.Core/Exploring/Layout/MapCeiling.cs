@@ -6,7 +6,9 @@ namespace Deguffer.Core.Exploring.Layout;
 /// <para>A drawing knows what in view it could not draw one by one: the block standing in for items
 /// too small to draw, and a folder too small to frame (<see cref="ExploreTile.Finest"/>). While there
 /// is any, a deeper zoom reveals new shapes, so the ceiling is above the zoom on screen, as deep as
-/// the smallest of those items needs to be drawn (see <see cref="Rendering.ExploreSurface.Ceiling"/>).
+/// the smallest of the items directly in them needs to be drawn (see
+/// <see cref="Rendering.ExploreSurface.Ceiling"/>). A folder among those items opens there, and the
+/// drawing made there measures what it holds.
 /// Once everything in view is drawn, the ceiling is where the smallest shape in view has room for its
 /// name, which is where the zoom is once every shape has: past that a deeper zoom only magnifies
 /// shapes already drawn and named. Each drawing sets it afresh, so it rises as the reader zooms into

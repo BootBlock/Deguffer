@@ -261,8 +261,8 @@ public abstract class ExploreSurface
     public MapViewport? Viewport { get; }
 
     /// <summary>
-    /// How far the map can zoom while this drawing is on screen, or null where it cannot be zoomed
-    /// (see <see cref="MapCeiling"/>).
+    /// How far the map can zoom while this drawing is on screen, or null where it cannot be zoomed:
+    /// null exactly where <see cref="Viewport"/> is (see <see cref="MapCeiling"/>).
     ///
     /// <para>Said by the drawing because only it knows what in view it could not draw one by one, and
     /// how small what it drew is, and what it drew is what the screen shows: a ceiling worked out from
