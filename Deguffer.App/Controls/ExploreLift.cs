@@ -50,7 +50,7 @@ internal sealed class ExploreLift
     {
         _graphics = graphics;
 
-        _drawing = Unstretched(compositor.CreateSurfaceBrush());
+        _drawing = compositor.CreateUnstretchedBrush();
 
         _shape = compositor.CreatePathGeometry(graphics.Nothing);
         var fill = compositor.CreateSpriteShape(_shape);
@@ -62,7 +62,7 @@ internal sealed class ExploreLift
 
         var masked = compositor.CreateMaskBrush();
         masked.Source = _drawing;
-        masked.Mask = Unstretched(compositor.CreateSurfaceBrush(_maskSurface));
+        masked.Mask = compositor.CreateUnstretchedBrush(_maskSurface);
 
         _sprite = compositor.CreateSpriteVisual();
         _sprite.Brush = masked;
@@ -114,15 +114,6 @@ internal sealed class ExploreLift
         _placed.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
     }
 
-    /// <summary>One surface pixel to one unit of the visual, from its top-left corner.</summary>
-    private static CompositionSurfaceBrush Unstretched(CompositionSurfaceBrush brush)
-    {
-        brush.Stretch = CompositionStretch.None;
-        brush.HorizontalAlignmentRatio = 0;
-        brush.VerticalAlignmentRatio = 0;
-
-        return brush;
-    }
 
     private void Unmagnified(Compositor compositor, MapCamera camera, CompositionObject target, string property, string expression)
     {

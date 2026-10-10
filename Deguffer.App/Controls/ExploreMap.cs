@@ -371,6 +371,7 @@ public sealed class ExploreMap : UserControl
         _descent.Midway += OnDescentMidway;
         _descent.Arrived += OnDescentArrived;
         _shift.Arrived += OnShiftArrived;
+        _pictures.Faded += (_, _) => ReportWhatThePointerIsOver();
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -791,8 +792,9 @@ public sealed class ExploreMap : UserControl
         }
 
         // The overview of the place left goes with it, rather than standing for this one until its
-        // whole drawing arrives. A change of folder has drawn into the other set, which has none.
-        if (another)
+        // whole drawing arrives. A change of folder has drawn into the other set, which has none. The
+        // same place laid out again keeps it until its own replaces it, as it keeps the zoom.
+        if (another && !samePlace)
         {
             _pictures.ForgetOverview();
         }
@@ -1522,10 +1524,15 @@ public sealed class ExploreMap : UserControl
         ActualWidth <= 0 || ActualHeight <= 0 || Stepping || _overview.Covers(point)
             ? null
             : MapHitTest.Locate(
-                _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing, _arriving, _tree);
+                _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing,
+                _shiftOwed ? null : _arriving,
+                _tree);
 
-    /// <summary>Whether a change of folder is flying, or waiting for the picture it is to fly out to.</summary>
-    private bool Stepping => _descent.IsMoving || _awaitingOuter || _shift.IsMoving;
+    /// <summary>
+    /// Whether the screen is between two pictures: a change of folder flying or waiting for the
+    /// picture it is to fly out to, shapes moving to a new layout, or a new drawing fading in.
+    /// </summary>
+    private bool Stepping => _descent.IsMoving || _awaitingOuter || _shift.IsMoving || _pictures.IsFading;
 
     /// <summary>
     /// Where the shape at <paramref name="spot"/> is on the screen, in fractions of it, or null where
@@ -2078,6 +2085,7 @@ public sealed class ExploreMap : UserControl
     private void SettleStep()
     {
         _shift.Finish();
+        _pictures.LandFades();
 
         if (_descent.IsMoving)
         {

@@ -91,6 +91,12 @@ internal sealed class ExploreLayers
     private int _fading;
 
     /// <summary>
+    /// How many times the crossfades under way were brought to their end at once (<see cref="LandFades"/>),
+    /// so a fade's own end, which comes later, does not count it a second time.
+    /// </summary>
+    private int _fadesLanded;
+
+    /// <summary>
     /// A small copy of the latest whole drawing to arrive, for the map's overview, kept until another
     /// replaces it or the map says the picture is of another place: see <see cref="Overview"/>.
     /// </summary>
@@ -182,6 +188,41 @@ internal sealed class ExploreLayers
     /// all of it has, for the same picture in a new look, so the old look turns into the new one rather
     /// than giving way to it a region at a time. <see cref="Motion.Instant"/> lands it as it is painted.
     /// </param>
+    /// <summary>
+    /// Whether a drawing is still fading in over the ones before it: the screen shows two drawings at
+    /// once, and a point on it is in neither of them alone (§7.1).
+    /// </summary>
+    public bool IsFading => _fading > 0;
+
+    /// <summary>Raised when the last crossfade under way has run its course.</summary>
+    public event EventHandler? Faded;
+
+    /// <summary>
+    /// Bring every crossfade under way to its end at once, for an input that needs the screen settled
+    /// first: the drawing on top covers it, and the ones it was fading in over go.
+    /// </summary>
+    public void LandFades()
+    {
+        if (_fading == 0 || _current is not { } current)
+        {
+            return;
+        }
+
+        _fading = 0;
+        _fadesLanded++;
+
+        current.Sprite.StopAnimation(nameof(Visual.Opacity));
+        current.Sprite.Opacity = 1;
+
+        foreach (var other in _layers)
+        {
+            if (other.Picture < current.Picture && other.Landing is null)
+            {
+                Hide(other);
+            }
+        }
+    }
+
     public ICanvasRedrawTarget Arrival(bool onTop, Action<ExploreSurface> arrived, Motion fade) =>
         new Landing(this, onTop, arrived, onTop ? fade : Motion.Instant);
 
@@ -569,16 +610,22 @@ internal sealed class ExploreLayers
             fading.End();
             layers._fading++;
 
+            var landed = layers._fadesLanded;
+
             fading.Completed += (_, _) =>
             {
-                layers._fading--;
-
                 foreach (var other in layers._layers)
                 {
                     if (other.Picture < layer.Picture && other != layers._current && other.Landing is null)
                     {
                         Hide(other);
                     }
+                }
+
+                // Brought to its end already, and counted then.
+                if (landed == layers._fadesLanded && --layers._fading == 0)
+                {
+                    layers.Faded?.Invoke(layers, EventArgs.Empty);
                 }
             };
         }

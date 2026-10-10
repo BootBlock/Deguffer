@@ -28,12 +28,8 @@ internal sealed class ExploreLayer
         _graphics = graphics;
         _surface = graphics.CreateSurface(1, 1);
 
-        // One surface pixel to one unit of the sprite, from its top-left corner. The sprite's own
-        // scale is what places the canvas in the picture, so the brush stretches nothing itself.
-        _brush = compositor.CreateSurfaceBrush(_surface);
-        _brush.Stretch = CompositionStretch.None;
-        _brush.HorizontalAlignmentRatio = 0;
-        _brush.VerticalAlignmentRatio = 0;
+        // The sprite's own scale is what places the canvas in the picture.
+        _brush = compositor.CreateUnstretchedBrush(_surface);
 
         Sprite = compositor.CreateSpriteVisual();
         Sprite.Brush = _brush;

@@ -53,8 +53,7 @@ internal sealed class ExploreShift
     /// <summary>
     /// Move <paramref name="travels"/> as <paramref name="motion"/> says, each showing
     /// <paramref name="earlier"/> or <paramref name="later"/>, two drawings on a canvas that lies at
-    /// <paramref name="placed"/> in the picture. Nothing moves for a motion that does not travel: the
-    /// new layout fades in place.
+    /// <paramref name="placed"/> in the picture, over <paramref name="motion"/>, which travels.
     /// </summary>
     public void Start(
         IReadOnlyList<ShapeTravel> travels,
@@ -64,11 +63,6 @@ internal sealed class ExploreShift
         Motion motion)
     {
         Finish();
-
-        if (travels.Count == 0 || !motion.Travels || motion.IsInstant)
-        {
-            return;
-        }
 
         _placed.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
         _placed.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
@@ -95,7 +89,10 @@ internal sealed class ExploreShift
         _moving = moving;
     }
 
-    /// <summary>End the move where it was going: the sprites go, leaving the later drawing.</summary>
+    /// <summary>
+    /// End the move where it was going: the sprites go. The crossfade under them is the layers' to
+    /// bring to its end (<see cref="ExploreLayers.LandFades"/>).
+    /// </summary>
     public void Finish()
     {
         if (_moving is null)
@@ -117,12 +114,9 @@ internal sealed class ExploreShift
 
     private SpriteVisual Sprite(ShapeTravel travel, ICompositionSurface surface, Motion motion)
     {
-        // One surface pixel to one unit of the sprite, read from the shape's corner, so the sprite is
-        // the shape's own rectangle of the drawing and nothing round it.
-        var brush = _compositor.CreateSurfaceBrush(surface);
-        brush.Stretch = CompositionStretch.None;
-        brush.HorizontalAlignmentRatio = 0;
-        brush.VerticalAlignmentRatio = 0;
+        // Read from the shape's corner, so the sprite is the shape's own rectangle of the drawing and
+        // nothing round it.
+        var brush = _compositor.CreateUnstretchedBrush(surface);
         brush.Offset = new Vector2(-(float)travel.Source.X, -(float)travel.Source.Y);
 
         var sprite = _compositor.CreateSpriteVisual();
