@@ -34,7 +34,7 @@ public sealed class TreemapZoomTests
     /// <summary>
     /// A shape running far off the canvas is cut a long way past it before it becomes single
     /// precision, so its edges stay small numbers at any zoom; one that runs past it by less than that
-    /// comes back whole, as every shape does at the zooms the map allows.
+    /// comes back whole, as every shape does up to the least ceiling.
     /// </summary>
     [Fact]
     public void AShapeFarOffTheCanvasIsCutBeforeItIsSinglePrecision()
