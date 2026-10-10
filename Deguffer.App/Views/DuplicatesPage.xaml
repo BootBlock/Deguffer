@@ -136,7 +136,7 @@
                 <TextBlock Text="{x:Bind ViewModel.Locations.Note, Mode=OneWay}" TextWrapping="Wrap"
                            Foreground="{ThemeResource SystemFillColorCautionBrush}" />
 
-                <ListView MaxHeight="150" SelectionMode="None"
+                <ListView x:Name="LocationsList" MaxHeight="150" SelectionMode="None"
                           AutomationProperties.Name="Locations to search"
                           ItemsSource="{x:Bind ViewModel.Locations.Rows}">
                     <ListView.ItemTemplate>
@@ -243,7 +243,7 @@
                   Header="{x:Bind ViewModel.NotesHeading, Mode=OneWay}"
                   AutomationProperties.Name="{x:Bind ViewModel.NotesHeading, Mode=OneWay}"
                   Visibility="{x:Bind ViewModel.HasNotes, Mode=OneWay}">
-            <ListView MaxHeight="180" SelectionMode="None" ItemsSource="{x:Bind ViewModel.Notes}"
+            <ListView x:Name="NotesList" MaxHeight="180" SelectionMode="None" ItemsSource="{x:Bind ViewModel.Notes}"
                       AutomationProperties.Name="Notes on what the search did not look at">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
@@ -304,7 +304,7 @@
 
             <!-- Groups arrive while the reader reads, each inserted where its space puts it. Keeping
                  the items in view holds the rows on screen still while one goes in above them. -->
-            <ListView Grid.Row="2" Grid.ColumnSpan="2" SelectionMode="None"
+            <ListView x:Name="GroupsList" Grid.Row="2" Grid.ColumnSpan="2" SelectionMode="None"
                       AutomationProperties.Name="Duplicate groups"
                       ItemsSource="{x:Bind ViewModel.Groups}"
                       ItemTemplate="{StaticResource GroupTemplate}"

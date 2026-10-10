@@ -57,29 +57,41 @@ public sealed class ItemFilter
     /// </summary>
     public IReadOnlyList<ItemGroup<T>> Showing<T>(IReadOnlyList<ItemGroup<T>> groups, Func<T, CleanupStep> stepOf)
     {
-        ArgumentNullException.ThrowIfNull(groups);
-        ArgumentNullException.ThrowIfNull(stepOf);
-
-        if (IsEmpty)
-        {
-            return groups;
-        }
-
+        var each = ShowingEach(groups, stepOf);
         List<ItemGroup<T>> shown = [];
 
-        foreach (var group in groups)
+        for (var at = 0; at < groups.Count; at++)
         {
-            List<T> items = [.. group.Items.Where(item => Matches(stepOf(item)))];
-
-            if (items.Count > 0)
+            if (each[at] is { } items)
             {
-                shown.Add(group with { Items = items });
+                shown.Add(IsEmpty ? groups[at] : groups[at] with { Items = items });
             }
         }
 
         return shown;
     }
 
+    /// <summary>
+    /// What this search shows under each of <paramref name="groups"/>, one entry for each in the same
+    /// order, and null for a group it drops (see <see cref="Showing"/>). For a list that keeps a heading
+    /// for every group and only shows or hides it, so the decision is made here and nowhere else.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<T>?> ShowingEach<T>(IReadOnlyList<ItemGroup<T>> groups, Func<T, CleanupStep> stepOf)
+    {
+        ArgumentNullException.ThrowIfNull(groups);
+        ArgumentNullException.ThrowIfNull(stepOf);
+
+        var each = new IReadOnlyList<T>?[groups.Count];
+
+        for (var at = 0; at < groups.Count; at++)
+        {
+            IReadOnlyList<T> items = IsEmpty ? groups[at].Items : [.. groups[at].Items.Where(item => Matches(stepOf(item)))];
+
+            each[at] = items.Count > 0 ? items : null;
+        }
+
+        return each;
+    }
     private static bool Mentions(CleanupStep step, string word)
     {
         if (Contains(step.Description, word))

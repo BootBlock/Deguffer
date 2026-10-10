@@ -42,6 +42,10 @@ public sealed partial class InstalledAppsPage : Page
 
         InitializeComponent();
 
+        ListAnimation.Play(StaleList, SystemMotion.Current);
+        ListAnimation.Play(InstalledList, SystemMotion.Current);
+        ListAnimation.Play(BackupList, SystemMotion.Current);
+
         NavigationCacheMode = NavigationCacheMode.Required;
         BackupsIntro = $"Backups Deguffer took before removing an entry, kept in {ViewModel.Actions.BackupFolder}. "
             + "Restoring one writes the entry back with reg.exe, and only where the entry is not already there.";

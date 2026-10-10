@@ -142,6 +142,10 @@ public sealed partial class ExplorePage : Page
 
         InitializeComponent();
 
+        ListAnimation.Play(RowsList, SystemMotion.Current);
+        ListAnimation.Play(GrowthList, SystemMotion.Current);
+        ListAnimation.Play(TypesList, SystemMotion.Current);
+
         _rowsMargin = RowsList.Margin;
 
         // Subscribed past the handled flag, because a ListViewItem marks the right-tap handled on

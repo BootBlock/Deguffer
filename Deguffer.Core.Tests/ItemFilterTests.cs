@@ -91,4 +91,33 @@ public class ItemFilterTests
         Assert.Equal("Work", only.Name);
         Assert.Equal([web, api], only.Items);
     }
+
+    /// <summary>
+    /// A list that keeps a heading for every group is told, for each, what to show under it, and null
+    /// for a heading the search drops. Read from anything less, a heading the search emptied would stay
+    /// on screen over nothing, or one it filled would be left out.
+    /// </summary>
+    [Fact]
+    public void ShowingEachAnswersForEveryGroupAndDropsOneLeftWithNothing()
+    {
+        var api = Build("billing-api", "Work");
+        var web = Build("billing-web", "Work");
+        var docs = Build("docs", "Personal");
+        var bills = Build("billing-home", "Home");
+
+        ItemGroup<CleanupStep>[] groups =
+        [
+            new("Work", [web, api]),
+            new("Personal", [docs]),
+            new("Home", [bills]),
+        ];
+
+        var each = new ItemFilter("billing").ShowingEach(groups, step => step);
+
+        Assert.Equal(3, each.Count);
+        Assert.Equal([web, api], each[0]);
+        Assert.Null(each[1]);
+        Assert.Equal([bills], each[2]);
+        Assert.Equal([[docs]], new ItemFilter(null).ShowingEach(groups, step => step).Skip(1).Take(1));
+    }
 }

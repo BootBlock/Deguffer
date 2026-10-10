@@ -1,11 +1,12 @@
+using System.Collections.Specialized;
 using Deguffer.App.ViewModels;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// How a row's item list stays in step with the row: its figures, its headings, the order it
-/// announces a new search in, and letting go of the row when it closes. The ordering, the search and
+/// How a row's item list stays in step with the row: its figures, its headings, a search changing
+/// only the rows it hides or brings back, and letting go of the row when it closes. The ordering, the search and
 /// the tri-state checkboxes are Core's; see <see cref="Core.Choosing.ItemSelection"/>.
 /// </summary>
 public class ItemListViewModelTests
@@ -67,26 +68,40 @@ public class ItemListViewModelTests
     }
 
     /// <summary>
-    /// A listener to the groups reads the flat list beside them, so the flat list is in place first. The
-    /// other order hands that listener the previous search's items.
+    /// A search changes only the rows it hides or brings back, in place. A list handed over afresh for
+    /// each keystroke throws away every row on screen, and the rows a search keeps would flash rather
+    /// than stay where they are.
     /// </summary>
     [Fact]
-    public void ANewSearchIsInPlaceBeforeItsGroupsAreAnnounced()
+    public void ASearchHidesAndBringsBackOnlyTheRowsItChanges()
     {
-        var row = Rows.Row(Rows.Found(Workspaces, Rows.Folder("alpha", 10), Rows.Folder("beta", 10)));
+        var row = Rows.Row(Rows.Found(
+            Workspaces,
+            Rows.Folder("alpha", 10, group: "Projects"),
+            Rows.Folder("beta", 10, group: "Projects"),
+            Rows.Folder("gamma", 10, group: "Caches")));
         using var list = new ItemListViewModel(row);
-        var seen = new List<int>();
-        list.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(ItemListViewModel.Shown))
-            {
-                seen.Add(list.ShownItems.Count);
-            }
-        };
+        var projects = list.Shown[0];
+        StepViewModel[] before = [.. projects];
+        var items = new List<NotifyCollectionChangedAction>();
+        var headings = new List<NotifyCollectionChangedAction>();
+        var underProjects = new List<NotifyCollectionChangedAction>();
+        list.ShownItems.CollectionChanged += (_, e) => items.Add(e.Action);
+        list.Shown.CollectionChanged += (_, e) => headings.Add(e.Action);
+        projects.CollectionChanged += (_, e) => underProjects.Add(e.Action);
 
         list.Query = "beta";
 
-        Assert.Equal([1], seen);
+        Assert.Equal([NotifyCollectionChangedAction.Remove, NotifyCollectionChangedAction.Remove], items);
+        Assert.Equal([NotifyCollectionChangedAction.Remove], headings);
+        Assert.Equal([NotifyCollectionChangedAction.Remove], underProjects);
+        Assert.Same(projects, Assert.Single(list.Shown));
+
+        list.Query = string.Empty;
+
+        Assert.Equal(["Projects", "Caches"], list.Shown.Select(group => group.Title));
+        Assert.Same(projects, list.Shown[0]);
+        Assert.Equal(before, projects);
     }
 
     /// <summary>

@@ -57,6 +57,10 @@ public sealed partial class DuplicatesPage : Page
 
         InitializeComponent();
 
+        ListAnimation.Play(LocationsList, SystemMotion.Current);
+        ListAnimation.Play(NotesList, SystemMotion.Current);
+        ListAnimation.Play(GroupsList, SystemMotion.Current);
+
         NavigationCacheMode = NavigationCacheMode.Required;
         Loaded += OnLoaded;
     }

@@ -65,6 +65,17 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(200), Travels: false),
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
+    /// <summary>
+    /// A bound list changing under the reader: a row arriving fades and slides in, one leaving fades
+    /// out as the rows below glide into its space, and one the sort moved glides to its new place
+    /// (see <see cref="ListMotion"/>). With motion off nothing glides or slides, because the rows
+    /// would only travel a row's height or two and land where a jump puts them, but a row still fades
+    /// in or out, so the reader can see that it came or went.
+    /// </summary>
+    public static MotionToken List { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(200), Travels: true),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
     /// <summary>How this plays, given whether the reader has animation effects on.</summary>
     public Motion For(bool animationsEnabled) => animationsEnabled ? Full : Reduced;
 }

@@ -1,7 +1,9 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
 
@@ -23,6 +25,9 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
     /// </summary>
     private readonly IReadOnlyList<ItemGroup<StepViewModel>> _ordered;
 
+    /// <summary>A heading for each of <see cref="_ordered"/>, kept for as long as the list is open.</summary>
+    private readonly IReadOnlyList<ItemGroupViewModel> _headings;
+
     private ItemFilter _filter = new(null);
 
     public ItemListViewModel(FindingViewModel row)
@@ -30,8 +35,9 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
         Row = row;
         _ordered = ItemGroups.Of(row.Steps, step => step.Step);
         IsGrouped = _ordered.Any(group => group.Name is not null);
+        _headings = [.. _ordered.Select(group => new ItemGroupViewModel(row, group.Name))];
 
-        Present(_ordered);
+        Present();
 
         // A tick, a group click, a keep and a release all reach the row, and the row raises this once
         // for each of them, which is when every checkbox and figure here has to follow.
@@ -49,16 +55,17 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string Query { get; set; } = string.Empty;
 
-    /// <summary>The groups the search leaves on screen, each holding only the items it shows.</summary>
-    [ObservableProperty]
-    public partial IReadOnlyList<ItemGroupViewModel> Shown { get; private set; } = [];
+    /// <summary>
+    /// The groups the search leaves on screen, each holding only the items it shows. Brought up to
+    /// date in place, as every bound list is, so a search moves only the rows it hides or brings back.
+    /// </summary>
+    public ObservableCollection<ItemGroupViewModel> Shown { get; } = [];
 
     /// <summary>
     /// The same items without their headings: what a list with no headings shows, and what the
-    /// checkbox over the whole list covers. Assigned before <see cref="Shown"/>, so a listener to that
-    /// change reads a matching value here.
+    /// checkbox over the whole list covers.
     /// </summary>
-    public IReadOnlyList<StepViewModel> ShownItems { get; private set; } = [];
+    public ObservableCollection<StepViewModel> ShownItems { get; } = [];
 
     public bool HasNoMatches => ShownItems.Count == 0;
 
@@ -101,18 +108,24 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
     partial void OnQueryChanged(string value)
     {
         _filter = new ItemFilter(value);
-        Present(_filter.Showing(_ordered, step => step.Step));
+        Present();
     }
 
-    private void Present(IReadOnlyList<ItemGroup<StepViewModel>> groups)
+    /// <summary>Bring the headings and the items on screen to what the search shows, in place.</summary>
+    private void Present()
     {
-        ShownItems = [.. groups.SelectMany(group => group.Items)];
-        Shown = [.. groups.Select(group => new ItemGroupViewModel(Row, group))];
+        var each = _filter.ShowingEach(_ordered, step => step.Step);
 
-        OnPropertyChanged(nameof(ShownItems));
+        for (var at = 0; at < _headings.Count; at++)
+        {
+            _headings[at].Show(each[at] ?? []);
+        }
+
+        LiveList.Show(ShownItems, [.. each.SelectMany(items => items ?? [])], step => step);
+        LiveList.Show(Shown, [.. _headings.Where((_, at) => each[at] is not null)], heading => heading);
         OnPropertyChanged(nameof(HasNoMatches));
 
-        // Each heading works out its own checkbox as it is built, so what is left is the list's own.
+        // Each heading works out its own checkbox as it is shown, so what is left is the list's own.
         RefreshFigures();
     }
 

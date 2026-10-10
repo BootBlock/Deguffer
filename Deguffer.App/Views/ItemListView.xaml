@@ -254,7 +254,7 @@
                                                TextTrimming="CharacterEllipsis" />
 
                                     <TextBlock Grid.Column="2"
-                                               Text="{x:Bind Summary}"
+                                               Text="{x:Bind Summary, Mode=OneWay}"
                                                Style="{StaticResource SecondaryText}"
                                                FontSize="12"
                                                TextWrapping="NoWrap"
