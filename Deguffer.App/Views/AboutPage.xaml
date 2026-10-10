@@ -3,181 +3,212 @@
     x:Class="Deguffer.App.Views.AboutPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Deguffer.App.Controls"
     Background="Transparent">
 
-    <ScrollViewer Padding="28,8,28,28">
-        <StackPanel Spacing="10" MaxWidth="720" HorizontalAlignment="Left">
+    <Page.Resources>
+        <!-- The page's cards stand over a starfield, so they take a solid fill rather than the
+             translucent layer fill every other page's cards take over the backdrop: a star behind a
+             line of text would show through the layer, and the text is what the page is for (§6.5).
+             The tertiary solid fill is the colour the layer fill comes to over the window's own. -->
+        <Style x:Key="SolidCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+            <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorTertiaryBrush}" />
+        </Style>
+    </Page.Resources>
 
-            <TextBlock Text="About" Style="{StaticResource PageTitle}" Margin="0,0,0,6" />
+    <!-- The header is a row of its own, outside the scroller, so the starfield in the row below is
+         never behind its words, and every other word on the page is on a card. -->
+    <Grid RowDefinitions="Auto,*">
 
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="6">
-                    <!-- The version belongs with the build date and the architecture in the card
-                         below, not beside the name as well; the same number twice, two lines
-                         apart, only invites the reader to check whether it is the same number. -->
-                    <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" />
+        <!-- First, so it is read first, and drawn above the row below so the mark passes over the cards
+             as it flies in out of the stars behind them. -->
+        <StackPanel Grid.Row="0" Canvas.ZIndex="1" Orientation="Horizontal" Spacing="12" Margin="28,8,28,16">
+            <!-- Decoded at the size it settles at, in the reader's own pixels: the source is the
+                 256px master. -->
+            <Image x:Name="Mark" Width="32" Height="32" VerticalAlignment="Center"
+                   AutomationProperties.AccessibilityView="Raw">
+                <Image.Source>
+                    <BitmapImage UriSource="ms-appx:///Assets/Deguffer-256.png"
+                                 DecodePixelType="Logical" DecodePixelWidth="32" DecodePixelHeight="32" />
+                </Image.Source>
+            </Image>
+            <TextBlock Text="About" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
+        </StackPanel>
 
-                    <TextBlock Style="{StaticResource SecondaryText}"
-                               Text="Reclaims disk space by recognising what specific locations on your disk actually are, and telling you what each one costs to lose before you agree to lose it." />
-                </StackPanel>
-            </Border>
+        <controls:Starfield x:Name="Field" Grid.Row="1" />
 
-            <!-- Directly under the name, because "which build is this" is what an about box is
-                 asked first, and the links belong beside it rather than at the foot of a page
-                 nobody scrolls to. -->
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="16">
-                    <Grid ColumnSpacing="20" RowSpacing="8" ColumnDefinitions="Auto,*"
-                          RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+        <ScrollViewer Grid.Row="1" Padding="28,0,28,28">
+            <StackPanel Spacing="10" MaxWidth="720" HorizontalAlignment="Left">
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Version"
-                                   Style="{StaticResource FieldLabel}" />
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Version}"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="Wrap" />
+                <Border Style="{StaticResource SolidCardStyle}">
+                    <StackPanel Spacing="6">
+                        <!-- The version belongs with the build date and the architecture in the card
+                             below, not beside the name as well; the same number twice, two lines
+                             apart, only invites the reader to check whether it is the same number. -->
+                        <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" />
 
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Built"
-                                   Style="{StaticResource FieldLabel}" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind BuildDate}"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource SecondaryText}"
+                                   Text="Reclaims disk space by recognising what specific locations on your disk actually are, and telling you what each one costs to lose before you agree to lose it." />
+                    </StackPanel>
+                </Border>
 
-                        <!-- The architecture is meaningless to most readers on its own, so the
-                             explanation has to reach every one of them. A TextBlock cannot take
-                             focus, so a tooltip on one serves a pointer and nobody else, which is
-                             why the value sits in a tab-stoppable ContentControl: the tooltip then
-                             opens on keyboard focus as well as on hover, and the sentence is
-                             HelpText on that one element. On both elements it would be announced
-                             twice. The label keeps a tooltip of its own because a pointer lands on
-                             the word as readily as on the value, and a duplicate tooltip string,
-                             unlike a duplicate HelpText, is only ever shown one at a time. -->
-                        <TextBlock x:Name="ArchitectureLabel"
-                                   Grid.Row="2" Grid.Column="0" Text="Architecture"
-                                   Style="{StaticResource FieldLabel}"
-                                   ToolTipService.ToolTip="{x:Bind ArchitectureExplanation}" />
-                        <ContentControl Grid.Row="2" Grid.Column="1"
-                                        IsTabStop="True"
-                                        UseSystemFocusVisuals="True"
-                                        HorizontalAlignment="Left"
-                                        VerticalAlignment="Center"
-                                        ToolTipService.ToolTip="{x:Bind ArchitectureExplanation}"
-                                        AutomationProperties.LabeledBy="{x:Bind ArchitectureLabel}"
-                                        AutomationProperties.HelpText="{x:Bind ArchitectureExplanation}">
-                            <TextBlock Text="{x:Bind Architecture}"
+                <!-- Directly under the name, because "which build is this" is what an about box is
+                     asked first, and the links belong beside it rather than at the foot of a page
+                     nobody scrolls to. -->
+                <Border Style="{StaticResource SolidCardStyle}">
+                    <StackPanel Spacing="16">
+                        <Grid ColumnSpacing="20" RowSpacing="8" ColumnDefinitions="Auto,*"
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Version"
+                                       Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Version}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        TextWrapping="Wrap" />
-                        </ContentControl>
 
-                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Author"
-                                   Style="{StaticResource FieldLabel}" />
-                        <TextBlock Grid.Row="3" Grid.Column="1" Text="Joe Cox"
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Built"
+                                       Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind BuildDate}"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="Wrap" />
+
+                            <!-- The architecture is meaningless to most readers on its own, so the
+                                 explanation has to reach every one of them. A TextBlock cannot take
+                                 focus, so a tooltip on one serves a pointer and nobody else, which is
+                                 why the value sits in a tab-stoppable ContentControl: the tooltip then
+                                 opens on keyboard focus as well as on hover, and the sentence is
+                                 HelpText on that one element. On both elements it would be announced
+                                 twice. The label keeps a tooltip of its own because a pointer lands on
+                                 the word as readily as on the value, and a duplicate tooltip string,
+                                 unlike a duplicate HelpText, is only ever shown one at a time. -->
+                            <TextBlock x:Name="ArchitectureLabel"
+                                       Grid.Row="2" Grid.Column="0" Text="Architecture"
+                                       Style="{StaticResource FieldLabel}"
+                                       ToolTipService.ToolTip="{x:Bind ArchitectureExplanation}" />
+                            <ContentControl Grid.Row="2" Grid.Column="1"
+                                            IsTabStop="True"
+                                            UseSystemFocusVisuals="True"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            ToolTipService.ToolTip="{x:Bind ArchitectureExplanation}"
+                                            AutomationProperties.LabeledBy="{x:Bind ArchitectureLabel}"
+                                            AutomationProperties.HelpText="{x:Bind ArchitectureExplanation}">
+                                <TextBlock Text="{x:Bind Architecture}"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                           TextWrapping="Wrap" />
+                            </ContentControl>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Author"
+                                       Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="Joe Cox"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Built in"
+                                       Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="Scunthorpe, England"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="Wrap" />
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="18">
+                            <HyperlinkButton Content="GitHub repository"
+                                             NavigateUri="https://github.com/BootBlock/Deguffer"
+                                             Padding="0" />
+                            <HyperlinkButton Content="bootblock.co.uk"
+                                             NavigateUri="https://bootblock.co.uk"
+                                             Padding="0" />
+                            <HyperlinkButton Content="BootBlock on GitHub"
+                                             NavigateUri="https://github.com/BootBlock?tab=repositories"
+                                             Padding="0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Diagnostic, because it is the difference between a scan that takes seconds and one
+                     that takes minutes, and there is otherwise nowhere to find out which one you got. -->
+                <Border Style="{StaticResource SolidCardStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Scanning" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind ScanMode}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    TextWrapping="Wrap" />
-
-                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Built in"
-                                   Style="{StaticResource FieldLabel}" />
-                        <TextBlock Grid.Row="4" Grid.Column="1" Text="Scunthorpe, England"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="Wrap" />
-                    </Grid>
-
-                    <StackPanel Orientation="Horizontal" Spacing="18">
-                        <HyperlinkButton Content="GitHub repository"
-                                         NavigateUri="https://github.com/BootBlock/Deguffer"
-                                         Padding="0" />
-                        <HyperlinkButton Content="bootblock.co.uk"
-                                         NavigateUri="https://bootblock.co.uk"
-                                         Padding="0" />
-                        <HyperlinkButton Content="BootBlock on GitHub"
-                                         NavigateUri="https://github.com/BootBlock?tab=repositories"
-                                         Padding="0" />
                     </StackPanel>
-                </StackPanel>
-            </Border>
+                </Border>
 
-            <!-- Diagnostic, because it is the difference between a scan that takes seconds and one
-                 that takes minutes, and there is otherwise nowhere to find out which one you got. -->
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Scanning" Style="{StaticResource FieldLabel}" />
-                    <TextBlock Text="{x:Bind ScanMode}"
-                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+                <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
+                    <StackPanel Spacing="14">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="The safety tiers" Style="{StaticResource SectionHeading}" FontSize="15" />
+                            <TextBlock Style="{StaticResource SecondaryText}"
+                                       FontSize="13"
+                                       Text="Every finding is classified before it is offered. Sizes are easy to compute; this classification is the part that takes knowledge, and it is what the tool is for." />
+                        </StackPanel>
 
-            <TextBlock Text="The safety tiers" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
-            <TextBlock Style="{StaticResource SecondaryText}"
-                       FontSize="13"
-                       Text="Every finding is classified before it is offered. Sizes are easy to compute; this classification is the part that takes knowledge, and it is what the tool is for." />
+                        <StackPanel Spacing="4">
+                            <ContentControl Content="Regenerable cache"
+                                            AutomationProperties.Name="Regenerable cache"
+                                            Style="{StaticResource TierChipRegenerableCache}"
+                                            HorizontalAlignment="Left" />
+                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                       Text="{x:Bind RegenerableCacheExplanation}" />
+                        </StackPanel>
 
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="14">
+                        <StackPanel Spacing="4">
+                            <ContentControl Content="Regenerable, with cost"
+                                            AutomationProperties.Name="Regenerable, with cost"
+                                            Style="{StaticResource TierChipRegenerableWithCost}"
+                                            HorizontalAlignment="Left" />
+                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                       Text="{x:Bind RegenerableWithCostExplanation}" />
+                        </StackPanel>
 
-                    <StackPanel Spacing="4">
-                        <ContentControl Content="Regenerable cache"
-                                        AutomationProperties.Name="Regenerable cache"
-                                        Style="{StaticResource TierChipRegenerableCache}"
-                                        HorizontalAlignment="Left" />
+                        <StackPanel Spacing="4">
+                            <ContentControl Content="User data"
+                                            AutomationProperties.Name="User data"
+                                            Style="{StaticResource TierChipUserData}"
+                                            HorizontalAlignment="Left" />
+                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                       Text="{x:Bind UserDataExplanation}" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <ContentControl Content="Do not touch"
+                                            AutomationProperties.Name="Do not touch"
+                                            Style="{StaticResource TierChipDoNotTouch}"
+                                            HorizontalAlignment="Left" />
+                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                                       Text="{x:Bind DoNotTouchExplanation}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="What it will not do" Style="{StaticResource SectionHeading}" FontSize="15" />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="{x:Bind RegenerableCacheExplanation}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="4">
-                        <ContentControl Content="Regenerable, with cost"
-                                        AutomationProperties.Name="Regenerable, with cost"
-                                        Style="{StaticResource TierChipRegenerableWithCost}"
-                                        HorizontalAlignment="Left" />
+                                   Text="Nothing is removed until a scan has shown you what it is, and the exact steps are inspectable on every row before you agree to them." />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="{x:Bind RegenerableWithCostExplanation}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="4">
-                        <ContentControl Content="User data"
-                                        AutomationProperties.Name="User data"
-                                        Style="{StaticResource TierChipUserData}"
-                                        HorizontalAlignment="Left" />
+                                   Text="It asks a tool to clear its own cache wherever the tool offers that, rather than deleting the folder behind its back." />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="{x:Bind UserDataExplanation}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="4">
-                        <ContentControl Content="Do not touch"
-                                        AutomationProperties.Name="Do not touch"
-                                        Style="{StaticResource TierChipDoNotTouch}"
-                                        HorizontalAlignment="Left" />
+                                   Text="It never targets a tool's root directory — only the children it recognises, because configuration and credentials routinely sit beside the cache." />
                         <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                                   Text="{x:Bind DoNotTouchExplanation}" />
+                                   Text="After every run it checks that the paths it promised to protect are still there, and says so in the status line either way." />
+
+                        <!-- §8: undo is not viable at these sizes. Saying so plainly is the alternative
+                             to a UI that quietly implies it might be. -->
+                        <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextWrapping="Wrap"
+                                   FontSize="13"
+                                   Text="There is no undo. What you agree to is removed outright rather than moved anywhere first, so it is gone." />
                     </StackPanel>
-                </StackPanel>
-            </Border>
+                </Border>
 
-            <TextBlock Text="What it will not do" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
-
-            <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="10">
+                <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
                     <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                               Text="Nothing is removed until a scan has shown you what it is, and the exact steps are inspectable on every row before you agree to them." />
-                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                               Text="It asks a tool to clear its own cache wherever the tool offers that, rather than deleting the folder behind its back." />
-                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                               Text="It never targets a tool's root directory — only the children it recognises, because configuration and credentials routinely sit beside the cache." />
-                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                               Text="After every run it checks that the paths it promised to protect are still there, and says so in the status line either way." />
-
-                    <!-- §8: undo is not viable at these sizes. Saying so plainly is the alternative
-                         to a UI that quietly implies it might be. -->
-                    <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                               TextWrapping="Wrap"
-                               FontSize="13"
-                               Text="There is no undo. What you agree to is removed outright rather than moved anywhere first, so it is gone." />
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource CardStyle}" Margin="0,14,0,0">
-                <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
-                           Text="Open source under the MIT licence." />
-            </Border>
-        </StackPanel>
-    </ScrollViewer>
+                               Text="Open source under the MIT licence." />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </Page>

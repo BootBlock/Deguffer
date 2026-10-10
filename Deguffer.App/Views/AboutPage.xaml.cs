@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Deguffer.App.Shell;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml.Controls;
 using RuntimeArchitecture = System.Runtime.InteropServices.Architecture;
 
@@ -15,7 +16,28 @@ public sealed partial class AboutPage : Page
     /// </summary>
     private const string BuildDateKey = "BuildDate";
 
-    public AboutPage() => InitializeComponent();
+    /// <summary>
+    /// Whether the mark has flown in already while the app has been running. It flies once: the page
+    /// is built again on every visit, and a flourish played every time is one the reader has to wait
+    /// through every time.
+    /// </summary>
+    private static bool _markLanded;
+
+    public AboutPage()
+    {
+        InitializeComponent();
+
+        Loaded += (_, _) =>
+        {
+            if (_markLanded)
+            {
+                return;
+            }
+
+            _markLanded = true;
+            Field.Land(Mark, SystemMotion.Current.For(MotionToken.Mark));
+        };
+    }
 
     public string Version => AppVersion.Current;
 
