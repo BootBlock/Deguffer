@@ -1216,7 +1216,7 @@ public sealed class ExploreMap : UserControl
         // A step out flies now that there is a picture to pull back into, from the shape the folder
         // left has in it. One that does not draw that folder's branch has nothing to fly from. A step
         // through the folder now drawn flies on into the folder asked for, from its shape in the same
-        // drawing; a folder too small to have a shape in it fades rather than flies on its leg.
+        // drawing. A folder with no shape in it fades on its leg rather than flies (see MapPassage).
         if (_awaitingOuter)
         {
             _awaitingOuter = false;

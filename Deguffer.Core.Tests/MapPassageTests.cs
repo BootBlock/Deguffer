@@ -97,6 +97,24 @@ public sealed class MapPassageTests
         Assert.Equal(0.5, second.Opacity(in75), Precision);
     }
 
+    /// <summary>
+    /// A leg with no shape on the middle picture to fly from or to fades in place, with half the
+    /// flight, rather than being given none of it by having no distance to cover and so cut.
+    /// </summary>
+    [Fact]
+    public void ALegWithNoShapeFadesForHalfTheFlightRatherThanBeingCut()
+    {
+        var offScreen = new MapFrame(1.5, 0, 0.5, 0.5);
+        var passage = new MapPassage(new MapDescent(offScreen, Travels: true), new MapDescent(Going, Travels: true));
+
+        Assert.Equal(0.5, passage.Midway);
+
+        var (leg, along) = passage.At(0.25);
+
+        Assert.Equal(passage.Out, leg);
+        Assert.Equal(0.5, leg.Opacity(along), Precision);
+    }
+
     /// <summary>How far a leg zooms is the mean, over both axes, of how many times the shape is magnified to fill the screen.</summary>
     [Fact]
     public void ALegsDepthIsItsZoomAcrossBothAxes()

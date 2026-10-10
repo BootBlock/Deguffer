@@ -80,7 +80,7 @@ public readonly record struct MapDescent(MapFrame Shape, bool Travels)
     private MapFrame OnScreen => Shape.Clipped(MapFrame.Whole);
 
     /// <summary>Whether the pictures move at all: not where the motion stays in place, nor for a slot with nothing of it on screen.</summary>
-    private bool Flies => Travels && OnScreen is { Width: > 0, Height: > 0 };
+    public bool Flies => Travels && OnScreen is { Width: > 0, Height: > 0 };
 
     /// <summary>
     /// Where the outer picture's screen is on one axis at <paramref name="progress"/>, for a slot at

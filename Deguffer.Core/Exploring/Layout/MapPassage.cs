@@ -12,8 +12,9 @@ namespace Deguffer.Core.Exploring.Layout;
 ///
 /// <para>The time is shared out by how far each leg travels (<see cref="MapDescent.Depth"/>), so the
 /// camera keeps the same speed through the turn: pulling back out of a small folder and flying into a
-/// large one spends most of the flight on the way out. Legs that travel nothing, with motion off,
-/// share it equally: the first folder fades into the middle picture, which fades into the second.</para>
+/// large one spends most of the flight on the way out. Where a leg does not fly, with motion off or
+/// for a folder with no shape on the middle picture, the legs share it equally: that leg fades in
+/// place rather than being cut, and there is no speed to keep through the turn.</para>
 ///
 /// <para>The clock is the caller's: this says which leg a progress from 0, the first folder filling
 /// the screen, to 1, the second filling it, is on, and how far along that leg.</para>
@@ -27,7 +28,7 @@ public readonly record struct MapPassage(MapDescent Out, MapDescent In)
         {
             var whole = Out.Depth + In.Depth;
 
-            return whole > 0 ? Out.Depth / whole : 0.5;
+            return Out.Flies && In.Flies && whole > 0 ? Out.Depth / whole : 0.5;
         }
     }
 

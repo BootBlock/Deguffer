@@ -29,6 +29,12 @@ internal sealed class ExploreDescent
     private bool _pastMidway;
 
     /// <summary>
+    /// Whether the flight through a folder under way still goes on past the middle picture: not once it
+    /// was turned round on the way out, when it goes back to the folder it left.
+    /// </summary>
+    private bool _onward;
+
+    /// <summary>
     /// How far the flight is from the outer picture, at 0, to the inner one, at 1; or, through a
     /// folder, from the folder left, at 0, to the folder going to, at 1 (see <see cref="MapPassage"/>).
     /// </summary>
@@ -98,6 +104,7 @@ internal sealed class ExploreDescent
 
         _passage = new MapPassage(new MapDescent(outOf, motion.Travels), new MapDescent(into, motion.Travels));
         _pastMidway = false;
+        _onward = true;
         _playing = motion;
         _progress = Spring.At(0).Toward(1, now, motion);
 
@@ -107,8 +114,8 @@ internal sealed class ExploreDescent
     /// <summary>
     /// Go back the way the flight came, from where it is now and at the speed it has, for a reader
     /// who asked for the folder it left before it arrived. Nothing jumps: the spring carries its speed
-    /// into the turn. A flight through a folder goes back to where its leg under way began: the folder
-    /// it left, or, past the middle, the folder that holds both.
+    /// into the turn. A flight through a folder turns between the ends of its leg under way: the folder
+    /// it left and the middle picture, or, past the middle, the middle picture and the folder going to.
     /// </summary>
     public void Turn()
     {
@@ -118,9 +125,20 @@ internal sealed class ExploreDescent
         }
 
         var now = _clock.Now;
-        var back = _passage is { } passage
-            ? (_pastMidway ? passage.Midway : 0)
-            : 1 - _progress.Target;
+        double back;
+
+        if (_passage is { } passage)
+        {
+            var (start, end) = _pastMidway ? (passage.Midway, 1.0) : (0.0, passage.Midway);
+
+            back = _progress.Target == start ? end : start;
+        }
+        else
+        {
+            back = 1 - _progress.Target;
+        }
+
+        _onward &= _pastMidway;
 
         _progress = _progress.Toward(back, now, _playing);
 
@@ -187,15 +205,18 @@ internal sealed class ExploreDescent
 
         if (_passage is { } passage)
         {
-            // Turned round on the way out, the flight never reaches the middle picture: its spring
-            // comes to rest without passing where it is going.
-            if (!_pastMidway && progress >= passage.Midway)
+            if (_onward && !_pastMidway && progress >= passage.Midway)
             {
                 _pastMidway = true;
                 Midway?.Invoke(this, EventArgs.Empty);
             }
 
-            (path, along) = passage.At(progress);
+            // Turned round on the way out, the spring carries its speed on a little before it comes
+            // back, and can carry it past the middle: the way out holds there rather than going on into
+            // a folder no longer asked for. Midway is above 0 here, or the middle was passed at the start.
+            (path, along) = _onward || _pastMidway
+                ? passage.At(progress)
+                : (passage.Out, 1 - Math.Min(progress / passage.Midway, 1));
         }
 
         Inner = path.Inner(along);

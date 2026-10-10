@@ -3,7 +3,10 @@ namespace Deguffer.Core.Exploring.Layout;
 /// <summary>Which way the map moves from one folder of a tree to another. See <see cref="FolderSteps.Between"/>.</summary>
 public enum FolderStep
 {
-    /// <summary>The same folder drawn the same way: there is nowhere to fly.</summary>
+    /// <summary>
+    /// No flight: the same folder drawn the same way, and, to the map, a change it has no camera to
+    /// fly, such as one on an icicle or a sunburst.
+    /// </summary>
     Across,
 
     /// <summary>Into a folder this one holds, however deep: the camera flies into its shape.</summary>
