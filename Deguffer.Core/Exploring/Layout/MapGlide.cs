@@ -3,19 +3,36 @@ using Deguffer.Core.Viewing;
 namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
-/// One move of a zoom from where it is to where it was asked to go, started at
-/// <paramref name="Start"/> on whatever clock the caller keeps and played as <paramref name="Motion"/>
-/// says, which is <see cref="MotionToken.Camera"/>'s answer for the reader.
+/// One move of a map's camera from <paramref name="From"/> to <paramref name="To"/> that changes the
+/// zoom, as the compositor plays it: a scale about the still point <see cref="MapTracking.Pivot"/>
+/// finds, through the key frames <see cref="Zooms"/> gives.
 ///
-/// <para>A value started afresh for each turn of the wheel rather than a running animation with
-/// state, so a zoom asked for again mid-move begins from wherever the screen is at that moment and
-/// never jumps.</para>
+/// <para>Key frames rather than one eased step from end to end, because the zoom moves by equal
+/// ratios (see <see cref="MapViewport.Between"/>) and the compositor eases a value by equal steps. A
+/// zoom from 1 to 8 eased by steps spends most of its time on the last doubling, which reads as a
+/// lurch. Enough frames, each a straight step, follow the curve closely enough not to show.</para>
 /// </summary>
-public readonly record struct MapGlide(MapViewport From, MapViewport To, TimeSpan Start, Motion Motion)
+public readonly record struct MapGlide(MapViewport From, MapViewport To)
 {
-    /// <summary>Where the move is at <paramref name="now"/>.</summary>
-    public MapViewport At(TimeSpan now) => MapViewport.Between(From, To, Motion.At(Start, now));
+    /// <summary>How many straight steps the move is played in.</summary>
+    public const int Steps = 12;
 
-    /// <summary>Whether the move has arrived by <paramref name="now"/>.</summary>
-    public bool IsOverAt(TimeSpan now) => Motion.IsOverAt(Start, now);
+    /// <summary>
+    /// The zoom at each of <see cref="Steps"/> + 1 evenly spaced moments of the move, as a fraction of
+    /// its time from 0 to 1, eased as every camera move is (<see cref="Motion.Ease"/>).
+    /// </summary>
+    public IReadOnlyList<(double Time, double Zoom)> Zooms()
+    {
+        var ratio = To.Zoom / From.Zoom;
+        var frames = new (double Time, double Zoom)[Steps + 1];
+
+        for (var step = 0; step <= Steps; step++)
+        {
+            var time = step / (double)Steps;
+
+            frames[step] = (time, From.Zoom * Math.Pow(ratio, Motion.Ease(time)));
+        }
+
+        return frames;
+    }
 }

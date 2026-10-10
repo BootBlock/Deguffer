@@ -99,6 +99,38 @@ public readonly record struct MapViewport
         Within(Zoom, Left - (screenX / Zoom), Top - (screenY / Zoom));
 
     /// <summary>
+    /// This viewport magnified <paramref name="factor"/> times more about screen point
+    /// (<paramref name="screenX"/>, <paramref name="screenY"/>), so the thing there stays there, as
+    /// far as the picture's edges and the zoom's limits allow. See <see cref="Anchored"/>.
+    /// </summary>
+    public MapViewport ZoomedAt(double factor, double screenX, double screenY)
+    {
+        var (pictureX, pictureY) = PictureAt(screenX, screenY);
+
+        return Anchored(Zoom * factor, pictureX, pictureY, screenX, screenY);
+    }
+
+    /// <summary>
+    /// What a screen shows while a hand stretches the picture: magnified <paramref name="zoom"/> times
+    /// with its left and top edges at <paramref name="left"/> and <paramref name="top"/>, held to
+    /// nothing. A pinch can take the zoom a little past its limits and a pan can take the screen a
+    /// little past the picture's edge, and the picture springs back from there once it is let go
+    /// (<see cref="Held"/>), but until then a click is resolved against what the screen shows (§7.1).
+    /// </summary>
+    public static MapViewport Seen(double zoom, double left, double top)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(zoom);
+
+        return new MapViewport(zoom, left, top);
+    }
+
+    /// <summary>
+    /// Where this comes to rest: the zoom held between 1 and <see cref="MaximumZoom"/>, and the screen
+    /// held inside the picture. Itself for any viewport made by anything but <see cref="Seen"/>.
+    /// </summary>
+    public MapViewport Held => Within(Zoom, Left, Top);
+
+    /// <summary>
     /// The viewport a fraction <paramref name="progress"/> of the way from <paramref name="from"/> to
     /// <paramref name="to"/>.
     ///

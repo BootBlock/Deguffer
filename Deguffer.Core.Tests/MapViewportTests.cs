@@ -1,5 +1,4 @@
 using Deguffer.Core.Exploring.Layout;
-using Deguffer.Core.Viewing;
 
 namespace Deguffer.Core.Tests;
 
@@ -189,60 +188,6 @@ public sealed class MapViewportTests
 
         Assert.True(x < 0, $"a point left of the drawing came back at {x}");
         Assert.True(y > 1, $"a point below the drawing came back at {y}");
-    }
-
-    [Fact]
-    public void AGlideStartsWhereTheScreenIsAndArrivesWhereItWasAsked()
-    {
-        var from = MapViewport.Whole;
-        var to = MapViewport.Anchored(8, 0.2, 0.3, 0.5, 0.5);
-        var start = TimeSpan.FromSeconds(10);
-        var motion = MotionToken.Camera.Full;
-        var glide = new MapGlide(from, to, start, motion);
-
-        Assert.Equal(from, glide.At(start));
-        Assert.False(glide.IsOverAt(start + (motion.Duration / 2)));
-        Assert.True(glide.IsOverAt(start + motion.Duration));
-        Assert.Equal(to, glide.At(start + motion.Duration));
-        Assert.Equal(to, glide.At(start + (motion.Duration * 3)));
-    }
-
-    /// <summary>With animation effects off the camera jumps: it is where it was asked to go from the start.</summary>
-    [Fact]
-    public void WithMotionOffAGlideHasArrivedAsItStarts()
-    {
-        var to = MapViewport.Anchored(8, 0.2, 0.3, 0.5, 0.5);
-        var start = TimeSpan.FromSeconds(10);
-        var glide = new MapGlide(MapViewport.Whole, to, start, MotionToken.Camera.Reduced);
-
-        Assert.True(glide.IsOverAt(start));
-        Assert.Equal(to, glide.At(start));
-    }
-
-    /// <summary>
-    /// Eased out: most of the way there in the first half of the time, so the picture answers the
-    /// wheel at once and settles rather than lagging behind it.
-    /// </summary>
-    [Fact]
-    public void AGlideIsFastestAtTheStartAndNeverTurnsBack()
-    {
-        var to = MapViewport.Anchored(16, 0.5, 0.5, 0.5, 0.5);
-        var motion = MotionToken.Camera.Full;
-        var glide = new MapGlide(MapViewport.Whole, to, TimeSpan.Zero, motion);
-
-        var halfway = glide.At(motion.Duration / 2);
-
-        Assert.True(halfway.Zoom > MapViewport.Between(MapViewport.Whole, to, 0.5).Zoom, "the glide was not eased out");
-
-        var previous = 1.0;
-
-        for (var step = 0; step <= 25; step++)
-        {
-            var zoom = glide.At(motion.Duration * (step / 25.0)).Zoom;
-
-            Assert.True(zoom >= previous, $"the zoom went back from {previous} to {zoom}");
-            previous = zoom;
-        }
     }
 
     /// <summary>
@@ -457,6 +402,46 @@ public sealed class MapViewportTests
         Assert.Equal(1 / displayScale, onScreen.ScaleY, Precision);
         Assert.Equal(0, onScreen.X, Precision);
         Assert.Equal(0, onScreen.Y, Precision);
+    }
+
+    /// <summary>
+    /// What a stretched screen shows is kept as it is, past the edge and past the zoom's limits, so a
+    /// click lands on what is there; and it comes to rest held inside them.
+    /// </summary>
+    [Fact]
+    public void AStretchedViewportIsKeptAsItIsAndRestsInsideThePicture()
+    {
+        var seen = MapViewport.Seen(MapViewport.MaximumZoom * 1.2, -0.05, 0.999);
+
+        Assert.True(seen.Left < 0);
+        Assert.True(seen.Zoom > MapViewport.MaximumZoom);
+
+        var held = seen.Held;
+
+        Assert.Equal(MapViewport.MaximumZoom, held.Zoom);
+        Assert.Equal(0, held.Left);
+        Assert.Equal(1 - (1 / MapViewport.MaximumZoom), held.Top, Precision);
+    }
+
+    [Fact]
+    public void AViewportAlreadyInsideThePictureRestsWhereItIs()
+    {
+        var viewport = MapViewport.Anchored(6, 0.3, 0.4, 0.2, 0.7);
+
+        Assert.Equal(viewport, viewport.Held);
+    }
+
+    [Fact]
+    public void ZoomingByAFactorAtAPointKeepsWhatIsUnderItUnderIt()
+    {
+        var from = MapViewport.Anchored(3, 0.6, 0.4, 0.5, 0.5);
+        var under = from.PictureAt(0.25, 0.8);
+
+        var to = from.ZoomedAt(2.5, 0.25, 0.8);
+
+        Assert.Equal(7.5, to.Zoom, Precision);
+        Assert.Equal(under.X, to.PictureAt(0.25, 0.8).X, Precision);
+        Assert.Equal(under.Y, to.PictureAt(0.25, 0.8).Y, Precision);
     }
 
     private static void AssertInside(MapViewport viewport)

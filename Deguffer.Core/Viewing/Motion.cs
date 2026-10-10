@@ -28,7 +28,7 @@ public readonly record struct Motion(TimeSpan Duration, bool Travels)
     /// at <paramref name="now"/>.
     /// </summary>
     public double At(TimeSpan start, TimeSpan now) =>
-        IsInstant ? 1 : Eased(Math.Clamp((now - start) / Duration, 0, 1));
+        IsInstant ? 1 : Ease(Math.Clamp((now - start) / Duration, 0, 1));
 
     /// <summary>Whether an animation started at <paramref name="start"/> has arrived by <paramref name="now"/>.</summary>
     public bool IsOverAt(TimeSpan start, TimeSpan now) => IsInstant || now - start >= Duration;
@@ -45,6 +45,10 @@ public readonly record struct Motion(TimeSpan Duration, bool Travels)
     /// <summary>
     /// A cubic ease out: fastest at the start, settling into place. A move that starts at speed is
     /// the answer to the input that asked for it; one that eased in would lag behind the hand.
+    ///
+    /// <para>Public for a move the compositor plays through key frames of something other than the
+    /// eased value itself, as a zoom does: see <see cref="Exploring.Layout.MapGlide"/>.</para>
     /// </summary>
-    private static double Eased(double progress) => 1 - Math.Pow(1 - progress, 3);
+    /// <param name="progress">How far through the time it is, from 0 to 1.</param>
+    public static double Ease(double progress) => 1 - Math.Pow(1 - progress, 3);
 }
