@@ -30,9 +30,6 @@ public readonly record struct Motion(TimeSpan Duration, bool Travels)
     public double At(TimeSpan start, TimeSpan now) =>
         IsInstant ? 1 : Ease(Math.Clamp((now - start) / Duration, 0, 1));
 
-    /// <summary>Whether an animation started at <paramref name="start"/> has arrived by <paramref name="now"/>.</summary>
-    public bool IsOverAt(TimeSpan start, TimeSpan now) => IsInstant || now - start >= Duration;
-
     /// <summary>
     /// The same curve as a cubic Bézier's two inner control points, for an animation the compositor
     /// clocks rather than the app. Exactly the curve, not an approximation of it: a Bézier whose inner

@@ -433,6 +433,25 @@ public abstract class ExploreSurface
     public abstract ExploreTile? TileAt(float x, float y);
 
     /// <summary>
+    /// Where <paramref name="node"/> is drawn, in fractions of the canvas: its own rectangle, or where it
+    /// is not drawn one by one, the rectangle of the deepest folder above it that is, which is where
+    /// the screen shows it. Null where it is not under this drawing's root, or this drawing is not made
+    /// of rectangles.
+    /// </summary>
+    public abstract MapFrame? FrameOf(int node);
+
+    /// <summary>
+    /// Where a screen showing <paramref name="node"/> drawn on its own at <paramref name="opened"/>
+    /// lies on a screen showing this drawing at <paramref name="shown"/>, in fractions of the second:
+    /// the shape a change of folder on the map flies into, or pulls back out of. Null where this
+    /// drawing cannot be zoomed or does not draw the node's branch.
+    /// </summary>
+    public MapFrame? ScreenOf(int node, MapViewport shown, MapViewport opened) =>
+        Viewport is { } drawn && FrameOf(node) is { } frame
+            ? shown.PlacementOf(drawn).OnScreen(frame).Inside(opened.PictureOf(MapFrame.Whole))
+            : null;
+
+    /// <summary>
     /// Where each of <paramref name="nodes"/> was drawn, for a caller that wants to mark it out.
     ///
     /// <para>Only the nodes this drawing actually drew come back, so a selection made in a folder

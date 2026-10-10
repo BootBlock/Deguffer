@@ -5,7 +5,7 @@ using Deguffer.Core.Viewing;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// A folder opening on the map asks the motion policy how to play. The camera's own moves are the
+/// A change of folder on the map asks the motion policy how to play. The camera's own moves are the
 /// compositor's, and their rules are Core's: see MapGlide, MapStretch and MapRequests.
 /// A reader with Windows' Animation effects off gets no movement, and one who turns them off while
 /// something is moving sees it land rather than play out.
@@ -25,7 +25,7 @@ public sealed class ExploreMotionTests
         var (descent, arrived) = Descent(new ScriptedMotion(animationsEnabled: false), clock);
         var fade = MotionToken.Entrance.Reduced.Duration;
 
-        descent.Start(Shape);
+        descent.Start(Shape, FolderStep.Into);
 
         Assert.True(descent.IsMoving, "the folder cut to its drawing rather than fading in");
         Assert.Equal(0, descent.Opacity);
@@ -38,12 +38,12 @@ public sealed class ExploreMotionTests
 
         for (var elapsed = fade / 2; elapsed < fade; elapsed += OneFrame)
         {
-            Assert.Equal(MapFrame.Whole, descent.Opened);
-            Assert.Equal(MapFrame.Whole, descent.Departing);
+            Assert.Equal(MapFrame.Whole, descent.Inner);
+            Assert.Equal(MapFrame.Whole, descent.Outer);
             clock.Step(OneFrame);
         }
 
-        Assert.Equal(MapFrame.Whole, descent.Opened);
+        Assert.Equal(MapFrame.Whole, descent.Inner);
         Assert.Equal(1, descent.Opacity);
         Assert.Single(arrived);
         Assert.False(clock.IsTicking);
@@ -55,35 +55,89 @@ public sealed class ExploreMotionTests
         var clock = new SteppedFrameClock();
         var (descent, arrived) = Descent(new ScriptedMotion(animationsEnabled: true), clock);
 
-        descent.Start(Shape);
+        descent.Start(Shape, FolderStep.Into);
 
-        Assert.Equal(Shape.X, descent.Opened.X, Precision);
-        Assert.Equal(Shape.Y, descent.Opened.Y, Precision);
-        Assert.Equal(Shape.Width, descent.Opened.Width, Precision);
-        Assert.Equal(Shape.Height, descent.Opened.Height, Precision);
+        AssertClose(Shape, descent.Inner);
         Assert.Equal(0, descent.Opacity);
 
         clock.Step(MotionToken.Entrance.Full.Duration);
 
-        Assert.Equal(MapFrame.Whole, descent.Opened);
+        Assert.Equal(MapFrame.Whole, descent.Inner);
+        Assert.Equal(1, descent.Opacity);
+        Assert.Single(arrived);
+        Assert.False(clock.IsTicking);
+    }
+
+    /// <summary>A step out is the same flight the other way: the folder left shrinks back into its shape and goes.</summary>
+    [Fact]
+    public void WithMotionOnAFolderLeftShrinksIntoItsShape()
+    {
+        var clock = new SteppedFrameClock();
+        var (descent, arrived) = Descent(new ScriptedMotion(animationsEnabled: true), clock);
+
+        descent.Start(Shape, FolderStep.OutOf);
+
+        Assert.Equal(MapFrame.Whole, descent.Inner);
+        Assert.Equal(1, descent.Opacity);
+
+        clock.Step(MotionToken.Entrance.Full.Duration);
+
+        AssertClose(Shape, descent.Inner);
+        Assert.Equal(MapFrame.Whole, descent.Outer);
+        Assert.Equal(0, descent.Opacity);
+        Assert.Single(arrived);
+    }
+
+    /// <summary>
+    /// Turned round part of the way, the flight goes back from where it is without a jump, carries on
+    /// a little the way it was going before it comes back, and arrives once, at the other end.
+    /// </summary>
+    [Fact]
+    public void AFlightTurnedRoundGoesBackFromWhereItIs()
+    {
+        var clock = new SteppedFrameClock();
+        var (descent, arrived) = Descent(new ScriptedMotion(animationsEnabled: true), clock);
+
+        descent.Start(Shape, FolderStep.Into);
+        clock.Step(OneFrame);
+        clock.Step(OneFrame);
+
+        var before = descent.Inner;
+
+        descent.Turn();
+
+        AssertClose(before, descent.Inner);
+
+        clock.Step(TimeSpan.FromMilliseconds(4));
+
+        Assert.True(descent.Inner.Width > before.Width, "the flight stopped dead as it was turned round");
+
+        for (var elapsed = TimeSpan.Zero; elapsed < MotionToken.Entrance.Full.Duration * 2 && descent.IsMoving; elapsed += OneFrame)
+        {
+            clock.Step(OneFrame);
+        }
+
+        Assert.False(descent.IsMoving);
+        AssertClose(Shape, descent.Inner);
+        Assert.Equal(0, descent.Opacity);
         Assert.Single(arrived);
     }
 
     [Fact]
-    public void AFolderOpeningWhenMotionIsTurnedOffArrivesAtTheNextFrame()
+    public void AFlightWhenMotionIsTurnedOffArrivesAtTheNextFrame()
     {
         var motion = new ScriptedMotion(animationsEnabled: true);
         var clock = new SteppedFrameClock();
         var (descent, arrived) = Descent(motion, clock);
 
-        descent.Start(Shape);
+        descent.Start(Shape, FolderStep.Into);
         clock.Step(OneFrame);
 
         motion.AnimationsEnabled = false;
         clock.Step(OneFrame);
 
         Assert.False(descent.IsMoving);
-        Assert.Equal(MapFrame.Whole, descent.Opened);
+        Assert.Equal(MapFrame.Whole, descent.Inner);
         Assert.Equal(1, descent.Opacity);
         Assert.Single(arrived);
         Assert.False(clock.IsTicking);
@@ -97,5 +151,13 @@ public sealed class ExploreMotionTests
         descent.Arrived += (_, e) => arrived.Add(e);
 
         return (descent, arrived);
+    }
+
+    private static void AssertClose(MapFrame expected, MapFrame actual)
+    {
+        Assert.Equal(expected.X, actual.X, Precision);
+        Assert.Equal(expected.Y, actual.Y, Precision);
+        Assert.Equal(expected.Width, actual.Width, Precision);
+        Assert.Equal(expected.Height, actual.Height, Precision);
     }
 }

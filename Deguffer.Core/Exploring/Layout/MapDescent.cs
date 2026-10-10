@@ -1,53 +1,95 @@
-using Deguffer.Core.Viewing;
-
 namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
-/// One move into a shape the reader opened: the shape grows from where it was on the screen until it
-/// fills it, and the drawing of what is inside it grows with it, over the old picture, until it is all
-/// that is left. Started at <paramref name="Start"/> on whatever clock the caller keeps, and played as
-/// <paramref name="Motion"/> says, which is <see cref="MotionToken.Entrance"/>'s answer for the reader.
+/// Where the two pictures of a change of folder on the map are at each step of the move between them:
+/// the outer picture, of the folder that holds the other, and the inner one, of the folder inside it.
+/// Opening a folder goes from the outer picture filling the screen to the inner one filling it, and
+/// going back up goes the other way along the same path, so both are one camera flying in or out.
 ///
-/// <para>Two drawings, because opening a folder draws it afresh across the whole canvas and that is
-/// a different layout from the one it had inside its parent: its own shape, not its parent's slot.
-/// The old picture is stretched so the shape fills the screen, which is what the reader asked for,
-/// and the new one comes in over it on the same frame, so the one becomes the other rather than
-/// cutting to it. Neither leaves any of the screen bare at any step, because the old picture is
-/// stretched over all of it.</para>
+/// <para>Two drawings, because a folder opened is drawn afresh across the whole screen, which is a
+/// different layout from the one it had inside its parent: its own shape, not its parent's slot. The
+/// outer picture is stretched so the folder's slot in it lies exactly under the inner picture at every
+/// step, so the one becomes the other rather than cutting to it. Neither leaves any of the screen bare,
+/// because the outer picture covers all of it throughout.</para>
 ///
-/// <para>Stretched rather than magnified, and by more on one axis than the other where the shape is
-/// not the screen's shape. It is a picture on its way to being replaced, it is on screen for a
-/// quarter of a second, and it ends exactly where the new drawing begins.</para>
+/// <para>Stretched rather than magnified, by more on one axis than the other where the slot is not the
+/// screen's shape. It is a picture on its way to being replaced, it is on screen for a quarter of a
+/// second, and it ends exactly where the other drawing begins.</para>
 ///
-/// <para>A motion that does not travel grows nothing: both pictures stay where they are, filling the
-/// screen, and the new one fades in over the old.</para>
+/// <para>On each axis the outer picture is magnified about the one point of the screen that stays
+/// where it is from end to end, by equal ratios rather than equal steps, as
+/// <see cref="MapViewport.Between"/> zooms: a flight several folders deep spends as long on each
+/// doubling, which reads as a steady speed rather than as a lurch at one end.</para>
+///
+/// <para>The clock is the caller's: this says where the two pictures are at a progress from 0, the
+/// outer picture filling the screen, to 1, the inner one filling it.</para>
 /// </summary>
 /// <param name="Shape">
-/// Where the opened shape was on the screen, in fractions of it. Only the part on the screen is grown
-/// from: a zoomed shape can run off the edges, and growing the whole of it would shrink the old
-/// picture away from them.
+/// Where the inner picture's screen lies on the outer picture's screen, in fractions of it. Only the
+/// part on the screen is flown to: a zoomed shape can run off the edges, and flying to the whole of it
+/// would shrink the outer picture away from them.
 /// </param>
-public readonly record struct MapDescent(MapFrame Shape, TimeSpan Start, Motion Motion)
+/// <param name="Travels">
+/// Whether anything moves. Where nothing does, both pictures fill the screen throughout, and the inner
+/// one fades in over the outer one, or out of it.
+/// </param>
+public readonly record struct MapDescent(MapFrame Shape, bool Travels)
 {
-    /// <summary>Where the drawing of what was opened is on the screen at <paramref name="now"/>.</summary>
-    public MapFrame Opened(TimeSpan now) =>
-        Motion.Travels ? MapFrame.Between(OnScreen, MapFrame.Whole, Motion.At(Start, now)) : MapFrame.Whole;
+    /// <summary>
+    /// Where the inner picture's screen is at <paramref name="progress"/>. Exactly the screen at the
+    /// end, where the map's own camera takes the inner picture over, so the hand-over moves nothing
+    /// by a rounding error.
+    /// </summary>
+    public MapFrame Inner(double progress) =>
+        Flies && progress < 1 ? Outer(progress).Inside(OnScreen) : MapFrame.Whole;
 
     /// <summary>
-    /// Where the old picture's screen is at <paramref name="now"/>: stretched so the opened shape lies
-    /// exactly under the drawing of what is inside it. Carried by nothing where the motion does not
-    /// travel: stretched at once to fill the screen, it would be the jump the motion is there to spare.
+    /// Where the outer picture's screen is at <paramref name="progress"/>: magnified on each axis so
+    /// the folder's slot in it lies exactly under the inner picture.
     /// </summary>
-    public MapFrame Departing(TimeSpan now) => Motion.Travels ? OnScreen.Carried(Opened(now)) : MapFrame.Whole;
+    public MapFrame Outer(double progress)
+    {
+        if (!Flies)
+        {
+            return MapFrame.Whole;
+        }
+
+        progress = Math.Clamp(progress, 0, 1);
+
+        var (x, width) = Axis(OnScreen.X, OnScreen.Width, progress);
+        var (y, height) = Axis(OnScreen.Y, OnScreen.Height, progress);
+
+        return new MapFrame(x, y, width, height);
+    }
+
+    /// <summary>
+    /// How opaque the inner picture is at <paramref name="progress"/>: none of it with the outer
+    /// picture filling the screen, and all of it once it fills the screen itself. In step with the
+    /// move, so the inner picture is mostly there by the time it is mostly the screen.
+    /// </summary>
+    public double Opacity(double progress) => Math.Clamp(progress, 0, 1);
 
     private MapFrame OnScreen => Shape.Clipped(MapFrame.Whole);
 
-    /// <summary>
-    /// How opaque the drawing of what was opened is at <paramref name="now"/>, from nothing to all of
-    /// it. The same easing as the move, so it is mostly there by the time it is mostly the screen.
-    /// </summary>
-    public double Opacity(TimeSpan now) => Motion.At(Start, now);
+    /// <summary>Whether the pictures move at all: not where the motion stays in place, nor for a slot with nothing of it on screen.</summary>
+    private bool Flies => Travels && OnScreen is { Width: > 0, Height: > 0 };
 
-    /// <summary>Whether the move has arrived by <paramref name="now"/>.</summary>
-    public bool IsOverAt(TimeSpan now) => Motion.IsOverAt(Start, now);
+    /// <summary>
+    /// Where the outer picture's screen is on one axis at <paramref name="progress"/>, for a slot at
+    /// <paramref name="start"/> spanning <paramref name="span"/> of it: magnified by
+    /// (1 / span)^progress about the point that the slot's start and end both map to themselves.
+    /// A slot that spans the whole axis leaves it as it is.
+    /// </summary>
+    private static (double Start, double Span) Axis(double start, double span, double progress)
+    {
+        if (span >= 1)
+        {
+            return (0, 1);
+        }
+
+        var magnified = Math.Pow(1 / span, progress);
+        var still = start / (1 - span);
+
+        return (still * (1 - magnified), magnified);
+    }
 }

@@ -170,7 +170,6 @@ public sealed class MotionTokenTests
         var start = TimeSpan.FromSeconds(3);
 
         Assert.Equal(1, Motion.Instant.At(start, start));
-        Assert.True(Motion.Instant.IsOverAt(start, start));
     }
 
     [Fact]
@@ -181,9 +180,7 @@ public sealed class MotionTokenTests
 
         Assert.Equal(0, motion.At(start, start));
         Assert.True(motion.At(start, start + (motion.Duration / 2)) > 0.5, "the motion was not eased out");
-        Assert.False(motion.IsOverAt(start, start + (motion.Duration / 2)));
         Assert.Equal(1, motion.At(start, start + motion.Duration));
-        Assert.True(motion.IsOverAt(start, start + motion.Duration));
         Assert.Equal(1, motion.At(start, start + (motion.Duration * 4)));
     }
 }
