@@ -371,7 +371,10 @@ public sealed class ExploreMap : UserControl
         _descent.Midway += OnDescentMidway;
         _descent.Arrived += OnDescentArrived;
         _shift.Arrived += OnShiftArrived;
-        _pictures.Faded += (_, _) => ReportWhatThePointerIsOver();
+
+        // Both sets, as the two change places with each change of folder that flies (see Swap).
+        _pictures.Faded += OnFaded;
+        _departing.Faded += OnFaded;
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -2168,6 +2171,9 @@ public sealed class ExploreMap : UserControl
         _highlight.Hide();
         ReportWhatThePointerIsOver();
     }
+
+    /// <summary>A new drawing has finished fading in: the pointer is over what it shows.</summary>
+    private void OnFaded(object? sender, EventArgs e) => ReportWhatThePointerIsOver();
 
     /// <summary>The shapes have landed: the names, the outlines and the readout are the new drawing's again.</summary>
     private void OnShiftArrived(object? sender, EventArgs e)
