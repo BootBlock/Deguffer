@@ -162,6 +162,15 @@ public sealed class ExploreMap : UserControl
 
     private readonly ExploreDescent _descent = new(SystemMotion.Current, RenderingClock.Current);
 
+    /// <summary>The large shapes moving from one layout of the same place to the next. See <see cref="ExploreShift"/>.</summary>
+    private readonly ExploreShift _shift;
+
+    /// <summary>
+    /// Whether the redraw on its way is the same place laid out again, which moves from the drawing
+    /// on screen when it arrives rather than replacing it: a scan's next snapshot, or a new spacing.
+    /// </summary>
+    private bool _shiftOwed;
+
     /// <summary>The pointer's look while it drags the picture. One for the life of the map (G5).</summary>
     private readonly InputCursor _dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
 
@@ -286,6 +295,7 @@ public sealed class ExploreMap : UserControl
         _pictures = new ExploreLayers(compositor, _graphics, _camera);
         _departing = new ExploreLayers(compositor, _graphics, _camera);
         _highlight = new ExploreHighlight(compositor, _graphics, _camera);
+        _shift = new ExploreShift(compositor, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(new DispatcherQueueSynchronizationContext(DispatcherQueue));
         _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer);
@@ -299,6 +309,7 @@ public sealed class ExploreMap : UserControl
         _root = compositor.CreateContainerVisual();
         _root.Children.InsertAtTop(_departing.Root);
         _root.Children.InsertAtTop(_pictures.Root);
+        _root.Children.InsertAtTop(_shift.Root);
         _root.Children.InsertAtTop(_highlight.Root);
 
         // The composition tree is hosted under an element of its own, so the labels, which are XAML,
@@ -359,6 +370,7 @@ public sealed class ExploreMap : UserControl
         _descent.Moved += OnDescentMoved;
         _descent.Midway += OnDescentMidway;
         _descent.Arrived += OnDescentArrived;
+        _shift.Arrived += OnShiftArrived;
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -701,6 +713,18 @@ public sealed class ExploreMap : UserControl
         // new colouring, scheme or spacing is the same picture, so the zoom stays.
         var was = _zoom.Shown;
         var another = !ReferenceEquals(tree, _tree) || node != _node || view != _view || volume != _volume;
+
+        // The same place in a new tree, drawn the same way: a scan's next snapshot. The same picture
+        // laid out again, so the zoom stays and the shapes move to where they are now. A change of
+        // view, such as a finished scan drawn as a treemap after its snapshots' icicles, is not.
+        var samePlace = another
+            && viewport is null
+            && view == _view
+            && volume == _volume
+            && tree is not null
+            && _tree is ITrackedTree shown
+            && ExploreSurface.Drawn(tree, view) == ExploreSurface.Drawn(shown, _view)
+            && shown.CounterpartsIn(tree)?.Invoke(_node) == node;
         var zooms = Zoomable && tree is not null && ExploreSurface.Zooms(tree, view);
 
         // Drawn at the zoom asked for from the start, rather than drawn whole and then glided in.
@@ -739,7 +763,10 @@ public sealed class ExploreMap : UserControl
 
             // A flight through a folder starts as a step out to it, drawn whole as any folder opened is.
             _through = step == FolderStep.Through ? new Through(FolderSteps.Meeting(tree!, _node, node), opened) : null;
-            _zoom.Reset(_through is null ? opened : MapViewport.Whole);
+            if (!samePlace)
+            {
+                _zoom.Reset(_through is null ? opened : MapViewport.Whole);
+            }
 
             // The picture on screen stays, to fly from, and the new one is drawn into the other set
             // of layers: over it for a step in, which the new picture grows out of, and under it for a
@@ -793,7 +820,14 @@ public sealed class ExploreMap : UserControl
             }
         }
 
-        Redraw();
+        if (samePlace)
+        {
+            Shift();
+        }
+        else
+        {
+            Redraw();
+        }
 
         // Nothing to fly to after all: a folder with nothing in it to draw.
         if (_step != FolderStep.Across && _drawing is null && _redraws.Pending is null)
@@ -971,8 +1005,9 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Draw the picture on screen again in a new look: <paramref name="colours"/> and
     /// <paramref name="spacing"/>, for the same tree, folder and view. The old look fades into the new
-    /// once the new drawing has landed (<see cref="MotionToken.Crossfade"/>), so the difference a choice
-    /// makes is seen as it is made, rather than the new look replacing the old a region at a time.
+    /// once the new drawing has landed, and shapes a new spacing moved travel to their new places
+    /// (<see cref="Shift"/>), so the difference a choice makes is seen as it is made, rather than the
+    /// new look replacing the old a region at a time.
     /// </summary>
     public void Restyle(Func<DateTime, ShapeColours> colours, ExploreSpacing spacing)
     {
@@ -981,7 +1016,22 @@ public sealed class ExploreMap : UserControl
         _colours = colours;
         _spacing = spacing;
 
-        Redraw(SystemMotion.Current.For(MotionToken.Crossfade));
+        Shift();
+    }
+
+    /// <summary>
+    /// Draw the same place laid out again, and move from the drawing on screen to it as it arrives:
+    /// the large shapes travel and the rest crossfades over the same time (<see cref="MotionToken.Shift"/>).
+    /// The crossfade keeps the earlier drawing until it is over, which the shapes that went show as
+    /// they shrink away.
+    /// </summary>
+    private void Shift()
+    {
+        Redraw(SystemMotion.Current.For(MotionToken.Shift));
+
+        // Owed only to a drawing on its way. A map that cannot be seen, or has nothing to draw, draws
+        // nothing, and a drawing kept from before has already been shown.
+        _shiftOwed = _redraws.Pending is not null;
     }
 
     private void Redraw() => Redraw(Motion.Instant);
@@ -990,9 +1040,11 @@ public sealed class ExploreMap : UserControl
     private void Redraw(Motion fade)
     {
         // Whatever brought us here is more current than a size change still waiting to be drawn, or a
-        // redraw stopped when the page was left.
+        // redraw stopped when the page was left; and a redraw for any other reason replaces a move
+        // from the drawing on screen that was owed.
         _settled.Stop();
         _redrawOwed = false;
+        _shiftOwed = false;
 
         // Nothing can see it, and the page asks again as it brings the map back. ExplorePage
         // collapses this for the List view and calls Show() in the same breath, so without this a
@@ -1183,6 +1235,8 @@ public sealed class ExploreMap : UserControl
     /// <summary>Work from <paramref name="drawing"/>, which is on top of the rest now.</summary>
     private void Present(ExploreSurface drawing)
     {
+        var earlier = _drawing;
+
         _drawing = drawing;
 
         // A drawing that cannot be zoomed shows the whole picture whatever was asked, and the zoom
@@ -1241,6 +1295,12 @@ public sealed class ExploreMap : UserControl
         if (_stepOwed && !_descent.IsMoving)
         {
             FinishStep();
+        }
+
+        if (_shiftOwed)
+        {
+            _shiftOwed = false;
+            MoveFrom(earlier, drawing);
         }
 
         // The whole picture under a zoomed drawing only shows once the picture moves, so it waits
@@ -1465,7 +1525,7 @@ public sealed class ExploreMap : UserControl
                 _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing, _arriving, _tree);
 
     /// <summary>Whether a change of folder is flying, or waiting for the picture it is to fly out to.</summary>
-    private bool Stepping => _descent.IsMoving || _awaitingOuter;
+    private bool Stepping => _descent.IsMoving || _awaitingOuter || _shift.IsMoving;
 
     /// <summary>
     /// Where the shape at <paramref name="spot"/> is on the screen, in fractions of it, or null where
@@ -2017,6 +2077,8 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void SettleStep()
     {
+        _shift.Finish();
+
         if (_descent.IsMoving)
         {
             _descent.Finish();
@@ -2059,6 +2121,52 @@ public sealed class ExploreMap : UserControl
 
         outer.Carry(_descent.Outer, 1, ActualWidth, ActualHeight);
         inner.Carry(_descent.Inner, _descent.Opacity, ActualWidth, ActualHeight);
+    }
+
+    /// <summary>
+    /// Move from <paramref name="earlier"/>, the drawing that was on screen, to <paramref name="later"/>,
+    /// the same place laid out again, which has just arrived (<see cref="ShapeChanges"/>). Only between
+    /// two drawings of one canvas at one zoom, whose shapes are where the same rectangles of the screen
+    /// say. The pointer is over nothing while the shapes travel, as it is during a change of folder:
+    /// a shape is not where it is drawn until it lands (§7.1).
+    /// </summary>
+    private void MoveFrom(ExploreSurface? earlier, ExploreSurface later)
+    {
+        var motion = SystemMotion.Current.For(MotionToken.Shift);
+
+        if (!motion.Travels
+            || earlier is null
+            || earlier.Width != later.Width
+            || earlier.Height != later.Height
+            || earlier.Viewport != later.Viewport
+            || _pictures.SurfaceOf(earlier) is not { } before
+            || _pictures.SurfaceOf(later) is not { } after)
+        {
+            return;
+        }
+
+        var travels = ShapeChanges.Between(earlier, later)
+            .Select(change => ShapeTravel.Of(change, later.Width, later.Height))
+            .OfType<ShapeTravel>()
+            .ToList();
+
+        if (travels.Count == 0)
+        {
+            return;
+        }
+
+        _shift.Start(travels, before, after, _drawn.Canvas(later.Width, later.Height, ActualWidth, ActualHeight, _zoom.Origin), motion);
+        _labels.Hide();
+        _highlight.Hide();
+        ReportWhatThePointerIsOver();
+    }
+
+    /// <summary>The shapes have landed: the names, the outlines and the readout are the new drawing's again.</summary>
+    private void OnShiftArrived(object? sender, EventArgs e)
+    {
+        _labels.Reveal();
+        _highlight.Reveal();
+        ReportWhatThePointerIsOver();
     }
 
     /// <summary>
