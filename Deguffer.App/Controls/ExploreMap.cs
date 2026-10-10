@@ -1926,6 +1926,12 @@ public sealed class ExploreMap : UserControl
         _departing.Carry(MapFrame.Whole, 1, ActualWidth, ActualHeight);
         _pictures.Carry(MapFrame.Whole, 1, ActualWidth, ActualHeight);
 
+        // Marked out again for the drawing worked from now, before they show: one settled before its
+        // picture arrived has none, and the hatch and outlines hidden with the picture left belong to
+        // its shapes, which in this picture are other shapes or none (§7.1).
+        ShowPicked();
+        ShowMarked();
+
         _labels.Reveal();
         _highlight.Reveal();
         Place();
