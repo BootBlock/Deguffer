@@ -73,7 +73,8 @@ public sealed class TiledSurface : ExploreSurface
 
     /// <summary>
     /// One pass over the shapes, keeping the deepest that is the node or a folder above it. Asked once
-    /// for each change of folder, so the folders above it are gathered rather than kept.
+    /// for each change of folder, so the folders above it are gathered rather than kept. A node outside
+    /// this drawing has none of them drawn here: every shape is this drawing's root or under it.
     /// </summary>
     public override MapFrame? FrameOf(int node)
     {
@@ -83,15 +84,9 @@ public sealed class TiledSurface : ExploreSurface
         {
             path.Add(current);
 
-            if (current == Root)
+            if (current == Root || Tree.ParentOf(current) == current)
             {
                 break;
-            }
-
-            // The tree's root, reached without passing this drawing's: the node is not in it.
-            if (Tree.ParentOf(current) == current)
-            {
-                return null;
             }
         }
 

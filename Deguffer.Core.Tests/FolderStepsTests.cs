@@ -90,9 +90,13 @@ public sealed class FolderStepsTests
         var drawn = Enumerable.Range(0, 40)
             .Select(level => Find(tree, $"level{level}"))
             .Last(node => drawing.Outlines(new HashSet<int> { node }).Count > 0);
+        var corners = drawing.Outlines(new HashSet<int> { drawn }).Single().Points;
 
-        Assert.Equal(drawing.FrameOf(drawn), frame);
-        Assert.NotEqual(tree.RootNode, drawn);
+        Assert.NotEqual(Find(tree, "level0"), drawn);
+        Assert.Equal(corners[0].X / (double)Width, frame.X, 1e-6);
+        Assert.Equal(corners[0].Y / (double)Height, frame.Y, 1e-6);
+        Assert.Equal((corners[2].X - corners[0].X) / (double)Width, frame.Width, 1e-6);
+        Assert.Equal((corners[2].Y - corners[0].Y) / (double)Height, frame.Height, 1e-6);
     }
 
     [Fact]
