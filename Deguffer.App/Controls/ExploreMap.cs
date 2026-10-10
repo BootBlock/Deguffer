@@ -1041,6 +1041,7 @@ public sealed class ExploreMap : UserControl
         if (drawing.Viewport is { } viewport)
         {
             _drawn = viewport;
+            _zoom.Limit(drawing.Ceiling ?? MapCeiling.Least);
         }
         else
         {
@@ -1174,8 +1175,21 @@ public sealed class ExploreMap : UserControl
     };
 
     /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
-    private void ShowPicked() =>
-        _highlight.ShowPicked(Outlining is { } drawing ? drawing.Outlines(_picked) : []);
+    private void ShowPicked()
+    {
+        if (Outlining is not { } drawing)
+        {
+            _highlight.ShowPicked([], 0);
+            return;
+        }
+
+        // Twice the whole picture in the drawing's canvas pixels, which is a canvas as many times
+        // over as the drawing is zoomed: the picture is within that of the canvas's corner whichever
+        // part of it the canvas shows, and so is the margin the outlines are drawn into round it.
+        var far = 2 * Math.Max(drawing.Width, drawing.Height) * (drawing.Viewport?.Zoom ?? 1);
+
+        _highlight.ShowPicked(drawing.Outlines(_picked), (float)far);
+    }
 
     /// <summary>
     /// The drawing the outlines are drawn in, which is the one the map works from, while it is of the
@@ -1719,7 +1733,7 @@ public sealed class ExploreMap : UserControl
 
         if (Zoomable && shape is { } frame)
         {
-            var fitting = MapViewport.Fitting(_zoom.Shown.PictureOf(frame));
+            var fitting = MapViewport.Fitting(_zoom.Shown.PictureOf(frame), _zoom.Ceiling);
 
             // Already going there, which is a step to nowhere.
             if (fitting != _zoom.Target)

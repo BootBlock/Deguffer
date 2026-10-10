@@ -8,7 +8,7 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class MapRequestsTests
 {
-    private static readonly MapViewport Target = MapViewport.Anchored(8, 0.3, 0.6, 0.5, 0.5);
+    private static readonly MapViewport Target = MapViewport.Anchored(8, 0.3, 0.6, 0.5, 0.5, MapCeiling.Least);
 
     [Fact]
     public void OnlyTheLatestRequestIsBelieved()
@@ -132,7 +132,7 @@ public sealed class MapRequestsTests
 
         requests.Asked(6, Target);
 
-        Assert.Equal(Target, requests.Rest(reported));
+        Assert.Equal(Target, requests.Rest(reported, MapCeiling.Least));
         Assert.Equal(Target, requests.Where(reported));
     }
 
@@ -149,8 +149,8 @@ public sealed class MapRequestsTests
         requests.Asked(7, Target);
 
         Assert.Equal(shortOf, requests.Where(shortOf));
-        Assert.Equal(shortOf.Held(), requests.Rest(shortOf));
-        Assert.Equal(0, requests.Rest(shortOf).Left);
+        Assert.Equal(shortOf.Held(MapCeiling.Least), requests.Rest(shortOf, MapCeiling.Least));
+        Assert.Equal(0, requests.Rest(shortOf, MapCeiling.Least).Left);
     }
 
     /// <summary>
@@ -181,6 +181,25 @@ public sealed class MapRequestsTests
         Assert.Null(requests.Destination);
     }
 
+    /// <summary>
+    /// How close a report has to be to have arrived is measured on the screen. At a deep zoom a
+    /// millionth of the picture is a hundredth of the screen, a visible distance, and a report that far
+    /// short has not arrived; one a rounding error away has.
+    /// </summary>
+    [Fact]
+    public void AtADeepZoomAReportAVisibleDistanceAwayHasNotArrived()
+    {
+        var requests = new MapRequests();
+        var deep = MapViewport.Anchored(10_000, 0.3, 0.6, 0.5, 0.5, MapCeiling.Most);
+        var stopped = MapViewport.Seen(deep.Zoom, deep.Left + 1e-6, deep.Top);
+        var near = MapViewport.Seen(deep.Zoom, deep.Left + 1e-11, deep.Top - 1e-11);
+
+        requests.Asked(9, deep);
+
+        Assert.Equal(stopped, requests.Rest(stopped, MapCeiling.Most));
+        Assert.Equal(deep, requests.Rest(near, MapCeiling.Most));
+    }
+
     /// <summary>A fling or a hand goes wherever the tracker stops it, so nothing is snapped to.</summary>
     [Fact]
     public void AFlingRestsWhereTheTrackerStopsIt()
@@ -190,6 +209,6 @@ public sealed class MapRequestsTests
 
         requests.Asked(8, null);
 
-        Assert.Equal(near, requests.Rest(near));
+        Assert.Equal(near, requests.Rest(near, MapCeiling.Least));
     }
 }

@@ -135,6 +135,9 @@ internal sealed class ExploreHighlight
 
     private IReadOnlyList<ExploreOutline> _pickedOutlines = [];
 
+    /// <summary>How far the dimming round <see cref="_pickedOutlines"/> reaches, in canvas pixels.</summary>
+    private float _pickedFar;
+
     private IReadOnlyList<ExploreOutline> _hoveredOutlines = [];
 
     private IReadOnlyList<ExploreOutline> _markedOutlines = [];
@@ -204,12 +207,17 @@ internal sealed class ExploreHighlight
     /// <summary>The top of what is drawn over the picture, in the composition tree.</summary>
     public Visual Root => _camera;
 
-    /// <summary>Mark out what the user picked, and dim the rest of the picture round it.</summary>
-    public void ShowPicked(IReadOnlyList<ExploreOutline> outlines)
+    /// <summary>
+    /// Mark out what the user picked, and dim the rest of the picture round it, to
+    /// <paramref name="far"/> canvas pixels from the canvas's corner each way (see
+    /// <see cref="MapGraphics.Around"/>).
+    /// </summary>
+    public void ShowPicked(IReadOnlyList<ExploreOutline> outlines, float far)
     {
         _pickedOutlines = outlines;
+        _pickedFar = far;
         _picked.Path = _graphics.Trace(outlines);
-        _dimmed.Path = _effects ? _graphics.Around(outlines) : _graphics.Nothing;
+        _dimmed.Path = _effects ? _graphics.Around(outlines, far) : _graphics.Nothing;
     }
 
     /// <summary>
@@ -265,7 +273,7 @@ internal sealed class ExploreHighlight
         _effects = effects;
         _dimBounds.IsVisible = effects;
 
-        ShowPicked(_pickedOutlines);
+        ShowPicked(_pickedOutlines, _pickedFar);
         ShowHovered(_hoveredOutlines, _hoveredSurface, _hoveredCanvas);
         ShowMarked(_markedOutlines, _hatchScale);
     }
@@ -311,7 +319,7 @@ internal sealed class ExploreHighlight
     /// <summary>Take all of it off, for a map that is no longer showing anything.</summary>
     public void Clear()
     {
-        ShowPicked([]);
+        ShowPicked([], _pickedFar);
         ShowHovered([], null, _hoveredCanvas);
         ShowMarked([], _hatchScale);
     }

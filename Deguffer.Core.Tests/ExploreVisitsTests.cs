@@ -11,7 +11,7 @@ public sealed class ExploreVisitsTests
 {
     private static readonly VolumeSpace Volume = new(TotalBytes: 100_000, FreeBytes: 40_000);
 
-    private static readonly MapViewport Zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5));
+    private static readonly MapViewport Zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5), MapCeiling.Least);
 
     private static readonly Func<int, bool> NothingRemoved = _ => false;
 
@@ -284,7 +284,7 @@ public sealed class ExploreVisitsTests
 
     /// <summary>A zoom told apart from every other <paramref name="step"/> by how far it is zoomed.</summary>
     private static MapViewport ZoomedBy(int step) =>
-        MapViewport.Fitting(new MapFrame(0, 0, 1.0 / (step + 2), 1.0 / (step + 2)));
+        MapViewport.Fitting(new MapFrame(0, 0, 1.0 / (step + 2), 1.0 / (step + 2)), MapCeiling.Least);
 
     /// <summary>A root holding a folder holding a folder holding a file.</summary>
     private static (ExploreTree Tree, ExplorePosition Outer, ExplorePosition Inner) Tree(string root)

@@ -63,6 +63,8 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
 
     public override bool HasVolumeBeside => drawing.HasVolumeBeside;
 
+    public override double? Ceiling => drawing.Ceiling;
+
     /// <summary>Let every region held back be painted.</summary>
     public void Open() => _open.Set();
 

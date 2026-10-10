@@ -261,6 +261,16 @@ public abstract class ExploreSurface
     public MapViewport? Viewport { get; }
 
     /// <summary>
+    /// How far the map can zoom while this drawing is on screen, or null where it cannot be zoomed
+    /// (see <see cref="MapCeiling"/>).
+    ///
+    /// <para>Said by the drawing because only it knows what in view it could not draw one by one, and
+    /// what it drew is what the screen shows: a ceiling worked out from anything else would stop a zoom
+    /// short of detail the reader can see is there, or let it run on past the last shape.</para>
+    /// </summary>
+    public abstract double? Ceiling { get; }
+
+    /// <summary>
     /// Where the text goes. At most <see cref="MaximumLabels"/> inside shapes, and for a treemap a
     /// folder's name in each band as well — see <see cref="TiledSurface"/>.
     /// </summary>

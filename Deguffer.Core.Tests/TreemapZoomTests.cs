@@ -20,7 +20,7 @@ public sealed class TreemapZoomTests
     public void TheRootCoversTheWholeMagnifiedPicture()
     {
         var tree = FilesOf(400, 300, 200, 100);
-        var viewport = MapViewport.Anchored(4, 0.6, 0.3, 0.5, 0.5);
+        var viewport = MapViewport.Anchored(4, 0.6, 0.3, 0.5, 0.5, MapCeiling.Least);
 
         var root = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: viewport)
             .Single(tile => tile.Node == tree.RootNode);
@@ -51,11 +51,11 @@ public sealed class TreemapZoomTests
         Assert.Equal((TreemapLayout.Reach + 1) * Height, root.Y + root.Height);
 
         // The screen at the picture's far corner: the root runs furthest off the canvas there.
-        var deepest = MapViewport.Anchored(MapViewport.MaximumZoom, 1, 1, 1, 1);
+        var deepest = MapViewport.Anchored(MapCeiling.Least, 1, 1, 1, 1, MapCeiling.Least);
         var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: deepest)
             .Single(tile => tile.Node == tree.RootNode);
 
-        Assert.Equal(Width * MapViewport.MaximumZoom, whole.Width, 2);
+        Assert.Equal(Width * MapCeiling.Least, whole.Width, 2);
     }
     /// <summary>
     /// What keeps a zoomed layout the size of the canvas rather than of the picture: nothing wholly off
@@ -65,7 +65,7 @@ public sealed class TreemapZoomTests
     public void NothingWhollyOffTheCanvasIsLaidOut()
     {
         var tree = FilesOf([.. Enumerable.Range(1, 400).Select(i => (long)(401 - i) * 10)]);
-        var viewport = MapViewport.Anchored(16, 0.3, 0.7, 0.5, 0.5);
+        var viewport = MapViewport.Anchored(16, 0.3, 0.7, 0.5, 0.5, MapCeiling.Least);
 
         var zoomed = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: viewport);
 
@@ -88,7 +88,7 @@ public sealed class TreemapZoomTests
     public void AZoomedLayoutStopsAtTheEdgeOfTheCanvas()
     {
         var tree = new CountingTree(FilesOf([.. Enumerable.Repeat(10L, 100_000)]));
-        var corner = MapViewport.Anchored(16, 0, 0, 0, 0);
+        var corner = MapViewport.Anchored(16, 0, 0, 0, 0, MapCeiling.Least);
 
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: corner);
 
@@ -115,11 +115,11 @@ public sealed class TreemapZoomTests
         Assert.DoesNotContain(whole, tile => small.Contains(tile.Node));
 
         var into = MapViewport.Anchored(
-            MapViewport.MaximumZoom,
+            MapCeiling.Least,
             (aggregate.X + (aggregate.Width / 2)) / Width,
             (aggregate.Y + (aggregate.Height / 2)) / Height,
             0.5,
-            0.5);
+            0.5, MapCeiling.Least);
 
         var zoomed = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits, viewport: into);
 
@@ -141,8 +141,8 @@ public sealed class TreemapZoomTests
         var tree = MixedTree();
         var limits = LayoutLimits.Default;
 
-        var before = MapViewport.Anchored(near, 0.62, 0.41, 0.5, 0.5);
-        var after = MapViewport.Anchored(far, 0.62, 0.41, 0.5, 0.5);
+        var before = MapViewport.Anchored(near, 0.62, 0.41, 0.5, 0.5, MapCeiling.Least);
+        var after = MapViewport.Anchored(far, 0.62, 0.41, 0.5, 0.5, MapCeiling.Least);
 
         var shown = InPicture(TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits, viewport: before), before);
         var zoomed = InPicture(TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits, viewport: after), after);
@@ -185,7 +185,7 @@ public sealed class TreemapZoomTests
             (deepest.X + (deepest.Width / 2)) / Width,
             (deepest.Y + (deepest.Height / 2)) / Height,
             0.5,
-            0.5);
+            0.5, MapCeiling.Least);
 
         var zoomed = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits, viewport: into);
 
@@ -207,7 +207,7 @@ public sealed class TreemapZoomTests
         var volume = new VolumeSpace(1_000_250, 250);
 
         var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, volume);
-        var edge = MapViewport.Anchored(MapViewport.MaximumZoom, 1, 1, 1, 1);
+        var edge = MapViewport.Anchored(MapCeiling.Least, 1, 1, 1, 1, MapCeiling.Least);
         var zoomed = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, volume, edge);
 
         Assert.DoesNotContain(whole, tile => tile.IsFreeSpace);
@@ -254,7 +254,7 @@ public sealed class TreemapZoomTests
     {
         var tree = OneBigFolder();
         var big = tree.ChildrenOf(tree.RootNode)[0];
-        var viewport = MapViewport.Anchored(3, 0.5, 0.05, 0.5, 0.2);
+        var viewport = MapViewport.Anchored(3, 0.5, 0.05, 0.5, 0.2, MapCeiling.Least);
 
         var surface = Draw(tree, ExploreView.Treemap, viewport);
         var band = TreemapLayout.Compute(
@@ -288,7 +288,7 @@ public sealed class TreemapZoomTests
             .Where(tile => tile.Header > 0 && tile.Node != tree.RootNode && tile.X * Zoom > Width && tile.Y * Zoom < Height - 40)
             .MinBy(tile => tile.X);
 
-        var sliver = MapViewport.Anchored(Zoom, ((folder.X * Zoom) + 4 - Width) / (Width * Zoom), 0, 0, 0);
+        var sliver = MapViewport.Anchored(Zoom, ((folder.X * Zoom) + 4 - Width) / (Width * Zoom), 0, 0, 0, MapCeiling.Least);
         var surface = Draw(tree, ExploreView.Treemap, sliver);
         var cut = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: sliver)
             .Single(tile => tile.Node == folder.Node);
@@ -309,7 +309,7 @@ public sealed class TreemapZoomTests
             var surface = ExploreSurface.Create(
                 tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
                 ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
-                MapViewport.Anchored(6, x, y, 0.5, 0.5));
+                MapViewport.Anchored(6, x, y, 0.5, 0.5, MapCeiling.Least));
 
             Assert.All(surface.Labels, label =>
             {
@@ -327,7 +327,7 @@ public sealed class TreemapZoomTests
     [Fact]
     public void ADrawingThatCannotBeZoomedSaysSo()
     {
-        var zoom = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5);
+        var zoom = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5, MapCeiling.Least);
         var finished = FilesOf(500, 300, 200);
         var running = NamedFilesOf(500, 300, 200);
 
@@ -342,7 +342,7 @@ public sealed class TreemapZoomTests
     public void WhatIsUnderAPointOfAZoomedDrawingIsTheShapeDrawnThere()
     {
         var tree = FilesOf(400, 300, 200, 100);
-        var viewport = MapViewport.Anchored(3, 0.7, 0.7, 0.5, 0.5);
+        var viewport = MapViewport.Anchored(3, 0.7, 0.7, 0.5, 0.5, MapCeiling.Least);
         var surface = Draw(tree, ExploreView.Treemap, viewport);
         var tiles = TreemapLayout.Compute(
             tree, tree.RootNode, Width, Height,

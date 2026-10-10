@@ -31,7 +31,7 @@ public sealed class RegionPaintingTests
     /// <summary>A zoomed treemap's shapes run off the canvas, so its cushions are measured past every edge.</summary>
     [Fact]
     public void AZoomedTreemapRegionByRegionIsTheWholePicture() =>
-        AssertSamePicture(Drawn(ExploreView.Treemap, MapViewport.Anchored(3, 0.4, 0.6, 0.5, 0.5)));
+        AssertSamePicture(Drawn(ExploreView.Treemap, MapViewport.Anchored(3, 0.4, 0.6, 0.5, 0.5, MapCeiling.Least)));
 
     /// <summary>
     /// A region's painter writes inside the region and nowhere else. Painting every region in turn

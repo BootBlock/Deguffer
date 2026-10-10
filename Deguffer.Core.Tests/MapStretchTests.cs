@@ -96,15 +96,15 @@ public sealed class MapStretchTests
     [InlineData(false)]
     public void AnOriginMovesNoEdge(bool elastic)
     {
-        var shown = Middle.Shown(Width, Height, elastic: true);
+        var shown = Middle.Shown(Width, Height, elastic: true, MapCeiling.Least);
         var origin = new MapOrigin(0.4, 0.55);
         var fromCorner = new MapStretch(Middle, Width, Height, elastic);
         var fromOrigin = new MapStretch(MapTracking.Of(shown, Width, Height, origin), Width, Height, elastic);
 
         foreach (var (x, y) in new[] { (Middle.X + 300, -1e6), (-1e6, Middle.Y + 40), (120.0, -80.0) })
         {
-            var cornered = fromCorner.Pull(x, y).Shown(Width, Height, elastic: true);
-            var originated = fromOrigin.Pull(x, y).Shown(Width, Height, elastic: true);
+            var cornered = fromCorner.Pull(x, y).Shown(Width, Height, elastic: true, MapCeiling.Least);
+            var originated = fromOrigin.Pull(x, y).Shown(Width, Height, elastic: true, MapCeiling.Least);
 
             Assert.Equal(cornered.Left, originated.Left, Precision);
             Assert.Equal(cornered.Top, originated.Top, Precision);
@@ -119,7 +119,7 @@ public sealed class MapStretchTests
     [Fact]
     public void ADragRemeasuredFromAnotherOriginGoesOnWhereTheHandHasIt()
     {
-        var shown = Middle.Shown(Width, Height, elastic: true);
+        var shown = Middle.Shown(Width, Height, elastic: true, MapCeiling.Least);
         var before = new MapOrigin(0.4, 0.55);
         var stretch = new MapStretch(MapTracking.Of(shown, Width, Height, before), Width, Height, elastic: true);
         var reference = new MapStretch(Middle, Width, Height, elastic: true);

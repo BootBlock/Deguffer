@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Numerics;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Viewing;
@@ -35,6 +34,9 @@ internal sealed class MapCamera
 
     private const string FormerFar = "FormerFar";
 
+    /// <summary>How far the picture can be magnified while the drawing on screen is (see <see cref="MapCeiling"/>).</summary>
+    private const string Ceiling = "Ceiling";
+
     private readonly Compositor _compositor;
 
     /// <summary>The batch a spring back is played in, until it ends, so a press can tell it is on.</summary>
@@ -56,6 +58,7 @@ internal sealed class MapCamera
         Properties.InsertVector3(nameof(Visual.Offset), Vector3.Zero);
         Properties.InsertVector2(nameof(Visual.Size), Vector2.Zero);
         Properties.InsertVector3(Stretched, Vector3.Zero);
+        Limit(MapCeiling.Least);
         Rebase(default);
         Settle();
 
@@ -77,6 +80,13 @@ internal sealed class MapCamera
         Properties.InsertVector2(nameof(Visual.Size), new Vector2((float)width, (float)height));
 
     /// <summary>
+    /// Hold the zoom to <paramref name="ceiling"/> from now on, where the camera holds it at all: see
+    /// <see cref="Track"/>. Read by the expression rather than written into it, so the ceiling moves
+    /// with each drawing without the camera being started again.
+    /// </summary>
+    public void Limit(double ceiling) => Properties.InsertScalar(Ceiling, (float)ceiling);
+
+    /// <summary>
     /// Put the whole picture where <paramref name="tracker"/> holds it, from now on.
     ///
     /// <para>Where the picture may not be stretched past its limits, because the reader has turned
@@ -89,7 +99,7 @@ internal sealed class MapCamera
     {
         var scale = elastic
             ? "tracker.Scale"
-            : string.Create(CultureInfo.InvariantCulture, $"Clamp(tracker.Scale, 1, {MapViewport.MaximumZoom})");
+            : $"Clamp(tracker.Scale, 1, camera.{Ceiling})";
 
         var offset = elastic
             ? $"-tracker.Position + camera.{Stretched}"

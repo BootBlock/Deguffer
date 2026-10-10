@@ -97,7 +97,7 @@ public sealed class MapHitTestTests
     public void APointIsFoundThroughTheZoomOnScreen()
     {
         var tree = Drawings.Tree();
-        var zoomedIn = MapViewport.Anchored(2, 0, 0, 0, 0);
+        var zoomedIn = MapViewport.Anchored(2, 0, 0, 0, 0, MapCeiling.Least);
         var drawing = Drawings.Covering(tree, Old, zoomedIn);
 
         var middle = MapHitTest.Locate(zoomedIn, 0.5, 0.5, drawing, arriving: null, tree);

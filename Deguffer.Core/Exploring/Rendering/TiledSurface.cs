@@ -54,11 +54,14 @@ public sealed class TiledSurface : ExploreSurface
         HasVolumeBeside = volumeBeside;
 
         Labels = BuildLabels();
+        Ceiling = viewport is { } drawn ? MapCeiling.Of(drawn.Zoom, Deeper()) : null;
     }
 
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override bool HasVolumeBeside { get; }
+
+    public override double? Ceiling { get; }
 
     public override CanvasPainter Painter(TileColour background) =>
         new TileRasteriser(_tiles, Width, Height, background, ColourFor);
@@ -203,6 +206,27 @@ public sealed class TiledSurface : ExploreSurface
         }
 
         return labels;
+    }
+
+    /// <summary>
+    /// How many times more the picture has to be magnified for everything in view this drawing stood
+    /// in for with a block to be drawn one by one: 1 where it drew everything in view.
+    /// </summary>
+    private double Deeper()
+    {
+        var deeper = 1.0;
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.Finest > 0 && OnCanvas(tile) is { Width: > 0, Height: > 0 })
+            {
+                deeper = Math.Max(deeper, MapCeiling.Revealing(tile.Finest, Limits.MinimumTileSize));
+            }
+        }
+
+        return deeper;
     }
 
     /// <summary>At most <paramref name="count"/> of <paramref name="indices"/>, largest shape first.</summary>

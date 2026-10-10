@@ -165,7 +165,7 @@ public sealed class TreemapVolumeTests
         var root = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, volume)
             .Single(tile => tile.Node == tree.RootNode);
         var viewport = MapViewport.Anchored(
-            16, (root.X + (root.Width / 2)) / Width, (root.Y + (root.Height / 2)) / Height, 0.5, 0.5);
+            16, (root.X + (root.Width / 2)) / Width, (root.Y + (root.Height / 2)) / Height, 0.5, 0.5, MapCeiling.Least);
 
         var zoomed = ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,

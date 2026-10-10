@@ -16,9 +16,9 @@ public sealed class MapGlideTests
 
     private const double Precision = 1e-9;
 
-    private static readonly MapViewport From = MapViewport.Anchored(2, 0.4, 0.45, 0.5, 0.5);
+    private static readonly MapViewport From = MapViewport.Anchored(2, 0.4, 0.45, 0.5, 0.5, MapCeiling.Least);
 
-    private static readonly MapViewport To = MapViewport.Anchored(24, 0.3, 0.7, 0.35, 0.65);
+    private static readonly MapViewport To = MapViewport.Anchored(24, 0.3, 0.7, 0.35, 0.65, MapCeiling.Least);
 
     [Fact]
     public void AGlideStartsAtTheZoomOnScreenAndEndsAtTheOneAskedFor()
@@ -75,7 +75,7 @@ public sealed class MapGlideTests
                 (zoom / start.Scale * (start.X + pivot.X)) - pivot.X,
                 (zoom / start.Scale * (start.Y + pivot.Y)) - pivot.Y,
                 zoom,
-                start.Origin).Shown(Width, Height, elastic: true);
+                start.Origin).Shown(Width, Height, elastic: true, MapCeiling.Least);
 
             var expected = MapViewport.Between(From, To, Motion.Ease(time));
 

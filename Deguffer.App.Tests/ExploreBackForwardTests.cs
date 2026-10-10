@@ -11,7 +11,7 @@ namespace Deguffer.App.Tests;
 /// </summary>
 public sealed class ExploreBackForwardTests : IDisposable
 {
-    private static readonly MapViewport Zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5));
+    private static readonly MapViewport Zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5), MapCeiling.Least);
 
     private readonly ExploreFixture _explore = new();
 

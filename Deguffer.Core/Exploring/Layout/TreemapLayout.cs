@@ -115,7 +115,7 @@ public static class TreemapLayout
             // rendering of "there is more in here than fits".
             var (header, gap) = level >= 0 ? detail.FrameOf(frame.Width, frame.Height, level) : (0f, 0f);
 
-            tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, canvas, header));
+            tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, canvas, header, level >= 0 ? 0 : FinestIn(tree, node, frame)));
 
             if (level < 0)
             {
@@ -147,10 +147,14 @@ public static class TreemapLayout
         && frame.Y + frame.Height > canvas.Y;
 
     /// <summary>
-    /// How many canvases past each edge of the canvas a rectangle may run before it is cut there.
-    /// Further than a picture at <see cref="MapViewport.MaximumZoom"/> reaches, so no rectangle at a zoom
-    /// the map allows today is cut, and near enough that an edge at the cut is still placed in single
-    /// precision to a few hundredths of a pixel on the largest screen.
+    /// How many canvases past each edge of the canvas a rectangle may run before it is cut there:
+    /// near enough that an edge at the cut is still placed in single precision to a few hundredths of
+    /// a pixel on the largest screen.
+    ///
+    /// <para>A picture at <see cref="MapCeiling.Least"/> is no wider than this, so up to that zoom no
+    /// rectangle is cut. Past it, a drawing shown zoomed out more than this many times on its way to
+    /// the next one has its cut edges on screen, and the whole picture drawn under every zoomed drawing
+    /// shows beyond them.</para>
     /// </summary>
     public const double Reach = 64;
 
@@ -161,10 +165,9 @@ public static class TreemapLayout
     /// thousands of pixels long, and summed in single precision they are visibly wrong. For the same
     /// reason a rectangle running far off the canvas is cut to <see cref="Reach"/> canvases past it
     /// first: its visible edge would otherwise be the sum of two numbers as large as the magnified
-    /// picture, rounded. A shape cut that far away is never on screen, even while the drawing is
-    /// shown zoomed out on its way to the next one.</para>
+    /// picture, rounded. Where the cut can come on screen is said at <see cref="Reach"/>.</para>
     /// </summary>
-    private static ExploreTile Tile(int node, int depth, long bytes, Rectangle frame, Rectangle canvas, float header = 0)
+    private static ExploreTile Tile(int node, int depth, long bytes, Rectangle frame, Rectangle canvas, float header = 0, float finest = 0)
     {
         var left = Math.Max(frame.X, canvas.X - (Reach * canvas.Width));
         var top = Math.Max(frame.Y, canvas.Y - (Reach * canvas.Height));
@@ -173,8 +176,48 @@ public static class TreemapLayout
 
         return new ExploreTile(
             node, depth, bytes,
-            (float)left, (float)top, (float)(right - left), (float)(bottom - top), header);
+            (float)left, (float)top, (float)(right - left), (float)(bottom - top), header, finest);
     }
+
+    /// <summary>
+    /// How wide the smallest thing in <paramref name="node"/>, drawn as one block in
+    /// <paramref name="frame"/>, would be as a square: see <see cref="ExploreTile.Finest"/>. Zero for a
+    /// file, and for a folder with nothing in it to draw.
+    /// </summary>
+    private static float FinestIn(ISizedTree tree, int node, Rectangle frame)
+    {
+        if (!tree.IsContainer(node))
+        {
+            return 0;
+        }
+
+        var smallest = Smallest(tree, tree.ChildrenOf(node));
+
+        return smallest > 0 ? Finest(smallest, frame.Width * frame.Height / tree.SizeOf(node)) : 0;
+    }
+
+    /// <summary>
+    /// The size of the smallest of <paramref name="nodes"/> that has any, or zero where none has. They
+    /// come largest first, so it is the last that is not empty.
+    /// </summary>
+    private static long Smallest(ISizedTree tree, ReadOnlySpan<int> nodes)
+    {
+        for (var i = nodes.Length - 1; i >= 0; i--)
+        {
+            if (tree.SizeOf(nodes[i]) is > 0 and var size)
+            {
+                return size;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// How wide a square <paramref name="bytes"/> covers, at <paramref name="scale"/> square pixels to
+    /// the byte.
+    /// </summary>
+    private static float Finest(long bytes, double scale) => (float)Math.Sqrt(bytes * scale);
 
     /// <summary>
     /// Fit one node's children into <paramref name="area"/>, row by row, largest first.
@@ -248,7 +291,7 @@ public static class TreemapLayout
                     continue;
                 }
 
-                Aggregate(tree, children[index..], remaining, canvas, depth, tiles);
+                Aggregate(tree, children[index..], remaining, scale, canvas, depth, tiles);
                 return;
             }
 
@@ -407,6 +450,7 @@ public static class TreemapLayout
         ISizedTree tree,
         ReadOnlySpan<int> omitted,
         Rectangle area,
+        double scale,
         Rectangle canvas,
         int depth,
         List<ExploreTile> tiles)
@@ -425,7 +469,7 @@ public static class TreemapLayout
             return;
         }
 
-        tiles.Add(Tile(ExploreTile.Aggregated, depth, bytes, area, canvas));
+        tiles.Add(Tile(ExploreTile.Aggregated, depth, bytes, area, canvas, finest: Finest(Smallest(tree, omitted), scale)));
     }
 
     /// <summary>
