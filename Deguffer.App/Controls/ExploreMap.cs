@@ -92,10 +92,30 @@ public sealed class ExploreMap : UserControl
     private bool _redrawOwed;
 
     /// <summary>
-    /// Whether a folder has finished opening and the picture of it has not arrived yet. The old picture
-    /// stays, stretched where the opening left it, until the new one has landed over it.
+    /// Which way the change of folder on its way goes, from the moment the page hands the map another
+    /// folder until the flight has finished and the picture it went to has arrived; and
+    /// <see cref="FolderStep.Across"/> while there is none. The pointer is over nothing while it flies,
+    /// because the screen is on its way from one picture to another (§7.1): see <see cref="Stepping"/>.
     /// </summary>
-    private bool _openingOwed;
+    private FolderStep _step;
+
+    /// <summary>
+    /// The folder the change of folder on its way left, and the drawing of it, so a reader who asks
+    /// for it back before the flight has arrived is flown back from where the flight is.
+    /// </summary>
+    private Left? _left;
+
+    /// <summary>
+    /// Whether a step out is waiting for the picture it goes out to: until that is drawn, there is
+    /// nothing to pull back into, and the picture left stays filling the screen.
+    /// </summary>
+    private bool _awaitingOuter;
+
+    /// <summary>
+    /// Whether a flight into a folder has finished and the picture of it has not arrived yet. The old
+    /// picture stays, stretched where the flight left it, until the new one has landed over it.
+    /// </summary>
+    private bool _stepOwed;
 
     /// <summary>
     /// Whether the last press was one a tap may act on: the left button, a touch or a pen. The
@@ -136,19 +156,13 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// The drawings of the picture on screen. See <see cref="ExploreLayers"/>. Swapped with
-    /// <see cref="_departing"/> as a folder opens, so the old picture can go on showing while the new
-    /// one grows over it.
+    /// <see cref="_departing"/> as the folder changes, so the old picture can go on showing while the
+    /// camera flies from it to the new one.
     /// </summary>
     private ExploreLayers _pictures;
 
-    /// <summary>The picture a folder is opening out of, while it does, and empty otherwise.</summary>
+    /// <summary>The picture a change of folder is leaving, while it does, and empty otherwise.</summary>
     private ExploreLayers _departing;
-
-    /// <summary>
-    /// The folder the page is being asked to open, and where its shape is on the screen, for the one
-    /// moment the request is being made. See <see cref="OnDoubleTapped"/>.
-    /// </summary>
-    private (int Node, MapFrame Shape)? _opening;
 
     /// <summary>
     /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, ExploreSpacing, VolumeSpace)"/>
@@ -304,7 +318,7 @@ public sealed class ExploreMap : UserControl
         // as soon as it does, as they are for a move the map starts itself.
         _zoom.Started += (_, _) =>
         {
-            _descent.Finish();
+            SettleStep();
             Underlay();
         };
 
@@ -398,7 +412,7 @@ public sealed class ExploreMap : UserControl
             // still opening, or a drag still held, is finished where it was going for the same reason.
             _settled.Stop();
             _zoom.Stop();
-            _descent.Finish();
+            SettleStep();
             EndDrag();
 
             // A redraw still landing is stopped for the same reason, and owed when the page is back.
@@ -452,8 +466,8 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// The node the user asked to open, by double-clicking a shape. A page that opens it by showing it
-    /// here, before this returns, has it open out of its shape on a treemap. See
+    /// The node the user asked to open, by double-clicking a shape. A page that opens it shows it here
+    /// before this returns, and one that does not has the map zoom to it instead. See
     /// <see cref="OnDoubleTapped"/>.
     /// </summary>
     public event EventHandler<int>? Activated;
@@ -578,6 +592,14 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Draw <paramref name="node"/> of any tree a layout can lay out.
+    ///
+    /// <para>On a treemap of the same tree, a change of folder is a camera move: into a folder below
+    /// this one, the camera flies into its shape and the folder's own picture comes in as it arrives;
+    /// out to a folder above it, however far up, the picture of that folder comes in round this one
+    /// and the camera pulls back until it fills the map, so the folder left is seen shrinking into its
+    /// place (<see cref="FolderSteps"/>, <see cref="MapDescent"/>). Asked for the folder it left before
+    /// the flight arrives, the camera turns round where it is. An icicle and a sunburst have no camera,
+    /// and change at once.</para>
     /// </summary>
     /// <param name="colours">What the colours are to say, asked at each repaint.</param>
     /// <param name="labelText">What to write on a shape of the tree this drawing chose to label.</param>
@@ -606,51 +628,56 @@ public sealed class ExploreMap : UserControl
         // new colouring, scheme or spacing is the same picture, so the zoom stays.
         var was = _zoom.Shown;
         var another = !ReferenceEquals(tree, _tree) || node != _node || view != _view || volume != _volume;
+        var zooms = Zoomable && tree is not null && ExploreSurface.Zooms(tree, view);
 
-        // A shape opened by a double-click, in the same tree and the same view, opens out of that
-        // shape: a folder, or the root opened out of the volume beside it. Anything else arriving
-        // here is not what the double-click asked for, and nor is the same picture again, which
-        // has nothing to open into.
-        var opening = another && _opening is { } asked && asked.Node == node && ReferenceEquals(tree, _tree) && view == _view
-            ? asked.Shape
-            : (MapFrame?)null;
+        // Drawn at the zoom asked for from the start, rather than drawn whole and then glided in.
+        var opened = zooms && viewport is { } revisited ? revisited : MapViewport.Whole;
+
+        MapFrame? into = null;
 
         if (another)
         {
             _picturesHanded++;
-
-            _descent.Finish();
             EndDrag();
 
-            // Drawn at the zoom asked for from the start, rather than drawn whole and then glided in.
-            _zoom.Reset(Zoomable && viewport is { } revisited && tree is not null && ExploreSurface.Zooms(tree, view)
-                ? revisited
-                : MapViewport.Whole);
-
-            // The picture on screen stays, to open out of, and the new one is drawn into the other
-            // set of layers over it.
-            if (opening is not null && _drawing is not null)
+            if (_left is { Drawing: { } drawing } left
+                && ReferenceEquals(tree, left.Tree) && node == left.Node && view == left.View && volume == left.Volume
+                && opened == left.Viewport
+                && Stepping)
             {
-                (_pictures, _departing) = (_departing, _pictures);
-
-                // The old picture stays where the camera had it as the folder was double-clicked,
-                // and the camera goes on to the new one, which grows over it.
-                _departing.Freeze(was.Camera(ActualWidth, ActualHeight, _zoom.Origin));
-                _pictures.Follow();
-                _pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
-                _labels.Ride(_pictures.Root);
-
-                _root.Children.Remove(_departing.Root);
-                _root.Children.InsertAtBottom(_departing.Root);
-
-                // The drawing on screen is the one being opened out of now, carried away with the
-                // old picture, so nothing is resolved against it again. The pointer is over nothing
-                // until the folder's own drawing arrives.
-                _drawing = null;
+                Return(drawing, colours, labelText, spacing);
+                return;
             }
-            else
+
+            // Any other change of folder lands the one on its way first: the screen has room for the
+            // flight between two pictures, and this one starts from the picture it arrived at.
+            LandStep();
+
+            var step = zooms && ReferenceEquals(tree, _tree) && view == _view && _drawing is { Viewport: not null }
+                ? FolderSteps.Between(tree!, _node, _volume != VolumeSpace.None, node, volume != VolumeSpace.None)
+                : FolderStep.Across;
+
+            _zoom.Reset(opened);
+
+            // The picture on screen stays, to fly from, and the new one is drawn into the other set
+            // of layers: over it for a step in, which the new picture grows out of, and under it for a
+            // step out, which it shrinks back into.
+            if (step != FolderStep.Across)
             {
-                opening = null;
+                into = step == FolderStep.Into
+                    ? _drawing!.ScreenOf(node, was, opened) ?? MapFrame.Whole
+                    : null;
+
+                _left = new Left(_tree!, _node, _view, _volume, was, _drawing, _shapeColours);
+                _step = step;
+                _awaitingOuter = step == FolderStep.OutOf;
+
+                Swap(was);
+
+                // The drawing on screen is the one being left now, carried away with the old
+                // picture, so nothing is resolved against it again. The pointer is over nothing
+                // until the flight has arrived.
+                _drawing = null;
             }
         }
 
@@ -665,20 +692,24 @@ public sealed class ExploreMap : UserControl
         // Started before the new picture is drawn, so the drawing arrives into a folder already
         // opening: its outlines wait for it the way they wait for a zoom, its names ride it in, and
         // the pointer is over nothing until the picture it is over is the one on screen. The names
-        // of the picture opened out of go with it.
-        if (opening is { } shape)
+        // of the picture left go with it. A step out flies once the picture it goes out to is drawn.
+        if (_step != FolderStep.Across && another)
         {
             _labels.Hide();
             _highlight.Hide();
-            _descent.Start(shape);
+
+            if (into is { } shape)
+            {
+                _descent.Start(shape, FolderStep.Into);
+            }
         }
 
         Redraw();
 
-        // Nothing to open into after all: a folder with nothing in it to draw.
-        if (opening is not null && _drawing is null && _redraws.Pending is null)
+        // Nothing to fly to after all: a folder with nothing in it to draw.
+        if (_step != FolderStep.Across && _drawing is null && _redraws.Pending is null)
         {
-            _descent.Finish();
+            LandStep();
         }
 
         // The same picture, zoomed to where the reader was, moves there as a zoom to a shape does.
@@ -797,7 +828,7 @@ public sealed class ExploreMap : UserControl
     {
         // Cut only while something can run past the edges. Unzoomed, nothing does except the halo of
         // an outline round a shape at the edge, which has always been drawn whole.
-        var cut = !(_zoom.Shown.IsWhole && _drawn.IsWhole && !_descent.IsMoving);
+        var cut = !(_zoom.Shown.IsWhole && _drawn.IsWhole && _step == FolderStep.Across);
 
         if (cut)
         {
@@ -898,9 +929,9 @@ public sealed class ExploreMap : UserControl
             Report(null);
 
             // A folder opened into nothing: the picture it opened out of goes too.
-            if (_openingOwed)
+            if (_stepOwed)
             {
-                FinishOpening();
+                FinishStep();
             }
 
             return;
@@ -1062,10 +1093,26 @@ public sealed class ExploreMap : UserControl
         ShowMarked();
         ReportWhatThePointerIsOver();
 
-        // A folder that finished opening before its picture arrived finishes now, over it.
-        if (_openingOwed && !_descent.IsMoving)
+        // A step out flies now that there is a picture to pull back into, from the shape the folder
+        // left has in it. One that does not draw that folder's branch has nothing to fly from.
+        if (_awaitingOuter)
         {
-            FinishOpening();
+            _awaitingOuter = false;
+
+            if (_left is { } left && drawing.ScreenOf(left.Node, _zoom.Shown, left.Viewport) is { } shape)
+            {
+                _descent.Start(shape, FolderStep.OutOf);
+            }
+            else
+            {
+                FinishStep();
+            }
+        }
+
+        // A flight in that arrived before its picture did finishes now, over it.
+        if (_stepOwed && !_descent.IsMoving)
+        {
+            FinishStep();
         }
 
         // The whole picture under a zoomed drawing only shows once the picture moves, so it waits
@@ -1263,8 +1310,9 @@ public sealed class ExploreMap : UserControl
     /// drawing does not reach is over nothing, even where a shape running off the drawing's edge would
     /// contain it, and even though a kept drawing shows there: that one is at another zoom, it names
     /// fewer shapes than the drawing that replaces it a moment later, and the outline that would
-    /// confirm the pick is drawn in this drawing's geometry, not in its. A folder opening is over
-    /// nothing throughout, for the same reason: the picture is on its way to being another one.</para>
+    /// confirm the pick is drawn in this drawing's geometry, not in its. A change of folder is over
+    /// nothing while it flies, and while a step out waits for the picture it flies out to, for the
+    /// same reason: the picture is on its way to being another one. A press lands it first.</para>
     ///
     /// <para>A redraw landing is the case once more. Its regions show where they have landed and the
     /// last drawing shows everywhere else, so each point is answered by whichever shows there: see
@@ -1277,10 +1325,13 @@ public sealed class ExploreMap : UserControl
     /// shows there, or null where none does. See <see cref="At"/>.
     /// </summary>
     private MapLocation? Locate(Point point) =>
-        ActualWidth <= 0 || ActualHeight <= 0 || _descent.IsMoving
+        ActualWidth <= 0 || ActualHeight <= 0 || Stepping
             ? null
             : MapHitTest.Locate(
                 _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing, _arriving, _tree);
+
+    /// <summary>Whether a change of folder is flying, or waiting for the picture it is to fly out to.</summary>
+    private bool Stepping => _descent.IsMoving || _awaitingOuter;
 
     /// <summary>
     /// Where the shape at <paramref name="spot"/> is on the screen, in fractions of it, or null where
@@ -1320,7 +1371,7 @@ public sealed class ExploreMap : UserControl
         var point = e.GetCurrentPoint(this);
         var delta = point.Properties.MouseWheelDelta;
 
-        _descent.Finish();
+        SettleStep();
         Underlay();
 
         _pointer = point.Position;
@@ -1354,7 +1405,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _descent.Finish();
+        SettleStep();
         Underlay();
 
         _zoom.Press(key);
@@ -1415,7 +1466,7 @@ public sealed class ExploreMap : UserControl
 
         _tapPress = point.PointerDeviceType != PointerDeviceType.Mouse || point.Properties.IsLeftButtonPressed;
 
-        _descent.Finish();
+        SettleStep();
 
         if (!_zoom.Movable)
         {
@@ -1578,7 +1629,7 @@ public sealed class ExploreMap : UserControl
     {
         _generation = _graphics.Generation;
 
-        _descent.Finish();
+        LandStep();
         _redraws.Cancel();
         _departing.Renew();
         _pictures.Renew();
@@ -1680,12 +1731,10 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Open what was double-clicked, and zoom to it where it cannot be opened.
     ///
-    /// <para>A treemap draws what a folder holds inside the folder's own shape, so going into one is
-    /// a zoom into that shape, and it is animated as one: the shape grows from where it was until it
-    /// fills the map, and the folder's own drawing grows in over it. The page is what decides whether
-    /// a node opens, and it says so by showing it here before <see cref="Activated"/> returns, so the
-    /// shape is handed over for that moment and only for it. The root of a scan of a whole volume
-    /// opens the same way, out of the volume drawn beside it.</para>
+    /// <para>The page is what decides whether a node opens, and it says so by showing it here before
+    /// <see cref="Activated"/> returns. The camera then flies into the folder's shape, as it does for
+    /// every step into a folder however the page asked for it (see <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, ExploreSpacing, VolumeSpace, MapViewport?)"/>).
+    /// The root of a scan of a whole volume opens the same way, out of the volume drawn beside it.</para>
     ///
     /// <para>What does not open, a file, the block standing in for items too small to draw, or the
     /// block standing for free space, is zoomed to until it fills the map as far as its shape allows.
@@ -1714,16 +1763,7 @@ public sealed class ExploreMap : UserControl
             // node drawn as another picture.
             var handedBefore = _picturesHanded;
 
-            _opening = shape is { } opening ? (hit.Node, opening) : null;
-
-            try
-            {
-                Activated?.Invoke(this, hit.Node);
-            }
-            finally
-            {
-                _opening = null;
-            }
+            Activated?.Invoke(this, hit.Node);
 
             if (_picturesHanded != handedBefore)
             {
@@ -1747,42 +1787,161 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// One frame of a folder opening: the old picture stretched so the folder's shape fills more of
-    /// the map, and the folder's own drawing over it on the same frame, coming in.
+    /// Hand the set of layers on screen to the picture being left, held where the camera had it at
+    /// <paramref name="left"/>, and draw the new picture into the other set, which follows the camera.
     /// </summary>
-    private void OnDescentMoved(object? sender, EventArgs e)
+    private void Swap(MapViewport left)
     {
-        _departing.Carry(_descent.Departing, 1, ActualWidth, ActualHeight);
-        _pictures.Carry(_descent.Opened, _descent.Opacity, ActualWidth, ActualHeight);
+        (_pictures, _departing) = (_departing, _pictures);
+
+        _departing.Freeze(left.Camera(ActualWidth, ActualHeight, _zoom.Origin));
+        _pictures.Follow();
+        _pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
+        _labels.Ride(_pictures.Root);
+
+        // The inner picture goes over the outer one: a folder opened grows over the picture it was
+        // in, and a folder left shrinks back into the picture it is in. The outlines stay on top.
+        _root.Children.Remove(_departing.Root);
+
+        if (_step == FolderStep.OutOf)
+        {
+            _root.Children.InsertAbove(_departing.Root, _pictures.Root);
+        }
+        else
+        {
+            _root.Children.InsertAtBottom(_departing.Root);
+        }
     }
 
     /// <summary>
-    /// The folder has opened: the old picture goes, and the names, the outlines and the readout are
-    /// the new drawing's from here. Unless that drawing is still landing, in which case the old
-    /// picture stays under it, where the opening left it, until it arrives.
+    /// The reader asked for the folder the flight is leaving before it arrived, at the zoom they left it
+    /// at: the flight turns round from where it is, at the speed it has, and the drawing left, still on
+    /// screen, is the one the map works from again. Nothing is drawn afresh, and nothing jumps.
+    /// </summary>
+    private void Return(ExploreSurface drawing, Func<DateTime, ShapeColours> colours, Func<int, string> labelText, ExploreSpacing spacing)
+    {
+        var left = _left!;
+        var leaving = _zoom.Shown;
+
+        _redraws.Cancel();
+
+        _left = new Left(_tree!, _node, _view, _volume, leaving, _drawing, _shapeColours);
+        _step = _step == FolderStep.Into ? FolderStep.OutOf : FolderStep.Into;
+        _awaitingOuter = false;
+        _stepOwed = false;
+
+        _zoom.Reset(left.Viewport);
+        Swap(leaving);
+
+        _tree = left.Tree;
+        _node = left.Node;
+        _view = left.View;
+        _volume = left.Volume;
+        _colours = colours;
+        _labelText = labelText;
+        _spacing = spacing;
+        _shapeColours = left.Colours;
+
+        // A step out still waiting for its picture had not moved yet: there is nothing to turn round.
+        var flying = _descent.IsMoving;
+
+        _descent.Turn();
+        Present(drawing);
+
+        if (!flying)
+        {
+            FinishStep();
+        }
+    }
+
+    /// <summary>
+    /// Bring a change of folder on its way to where it was going, for an input that needs the screen
+    /// settled first: the flight lands, and a step out still waiting for its picture stops waiting,
+    /// so the picture left goes. A flight that landed before its picture arrived still waits for it.
+    /// </summary>
+    private void SettleStep()
+    {
+        if (_descent.IsMoving)
+        {
+            _descent.Finish();
+        }
+        else if (_awaitingOuter)
+        {
+            FinishStep();
+        }
+    }
+
+    /// <summary>
+    /// End a change of folder on its way altogether, for a map handed another picture or one with
+    /// nothing to draw: the picture left goes, whether or not the one it was going to has arrived.
+    /// </summary>
+    private void LandStep()
+    {
+        SettleStep();
+
+        if (_step != FolderStep.Across)
+        {
+            FinishStep();
+        }
+    }
+
+    /// <summary>
+    /// One frame of a change of folder: the outer picture stretched so the inner folder's shape fills
+    /// more of the map or less, and the inner folder's own drawing over it on the same frame, coming in
+    /// or going.
+    /// </summary>
+    private void OnDescentMoved(object? sender, EventArgs e)
+    {
+        var (inner, outer) = _step == FolderStep.OutOf ? (_departing, _pictures) : (_pictures, _departing);
+
+        outer.Carry(_descent.Outer, 1, ActualWidth, ActualHeight);
+        inner.Carry(_descent.Inner, _descent.Opacity, ActualWidth, ActualHeight);
+    }
+
+    /// <summary>
+    /// The flight has arrived: the picture left goes, and the names, the outlines and the readout are
+    /// the new drawing's from here. Unless that drawing is still landing, in which case the picture
+    /// left stays under it, where the flight left it, until it arrives.
     /// </summary>
     private void OnDescentArrived(object? sender, EventArgs e)
     {
         if (_drawing is null && _redraws.Pending is not null)
         {
-            _openingOwed = true;
+            _stepOwed = true;
             return;
         }
 
-        FinishOpening();
+        FinishStep();
     }
 
-    /// <summary>The end of a folder opening, once it has finished moving and its picture has arrived.</summary>
-    private void FinishOpening()
+    /// <summary>The end of a change of folder, once its flight is over and its picture has arrived.</summary>
+    private void FinishStep()
     {
-        _openingOwed = false;
+        _step = FolderStep.Across;
+        _left = null;
+        _awaitingOuter = false;
+        _stepOwed = false;
 
         _departing.Clear();
         _departing.Carry(MapFrame.Whole, 1, ActualWidth, ActualHeight);
+        _pictures.Carry(MapFrame.Whole, 1, ActualWidth, ActualHeight);
 
         _labels.Reveal();
         _highlight.Reveal();
         Place();
         ReportWhatThePointerIsOver();
     }
+
+    /// <summary>
+    /// The folder a change of folder left, as it was on screen: the zoom it was at, the drawing the map
+    /// worked from, if one had arrived, and the colours its drawings were made in.
+    /// </summary>
+    private sealed record Left(
+        ISizedTree Tree,
+        int Node,
+        ExploreView View,
+        VolumeSpace Volume,
+        MapViewport Viewport,
+        ExploreSurface? Drawing,
+        ShapeColours? Colours);
 }

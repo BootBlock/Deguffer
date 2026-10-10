@@ -36,6 +36,13 @@ public readonly record struct MapFrame(double X, double Y, double Width, double 
     }
 
     /// <summary>
+    /// Where <paramref name="part"/>, measured in fractions of this frame, is in the terms this frame
+    /// is measured in.
+    /// </summary>
+    public MapFrame Inside(MapFrame part) =>
+        new(X + (part.X * Width), Y + (part.Y * Height), part.Width * Width, part.Height * Height);
+
+    /// <summary>
     /// Where all of what this is a part of goes when this part is stretched onto
     /// <paramref name="onto"/>: the one move of the whole that carries this frame exactly there.
     /// </summary>

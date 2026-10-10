@@ -1,80 +1,92 @@
 using Deguffer.Core.Exploring.Layout;
-using Deguffer.Core.Viewing;
 
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A folder opening on the map: its shape grows from where it was until it fills the screen, the old
-/// picture stretches with it, and the folder's own drawing comes in over it on the same frame.
+/// A change of folder on the map: the camera flies from the outer picture filling the screen into the
+/// inner folder's shape until its own picture fills it, or back out, and the inner picture comes in
+/// over the outer one on the same frame, or goes.
 /// </summary>
 public sealed class MapDescentTests
 {
     private const double Precision = 1e-9;
 
-    private static readonly TimeSpan Start = TimeSpan.FromSeconds(5);
-
-    /// <summary>A folder opening for a reader with animation effects on.</summary>
-    private static readonly Motion Opening = MotionToken.Entrance.Full;
-
-    /// <summary>The same for a reader with them off.</summary>
-    private static readonly Motion Fading = MotionToken.Entrance.Reduced;
-
     [Fact]
-    public void AFolderOpensFromWhereItsShapeWasToTheWholeScreen()
+    public void TheFlightRunsFromTheFoldersShapeToTheWholeScreen()
     {
         var shape = new MapFrame(0.6, 0.1, 0.3, 0.2);
-        var descent = new MapDescent(shape, Start, Opening);
+        var descent = new MapDescent(shape, Travels: true);
 
-        AssertClose(shape, descent.Opened(Start));
-        AssertClose(MapFrame.Whole, descent.Departing(Start));
-        Assert.Equal(0, descent.Opacity(Start));
-        Assert.False(descent.IsOverAt(Start + (Opening.Duration / 2)));
+        AssertClose(shape, descent.Inner(0));
+        AssertClose(MapFrame.Whole, descent.Outer(0));
+        Assert.Equal(0, descent.Opacity(0));
 
-        Assert.True(descent.IsOverAt(Start + Opening.Duration));
-        AssertClose(MapFrame.Whole, descent.Opened(Start + Opening.Duration));
-        Assert.Equal(1, descent.Opacity(Start + Opening.Duration));
+        // Exactly, not nearly: the map's camera takes the inner picture over from here, and a rounding
+        // error would move it as it did.
+        Assert.Equal(MapFrame.Whole, descent.Inner(1));
+        Assert.Equal(MapFrame.Whole, descent.Outer(0));
+        AssertClose(shape.Carried(MapFrame.Whole), descent.Outer(1));
+        Assert.Equal(1, descent.Opacity(1));
     }
 
     /// <summary>
-    /// At every step the old picture's copy of the shape lies exactly under the new drawing, so the one
-    /// turns into the other rather than sliding past it.
+    /// The camera zooms about the one point of the screen that the folder's shape and the whole screen
+    /// agree on, on each axis, so nothing slides sideways on the way: a straight line between the two
+    /// frames would drift the outer picture across the screen as it grew.
     /// </summary>
-    [Fact]
-    public void TheOldShapeLiesUnderTheNewDrawingAtEveryStep()
+    [Theory]
+    [InlineData(0.6, 0.1, 0.3, 0.2)]
+    [InlineData(0, 0.5, 0.25, 0.5)]
+    [InlineData(0.9, 0.9, 0.01, 0.05)]
+    public void ThePointTheTwoEndsAgreeOnStaysStill(double x, double y, double width, double height)
     {
-        var shape = new MapFrame(0.15, 0.55, 0.25, 0.4);
-        var descent = new MapDescent(shape, Start, Opening);
+        var descent = new MapDescent(new MapFrame(x, y, width, height), Travels: true);
+        var stillX = x / (1 - width);
+        var stillY = y / (1 - height);
 
         for (var step = 0; step <= 20; step++)
         {
-            var now = Start + (Opening.Duration * (step / 20.0));
-            var screen = descent.Departing(now);
-            var opened = descent.Opened(now);
+            var outer = descent.Outer(step / 20.0);
 
-            Assert.Equal(opened.X, screen.X + (shape.X * screen.Width), Precision);
-            Assert.Equal(opened.Y, screen.Y + (shape.Y * screen.Height), Precision);
-            Assert.Equal(opened.Width, shape.Width * screen.Width, Precision);
-            Assert.Equal(opened.Height, shape.Height * screen.Height, Precision);
+            Assert.Equal(stillX, outer.X + (stillX * outer.Width), Precision);
+            Assert.Equal(stillY, outer.Y + (stillY * outer.Height), Precision);
         }
     }
 
     /// <summary>
-    /// The old picture covers the whole screen at every step, so nothing bare shows round a folder as
-    /// it opens. Including a shape a zoom had magnified past the screen's edges, which is grown from
-    /// the part of it on the screen: grown whole, the old picture would shrink away from the edges.
+    /// The zoom goes by equal ratios rather than equal steps, so a flight many folders deep spends as
+    /// long on each doubling: halfway through, the outer picture is magnified by the square root of
+    /// what it is at the end, not by half of it.
+    /// </summary>
+    [Fact]
+    public void TheZoomMovesByEqualRatios()
+    {
+        var descent = new MapDescent(new MapFrame(0.4, 0.45, 0.01, 0.04), Travels: true);
+        var end = descent.Outer(1);
+        var halfway = descent.Outer(0.5);
+
+        Assert.Equal(Math.Sqrt(end.Width), halfway.Width, Precision);
+        Assert.Equal(Math.Sqrt(end.Height), halfway.Height, Precision);
+    }
+
+    /// <summary>
+    /// The outer picture covers the whole screen at every step, so nothing bare shows round the folder
+    /// on the way in or out. Including a shape a zoom had magnified past the screen's edges, which is
+    /// flown to from the part of it on the screen: flown to whole, the outer picture would shrink away
+    /// from the edges.
     /// </summary>
     [Theory]
     [InlineData(0, 0, 0.5, 0.5)]
     [InlineData(0.7, 0.8, 0.3, 0.2)]
     [InlineData(0.3, 0.4, 0.01, 0.02)]
     [InlineData(-0.5, 0.2, 1.2, 1.5)]
-    public void TheOldPictureCoversTheScreenThroughout(double x, double y, double width, double height)
+    public void TheOuterPictureCoversTheScreenThroughout(double x, double y, double width, double height)
     {
-        var descent = new MapDescent(new MapFrame(x, y, width, height), Start, Opening);
+        var descent = new MapDescent(new MapFrame(x, y, width, height), Travels: true);
 
         for (var step = 0; step <= 20; step++)
         {
-            var screen = descent.Departing(Start + (Opening.Duration * (step / 20.0)));
+            var screen = descent.Outer(step / 20.0);
 
             Assert.True(screen.X <= Precision, $"the left edge was bare at step {step}: {screen}");
             Assert.True(screen.Y <= Precision, $"the top edge was bare at step {step}: {screen}");
@@ -83,15 +95,31 @@ public sealed class MapDescentTests
         }
     }
 
+    /// <summary>
+    /// A spring turned round near either end can carry the progress a hair past it. The pictures stay
+    /// at that end rather than the outer one shrinking off the screen's edges.
+    /// </summary>
     [Fact]
-    public void TheNewDrawingComesInWithoutEverFadingBack()
+    public void AProgressPastEitherEndStaysAtThatEnd()
     {
-        var descent = new MapDescent(new MapFrame(0.2, 0.2, 0.2, 0.2), Start, Opening);
+        var shape = new MapFrame(0.2, 0.3, 0.4, 0.5);
+        var descent = new MapDescent(shape, Travels: true);
+
+        AssertClose(MapFrame.Whole, descent.Outer(-0.05));
+        AssertClose(MapFrame.Whole, descent.Inner(1.05));
+        Assert.Equal(0, descent.Opacity(-0.05));
+        Assert.Equal(1, descent.Opacity(1.05));
+    }
+
+    [Fact]
+    public void TheInnerPictureComesInWithoutEverFadingBack()
+    {
+        var descent = new MapDescent(new MapFrame(0.2, 0.2, 0.2, 0.2), Travels: true);
         var previous = 0.0;
 
         for (var step = 0; step <= 25; step++)
         {
-            var opacity = descent.Opacity(Start + (Opening.Duration * (step / 25.0)));
+            var opacity = descent.Opacity(step / 25.0);
 
             Assert.InRange(opacity, previous, 1);
             previous = opacity;
@@ -100,27 +128,20 @@ public sealed class MapDescentTests
 
     /// <summary>
     /// With animation effects off nothing grows or stretches: both pictures fill the screen where they
-    /// are throughout, and the new one fades in over the old, sooner than the move it stands in for.
+    /// are throughout, and the inner one fades in over the outer, or out of it.
     /// </summary>
     [Fact]
-    public void WithMotionOffTheFolderFadesInPlace()
+    public void WithMotionOffThePicturesStayInPlace()
     {
-        var shape = new MapFrame(0.6, 0.1, 0.3, 0.2);
-        var descent = new MapDescent(shape, Start, Fading);
-
-        Assert.True(Fading.Duration < Opening.Duration, "the fade took as long as the move it stands in for");
-        Assert.Equal(0, descent.Opacity(Start));
-        Assert.False(descent.IsOverAt(Start + (Fading.Duration / 2)));
-        Assert.True(descent.IsOverAt(Start + Fading.Duration));
-        Assert.Equal(1, descent.Opacity(Start + Fading.Duration));
+        var descent = new MapDescent(new MapFrame(0.6, 0.1, 0.3, 0.2), Travels: false);
 
         for (var step = 0; step <= 20; step++)
         {
-            var now = Start + (Fading.Duration * (step / 20.0));
-
-            Assert.Equal(MapFrame.Whole, descent.Opened(now));
-            Assert.Equal(MapFrame.Whole, descent.Departing(now));
+            Assert.Equal(MapFrame.Whole, descent.Inner(step / 20.0));
+            Assert.Equal(MapFrame.Whole, descent.Outer(step / 20.0));
         }
+
+        Assert.Equal(0.5, descent.Opacity(0.5), Precision);
     }
 
     private static void AssertClose(MapFrame expected, MapFrame actual)

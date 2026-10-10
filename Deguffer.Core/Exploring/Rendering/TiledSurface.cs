@@ -71,6 +71,47 @@ public sealed class TiledSurface : ExploreSurface
 
     public override ExploreTile? TileAt(float x, float y) => _hits.At(x, y) is { } index ? _tiles[index] : null;
 
+    /// <summary>
+    /// One pass over the shapes, keeping the deepest that is the node or a folder above it. Asked once
+    /// for each change of folder, so the folders above it are gathered rather than kept.
+    /// </summary>
+    public override MapFrame? FrameOf(int node)
+    {
+        var path = new HashSet<int>();
+
+        for (var current = node; ; current = Tree.ParentOf(current))
+        {
+            path.Add(current);
+
+            if (current == Root)
+            {
+                break;
+            }
+
+            // The tree's root, reached without passing this drawing's: the node is not in it.
+            if (Tree.ParentOf(current) == current)
+            {
+                return null;
+            }
+        }
+
+        ExploreTile? deepest = null;
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.IsNode && path.Contains(tile.Node) && (deepest is not { } found || tile.Depth > found.Depth))
+            {
+                deepest = tile;
+            }
+        }
+
+        return deepest is { } shape
+            ? new MapFrame(shape.X / (double)Width, shape.Y / (double)Height, shape.Width / (double)Width, shape.Height / (double)Height)
+            : null;
+    }
+
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
     {
         ArgumentNullException.ThrowIfNull(nodes);
