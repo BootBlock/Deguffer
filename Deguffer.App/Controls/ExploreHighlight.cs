@@ -9,7 +9,8 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// What is drawn over the map to say the state of its shapes: the outlines round what is picked and
 /// what the pointer is over, the shape under the pointer lifted with a shadow, the rest of the
-/// picture dimmed round a selection, and a hatch over what a removal under way is acting on.
+/// picture dimmed round a selection or round what a card beside the map lights, and a hatch over what
+/// a removal under way is acting on.
 ///
 /// <para>Over the picture rather than in it, which is what the reference implementation does and for
 /// the reason it does it: WinDirStat renders the shapes into a cached surface once and draws only the
@@ -27,7 +28,7 @@ namespace Deguffer.App.Controls;
 /// says effects are slow, over Remote Desktop for one. The hatch is plain geometry and says what is
 /// about to go, so it stays.</para>
 ///
-/// <para>One type for all four, past the usual length, because they are one answer: each is drawn
+/// <para>One type for all five, past the usual length, because they are one answer: each is drawn
 /// from the outlines of the same drawing, placed over it by the same placement, and turned to the
 /// reader's colours and effects by the same switch, and a mark drawn from a different one would mark a
 /// different shape. How a shape is lifted is apart, in <see cref="ExploreLift"/>.</para>
@@ -65,6 +66,14 @@ internal sealed class ExploreHighlight
     private const float HoveredHaloWidth = 4.5f;
 
     private const float HoveredEdgeWidth = 2;
+
+    /// <summary>
+    /// What a card lights, where the effects are off: the colours of what the pointer is over, which is
+    /// what the card is pointing at, in finer lines, because a kind of file can be thousands of shapes.
+    /// </summary>
+    private const float LitHaloWidth = 2.5f;
+
+    private const float LitEdgeWidth = 1;
 
     /// <summary>
     /// How far past the picture's edges an outline is still drawn, in the picture's own
@@ -113,6 +122,8 @@ internal sealed class ExploreHighlight
     /// <summary>The shape under the pointer, lifted out of the picture over the dimming.</summary>
     private readonly ExploreLift _lift;
 
+    private readonly CompositionPathGeometry _lit;
+
     private readonly CompositionPathGeometry _hovered;
 
     private readonly CompositionPathGeometry _picked;
@@ -135,8 +146,11 @@ internal sealed class ExploreHighlight
 
     private IReadOnlyList<ExploreOutline> _pickedOutlines = [];
 
-    /// <summary>How far the dimming round <see cref="_pickedOutlines"/> reaches, in canvas pixels.</summary>
-    private float _pickedFar;
+    /// <summary>How far the dimming reaches, in canvas pixels.</summary>
+    private float _far;
+
+    /// <summary>What a card beside the map lights, or null while it lights nothing.</summary>
+    private IReadOnlyList<ExploreOutline>? _litOutlines;
 
     private IReadOnlyList<ExploreOutline> _hoveredOutlines = [];
 
@@ -181,6 +195,7 @@ internal sealed class ExploreHighlight
         _placed = compositor.CreateContainerShape();
         _bounds.Shapes.Add(_placed);
 
+        _lit = compositor.CreatePathGeometry(graphics.Nothing);
         _hovered = compositor.CreatePathGeometry(graphics.Nothing);
         _picked = compositor.CreatePathGeometry(graphics.Nothing);
         _marked = compositor.CreatePathGeometry(graphics.Nothing);
@@ -195,9 +210,12 @@ internal sealed class ExploreHighlight
         Colour(null, _hoveredEdge.Color);
 
         // Drawn in this order: the hatch under every line, so a shape marked for removal is still
-        // outlined, and what is picked over what the pointer is over where they meet.
+        // outlined, what is lit under the two outlines a click makes, and what is picked over what the
+        // pointer is over where they meet.
         _placed.Shapes.Add(Fill(compositor, _markedBetween, _hatchBetween));
         _placed.Shapes.Add(Fill(compositor, _marked, _hatch));
+        _placed.Shapes.Add(Stroke(compositor, camera, _lit, _hoveredHalo, LitHaloWidth));
+        _placed.Shapes.Add(Stroke(compositor, camera, _lit, _hoveredEdge, LitEdgeWidth));
         _placed.Shapes.Add(Stroke(compositor, camera, _hovered, _hoveredHalo, HoveredHaloWidth));
         _placed.Shapes.Add(Stroke(compositor, camera, _hovered, _hoveredEdge, HoveredEdgeWidth));
         _placed.Shapes.Add(Stroke(compositor, camera, _picked, _pickedHalo, PickedHaloWidth));
@@ -215,10 +233,41 @@ internal sealed class ExploreHighlight
     public void ShowPicked(IReadOnlyList<ExploreOutline> outlines, float far)
     {
         _pickedOutlines = outlines;
-        _pickedFar = far;
+        _far = far;
         _picked.Path = _graphics.Trace(outlines);
-        _dimmed.Path = _effects ? _graphics.Around(outlines, far) : _graphics.Nothing;
+
+        Dim();
     }
+
+    /// <summary>
+    /// Light what a card beside the map points at, and dim the rest of the picture round it in place
+    /// of the dimming round a selection, for as long as the card points: the question asked last is
+    /// the one answered. Null to light nothing, and an empty list to dim all of the picture, which
+    /// says that what was asked for is nowhere drawn one by one.
+    ///
+    /// <para>Dimmed rather than outlined, so a kind spread over thousands of small shapes reads as
+    /// those shapes standing out rather than as a mesh of lines over them. Where the effects are off
+    /// and nothing is dimmed, the shapes are outlined in the colours of what the pointer is over
+    /// instead, so the answer is still there to read (§6.5).</para>
+    /// </summary>
+    public void ShowLit(IReadOnlyList<ExploreOutline>? outlines)
+    {
+        _litOutlines = outlines;
+        _lit.Path = !_effects && outlines is { Count: > 0 } ? _graphics.Trace(outlines) : _graphics.Nothing;
+
+        Dim();
+    }
+
+    /// <summary>Dim round what is lit, or failing that round what is picked, where the effects are on.</summary>
+    private void Dim() =>
+        _dimmed.Path = !_effects
+            ? _graphics.Nothing
+            : _litOutlines switch
+            {
+                null => _graphics.Around(_pickedOutlines, _far),
+                [] => _graphics.Everything(_far),
+                var lit => _graphics.Around(lit, _far),
+            };
 
     /// <summary>
     /// Mark out what the pointer is over, and lift it out of <paramref name="surface"/>, the canvas
@@ -273,7 +322,8 @@ internal sealed class ExploreHighlight
         _effects = effects;
         _dimBounds.IsVisible = effects;
 
-        ShowPicked(_pickedOutlines, _pickedFar);
+        ShowPicked(_pickedOutlines, _far);
+        ShowLit(_litOutlines);
         ShowHovered(_hoveredOutlines, _hoveredSurface, _hoveredCanvas);
         ShowMarked(_markedOutlines, _hatchScale);
     }
@@ -319,7 +369,8 @@ internal sealed class ExploreHighlight
     /// <summary>Take all of it off, for a map that is no longer showing anything.</summary>
     public void Clear()
     {
-        ShowPicked([], _pickedFar);
+        ShowPicked([], _far);
+        ShowLit(null);
         ShowHovered([], null, _hoveredCanvas);
         ShowMarked([], _hatchScale);
     }

@@ -61,7 +61,7 @@ public sealed class ExploreGrowthTests : IDisposable
         Assert.False(old.CanOpen);
 
         Assert.Equal(2, page.Growth.UsedSpace.Count);
-        Assert.Equal(ExploreGrowth.StripHeight * 0.6, page.Growth.UsedSpace[^1].Height, precision: 6);
+        Assert.Equal(60, page.Growth.UsedSpace[^1].Share, precision: 6);
         Assert.Equal(GrowthPalette.Bands.Select(band => band.Label), page.Legend.Select(band => band.Label));
     });
 

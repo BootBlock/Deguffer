@@ -1155,6 +1155,12 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             _ => (string.Empty, string.Empty, string.Empty),
         };
+
+        // The card beside the map marks the row of what is pointed at, so the map answers "what" too.
+        var pointed = hit is { IsNode: true } over ? over.Node : (int?)null;
+
+        Types.Point(Tree, pointed);
+        Growth.Point(Tree, pointed);
     }
 
     /// <summary>

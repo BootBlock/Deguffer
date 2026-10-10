@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
@@ -27,9 +28,9 @@ public sealed record ExploreGrowthRow(string Path, string Change, string Size, i
 }
 
 /// <summary>One kept scan, as a bar of the used-space strip.</summary>
-/// <param name="Height">The bar's height in pixels, in proportion to the volume's capacity from a zero baseline.</param>
+/// <param name="Share">How full the volume was, 0 to 100, against the largest capacity kept, so the bars rise from a zero baseline.</param>
 /// <param name="Description">The date and the figures, for the bar's tooltip and its accessible name.</param>
-public sealed record UsedSpaceBar(double Height, string Description);
+public sealed record UsedSpaceBar(double Share, string Description);
 
 /// <summary>
 /// The Explore page's answer to "what grew since the last scan": the comparison the map is coloured
@@ -42,9 +43,6 @@ public sealed record UsedSpaceBar(double Height, string Description);
 /// </summary>
 public sealed partial class ExploreGrowth : ObservableObject
 {
-    /// <summary>How tall the tallest possible bar is, which is a volume that is completely full.</summary>
-    public const double StripHeight = 32;
-
     private readonly ScanHistory _history;
 
     /// <summary>The volume the comparison is of, so a removal in Settings can be checked against it.</summary>
@@ -86,8 +84,24 @@ public sealed partial class ExploreGrowth : ObservableObject
 
     public bool HasNote => Note.Length > 0;
 
+    /// <summary>
+    /// The path of the row that speaks for what the pointer is over on the map, which the panel marks,
+    /// or null where no row does. See <see cref="ScanGrowth.ListedFor"/>.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? Pointed { get; private set; }
+
     /// <summary>Raised when <see cref="Comparison"/> changes, so the map is drawn again.</summary>
     public event EventHandler? Changed;
+
+    /// <summary>
+    /// Mark the row that speaks for <paramref name="node"/> of <paramref name="tree"/>, the shape the
+    /// pointer is over on the map, or nothing. A comparison of another tree speaks for nothing in it.
+    /// </summary>
+    public void Point(ExploreTree? tree, int? node) =>
+        Pointed = Comparison is { } growth && ReferenceEquals(growth.Tree, tree) && node is { } over
+            ? growth.ListedFor(over)?.Path
+            : null;
 
     /// <summary>Show what recording a finished scan produced.</summary>
     public void Show(ScanRecord record)
@@ -201,7 +215,7 @@ public sealed partial class ExploreGrowth : ObservableObject
             UsedSpace,
             [
                 .. kept.Select(summary => new UsedSpaceBar(
-                    capacity > 0 ? StripHeight * summary.UsedBytes / capacity : 0,
+                    capacity > 0 ? 100.0 * summary.UsedBytes / capacity : 0,
                     $"{Local(summary.TakenUtc)}: {FreeSpace.Format(summary.UsedBytes)} used of "
                     + $"{FreeSpace.Format(summary.TotalBytes)}")),
             ]);

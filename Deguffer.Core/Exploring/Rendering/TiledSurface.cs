@@ -71,25 +71,67 @@ public sealed class TiledSurface : ExploreSurface
 
     public override ExploreTile? TileAt(float x, float y) => _hits.At(x, y) is { } index ? _tiles[index] : null;
 
+    public override MapFrame? FrameOf(int node) =>
+        Deepest(node) is { } shape
+            ? new MapFrame(shape.X / (double)Width, shape.Y / (double)Height, shape.Width / (double)Width, shape.Height / (double)Height)
+            : null;
+
+    public override int? ShownAs(int node) => Deepest(node)?.Node;
+
     /// <summary>
-    /// One pass over the shapes, keeping the deepest that is the node or a folder above it. Asked once
-    /// for each change of folder, so the folders above it are gathered rather than kept. A node outside
-    /// this drawing has none of them drawn here: every shape is this drawing's root or under it.
+    /// A shape is under another where it lies inside it, which in a treemap is every shape with a
+    /// folder drawn round it and in an icicle none, whose children sit beside their folder rather than
+    /// in it. Read from where the shapes are rather than from which layout made them, so the answer is
+    /// what the screen shows. Only a node's own folder is asked: the layouts draw nothing inside a
+    /// shape but what that shape holds.
     /// </summary>
-    public override MapFrame? FrameOf(int node)
+    public override IReadOnlyList<ExploreOutline> Uncovered(Func<int, bool> nodes)
     {
-        var path = new HashSet<int>();
+        ArgumentNullException.ThrowIfNull(nodes);
 
-        for (var current = node; ; current = Tree.ParentOf(current))
+        // The layouts emit a folder before what it holds, so its shape is known by the time they are.
+        var shapes = new Dictionary<int, int>();
+        var covered = new HashSet<int>();
+
+        for (var i = 0; i < _tiles.Count; i++)
         {
-            path.Add(current);
+            var tile = _tiles[i];
 
-            if (current == Root || Tree.ParentOf(current) == current)
+            if (!tile.IsNode)
             {
-                break;
+                continue;
+            }
+
+            shapes[tile.Node] = i;
+
+            if (tile.Node != Root && shapes.TryGetValue(Tree.ParentOf(tile.Node), out var folder) && Inside(tile, _tiles[folder]))
+            {
+                covered.Add(_tiles[folder].Node);
             }
         }
 
+        var outlines = new List<ExploreOutline>();
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.IsNode && !covered.Contains(tile.Node) && nodes(tile.Node))
+            {
+                outlines.Add(OutlineOf(tile));
+            }
+        }
+
+        return outlines;
+    }
+
+    /// <summary>
+    /// One pass over the shapes, keeping the deepest that is the node or a folder above it. A node
+    /// outside this drawing has none of them drawn here: every shape is this drawing's root or under it.
+    /// </summary>
+    private ExploreTile? Deepest(int node)
+    {
+        var path = PathOf(node);
         ExploreTile? deepest = null;
 
         for (var i = 0; i < _tiles.Count; i++)
@@ -102,9 +144,7 @@ public sealed class TiledSurface : ExploreSurface
             }
         }
 
-        return deepest is { } shape
-            ? new MapFrame(shape.X / (double)Width, shape.Y / (double)Height, shape.Width / (double)Width, shape.Height / (double)Height)
-            : null;
+        return deepest;
     }
 
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
@@ -117,23 +157,40 @@ public sealed class TiledSurface : ExploreSurface
         {
             var tile = _tiles[i];
 
-            if (!tile.IsNode || !nodes.Contains(tile.Node))
+            if (tile.IsNode && nodes.Contains(tile.Node))
             {
-                continue;
+                outlines.Add(OutlineOf(tile));
             }
-
-            var right = tile.X + tile.Width;
-            var bottom = tile.Y + tile.Height;
-
-            outlines.Add(new ExploreOutline(tile.Node, [
-                new ExplorePoint(tile.X, tile.Y),
-                new ExplorePoint(right, tile.Y),
-                new ExplorePoint(right, bottom),
-                new ExplorePoint(tile.X, bottom),
-            ]));
         }
 
         return outlines;
+    }
+
+    private static ExploreOutline OutlineOf(ExploreTile tile)
+    {
+        var right = tile.X + tile.Width;
+        var bottom = tile.Y + tile.Height;
+
+        return new ExploreOutline(tile.Node, [
+            new ExplorePoint(tile.X, tile.Y),
+            new ExplorePoint(right, tile.Y),
+            new ExplorePoint(right, bottom),
+            new ExplorePoint(tile.X, bottom),
+        ]);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="inner"/> lies inside <paramref name="outer"/>, to within the rounding of
+    /// single precision: a folder drawn with no room round what it holds ends where its last shape does,
+    /// by a sum that need not round the same way twice.
+    /// </summary>
+    private static bool Inside(ExploreTile inner, ExploreTile outer)
+    {
+        const float Rounding = 1f / 64;
+
+        return inner.X >= outer.X - Rounding && inner.Y >= outer.Y - Rounding
+            && inner.X + inner.Width <= outer.X + outer.Width + Rounding
+            && inner.Y + inner.Height <= outer.Y + outer.Height + Rounding;
     }
 
     /// <summary>

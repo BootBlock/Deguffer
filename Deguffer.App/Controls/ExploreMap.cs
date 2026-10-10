@@ -261,6 +261,9 @@ public sealed class ExploreMap : UserControl
     /// <summary>Whether a node has gone since the scan. See <see cref="Excluding"/>.</summary>
     private Func<int, bool> _gone = _ => false;
 
+    /// <summary>What a card beside the map lights on it, or null. See <see cref="Light"/>.</summary>
+    private MapLight? _light;
+
     public ExploreMap()
     {
         var compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
@@ -766,6 +769,21 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
+    /// Light what a card beside the map points at, dimming the rest, or nothing where
+    /// <paramref name="light"/> is null. See <see cref="MapLight"/>.
+    ///
+    /// <para>Told, as the selection is, because what the card points at is the card's to say. Kept and
+    /// lit again on every new drawing, so it stays on the shapes it names through a zoom, a resize or a
+    /// snapshot, as long as the page keeps it.</para>
+    /// </summary>
+    public void Light(MapLight? light)
+    {
+        _light = light;
+
+        ShowLit();
+    }
+
+    /// <summary>
     /// How to tell whether a node has gone since the scan, so the map stops offering it.
     ///
     /// <para>The rule rather than a list of nodes, and told rather than worked out. A removal takes
@@ -1090,6 +1108,7 @@ public sealed class ExploreMap : UserControl
         Fit();
         Place();
         ShowPicked();
+        ShowLit();
         ShowMarked();
         ReportWhatThePointerIsOver();
 
@@ -1238,6 +1257,12 @@ public sealed class ExploreMap : UserControl
         _highlight.ShowPicked(drawing.Outlines(_picked), (float)far);
     }
 
+    /// <summary>
+    /// Light what a card beside the map is pointing at, in the drawing the outlines are drawn in, and
+    /// nothing while that drawing is of another tree or a change of folder is still on its way.
+    /// </summary>
+    private void ShowLit() =>
+        _highlight.ShowLit(_light is { } light && Outlining is { } drawing ? light.On(drawing, _gone) : null);
     /// <summary>
     /// The drawing the outlines are drawn in, which is the one the map works from, while it is of the
     /// tree the page handed over last. What is picked is named in that tree, and the same numbers in
@@ -1930,6 +1955,7 @@ public sealed class ExploreMap : UserControl
         // picture arrived has none, and the hatch and outlines hidden with the picture left belong to
         // its shapes, which in this picture are other shapes or none (§7.1).
         ShowPicked();
+        ShowLit();
         ShowMarked();
 
         _labels.Reveal();

@@ -237,6 +237,13 @@ internal sealed class MapGraphics
     }
 
     /// <summary>
+    /// A geometry over everything to <paramref name="far"/> pixels from the canvas's corner each way:
+    /// what <see cref="Around"/> covers with nothing left out of it.
+    /// </summary>
+    public CompositionPath Everything(float far) =>
+        new(CanvasGeometry.CreateRectangle(_device, -far, -far, 2 * far, 2 * far));
+
+    /// <summary>
     /// Stripes across <paramref name="outlines"/> and nowhere else, in the canvas's own pixels: one
     /// stripe in every <paramref name="spacing"/>, <paramref name="width"/> wide, starting
     /// <paramref name="phase"/> along. <see cref="Nothing"/> where there is nothing to stripe.

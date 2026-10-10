@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    One column of a chart for a figure out of 100, rising from the baseline under it in the accent
+    colour. Hidden from assistive technology and from the pointer, because what holds it names the
+    figure in words, and is what the tooltip is reached over (§6.5).
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.ColumnBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    IsHitTestVisible="False"
+    AutomationProperties.AccessibilityView="Raw">
+
+    <Grid x:Name="Column">
+        <Border x:Name="Fill"
+                CornerRadius="2,2,0,0"
+                Background="{ThemeResource AccentFillColorDefaultBrush}" />
+    </Grid>
+</UserControl>
