@@ -16,6 +16,9 @@ using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
+using Windows.UI.Core;
+using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 using Windows.UI.ViewManagement;
 
 namespace Deguffer.App.Controls;
@@ -44,8 +47,8 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>Over 500 lines because it is where the pointer, the drawings and the page meet, and each
 /// input has to be resolved against whichever picture is on screen at that moment (§7.1). Everything
-/// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the clocks of a zoom
-/// and of a folder opening (<see cref="ExploreZoom"/>, <see cref="ExploreDescent"/>), the names and
+/// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the camera and what
+/// moves it (<see cref="ExploreZoom"/>), the clock of a folder opening (<see cref="ExploreDescent"/>), the names and
 /// the outlines, and in Core the arithmetic and the rule telling a click from a drag
 /// (<see cref="MapDrag"/>). Most of the length is the reasoning behind each ordering.</para>
 /// </summary>
@@ -124,7 +127,7 @@ public sealed class ExploreMap : UserControl
 
     private readonly DispatcherQueueTimer _settled;
 
-    private readonly ExploreZoom _zoom = new(SystemMotion.Current, RenderingClock.Current);
+    private readonly ExploreZoom _zoom;
 
     private readonly ExploreDescent _descent = new(SystemMotion.Current, RenderingClock.Current);
 
@@ -153,7 +156,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private int _picturesHanded;
 
-    /// <summary>Whether the left button is dragging the picture. See <see cref="MapDrag"/>.</summary>
+    /// <summary>Whether the left or middle button is dragging the picture. See <see cref="MapDrag"/>.</summary>
     private readonly MapDrag _drag = new();
 
     /// <summary>
@@ -251,6 +254,7 @@ public sealed class ExploreMap : UserControl
         _graphics = MapGraphics.For(compositor);
         _generation = _graphics.Generation;
         _camera = new MapCamera(compositor);
+        _zoom = new ExploreZoom(ElementCompositionPreview.GetElementVisual(this), _camera, SystemMotion.Current, DispatcherQueue);
         _pictures = new ExploreLayers(compositor, _graphics, _camera);
         _departing = new ExploreLayers(compositor, _graphics, _camera);
         _highlight = new ExploreHighlight(compositor, _graphics, _camera);
@@ -291,6 +295,15 @@ public sealed class ExploreMap : UserControl
         };
         _zoom.Retargeted += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
 
+        // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
+        // map hears of it, so a folder still opening is settled and the whole picture painted under the zoomed one
+        // as soon as it does, as they are for a move the map starts itself.
+        _zoom.Started += (_, _) =>
+        {
+            _descent.Finish();
+            Underlay();
+        };
+
         _descent.Moved += OnDescentMoved;
         _descent.Arrived += OnDescentArrived;
 
@@ -302,12 +315,13 @@ public sealed class ExploreMap : UserControl
         SizeChanged += OnSizeChanged;
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
-        PointerReleased += OnDragEnded;
+        PointerReleased += OnPointerReleased;
         PointerCanceled += OnDragEnded;
         PointerCaptureLost += OnDragEnded;
         PointerExited += OnPointerExited;
         PointerWheelChanged += OnPointerWheelChanged;
         DoubleTapped += OnDoubleTapped;
+        KeyDown += OnKeyDown;
 
         // Picking is separate from opening, on the file-manager idiom: one click says which one, two
         // says go in. A right-click picks as well, so the menu that follows is about the shape under
@@ -330,7 +344,9 @@ public sealed class ExploreMap : UserControl
             SystemSettings.TextScaleFactorChanged += OnTextScaleChanged;
             SystemSettings.ColorValuesChanged += OnSystemColoursChanged;
             _capabilities.Changed += OnCapabilitiesChanged;
+            SystemMotion.Current.Changed += OnMotionChanged;
             TintHighlight();
+            _zoom.FollowMotion();
 
             _graphics.Replaced += OnDeviceReplaced;
 
@@ -408,6 +424,7 @@ public sealed class ExploreMap : UserControl
             SystemSettings.TextScaleFactorChanged -= OnTextScaleChanged;
             SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
             _capabilities.Changed -= OnCapabilitiesChanged;
+            SystemMotion.Current.Changed -= OnMotionChanged;
             _graphics.Replaced -= OnDeviceReplaced;
         };
 
@@ -457,10 +474,10 @@ public sealed class ExploreMap : UserControl
     public event EventHandler? ViewportChanged;
 
     /// <summary>
-    /// Whether the mouse wheel zooms the picture and the left button drags it, where the drawing can
-    /// be zoomed at all. Off unless the page asks, because every new tree starts from the whole
-    /// picture, and a page that draws a new tree every few seconds would take the reader's zoom away
-    /// every few seconds.
+    /// Whether the wheel, the touchpad, touch, a drag and the keyboard move the picture, where the
+    /// drawing can be zoomed at all. Off unless the page asks, because every new tree starts from the
+    /// whole picture, and a page that draws a new tree every few seconds would take the reader's zoom
+    /// away every few seconds.
     /// </summary>
     public bool Zoomable
     {
@@ -469,8 +486,15 @@ public sealed class ExploreMap : UserControl
         {
             field = value;
             DescribeControls();
+            Unlock();
         }
     }
+
+    /// <summary>
+    /// Let the camera move where the page allows it and the drawing worked from can be zoomed, and
+    /// hand the wheel, the touchpad and touch back to the page everywhere else.
+    /// </summary>
+    private void Unlock() => _zoom.Movable = Zoomable && _drawing is { Viewport: not null };
 
     /// <summary>
     /// Say what the map is and how the pointer moves it, for a screen reader on the focused map:
@@ -482,8 +506,10 @@ public sealed class ExploreMap : UserControl
             "A picture of what is using the space. Choose List in the View box for the same "
             + "contents as a readable list. Double-click a shape to open what is inside it."
             + (Zoomable
-                ? " On the treemap, turn the mouse wheel to zoom, drag with the left button to move a "
-                    + "zoomed picture, and double-click anything else to zoom to it. The mouse's Back and "
+                ? " On the treemap, turn the mouse wheel or pinch to zoom, and hold Shift with the wheel "
+                    + "to move across. Drag with the left or middle button, two fingers or a touch to move a "
+                    + "zoomed picture, and double-click anything else to zoom to it. Plus and minus zoom "
+                    + "about the middle, the arrow keys move the picture, and Home shows all of it. The mouse's Back and "
                     + "Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through "
                     + "the folders opened and the zooms to a shape."
                 : string.Empty));
@@ -734,6 +760,8 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        _zoom.Resize(ActualWidth, ActualHeight);
+
         // Every drawing kept stretches over the new size, and so does one landing.
         Fit();
 
@@ -758,9 +786,8 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Put the picture where the zoom on screen says it is: the camera, which every drawing, the
-    /// outlines and the names follow, and the clip at the map's edges while anything runs past them.
-    /// What each frame of a move writes.
+    /// Cut the picture at the map's edges while anything runs past them. The camera itself follows the
+    /// tracker on the compositor (see <see cref="ExploreZoom"/>), so nothing here moves the picture.
     /// </summary>
     private void Place()
     {
@@ -774,8 +801,6 @@ public sealed class ExploreMap : UserControl
         }
 
         _layers.Clip = cut ? _edges : null;
-
-        _camera.Show(_zoom.Shown.Camera(ActualWidth, ActualHeight));
     }
 
     /// <summary>
@@ -860,6 +885,7 @@ public sealed class ExploreMap : UserControl
             _hovered = null;
             _labels.Clear();
             _highlight.Clear();
+            Unlock();
 
             // There is no picture now, so nothing is under the pointer. Said rather than left: a
             // cancelled scan takes the tree away, and without this the line under the map goes on
@@ -1016,6 +1042,8 @@ public sealed class ExploreMap : UserControl
             _zoom.Reset(MapViewport.Whole);
             _drawn = MapViewport.Whole;
         }
+
+        Unlock();
 
         // Over a folder still opening, too: the names ride the picture they name as it grows.
         _labels.Show(drawing, _scale, LabelText);
@@ -1256,21 +1284,53 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Zoom at the pointer, where the page allows it and the picture can be zoomed.
+    /// Zoom at the pointer, or with Shift held, or on a wheel that tilts, pan across, where the page
+    /// allows it and the picture can be zoomed. Ctrl and the wheel never arrive here: the compositor
+    /// zooms for them itself.
     ///
     /// <para>Left unhandled otherwise, so a wheel over a map that does not zoom goes on to whatever
-    /// would have had it. A horizontal wheel is not a zoom either.</para>
+    /// would have had it.</para>
     /// </summary>
     private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (!Zoomable || _drawing is not { Viewport: not null } || ActualWidth <= 0 || ActualHeight <= 0)
+        if (!_zoom.Movable || ActualWidth <= 0 || ActualHeight <= 0)
         {
             return;
         }
 
         var point = e.GetCurrentPoint(this);
+        var delta = point.Properties.MouseWheelDelta;
 
+        _descent.Finish();
+        Underlay();
+
+        _pointer = point.Position;
+
+        // A wheel tilted right reports a turn away from the reader, and shows what is to the right.
         if (point.Properties.IsHorizontalMouseWheel)
+        {
+            _zoom.Slide(-delta);
+        }
+        else if (e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift))
+        {
+            _zoom.Slide(delta);
+        }
+        else
+        {
+            _zoom.Turn(delta, point.Position.X / ActualWidth, point.Position.Y / ActualHeight);
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Move the picture with the keyboard, on the focused map: plus and minus zoom about the middle,
+    /// the arrows pan, and Home shows the whole picture. A key with Alt or Ctrl held is left alone,
+    /// because Alt+Left and Alt+Right step back and forward.
+    /// </summary>
+    private void OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!_zoom.Movable || Held(VirtualKey.Menu) || Held(VirtualKey.Control) || KeyOf(e.Key) is not { } key)
         {
             return;
         }
@@ -1278,21 +1338,38 @@ public sealed class ExploreMap : UserControl
         _descent.Finish();
         Underlay();
 
-        _pointer = point.Position;
-        _zoom.Turn(
-            point.Properties.MouseWheelDelta,
-            point.Position.X / ActualWidth,
-            point.Position.Y / ActualHeight);
+        _zoom.Press(key);
 
         e.Handled = true;
+
+        static bool Held(VirtualKey modifier) =>
+            InputKeyboardSource.GetKeyStateForCurrentThread(modifier).HasFlag(CoreVirtualKeyStates.Down);
     }
 
+    /// <summary>What <paramref name="key"/> does to the camera, or null where it does nothing.</summary>
+    private static MapKey? KeyOf(VirtualKey key) => key switch
+    {
+        VirtualKey.Add or PlusKey => MapKey.ZoomIn,
+        VirtualKey.Subtract or MinusKey => MapKey.ZoomOut,
+        VirtualKey.Left => MapKey.Left,
+        VirtualKey.Right => MapKey.Right,
+        VirtualKey.Up => MapKey.Up,
+        VirtualKey.Down => MapKey.Down,
+        VirtualKey.Home => MapKey.Whole,
+        _ => null,
+    };
+
+    /// <summary>The main keyboard's plus and minus (VK_OEM_PLUS, VK_OEM_MINUS), which VirtualKey has no names for.</summary>
+    private const VirtualKey PlusKey = (VirtualKey)0xBB;
+
+    private const VirtualKey MinusKey = (VirtualKey)0xBD;
+
     /// <summary>
-    /// One frame of a zoom on its way: move the picture on hand, and say what is under the pointer
-    /// now that the picture has moved beneath it.
+    /// One report of the camera on its way: cut the picture at the edges if it now runs past them, and
+    /// say what is under the pointer now that the picture has moved beneath it.
     ///
-    /// <para>The names follow the camera on the compositor, and fade as their shapes shrink round them,
-    /// so nothing here moves them.</para>
+    /// <para>The picture and the names follow the camera on the compositor, and the names fade as their
+    /// shapes shrink round them, so nothing here moves them.</para>
     /// </summary>
     private void OnZoomMoved(object? sender, EventArgs e)
     {
@@ -1308,7 +1385,7 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Settle any folder still opening, whichever button went down, so what the press resolves
     /// against is the picture on screen rather than one on its way; and get ready to drag the picture
-    /// with the left button, where the page allows it and the picture is zoomed.
+    /// with the left or middle button, where the page allows it and the picture is zoomed.
     ///
     /// <para>Nothing moves yet, and the press is left for the framework to make a click of. Whether
     /// it is a drag is decided by how far it goes: see <see cref="MapDrag"/>.</para>
@@ -1321,10 +1398,23 @@ public sealed class ExploreMap : UserControl
 
         _descent.Finish();
 
-        var movable = Zoomable
-            && _drawing is { Viewport: not null }
-            && !_zoom.Shown.IsWhole
-            && point.Properties.IsLeftButtonPressed;
+        if (!_zoom.Movable)
+        {
+            _drag.Press(point.Position.X, point.Position.Y, movable: false);
+            return;
+        }
+
+        // A move on its way stops where it is, so the press lands on what the screen shows.
+        _zoom.Halt();
+
+        if (point.PointerDeviceType == PointerDeviceType.Touch)
+        {
+            _drag.Press(point.Position.X, point.Position.Y, movable: false);
+            _zoom.Redirect(point);
+            return;
+        }
+
+        var movable = !_zoom.Shown.IsWhole && Drags(point);
 
         _drag.Press(point.Position.X, point.Position.Y, movable);
 
@@ -1335,8 +1425,12 @@ public sealed class ExploreMap : UserControl
         }
     }
 
+    /// <summary>Whether <paramref name="point"/> has a button down that drags the picture: the left, or the middle.</summary>
+    private static bool Drags(PointerPoint point) =>
+        point.Properties.IsLeftButtonPressed || point.Properties.IsMiddleButtonPressed;
+
     /// <summary>
-    /// Drag the picture with the left button held, once it has moved past what a click allows, and
+    /// Drag the picture with the left or middle button held, once it has moved past what a click allows, and
     /// otherwise say what is under the pointer.
     ///
     /// <para>The pointer is captured for the drag, so a hand that leaves the map while dragging goes on
@@ -1352,7 +1446,7 @@ public sealed class ExploreMap : UserControl
 
         if (ActualWidth > 0
             && ActualHeight > 0
-            && _drag.Move(position.X, position.Y, point.Properties.IsLeftButtonPressed) is (var x, var y))
+            && _drag.Move(position.X, position.Y, Drags(point)) is (var x, var y))
         {
             if (!began)
             {
@@ -1360,7 +1454,7 @@ public sealed class ExploreMap : UserControl
                 ProtectedCursor = _dragCursor;
             }
 
-            _zoom.Drag(x / ActualWidth, y / ActualHeight);
+            _zoom.Drag(x, y, position.X, position.Y, TimeSpan.FromMicroseconds(point.Timestamp));
 
             e.Handled = true;
             return;
@@ -1369,12 +1463,29 @@ public sealed class ExploreMap : UserControl
         FollowPointer();
     }
 
+    /// <summary>
+    /// The button came up: focus the map, so the keyboard moves the picture next, as it does a map
+    /// anywhere else, and end any drag. Focused here rather than as the button goes down, because the
+    /// page's scroller takes the focus for itself on every press that reaches it. Through the pointer,
+    /// so no focus rectangle is drawn round a map the reader has only clicked.
+    /// </summary>
+    private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_zoom.Movable)
+        {
+            Focus(FocusState.Pointer);
+            e.Handled = true;
+        }
+
+        OnDragEnded(sender, e);
+    }
+
     /// <summary>The button came up, or the pointer was taken away: the drag is over and worth drawing.</summary>
     private void OnDragEnded(object sender, PointerRoutedEventArgs e)
     {
         if (EndDrag())
         {
-            _zoom.Release();
+            _zoom.Release(TimeSpan.FromMicroseconds(e.GetCurrentPoint(this).Timestamp));
         }
     }
 
@@ -1478,6 +1589,12 @@ public sealed class ExploreMap : UserControl
     /// <summary>Follow the compositor's word on whether effects are fast, which a remote session changes.</summary>
     private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
         DispatcherQueue.TryEnqueue(TintHighlight);
+
+    /// <summary>
+    /// Follow the reader turning animation effects on or off, which says whether the picture coasts
+    /// and stretches. Raised on the UI thread.
+    /// </summary>
+    private void OnMotionChanged(object? sender, EventArgs e) => _zoom.FollowMotion();
 
     /// <summary>
     /// The lightest of the accent's shades for what the pointer is over, because it is drawn over a

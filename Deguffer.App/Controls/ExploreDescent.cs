@@ -8,9 +8,8 @@ namespace Deguffer.App.Controls;
 /// The clock behind a folder opening on the map: where the old picture and the new one are at each
 /// frame of the move from one to the other.
 ///
-/// <para>The same split as <see cref="ExploreZoom"/>: the arithmetic is Core's, in
-/// <see cref="MapDescent"/>, how it moves is <see cref="MotionToken.Entrance"/>'s, and what is left
-/// here is following the frames.</para>
+/// <para>The arithmetic is Core's, in <see cref="MapDescent"/>, how it moves is
+/// <see cref="MotionToken.Entrance"/>'s, and what is left here is following the frames.</para>
 /// </summary>
 internal sealed class ExploreDescent
 {

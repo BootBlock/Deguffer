@@ -12,8 +12,8 @@
 
     <!--
         Backspace goes back, as Alt+Left does, unless a box being typed in has it. An accelerator
-        rather than a KeyDown handler, because a click on the map focuses nothing and a key then
-        reaches no element to bubble from; an accelerator is heard whatever holds the focus.
+        rather than a KeyDown handler, because a click on a map that cannot zoom focuses nothing and
+        a key then reaches no element to bubble from; an accelerator is heard whatever holds the focus.
     -->
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="Back" Invoked="OnBackspaceInvoked" />
@@ -382,15 +382,15 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- How the mouse moves the treemap, which nothing on the map itself says. Terse because
-                 it sits beside the trail on every visit, and spelled out for a screen reader. -->
+            <!-- How the treemap is moved, which nothing on the map itself says. Terse because it sits
+                 beside the trail on every visit, and spelled out for a screen reader. -->
             <TextBlock Grid.Column="2"
                        VerticalAlignment="Center"
                        Style="{StaticResource CaptionTextBlockStyle}"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       Text="Wheel: zoom · LMB drag: pan · Dbl-click: open/zoom"
+                       Text="Wheel/pinch: zoom · Drag: pan · + − arrows Home · Dbl-click: open/zoom"
                        Visibility="{x:Bind ViewModel.ShowsMapControls, Mode=OneWay}"
-                       AutomationProperties.Name="Turn the mouse wheel over the map to zoom, drag with the left button to move a zoomed picture, and double-click a folder to open it or anything else to zoom to it." />
+                       AutomationProperties.Name="Turn the mouse wheel or pinch over the map to zoom, and hold Shift to move across. Drag a zoomed picture with the left or middle button, two fingers or a touch to move it. On the focused map, plus and minus zoom, the arrow keys move the picture and Home shows all of it. Double-click a folder to open it or anything else to zoom to it." />
         </Grid>
 
         <!--

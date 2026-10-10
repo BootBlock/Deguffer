@@ -99,6 +99,41 @@ public readonly record struct MapViewport
         Within(Zoom, Left - (screenX / Zoom), Top - (screenY / Zoom));
 
     /// <summary>
+    /// This viewport magnified <paramref name="factor"/> times more about screen point
+    /// (<paramref name="screenX"/>, <paramref name="screenY"/>), so the thing there stays there, as
+    /// far as the picture's edges and the zoom's limits allow. See <see cref="Anchored"/>.
+    /// </summary>
+    public MapViewport ZoomedAt(double factor, double screenX, double screenY)
+    {
+        var (pictureX, pictureY) = PictureAt(screenX, screenY);
+
+        return Anchored(Zoom * factor, pictureX, pictureY, screenX, screenY);
+    }
+
+    /// <summary>
+    /// What a screen shows while a hand stretches the picture: magnified <paramref name="zoom"/> times
+    /// with its left and top edges at <paramref name="left"/> and <paramref name="top"/>, held to
+    /// nothing. A pinch can take the zoom a little past its limits and a pan can take the screen a
+    /// little past the picture's edge, and the picture springs back from there once it is let go
+    /// (<see cref="Held"/>), but until then a click is resolved against what the screen shows (§7.1).
+    /// </summary>
+    public static MapViewport Seen(double zoom, double left, double top)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(zoom);
+
+        return new MapViewport(zoom, left, top);
+    }
+
+    /// <summary>
+    /// Where this comes to rest: the zoom held between 1 and <see cref="MaximumZoom"/>, and the screen
+    /// held inside the picture. Itself for any viewport made by anything but <see cref="Seen"/>.
+    ///
+    /// <para>A method rather than a property: a record prints every property it has, and a property
+    /// of its own type would print that one's, and so on until the stack ran out.</para>
+    /// </summary>
+    public MapViewport Held() => Within(Zoom, Left, Top);
+
+    /// <summary>
     /// The viewport a fraction <paramref name="progress"/> of the way from <paramref name="from"/> to
     /// <paramref name="to"/>.
     ///
@@ -123,12 +158,9 @@ public readonly record struct MapViewport
             return to;
         }
 
-        var ratio = to.Zoom / from.Zoom;
-
         // At one zoom the path above has no length in how much is shown, so the two positions are
-        // simply blended. Compared with a tolerance because a zoom that went up a step and back down
-        // again arrives a rounding error away from where it started.
-        if (Math.Abs(ratio - 1) < 1e-9)
+        // simply blended.
+        if (SameZoom(from, to))
         {
             return Within(
                 from.Zoom,
@@ -136,7 +168,7 @@ public readonly record struct MapViewport
                 from.Top + ((to.Top - from.Top) * progress));
         }
 
-        var zoom = from.Zoom * Math.Pow(ratio, progress);
+        var zoom = from.Zoom * Math.Pow(to.Zoom / from.Zoom, progress);
         var along = ((1 / zoom) - (1 / from.Zoom)) / ((1 / to.Zoom) - (1 / from.Zoom));
 
         return Within(
@@ -144,6 +176,13 @@ public readonly record struct MapViewport
             from.Left + ((to.Left - from.Left) * along),
             from.Top + ((to.Top - from.Top) * along));
     }
+
+    /// <summary>
+    /// Whether a move from <paramref name="from"/> to <paramref name="to"/> keeps one zoom, and so
+    /// has no still point to zoom about. Compared with a tolerance because a zoom that went up a step
+    /// and back down again arrives a rounding error away from where it started.
+    /// </summary>
+    internal static bool SameZoom(MapViewport from, MapViewport to) => Math.Abs((to.Zoom / from.Zoom) - 1) < 1e-9;
 
     /// <summary>Where screen point (<paramref name="screenX"/>, <paramref name="screenY"/>) falls in the whole picture.</summary>
     public (double X, double Y) PictureAt(double screenX, double screenY) =>
