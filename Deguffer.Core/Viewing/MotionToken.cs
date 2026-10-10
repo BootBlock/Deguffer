@@ -76,6 +76,27 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(200), Travels: true),
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
+    /// <summary>
+    /// A bar following its figure: a row's share growing in as the row arrives and easing as a scan
+    /// reports larger rows, or the used space on the disk draining as a clean gives it back. Each move
+    /// goes from where the bar is drawn to the figure just reported, and never past it. With motion off
+    /// the bar is at its figure at once, because the figure beside it already says the new value, and a
+    /// bar that only arrives there later says nothing more.
+    /// </summary>
+    public static MotionToken Bar { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(300), Travels: true),
+        Motion.Instant);
+
+    /// <summary>
+    /// The figures a finished clean leaves on the page coming in: they rise a short way into place as
+    /// they fade in, and nothing else marks the moment. They come in alike whatever the run found, so
+    /// a protected path that did not survive arrives with the same weight as a clean that went to plan
+    /// (§5.6). With motion off they fade in place, so the reader still sees that the run has finished.
+    /// </summary>
+    public static MotionToken Outcome { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(250), Travels: true),
+        new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
+
     /// <summary>How this plays, given whether the reader has animation effects on.</summary>
     public Motion For(bool animationsEnabled) => animationsEnabled ? Full : Reduced;
 }

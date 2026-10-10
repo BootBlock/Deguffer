@@ -106,6 +106,8 @@ public class CleanViewModelScanTests
     /// <summary>
     /// Both filters are on by default and each hides its own rows as they land. A row waiting for a
     /// folder is absent too, and is never hidden: it is the one row that says what the user can do.
+    /// The list draws exactly the rows the filters let through, and a filter switched on adds its rows
+    /// to it one by one rather than rebuilding it, so the rows already drawn stay where they are.
     /// </summary>
     [Fact]
     public void EachRowIsFilteredAsItLandsAndAgainWhenAFilterChanges()
@@ -122,13 +124,23 @@ public class CleanViewModelScanTests
         Assert.False(page.Row("clear").IsListed);
         Assert.True(page.Row("waiting").IsListed);
         Assert.True(page.Row("ready").IsListed);
+        Assert.Equal(["ready", "waiting"], Drawn(page).Order());
+
+        var changes = new List<NotifyCollectionChangedAction>();
+        page.ViewModel.Listed.CollectionChanged += (_, e) => changes.Add(e.Action);
 
         page.ViewModel.ShowNotInstalled = true;
         Assert.True(page.Row("missing").IsListed);
         Assert.False(page.Row("clear").IsListed);
+        Assert.Equal(["missing", "ready", "waiting"], Drawn(page).Order());
+        Assert.Equal([NotifyCollectionChangedAction.Add], changes);
 
         page.ViewModel.ShowAlreadyClear = true;
         Assert.True(page.Row("clear").IsListed);
+        Assert.Equal(["clear", "missing", "ready", "waiting"], Drawn(page).Order());
+
+        static IEnumerable<string> Drawn(StoragePage page) =>
+            page.ViewModel.Listed.Select(row => row.Finding.Provider.Id);
     }
 
     /// <summary>

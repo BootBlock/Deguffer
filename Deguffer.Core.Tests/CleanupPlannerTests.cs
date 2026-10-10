@@ -745,6 +745,61 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// The space a clean gives back is counted as each plan finishes, so each plan's result arrives
+    /// before the next plan starts. Reported only at the end, the count would sit at nothing for the
+    /// whole run and then jump.
+    /// </summary>
+    [Fact]
+    public async Task EachPlansResultArrivesBeforeTheNextPlanStarts()
+    {
+        var journal = new List<string>();
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("large", bytes: 9_000, journal: journal),
+            new StubProvider("small", bytes: 1_000, journal: journal),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        journal.Clear();
+
+        var reported = new List<CleanupResult>();
+        var results = await planner.ExecuteAsync(
+            findings,
+            finished: new CallbackProgress<CleanupResult>(result =>
+            {
+                reported.Add(result);
+                journal.Add($"finished:{result.ProviderId}");
+            }));
+
+        Assert.Equal(["execute:large", "finished:large", "execute:small", "finished:small"], journal);
+        Assert.Equal(results, reported);
+    }
+
+    /// <summary>
+    /// A plan the clean was cancelled before starting is still part of the run's results, so it is
+    /// reported as well. A count summed from the reports then lands on the figure summed from the
+    /// results, which is the figure the page states once the run is over.
+    /// </summary>
+    [Fact]
+    public async Task APlanCancelledBeforeItStartedIsReportedToo()
+    {
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("first", bytes: 9_000),
+            new StubProvider("second", bytes: 1_000),
+        ]);
+
+        var findings = await planner.PlanAllAsync();
+        var reported = new ProgressRecorder<CleanupResult>();
+
+        var results = await planner.ExecuteAsync(findings, finished: reported, ct: new CancellationToken(canceled: true));
+
+        Assert.Equal(2, results.Count);
+        Assert.All(results, result => Assert.True(result.Interrupted));
+        Assert.Equal(results, reported.Reports);
+    }
+
+    /// <summary>
     /// §5.6's negative asks whether Deguffer took a protected path that has gone missing, and a run
     /// is many plans. A provider handed only its own targets would find the folder the provider
     /// beside it deleted indistinguishable from a folder a stranger deleted, and report Deguffer's

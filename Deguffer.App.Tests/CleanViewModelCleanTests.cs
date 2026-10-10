@@ -369,7 +369,9 @@ public class CleanViewModelCleanTests
 
     /// <summary>
     /// A row the run emptied says "Already clear" once it is planned again, and the filter that hides
-    /// such rows hides it where it stands, with the empty state saying why the list is empty.
+    /// such rows takes it out of the drawn rows on its own, so the list can show it leaving, with the
+    /// empty state saying why the list is empty. The row stays in the findings, ready for the filter
+    /// to be switched off.
     /// </summary>
     [Fact]
     public void ARowTheRunEmptiedIsFilteredAgainWhenItIsPlannedAgain()
@@ -380,12 +382,61 @@ public class CleanViewModelCleanTests
         cache.AfterCleaning = () => cache.Steps = [];
         page.Scan();
         Assert.True(page.Row("cache").IsListed);
+        var row = page.Row("cache");
+        var changes = new List<NotifyCollectionChangedAction>();
+        page.ViewModel.Listed.CollectionChanged += (_, e) => changes.Add(e.Action);
 
         page.Clean();
 
         Assert.Equal(FindingStatus.AlreadyClear, page.Row("cache").Status);
         Assert.False(page.Row("cache").IsListed);
+        Assert.Equal([NotifyCollectionChangedAction.Remove], changes);
+        Assert.DoesNotContain(row, page.ViewModel.Listed);
+        Assert.Same(row, page.Row("cache"));
         Assert.Equal("Every row is hidden", page.ViewModel.EmptyStateTitle);
+    }
+
+    /// <summary>
+    /// While a clean runs, the space it has removed is counted up as each row's run finishes, and the
+    /// volume is read again each time, so the used space drains by what the disk actually gave back.
+    /// The count starts at nothing, takes one step per row, and ends on the figure the card states
+    /// once the run is over. It is never worked out from anything but the run's own results.
+    /// </summary>
+    [Fact]
+    public void TheSpaceACleanRemovesIsCountedAsEachRowFinishes()
+    {
+        var large = new FakeCleanupProvider("large");
+        var small = new FakeCleanupProvider("small");
+        using var page = new StoragePage([large, small], freeBytes: 400_000);
+        large.Steps = [page.Cache("a", 2048)];
+        small.Steps = [page.Cache("b", 1024)];
+
+        // Only the first row's run moves the volume. A reading is taken as the page hears of a row's
+        // result, which can be after the next row has started, so a second move would race it.
+        large.AfterCleaning = () => page.FreeSpaceBecomes(500_000);
+        page.Scan();
+
+        var counted = new List<string>();
+        var free = new List<long?>();
+        page.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(page.ViewModel.RemovedSoFarLabel))
+            {
+                counted.Add(page.ViewModel.RemovedSoFarLabel);
+            }
+            else if (e.PropertyName == nameof(page.ViewModel.FreeSpaceNow) && page.ViewModel.IsCleaning)
+            {
+                free.Add(page.ViewModel.FreeSpaceNow);
+            }
+        };
+
+        page.Clean();
+
+        Assert.Equal(3, counted.Count);
+        Assert.Equal("0 B", counted[0]);
+        Assert.NotEqual(counted[1], counted[2]);
+        Assert.Equal(page.ViewModel.RemovedLabel, counted[^1]);
+        Assert.Equal([500_000L], free);
     }
 
     /// <summary>

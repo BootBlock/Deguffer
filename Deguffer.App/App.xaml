@@ -185,16 +185,10 @@
                 appears. It exists so the relative weight of the rows is visible without reading
                 every figure — §6.5 forbids encoding meaning where only the graphic carries it, so
                 the size beside it always says the same thing in words. Hidden from assistive
-                technology for that reason; the text is what gets announced.
+                technology for that reason, as every FillBar is; the text is what gets announced.
             -->
-            <Style x:Key="ShareBar" TargetType="ProgressBar">
+            <Style x:Key="ShareBar" TargetType="controls:FillBar">
                 <Setter Property="Height" Value="3" />
-                <Setter Property="Maximum" Value="100" />
-                <Setter Property="Minimum" Value="0" />
-                <Setter Property="IsIndeterminate" Value="False" />
-                <Setter Property="IsHitTestVisible" Value="False" />
-                <Setter Property="IsTabStop" Value="False" />
-                <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>

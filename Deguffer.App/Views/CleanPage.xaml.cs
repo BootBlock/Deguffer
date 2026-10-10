@@ -1,13 +1,16 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
@@ -25,6 +28,9 @@ public sealed partial class CleanPage : Page
 
     /// <summary>The row whose item list is on screen, so the keyboard can go back to it when the list closes.</summary>
     private FindingViewModel? _itemsShownFor;
+
+    /// <summary>How a finished clean's figures come in: a short rise, quieter than a page's.</summary>
+    private readonly ElementEntrance _runResultEntrance = new(rise: 8);
 
     public CleanPage()
     {
@@ -52,6 +58,20 @@ public sealed partial class CleanPage : Page
         // silently back to Standard, in the same session and with no explanation.
         ShowFindingsAt(App.Preferences.Current.View);
         ListNotInstalled(App.Preferences.Current.ShowNotInstalled);
+
+        // A row's share bar comes in from nothing as the row itself arrives, rather than standing at
+        // its figure under a row still fading in. Never as a row only scrolls into sight.
+        ListAnimation.Play(FindingsList, SystemMotion.Current).Arrived += GrowBarsIn;
+
+        // A row's container is what assistive technology lands on, and unnamed it is read out as
+        // the type of the object behind it.
+        FindingsList.ContainerContentChanging += (_, args) =>
+        {
+            if (args.Item is FindingViewModel row)
+            {
+                AutomationProperties.SetName(args.ItemContainer, row.Name);
+            }
+        };
 
         // A scan and its results outlive a trip to Settings; rebuilding the page on the way back
         // would throw away a preview the user has not acted on yet.
@@ -278,6 +298,40 @@ public sealed partial class CleanPage : Page
         {
             CopyRunDiagnosticsResult.Text = string.Empty;
         }
+
+        if (e.PropertyName == nameof(CleanViewModel.HasRunResult) && ViewModel.HasRunResult)
+        {
+            BringInRunResult();
+        }
+    }
+
+    /// <summary>
+    /// The moment a clean finishes: its figures and its §5.6 verdict come in together, and nothing
+    /// else marks it. Alike whatever the run found, so a protected path that did not survive arrives
+    /// with the same weight as a clean that went to plan.
+    /// </summary>
+    private void BringInRunResult()
+    {
+        var played = SystemMotion.Current.For(MotionToken.Outcome);
+
+        // The compositor refuses a key frame animation with no length.
+        if (played.IsInstant)
+        {
+            return;
+        }
+
+        foreach (var part in new UIElement[] { RunFiguresPanel, RunVerdictPanel })
+        {
+            _runResultEntrance.Enter(part, played, TimeSpan.Zero);
+        }
+    }
+
+    private static void GrowBarsIn(SelectorItem container)
+    {
+        foreach (var bar in VisualTree.Descendants<FillBar>(container))
+        {
+            bar.Grow();
+        }
     }
 
     /// <summary>
@@ -347,27 +401,11 @@ public sealed partial class CleanPage : Page
         }
     }
 
-    private static HyperlinkButton? ItemsLinkIn(DependencyObject parent, FindingViewModel row)
-    {
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-
-            if (child is HyperlinkButton { Tag: FindingViewModel tagged } link
-                && ReferenceEquals(tagged, row)
-                && AutomationProperties.GetName(link) == row.Text.ItemsLinkName)
-            {
-                return link;
-            }
-
-            if (ItemsLinkIn(child, row) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
-    }
+    private static HyperlinkButton? ItemsLinkIn(DependencyObject parent, FindingViewModel row) =>
+        VisualTree.Descendants<HyperlinkButton>(parent).FirstOrDefault(link =>
+            link.Tag is FindingViewModel tagged
+            && ReferenceEquals(tagged, row)
+            && AutomationProperties.GetName(link) == row.Text.ItemsLinkName);
 
     private async Task ShowProviderInfoAsync(FindingViewModel finding)
     {

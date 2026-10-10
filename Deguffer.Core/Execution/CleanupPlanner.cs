@@ -409,6 +409,12 @@ public sealed class CleanupPlanner
     /// How far through the whole run, 0 to 1. Unlike planning, execution knows its own extent
     /// before it starts, so this is a fraction rather than a sentence.
     /// </param>
+    /// <param name="finished">
+    /// Each plan's result the moment it has one, before the next plan starts, so the space a clean
+    /// gives back can be counted as it goes rather than only stated at the end. Every result the run
+    /// returns is reported here once and in the same order, a plan the clean was cancelled before
+    /// starting included, so whatever is summed from these lands on what is summed from the results.
+    /// </param>
     /// <param name="ct">
     /// Stops the run. <b>Never thrown:</b> the results hold every plan, the ones that finished, the
     /// one that was stopped and the ones never started, each <see cref="CleanupResult.Interrupted"/>
@@ -421,6 +427,7 @@ public sealed class CleanupPlanner
         bool requireTypedPhrase = true,
         IProgress<string>? status = null,
         IProgress<double>? progress = null,
+        IProgress<CleanupResult>? finished = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
@@ -491,7 +498,10 @@ public sealed class CleanupPlanner
             if (!plan.IsEmpty && (cancelled || ct.IsCancellationRequested))
             {
                 cancelled = true;
-                results.Add(await ProveUnstartedAsync(finding, plan, reach, residue).ConfigureAwait(false));
+
+                var unstarted = await ProveUnstartedAsync(finding, plan, reach, residue).ConfigureAwait(false);
+                results.Add(unstarted);
+                finished?.Report(unstarted);
                 continue;
             }
 
@@ -509,6 +519,7 @@ public sealed class CleanupPlanner
                 .ConfigureAwait(false);
 
             results.Add(result);
+            finished?.Report(result);
             cancelled |= result.Interrupted;
 
             // Reported from here rather than trusted from the provider: a provider that reports
