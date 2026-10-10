@@ -59,6 +59,10 @@ internal sealed class MapGraphics
     /// <summary>
     /// Every surface's content is gone: the device was lost and replaced, by this or by the compositor.
     /// Raised on the UI thread. Each map draws its picture again, and keeps none of what it had.
+    ///
+    /// <para>Nor does it keep its surfaces. One made before the replacement takes a write on the new
+    /// device without an error and shows nothing of it, so the map stayed empty under its labels
+    /// until each surface was made again.</para>
     /// </summary>
     public event EventHandler? Replaced;
 

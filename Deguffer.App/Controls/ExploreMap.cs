@@ -1391,8 +1391,8 @@ public sealed class ExploreMap : UserControl
 
         _descent.Finish();
         _redraws.Cancel();
-        _departing.Clear();
-        _pictures.Clear();
+        _departing.Renew();
+        _pictures.Renew();
 
         _drawing = null;
         _hovered = null;

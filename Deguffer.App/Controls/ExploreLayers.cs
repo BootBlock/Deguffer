@@ -160,6 +160,22 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>
+    /// Drop every drawing, and give every layer a new surface, for a device that has replaced the
+    /// one they were written through. Anything landing has been withdrawn first.
+    /// </summary>
+    public void Renew()
+    {
+        Forget();
+
+        foreach (var layer in _layers)
+        {
+            layer.Renew();
+        }
+
+        _current = null;
+    }
+
+    /// <summary>
     /// Keep only the drawing on top, for a map leaving the screen. It is what the map shows when it
     /// comes back, and the others are memory nothing shows until the picture moves again, which asks
     /// for them afresh. Anything landing has been withdrawn first.

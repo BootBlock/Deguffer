@@ -12,13 +12,16 @@ namespace Deguffer.App.Controls;
 /// decides which drawing goes in which.
 ///
 /// <para>Made once and written through. A new drawing of another size resizes the surface rather than
-/// making another, and a layer nothing is using is emptied rather than thrown away (G5).</para>
+/// making another, and a layer nothing is using is emptied rather than thrown away (G5). Only a
+/// replaced device makes it take another surface: see <see cref="Renew"/>.</para>
 /// </summary>
 internal sealed class ExploreLayer
 {
     private readonly MapGraphics _graphics;
 
-    private readonly CompositionVirtualDrawingSurface _surface;
+    private readonly CompositionSurfaceBrush _brush;
+
+    private CompositionVirtualDrawingSurface _surface;
 
     public ExploreLayer(Compositor compositor, MapGraphics graphics)
     {
@@ -27,13 +30,13 @@ internal sealed class ExploreLayer
 
         // One surface pixel to one unit of the sprite, from its top-left corner. The sprite's own
         // scale is what places the canvas in the picture, so the brush stretches nothing itself.
-        var brush = compositor.CreateSurfaceBrush(_surface);
-        brush.Stretch = CompositionStretch.None;
-        brush.HorizontalAlignmentRatio = 0;
-        brush.VerticalAlignmentRatio = 0;
+        _brush = compositor.CreateSurfaceBrush(_surface);
+        _brush.Stretch = CompositionStretch.None;
+        _brush.HorizontalAlignmentRatio = 0;
+        _brush.VerticalAlignmentRatio = 0;
 
         Sprite = compositor.CreateSpriteVisual();
-        Sprite.Brush = brush;
+        Sprite.Brush = _brush;
         Sprite.IsVisible = false;
     }
 
@@ -116,5 +119,20 @@ internal sealed class ExploreLayer
         Sprite.IsVisible = false;
 
         MapGraphics.Empty(_surface);
+    }
+
+    /// <summary>
+    /// Take a new surface, of the same size, for a device that has replaced the one this was
+    /// written through. What the old one held is gone, and writing into it again put nothing on
+    /// screen: see <see cref="MapGraphics.Replaced"/>.
+    /// </summary>
+    public void Renew()
+    {
+        Drawing = null;
+        Landing = null;
+        Sprite.IsVisible = false;
+
+        _surface = _graphics.CreateSurface(Size.Width, Size.Height);
+        _brush.Surface = _surface;
     }
 }
