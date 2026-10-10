@@ -43,7 +43,7 @@ public static partial class LongPath
 
         try
         {
-            return Canonicalised(path, out _);
+            return Canonicalised(path, Resolved, out _);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -69,9 +69,8 @@ public static partial class LongPath
     /// program is routinely started with a file it has not written yet, such as a log. Asked of the
     /// whole path, <c>C:\Users\LONGPR~1\...\run-1\out.log</c> kept its alias until the log appeared.
     /// What lies below the part that exists cannot be an alias, because an alias names something on
-    /// the disk, so it is kept as it was spelled. <see cref="Path.GetFullPath(string)"/> already does
-    /// this for a drive-letter path, undocumented, and leaves a path with a device prefix alone, so
-    /// the walk up is what covers a volume's GUID name and what finds a part Windows refused.</para>
+    /// the disk, so it is kept as it was spelled. The walk up covers every root, a volume's GUID name
+    /// included, and finds a part Windows refused.</para>
     ///
     /// <para><b>Null is "cannot say", never a guess.</b> A path that is not fully qualified would
     /// have to be resolved against a working directory nobody named, and a part that carries a
@@ -92,13 +91,45 @@ public static partial class LongPath
 
         try
         {
-            var form = Canonicalised(path, out var whole);
+            var form = Canonicalised(path, Resolved, out var whole);
 
             return whole ? form : null;
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
             // Not a path Windows will accept, so there is no place it names to compare.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Canonical"/> of the folder a program opens when it hands <paramref name="path"/> to
+    /// Win32, where that is another folder than the one the path spells, or null where it is not or
+    /// cannot be said.
+    ///
+    /// <para><b>For a path another program spelled</b>, such as an argument it was started with.
+    /// Win32 drops trailing dots and spaces from the last name and one trailing dot from every other
+    /// as it opens a path, so a browser started with <c>--user-data-dir=C:\Temp\pw.</c> works in
+    /// <c>C:\Temp\pw</c>. Compared only as spelled, that profile read as unused, in the direction that
+    /// deletes it. A path Windows itself reports, such as a working directory, already names the
+    /// folder as it is, so <see cref="Canonical"/> alone answers for it.</para>
+    /// </summary>
+    public static string? CanonicalAsOpened(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var opened = Canonicalised(path, Path.GetFullPath, out var whole);
+
+            return whole && !opened.Equals(Canonicalised(path, Resolved, out _), StringComparison.Ordinal) ? opened : null;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // Not a path Windows will accept, so it opens nothing.
             return null;
         }
     }
@@ -126,7 +157,11 @@ public static partial class LongPath
     /// Whether the answer is the canonical form, rather than the best spelling available of a path
     /// that has none.
     /// </param>
-    private static string Canonicalised(string path, out bool whole)
+    /// <param name="resolve">
+    /// How the path's names are read: as spelled (<see cref="Resolved"/>), or as Win32 opens them
+    /// (<see cref="Path.GetFullPath(string)"/>).
+    /// </param>
+    private static string Canonicalised(string path, Func<string, string> resolve, out bool whole)
     {
         var shown = Display(path);
 
@@ -138,8 +173,10 @@ public static partial class LongPath
 
         // Safe only because the path is fully qualified, so nothing resolves against Deguffer's own
         // working directory. A path that keeps its device prefix, such as a volume GUID's, comes
-        // back unresolved, which is right: Windows resolves nothing in it either.
-        var full = Path.GetFullPath(shown);
+        // back unresolved, which is right: Windows resolves nothing in it either. Names are read
+        // as the caller asks: Canonical keeps them as spelled, because a folder named "build." holds
+        // what a program is using in it, and compared as "build" it would hold nothing.
+        var full = resolve(shown);
         var existing = full;
         var below = "";
 

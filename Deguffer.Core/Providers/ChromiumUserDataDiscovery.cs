@@ -278,7 +278,7 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     /// </summary>
     private static string HostOf(string root, string userData)
     {
-        var host = Path.GetRelativePath(root, Path.GetDirectoryName(userData) ?? root);
+        var host = LongPath.Relative(root, Path.GetDirectoryName(userData) ?? root);
 
         return host == "." ? Path.GetFileName(userData) : host;
     }

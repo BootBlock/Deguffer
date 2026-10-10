@@ -321,7 +321,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
                         + "removes the streaming cache inside it and nothing else.",
                 RequiresElevation: false,
                 storage.MayOffer(install.Edition)
-                    ? [new DeclaredLocation(Path.GetRelativePath(install.Edition.Root, install.Edition.Cache), CacheReason)]
+                    ? [new DeclaredLocation(LongPath.Relative(install.Edition.Root, install.Edition.Cache), CacheReason)]
                     : [],
                 [])),
         ];

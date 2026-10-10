@@ -151,9 +151,10 @@ public sealed class SourceRootStore
     ///
     /// A root has to be an absolute path: a relative one would resolve against whatever directory
     /// the process happens to be running in, which is not something the user consented to. It also
-    /// has to be <em>resolved</em>, and that second half is what <see cref="LongPath.Configured"/>
-    /// is for. Every other configured path in Deguffer already goes through it; this one did not,
-    /// and once several providers share one discovery pass the omission stops being cosmetic. The
+    /// has to be <em>resolved</em>, and that second half is what <see cref="LongPath.Entry"/>
+    /// is for. A root is a folder the user picked, so a name ending in a dot keeps it, where
+    /// <see cref="LongPath.Configured"/> would approve its sibling. Once several providers share
+    /// one discovery pass, a root that skipped resolving stops being cosmetic. The
     /// walk resolves a root itself, by way of <see cref="LongPath.Extended"/>, while the volume
     /// index narrows by comparing strings — so a hand-edited <c>C:/Users/me/src</c> or a value
     /// carrying <c>..</c> would make the two routes disagree, and an elevated run would quietly
@@ -171,7 +172,7 @@ public sealed class SourceRootStore
     private static IReadOnlyList<SourceRoot> Usable(IEnumerable<SourceRoot> roots) =>
     [
         .. roots
-            .Select(root => LongPath.Configured(root.Path) is { } path
+            .Select(root => LongPath.Entry(root.Path) is { } path
                 ? root with { Path = path }
                 : null)
             .OfType<SourceRoot>()

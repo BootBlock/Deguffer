@@ -163,10 +163,10 @@ internal static partial class VolumeCalls
     /// </summary>
     internal static string? MountPointOf(string path)
     {
-        // Configured rather than Extended alone: it resolves a relative path, rejects one Windows
+        // Entry rather than Extended alone: it rejects a relative path, rejects one Windows
         // will not accept, and answers null instead of throwing — which is this method's own
         // contract for a path that names no volume.
-        if (LongPath.Configured(path) is not { } qualified)
+        if (LongPath.Entry(path) is not { } qualified)
         {
             return null;
         }

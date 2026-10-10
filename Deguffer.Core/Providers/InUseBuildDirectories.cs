@@ -73,7 +73,7 @@ internal static class InUseBuildDirectories
         // a path with '..' in it would otherwise be followed to somewhere it is not. Each is followed
         // through the inspector, which keeps the answer for the planning pass every build provider shares.
         var occupied = inspector.FindOccupiedDirectories(ct).Live
-            .Select(place => LongPath.Configured(place.Directory))
+            .Select(place => LongPath.Entry(place.Directory))
             .OfType<string>()
             .Select(inspector.Reach)
             .ToList();

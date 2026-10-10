@@ -57,6 +57,55 @@ public class RunningProcessTableTests
     }
 
     /// <summary>
+    /// A working directory Windows reports names the folder as it is, so a program working in
+    /// <c>app.</c> holds <c>app.</c> and not the <c>app</c> beside it. Taken relative to the
+    /// folder asked about as Win32 reads names, it was counted against <c>app</c>, and <c>app.</c>
+    /// read as unused.
+    /// </summary>
+    [Fact]
+    public void AWorkingDirectoryHoldsTheChildItNames()
+    {
+        var calls = new FakeProcessTableCalls()
+            .With(FakeProcessTableCalls.Own)
+            .With(new FakeListedProcess
+            {
+                Id = 4325,
+                Name = "shell",
+                CommandLine = "cmd.exe",
+                Memory = FakeProcessMemory.Native(Project + @".\sub\", "cmd.exe"),
+            });
+
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([Path.GetDirectoryName(Project)!]);
+
+        Assert.True(findings.IsLive(Project + "."));
+        Assert.False(findings.IsLive(Project));
+    }
+
+    /// <summary>
+    /// A program opens the paths it was started with through Win32, which drops a trailing dot, so a
+    /// browser started with <c>app.\profile</c> works in <c>app\profile</c>. Compared only as
+    /// spelled, the project read as unused while the browser held a profile in it.
+    /// </summary>
+    [Fact]
+    public void AnArgumentIsComparedAsTheProgramOpensIt()
+    {
+        var calls = new FakeProcessTableCalls()
+            .With(FakeProcessTableCalls.Own)
+            .With(new FakeListedProcess
+            {
+                Id = 4324,
+                Name = "chrome",
+                CommandLine = $@"chrome.exe --user-data-dir={Project}.\profile",
+                Memory = FakeProcessMemory.Native(Other + @"\", $@"chrome.exe --user-data-dir={Project}.\profile"),
+            });
+
+        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([Path.GetDirectoryName(Project)!]);
+
+        Assert.True(findings.Complete);
+        Assert.True(findings.IsLive(Project));
+    }
+
+    /// <summary>
     /// A process whose memory could not be read at all is not a doubt about the layout, as it never
     /// was: it is one of the processes the veto cannot see, which the design records.
     /// </summary>

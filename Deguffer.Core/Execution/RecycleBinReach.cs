@@ -64,6 +64,12 @@ internal sealed class RecycleBinReach
     /// <param name="path">The item in display form, as the shell is handed it.</param>
     internal string? WhyNot(string path)
     {
+        if (NameTheShellRereads(path) is { } name)
+        {
+            return $"'{name}' on its path ends in a dot or a space, and the Recycle Bin reads such a name as "
+                + "another, so it would move something else or nothing.";
+        }
+
         if (path.Length > LongestPath)
         {
             return $"Its path is {path.Length:N0} characters long. {TakesNoLongerPath}, and deletes it outright instead.";
@@ -91,6 +97,34 @@ internal sealed class RecycleBinReach
         var (length, inside) = item is DirectoryInfo folder ? Walk(path, folder) : (((FileInfo)item).Length, null);
 
         return inside ?? WhyTheBinCannotHold(path, length);
+    }
+
+    /// <summary>
+    /// The first name on <paramref name="path"/> that ends in a dot or a space, or null where none
+    /// does.
+    ///
+    /// <para><b>Observed on 2026-10-10:</b> <c>SHCreateItemFromParsingName</c>, which every
+    /// removal to the bin parses its path through, drops trailing dots and spaces from the last name,
+    /// and trailing dots from every other. Beside <c>report</c>, a <c>report.</c> parsed as
+    /// <c>report</c>, and <c>sub.\x.txt</c> and <c>sub..\x.txt</c> as <c>sub\x.txt</c>; a
+    /// <c>notes </c> parsed as nothing at all, while <c>sp \y.txt</c> kept its space. NTFS keeps
+    /// such names apart, and the shell takes no <c>\\?\</c> path that would spell them, so the bin
+    /// cannot be handed the item at all.</para>
+    /// </summary>
+    private static string? NameTheShellRereads(string path)
+    {
+        var names = path[(Path.GetPathRoot(path)?.Length ?? 0)..]
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+
+        for (var i = 0; i < names.Length; i++)
+        {
+            if (names[i] is not ("." or "..") && (names[i].EndsWith('.') || (i == names.Length - 1 && names[i].EndsWith(' '))))
+            {
+                return names[i];
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

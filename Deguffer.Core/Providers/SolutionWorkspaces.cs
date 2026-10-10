@@ -58,7 +58,7 @@ internal sealed class SolutionWorkspaces
 
             // Resolved first, because the process table holds whatever form a program was started
             // with: a path with '..' in it would otherwise be followed to somewhere it is not.
-            if (LongPath.Configured(place.Directory) is not { } directory)
+            if (LongPath.Entry(place.Directory) is not { } directory)
             {
                 continue;
             }

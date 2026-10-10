@@ -114,7 +114,7 @@ internal static class LocalCopyRelease
                 : PinState.Pinned;
 
             var resolved = Path.Join(
-                resolvedRoot, Path.GetRelativePath(LongPath.Display(step.SyncRoot), LongPath.Display(file.Path)));
+                resolvedRoot, LongPath.Relative(LongPath.Display(step.SyncRoot), LongPath.Display(file.Path)));
             var answer = cloud.Release(file.Path, resolved, now => ReleaseRules.Hold(now, inherited, keep) is null);
 
             tally[answer.Result] = tally.GetValueOrDefault(answer.Result) + answer.RequestedBytes;

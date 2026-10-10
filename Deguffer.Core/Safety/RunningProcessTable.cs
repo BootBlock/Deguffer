@@ -161,6 +161,12 @@ internal static class RunningProcessTable
             if (canonicalOf(argument) is { } canonical)
             {
                 paths.Add(canonical);
+
+                // The program opens the argument through Win32, which may read it as another folder.
+                if (LongPath.CanonicalAsOpened(argument) is { } opened)
+                {
+                    paths.Add(opened);
+                }
             }
             else
             {

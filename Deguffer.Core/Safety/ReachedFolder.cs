@@ -96,7 +96,7 @@ public sealed class ReachedFolder
             {
                 if (LongPath.Contains(outer, place))
                 {
-                    return Path.GetRelativePath(outer, place);
+                    return LongPath.Relative(outer, place);
                 }
             }
         }
@@ -116,7 +116,7 @@ public sealed class ReachedFolder
     public string? PathTo(string place) =>
         Places
             .Where(outer => LongPath.Contains(outer, place))
-            .Select(outer => Path.GetRelativePath(outer, place))
+            .Select(outer => LongPath.Relative(outer, place))
             .MinBy(Levels);
 
     /// <summary>

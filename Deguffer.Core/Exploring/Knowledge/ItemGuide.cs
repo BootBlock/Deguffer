@@ -138,7 +138,7 @@ public sealed class ItemGuide
     /// A pointer over a picture is not, and <see cref="DescribeNearest"/> is for that.</para>
     /// </summary>
     public KnownItem? Describe(string? path) =>
-        LongPath.Configured(path) is { } target ? Lookup(target) : null;
+        LongPath.Entry(path) is { } target ? Lookup(target) : null;
 
     /// <summary>
     /// What Deguffer knows about <paramref name="path"/>, or about the nearest folder above it that
@@ -156,7 +156,7 @@ public sealed class ItemGuide
     /// </summary>
     public KnownMatch? DescribeNearest(string? path)
     {
-        if (LongPath.Configured(path) is not { } target)
+        if (LongPath.Entry(path) is not { } target)
         {
             return null;
         }
@@ -182,7 +182,7 @@ public sealed class ItemGuide
 
     /// <summary>
     /// The entry for exactly <paramref name="target"/>, which has already been through
-    /// <see cref="LongPath.Configured(string?)"/>.
+    /// <see cref="LongPath.Entry(string?)"/>.
     ///
     /// <para>Asked in order of how specific the claim is: an address on this machine, then a
     /// position at the top of any volume, then a name found anywhere, then a type of file. The one

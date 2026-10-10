@@ -44,7 +44,7 @@ internal sealed class ToolRootChildren(IFileSystem fileSystem)
             return ExploreVerdict.Refuse(root.Root.Reason);
         }
 
-        // Empty only if the remainder is separators alone, which Configured has already collapsed
+        // Empty only if the remainder is separators alone, which Entry has already collapsed
         // into the equality above. Read as a refusal rather than indexed blindly: this is the one
         // predicate standing between a size picture and a tool's credentials.
         if (target[rootPath.Length..].Split(Separators, StringSplitOptions.RemoveEmptyEntries)

@@ -20,6 +20,19 @@ public class VolumePathTests
     }
 
     /// <summary>
+    /// A scan root whose name ends in a dot is measured as itself. Read as Win32 reads it, the
+    /// components named the folder beside it.
+    /// </summary>
+    [Fact]
+    public void KeepsANameEndingInADot()
+    {
+        Assert.True(VolumePath.TryParse(@"C:\Users\testuser\build.", out var parsed));
+
+        Assert.Equal(@"C:\Users\testuser\build.", parsed.FullPath);
+        Assert.Equal(["Users", "testuser", "build."], parsed.Components);
+    }
+
+    /// <summary>
     /// §6.3 puts every path in Core through LongPath, so most arrive here already prefixed. Failing
     /// to strip that would send every measurement down the fallback path on an elevated machine —
     /// working, but slowly, and for no visible reason.

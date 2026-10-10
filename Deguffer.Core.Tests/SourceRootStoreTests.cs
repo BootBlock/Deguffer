@@ -21,6 +21,21 @@ public sealed class SourceRootStoreTests : IDisposable
 
     private string StoreFile => Path.Combine(_environment.LocalAppData, "Deguffer", "source-roots.json");
 
+    /// <summary>
+    /// A root is a folder the user picked, so a name ending in a dot or a space is kept. Read as
+    /// Win32 reads it, an approval of <c>src.</c> was stored as an approval of <c>src</c>, a folder
+    /// the user never approved.
+    /// </summary>
+    [Fact]
+    public void KeepsAPickedRootWhoseNameEndsInADotOrASpace()
+    {
+        var store = CreateStore();
+        SourceRoot[] roots = [new(@"C:\Users\testuser\src."), new(@"C:\Users\testuser\work ")];
+
+        Assert.True(store.Save(roots));
+        Assert.Equal(roots, CreateStore().Load());
+    }
+
     [Fact]
     public void ReadsBackWhatWasSaved()
     {

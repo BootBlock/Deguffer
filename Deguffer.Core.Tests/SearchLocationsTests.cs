@@ -42,6 +42,27 @@ public sealed class SearchLocationsTests : IDisposable
         Assert.Equal(4, Assert.Single(found.Groups).Files.Count);
     }
 
+    /// <summary>
+    /// A picked folder whose name ends in a dot is searched as itself. Read as Win32 reads it,
+    /// <c>Photos.</c> was <c>Photos</c>, so the folder beside it was searched, and a reference
+    /// location protected the wrong folder's copies.
+    /// </summary>
+    [Fact]
+    public async Task APickedFolderWhoseNameEndsInADotIsSearchedAsItself()
+    {
+        TwoFiles("Photos");
+        var picked = Path.Combine(_tree.Top, "Photos.");
+        Directory.CreateDirectory(LongPath.Extended(picked));
+        File.WriteAllBytes(LongPath.Extended(Path.Combine(picked, "c.jpg")), new byte[100]);
+        File.WriteAllBytes(LongPath.Extended(Path.Combine(picked, "d.jpg")), new byte[100]);
+
+        var found = await _tree.FindAsync(MatchCriteria.Size, new SearchLocation(picked));
+
+        Assert.All(
+            Assert.Single(found.Groups).Files,
+            file => Assert.StartsWith(picked + Path.DirectorySeparatorChar, file.Path, StringComparison.Ordinal));
+    }
+
     [Theory]
     [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
     public async Task AFolderReachedThroughALinkIsSearchedOnce(DirectoryLinkKind kind)

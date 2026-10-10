@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
@@ -70,7 +70,7 @@ internal static class RefusalCheck
         IFileSystem fs,
         CancellationToken ct)
     {
-        if (LongPath.Configured(path) is not { } root)
+        if (LongPath.Entry(path) is not { } root)
         {
             return Nothing;
         }

@@ -104,17 +104,7 @@ public sealed class ScanEstimateCache
     /// make two spellings of one directory miss each other, and the cache would quietly stop
     /// working with no symptom beyond a blank window on reopen.
     /// </summary>
-    private static string Key(string path)
-    {
-        try
-        {
-            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(LongPath.Display(path)));
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return path;
-        }
-    }
+    private static string Key(string path) => LongPath.Entry(path) ?? path;
 
     private static bool IsStale(Entry entry) => DateTimeOffset.UtcNow - entry.MeasuredAt > MaximumAge;
 

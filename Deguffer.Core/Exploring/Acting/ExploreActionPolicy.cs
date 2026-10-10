@@ -171,8 +171,9 @@ public sealed class ExploreActionPolicy
         // Normalised first, because every comparison below is a prefix match on a path's text, made
         // of each path the item and each rule are reachable at. A path
         // carrying '..' compares equal to nothing and would walk straight past the whole table —
-        // the same trap LongPath.Configured exists for on a provider's configured root.
-        if (LongPath.Configured(path) is not { } target)
+        // the same trap LongPath.Configured exists for on a provider's configured root. Entry, not
+        // Configured, because a picked name ending in a dot or a space names that entry and no other.
+        if (LongPath.Entry(path) is not { } target)
         {
             return ExploreVerdict.Refuse(
                 "Deguffer could not make sense of that path, so it will not act on it.");
@@ -244,7 +245,7 @@ public sealed class ExploreActionPolicy
     /// </summary>
     public ExploreVerdict? RefusedAtAndBelow(string path)
     {
-        if (LongPath.Configured(path) is not { } target)
+        if (LongPath.Entry(path) is not { } target)
         {
             return ExploreVerdict.Refuse(
                 "Deguffer could not make sense of that path, so it will not act on it.");

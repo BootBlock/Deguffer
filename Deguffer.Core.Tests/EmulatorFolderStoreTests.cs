@@ -27,6 +27,21 @@ public sealed class EmulatorFolderStoreTests : IDisposable
         Assert.Empty(thrown);
     }
 
+    /// <summary>
+    /// An emulator folder is one the user picked, so a name ending in a dot or a space is kept rather
+    /// than stored as the folder beside it.
+    /// </summary>
+    [Fact]
+    public void KeepsAPickedFolderWhoseNameEndsInADotOrASpace()
+    {
+        string[] folders = [Path.Combine(_temp.Path, "rpcs3."), Path.Combine(_temp.Path, "cemu ")];
+
+        Assert.True(new EmulatorFolderStore(_environment).Save(folders, out var stored));
+
+        Assert.Equal(folders, stored);
+        Assert.Equal(folders, new EmulatorFolderStore(_environment).Load());
+    }
+
     [Fact]
     public void KeepsFullPathsOnceEachInTheOrderGiven()
     {

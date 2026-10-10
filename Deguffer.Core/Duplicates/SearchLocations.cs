@@ -140,12 +140,12 @@ public sealed class SearchLocations
     private static (ResolvedLocation? Location, string? Reason, string? Place) Resolve(
         SearchLocation location, IVolumeInventory volumes, FileInformation files)
     {
-        if (LongPath.Configured(location.Path) is not { } configured)
+        if (LongPath.Entry(location.Path) is not { } picked)
         {
             return (null, "This is not a full path to a drive or a folder.", null);
         }
 
-        var followed = VolumeRoot.Followed(volumes, configured);
+        var followed = VolumeRoot.Followed(volumes, picked);
         var (found, reason) = Resolve(location, followed, volumes, files);
 
         return (found, reason, Path.TrimEndingDirectorySeparator(LongPath.Display(followed)));

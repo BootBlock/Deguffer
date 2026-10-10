@@ -39,7 +39,7 @@ internal static class OutlookDataFiles
     internal const string SavedDataFilesFolder = "Outlook Files";
 
     /// <summary>Why Explore will not remove <paramref name="target"/>, or null where this rule has nothing to say.</summary>
-    /// <param name="target">A path already through <see cref="LongPath.Configured(string?)"/>.</param>
+    /// <param name="target">A path already through <see cref="LongPath.Entry(string?)"/>.</param>
     public static ExploreVerdict? Refusal(string target)
     {
         // Which files are stores is MailStore's to say, once for every route. What is said about each

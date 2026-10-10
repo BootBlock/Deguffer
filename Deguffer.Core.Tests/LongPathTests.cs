@@ -135,6 +135,68 @@ public class LongPathTests
     }
 
     /// <summary>
+    /// A name ending in a dot or a space is kept as spelled wherever a path names an entry on the
+    /// disk. Win32 drops them from a path's last segment as it resolves it, so <c>report.</c> came
+    /// out as <c>report</c>, a sibling NTFS keeps apart from it, and the removal, the policy and the
+    /// in-use check all acted on that sibling. A <c>.</c> or <c>..</c> segment is still resolved.
+    /// The paths are invented and carry no <c>~</c>, so nothing is asked of the disk.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\testuser\Downloads\report.", @"C:\Users\testuser\Downloads\report.")]
+    [InlineData(@"C:\Users\testuser\Downloads\foo. .", @"C:\Users\testuser\Downloads\foo. .")]
+    [InlineData(@"C:\Users\testuser\Downloads\notes ", @"C:\Users\testuser\Downloads\notes ")]
+    [InlineData(@"C:\Users\testuser\Downloads\...", @"C:\Users\testuser\Downloads\...")]
+    [InlineData(@"C:/Users/testuser/x/../Downloads/report.", @"C:\Users\testuser\Downloads\report.")]
+    [InlineData(@"\\?\C:\Users\testuser\Downloads\report.", @"C:\Users\testuser\Downloads\report.")]
+    [InlineData(@"\\server\share\report.", @"\\server\share\report.")]
+    [InlineData(@"C:\Users\testuser\sub.\report", @"C:\Users\testuser\sub.\report")]
+    [InlineData(@"C:\Users\testuser\sub. .\report", @"C:\Users\testuser\sub. .\report")]
+    [InlineData(@"C:\Users\testuser\\Downloads\\report.", @"C:\Users\testuser\Downloads\report.")]
+    [InlineData(@"C:\..\Users\testuser\report.", @"C:\Users\testuser\report.")]
+    [InlineData(@"C:\Users\testuser\Downloads\x\..", @"C:\Users\testuser\Downloads")]
+    [InlineData(@"C:\Users\testuser\Downloads\.", @"C:\Users\testuser\Downloads")]
+    public void KeepsANameEndingInADotOrASpaceWherePathsNameEntries(string spelled, string entry)
+    {
+        Assert.Equal(entry, LongPath.Entry(spelled));
+        Assert.Equal(entry, LongPath.Canonical(spelled));
+        Assert.Equal(LongPath.Extended(entry), LongPath.Extended(spelled));
+        Assert.Equal(entry, LongPath.Display(LongPath.Extended(entry)));
+    }
+
+    /// <summary>
+    /// A path relative to a folder keeps every name as spelled. The framework's own call resolves
+    /// both sides as Win32 does, so <c>app.\profile</c> below <c>C:\src</c> came back as
+    /// <c>app\profile</c>, and what was found in <c>app.</c> was counted against <c>app</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Users\testuser\src", @"C:\Users\testuser\src\app.\profile", @"app.\profile")]
+    [InlineData(@"C:\Users\testuser\src", @"C:\Users\testuser\src\notes ", "notes ")]
+    [InlineData(@"C:\Users\testuser\src\", @"C:\Users\testuser\src\app", "app")]
+    [InlineData(@"C:\Users\testuser\src", @"C:\Users\testuser\src", ".")]
+    [InlineData(@"C:\Users\testuser\src", @"C:\Users\testuser\other.\x", @"..\other.\x")]
+    [InlineData(@"C:\Users\testuser\src", @"D:\elsewhere.", @"D:\elsewhere.")]
+    public void ARelativePathKeepsEveryNameAsSpelled(string relativeTo, string path, string expected) =>
+        Assert.Equal(expected, LongPath.Relative(relativeTo, path));
+
+    /// <summary>
+    /// A configured value is read as Win32 reads it, because that is the folder the tool it
+    /// configures opens: <c>C:\cache.</c> in an environment variable is <c>C:\cache</c> to the
+    /// tool. Only a path naming an entry on the disk keeps the name as spelled, and only it skips
+    /// the trim a value read from a setting needs.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\cache.", @"C:\cache", @"C:\cache.")]
+    [InlineData(@" C:\cache ", @"C:\cache", null)]
+    [InlineData(@"C:\Users\testuser\notes ", @"C:\Users\testuser\notes", @"C:\Users\testuser\notes ")]
+    [InlineData(@"C:\Users\testuser\report.\", @"C:\Users\testuser\report", @"C:\Users\testuser\report.")]
+    public void ReadsAConfiguredValueAsTheToolDoesAndAnEntryAsTheDiskHoldsIt(
+        string value, string configured, string? entry)
+    {
+        Assert.Equal(configured, LongPath.Configured(value));
+        Assert.Equal(entry, LongPath.Entry(value));
+    }
+
+    /// <summary>
     /// <see cref="LongPath.Unaliased"/> answers in display form whether or not the path carries an
     /// alias, because the in-use check compares what it returns with display-form folders. The
     /// paths are invented and carry no <c>~</c>, so nothing is asked of the disk.

@@ -264,7 +264,10 @@ public static class ExploreRemover
     /// itself and the second return nothing, so the evidence would describe the directory being
     /// removed rather than the one it sits in, and a wholly correct removal would report as a
     /// failure. <see cref="LongPath.Configured"/> documents that trap where a provider's configured
-    /// root meets it; a path arriving from a caller meets it here.</para>
+    /// root meets it; a path arriving from a caller meets it here. It is normalised through
+    /// <see cref="LongPath.Entry"/>, which keeps a name ending in a dot or a space as the disk holds
+    /// it, because a picked <c>report.</c> read as <c>report</c> would remove a sibling nobody
+    /// picked.</para>
     public static (IReadOnlyList<ExploreItem> Allowed, IReadOnlyList<ExploreItemOutcome> Refused) Partition(
         IReadOnlyList<ExploreItem> items,
         ExploreActionPolicy policy)
@@ -283,9 +286,9 @@ public static class ExploreRemover
                 continue;
             }
 
-            // Non-null by construction: the policy refuses outright anything Configured cannot
-            // resolve, so a path that reaches this line has already been through it once.
-            allowed.Add(item with { Path = LongPath.Configured(item.Path)! });
+            // Non-null by construction: the policy refuses outright anything Entry cannot resolve,
+            // so a path that reaches this line has already been through it once.
+            allowed.Add(item with { Path = LongPath.Entry(item.Path)! });
         }
 
         return (allowed, refused);

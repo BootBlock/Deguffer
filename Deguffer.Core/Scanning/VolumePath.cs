@@ -7,7 +7,7 @@ namespace Deguffer.Core.Scanning;
 /// the form an MFT lookup needs, since the table knows nothing about drive letters.
 /// </summary>
 /// <param name="FullPath">
-/// The path as <see cref="Path.GetFullPath(string)"/> resolved it, with any extended-length prefix
+/// The path as <see cref="LongPath.Entry(string?)"/> resolved it, with any extended-length prefix
 /// removed. Kept rather than recomputed because it and <paramref name="Components"/> have to
 /// describe the same location in the same form: a caller that resolves a record by the components
 /// and then labels it with the string it was handed would name the record after a path that no
@@ -30,15 +30,10 @@ public readonly record struct VolumePath(
             return false;
         }
 
-        string full;
-        try
-        {
-            // Strip any extended-length prefix first: §6.3 puts every path in Core through
-            // LongPath, so most arrive here as \\?\C:\... and the raw form would fail the
-            // drive-letter check below.
-            full = Path.GetFullPath(LongPath.Display(path));
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        // In display form, because §6.3 puts every path in Core through LongPath, so most arrive
+        // here as \\?\C:\... and the raw form would fail the drive-letter check below. Read as an
+        // entry, so a scan root named "build." is measured as itself rather than as "build".
+        if (LongPath.Entry(path) is not { } full)
         {
             return false;
         }
