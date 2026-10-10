@@ -33,11 +33,14 @@ public sealed class MapCeilingTests
     public void AnItemIsRevealedOnceItIsTwiceTheSmallestShapeAcross(double finest, double smallest, double expected) =>
         Assert.Equal(expected, MapCeiling.Revealing(finest, smallest), 9);
 
-    /// <summary>A shape has room for a name once both its sides do: the tighter one decides.</summary>
+    /// <summary>
+    /// A shape has room for a name once both its sides do, with a pixel to spare: the tighter one
+    /// decides.
+    /// </summary>
     [Theory]
-    [InlineData(3, 3, 16)]
-    [InlineData(100, 10, 1.6)]
-    [InlineData(200, 50, 0.32)]
+    [InlineData(7, 17, 7)]
+    [InlineData(98, 10, 1.7)]
+    [InlineData(196, 50, 0.34)]
     public void AShapeIsNamedOnceItsTighterSideHasRoom(double width, double height, double expected) =>
         Assert.Equal(expected, MapCeiling.Naming(width, height, labelWidth: 48, labelHeight: 16), 9);
 

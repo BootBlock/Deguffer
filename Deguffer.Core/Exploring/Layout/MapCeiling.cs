@@ -49,10 +49,14 @@ public static class MapCeiling
     /// <summary>
     /// How many times more a picture has to be magnified for a shape <paramref name="width"/> by
     /// <paramref name="height"/> pixels to have room for a name <paramref name="labelWidth"/> by
-    /// <paramref name="labelHeight"/> pixels: at most 1 where it already has.
+    /// <paramref name="labelHeight"/> pixels, and a pixel more each way: at most 1 where it already has.
+    ///
+    /// <para>The pixel is what makes the room certain. A zoom to exactly the label's size leaves the
+    /// shapes at the threshold by a rounding error either side of it, so some are named and their equal
+    /// neighbours are not, and the next drawing asks for a rounding error more.</para>
     /// </summary>
     public static double Naming(double width, double height, double labelWidth, double labelHeight) =>
-        Math.Max(labelWidth / width, labelHeight / height);
+        Math.Max((labelWidth + 1) / width, (labelHeight + 1) / height);
 
     /// <summary>
     /// The ceiling for a drawing made at <paramref name="zoom"/> whose detail in view is all drawn and
