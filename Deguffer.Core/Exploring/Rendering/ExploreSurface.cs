@@ -433,6 +433,12 @@ public abstract class ExploreSurface
     public abstract ExploreTile? TileAt(float x, float y);
 
     /// <summary>
+    /// Every rectangle drawn, a folder before what is drawn of it, in pixels of the drawing. None for
+    /// a sunburst, which draws sectors rather than rectangles.
+    /// </summary>
+    public abstract IReadOnlyList<ExploreTile> Tiles { get; }
+
+    /// <summary>
     /// Where <paramref name="node"/> is drawn, in fractions of the canvas: its own rectangle, or where it
     /// is not drawn one by one, the rectangle of the deepest folder above it that is, which is where
     /// the screen shows it. Null where it is not under this drawing's root, or this drawing is not made

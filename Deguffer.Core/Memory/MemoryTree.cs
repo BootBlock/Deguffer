@@ -15,7 +15,7 @@ namespace Deguffer.Core.Memory;
 /// <para>A node number means something only in the tree that gave it. A refresh builds a new tree, and
 /// <see cref="MemoryPlace"/> is what finds the same process or part in it.</para>
 /// </summary>
-public sealed class MemoryTree : ISizedTree
+public sealed class MemoryTree : ITrackedTree
 {
     private readonly string[] _names;
     private readonly MemoryPart[] _parts;
@@ -120,4 +120,8 @@ public sealed class MemoryTree : ISizedTree
 
     /// <summary>The node <paramref name="key"/> names in this tree, or null where this tree has none.</summary>
     public int? Find(MemoryNodeKey key) => _index.TryGetValue(key, out var node) ? node : null;
+
+    /// <summary>Find each node in <paramref name="later"/>, another reading of memory, as <see cref="MemoryPlace.TryCarry"/> does.</summary>
+    public Func<int, int?>? CounterpartsIn(ISizedTree later) =>
+        later is MemoryTree reading ? node => MemoryPlace.TryCarry(this, node, reading) : null;
 }

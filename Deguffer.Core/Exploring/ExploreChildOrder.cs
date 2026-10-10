@@ -11,8 +11,9 @@ namespace Deguffer.Core.Exploring;
 public enum ExploreChildOrder
 {
     /// <summary>
-    /// Largest first. What a finished scan wants: the treemap requires it, and the list and the
-    /// icicle both read best in it.
+    /// Largest first, and siblings of one size by name as <see cref="ByName"/> orders them, so every
+    /// tree of the same disk lays them out alike. What a finished scan wants: the treemap requires
+    /// it, and the list and the icicle both read best in it.
     /// </summary>
     BySize = 0,
 

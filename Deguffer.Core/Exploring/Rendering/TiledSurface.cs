@@ -63,6 +63,8 @@ public sealed class TiledSurface : ExploreSurface
 
     public override double? Ceiling { get; }
 
+    public override IReadOnlyList<ExploreTile> Tiles => _tiles;
+
     public override CanvasPainter Painter(TileColour background) =>
         new TileRasteriser(_tiles, Width, Height, background, ColourFor);
 
@@ -184,7 +186,7 @@ public sealed class TiledSurface : ExploreSurface
     /// single precision: a folder drawn with no room round what it holds ends where its last shape does,
     /// by a sum that need not round the same way twice.
     /// </summary>
-    private static bool Inside(ExploreTile inner, ExploreTile outer)
+    internal static bool Inside(ExploreTile inner, ExploreTile outer)
     {
         const float Rounding = 1f / 64;
 
