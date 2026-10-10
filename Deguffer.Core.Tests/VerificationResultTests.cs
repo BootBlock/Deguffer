@@ -79,6 +79,43 @@ public sealed class VerificationResultTests
         Assert.Equal("1 of 1 protected item(s) did not survive.", result.Summary);
     }
 
+    /// <summary>
+    /// What a page lists beside its sentence after a removal (#301): every check the sentence counts
+    /// as not passed, the alarms first, and nothing that passed or asserts nothing. A list that left
+    /// out the checks Windows would not let be made would name fewer folders than the sentence
+    /// counts, and one that took in a pass would send the user to a folder that is fine.
+    /// </summary>
+    [Fact]
+    public void WhatDidNotPassIsEveryCheckThatDidNotPassAndNoOther()
+    {
+        var result = new VerificationResult
+        {
+            Checks =
+            [
+                Check(VerificationOutcome.Unverified, @"C:\Users\testuser\Linked"),
+                Check(VerificationOutcome.Survived, @"C:\Users\testuser\Downloads"),
+                Check(VerificationOutcome.RemovedFromOutside, @"C:\Users\testuser\.gradle\gradle.properties"),
+                Check(VerificationOutcome.NotPresentBefore, @"C:\Users\testuser\Absent"),
+                Check(VerificationOutcome.Emptied, @"C:\Users\testuser\.m2\settings"),
+                Check(VerificationOutcome.Sent, "window 0x00040122 of notepad.exe (process 4321)"),
+                Check(VerificationOutcome.Failed, @"C:\Users\testuser\Documents"),
+                Check(VerificationOutcome.ExpectedExit, "helper.exe (process 4400)"),
+                Check(VerificationOutcome.Entered, @"C:\Users\testuser\.cargo\config"),
+                Check(VerificationOutcome.UnclaimedExit, "svchost.exe (process 980)"),
+            ],
+        };
+
+        Assert.Equal(
+            [
+                @"C:\Users\testuser\.m2\settings",
+                @"C:\Users\testuser\Documents",
+                @"C:\Users\testuser\.cargo\config",
+                @"C:\Users\testuser\.gradle\gradle.properties",
+                @"C:\Users\testuser\Linked",
+            ],
+            result.Unpassed.Select(check => check.Subject));
+    }
+
     private static VerificationCheck Check(VerificationOutcome outcome, string subject) =>
         new(subject, "It must survive.", outcome, "Whatever was found.");
 }

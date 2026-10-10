@@ -1,7 +1,10 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Duplicates;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
 
@@ -86,6 +89,19 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// <summary>What the last rule or removal did, or an empty string.</summary>
     [ObservableProperty]
     public partial string Outcome { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// The §5.6 checks the last removal could not pass, each by the path it is about and what it
+    /// found, listed beside <see cref="Outcome"/> while it still holds that removal's sentence. The
+    /// sentence counts them and asks the user to look at the folders, and a count does not say which.
+    /// </summary>
+    public ObservableCollection<VerificationCheck> OutcomeChecks { get; } = [];
+
+    /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
+    public bool HasOutcomeChecks => OutcomeChecks.Count > 0;
+
+    /// <summary>The last statement a removal put on the page.</summary>
+    private OutcomeStatement _stated = OutcomeStatement.Said(string.Empty);
 
     /// <summary>Why nothing can be marked, ruled or removed now, or an empty string where something can.</summary>
     public string WhyClosed => WhyCannotAct ?? _marks?.WhyRulesCannotMark ?? string.Empty;
@@ -297,13 +313,31 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                     rows[copy.Copy.Identity].Removal(copy.Message);
                 }
 
-                Outcome = answer.Summary;
+                Say(answer.Statement);
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
                 Outcome = "Stopped before anything was removed.";
             }
         });
+    }
+
+    /// <summary>Put a removal's statement on the page and its checks beside it.</summary>
+    private void Say(OutcomeStatement statement)
+    {
+        // Before the sentence, so the change below lists this statement's checks beside it.
+        _stated = statement;
+        Outcome = statement.Sentence;
+        ListBeside(Outcome);
+    }
+
+    partial void OnOutcomeChanged(string value) => ListBeside(value);
+
+    /// <summary>Update the list in place to what <see cref="OutcomeStatement.ChecksBeside"/> says belongs beside <paramref name="shown"/>.</summary>
+    private void ListBeside(string shown)
+    {
+        LiveList.Rewrite(OutcomeChecks, _stated.ChecksBeside(shown));
+        OnPropertyChanged(nameof(HasOutcomeChecks));
     }
 
     /// <summary>

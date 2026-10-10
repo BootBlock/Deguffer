@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Duplicates;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -359,6 +360,60 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.True(_running.MayEndProcess);
         Assert.All(Open(page), Assert.False);
         Assert.NotEmpty(page.Marking.WhyClosed);
+        Assert.Empty(page.Marking.OutcomeChecks);
+    });
+
+    /// <summary>
+    /// #301: a removal that took more than the copies it was asked to names each check that failed,
+    /// by the copy or folder it failed on and what it found, beside the sentence that counts them.
+    /// Here the bin, moving one group's copy, takes a file beside it and the copy another group
+    /// keeps, and the page says which of each. The next search takes the list with it.
+    /// </summary>
+    [Fact]
+    public void AFailedCheckAfterARemovalIsNamedBesideTheOutcome() => UiThread.Run(async () =>
+    {
+        var first = new byte[200 * 1024];
+        var second = new byte[200 * 1024];
+        new Random(301).NextBytes(first);
+        new Random(302).NextBytes(second);
+        var keptFirst = _scene.Written(Path.Combine(_scene.Folder("Documents"), "a.bin"), first);
+        var copyFirst = _scene.Written(Path.Combine(_scene.Folder("Downloads"), "a.bin"), first);
+        var kept = _scene.Written(Path.Combine(_scene.Folder("Pictures"), "b.bin"), second);
+        var copy = _scene.Written(Path.Combine(_scene.Folder("Desktop"), "b.bin"), second);
+        var beside = Path.Combine(_scene.Folder("Downloads"), "note.txt");
+        File.WriteAllText(beside, "beside the copy");
+        RecycleBin = FakeRecycleBin.MovingTo(_scene.Bin, path =>
+        {
+            if (Path.GetFileName(path) == "a.bin")
+            {
+                File.Delete(beside);
+                File.Delete(kept.Path);
+            }
+        });
+        Prompt = new FakeDuplicateConfirmation(true);
+        var page = PageWithPhotos(Finds(Group(keptFirst, copyFirst), Group(kept, copy)));
+        await page.SearchCommand.ExecuteAsync(null);
+        Toggle(page, copyFirst);
+        Toggle(page, copy);
+
+        await page.Marking.MoveToRecycleBinCommand.ExecuteAsync(null);
+
+        Assert.Contains("did not pass", page.Marking.Outcome, StringComparison.Ordinal);
+        Assert.True(page.Marking.HasOutcomeChecks);
+        Assert.Equal(2, page.Marking.OutcomeChecks.Count);
+
+        var folder = Assert.Single(page.Marking.OutcomeChecks, check => check.Subject == _scene.Folder("Downloads"));
+        Assert.Equal(VerificationOutcome.Failed, folder.Outcome);
+        Assert.Contains("'note.txt'", folder.Detail, StringComparison.Ordinal);
+
+        var lost = Assert.Single(page.Marking.OutcomeChecks, check => check.Subject == kept.Path);
+        Assert.Equal(VerificationOutcome.Failed, lost.Outcome);
+        Assert.StartsWith("MISSING", lost.Detail, StringComparison.Ordinal);
+
+        await page.SearchCommand.ExecuteAsync(null);
+
+        Assert.Empty(page.Marking.OutcomeChecks);
+        Assert.False(page.Marking.HasOutcomeChecks);
     });
 
     /// <summary>

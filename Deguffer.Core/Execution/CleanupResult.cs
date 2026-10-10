@@ -249,6 +249,18 @@ public sealed record VerificationResult
         [.. Checks.Where(c => c.Outcome == VerificationOutcome.Unverified)];
 
     /// <summary>
+    /// Every check this result has something to answer for, each with the subject it is about and
+    /// what it found: the failures, then what something else removed, then what Windows would not
+    /// describe. A pass is left out, and so is a close's record of what it sent and what exited,
+    /// which assert nothing.
+    ///
+    /// <para>What a page lists beside its sentence after acting. The sentence counts, and a count
+    /// that asks the user to look at the folders without saying which leaves them nowhere to look
+    /// at the moment it matters most.</para>
+    /// </summary>
+    public IReadOnlyList<VerificationCheck> Unpassed => [.. Failures, .. RemovedFromOutside, .. Unverified];
+
+    /// <summary>
     /// The checks that assert something survived, which is what <see cref="Summary"/> counts.
     ///
     /// <para>A close also records what it sent and which processes exited beside its target

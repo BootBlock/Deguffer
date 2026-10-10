@@ -42,6 +42,9 @@ internal sealed class ExploreFixture : IDisposable
 
     public FakeExploreConfirmation Prompt { get; set; } = new(answer: true);
 
+    /// <summary>The Recycle Bin a page built after this is set removes to.</summary>
+    public FakeRecycleBin Bin { get; set; } = new();
+
     /// <summary>How the removal policy is built. A finished policy that refuses nothing, unless a test says otherwise.</summary>
     public Func<CancellationToken, Task<ExploreActionPolicy>> Build { get; set; }
 
@@ -60,7 +63,7 @@ internal sealed class ExploreFixture : IDisposable
             Volumes,
             Hidden,
             Time,
-            new ExploreActions(Build, () => Prompt, Faults, Running, new FakeRecycleBin()),
+            new ExploreActions(Build, () => Prompt, Faults, Running, Bin),
             Guide,
             isElevated,
             request =>

@@ -157,6 +157,38 @@ public sealed class CleanRunReportTests : IDisposable
         Assert.Contains(@"\profileby\obj", report, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The report names every check the page lists as not passed, a path something else removed and
+    /// one Windows would not describe included, because a fault report that leaves them out asks the
+    /// reader to diagnose what it never told them. A check that passed is not named.
+    /// </summary>
+    [Fact]
+    public void NamesEveryCheckThatDidNotPassAndNoneThatDid()
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        var root = Path.Combine(environment.UserProfile, ".gradle");
+        var result = new CleanupResult
+        {
+            ProviderId = "gradle",
+            ProviderName = "Gradle",
+            Verification = new VerificationResult
+            {
+                Checks =
+                [
+                    new VerificationCheck(Path.Combine(root, "survived"), "Config.", VerificationOutcome.Survived, "Still present."),
+                    new VerificationCheck(Path.Combine(root, "outside"), "Config.", VerificationOutcome.RemovedFromOutside, "Gone before the clean."),
+                    new VerificationCheck(Path.Combine(root, "linked"), "Config.", VerificationOutcome.Unverified, "NOT CHECKED."),
+                ],
+            },
+        };
+
+        var report = CleanRunReport.Describe([result], Origin, environment);
+
+        Assert.Contains(@"- RemovedFromOutside: `%USERPROFILE%\.gradle\outside`", report, StringComparison.Ordinal);
+        Assert.Contains(@"- Unverified: `%USERPROFILE%\.gradle\linked`", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("survived`", report, StringComparison.Ordinal);
+    }
+
     private static CleanupResult Failed(string path, string step, string? message) => new()
     {
         ProviderId = "temp-directories",

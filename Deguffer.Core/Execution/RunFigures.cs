@@ -42,7 +42,7 @@ public sealed record RunFigures(
                 .. results
                     .Select(r => r.Verification)
                     .OfType<VerificationResult>()
-                    .SelectMany(v => v.Failures.Concat(v.RemovedFromOutside).Concat(v.Unverified)),
+                    .SelectMany(v => v.Unpassed),
             ]);
     }
 

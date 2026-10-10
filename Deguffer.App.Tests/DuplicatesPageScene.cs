@@ -29,8 +29,11 @@ public abstract class DuplicatesPageScene : IDisposable
         RecycleBin = FakeRecycleBin.MovingTo(_scene.Bin);
     }
 
-    /// <summary>The Recycle Bin the page removes to, moving what it takes into the scene's bin folder.</summary>
-    private protected FakeRecycleBin RecycleBin { get; }
+    /// <summary>
+    /// The Recycle Bin a page built after this is set removes to; by default moving what it takes
+    /// into the scene's bin folder.
+    /// </summary>
+    private protected FakeRecycleBin RecycleBin { get; set; }
 
     /// <summary>What the page's confirmation is answered with; declining unless a test says otherwise.</summary>
     private protected FakeDuplicateConfirmation Prompt { get; set; } = new(false);
