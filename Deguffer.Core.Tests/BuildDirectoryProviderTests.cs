@@ -311,6 +311,62 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
+    /// <summary>
+    /// The lock file is what makes <c>node_modules</c> reproducible, which is the whole of the claim
+    /// that deleting it costs only a reinstall. Recognition accepts any one of several, so each is
+    /// named as a survivor in its own right rather than left standing by luck.
+    /// </summary>
+    [Theory]
+    [InlineData("package-lock.json")]
+    [InlineData("npm-shrinkwrap.json")]
+    [InlineData("pnpm-lock.yaml")]
+    [InlineData("yarn.lock")]
+    [InlineData("bun.lockb")]
+    public async Task ANodeProjectsLockFileIsAssertedToSurviveAndDoes(string lockFile)
+    {
+        var root = ApproveRoot();
+        var project = Path.Combine(root, "app");
+        var modules = BuildDirectoryFixture.CreateNodeProject(project, lockFile: lockFile);
+
+        await AssertTheManifestSurvives(Node(), project, modules, lockFile);
+    }
+
+    /// <summary>
+    /// The same negative for a virtual environment, whose manifest is the only record of what was
+    /// installed into it.
+    /// </summary>
+    [Theory]
+    [InlineData("requirements.txt")]
+    [InlineData("pyproject.toml")]
+    [InlineData("Pipfile")]
+    [InlineData("setup.py")]
+    [InlineData("environment.yml")]
+    public async Task APythonProjectsManifestIsAssertedToSurviveAndDoes(string manifest)
+    {
+        var root = ApproveRoot();
+        var project = Path.Combine(root, "tool");
+        var environment = BuildDirectoryFixture.CreatePythonProject(project, manifest: manifest);
+
+        await AssertTheManifestSurvives(Python(), project, environment, manifest);
+    }
+
+    private static async Task AssertTheManifestSurvives(
+        BuildDirectoryProvider provider, string project, string target, string manifest)
+    {
+        var path = Path.Combine(project, manifest);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([target], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == path && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(LongPath.DirectoryExists(target));
+        Assert.True(LongPath.FileExists(path));
+        Assert.True(result.Verification!.Passed);
+    }
+
     // ---- consent ------------------------------------------------------------------------------
 
     /// <summary>

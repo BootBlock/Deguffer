@@ -395,6 +395,46 @@ public sealed class FileHistoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The settings folder on this machine is a different path from the catalogue on the drive, and
+    /// the one that records what is protected and where. Naming it as a tool root keeps Explore out
+    /// of it, and does not make §5.6 assert it.
+    /// </summary>
+    [Fact]
+    public async Task AssertsTheSettingsFolderSurvived()
+    {
+        CreateConfiguredDrive();
+        var settings = Path.Combine(
+            _environment.LocalAppData, "Microsoft", "Windows", "FileHistory", "Configuration");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(settings, StringComparison.OrdinalIgnoreCase)
+            && p.PresenceBefore is PathPresence.Present);
+    }
+
+    /// <summary>
+    /// The other accounts and machines are survivors only because a listing found them. A listing
+    /// that is refused leaves that set incomplete, and the plan has to say so rather than let the
+    /// negative read as whole.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AListingOfTheNeighboursThatIsRefusedIsSaidSo(bool refuseTheUserFolder)
+    {
+        var drive = CreateConfiguredDrive();
+        var history = Path.Combine(drive, "FileHistory");
+        var refused = refuseTheUserFolder ? Path.Combine(history, FakeUserEnvironment.Account) : history;
+
+        using var denied = new DeniedDirectory(refused);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Single(plan.Steps);
+        Assert.True(plan.HasUnreadableRoot);
+    }
+
+    /// <summary>
     /// §5.6's whole purpose against a command whose reach Deguffer does not control. Windows decides
     /// what <c>-cleanup</c> removes, and every assertion that the target shrank would pass just as
     /// happily if it had taken somebody else's backup with it. Only the negative catches that.

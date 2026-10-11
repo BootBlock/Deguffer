@@ -306,6 +306,10 @@ public sealed class ChromiumHostTests : IDisposable
         Assert.True(plan.HasUnreadableRoot);
         Assert.Single(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(vendor, StringComparison.OrdinalIgnoreCase));
+
+        // Unreached is not unprotected: §5.6 still asserts the vendor directory survived.
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(vendor, StringComparison.OrdinalIgnoreCase) && p.Reason == UnreadableRoot.UnreachedReason);
     }
 
     /// <summary>

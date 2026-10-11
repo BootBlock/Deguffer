@@ -186,6 +186,11 @@ public sealed class ZigCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
             && n.Message.Contains("goes whole or not at all", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(store, StringComparison.OrdinalIgnoreCase));
+
+        // The directory withheld whole is asserted to survive, and to have held content, as the
+        // store it was withheld for did.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Child("o"), StringComparison.OrdinalIgnoreCase)
+            && p is { PresenceBefore: PathPresence.Present, HeldContentBefore: true });
     }
 
     /// <summary>An index with no outputs beside it is an ordinary cache, and goes on its own.</summary>

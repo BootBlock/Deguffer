@@ -181,14 +181,18 @@ public sealed class CondaCacheProviderTests : IDisposable
     public async Task ReportsReclaimAgainstItsOwnProbeRatherThanCondasFigure()
     {
         Populate(PackageCache, bytes: 65536);
+        Populate(Environments);
+        var configuration = Path.Combine(_environment.UserProfile, ".condarc");
+        File.WriteAllText(configuration, "channels: []");
 
         // Stands in for the command actually clearing the cache, so the executor's after-measure
-        // has something to subtract.
+        // has something to subtract. conda empties a package cache and leaves the folder, which
+        // §5.6 asserts survived.
         var runner = Reporting().Replying(Conda, arguments =>
         {
             if (arguments.EndsWith("--yes", StringComparison.Ordinal))
             {
-                Directory.Delete(PackageCache, recursive: true);
+                File.Delete(Path.Combine(PackageCache, "payload.bin"));
                 return new Safety.CommandOutcome(0, "done", string.Empty);
             }
 
@@ -201,6 +205,12 @@ public sealed class CondaCacheProviderTests : IDisposable
 
         Assert.Equal(65536, result.BytesReclaimed);
         Assert.DoesNotContain("grew", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.True(Directory.Exists(RootPrefix));
+        Assert.True(Directory.Exists(PackageCache));
+        Assert.True(File.Exists(Path.Combine(Environments, "payload.bin")));
+        Assert.True(File.Exists(configuration));
     }
 
     /// <summary>

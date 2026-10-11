@@ -262,6 +262,10 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
@@ -271,6 +275,49 @@ public sealed class GradleCacheProviderTests : IDisposable
 
         Assert.True(Directory.Exists(root));
         Assert.True(File.Exists(properties));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// §5.6 for each piece of user configuration beside the caches. A child classification sees only
+    /// directories, so a file in the home is asserted only because it is named. <c>init.d</c> would
+    /// survive as an unrecognised child even unnamed, and is asserted under its own reason so the
+    /// user is told what it is rather than only that Deguffer does not recognise it.
+    /// </summary>
+    [Theory]
+    [InlineData("init.d", true, "User init scripts.")]
+    [InlineData("init.gradle", false, "A user init script, which Gradle runs before every build.")]
+    [InlineData("init.gradle.kts", false, "A user init script, which Gradle runs before every build.")]
+    [InlineData("gradle.encrypted.properties", false, "Encrypted user configuration.")]
+    public async Task ExecutingLeavesEachPieceOfUserConfigurationStanding(string name, bool isDirectory, string reason)
+    {
+        var root = CreateGradleHome();
+        CreateAt(root, "caches", 4096);
+        var path = Path.Combine(root, name);
+
+        if (isDirectory)
+        {
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Combine(path, "mirror.gradle"), "// the user's own init script");
+        }
+        else
+        {
+            File.WriteAllText(path, "// the user's own configuration");
+        }
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.All(plan.TargetedPaths, target =>
+            Assert.False(IsAtOrUnder(path, target), $"{target} would have taken {name} with it."));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present
+            && p.Reason == reason);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(Path.Combine(root, "caches")));
+        Assert.True(isDirectory ? Directory.Exists(path) : File.Exists(path), $"{name} was removed with the caches.");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
