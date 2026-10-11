@@ -16,11 +16,20 @@ public sealed class FakeExploreConfirmation(Task<bool> answer) : IExploreConfirm
     {
     }
 
+    private readonly TaskCompletionSource _firstAsked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public List<ExploreRemovalPrompt> Asked { get; } = [];
+
+    /// <summary>
+    /// Completes once the first question is asked, for a test that looks at the page while the
+    /// dialog is up: a removal reaches it only after the Recycle Bin has been asked, off the thread.
+    /// </summary>
+    public Task FirstAsked => _firstAsked.Task;
 
     public Task<bool> AskAsync(ExploreRemovalPrompt prompt, CancellationToken ct = default)
     {
         Asked.Add(prompt);
+        _firstAsked.TrySetResult();
 
         return answer.WaitAsync(ct);
     }

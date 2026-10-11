@@ -1027,8 +1027,9 @@ watched; the attributes are the evidence that nothing was recalled.
   delete it outright, so it can be removed only permanently, as a deliberate choice. A drive
   Windows calls removable has no bin at all (measured in phase 10), so the same holds for every copy
   on one.
-- **Explore's prompt promises the bin.** Explore asks to move an item to the Recycle Bin without
-  asking the bin whether it can take it, which for a folder needs a walk; the removal refuses it
-  and the report says so. [#302](https://github.com/BootBlock/Deguffer/issues/302).
+- **Explore's prompt promises the bin.** Closed by
+  [#302](https://github.com/BootBlock/Deguffer/issues/302): Explore now asks the bin before the
+  prompt, once per removal and off the page's thread, and reports what it cannot take with why
+  rather than asking about it.
 - **A catalogue that names a file.** Lightroom, a music library or a project file can name the copy
   a user removes. Deguffer cannot see that; the confirmation lists every copy so the user can.

@@ -487,8 +487,10 @@ not the shell asked.
   the bin will not take fails, and is never deleted outright in its place. Windows deletes outright,
   and says it succeeded, an item whose path, or any path inside it, is too long for the bin, one
   larger than the bin can hold, and anything sent to a bin set to keep nothing, so such an item is
-  never handed to it, and nor is one whose bin Windows will not describe. One Windows deleted
-  outright all the same is reported as gone, never as in the bin.
+  never handed to it, and nor is one whose bin Windows will not describe. The bin is asked before
+  the user is, so the confirmation offers the bin only for what it will take, and an item it will
+  not take is reported with why, never asked about. One Windows deleted outright all the same is
+  reported as gone, never as in the bin.
 - **§5.6 still applies.** Every removal asserts afterwards that what should have survived did.
 - **Explore's numbers may be lower bounds, and must say so.** The measurement rules differ from
   Storage's on purpose: a total that is short is unacceptable where it decides a deletion, and
