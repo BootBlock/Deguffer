@@ -387,9 +387,9 @@
                        VerticalAlignment="Center"
                        Style="{StaticResource CaptionTextBlockStyle}"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       Text="Wheel/pinch: zoom · Drag: pan · + − arrows Home · Dbl-click: open/zoom"
+                       Text="Wheel/pinch: zoom · Drag: pan · + − Shift+arrows Home · Arrows: shapes · Dbl-click: open/zoom"
                        Visibility="{x:Bind ViewModel.ShowsMapControls, Mode=OneWay}"
-                       AutomationProperties.Name="Turn the mouse wheel or pinch over the map to zoom, and hold Shift to move across. Drag a zoomed picture with the left or middle button, two fingers or a touch to move it. On the focused map, plus and minus zoom, the arrow keys move the picture and Home shows all of it. Double-click a folder to open it or anything else to zoom to it." />
+                       AutomationProperties.Name="Turn the mouse wheel or pinch over the map to zoom, and hold Shift to move across. Drag a zoomed picture with the left or middle button, two fingers or a touch to move it. On the focused map, the arrow keys move between the shapes, plus and minus zoom, the arrow keys with Shift move the picture and Home shows all of it. Double-click a folder, or press Enter on it, to open it, or anything else to zoom to it." />
         </Grid>
 
         <!--

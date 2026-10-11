@@ -28,7 +28,7 @@ public sealed class SunburstSurface : ExploreSurface
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override CanvasPainter Painter(TileColour background) =>
-        new SectorRasteriser(_hits, Width, Height, background, ColourFor);
+        new SectorRasteriser(_hits, Width, Height, background, ColourFor, Edges);
 
     public override CushionQuads? Quads() => null;
 
@@ -52,6 +52,82 @@ public sealed class SunburstSurface : ExploreSurface
 
     /// <summary>Null throughout, for the same reason.</summary>
     public override MapFrame? Locate(int node) => null;
+
+    /// <summary>
+    /// The sectors in the ring outside <paramref name="folder"/>'s that it holds, each standing at the
+    /// middle of its arc. Its block of the rest is the one in that ring within the folder's own sweep.
+    /// </summary>
+    public override IReadOnlyList<MapShape> Shapes(int? folder)
+    {
+        var inside = folder ?? Root;
+        var sunburst = _hits.Sunburst;
+        var sectors = sunburst.Sectors;
+        var shapes = new List<MapShape>();
+        ExploreSector? holder = null;
+
+        for (var i = 0; i < sectors.Count && holder is null; i++)
+        {
+            holder = !sectors[i].IsAggregate && sectors[i].Node == inside ? sectors[i] : null;
+        }
+
+        if (holder is not { } outer)
+        {
+            return shapes;
+        }
+
+        const float Rounding = 1e-4f;
+
+        foreach (var sector in sectors)
+        {
+            if (sector.Depth == outer.Depth + 1
+                && (sector.IsAggregate
+                    ? sector.StartAngle >= outer.StartAngle - Rounding
+                        && sector.StartAngle + sector.SweepAngle <= outer.StartAngle + outer.SweepAngle + Rounding
+                    : Tree.ParentOf(sector.Node) == inside))
+            {
+                var middle = sunburst.PointAt(sector.MidRadius, sector.MidAngle);
+
+                shapes.Add(new MapShape(sector.Node, sector.Bytes, BoxOf(sunburst, sector), middle.X / Width, middle.Y / Height));
+            }
+        }
+
+        return shapes;
+    }
+
+    /// <summary>The wedge or ring the shape stands at the middle of, traced as any outline is.</summary>
+    public override IReadOnlyList<ExploreOutline> OutlineOf(MapShape shape)
+    {
+        var outlines = new List<ExploreOutline>();
+
+        if (_hits.At((float)(shape.X * Width), (float)(shape.Y * Height)) is { } index)
+        {
+            Trace(_hits.Sunburst, _hits.Sunburst.Sectors[index], outlines);
+        }
+
+        return outlines;
+    }
+
+    /// <summary>The box round <paramref name="sector"/>, in fractions of the canvas, measured round its arcs a degree at a time.</summary>
+    private MapFrame BoxOf(Sunburst sunburst, ExploreSector sector)
+    {
+        var steps = Math.Clamp((int)MathF.Ceiling(sector.SweepAngle / (MathF.PI / 180)), 2, 360);
+        var (left, top, right, bottom) = (float.MaxValue, float.MaxValue, float.MinValue, float.MinValue);
+
+        for (var step = 0; step <= steps; step++)
+        {
+            var angle = sector.StartAngle + (sector.SweepAngle * step / steps);
+
+            foreach (var radius in (ReadOnlySpan<float>)[sector.InnerRadius, sector.OuterRadius])
+            {
+                var point = sunburst.PointAt(radius, angle);
+
+                (left, top) = (Math.Min(left, point.X), Math.Min(top, point.Y));
+                (right, bottom) = (Math.Max(right, point.X), Math.Max(bottom, point.Y));
+            }
+        }
+
+        return new MapFrame(left / (double)Width, top / (double)Height, (right - left) / (double)Width, (bottom - top) / (double)Height);
+    }
 
     /// <summary>
     /// The deepest sector that is the node or a folder above it. A folder's ring holds nothing inside
@@ -107,7 +183,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             if (!sector.IsAggregate && nodes.Contains(sector.Node))
             {
-                shapes.Add(new MorphShape(sector.Node, sector.Depth, ColourFor(sector.Node, sector.Depth), MorphOutline.Of(sunburst, sector)));
+                shapes.Add(new MorphShape(sector.Node, sector.Depth, ColourFor(sector.Node, sector.Depth), MorphOutline.Of(sunburst, sector), Edges));
             }
         }
 

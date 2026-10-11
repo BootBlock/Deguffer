@@ -71,7 +71,7 @@ public sealed class TiledSurface : ExploreSurface
 
     public override CanvasPainter Painter(TileColour background) => new TileRasteriser(Quads(), background);
 
-    public override CushionQuads Quads() => new(_tiles, Width, Height, ColourFor);
+    public override CushionQuads Quads() => new(_tiles, Width, Height, ColourFor, Edges);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;
@@ -107,7 +107,7 @@ public sealed class TiledSurface : ExploreSurface
             Tree, Root, Width, Height, Limits, _beside, viewport,
             new TreemapDetail(Limits, zoom, MapTiling.DetailOf(key.Level)), width, height);
 
-        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourFor);
+        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourFor, Edges);
     }
 
     public override MapFrame? FrameOf(int node) =>
@@ -125,6 +125,62 @@ public sealed class TiledSurface : ExploreSurface
         Viewport is { } viewport
             ? TreemapLayout.Locate(Tree, Root, Width, Height, Limits, _beside, viewport, node)
             : ShownAs(node) == node ? FrameOf(node) : null;
+
+    public override IReadOnlyList<MapShape> Shapes(int? folder) =>
+        Viewport is { } viewport
+            ? TreemapLayout.Within(Tree, Root, Width, Height, Limits, _beside, viewport, folder is null && HasVolumeBeside ? null : folder ?? Root)
+            : Held(folder ?? Root);
+
+    public override IReadOnlyList<ExploreOutline> OutlineOf(MapShape shape) =>
+    [
+        OutlineOf(new ExploreTile(
+            shape.Node,
+            Depth: 0,
+            shape.Bytes,
+            (float)(shape.Frame.X * Width),
+            (float)(shape.Frame.Y * Height),
+            (float)(shape.Frame.Width * Width),
+            (float)(shape.Frame.Height * Height))),
+    ];
+
+    /// <summary>
+    /// The shapes in the row under <paramref name="folder"/>'s that it holds: an icicle draws what a
+    /// folder holds below it rather than in it. Its block of the rest is the one in that row under the
+    /// folder's own width.
+    /// </summary>
+    private List<MapShape> Held(int folder)
+    {
+        var shapes = new List<MapShape>();
+        var holder = -1;
+
+        for (var i = 0; i < _tiles.Count && holder < 0; i++)
+        {
+            holder = _tiles[i].IsNode && _tiles[i].Node == folder ? i : -1;
+        }
+
+        if (holder < 0)
+        {
+            return shapes;
+        }
+
+        const float Rounding = 1f / 64;
+        var outer = _tiles[holder];
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.Depth == outer.Depth + 1
+                && (tile.IsNode
+                    ? Tree.ParentOf(tile.Node) == folder
+                    : tile.X >= outer.X - Rounding && tile.X + tile.Width <= outer.X + outer.Width + Rounding))
+            {
+                shapes.Add(MapShape.Of(tile.Node, tile.Bytes, new MapFrame(tile.X / (double)Width, tile.Y / (double)Height, tile.Width / (double)Width, tile.Height / (double)Height)));
+            }
+        }
+
+        return shapes;
+    }
 
     /// <summary>
     /// A shape is under another where it lies inside it, which in a treemap is every shape with a
@@ -227,7 +283,7 @@ public sealed class TiledSurface : ExploreSurface
         {
             if (tile.IsNode && nodes.Contains(tile.Node) && found.Add(tile.Node))
             {
-                shapes.Add(new MorphShape(tile.Node, tile.Depth, ColourFor(tile.Node, tile.Depth), MorphOutline.Of(tile)));
+                shapes.Add(new MorphShape(tile.Node, tile.Depth, ColourFor(tile.Node, tile.Depth), MorphOutline.Of(tile), Edges));
             }
         }
 

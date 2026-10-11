@@ -20,6 +20,9 @@ public sealed class MapTile
 
     private readonly Func<int, int, TileColour> _colourOf;
 
+    /// <summary>The edges its picture draws each shape with, or null for cushions: see <see cref="ExploreSurface.Edges"/>.</summary>
+    private readonly QuadEdges? _edges;
+
     internal MapTile(
         ExploreSurface picture,
         MapViewport drawnAt,
@@ -29,7 +32,8 @@ public sealed class MapTile
         int width,
         int height,
         IReadOnlyList<ExploreTile> shapes,
-        Func<int, int, TileColour> colourOf)
+        Func<int, int, TileColour> colourOf,
+        QuadEdges? edges)
     {
         Picture = picture;
         DrawnAt = drawnAt;
@@ -41,6 +45,7 @@ public sealed class MapTile
         _shapes = shapes as ExploreTile[] ?? [.. shapes];
         _hits = new TileHitTest(_shapes, width, height);
         _colourOf = colourOf;
+        _edges = edges;
     }
 
     /// <summary>The drawing whose picture this is a piece of.</summary>
@@ -83,7 +88,7 @@ public sealed class MapTile
     public CanvasPainter Painter(TileColour background) => new TileRasteriser(Quads(), background);
 
     /// <summary>The tile's shapes as the GPU shades them, or as <see cref="Painter"/> paints them.</summary>
-    public CushionQuads Quads() => new(_shapes, Width, Height, _colourOf);
+    public CushionQuads Quads() => new(_shapes, Width, Height, _colourOf, _edges);
 
     /// <summary>
     /// Where the tile goes in a picture laid out over a screen <paramref name="width"/> by

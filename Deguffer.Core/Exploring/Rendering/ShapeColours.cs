@@ -84,7 +84,21 @@ public abstract class ShapeColours
         return new ReplayColours(frame);
     }
 
+    /// <summary>
+    /// Every shape in the window colour of a high contrast theme, with its edges in the theme's text
+    /// colour, and nothing shaded. See <see cref="ContrastColours"/>. Describes any tree, as a branch
+    /// colouring does.
+    /// </summary>
+    public static ShapeColours Contrasted(ContrastColours colours) => new ContrastedColours(colours);
+
     internal abstract TileColour For(ExploreSurface surface, int node, int depth);
+
+    /// <summary>
+    /// The high contrast colours every shape, block and name is drawn in instead, or null where the
+    /// shapes are coloured and shaded. Asked by <see cref="ExploreSurface"/> before anything else,
+    /// because they replace the blocks' own greys as well.
+    /// </summary>
+    internal virtual ContrastColours? Contrast => null;
 
     /// <summary>
     /// Refuse a tree this colouring cannot describe.
@@ -103,6 +117,13 @@ public abstract class ShapeColours
     {
         internal override TileColour For(ExploreSurface surface, int node, int depth) =>
             TilePalette.For(surface.HueOf(node), depth, scheme);
+    }
+
+    private sealed class ContrastedColours(ContrastColours colours) : ShapeColours
+    {
+        internal override TileColour For(ExploreSurface surface, int node, int depth) => colours.Window;
+
+        internal override ContrastColours? Contrast => colours;
     }
 
     private sealed class AgeColours(ExploreTree tree, ExploreScheme scheme, DateTime nowUtc) : OneTreeColours(tree)

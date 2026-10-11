@@ -126,6 +126,7 @@ internal sealed class ExploreMorph
             foreach (var shape in shapes.Shapes.OfType<CompositionSpriteShape>())
             {
                 shape.FillBrush?.Dispose();
+                shape.StrokeBrush?.Dispose();
                 shape.Geometry?.Dispose();
                 shape.Dispose();
             }
@@ -143,6 +144,13 @@ internal sealed class ExploreMorph
         var geometry = _compositor.CreatePathGeometry(from);
         var shape = _compositor.CreateSpriteShape(geometry);
         shape.FillBrush = _compositor.CreateColorBrush(Color.FromArgb(255, morph.Colour.Red, morph.Colour.Green, morph.Colour.Blue));
+
+        // In a high contrast theme's colours the fill is the ground's, and the edge is what travels.
+        if (morph.Edges is { } edges)
+        {
+            shape.StrokeBrush = _compositor.CreateColorBrush(Color.FromArgb(255, edges.Colour.Red, edges.Colour.Green, edges.Colour.Blue));
+            shape.StrokeThickness = edges.Width;
+        }
 
         var travel = _compositor.CreatePathKeyFrameAnimation();
         travel.InsertKeyFrame(0, from);

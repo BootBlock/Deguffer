@@ -55,6 +55,15 @@ public static class PixelBuffer
         }
     }
 
+    /// <summary>Write one opaque pixel of <paramref name="colour"/> at <paramref name="offset"/>, unlit.</summary>
+    public static void Write(byte[] pixels, int offset, TileColour colour)
+    {
+        pixels[offset] = colour.Blue;
+        pixels[offset + 1] = colour.Green;
+        pixels[offset + 2] = colour.Red;
+        pixels[offset + 3] = 255;
+    }
+
     /// <summary>
     /// One BGRA pixel as the single word a vectorised fill can write.
     ///

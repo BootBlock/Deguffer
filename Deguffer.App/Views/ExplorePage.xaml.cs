@@ -216,6 +216,9 @@ public sealed partial class ExplorePage : Page
 
         Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
+        Map.Ascending += (_, _) => Invoke(ViewModel.AscendCommand);
+        Map.Facts = ViewModel.ShapeFacts;
+        Map.ContrastChanged += (_, _) => ViewModel.MapInContrast = Map.Contrasted;
         Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
         Map.ViewportChanged += (_, _) => ViewModel.ViewportChanged();
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);

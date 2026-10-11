@@ -21,23 +21,32 @@ public sealed class SectorRasteriser : CanvasPainter
 
     private readonly TileColour[] _colours;
 
+    /// <summary>The edges drawn in place of cushions, or null. See <see cref="QuadEdges"/>.</summary>
+    private readonly QuadEdges? _edges;
+
     /// <summary>
     /// Get ready to paint <paramref name="hits"/>' sunburst on a canvas of <paramref name="width"/>
     /// by <paramref name="height"/>, each sector in the colour <paramref name="colourOf"/> gives its
     /// node at its depth.
     /// </summary>
+    /// <param name="edges">
+    /// The edges every sector is drawn with in place of its cushion, flat between them, or null for
+    /// cushions: inside its rings and its sides, as a quad's are inside its sides.
+    /// </param>
     public SectorRasteriser(
         SectorHitTest hits,
         int width,
         int height,
         TileColour background,
-        Func<int, int, TileColour> colourOf)
+        Func<int, int, TileColour> colourOf,
+        QuadEdges? edges = null)
         : base(width, height, background)
     {
         ArgumentNullException.ThrowIfNull(hits);
         ArgumentNullException.ThrowIfNull(colourOf);
 
         _hits = hits;
+        _edges = edges;
 
         // One colour per sector, before a single pixel is written. Resolving it per pixel instead
         // would walk a node's ancestors and index the palette three million times per repaint on a
@@ -94,13 +103,33 @@ public sealed class SectorRasteriser : CanvasPainter
                     continue;
                 }
 
+                var offset = ((y * Width) + x) * 4;
+
+                if (_edges is { } edges)
+                {
+                    PixelBuffer.Write(pixels, offset, OnEdge(sectors[index], radius, angle, edges.Width) ? edges.Colour : _colours[index]);
+                    continue;
+                }
+
                 var (nx, ny) = Normal(sectors[index], dx, dy, radius, angle);
 
-                CushionShading.Write(
-                    pixels, ((y * Width) + x) * 4, _colours[index], CushionShading.LightAt(nx, ny));
+                CushionShading.Write(pixels, offset, _colours[index], CushionShading.LightAt(nx, ny));
             }
         }
     }
+
+    /// <summary>
+    /// Whether a point at <paramref name="radius"/> and <paramref name="angle"/> is within
+    /// <paramref name="width"/> pixels of <paramref name="sector"/>'s edge: its outer ring, its inner
+    /// ring where it has one, and its two sides where it is not a whole ring. A side is measured along
+    /// the arc, so the line is as wide near the middle as at the rim.
+    /// </summary>
+    private static bool OnEdge(ExploreSector sector, float radius, float angle, int width) =>
+        sector.OuterRadius - radius < width
+        || (sector.InnerRadius > 0 && radius - sector.InnerRadius < width)
+        || (!sector.IsWholeCircle
+            && ((angle - sector.StartAngle) * radius < width
+                || (sector.StartAngle + sector.SweepAngle - angle) * radius < width));
 
     /// <summary>
     /// How far the cushion's surface tilts at this point, in canvas directions.

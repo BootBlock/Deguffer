@@ -27,7 +27,7 @@ internal sealed class CushionRenderer : IDisposable
     private const int QuadSize = 24;
 
     /// <summary>How many floats the shader's constant buffer holds: see <c>Cushions.hlsl</c>.</summary>
-    private const int CanvasConstants = 12;
+    private const int CanvasConstants = 16;
 
     private static readonly Lazy<(byte[] Vertices, byte[] Pixels)> Shaders = new(Compile);
 
@@ -113,9 +113,10 @@ internal sealed class CushionRenderer : IDisposable
 
     /// <summary>
     /// Shade <paramref name="region"/> of <paramref name="quads"/>' canvas on <paramref name="ground"/>,
-    /// under <paramref name="light"/> where there is one, and return the bitmap it is shaded in. The canvas
-    /// is its corner, <see cref="CushionQuads.Width"/> by <see cref="CushionQuads.Height"/> pixels, and the
-    /// region holds the picture until the next shading. Nothing else of the bitmap is.
+    /// under <paramref name="light"/> where there is one, or flat with the quads' edges where they have
+    /// them, and return the bitmap it is shaded in. The canvas is its corner, <see cref="CushionQuads.Width"/>
+    /// by <see cref="CushionQuads.Height"/> pixels, and the region holds the picture until the next
+    /// shading. Nothing else of the bitmap is.
     /// </summary>
     public CanvasBitmap Shade(CushionQuads quads, TileColour ground, CanvasRegion region, PointerLight? light)
     {
@@ -136,7 +137,7 @@ internal sealed class CushionRenderer : IDisposable
                 _uploaded = quads;
             }
 
-            Draw(quads.Width, quads.Height, region, light, shapes.Length);
+            Draw(quads.Width, quads.Height, region, light, quads.Edges, shapes.Length);
         }
 
         return bitmap;
@@ -368,7 +369,7 @@ internal sealed class CushionRenderer : IDisposable
     /// is one. Every piece of state the draw depends on is set, because the device is shared with Win2D,
     /// and the target is let go of after, so Win2D can read it.
     /// </summary>
-    private void Draw(int width, int height, CanvasRegion region, PointerLight? light, int count)
+    private void Draw(int width, int height, CanvasRegion region, PointerLight? light, QuadEdges? edges, int count)
     {
         var shining = light ?? default;
 
@@ -385,6 +386,10 @@ internal sealed class CushionRenderer : IDisposable
             shining.Reach,
             light is null ? 0 : PointerLight.Strength,
             shining.Reach * PointerLight.Height,
+            edges?.Width ?? 0,
+            edges?.Colour.Red ?? 0,
+            edges?.Colour.Green ?? 0,
+            edges?.Colour.Blue ?? 0,
             0,
         ];
 

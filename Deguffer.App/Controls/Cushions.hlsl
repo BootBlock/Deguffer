@@ -24,7 +24,13 @@ cbuffer Canvas : register(b0)
     float reach;
     float strength;
     float height;
-    float unused;
+
+    // How many pixels wide each quad's edges are drawn, inside its sides, in place of its cushion; zero
+    // for cushions. A high contrast theme's picture: see QuadEdges.
+    float edge;
+
+    // The edges' red, green and blue, from 0 to 255, and a value nothing reads.
+    float4 edgeColour;
 };
 
 struct Quad
@@ -59,6 +65,17 @@ float4 ps(Pixel pixel) : SV_Target
 {
     // The pixel's own column and row, as the rasteriser counts them: the position is its centre.
     float2 at = floor(pixel.position.xy);
+
+    // Flat and unlit, with the edges inside the quad's sides, as TileRasteriser draws them: nothing of
+    // the light or the pointer's light, which a high contrast theme's picture has none of.
+    if (edge > 0)
+    {
+        bool onEdge = at.x < pixel.edges.x + edge || at.x >= pixel.edges.z - edge
+            || at.y < pixel.edges.y + edge || at.y >= pixel.edges.w - edge;
+
+        return float4((onEdge ? edgeColour.rgb : pixel.shade.yzw) / 255, 1);
+    }
+
     float spanX = pixel.edges.z - pixel.edges.x;
     float spanY = pixel.edges.w - pixel.edges.y;
     float u = spanX <= 1 ? 0.5 : (at.x - pixel.edges.x) / (spanX - 1);

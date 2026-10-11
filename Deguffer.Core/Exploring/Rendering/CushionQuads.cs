@@ -22,7 +22,11 @@ public sealed class CushionQuads
     /// <paramref name="height"/>, each painted the colour <paramref name="colourOf"/> gives its node at
     /// its depth.
     /// </summary>
-    public CushionQuads(IReadOnlyList<ExploreTile> tiles, int width, int height, Func<int, int, TileColour> colourOf)
+    /// <param name="edges">
+    /// The edges every quad is drawn with in place of its cushion, flat between them, or null for
+    /// cushions. See <see cref="QuadEdges"/>.
+    /// </param>
+    public CushionQuads(IReadOnlyList<ExploreTile> tiles, int width, int height, Func<int, int, TileColour> colourOf, QuadEdges? edges = null)
     {
         ArgumentNullException.ThrowIfNull(tiles);
         ArgumentNullException.ThrowIfNull(colourOf);
@@ -31,6 +35,7 @@ public sealed class CushionQuads
 
         Width = width;
         Height = height;
+        Edges = edges;
 
         var quads = new CushionQuad[tiles.Count];
         var count = 0;
@@ -53,6 +58,12 @@ public sealed class CushionQuads
     public int Width { get; }
 
     public int Height { get; }
+
+    /// <summary>
+    /// The edges every quad is drawn with, flat and unlit between them, or null where each is shaded as
+    /// a cushion. Both routes to the screen draw them alike.
+    /// </summary>
+    public QuadEdges? Edges { get; }
 
     /// <summary>Every quad that covers a pixel of the canvas, in the order they are drawn.</summary>
     public ReadOnlySpan<CushionQuad> Quads => _quads;

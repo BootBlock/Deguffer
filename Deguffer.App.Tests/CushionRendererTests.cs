@@ -135,6 +135,38 @@ public sealed class CushionRendererTests : IDisposable
         Assert.Equal(whole, part);
     }
 
+    /// <summary>
+    /// In a high contrast theme's colours the GPU draws what the CPU paints exactly: flat shapes in the
+    /// window colour with their edges in the text colour, whole and zoomed, with no light in them even
+    /// where the pointer's light is asked for.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0, 0.0, 0.0)]
+    [InlineData(2.5, 0.31, 0.42)]
+    public void AHighContrastPictureIsShadedExactlyAsItIsPainted(double zoom, double left, double top)
+    {
+        var window = new TileColour(0, 0, 0);
+        var text = new TileColour(255, 255, 0);
+        var picture = Picture(MapViewport.Seen(zoom, left, top), colours: ShapeColours.Contrasted(new ContrastColours(window, text)));
+        var quads = picture.Quads()!;
+        var painted = new byte[PixelBuffer.LengthFor(picture.Width, picture.Height)];
+
+        picture.Painter(window).Paint(painted, new CanvasRegion(0, 0, picture.Width, picture.Height));
+
+        var shaded = _renderer.Shade(quads, window, Whole(quads), new PointerLight(400, 300, 120))
+            .GetPixelBytes(0, 0, quads.Width, quads.Height);
+
+        Assert.True(quads.Quads.Length > 100, $"only {quads.Quads.Length} shapes drawn, too few to say anything");
+        Assert.Contains(painted.Chunk(4), pixel => pixel[2] == text.Red && pixel[0] == text.Blue);
+
+        for (var i = 0; i < painted.Length; i += 4)
+        {
+            Assert.True(
+                painted.AsSpan(i, 4).SequenceEqual(shaded.AsSpan(i, 4)),
+                $"pixel ({i / 4 % picture.Width}, {i / 4 / picture.Width}) is {Colour(shaded, i)} shaded and {Colour(painted, i)} painted");
+        }
+    }
+
     /// <summary>A canvas with no shapes on it is the ground alone.</summary>
     [Fact]
     public void ACanvasWithNoShapesIsTheGround()
@@ -189,7 +221,7 @@ public sealed class CushionRendererTests : IDisposable
 
     private static string Colour(byte[] pixels, int i) => $"#{pixels[i + 2]:X2}{pixels[i + 1]:X2}{pixels[i]:X2}";
 
-    private static ExploreSurface Picture(MapViewport viewport, int width = Width, int height = Height) =>
+    private static ExploreSurface Picture(MapViewport viewport, int width = Width, int height = Height, ShapeColours? colours = null) =>
         ExploreSurface.Create(
             Tree,
             Tree.RootNode,
@@ -198,7 +230,7 @@ public sealed class CushionRendererTests : IDisposable
             height,
             1,
             1,
-            ShapeColours.ByBranch(ExploreScheme.Standard),
+            colours ?? ShapeColours.ByBranch(ExploreScheme.Standard),
             ExploreSpacing.Comfortable,
             VolumeSpace.None,
             viewport);
