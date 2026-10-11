@@ -296,6 +296,13 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private ShapeColours? _shapeColours;
 
+    /// <summary>
+    /// The high contrast theme's colours the drawings of the picture on screen are in, or null where
+    /// they are coloured and shaded: read with <see cref="_shapeColours"/>, so the ground under them
+    /// agrees with them, and read again to tell whether a change of the system's colours changed them.
+    /// </summary>
+    private ContrastColours? _contrast;
+
     private double _scale = 1;
     private ExploreHit? _hovered;
 
@@ -1199,7 +1206,11 @@ public sealed class ExploreMap : UserControl
         // The clock is read here rather than held, because the age bands are relative to now and
         // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
         // one read of it against a full rasterisation.
-        _shapeColours = _colours(DateTime.UtcNow);
+        //
+        // In a high contrast theme the colours say nothing but where each shape's edges are: see
+        // ContrastColours.
+        _contrast = Contrast();
+        _shapeColours = _contrast is { } contrast ? ShapeColours.Contrasted(contrast) : _colours(DateTime.UtcNow);
 
         // Every drawing kept is of the picture as it was, so none of them is shown again, though
         // they stay on screen until the new one has landed over them. Drawn at the zoom on screen
@@ -1526,9 +1537,30 @@ public sealed class ExploreMap : UserControl
     /// sets it on the application — so the application dictionary answers for the *system* theme.
     /// Asking it for a colour gives a light ground behind a dark page whenever the two disagree,
     /// which is the §6.5 failure this method exists to avoid.</para>
-    private TileColour Ground() => ActualTheme == ElementTheme.Dark
-        ? new TileColour(32, 32, 32)
-        : new TileColour(243, 243, 243);
+    ///
+    /// <para>In a high contrast theme, the theme's own window colour, which the shapes are filled with too.</para>
+    private TileColour Ground() => _contrast is { } contrast
+        ? contrast.Window
+        : ActualTheme == ElementTheme.Dark
+            ? new TileColour(32, 32, 32)
+            : new TileColour(243, 243, 243);
+
+    /// <summary>
+    /// The colours of the high contrast theme Windows is in, or null where it is in none. Read from the
+    /// system rather than the application's resources, as <see cref="TintHighlight"/> reads them.
+    /// </summary>
+    private static ContrastColours? Contrast()
+    {
+        if (!HighContrast.IsEnabled())
+        {
+            return null;
+        }
+
+        var window = SystemSettings.UIElementColor(UIElementType.Window);
+        var text = SystemSettings.UIElementColor(UIElementType.WindowText);
+
+        return new ContrastColours(new TileColour(window.R, window.G, window.B), new TileColour(text.R, text.G, text.B));
+    }
 
     /// <summary>
     /// What to write on a labelled shape. The blocks standing for the rest of the volume are the
@@ -2068,11 +2100,20 @@ public sealed class ExploreMap : UserControl
     private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(Redraw);
 
     /// <summary>
-    /// Follow a change of accent colour, or high contrast turned on or off. Raised off the UI thread,
-    /// like the text size above.
+    /// Follow a change of accent colour, or high contrast turned on or off or to another theme, which
+    /// draws the picture again in the colours it now has. Raised off the UI thread, like the text size
+    /// above.
     /// </summary>
     private void OnSystemColoursChanged(UISettings sender, object args) =>
-        DispatcherQueue.TryEnqueue(TintHighlight);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            TintHighlight();
+
+            if (Contrast() != _contrast)
+            {
+                Redraw();
+            }
+        });
 
     /// <summary>Follow the compositor's word on whether effects are fast, which a remote session changes.</summary>
     private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>

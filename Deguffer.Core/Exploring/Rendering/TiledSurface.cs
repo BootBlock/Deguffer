@@ -71,7 +71,7 @@ public sealed class TiledSurface : ExploreSurface
 
     public override CanvasPainter Painter(TileColour background) => new TileRasteriser(Quads(), background);
 
-    public override CushionQuads Quads() => new(_tiles, Width, Height, ColourFor);
+    public override CushionQuads Quads() => new(_tiles, Width, Height, ColourFor, Edges);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;
@@ -107,7 +107,7 @@ public sealed class TiledSurface : ExploreSurface
             Tree, Root, Width, Height, Limits, _beside, viewport,
             new TreemapDetail(Limits, zoom, MapTiling.DetailOf(key.Level)), width, height);
 
-        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourFor);
+        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourFor, Edges);
     }
 
     public override MapFrame? FrameOf(int node) =>
@@ -227,7 +227,7 @@ public sealed class TiledSurface : ExploreSurface
         {
             if (tile.IsNode && nodes.Contains(tile.Node) && found.Add(tile.Node))
             {
-                shapes.Add(new MorphShape(tile.Node, tile.Depth, ColourFor(tile.Node, tile.Depth), MorphOutline.Of(tile)));
+                shapes.Add(new MorphShape(tile.Node, tile.Depth, ColourFor(tile.Node, tile.Depth), MorphOutline.Of(tile), Edges));
             }
         }
 

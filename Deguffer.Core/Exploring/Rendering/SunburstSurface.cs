@@ -28,7 +28,7 @@ public sealed class SunburstSurface : ExploreSurface
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override CanvasPainter Painter(TileColour background) =>
-        new SectorRasteriser(_hits, Width, Height, background, ColourFor);
+        new SectorRasteriser(_hits, Width, Height, background, ColourFor, Edges);
 
     public override CushionQuads? Quads() => null;
 
@@ -107,7 +107,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             if (!sector.IsAggregate && nodes.Contains(sector.Node))
             {
-                shapes.Add(new MorphShape(sector.Node, sector.Depth, ColourFor(sector.Node, sector.Depth), MorphOutline.Of(sunburst, sector)));
+                shapes.Add(new MorphShape(sector.Node, sector.Depth, ColourFor(sector.Node, sector.Depth), MorphOutline.Of(sunburst, sector), Edges));
             }
         }
 
