@@ -407,6 +407,29 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// What a caller says was refused before asking is reported, and its folder is listed for §5.6
+    /// only where the policy allows the item: a refused item's folder may be one §5.2 says is never
+    /// listed at all, and the policy is asked here rather than trusted from the caller.
+    /// </summary>
+    [Fact]
+    public async Task AFolderThePolicyRefusesIsNeverListedForWhatWasRefusedBeforeAsking()
+    {
+        var inside = Directory.CreateDirectory(Path.Combine(_system.WindowsDirectory, "System32")).FullName;
+        var refusal = new ExploreItemOutcome(inside, Removed: false, Bytes: 0, "Too long for the bin.");
+
+        var report = await ExploreRemover.RemoveAsync(
+            [],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            new FakeRecycleBin(),
+            refusedBeforeAsking: [refusal]);
+
+        Assert.Equal(refusal, Assert.Single(report.Refused));
+        Assert.Empty(report.Verification.Checks);
+        Assert.True(LongPath.DirectoryExists(inside));
+    }
+
+    /// <summary>
     /// §9's Outlook data file, picked out of the picture beside something ordinary, by either route.
     /// The ordinary file goes and the mail store does not: it is still on the disk, the shell was
     /// never asked about it, and the report quotes why rather than counting it.

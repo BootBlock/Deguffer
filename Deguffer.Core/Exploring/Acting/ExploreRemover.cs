@@ -207,12 +207,13 @@ public static class ExploreRemover
         refusedBeforeAsking ??= [];
 
         var (allowed, refused) = Partition(items, policy);
-        var listed = allowed.Select(item => item.Path).Concat(refusedBeforeAsking.Select(refusal => refusal.Path)).ToList();
 
-        // The containers of the allowed items only, those refused before asking included. A refused item's container may be a directory
-        // §5.2 says must never be listed at all — C:\Windows is the case that matters — and reading
-        // it to build evidence about a deletion that is not going to happen would break the rule
-        // this whole method exists to uphold.
+        // The containers of what the policy allows only, among what was refused before asking too.
+        // An item the policy refuses may sit in a directory §5.2 says must never be listed at all —
+        // C:\Windows is the case that matters — and reading it to build evidence about a deletion
+        // that is not going to happen would break the rule this whole method exists to uphold. The
+        // policy is asked here about what was refused before asking, as it is about everything
+        // else, rather than trusted from the caller.
         //
         // Listed before anything is deleted, because a survivor set gathered afterwards can only
         // describe what is left, which would agree with any removal however over-broad.
@@ -221,6 +222,9 @@ public static class ExploreRemover
         // it. The caller is a shell resuming on the UI thread after its own dialog, and this listing
         // is of a folder that may hold two hundred thousand entries. Everything after this stays on
         // the pool, because every await below is ConfigureAwait(false).
+        var listed = allowed.Select(item => item.Path)
+            .Concat(refusedBeforeAsking.Select(refusal => refusal.Path).Where(path => policy.MayRemove(path).IsAllowed))
+            .ToList();
         var before = await Task.Run(() => SiblingCheck.Take(listed, fs), ct).ConfigureAwait(false);
 
         var outcomes = new List<ExploreItemOutcome>(items.Count);
