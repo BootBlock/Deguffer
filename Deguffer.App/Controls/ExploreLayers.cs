@@ -89,6 +89,9 @@ internal sealed class ExploreLayers
 
     private ExploreLayer? _current;
 
+    /// <summary>The layer the pointer's light is on, or null: see <see cref="Light"/>.</summary>
+    private ExploreLayer? _lit;
+
     /// <summary>
     /// How many drawings are fading in over the pictures before them. While one is, those pictures are
     /// what shows through it, so none of their surfaces is taken for another drawing.
@@ -187,6 +190,24 @@ internal sealed class ExploreLayers
     /// </summary>
     public ICompositionSurface? SurfaceOf(ExploreSurface drawing) =>
         _layers.Find(layer => ReferenceEquals(layer.Drawing, drawing))?.Surface;
+
+    /// <summary>
+    /// Put the pointer's light at <paramref name="light"/> on <paramref name="drawing"/>, and take it off
+    /// whichever drawing had it, or take it off altogether with nulls. One drawing has it at most, so a
+    /// drawing kept and shown again later comes back without a light it no longer has a pointer for.
+    /// </summary>
+    public void Light(ExploreSurface? drawing, PointerLight? light)
+    {
+        var layer = drawing is null ? null : _layers.Find(kept => ReferenceEquals(kept.Drawing, drawing));
+
+        if (layer != _lit)
+        {
+            _lit?.Light(null);
+            _lit = layer;
+        }
+
+        layer?.Light(light);
+    }
 
     /// <summary>
     /// Move with the map's camera, for the drawings of the picture the map works from. The compositor
@@ -289,6 +310,7 @@ internal sealed class ExploreLayers
         }
 
         _current = null;
+        _lit = null;
         Release();
         ForgetOverview();
     }
@@ -310,6 +332,7 @@ internal sealed class ExploreLayers
 
         // Made before the replacement, it would take a write and show nothing (see MapGraphics.Replaced).
         _current = null;
+        _lit = null;
         _overview = null;
         ForgetOverview();
     }

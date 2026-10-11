@@ -23,6 +23,12 @@ internal sealed class ExploreLayer
 
     private CompositionVirtualDrawingSurface _surface;
 
+    /// <summary>What the canvas was shaded from on the GPU, or null for one painted on the CPU, which has no light.</summary>
+    private (CushionQuads Quads, TileColour Ground)? _shaded;
+
+    /// <summary>The pointer's light as it is on the surface now, or null where none is.</summary>
+    private PointerLight? _light;
+
     public ExploreLayer(Compositor compositor, MapGraphics graphics)
     {
         _graphics = graphics;
@@ -79,6 +85,7 @@ internal sealed class ExploreLayer
     public void Prepare(int width, int height)
     {
         MapGraphics.Empty(_surface);
+        Forget();
 
         if (Size.Width != width || Size.Height != height)
         {
@@ -101,7 +108,34 @@ internal sealed class ExploreLayer
     }
 
     /// <summary>Shade the whole canvas, a canvas this surface's size, from <paramref name="quads"/> on <paramref name="ground"/>.</summary>
-    public void Shade(CushionQuads quads, TileColour ground) => _graphics.Shade(_surface, quads, ground);
+    public void Shade(CushionQuads quads, TileColour ground)
+    {
+        _graphics.Shade(_surface, quads, ground);
+        _shaded = (quads, ground);
+        _light = null;
+    }
+
+    /// <summary>
+    /// Put the pointer's light at <paramref name="light"/> on a canvas shaded on the GPU, or take it off
+    /// with null: only what it lit, and what it lights now, is shaded again. Nothing on a canvas painted
+    /// on the CPU, which has nothing to shade it again from.
+    /// </summary>
+    public void Light(PointerLight? light)
+    {
+        if (_shaded is not { } shaded || light == _light)
+        {
+            return;
+        }
+
+        var (quads, ground) = shaded;
+
+        if (PointerLight.Between(_light, light, Size.Width, Size.Height) is { } region)
+        {
+            _graphics.Shade(_surface, quads, ground, region, light);
+        }
+
+        _light = light;
+    }
 
     /// <summary>
     /// Put the canvas where its part of the picture is, in a picture laid out over a screen
@@ -125,6 +159,7 @@ internal sealed class ExploreLayer
         Sprite.IsVisible = false;
 
         MapGraphics.Empty(_surface);
+        Forget();
     }
 
     /// <summary>
@@ -140,5 +175,13 @@ internal sealed class ExploreLayer
 
         _surface = _graphics.CreateSurface(Size.Width, Size.Height);
         _brush.Surface = _surface;
+        Forget();
+    }
+
+    /// <summary>The surface no longer holds a shaded canvas, or a light on one.</summary>
+    private void Forget()
+    {
+        _shaded = null;
+        _light = null;
     }
 }

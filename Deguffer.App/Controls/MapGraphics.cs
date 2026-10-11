@@ -184,6 +184,20 @@ internal sealed class MapGraphics
     /// <see cref="ShrinkShaded"/>. Asked only while <see cref="Shades"/> says so.
     /// </summary>
     public void Shade(CompositionDrawingSurface surface, CushionQuads quads, TileColour ground) =>
+        Shade(surface, quads, ground, new CanvasRegion(0, 0, quads.Width, quads.Height), light: null);
+
+    /// <summary>
+    /// Shade <paramref name="region"/> of the canvas <paramref name="quads"/> make on
+    /// <paramref name="ground"/> into the same place on <paramref name="surface"/>, under
+    /// <paramref name="light"/> where there is one, and nothing else of it: the pointer's light moving
+    /// over a canvas shaded whole before.
+    /// </summary>
+    public void Shade(
+        CompositionDrawingSurface surface,
+        CushionQuads quads,
+        TileColour ground,
+        CanvasRegion region,
+        PointerLight? light) =>
         UnlessLost(_ =>
         {
             // None where the device was lost as the renderer was made: it is replaced, and every
@@ -193,19 +207,18 @@ internal sealed class MapGraphics
                 return;
             }
 
-            var shaded = renderer.Shade(quads, ground);
+            var shaded = renderer.Shade(quads, ground, region, light);
+            var area = new Rect(region.X, region.Y, region.Width, region.Height);
 
             // Every pixel of the update rectangle is overwritten, as a draw into a surface has to be.
-            using var session = CanvasComposition.CreateDrawingSession(
-                surface,
-                new Rect(0, 0, quads.Width, quads.Height),
-                96);
+            using var session = CanvasComposition.CreateDrawingSession(surface, area, 96);
 
+            // The session draws from the update rectangle's own corner.
             session.DrawImage(
                 shaded,
                 0,
                 0,
-                new Rect(0, 0, quads.Width, quads.Height),
+                area,
                 1,
                 CanvasImageInterpolation.NearestNeighbor,
                 CanvasComposite.Copy);

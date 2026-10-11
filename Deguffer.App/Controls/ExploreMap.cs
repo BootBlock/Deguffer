@@ -494,6 +494,7 @@ public sealed class ExploreMap : UserControl
             // held: at 4K, 33 MB for each drawing kept and for the paint buffer. Only the drawing on
             // screen is needed to come back to, and the rest is asked for again when the picture next
             // moves.
+            _pictures.Light(null, null);
             _pictures.Trim();
             _departing.Tiles.Release();
             _buffers.Release();
@@ -1411,6 +1412,7 @@ public sealed class ExploreMap : UserControl
         var hit = spot?.Hit;
 
         _hoveredTile = spot?.Tile;
+        Shine(spot);
 
         if (hit == _hovered)
         {
@@ -1863,6 +1865,8 @@ public sealed class ExploreMap : UserControl
         var hit = spot?.Hit;
         var tile = spot?.Tile;
 
+        Shine(spot);
+
         // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
         // shape for most of that, so reporting every move would rebuild the same string sixty times
         // a second. The same shape found on another tile, or on the drawing, is outlined again from
@@ -1887,6 +1891,29 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>Say what the pointer found.</summary>
     private void Report(ExploreHit? hit) => Hovered?.Invoke(this, hit);
+
+    /// <summary>
+    /// Put the pointer's light where <paramref name="spot"/> is, or take it away: see
+    /// <see cref="PointerLight"/>.
+    ///
+    /// <para>Only on the drawing at rest on screen, where it was shaded on the GPU, and only while effects
+    /// are fast. Not on a tile, which a move shows for a moment, nor on a drawing on its way in, and not in
+    /// high contrast, where the picture is the theme's and nothing is added to it (§6.5).</para>
+    /// </summary>
+    private void Shine(MapLocation? spot)
+    {
+        if (spot is { Tile: null } found
+            && ReferenceEquals(found.Drawing, _drawing)
+            && _graphics.Shades
+            && !HighContrast.IsEnabled())
+        {
+            _pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _scale));
+        }
+        else
+        {
+            _pictures.Light(null, null);
+        }
+    }
 
     /// <summary>
     /// Redraw only when the scale actually moved. The root raises this for several reasons — the
@@ -1992,6 +2019,7 @@ public sealed class ExploreMap : UserControl
         _hovered = null;
         _hoveredTile = null;
 
+        Shine(null);
         ShowHovered();
         Report(null);
     }
