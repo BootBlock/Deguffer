@@ -2,6 +2,7 @@ using System.Numerics;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.UI.Composition;
+using Microsoft.UI.Dispatching;
 using Windows.Graphics;
 
 namespace Deguffer.App.Controls;
@@ -17,6 +18,10 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class ExploreLayer
 {
+    private readonly Compositor _compositor;
+
+    private readonly DispatcherQueue _dispatcher;
+
     private readonly MapGraphics _graphics;
 
     private readonly CompositionSurfaceBrush _brush;
@@ -29,8 +34,19 @@ internal sealed class ExploreLayer
     /// <summary>The pointer's light as it is on the surface now, or null where none is.</summary>
     private PointerLight? _light;
 
+    /// <summary>Where the pointer's light is to go, once the compositor has taken the surface as it is: see <see cref="Light"/>.</summary>
+    private PointerLight? _wanted;
+
+    /// <summary>Whether a commit is asked for, after which the light goes where it is wanted.</summary>
+    private bool _awaiting;
+
+    /// <summary>The last commit asked for. Only its completion settles the surface: see <see cref="AfterCommit"/>.</summary>
+    private int _asked;
+
     public ExploreLayer(Compositor compositor, MapGraphics graphics)
     {
+        _compositor = compositor;
+        _dispatcher = DispatcherQueue.GetForCurrentThread();
         _graphics = graphics;
         _surface = graphics.CreateSurface(1, 1);
 
@@ -113,28 +129,33 @@ internal sealed class ExploreLayer
         _graphics.Shade(_surface, quads, ground);
         _shaded = (quads, ground);
         _light = null;
+        AfterCommit();
     }
 
     /// <summary>
     /// Put the pointer's light at <paramref name="light"/> on a canvas shaded on the GPU, or take it off
     /// with null: only what it lit, and what it lights now, is shaded again. Nothing on a canvas painted
     /// on the CPU, which has nothing to shade it again from.
+    ///
+    /// <para>Not at once, but after the compositor next takes what is on the surface, and then only
+    /// where the light was last wanted. A part of a virtual surface written in the same commit as the
+    /// whole canvas left the rest of it empty on screen, which a light landing with a new drawing did
+    /// every time. And a pointer moves several times a frame, so the light is shaded once a commit
+    /// rather than once a move.</para>
     /// </summary>
     public void Light(PointerLight? light)
     {
-        if (_shaded is not { } shaded || light == _light)
+        if (_shaded is null)
         {
             return;
         }
 
-        var (quads, ground) = shaded;
+        _wanted = light;
 
-        if (PointerLight.Between(_light, light, Size.Width, Size.Height) is { } region)
+        if (!_awaiting && _wanted != _light)
         {
-            _graphics.Shade(_surface, quads, ground, region, light);
+            AfterCommit();
         }
-
-        _light = light;
     }
 
     /// <summary>
@@ -183,5 +204,45 @@ internal sealed class ExploreLayer
     {
         _shaded = null;
         _light = null;
+        _wanted = null;
+    }
+
+    /// <summary>
+    /// Ask for the commit that takes the surface as it is now, and settle it once that commit is done.
+    /// A later ask supersedes this one, so a canvas shaded whole after a light was asked for waits for
+    /// its own commit rather than settling on the light's.
+    /// </summary>
+    private void AfterCommit()
+    {
+        var asked = ++_asked;
+        _awaiting = true;
+
+        _compositor.RequestCommitAsync().Completed = (_, _) => _dispatcher.TryEnqueue(() =>
+        {
+            if (asked == _asked)
+            {
+                Settle();
+            }
+        });
+    }
+
+    /// <summary>Put the light where it was last wanted, on a surface the compositor has taken.</summary>
+    private void Settle()
+    {
+        _awaiting = false;
+
+        if (_shaded is not { } shaded || _wanted == _light)
+        {
+            return;
+        }
+
+        var (quads, ground) = shaded;
+
+        if (PointerLight.Between(_light, _wanted, Size.Width, Size.Height) is { } region)
+        {
+            _graphics.Shade(_surface, quads, ground, region, _wanted);
+        }
+
+        _light = _wanted;
     }
 }
