@@ -61,8 +61,9 @@ public sealed class TableRoutesTests
 
     /// <summary>
     /// Following an attribute list is part of the read. A file whose list is kept outside the table
-    /// costs the clusters holding the list and a second read of the extension record it names, and
-    /// a rate that left either out would credit the run with a speed it did not have.
+    /// costs the clusters holding the list, read while the run is timed, and a rate that left them
+    /// out would credit the run with a speed it did not have. The extension record the list names
+    /// was read once, by the first pass, and is counted once.
     /// </summary>
     [Fact]
     public void CountsWhatFollowingAnAttributeListRead()
@@ -73,8 +74,8 @@ public sealed class TableRoutesTests
             .WithoutBitmap());
 
         Assert.True(tally.Complete);
-        Assert.Equal(19 + 1, tally.Items);
-        Assert.Equal((20 * BytesPerRecord) + 4096, tally.BytesRead);
+        Assert.Equal(19, tally.Items);
+        Assert.Equal((19 * BytesPerRecord) + 4096, tally.BytesRead);
     }
 
     /// <summary>

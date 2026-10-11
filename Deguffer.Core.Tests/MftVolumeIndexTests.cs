@@ -810,6 +810,36 @@ public class MftVolumeIndexTests
         Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
     }
 
+    /// <summary>
+    /// Nor on a damaged one no file wants. Whether an extension record can be read matters only to
+    /// the base record that lists it, so one whose header cannot be read costs the table nothing.
+    /// </summary>
+    [Fact]
+    public void BuildsAnIndexFromATableHoldingADamagedExtensionRecordNoFileWants()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddExtensionRecord(21, baseRecordNumber: 20)
+            .CorruptUsedLength(21));
+
+        Assert.Equal(4096, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Allocated);
+    }
+
+    /// <summary>
+    /// A damaged extension record a file does want leaves that file's size unknown, so the subtree
+    /// holding it is not totalled.
+    /// </summary>
+    [Fact]
+    public void RefusesToTotalASubtreeWhoseFileWantsADamagedExtensionRecord()
+    {
+        var index = Build(Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFileWithDataInAnExtensionRecord(21, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22)
+            .CorruptUsedLength(22));
+
+        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+    }
+
     [Fact]
     public void SkipsUnusedRecordsWithoutAttachingThemToTheTree()
     {

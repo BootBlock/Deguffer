@@ -226,6 +226,9 @@ public sealed class MftBitmapLocationTests
 
         public bool TryReadClusters(long firstCluster, Span<byte> destination) => table.TryReadClusters(firstCluster, destination);
 
+        public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+            table.TryReadClustersAsync(firstCluster, destination, ct);
+
         public void Dispose()
         {
         }

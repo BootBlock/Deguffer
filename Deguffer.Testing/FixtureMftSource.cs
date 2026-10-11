@@ -77,6 +77,9 @@ public sealed class FixtureMftSource(
         return true;
     }
 
+    public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+        ValueTask.FromResult(TryReadClusters(firstCluster, destination.Span));
+
     public void Dispose()
     {
     }

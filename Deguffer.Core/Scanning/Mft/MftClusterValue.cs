@@ -19,13 +19,70 @@ internal static class MftClusterValue
             return [];
         }
 
-        // Cannot overflow: every caller bounds the length well below int.MaxValue less a cluster,
-        // and a cluster is at most 2 MiB.
-        var wanted = (length + clusterBytes - 1) / clusterBytes * clusterBytes;
+        if (Plan(clusterBytes, runs, length) is not { } pieces)
+        {
+            return null;
+        }
 
         // Aligned because a volume source reads straight into it. See VolumeReadBuffer for why.
-        using var buffer = new VolumeReadBuffer(wanted);
-        var clusters = buffer.Span;
+        using var buffer = new VolumeReadBuffer(BytesFor(clusterBytes, length));
+
+        foreach (var (cluster, offset, bytes) in pieces)
+        {
+            if (!read(cluster, buffer.Span.Slice(offset, bytes)))
+            {
+                return null;
+            }
+        }
+
+        return buffer.Span[..length].ToArray();
+    }
+
+    /// <summary>
+    /// The same into <paramref name="clusters"/>, overlapped, so several values can be read at once.
+    /// The value is the first <paramref name="length"/> bytes of <paramref name="clusters"/>, and only
+    /// where this returns true.
+    /// </summary>
+    /// <param name="clusters">
+    /// At least <see cref="BytesFor"/> bytes of a <see cref="VolumeReadBuffer"/>, held until this has
+    /// completed, cancelled or not.
+    /// </param>
+    public static async Task<bool> TryReadAsync(
+        IMftSource source, IReadOnlyList<DataRun> runs, int length, Memory<byte> clusters, CancellationToken ct)
+    {
+        if (Plan(source.BytesPerCluster, runs, length) is not { } pieces)
+        {
+            return false;
+        }
+
+        // One piece after another rather than all at once: almost every list is one run, and the
+        // values are what is read several at a time.
+        foreach (var (cluster, offset, bytes) in pieces)
+        {
+            if (!await source.TryReadClustersAsync(cluster, clusters.Slice(offset, bytes), ct).ConfigureAwait(false))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>How many bytes of whole clusters hold the first <paramref name="length"/> bytes of a value.</summary>
+    public static int BytesFor(int clusterBytes, int length) =>
+        // Cannot overflow: every caller bounds the length well below int.MaxValue less a cluster,
+        // and a cluster is at most 2 MiB.
+        (length + clusterBytes - 1) / clusterBytes * clusterBytes;
+
+    /// <summary>
+    /// The reads that bring in the clusters holding the first <paramref name="length"/> bytes the runs
+    /// hold, each as a cluster and where its bytes go, or null where a sparse run or the end of the
+    /// runs comes first.
+    /// </summary>
+    private static List<(long Cluster, int Offset, int Bytes)>? Plan(int clusterBytes, IReadOnlyList<DataRun> runs, int length)
+    {
+        var wanted = BytesFor(clusterBytes, length);
+        var pieces = new List<(long Cluster, int Offset, int Bytes)>(runs.Count);
         var filled = 0;
 
         foreach (var run in runs)
@@ -42,14 +99,10 @@ internal static class MftClusterValue
 
             var take = (int)Math.Min(run.ClusterCount, (wanted - filled) / clusterBytes) * clusterBytes;
 
-            if (!read(run.StartCluster, clusters.Slice(filled, take)))
-            {
-                return null;
-            }
-
+            pieces.Add((run.StartCluster, filled, take));
             filled += take;
         }
 
-        return filled == wanted ? clusters[..length].ToArray() : null;
+        return filled == wanted ? pieces : null;
     }
 }

@@ -86,29 +86,42 @@ public static class MftListedFiles
     /// than one inside a record has room for.
     /// </param>
     public static MftFixture AddFileWhoseListWantsMoreRecordsThanTheTableHolds(
-        this MftFixture fixture, uint number, bool outsideTheRecord)
-    {
+        this MftFixture fixture, uint number, bool outsideTheRecord) =>
         // As many as fit: inside a record, the room a record has left after its header and dates;
         // outside it, one cluster.
-        var count = outsideTheRecord ? 120 : 24;
+        AddFileWhoseListNamesRecordsForItsNames(
+            fixture, number, firstNamed: 1000, count: outsideTheRecord ? 120 : 24, listCluster: outsideTheRecord ? 600 : null);
+
+    /// <summary>
+    /// A file whose list, kept in <paramref name="listCluster"/> outside the table, names
+    /// <paramref name="count"/> records from <paramref name="firstNamed"/> on, each for one of its
+    /// names. The file holds no name of its own, so it wants every one.
+    /// </summary>
+    /// <param name="count">At most 120, which is what fits in one cluster.</param>
+    public static MftFixture AddFileWhoseListOutsideTheTableNamesRecords(
+        this MftFixture fixture, uint number, long listCluster, uint firstNamed, int count) =>
+        AddFileWhoseListNamesRecordsForItsNames(fixture, number, firstNamed, count, listCluster);
+
+    /// <param name="listCluster">Where the list is kept outside the table, or null to keep it in the record.</param>
+    private static MftFixture AddFileWhoseListNamesRecordsForItsNames(
+        MftFixture fixture, uint number, uint firstNamed, int count, long? listCluster)
+    {
         var self = MftFixture.Reference(number);
         IReadOnlyList<ListedAttribute> entries =
         [
             new ListedAttribute(StandardInformation, self),
-            .. Enumerable.Range(0, count).Select(i => new ListedAttribute(FileName, MftFixture.Reference(1000 + (uint)i))),
+            .. Enumerable.Range(0, count).Select(i => new ListedAttribute(FileName, MftFixture.Reference(firstNamed + (uint)i))),
         ];
 
         AttributeWriter list = t => MftAttributeBytes.WriteAttributeList(t, entries);
 
-        if (outsideTheRecord)
+        if (listCluster is { } at)
         {
-            const long ListCluster = 600;
-
             var value = MftAttributeBytes.AttributeListValue(entries);
             var cluster = new byte[MftRecordBytes.BytesPerCluster];
             value.CopyTo(cluster, 0);
-            fixture.PutCluster(ListCluster, cluster);
-            list = t => MftAttributeBytes.WriteNonResidentAttributeList(t, ListCluster, clusterCount: 1, value.Length);
+            fixture.PutCluster(at, cluster);
+            list = t => MftAttributeBytes.WriteNonResidentAttributeList(t, at, clusterCount: 1, value.Length);
         }
 
         return fixture.Add(number, MftRecordBytes.Compose(

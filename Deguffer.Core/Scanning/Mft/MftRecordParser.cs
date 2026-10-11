@@ -39,16 +39,32 @@ internal static class MftRecordParser
     /// Where the outcome is <see cref="MftParseOutcome.Continued"/>, what has to be read from other
     /// records before this one can be answered; otherwise null.
     /// </param>
+    /// <param name="extension">
+    /// Where the record is an extension record, which is <see cref="MftParseOutcome.NotAnEntry"/>,
+    /// what it holds for the base record that owns it; otherwise null. Its attributes are reached
+    /// through that base record, so parsing it as an entry of its own would count the same file twice.
+    /// </param>
     internal static MftParseOutcome Parse(
         Span<byte> record,
         long number,
         out MftRecord result,
-        out MftDeferredRecord? deferred)
+        out MftDeferredRecord? deferred,
+        out MftExtensionRecord? extension)
     {
         result = default;
         deferred = null;
+        extension = null;
 
-        var outcome = MftRecordHeader.Read(record, out var header);
+        var outcome = MftRecordHeader.ReadEither(record, out var header);
+
+        // Whether the record is damaged is for the base record that lists it to decide, when it
+        // follows its list, so a damaged extension record met in passing costs the table nothing.
+        if (header.IsExtension)
+        {
+            extension = MftExtensionRecord.Of(number, outcome, header, record);
+            return MftParseOutcome.NotAnEntry;
+        }
+
         if (outcome != MftParseOutcome.Parsed)
         {
             return outcome;
