@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
@@ -24,14 +26,30 @@ namespace Deguffer.Core.Scanning;
 /// always has, and handed back so a caller asking a file's type still meets them. See
 /// <see cref="Safety.MailStore"/>.
 /// </param>
-/// <param name="WasRefused">
-/// Whether the directory could not be listed to the end. §5.3 makes that ordinary rather than an
-/// error, so the walk still skips it silently — but a caller reporting a total needs to know the total
-/// is now a lower bound, and one that never hears about it cannot say so. What was listed before a
+/// <param name="Presence">
+/// How the listing ended: <see cref="PathPresence.Present"/> where it was read to the end,
+/// <see cref="PathPresence.Absent"/> where the directory was gone by the time it was reached, and
+/// <see cref="PathPresence.Refused"/> where Windows would not list it. What was listed before a
 /// listing failed part-way is still in the three lists.
 /// </param>
 internal readonly record struct DirectoryContents(
     IReadOnlyList<WalkEntry> Entries,
     IReadOnlyList<WalkEntry> Links,
     IReadOnlyList<WalkEntry> ReparseFiles,
-    bool WasRefused);
+    PathPresence Presence)
+{
+    /// <summary>
+    /// Whether the directory could not be listed to the end. §5.3 makes that ordinary rather than an
+    /// error, so the walk still skips it silently — but a caller reporting a total needs to know the
+    /// total is now a lower bound, and one that never hears about it cannot say so. A directory gone
+    /// since its parent was listed counts too: its bytes were never read either.
+    /// </summary>
+    public bool WasRefused => Presence is not PathPresence.Present;
+
+    /// <summary>
+    /// Whether Windows would not list the directory, as opposed to its being gone. A caller that
+    /// names the folders it could not search needs the difference: "could not be listed" is a sentence
+    /// about permissions, and a build output removed mid-walk was never refused anything.
+    /// </summary>
+    public bool WasDenied => Presence is PathPresence.Refused;
+}
