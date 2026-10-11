@@ -1888,9 +1888,9 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        if (e.Key == VirtualKey.Enter && _keyboard && FocusedShape() is { } focused && ShapeOf(focused) is { } shape)
+        if (e.Key == VirtualKey.Enter && _keyboard && Readable is { } drawing && FocusedShape() is { } focused && ShapeOf(focused) is { } shape)
         {
-            OpenShape(focused.Folder, shape);
+            OpenShape(drawing, focused.Folder, shape);
             e.Handled = true;
         }
         else if (e.Key == VirtualKey.Back && Ascending is { } ascending)
@@ -2426,24 +2426,9 @@ public sealed class ExploreMap : UserControl
 
     private MapShapeFacts? FactsOf(ExploreSurface drawing, int node) => Facts?.Invoke(drawing.Tree, node);
 
-    /// <summary>The folder whose shapes hold <paramref name="node"/>'s, or null for the top of the picture.</summary>
-    internal int? FolderOf(int node)
-    {
-        if (Readable is not { } drawing)
-        {
-            return null;
-        }
-
-        // Beside a volume the root is at the top, and what it holds is its own.
-        if (drawing.HasVolumeBeside)
-        {
-            return node == DrawnNode ? null : drawing.Tree.ParentOf(node);
-        }
-
-        var parent = drawing.Tree.ParentOf(node);
-
-        return parent == DrawnNode ? null : parent;
-    }
+    /// <summary>The folder whose shapes hold <paramref name="node"/>'s, or null for the top of the picture. See <see cref="MapFolders.Of"/>.</summary>
+    internal int? FolderOf(int node) =>
+        Readable is { } drawing ? MapFolders.Of(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, node) : null;
 
     /// <summary>
     /// What a screen reader calls <paramref name="shape"/>: its name, its size and its share of what
@@ -2457,14 +2442,17 @@ public sealed class ExploreMap : UserControl
         }
 
         var name = shape.IsNode ? FactsOf(drawing, shape.Node)?.Name : MapShapeText.BlockName(shape.Node);
-        var (ofBytes, ofName) = folder switch
-        {
-            { } inside => (drawing.Tree.SizeOf(inside), FactsOf(drawing, inside)?.Name),
-            null when drawing.HasVolumeBeside => (drawing.Shapes(null).Sum(top => top.Bytes), null),
-            null => (drawing.Tree.SizeOf(DrawnNode), FactsOf(drawing, DrawnNode)?.Name),
-        };
+        var (ofBytes, named) = MapFolders.ShareBasis(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, drawing.Shapes(null));
 
-        return name is null ? string.Empty : MapShapeText.Name(name, shape.Bytes, ofBytes, ofName);
+        // A share of the drive is named by no node. A share of a folder the page says nothing of is not
+        // said at all, rather than said to be of the drive.
+        return (name, named) switch
+        {
+            (null, _) => string.Empty,
+            (_, null) => MapShapeText.Name(name, shape.Bytes, ofBytes, ofName: null),
+            (_, { } folderNode) when FactsOf(drawing, folderNode) is { } of => MapShapeText.Name(name, shape.Bytes, ofBytes, of.Name),
+            _ => MapShapeText.Name(name, shape.Bytes, ofBytes: 0, ofName: null),
+        };
     }
 
     /// <summary>What <paramref name="shape"/> is and what can be done with it. See <see cref="MapShapeText.Help"/>.</summary>
@@ -2488,10 +2476,14 @@ public sealed class ExploreMap : UserControl
     /// <summary>What is picked, each with the folder whose shapes hold it.</summary>
     internal IEnumerable<(int? Folder, int Node)> PickedShapes() => _picked.Select(node => (FolderOf(node), node));
 
-    /// <summary>Put the keyboard on <paramref name="shape"/>, as a screen reader asks: the map takes the focus if it has not got it.</summary>
-    internal void FocusShape(int? folder, MapShape shape)
+    /// <summary>
+    /// Put the keyboard on <paramref name="shape"/> of <paramref name="drawing"/>, as a screen reader
+    /// asks: the map takes the focus if it has not got it. Nothing where that drawing is no longer the
+    /// one on screen, whose node numbers may be other nodes now (§7.1).
+    /// </summary>
+    internal void FocusShape(ExploreSurface drawing, int? folder, MapShape shape)
     {
-        if (Readable is not { } drawing)
+        if (!ReferenceEquals(drawing, Readable))
         {
             return;
         }
@@ -2508,12 +2500,14 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Pick <paramref name="shape"/> and put the keyboard on it, as a screen reader selecting it asks: the
-    /// same pick a click makes, which Delete and the menu then act on (§7.1).
+    /// Pick <paramref name="shape"/> of <paramref name="drawing"/> and put the keyboard on it, as a screen
+    /// reader selecting it asks: the same pick a click makes, which Delete and the menu then act on
+    /// (§7.1). Nothing where that drawing is no longer the one on screen: a peer a screen reader kept
+    /// from an earlier drawing names a node number that may be another node in the tree on screen now.
     /// </summary>
-    internal void PickShape(int? folder, MapShape shape)
+    internal void PickShape(ExploreSurface drawing, int? folder, MapShape shape)
     {
-        if (Readable is not { } drawing)
+        if (!ReferenceEquals(drawing, Readable))
         {
             return;
         }
@@ -2531,21 +2525,24 @@ public sealed class ExploreMap : UserControl
         }
     }
 
-    /// <summary>Bring <paramref name="shape"/> into view, as a screen reader scrolling to it asks.</summary>
-    internal void BringIntoView(MapShape shape)
+    /// <summary>Bring <paramref name="shape"/> of <paramref name="drawing"/> into view, as a screen reader scrolling to it asks, while that drawing is on screen.</summary>
+    internal void BringIntoView(ExploreSurface drawing, MapShape shape)
     {
-        if (Readable is { } drawing)
+        if (ReferenceEquals(drawing, Readable))
         {
-            BringIntoView(drawing, shape);
+            Bring(drawing, shape);
         }
     }
 
-    /// <summary>Open <paramref name="shape"/>, or zoom to it where it cannot be opened: what Enter and a double-click do.</summary>
-    internal void OpenShape(int? folder, MapShape shape)
+    /// <summary>
+    /// Open <paramref name="shape"/> of <paramref name="drawing"/>, or zoom to it where it cannot be
+    /// opened: what Enter and a double-click do. Nothing where that drawing is no longer on screen.
+    /// </summary>
+    internal void OpenShape(ExploreSurface drawing, int? folder, MapShape shape)
     {
         SettleStep();
 
-        if (Readable is not { } drawing)
+        if (!ReferenceEquals(drawing, Readable))
         {
             return;
         }
@@ -2626,7 +2623,7 @@ public sealed class ExploreMap : UserControl
 
         ShowHovered();
         Report(new ExploreHit(shape.Node, shape.Bytes));
-        BringIntoView(drawing, shape);
+        Bring(drawing, shape);
 
         if (AutomationPeer.ListenerExists(AutomationEvents.AutomationFocusChanged)
             && FrameworkElementAutomationPeer.FromElement(this) is MapAutomationPeer peer
@@ -2640,7 +2637,7 @@ public sealed class ExploreMap : UserControl
     /// Move the camera as little as brings <paramref name="shape"/> into view at a size it can be seen at
     /// (<see cref="MapViewport.Showing"/>): big enough to carry its name, at the reader's text size.
     /// </summary>
-    private void BringIntoView(ExploreSurface drawing, MapShape shape)
+    private void Bring(ExploreSurface drawing, MapShape shape)
     {
         if (!_zoom.Movable || drawing.Viewport is not { } drawn || ActualWidth <= 0 || ActualHeight <= 0)
         {
@@ -2696,12 +2693,31 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// The menu key or Shift+F10 on the map: the menu opens on the shape the keyboard is on, picked first
-    /// as a right-click picks, at the middle of where the camera is taking it. A right-click has a
-    /// position and is <see cref="OnRightTapped"/>'s.
+    /// as a right-click picks, at the middle of where the camera is taking it. Where the keyboard has not
+    /// been moving, on what a click picked and nothing else, because that is what the reader chose
+    /// (§7.1); and not at all where a click picked nothing. A right-click has a position and is
+    /// <see cref="OnRightTapped"/>'s.
     /// </summary>
     private void OnContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
-        if (e.TryGetPosition(this, out _) || !Answers || Readable is not { } drawing || _focus.Find(drawing) is not { } found)
+        if (e.TryGetPosition(this, out _) || !Answers || Readable is not { } drawing)
+        {
+            return;
+        }
+
+        var picked = PickedAlone;
+
+        if (!_keyboard)
+        {
+            if (picked is not { } clicked)
+            {
+                return;
+            }
+
+            _focus.Expect(FolderOf(clicked), clicked);
+        }
+
+        if (_focus.Find(drawing) is not { } found || (!_keyboard && found.Shapes[found.Index].Node != picked))
         {
             return;
         }
@@ -2733,36 +2749,13 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        if (tree is not null && ReferenceEquals(tree, _tree) && OnTheWayDown(tree, _node, node, beside) is { } left)
+        if (tree is not null && ReferenceEquals(tree, _tree) && MapFolders.CameUpFrom(tree, _node, node, beside) is { } left)
         {
             _focus.Expect(null, left);
             return;
         }
 
         _focus.Clear();
-    }
-
-    /// <summary>
-    /// What <paramref name="node"/>'s picture shows at its top on the way down to <paramref name="from"/>:
-    /// the child of it that holds <paramref name="from"/>, or the root itself drawn again beside its
-    /// volume; or null where <paramref name="from"/> is not below it.
-    /// </summary>
-    private static int? OnTheWayDown(ISizedTree tree, int from, int node, bool beside)
-    {
-        if (from == node)
-        {
-            return beside ? node : null;
-        }
-
-        for (var at = from; tree.ParentOf(at) != at; at = tree.ParentOf(at))
-        {
-            if (tree.ParentOf(at) == node)
-            {
-                return at;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
@@ -25,6 +26,12 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
 
     private MapShape _shape;
 
+    /// <summary>
+    /// The drawing the shape is of. Everything the peer does is asked of it, and refused once another
+    /// drawing is on screen, whose node numbers may be other nodes (§7.1).
+    /// </summary>
+    private ExploreSurface? _drawing;
+
     private int _position;
 
     private int _count;
@@ -36,23 +43,39 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
         _folder = folder;
     }
 
-    public bool IsSelected => _shape.IsNode && _map.IsPicked(_shape.Node);
+    public bool IsSelected => Current && _shape.IsNode && _map.IsPicked(_shape.Node);
 
     public IRawElementProviderSimple SelectionContainer => ProviderFromPeer(_owner);
 
-    /// <summary>Where the shape is in the drawing on screen, and which of its folder's shapes it is.</summary>
-    public void Describe(MapShape shape, int position, int count)
+    /// <summary>Whether the drawing the shape is of is the one on screen.</summary>
+    private bool Current => _drawing is not null && ReferenceEquals(_drawing, _map.Readable);
+
+    /// <summary>Where the shape is in <paramref name="drawing"/>, and which of its folder's shapes it is.</summary>
+    public void Describe(ExploreSurface drawing, MapShape shape, int position, int count)
     {
+        _drawing = drawing;
         _shape = shape;
         _position = position;
         _count = count;
     }
 
-    public void Invoke() => _map.OpenShape(_folder, _shape);
+    public void Invoke()
+    {
+        if (_drawing is { } drawing)
+        {
+            _map.OpenShape(drawing, _folder, _shape);
+        }
+    }
 
-    public void Select() => _map.PickShape(_folder, _shape);
+    public void Select()
+    {
+        if (_drawing is { } drawing)
+        {
+            _map.PickShape(drawing, _folder, _shape);
+        }
+    }
 
-    public void AddToSelection() => _map.PickShape(_folder, _shape);
+    public void AddToSelection() => Select();
 
     public void RemoveFromSelection()
     {
@@ -62,11 +85,17 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
         }
     }
 
-    public void ScrollIntoView() => _map.BringIntoView(_shape);
+    public void ScrollIntoView()
+    {
+        if (_drawing is { } drawing)
+        {
+            _map.BringIntoView(drawing, _shape);
+        }
+    }
 
-    protected override string GetNameCore() => _map.NameOf(_folder, _shape);
+    protected override string GetNameCore() => Current ? _map.NameOf(_folder, _shape) : string.Empty;
 
-    protected override string GetHelpTextCore() => _map.HelpOf(_shape);
+    protected override string GetHelpTextCore() => Current ? _map.HelpOf(_shape) : string.Empty;
 
     protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TreeItem;
 
@@ -80,11 +109,17 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
 
     protected override bool IsKeyboardFocusableCore() => true;
 
-    protected override bool HasKeyboardFocusCore() => _map.HasFocusOn(_folder, _shape.Node);
+    protected override bool HasKeyboardFocusCore() => Current && _map.HasFocusOn(_folder, _shape.Node);
 
-    protected override void SetFocusCore() => _map.FocusShape(_folder, _shape);
+    protected override void SetFocusCore()
+    {
+        if (_drawing is { } drawing)
+        {
+            _map.FocusShape(drawing, _folder, _shape);
+        }
+    }
 
-    protected override bool IsOffscreenCore() => _map.OnScreenOf(_shape) is not { } frame
+    protected override bool IsOffscreenCore() => !Current || _map.OnScreenOf(_shape) is not { } frame
         || frame.X + frame.Width <= 0 || frame.Y + frame.Height <= 0 || frame.X >= 1 || frame.Y >= 1;
 
     /// <summary>
@@ -93,7 +128,7 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     /// </summary>
     protected override Rect GetBoundingRectangleCore()
     {
-        if (_map.OnScreenOf(_shape) is not { } frame)
+        if (!Current || _map.OnScreenOf(_shape) is not { } frame)
         {
             return default;
         }
@@ -109,13 +144,13 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     }
 
     protected override IList<AutomationPeer>? GetChildrenCore() =>
-        _shape.IsNode ? [.. _owner.Children(_shape.Node)] : null;
+        Current && _shape.IsNode ? [.. _owner.Children(_shape.Node)] : null;
 
     protected override int GetPositionInSetCore() => _position;
 
     protected override int GetSizeOfSetCore() => _count;
 
-    protected override object? GetPatternCore(PatternInterface patternInterface) => patternInterface switch
+    protected override object? GetPatternCore(PatternInterface patternInterface) => !Current ? null : patternInterface switch
     {
         PatternInterface.Invoke => this,
         PatternInterface.ScrollItem => this,

@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
@@ -39,12 +40,17 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
     /// </summary>
     public IReadOnlyList<MapShapeAutomationPeer> Children(int? folder)
     {
+        if (_map.Readable is not { } drawing)
+        {
+            return [];
+        }
+
         var shapes = _map.ShapesIn(folder);
         var peers = new MapShapeAutomationPeer[shapes.Count];
 
         for (var i = 0; i < shapes.Count; i++)
         {
-            peers[i] = Peer(folder, shapes[i], i + 1, shapes.Count);
+            peers[i] = Peer(drawing, folder, shapes[i], i + 1, shapes.Count);
         }
 
         return peers;
@@ -53,13 +59,18 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
     /// <summary>The peer of the shape <paramref name="node"/> in <paramref name="folder"/>, or null where the drawing on screen does not list it.</summary>
     public MapShapeAutomationPeer? PeerOf(int? folder, int node)
     {
+        if (_map.Readable is not { } drawing)
+        {
+            return null;
+        }
+
         var shapes = _map.ShapesIn(folder);
 
         for (var i = 0; i < shapes.Count; i++)
         {
             if (shapes[i].Node == node)
             {
-                return Peer(folder, shapes[i], i + 1, shapes.Count);
+                return Peer(drawing, folder, shapes[i], i + 1, shapes.Count);
             }
         }
 
@@ -101,12 +112,12 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
             ? peer
             : base.GetFocusedElementCore();
 
-    private MapShapeAutomationPeer Peer(int? folder, MapShape shape, int position, int count)
+    private MapShapeAutomationPeer Peer(ExploreSurface drawing, int? folder, MapShape shape, int position, int count)
     {
-        if (!ReferenceEquals(_drawn, _map.Readable))
+        if (!ReferenceEquals(_drawn, drawing))
         {
             _peers.Clear();
-            _drawn = _map.Readable;
+            _drawn = drawing;
         }
 
         if (!_peers.TryGetValue((folder, shape.Node), out var peer))
@@ -119,7 +130,7 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
             peer.SetParent(folder is { } inside && _map.FolderOf(inside) is var above && PeerOf(above, inside) is { } holder ? holder : this);
         }
 
-        peer.Describe(shape, position, count);
+        peer.Describe(drawing, shape, position, count);
 
         return peer;
     }

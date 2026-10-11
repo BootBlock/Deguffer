@@ -30,7 +30,7 @@ public sealed class MapShapesTests
         var drawing = Drawn(tree, ExploreView.Treemap);
         var shapes = drawing.Shapes(null);
 
-        Assert.Contains(shapes, shape => shape.Node == ExploreTile.Aggregated);
+        Assert.Equal(ExploreTile.Aggregated, shapes[^1].Node);
         Assert.Equal(
             [.. drawing.Tiles.Where(tile => tile.Depth == 1).Select(tile => tile.Node).Order()],
             shapes.Select(shape => shape.Node).Order());
@@ -119,8 +119,11 @@ public sealed class MapShapesTests
 
         Assert.Contains(drawing.Tiles, tile => tile.Node == nook && tile.Header == 0);
         Assert.Empty(drawing.Shapes(nook));
-        Assert.Empty(drawing.Shapes(Named(tree, "tiny7")));
-        Assert.Empty(inner.Shapes(Named(tree, "big0")));
+        var lost = Named(tree, "lost");
+
+        Assert.DoesNotContain(drawing.Tiles, tile => tile.Node == lost);
+        Assert.Empty(drawing.Shapes(lost));
+        Assert.Empty(inner.Shapes(Named(tree, "other")));
         Assert.NotEmpty(inner.Shapes(null));
     }
 
@@ -141,12 +144,18 @@ public sealed class MapShapesTests
         Assert.Equal(
             [.. drawing.Tiles.Where(tile => tile.Depth == 1).Select(tile => tile.Node).Order()],
             top.Select(shape => shape.Node).Order());
+        var crowd = Named(tree, "crowd");
+        var crowded = drawing.Shapes(crowd);
+
         Assert.NotEmpty(held);
         Assert.All(held, shape => Assert.Equal(folder, tree.ParentOf(shape.Node)));
-        Assert.All(top.Concat(held), shape => AssertDrawnAt(drawing, shape));
+        Assert.All(top.Concat(held).Concat(crowded), shape => AssertDrawnAt(drawing, shape));
 
-        // The row under it holds what its neighbour holds as well, which is not its.
+        // The row under it holds what its neighbours hold as well, their blocks of the rest included,
+        // which are not its.
         Assert.Contains(drawing.Tiles, tile => tile.IsNode && tile.Depth == 2 && tree.ParentOf(tile.Node) == Named(tree, "other"));
+        Assert.Contains(crowded, shape => shape.Node == ExploreTile.Aggregated);
+        Assert.All(crowded.Where(shape => shape.IsNode), shape => Assert.Equal(crowd, tree.ParentOf(shape.Node)));
     }
 
     /// <summary>
@@ -162,12 +171,19 @@ public sealed class MapShapesTests
         var top = drawing.Shapes(null);
         var held = drawing.Shapes(folder);
 
+        var crowd = Named(tree, "crowd");
+        var crowded = drawing.Shapes(crowd);
+
         Assert.Contains(top, shape => shape.Node == ExploreTile.Aggregated);
         Assert.All(top.Where(shape => shape.IsNode), shape => Assert.Equal(tree.RootNode, tree.ParentOf(shape.Node)));
         Assert.NotEmpty(held);
         Assert.All(held, shape => Assert.Equal(folder, tree.ParentOf(shape.Node)));
 
-        foreach (var shape in top.Concat(held))
+        // A folder's block of the rest is its own, and not its neighbour's in the same ring.
+        Assert.Contains(crowded, shape => shape.Node == ExploreTile.Aggregated);
+        Assert.All(crowded.Where(shape => shape.IsNode), shape => Assert.Equal(crowd, tree.ParentOf(shape.Node)));
+
+        foreach (var shape in top.Concat(held).Concat(crowded))
         {
             Assert.Equal(shape.Node, drawing.At((float)(shape.X * Width), (float)(shape.Y * Height))?.Node);
             Assert.InRange(shape.X, shape.Frame.X, shape.Frame.X + shape.Frame.Width);
@@ -261,9 +277,10 @@ public sealed class MapShapesTests
         Enumerable.Range(0, tree.NodeCount).First(node => tree.NameOf(node) == name);
 
     /// <summary>
-    /// Two folders of files beside three large files, a folder too small to frame, and a long tail of
-    /// tiny ones: nesting, a row of what two folders hold side by side, siblings of different sizes, a
-    /// folder drawn as one block, and a block of the rest at the top.
+    /// Folders of files beside three large files, a folder too small to frame, a folder lost in a long
+    /// tail of tiny files, and a folder with a tail of its own: nesting, a row of what several folders
+    /// hold side by side, siblings of different sizes, a folder drawn as one block, a folder drawn in no
+    /// shape of its own, and a block of the rest at the top and in a folder.
     /// </summary>
     private static ExploreTree Tree()
     {
@@ -274,6 +291,8 @@ public sealed class MapShapesTests
                 new ExploreChild("folder", IsDirectory: true, IsLink: false, Size: 0),
                 new ExploreChild("nook", IsDirectory: true, IsLink: false, Size: 0),
                 new ExploreChild("other", IsDirectory: true, IsLink: false, Size: 0),
+                new ExploreChild("crowd", IsDirectory: true, IsLink: false, Size: 0),
+                new ExploreChild("lost", IsDirectory: true, IsLink: false, Size: 0),
                 .. Enumerable.Range(0, 3).Select(i =>
                     new ExploreChild($"big{i}", IsDirectory: false, IsLink: false, Size: (3 - i) * 1_000_000L)),
                 .. Enumerable.Range(0, 500).Select(i =>
@@ -294,6 +313,17 @@ public sealed class MapShapesTests
             folder + 2,
             [.. Enumerable.Range(0, 2).Select(i =>
                 new ExploreChild($"part{i}", IsDirectory: false, IsLink: false, Size: 1_500_000))]);
+
+        builder.AddChildren(
+            folder + 3,
+            [
+                .. Enumerable.Range(0, 2).Select(i =>
+                    new ExploreChild($"wide{i}", IsDirectory: false, IsLink: false, Size: 1_000_000)),
+                .. Enumerable.Range(0, 300).Select(i =>
+                    new ExploreChild($"speck{i}", IsDirectory: false, IsLink: false, Size: 2_000)),
+            ]);
+
+        builder.AddChildren(folder + 4, [new ExploreChild("dust", IsDirectory: false, IsLink: false, Size: 1)]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }

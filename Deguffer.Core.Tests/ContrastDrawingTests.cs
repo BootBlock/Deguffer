@@ -152,6 +152,69 @@ public sealed class ContrastDrawingTests
         }
     }
 
+    /// <summary>
+    /// Wedges side by side in a ring are told apart by their sides, and a ring from the ring inside it
+    /// by its inner edge: walking from a wedge's point round its arc, and in towards the middle, the last
+    /// pixel of the wedge each way is the text colour.
+    /// </summary>
+    [Fact]
+    public void AWedgeIsEdgedAlongItsSidesAndItsInnerRing()
+    {
+        var drawing = Drawn(ExploreView.Sunburst);
+        var pixels = Paint(drawing);
+        var (centreX, centreY) = (Width / 2.0, Height / 2.0);
+        var ring = drawing.Shapes(null).Where(shape => shape.IsNode).ToList();
+        var outer = ring.Where(shape => drawing.Shapes(shape.Node).Count > 0).SelectMany(shape => drawing.Shapes(shape.Node)).Where(shape => shape.IsNode).ToList();
+
+        Assert.True(ring.Count > 1, "one wedge has no neighbour to be told from");
+        Assert.NotEmpty(outer);
+
+        foreach (var shape in ring)
+        {
+            var (x, y) = ((shape.X * Width) - centreX, (shape.Y * Height) - centreY);
+            var radius = Math.Sqrt((x * x) + (y * y));
+            var angle = Math.Atan2(y, x);
+
+            Assert.Equal(Text, LastOf(drawing, pixels, shape, step => (
+                centreX + (radius * Math.Cos(angle - (step / radius))),
+                centreY + (radius * Math.Sin(angle - (step / radius))))));
+        }
+
+        foreach (var shape in outer)
+        {
+            var (x, y) = ((shape.X * Width) - centreX, (shape.Y * Height) - centreY);
+            var radius = Math.Sqrt((x * x) + (y * y));
+
+            Assert.Equal(Text, LastOf(drawing, pixels, shape, step => (
+                centreX + (x / radius * (radius - step)),
+                centreY + (y / radius * (radius - step)))));
+        }
+    }
+
+    /// <summary>
+    /// The colour of the last pixel of <paramref name="shape"/> along the path <paramref name="along"/>
+    /// takes from its point, a quarter of a pixel at a time.
+    /// </summary>
+    private static TileColour LastOf(ExploreSurface drawing, byte[] pixels, MapShape shape, Func<double, (double X, double Y)> along)
+    {
+        (int X, int Y) last = ((int)(shape.X * Width), (int)(shape.Y * Height));
+
+        for (var step = 0.0; step < Width; step += 0.25)
+        {
+            var (x, y) = along(step);
+            var (column, row) = ((int)x, (int)y);
+
+            if (column < 0 || row < 0 || column >= Width || row >= Height || drawing.At(column + 0.5f, row + 0.5f)?.Node != shape.Node)
+            {
+                break;
+            }
+
+            last = (column, row);
+        }
+
+        return ColourAt(pixels, last.X, last.Y);
+    }
+
     /// <summary>Every name is written in the theme's text colour, which every shape shares.</summary>
     [Theory]
     [InlineData(ExploreView.Treemap)]

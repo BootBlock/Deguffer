@@ -26,7 +26,6 @@ internal static class MemoryText
         };
     }
 
-    /// <summary>The name a shape carries on the picture: what it is, and how much it holds.</summary>
     /// <summary>What part of memory <paramref name="node"/> is, as a screen reader names its kind.</summary>
     public static string Kind(MemoryTree tree, int node) => tree.PartOf(node) switch
     {
@@ -36,6 +35,7 @@ internal static class MemoryText
         _ => "Memory",
     };
 
+    /// <summary>The name a shape carries on the picture: what it is, and how much it holds.</summary>
     public static string Label(MemoryTree tree, int node) =>
         $"{Name(tree, node)}  {FreeSpace.Format(tree.SizeOf(node))}";
 
