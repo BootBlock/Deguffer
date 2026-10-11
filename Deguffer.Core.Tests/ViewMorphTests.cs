@@ -97,6 +97,29 @@ public sealed class ViewMorphTests
     }
 
     /// <summary>
+    /// A shape only one view draws has nowhere to travel from or to, so it crossfades with the rest of
+    /// the picture. Here the icicle draws small files that the sunburst lumps together.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Icicle, ExploreView.Sunburst)]
+    [InlineData(ExploreView.Sunburst, ExploreView.Icicle)]
+    public void AShapeOnlyOneViewDrawsDoesNotTravel(ExploreView from, ExploreView to)
+    {
+        var tree = Fanned(files: 150);
+        var earlier = Drawing(tree, from);
+        var later = Drawing(tree, to);
+        var both = earlier.NodesDrawn.Intersect(later.NodesDrawn).ToHashSet();
+        var either = earlier.NodesDrawn.Union(later.NodesDrawn).ToHashSet();
+
+        Assert.True(either.Count > both.Count, "both views draw every shape");
+        Assert.True(both.Count < ViewMorph.MostShapes, "the largest shapes are all drawn by both views");
+
+        var morphs = ViewMorph.Between(earlier, later);
+
+        Assert.Equal(both, morphs.Select(morph => morph.Node).ToHashSet());
+    }
+
+    /// <summary>
     /// A shape the treemap draws inside another is painted over it as they travel, so the folder does
     /// not cover what it holds.
     /// </summary>
@@ -239,6 +262,31 @@ public sealed class ViewMorphTests
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+
+    /// <summary>
+    /// A folder six deep holding half the bytes, and beside it <paramref name="files"/> files sharing
+    /// the other half. The depth makes the sunburst's rings narrow, so its inner ring is too short to
+    /// draw each file and lumps them, while an icicle's row is the canvas's full width and draws them.
+    /// </summary>
+    private static ExploreTree Fanned(int files)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var folder = builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [
+                new ExploreChild("deep", IsDirectory: true, IsLink: false, Size: 0),
+                .. Enumerable.Range(0, files).Select(i => new ExploreChild($"small{i:d3}.bin", IsDirectory: false, IsLink: false, Size: 1_000_000L - i)),
+            ]);
+
+        for (var level = 0; level < 5; level++)
+        {
+            folder = builder.AddChildren(folder, [new ExploreChild($"level{level}", IsDirectory: true, IsLink: false, Size: 0)]);
+        }
+
+        builder.AddChildren(folder, [new ExploreChild("large.bin", IsDirectory: false, IsLink: false, Size: files * 1_000_000L)]);
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
 
     /// <summary>
     /// Three levels of <paramref name="breadth"/> each, folders of folders of files of about one size,
