@@ -51,6 +51,18 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
     /// <summary>
+    /// The map changing from one view to another: the largest shapes travel from their rectangle to
+    /// their bar or wedge while the rest of the picture crossfades (see
+    /// <see cref="Exploring.Layout.ViewMorph"/>). Longer than <see cref="Shift"/>, because a shape
+    /// changes its whole form rather than its place, and the eye needs the time to follow it. With
+    /// motion off the views swap at once: the new view is another picture of the same tree, and a
+    /// fade between two unrelated pictures tells the reader nothing a cut does not.
+    /// </summary>
+    public static MotionToken Morph { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(450), Travels: true),
+        Motion.Instant);
+
+    /// <summary>
     /// The overview a zoomed map shows in a corner, coming in as the map is zoomed in, going as it
     /// shows the whole picture again, and coming in at the other corner when the map is acted on
     /// beside it. With motion on it drops a short way into place as it fades in. With motion off it

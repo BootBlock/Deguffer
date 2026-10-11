@@ -1,3 +1,5 @@
+using Deguffer.Core.Exploring.Rendering;
+
 namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
@@ -77,4 +79,14 @@ public sealed record Sunburst(
     float CentreX,
     float CentreY,
     float RingWidth,
-    float Radius);
+    float Radius)
+{
+    /// <summary>
+    /// The point on the canvas at <paramref name="radius"/> from the centre and <paramref name="angle"/>
+    /// round it. Angles run clockwise from twelve o'clock, and the canvas's y axis runs downwards,
+    /// which is where the subtraction comes from.
+    /// </summary>
+    public ExplorePoint PointAt(float radius, float angle) => new(
+        CentreX + (radius * MathF.Sin(angle)),
+        CentreY - (radius * MathF.Cos(angle)));
+}

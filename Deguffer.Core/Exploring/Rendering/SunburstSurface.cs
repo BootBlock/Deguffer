@@ -92,6 +92,28 @@ public sealed class SunburstSurface : ExploreSurface
         return Traced(nodes);
     }
 
+    /// <summary>Each node once: a sunburst draws no node twice, and every sector but a lump is one.</summary>
+    public override IEnumerable<int> NodesDrawn =>
+        _hits.Sunburst.Sectors.Where(sector => !sector.IsAggregate).Select(sector => sector.Node);
+
+    public override IReadOnlyList<MorphShape> MorphShapes(IReadOnlySet<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        var sunburst = _hits.Sunburst;
+        var shapes = new List<MorphShape>();
+
+        foreach (var sector in sunburst.Sectors)
+        {
+            if (!sector.IsAggregate && nodes.Contains(sector.Node))
+            {
+                shapes.Add(new MorphShape(sector.Node, sector.Depth, ColourFor(sector.Node, sector.Depth), MorphOutline.Of(sunburst, sector)));
+            }
+        }
+
+        return shapes;
+    }
+
     private List<ExploreOutline> Traced(Func<int, bool> nodes)
     {
         var sunburst = _hits.Sunburst;
@@ -147,7 +169,7 @@ public sealed class SunburstSurface : ExploreSurface
 
         for (var i = 0; i <= steps; i++)
         {
-            points.Add(At(sunburst, sector.OuterRadius, Angle(sector, i, steps)));
+            points.Add(sunburst.PointAt(sector.OuterRadius, Angle(sector, i, steps)));
         }
 
         if (sector.InnerRadius <= 0)
@@ -158,7 +180,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             for (var i = steps; i >= 0; i--)
             {
-                points.Add(At(sunburst, sector.InnerRadius, Angle(sector, i, steps)));
+                points.Add(sunburst.PointAt(sector.InnerRadius, Angle(sector, i, steps)));
             }
         }
 
@@ -176,7 +198,7 @@ public sealed class SunburstSurface : ExploreSurface
 
         for (var i = 0; i < steps; i++)
         {
-            points.Add(At(sunburst, radius, Angle(sector, i, steps)));
+            points.Add(sunburst.PointAt(radius, Angle(sector, i, steps)));
         }
 
         return points;
@@ -185,14 +207,6 @@ public sealed class SunburstSurface : ExploreSurface
     /// <summary>Where step <paramref name="step"/> of <paramref name="steps"/> falls across the sweep.</summary>
     private static float Angle(ExploreSector sector, int step, int steps) =>
         sector.StartAngle + (sector.SweepAngle * step / steps);
-
-    /// <summary>
-    /// A point on the canvas at this radius and angle. Angles run clockwise from twelve o'clock, and
-    /// the canvas's y axis runs downwards, which is where the subtraction comes from.
-    /// </summary>
-    private static ExplorePoint At(Sunburst sunburst, float radius, float angle) => new(
-        sunburst.CentreX + (radius * MathF.Sin(angle)),
-        sunburst.CentreY - (radius * MathF.Cos(angle)));
 
     /// <summary>
     /// Put each label along its own ring, turned so it lies with the sector rather than across it.
@@ -243,7 +257,7 @@ public sealed class SunburstSurface : ExploreSurface
             }
 
             var angle = sector.MidAngle;
-            var middle = At(sunburst, sector.MidRadius, angle);
+            var middle = sunburst.PointAt(sector.MidRadius, angle);
             var width = chord - (Limits.LabelPadding * 2);
             var left = middle.X - (width / 2);
             var top = middle.Y - (Limits.MinimumLabelHeight / 2);
