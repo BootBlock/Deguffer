@@ -432,6 +432,8 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         // different for being the folder the others sit in.
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(Common(RoamingRoot), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(RoamingRoot, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>
@@ -590,6 +592,13 @@ public sealed class AffinityModelCacheProviderTests : IDisposable
         Assert.True(plan.HasUnreadableRoot);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(version));
+
+        // Left alone is still asserted to survive: the folder holds the asset library and the licences.
+        foreach (var survivor in new[] { RoamingRoot, version })
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
     }
 
     /// <summary>

@@ -108,6 +108,30 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// §5.2 one level up. Every directory in <c>Cache</c> is read as a project's folder, so a file
+    /// there is something Deguffer does not recognise, and §5.6 has to assert it by name.
+    /// </summary>
+    [Fact]
+    public async Task AFileDirectlyInTheCacheIsTier4AndSurvives()
+    {
+        ServerLog("filesystem");
+
+        var file = Path.Combine(Cache, "notes.txt");
+        File.WriteAllBytes(file, new byte[256]);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(file, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(file), "a file beside the project folders was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
     [Fact]
     public async Task TheCacheAndEveryProjectFolderSurviveTheClean()
     {

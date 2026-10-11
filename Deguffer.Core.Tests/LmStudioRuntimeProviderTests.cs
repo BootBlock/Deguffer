@@ -375,6 +375,10 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, note => note.Message.Contains("link to somewhere else", StringComparison.Ordinal));
+
+        // Left alone and asserted to survive. A link is listed apart from the runtimes folder's
+        // directories, so nothing else names it to §5.6.
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.45.0") && p.PresenceBefore is PathPresence.Present);
     }
 
     /// <summary>

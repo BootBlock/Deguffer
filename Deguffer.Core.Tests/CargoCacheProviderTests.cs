@@ -52,6 +52,14 @@ public sealed class CargoCacheProviderTests : IDisposable
         return directory;
     }
 
+    /// <summary>
+    /// The files in the home root that no child classification can see. Cargo still reads the
+    /// extensionless spellings that predate <c>.toml</c>, so an older <c>credentials</c> holds a
+    /// registry token as surely as the newer one does.
+    /// </summary>
+    private static readonly string[] RootFiles =
+        ["credentials.toml", "credentials", "config.toml", "config", ".crates.toml", ".crates2.json"];
+
     private string CreateFullHome()
     {
         Populate(Path.Combine(Home, "registry", "cache"));
@@ -62,7 +70,11 @@ public sealed class CargoCacheProviderTests : IDisposable
         Populate(Path.Combine(Home, "bin"));
 
         File.WriteAllText(Path.Combine(Home, "credentials.toml"), "[registry]\ntoken = \"redacted\"\n");
+        File.WriteAllText(Path.Combine(Home, "credentials"), "[registry]\ntoken = \"redacted\"\n");
         File.WriteAllText(Path.Combine(Home, "config.toml"), "[net]\ngit-fetch-with-cli = true\n");
+        File.WriteAllText(Path.Combine(Home, "config"), "[net]\ngit-fetch-with-cli = true\n");
+        File.WriteAllText(Path.Combine(Home, ".crates.toml"), "[v1]\n");
+        File.WriteAllText(Path.Combine(Home, ".crates2.json"), "{\"installs\":{}}");
 
         return Home;
     }
@@ -134,8 +146,8 @@ public sealed class CargoCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The §5.2 trap the survey names. A child classification only ever sees directories, so both
-    /// files are invisible to it and are asserted by name — the lesson NVIDIA's <c>accounts</c>
+    /// The §5.2 trap the survey names. A child classification only ever sees directories, so every
+    /// file in the home root is invisible to it and are asserted by name — the lesson NVIDIA's <c>accounts</c>
     /// taught, in a directory with a registry token in it.
     /// </summary>
     [Fact]
@@ -145,7 +157,7 @@ public sealed class CargoCacheProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
-        foreach (var name in (string[])["credentials.toml", "config.toml"])
+        foreach (var name in RootFiles)
         {
             var file = Path.Combine(Home, name);
 
@@ -617,8 +629,7 @@ public sealed class CargoCacheProviderTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(Home, "git")));
         Assert.True(Directory.Exists(Path.Combine(Home, "git", "db")));
         Assert.True(Directory.Exists(Path.Combine(Home, "bin")));
-        Assert.True(File.Exists(Path.Combine(Home, "credentials.toml")));
-        Assert.True(File.Exists(Path.Combine(Home, "config.toml")));
+        Assert.All(RootFiles, name => Assert.True(File.Exists(Path.Combine(Home, name)), name));
 
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }

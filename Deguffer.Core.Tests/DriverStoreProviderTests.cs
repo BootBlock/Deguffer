@@ -359,6 +359,7 @@ public sealed class DriverStoreProviderTests : IDisposable
             Assert.DoesNotContain("/force", step.Arguments, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("/uninstall", step.Arguments, StringComparison.OrdinalIgnoreCase);
             Assert.True(step.RequiresElevation);
+            Assert.True(step.HeldWhileUpdating);
         });
         Assert.Equal(["/delete-driver oem1.inf", "/delete-driver oem2.inf"], steps.Select(s => s.Arguments));
         Assert.Equal([oldest.Folder, older.Folder], steps.Select(s => s.Removes));
@@ -457,6 +458,31 @@ public sealed class DriverStoreProviderTests : IDisposable
 
         Assert.False(result.Verification!.Passed);
         Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(alone.Folder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// An update that starts between the preview and the clean holds pnputil back as it holds Windows'
+    /// own cleanup, because the hold at planning has already been passed.
+    /// </summary>
+    [Fact]
+    public async Task AnUpdateStartedSinceThePreviewStopsPnpUtil()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        var servicing = FakeWindowsServicing.Settled;
+        var runner = PnpUtil([older]);
+        var provider = CreateProvider(
+            new FakeDriverStore(older, newest), FakeDiskCleanupHandlers.NoneRegistered(), runner, servicing);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        servicing.IsRestartPending = true;
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(runner.Invocations, i => i.Arguments.Contains("/delete-driver", StringComparison.OrdinalIgnoreCase));
+        Assert.True(Directory.Exists(older.Folder));
+        Assert.Contains("restart", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
     }
 
     /// <summary>Windows Update installs drivers too, so nothing is offered while an update is unfinished.</summary>
