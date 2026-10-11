@@ -164,9 +164,12 @@ public sealed class WholeTreeLookTests : IDisposable
 
         using var denied = new DeniedDirectory(locked);
 
+        // One worker, which is the calling thread: an exception on a helper would not be seen here,
+        // because the walk starts its helpers without the context that records what is thrown.
         WholeTreeLook? look = null;
         var thrown = ThrownExceptions.During(
-            () => look = WholeTreeLook.Take([root], MinimumAge.Off, WindowsFileSystem.Default, default));
+            () => look = WholeTreeLook.Take(
+                [root], MinimumAge.Off, WindowsFileSystem.Default, new WalkTuning(1, WalkTuning.MinimumListingBuffer), default));
 
         Assert.Empty(thrown);
         Assert.Equal([store], look!.Stores);
@@ -175,8 +178,7 @@ public sealed class WholeTreeLookTests : IDisposable
 
     /// <summary>
     /// The answer is the same however many workers looked, and names each store and each unlisted
-    /// folder once, in one order, when the paths asked about nest and several workers meet the same
-    /// folder from two of them.
+    /// folder once, in one order, when one path asked about lies inside another.
     /// </summary>
     [Fact]
     public void GivesTheSameAnswerWithOneWorkerAsWithMany()

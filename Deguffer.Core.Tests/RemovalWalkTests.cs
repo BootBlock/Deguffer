@@ -99,9 +99,11 @@ public sealed class RemovalWalkTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
+        // One worker, which is the calling thread: an exception on a helper would not be seen here,
+        // because the walk starts its helpers without the context that records what is thrown.
         RemovalInventory? inventory = null;
         var thrown = ThrownExceptions.During(
-            () => inventory = RemovalWalk.Gather(LongPath.Extended(root), MinimumAge.Off, RemovalBounds.None, WindowsFileSystem.Default, default));
+            () => inventory = Gather(root, MinimumAge.Off, RemovalBounds.None, new WalkTuning(1, WalkTuning.MinimumListingBuffer)));
 
         Assert.Empty(thrown);
         Assert.Contains(inventory!.Directories, directory => directory.Path == LongPath.Extended(refused));
