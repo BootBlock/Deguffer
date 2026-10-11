@@ -611,6 +611,15 @@ public sealed class ExploreMap : UserControl
     public Func<ISizedTree, int, MapShapeFacts?>? Facts { get; set; }
 
     /// <summary>
+    /// Whether the picture is drawn in a high contrast theme's two colours, so its colours say nothing
+    /// of what the page coloured it by. See <see cref="ContrastColours"/>.
+    /// </summary>
+    public bool Contrasted => _contrast is not null;
+
+    /// <summary><see cref="Contrasted"/> has a new answer.</summary>
+    public event EventHandler? ContrastChanged;
+
+    /// <summary>
     /// A double-click is zooming to a shape it could not open, away from this part of the picture.
     /// A step the page can go back from, as it can from a folder opened; a turn of the wheel or a drag
     /// is not one.
@@ -1244,8 +1253,15 @@ public sealed class ExploreMap : UserControl
         //
         // In a high contrast theme the colours say nothing but where each shape's edges are: see
         // ContrastColours.
+        var wasContrasted = Contrasted;
+
         _contrast = Contrast();
         _shapeColours = _contrast is { } contrast ? ShapeColours.Contrasted(contrast) : _colours(DateTime.UtcNow);
+
+        if (Contrasted != wasContrasted)
+        {
+            ContrastChanged?.Invoke(this, EventArgs.Empty);
+        }
 
         // Every drawing kept is of the picture as it was, so none of them is shown again, though
         // they stay on screen until the new one has landed over them. Drawn at the zoom on screen

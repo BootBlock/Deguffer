@@ -523,13 +523,23 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>
     /// Whether to show that legend: only when the colours are a scale, only when there is a picture
-    /// rather than a list, and only once something has been scanned into it. A scale beside an
-    /// empty card explains nothing and reads as part of the empty state.
+    /// rather than a list, only once something has been scanned into it, and not while the map is drawn
+    /// in a high contrast theme's two colours, which none of the bands is. A scale beside an empty card
+    /// explains nothing and reads as part of the empty state.
     /// </summary>
     public bool ShowsLegend =>
         SelectedColouring != ExploreColouring.Branch
         && SelectedView is not (ExploreView.List or ExploreView.Files)
-        && HasTree;
+        && HasTree
+        && !MapInContrast;
+
+    /// <summary>
+    /// Whether the map is drawn in a high contrast theme's two colours, in which its colours say nothing
+    /// and no legend names them. The page says, as the map tells it.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsLegend))]
+    public partial bool MapInContrast { get; set; }
 
     /// <summary>Whether to show the Files layout's filters: while it is on screen and has something to filter.</summary>
     public bool ShowsFileFilters => SelectedView == ExploreView.Files && HasTree;

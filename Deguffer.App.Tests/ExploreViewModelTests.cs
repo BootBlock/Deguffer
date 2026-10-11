@@ -1007,6 +1007,33 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Null(page.ShapeFacts(Drive(ExploreFixture.Folder("kept")), Child(tree, "kept")));
     });
 
+    /// <summary>
+    /// The legend names the colours of a scale, so it goes while the map is drawn in a high contrast
+    /// theme's two colours and comes back with the scale.
+    /// </summary>
+    [Fact]
+    public void TheLegendGoesWhileTheMapIsInHighContrast() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+
+        var page = _explore.Page();
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(ExploreFixture.File("a.bin", 10))));
+
+        page.SelectedView = ExploreView.Treemap;
+        page.SelectedColouring = ExploreColouring.Age;
+
+        Assert.True(page.ShowsLegend);
+
+        page.MapInContrast = true;
+
+        Assert.False(page.ShowsLegend);
+
+        page.MapInContrast = false;
+
+        Assert.True(page.ShowsLegend);
+    });
+
     private static ExploreTree Drive(params ExploreChild[] children)
     {
         var builder = new ExploreTreeBuilder(@"C:\");
