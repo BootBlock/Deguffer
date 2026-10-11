@@ -110,6 +110,23 @@ public sealed class MapFollowTests
             MapFollow.Onward(Drawing(earlier, MapViewport.Whole), Drawing(later, MapViewport.Whole)));
     }
 
+    /// <summary>
+    /// Two drawings made at different zooms are not one place laid out again: the camera moved between
+    /// them, so it stays where the later one was drawn rather than going back to the earlier.
+    /// </summary>
+    [Fact]
+    public void DrawingsAtTwoZoomsKeepTheLaterZoom()
+    {
+        var earlier = Scan(("alpha", 300), ("beta", 200), ("gamma", 100));
+        var later = Scan(("alpha", 300), ("beta", 200), ("gamma", 260));
+        var zoomed = Onto(later, Find(later, "beta.bin"));
+
+        Assert.Equal(zoomed, MapFollow.Onward(Drawing(earlier, MapViewport.Whole), Drawing(later, zoomed)));
+        Assert.Equal(
+            MapViewport.Whole,
+            MapFollow.Onward(Drawing(earlier, Onto(earlier, Find(earlier, "beta.bin"))), Drawing(later, MapViewport.Whole)));
+    }
+
     /// <summary>A tree of something else holds nothing of this one, so there is nothing to follow.</summary>
     [Fact]
     public void ATreeOfSomethingElseKeepsTheCameraWhereItIs()

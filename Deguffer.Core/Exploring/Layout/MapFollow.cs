@@ -22,8 +22,9 @@ public static class MapFollow
     /// <summary>
     /// The viewport that keeps the reader on the same thing after <paramref name="earlier"/> is laid
     /// out again as <paramref name="later"/>: two drawings of the same place at the same zoom, which
-    /// fills the screen. The zoom both were drawn at where nothing can be followed: a whole picture, two
-    /// trees of different things, or nothing under the middle found in both.
+    /// fills the screen. The zoom <paramref name="later"/> was drawn at where nothing can be followed: a
+    /// whole picture, two drawings at different zooms, which the camera moved between, two trees of
+    /// different things, or nothing under the middle found in both.
     /// </summary>
     public static MapViewport Onward(ExploreSurface earlier, ExploreSurface later)
     {
@@ -35,7 +36,7 @@ public static class MapFollow
             || earlier.Tree is not ITrackedTree before
             || before.CounterpartsIn(later.Tree) is not { } onward)
         {
-            return earlier.Viewport ?? MapViewport.Whole;
+            return later.Viewport ?? MapViewport.Whole;
         }
 
         // Deepest last: a layout emits a folder before what it holds, and every shape under a point
