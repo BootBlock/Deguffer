@@ -123,10 +123,32 @@ internal sealed class RowGhosts
             if (container.ContentTemplateRoot is FrameworkElement root && VisualTreeHelper.GetParent(root) is not null)
             {
                 var origin = root.TransformToVisual(container).TransformPoint(default);
-                content = new Windows.Foundation.Rect(at.X + origin.X, at.Y + origin.Y, root.ActualWidth, root.ActualHeight);
+                content = WithMargin(root, new Windows.Foundation.Rect(at.X + origin.X, at.Y + origin.Y, root.ActualWidth, root.ActualHeight));
             }
 
             return new Stood(content, null, list.ItemTemplate, list.ItemTemplateSelector);
+        }
+
+        /// <summary>
+        /// How <paramref name="root"/>, a template's root standing at <paramref name="at"/>, is drawn
+        /// by <paramref name="template"/>: a <see cref="DataTemplate"/> or a <see cref="DataTemplateSelector"/>.
+        /// </summary>
+        public static Stood Of(FrameworkElement root, Windows.Foundation.Rect at, object? template) =>
+            new(WithMargin(root, at), null, template as DataTemplate, template as DataTemplateSelector);
+
+        /// <summary>
+        /// Where a template's root stood, with its margin. The ghost draws the template again, margin
+        /// and all, so a ghost sized to the root alone would squeeze it by the margin.
+        /// </summary>
+        private static Windows.Foundation.Rect WithMargin(FrameworkElement root, Windows.Foundation.Rect at)
+        {
+            var margin = root.Margin;
+
+            return new Windows.Foundation.Rect(
+                at.X - margin.Left,
+                at.Y - margin.Top,
+                Math.Max(0, at.Width + margin.Left + margin.Right),
+                Math.Max(0, at.Height + margin.Top + margin.Bottom));
         }
     }
 

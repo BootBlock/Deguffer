@@ -53,12 +53,16 @@ internal sealed class RepeaterRows : IListRows
 
     public HashSet<object> Held()
     {
-        var count = _items?.Count ?? 0;
-        var held = new HashSet<object>(count, ReferenceEqualityComparer.Instance);
-
-        for (var at = 0; at < count; at++)
+        if (_items is not { } items)
         {
-            if (_items!.GetAt(at) is { } row)
+            return new HashSet<object>(ReferenceEqualityComparer.Instance);
+        }
+
+        var held = new HashSet<object>(items.Count, ReferenceEqualityComparer.Instance);
+
+        for (var at = 0; at < items.Count; at++)
+        {
+            if (items.GetAt(at) is { } row)
             {
                 held.Add(row);
             }
@@ -89,7 +93,7 @@ internal sealed class RepeaterRows : IListRows
 
     /// <summary>A repeater's element is its template's root, so the ghost stands where the element did.</summary>
     public RowGhosts.Stood Draw(UIElement container, Rect at, UIElement viewport) =>
-        new(at, null, _repeater.ItemTemplate as DataTemplate, _repeater.ItemTemplate as DataTemplateSelector);
+        RowGhosts.Stood.Of((FrameworkElement)container, at, _repeater.ItemTemplate);
 
     private void Hear()
     {

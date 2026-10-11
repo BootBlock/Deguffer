@@ -27,7 +27,10 @@ internal interface IListRows
     /// </summary>
     event Action<IReadOnlyList<object>, bool>? Changed;
 
-    /// <summary>The scroller the rows are seen through, or null before the list is in the tree.</summary>
+    /// <summary>
+    /// The scroller the rows are seen through, or null before the list is in the tree, or where no
+    /// scroller is around it. Such a list does not animate.
+    /// </summary>
     ScrollViewer? Scroller();
 
     /// <summary>Every row the list holds, on screen or not.</summary>

@@ -233,6 +233,8 @@
                        Margin="4,0,0,0"
                        Visibility="{x:Bind ViewModel.HasNoSourceRoots, Mode=OneWay}" />
 
+            <!-- Every list on this page is a repeater, so that ListAnimation can play its rows in and
+                 out: an ItemsControl's rows would appear and vanish at once. -->
             <ItemsRepeater x:Name="SourceRootsList" ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,2,0,0">
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="configuration:SourceRoot">
