@@ -1,3 +1,4 @@
+using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
@@ -100,8 +101,10 @@ public sealed partial class MemoryPage : Page
 
         InitializeComponent();
 
-        ListAnimation.Play(RowsList, SystemMotion.Current);
-        ListAnimation.Play(TreeList, SystemMotion.Current);
+        // A row's share bar comes in from nothing as the row itself arrives, in the tree as a row
+        // opens as well. Never as a row only scrolls into sight.
+        ListAnimation.Play(RowsList, SystemMotion.Current).Arrived += BarMotion.GrowIn;
+        ListAnimation.Play(TreeList, SystemMotion.Current, BarMotion.GrowIn);
 
         // Required rather than Enabled, as the other destinations are: Enabled is subject to the
         // frame's cache size and Required is not, and a page rebuilt on return loses which picture

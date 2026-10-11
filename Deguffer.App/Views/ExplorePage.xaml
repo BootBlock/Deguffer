@@ -76,11 +76,10 @@
                 <!-- The bar is scaled against the containing folder, so the row
                      answers "how much of this folder is that" rather than "how does
                      it compare with the biggest thing here". -->
-                <ProgressBar Grid.Column="2"
-                             VerticalAlignment="Center"
-                             Maximum="100"
-                             Value="{x:Bind Share, Mode=OneWay}"
-                             AutomationProperties.AccessibilityView="Raw" />
+                <controls:FillBar Grid.Column="2"
+                                  Style="{StaticResource ShareBar}"
+                                  VerticalAlignment="Center"
+                                  Value="{x:Bind Share, Mode=OneWay}" />
 
                 <TextBlock Grid.Column="3"
                            Text="{x:Bind SizeLabel, Mode=OneWay}"

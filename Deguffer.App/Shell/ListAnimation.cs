@@ -103,9 +103,11 @@ internal sealed class ListAnimation
     /// <summary>
     /// Give the list inside <paramref name="tree"/> the motion. A tree view lays its rows out as a
     /// flattened list in its template, which is applied when the tree is first laid out, and not
-    /// before for a tree that loads collapsed, so the list is looked for until it is there.
+    /// before for a tree that loads collapsed, so the list is looked for until it is there. The
+    /// animation is made only then, so a row's arrival is heard through <paramref name="arrived"/>
+    /// rather than through <see cref="Arrived"/>.
     /// </summary>
-    public static void Play(TreeView tree, IMotionPolicy motion)
+    public static void Play(TreeView tree, IMotionPolicy motion, Action<UIElement> arrived)
     {
         tree.LayoutUpdated += Find;
 
@@ -114,7 +116,9 @@ internal sealed class ListAnimation
             if (Descendant<TreeViewList>(tree) is { } list)
             {
                 tree.LayoutUpdated -= Find;
-                new ListAnimation(new ListViewRows(list), motion).FindViewport();
+                var animation = new ListAnimation(new ListViewRows(list), motion);
+                animation.Arrived += arrived;
+                animation.FindViewport();
             }
         }
     }

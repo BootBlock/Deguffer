@@ -183,12 +183,20 @@ public sealed record ExploreRemovalReport(
 /// </summary>
 public static class ExploreRemover
 {
+    /// <param name="refusedBeforeAsking">
+    /// Items the policy allowed that were refused before the user was asked, with why: the Recycle
+    /// Bin could not take them (<see cref="WhatTheBinCannotTake"/>). They are not in
+    /// <paramref name="items"/> and are not removed, and they are reported with the rest. Their
+    /// folders are listed with the allowed items' and they are asserted to have survived, as they
+    /// were while the removal itself refused them: a removal beside one could still take it.
+    /// </param>
     public static async Task<ExploreRemovalReport> RemoveAsync(
         IReadOnlyList<ExploreItem> items,
         ExploreRemovalMode mode,
         ExploreActionPolicy policy,
         IRecycleBin? recycleBin = null,
         IFileSystem? fileSystem = null,
+        IReadOnlyList<ExploreItemOutcome>? refusedBeforeAsking = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -196,13 +204,16 @@ public static class ExploreRemover
 
         var bin = recycleBin ?? ShellRecycleBin.Default;
         var fs = fileSystem ?? WindowsFileSystem.Default;
+        refusedBeforeAsking ??= [];
 
         var (allowed, refused) = Partition(items, policy);
 
-        // The containers of the allowed items only. A refused item's container may be a directory
-        // §5.2 says must never be listed at all — C:\Windows is the case that matters — and reading
-        // it to build evidence about a deletion that is not going to happen would break the rule
-        // this whole method exists to uphold.
+        // The containers of what the policy allows only, among what was refused before asking too.
+        // An item the policy refuses may sit in a directory §5.2 says must never be listed at all —
+        // C:\Windows is the case that matters — and reading it to build evidence about a deletion
+        // that is not going to happen would break the rule this whole method exists to uphold. The
+        // policy is asked here about what was refused before asking, as it is about everything
+        // else, rather than trusted from the caller.
         //
         // Listed before anything is deleted, because a survivor set gathered afterwards can only
         // describe what is left, which would agree with any removal however over-broad.
@@ -211,7 +222,10 @@ public static class ExploreRemover
         // it. The caller is a shell resuming on the UI thread after its own dialog, and this listing
         // is of a folder that may hold two hundred thousand entries. Everything after this stays on
         // the pool, because every await below is ConfigureAwait(false).
-        var before = await Task.Run(() => SiblingCheck.Take(allowed.Select(item => item.Path), fs), ct).ConfigureAwait(false);
+        var listed = allowed.Select(item => item.Path)
+            .Concat(refusedBeforeAsking.Select(refusal => refusal.Path).Where(path => policy.MayRemove(path).IsAllowed))
+            .ToList();
+        var before = await Task.Run(() => SiblingCheck.Take(listed, fs), ct).ConfigureAwait(false);
 
         var outcomes = new List<ExploreItemOutcome>(items.Count);
         var cancelled = false;
@@ -244,6 +258,7 @@ public static class ExploreRemover
         }
 
         outcomes.AddRange(refused);
+        outcomes.AddRange(refusedBeforeAsking);
 
         return new ExploreRemovalReport(mode, outcomes, Verify(before, outcomes), cancelled);
     }
@@ -293,6 +308,45 @@ public static class ExploreRemover
 
         return (allowed, refused);
     }
+
+    /// <summary>
+    /// The refusals of whichever of <paramref name="allowed"/> the Recycle Bin cannot take as things
+    /// are now, asked of the bin <see cref="RemoveAsync"/> uses with the path it hands it.
+    ///
+    /// <para>Asked before the confirmation, because a confirmation that promises the bin for an item
+    /// the bin then refuses is a yes given to a move that never happens (§7.1). The removal asks
+    /// again, because the item or the bin can change while the user reads.</para>
+    ///
+    /// <para>Synchronous and slow: a folder is answered by a walk of everything inside it. The caller
+    /// runs it off its own thread.</para>
+    /// </summary>
+    /// <param name="allowed">Items <see cref="Partition"/> allowed, so their paths are normalised.</param>
+    /// <param name="recycleBin">The bin <see cref="RemoveAsync"/> is handed; the shell's own where null.</param>
+    internal static IReadOnlyList<ExploreItemOutcome> WhatTheBinCannotTake(
+        IReadOnlyList<ExploreItem> allowed,
+        IRecycleBin? recycleBin,
+        CancellationToken ct)
+    {
+        var bin = recycleBin ?? ShellRecycleBin.Default;
+        var refused = new List<ExploreItemOutcome>();
+
+        foreach (var item in allowed)
+        {
+            if (bin.WhyItCannotTake(BinPath(item), ct) is { } why)
+            {
+                refused.Add(new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, RecycleOutcome.CannotTake(why)));
+            }
+        }
+
+        return refused;
+    }
+
+    /// <summary>
+    /// The display form, normalised: the shell namespace refuses the extended-length prefix §6.3
+    /// requires everywhere else. <see cref="IRecycleBin"/> says why that is a second seam rather than
+    /// an argument to the first.
+    /// </summary>
+    private static string BinPath(ExploreItem item) => LongPath.Display(LongPath.Extended(item.Path));
 
     private static async Task<ExploreItemOutcome> RemoveOneAsync(
         ExploreItem item,
@@ -357,11 +411,7 @@ public static class ExploreRemover
                 }
             }
 
-            // The display form, normalised: the shell namespace refuses the extended-length prefix
-            // §6.3 requires everywhere else. IRecycleBin says why that is a second seam rather than
-            // an argument to the first.
-            var shellPath = LongPath.Display(LongPath.Extended(item.Path));
-            var recycled = bin.Recycle(shellPath);
+            var recycled = bin.Recycle(BinPath(item));
 
             return new ExploreItemOutcome(
                 item.Path,

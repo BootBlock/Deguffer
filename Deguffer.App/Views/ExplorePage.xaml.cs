@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
@@ -147,7 +148,9 @@ public sealed partial class ExplorePage : Page
 
         InitializeComponent();
 
-        ListAnimation.Play(RowsList, SystemMotion.Current);
+        // A row's share bar comes in from nothing as the row itself arrives. Never as a row only
+        // scrolls into sight.
+        ListAnimation.Play(RowsList, SystemMotion.Current).Arrived += BarMotion.GrowIn;
 
         _cards = new ExploreCards(ViewModel, Map, GrowthList, TypesList, UsedSpaceStrip);
 

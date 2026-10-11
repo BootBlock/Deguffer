@@ -14,8 +14,8 @@ namespace Deguffer.Core.Exploring.Acting;
 ///
 /// <para>In Core because what it holds are rules about what gets deleted: what a path is told
 /// while the policy is still being built, that a failed build refuses everything, that nothing is
-/// asked about a selection the policy refuses outright, and that a removal waits for the whole
-/// policy rather than acting on part of it. What may be removed is still
+/// asked about what the policy refuses or the Recycle Bin cannot take, and that a removal waits for
+/// the whole policy rather than acting on part of it. What may be removed is still
 /// <see cref="ExploreActionPolicy"/>'s, what the user is told is <see cref="ExploreRemovalPrompt"/>'s,
 /// and what happened is <see cref="ExploreRemovalReport.Summary"/>'s.</para>
 /// </summary>
@@ -157,10 +157,10 @@ public sealed class ExploreActions
     /// <summary>
     /// Ask, then remove. Null when the user declined, which is a decision rather than a failure.
     ///
-    /// <para>Nothing is asked about an item the policy refuses. A dialog covering something that is
-    /// then refused teaches the user that saying yes is how you find out what happens, and §7.1
-    /// wants the reason stated instead — so a wholly refused selection goes straight to a report
-    /// carrying the reasons.</para>
+    /// <para>Nothing is asked about an item the policy refuses, or, on the way to the Recycle Bin,
+    /// one the bin cannot take. A dialog covering something that is then refused teaches the user
+    /// that saying yes is how you find out what happens, and §7.1 wants the reason stated instead —
+    /// so a wholly refused selection goes straight to a report carrying the reasons.</para>
     ///
     /// <para>It waits for the policy rather than reading whatever is ready, because this is the path
     /// that deletes. A removal decided against a half-built policy is the one thing the deferral
@@ -168,9 +168,10 @@ public sealed class ExploreActions
     /// </summary>
     /// <param name="acting">
     /// Told what the removal will act on, which is the part of <paramref name="items"/> the policy
-    /// allows, once the policy has said and before anything is asked: for a screen marking what is
-    /// about to go, which must never mark what the policy refuses (§7.1). Not told at all where the
-    /// policy could not be built, because then nothing is acted on.
+    /// allows and, on the way to the Recycle Bin, the bin can take, once both have said and before
+    /// anything is asked: for a screen marking what is about to go, which must never mark what is
+    /// refused (§7.1). Not told at all where the policy could not be built, because then nothing is
+    /// acted on.
     /// </param>
     public async Task<ExploreRemovalReport?> RemoveAsync(
         IReadOnlyList<ExploreItem> items,
@@ -202,10 +203,22 @@ public sealed class ExploreActions
         var policy = building.Result;
         var (allowed, _) = ExploreRemover.Partition(items, policy);
 
-        acting?.Invoke(allowed);
+        // What the bin cannot take is treated as the policy's refusals are: not asked about, and
+        // reported with why. The prompt promises the bin, and a yes to a move that never happens is
+        // the lesson the policy's refusals are kept out of the prompt to avoid teaching. A folder is
+        // answered by a walk of everything inside it, which is why this is off the page's thread, and
+        // it is asked once per removal rather than at each change of selection.
+        IReadOnlyList<ExploreItemOutcome> binRefused = mode == ExploreRemovalMode.RecycleBin && allowed.Count > 0
+            ? await Task.Run(() => ExploreRemover.WhatTheBinCannotTake(allowed, _recycleBin, ct), ct).ConfigureAwait(true)
+            : [];
 
-        if (allowed.Count > 0 &&
-            !await _prompt().AskAsync(ExploreRemovalPrompt.For(mode, allowed), ct).ConfigureAwait(true))
+        HashSet<string> notGoing = [.. binRefused.Select(refusal => refusal.Path)];
+        IReadOnlyList<ExploreItem> going = notGoing.Count == 0 ? allowed : [.. allowed.Where(item => !notGoing.Contains(item.Path))];
+
+        acting?.Invoke(going);
+
+        if (going.Count > 0 &&
+            !await _prompt().AskAsync(ExploreRemovalPrompt.For(mode, going), ct).ConfigureAwait(true))
         {
             return null;
         }
@@ -214,10 +227,19 @@ public sealed class ExploreActions
         // window closed over the dialog loses nothing.
         using var running = _running.Begin(RunningAction.ExploreRemoval);
 
-        // Everything goes back in, refusals included: the remover partitions again and reports what
-        // it would not take, so the user is told about each one rather than seeing it silently
-        // dropped from the count.
-        return await ExploreRemover.RemoveAsync(items, mode, policy, _recycleBin, ct: ct)
+        // Everything else goes back in, the policy's refusals included: the remover partitions again
+        // and reports what it would not take, so the user is told about each one rather than seeing
+        // it silently dropped from the count. What the bin refused is handed over as refused, so it
+        // stays out even if the bin would take it by now, because the user was not asked about it,
+        // and §5.6 still asserts it survived. Partition normalises the same path the same way, so it
+        // is matched by the form the refusal carries.
+        return await ExploreRemover.RemoveAsync(
+                notGoing.Count == 0 ? items : [.. items.Where(item => LongPath.Entry(item.Path) is not { } path || !notGoing.Contains(path))],
+                mode,
+                policy,
+                _recycleBin,
+                refusedBeforeAsking: binRefused,
+                ct: ct)
             .ConfigureAwait(true);
     }
 

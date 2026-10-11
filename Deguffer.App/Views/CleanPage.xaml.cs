@@ -60,7 +60,7 @@ public sealed partial class CleanPage : Page
 
         // A row's share bar comes in from nothing as the row itself arrives, rather than standing at
         // its figure under a row still fading in. Never as a row only scrolls into sight.
-        ListAnimation.Play(FindingsList, SystemMotion.Current).Arrived += GrowBarsIn;
+        ListAnimation.Play(FindingsList, SystemMotion.Current).Arrived += BarMotion.GrowIn;
 
         // A row's container is what assistive technology lands on, and unnamed it is read out as
         // the type of the object behind it.
@@ -322,14 +322,6 @@ public sealed partial class CleanPage : Page
         foreach (var part in new UIElement[] { RunFiguresPanel, RunVerdictPanel })
         {
             _runResultEntrance.Enter(part, played, TimeSpan.Zero);
-        }
-    }
-
-    private static void GrowBarsIn(UIElement container)
-    {
-        foreach (var bar in VisualTree.Descendants<FillBar>(container))
-        {
-            bar.Grow();
         }
     }
 

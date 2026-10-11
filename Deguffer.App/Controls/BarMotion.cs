@@ -56,6 +56,23 @@ internal sealed class BarMotion
         visual.StartAnimation("Translation", translation);
     }
 
+    /// <summary>
+    /// Bring every bar under <paramref name="holder"/> in from nothing, as the row or card holding
+    /// them arrives, rather than leave them standing at their figures under a row still fading in.
+    /// </summary>
+    public static void GrowIn(DependencyObject holder)
+    {
+        foreach (var bar in VisualTree.Descendants<FillBar>(holder))
+        {
+            bar.Grow();
+        }
+
+        foreach (var column in VisualTree.Descendants<ColumnBar>(holder))
+        {
+            column.Grow();
+        }
+    }
+
     /// <summary>The bar is <paramref name="length"/> long now, along the way its fill moves.</summary>
     public void Measure(float length) => _drawn.InsertScalar("Length", length);
 

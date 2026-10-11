@@ -26,6 +26,13 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
     /// shell's progress sink says when a path changed under that question or another reason arose.
     /// </summary>
     public bool DeletedOutright { get; init; }
+
+    /// <summary>
+    /// What the user is told about an item the bin cannot take, for <paramref name="why"/>
+    /// (<see cref="IRecycleBin.WhyItCannotTake"/>). Nothing was handed to the shell, so it says so.
+    /// </summary>
+    internal static string CannotTake(string why) =>
+        $"{why} Deguffer did not ask Windows to move it, and it is still where it was.";
 }
 
 /// <summary>
@@ -67,7 +74,8 @@ public interface IRecycleBin
     /// asks again, because the item or the bin can change while the user reads.
     /// </summary>
     /// <param name="path">In the form <see cref="Recycle"/> takes.</param>
-    string? WhyItCannotTake(string path);
+    /// <param name="ct">Stops the walk a folder needs, which is of everything inside it.</param>
+    string? WhyItCannotTake(string path, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -128,7 +136,7 @@ public sealed class ShellRecycleBin : IRecycleBin
         _reach = reach;
     }
 
-    public string? WhyItCannotTake(string path) => _reach.WhyNot(path);
+    public string? WhyItCannotTake(string path, CancellationToken ct = default) => _reach.WhyNot(path, ct);
 
     public RecycleOutcome Recycle(string path)
     {
@@ -136,7 +144,7 @@ public sealed class ShellRecycleBin : IRecycleBin
 
         if (WhyItCannotTake(path) is { } cannotTake)
         {
-            return new RecycleOutcome(Removed: false, $"{cannotTake} Deguffer did not ask Windows to move it, and it is still where it was.");
+            return new RecycleOutcome(Removed: false, RecycleOutcome.CannotTake(cannotTake));
         }
 
         // The shell's apartment requirement, met on a thread of our own rather than by initialising

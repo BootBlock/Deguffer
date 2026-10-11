@@ -286,6 +286,172 @@ public sealed class ExploreActionsTests : IDisposable
         Assert.Single(prompt.Asked);
     }
 
+    /// <summary>
+    /// An item the Recycle Bin cannot take is not put to the user as going there: the prompt would
+    /// promise a move that never happens. It goes straight to the report with why, and nothing is
+    /// handed to the bin to move.
+    /// </summary>
+    [Fact]
+    public async Task AnItemTheBinCannotTakeIsReportedWithoutAsking()
+    {
+        var file = _temp.CreateFile(8, "a.bin");
+        _recycleBin.CannotTake = _ => "Too long for the bin.";
+        var prompt = new FakeExploreConfirmation(answer: true);
+        var actions = Actions(_ => Task.FromResult(Policy()), prompt);
+
+        var report = await actions.RemoveAsync([Item(file)], ExploreRemovalMode.RecycleBin);
+
+        Assert.Empty(prompt.Asked);
+        Assert.Empty(_recycleBin.Paths);
+        Assert.StartsWith("Too long for the bin. ", Assert.Single(report!.Refused).Message, StringComparison.Ordinal);
+        Assert.Equal(report.Refused[0].Message, report.Summary);
+        Assert.True(LongPath.FileExists(file));
+    }
+
+    /// <summary>
+    /// Where the bin can take part of a selection, the question, and what is marked as going, are
+    /// about that part alone. The rest is reported with why and is still there, and so is everything
+    /// beside it (§5.6). The bin is asked in the form the shell is handed, never the extended-length
+    /// one (§6.3).
+    /// </summary>
+    [Fact]
+    public async Task TheUserIsAskedOnlyAboutWhatTheBinCanTake()
+    {
+        var stays = Item(_temp.CreateFile(8, "stays.bin"));
+        var goes = Item(_temp.CreateFile(16, "goes.bin"));
+        var beside = _temp.CreateFile(4, "beside.bin");
+        _recycleBin.CannotTake = path => path == stays.Path ? "Too long for the bin." : null;
+        var prompt = new FakeExploreConfirmation(answer: true);
+        var actions = Actions(_ => Task.FromResult(Policy()), prompt);
+        IReadOnlyList<ExploreItem>? told = null;
+
+        var report = await actions.RemoveAsync([stays, goes], ExploreRemovalMode.RecycleBin, allowed => told = allowed);
+
+        Assert.Equal([goes], told);
+        Assert.Equal(ExploreRemovalPrompt.For(ExploreRemovalMode.RecycleBin, [goes]), Assert.Single(prompt.Asked));
+        Assert.Equal([stays.Path, goes.Path], _recycleBin.Asked);
+        Assert.All(_recycleBin.Asked, path => Assert.False(path.StartsWith(@"\\?\", StringComparison.Ordinal), path));
+        Assert.Equal(goes.Path, Assert.Single(report!.Removed).Path);
+        Assert.Equal(stays.Path, Assert.Single(report.Refused).Path);
+        Assert.True(report.Verification.Passed);
+        Assert.True(LongPath.FileExists(stays.Path));
+        Assert.True(LongPath.FileExists(beside));
+    }
+
+    /// <summary>
+    /// An item kept out of the question because the bin could not take it stays out of the removal,
+    /// even where the bin would take it by then: the user was never asked about it.
+    /// </summary>
+    [Fact]
+    public async Task AnItemTheBinRefusedBeforeTheQuestionIsNotRemovedOnceItCouldBeTaken()
+    {
+        var stays = Item(_temp.CreateFile(8, "stays.bin"));
+        var goes = Item(_temp.CreateFile(16, "goes.bin"));
+        var askedAboutStays = 0;
+        _recycleBin.CannotTake = path => path == stays.Path && askedAboutStays++ == 0 ? "Too long for the bin." : null;
+        var actions = Actions(_ => Task.FromResult(Policy()), new FakeExploreConfirmation(answer: true));
+
+        var report = await actions.RemoveAsync([stays, goes], ExploreRemovalMode.RecycleBin);
+
+        Assert.Equal([goes.Path], _recycleBin.Paths);
+        Assert.Equal(stays.Path, Assert.Single(report!.Refused).Path);
+        Assert.True(LongPath.FileExists(stays.Path));
+    }
+
+    /// <summary>
+    /// The bin is asked off the calling thread. A folder is answered by a walk of everything inside
+    /// it, and the caller is a page's thread, which would freeze for as long as the walk takes.
+    /// </summary>
+    [Fact]
+    public async Task TheBinIsAskedOffTheCallingThread()
+    {
+        var file = Item(_temp.CreateFile(8, "a.bin"));
+        var caller = Environment.CurrentManagedThreadId;
+        int? askedOn = null;
+        _recycleBin.CannotTake = _ =>
+        {
+            askedOn = Environment.CurrentManagedThreadId;
+            return null;
+        };
+        var actions = Actions(_ => Task.FromResult(Policy()), new FakeExploreConfirmation(answer: false));
+
+        await actions.RemoveAsync([file], ExploreRemovalMode.RecycleBin);
+
+        Assert.NotNull(askedOn);
+        Assert.NotEqual(caller, askedOn);
+    }
+
+    /// <summary>
+    /// A removal cancelled while the bin is being asked stops there: nothing more is asked of the
+    /// bin, the user is asked nothing, and nothing is removed.
+    /// </summary>
+    [Fact]
+    public async Task CancellingWhileTheBinIsAskedStopsBeforeTheQuestion()
+    {
+        var first = Item(_temp.CreateFile(8, "first.bin"));
+        var second = Item(_temp.CreateFile(8, "second.bin"));
+        using var cancel = new CancellationTokenSource();
+        _recycleBin.CannotTake = _ =>
+        {
+            cancel.Cancel();
+            return null;
+        };
+        var prompt = new FakeExploreConfirmation(answer: true);
+        var actions = Actions(_ => Task.FromResult(Policy()), prompt);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => actions.RemoveAsync([first, second], ExploreRemovalMode.RecycleBin, ct: cancel.Token));
+
+        Assert.Equal([first.Path], _recycleBin.Asked);
+        Assert.Empty(prompt.Asked);
+        Assert.Empty(_recycleBin.Paths);
+        Assert.True(LongPath.FileExists(first.Path));
+        Assert.True(LongPath.FileExists(second.Path));
+    }
+
+    /// <summary>
+    /// §5.6 asserts an item the bin could not take survived, as it does for every item the policy
+    /// allows. Here a removal in another folder takes it as well, and nothing else beside the removed
+    /// item would show that.
+    /// </summary>
+    [Fact]
+    public async Task AnItemTheBinCouldNotTakeIsAssertedToHaveSurvived()
+    {
+        var stays = Item(_temp.CreateFile(8, "kept", "stays.bin"));
+        var goes = Item(_temp.CreateFile(16, "going", "goes.bin"));
+        _recycleBin = new FakeRecycleBin(path =>
+        {
+            File.Delete(path);
+            File.Delete(stays.Path);
+            return new RecycleOutcome(Removed: true);
+        })
+        {
+            CannotTake = path => path == stays.Path ? "Too long for the bin." : null,
+        };
+        var actions = Actions(_ => Task.FromResult(Policy()), new FakeExploreConfirmation(answer: true));
+
+        var report = await actions.RemoveAsync([stays, goes], ExploreRemovalMode.RecycleBin);
+
+        Assert.Equal(stays.Path, Assert.Single(report!.Refused).Path);
+        Assert.False(report.Verification.Passed);
+        Assert.Contains(report.Verification.Failures, check => check.Subject == Path.GetDirectoryName(stays.Path));
+    }
+
+    /// <summary>A permanent removal goes nowhere near the bin, so the bin is not asked about it.</summary>
+    [Fact]
+    public async Task APermanentRemovalDoesNotAskTheBin()
+    {
+        var file = Item(_temp.CreateFile(8, "a.bin"));
+        _recycleBin.CannotTake = _ => "Too long for the bin.";
+        var prompt = new FakeExploreConfirmation(answer: false);
+        var actions = Actions(_ => Task.FromResult(Policy()), prompt);
+
+        await actions.RemoveAsync([file], ExploreRemovalMode.Permanent);
+
+        Assert.Empty(_recycleBin.Asked);
+        Assert.Equal(ExploreRemovalPrompt.For(ExploreRemovalMode.Permanent, [file]), Assert.Single(prompt.Asked));
+    }
+
     [Fact]
     public async Task DecliningRemovesNothingAndIsNotAFailure()
     {

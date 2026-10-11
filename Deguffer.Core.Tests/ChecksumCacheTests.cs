@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -64,8 +65,11 @@ public sealed class ChecksumCacheTests : IDisposable
         var modified = File.GetLastWriteTimeUtc(a);
         var before = Describe(a);
 
-        File.WriteAllBytes(a, Random(3 * Block, 99));
-        File.SetLastWriteTimeUtc(a, modified);
+        UntilTheChangeTimeMoves(a, before.Changed, () =>
+        {
+            File.WriteAllBytes(a, Random(3 * Block, 99));
+            File.SetLastWriteTimeUtc(a, modified);
+        });
 
         var after = Describe(a);
         Assert.Equal((before.Identity, before.Length, before.Modified), (after.Identity, after.Length, after.Modified));
@@ -295,14 +299,8 @@ public sealed class ChecksumCacheTests : IDisposable
         var file = Candidate(path);
         var before = Describe(path);
         var cache = new ChecksumCache(Store, _clock);
-        using var checksum = new OnFirstAppend(() =>
-        {
-            var info = new FileInfo(path);
-            var security = info.GetAccessControl();
-            security.AddAccessRule(new FileSystemAccessRule(
-                new SecurityIdentifier(WellKnownSidType.WorldSid, null), FileSystemRights.Read, AccessControlType.Allow));
-            info.SetAccessControl(security);
-        });
+        var granted = false;
+        using var checksum = new OnFirstAppend(() => UntilTheChangeTimeMoves(path, before.Changed, () => GrantEveryoneRead(path, granted = !granted)));
 
         var reading = Reader(cache).Read(file, ContentPart.Whole, checksum, default);
 
@@ -433,6 +431,47 @@ public sealed class ChecksumCacheTests : IDisposable
             .Order(StringComparer.Ordinal)];
 
     private static FileDescription Describe(string path) => FileInformation.Default.Describe(path, IdentityRoute.FileId).Description!;
+
+    /// <summary>
+    /// Makes <paramref name="change"/> to the file at least once, and again until its change time is
+    /// no longer <paramref name="changed"/>. NTFS stamps a change with the system time as of the last
+    /// clock interrupt, so one made within the tick that stamped the file's last change leaves the
+    /// change time where it was, as most made straight after it do. Each call must be a real change.
+    /// The limit only keeps a broken premise from hanging the test.
+    /// </summary>
+    private static void UntilTheChangeTimeMoves(string path, DateTime changed, Action change)
+    {
+        var limit = Stopwatch.StartNew();
+
+        do
+        {
+            change();
+        }
+        while (Describe(path).Changed == changed && limit.Elapsed < TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
+    /// Grants everyone the right to read the file, or withdraws it: called in turn, each call undoes
+    /// the last, so every call is a real change.
+    /// </summary>
+    private static void GrantEveryoneRead(string path, bool grant)
+    {
+        var everyone = new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.WorldSid, null), FileSystemRights.Read, AccessControlType.Allow);
+        var info = new FileInfo(path);
+        var security = info.GetAccessControl();
+
+        if (grant)
+        {
+            security.AddAccessRule(everyone);
+        }
+        else
+        {
+            security.RemoveAccessRule(everyone);
+        }
+
+        info.SetAccessControl(security);
+    }
 
     /// <summary>The file as a search on an NTFS volume identified it.</summary>
     private static DuplicateCandidate Candidate(string path)

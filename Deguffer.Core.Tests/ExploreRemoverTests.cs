@@ -296,7 +296,7 @@ public sealed class ExploreRemoverTests : IDisposable
             _policy,
             recycleBin: null,
             fileSystem: new CancellingFileSystem(WindowsFileSystem.Default, cts),
-            cts.Token);
+            ct: cts.Token);
 
         Assert.True(report.Cancelled);
         Assert.StartsWith("Stopped part-way.", report.Summary);
@@ -404,6 +404,29 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.True(LongPath.DirectoryExists(inside));
         Assert.Equal(0, report.BytesRemoved);
         Assert.Contains("Windows directory", Assert.Single(report.Refused).Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What a caller says was refused before asking is reported, and its folder is listed for §5.6
+    /// only where the policy allows the item: a refused item's folder may be one §5.2 says is never
+    /// listed at all, and the policy is asked here rather than trusted from the caller.
+    /// </summary>
+    [Fact]
+    public async Task AFolderThePolicyRefusesIsNeverListedForWhatWasRefusedBeforeAsking()
+    {
+        var inside = Directory.CreateDirectory(Path.Combine(_system.WindowsDirectory, "System32")).FullName;
+        var refusal = new ExploreItemOutcome(inside, Removed: false, Bytes: 0, "Too long for the bin.");
+
+        var report = await ExploreRemover.RemoveAsync(
+            [],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            new FakeRecycleBin(),
+            refusedBeforeAsking: [refusal]);
+
+        Assert.Equal(refusal, Assert.Single(report.Refused));
+        Assert.Empty(report.Verification.Checks);
+        Assert.True(LongPath.DirectoryExists(inside));
     }
 
     /// <summary>
