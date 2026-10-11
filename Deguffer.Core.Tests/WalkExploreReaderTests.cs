@@ -478,7 +478,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         [.. entries.Where(e => !e.IsReparsePoint)],
         [],
         [.. entries.Where(e => e.IsReparsePoint)],
-        WasRefused: false);
+        PathPresence.Present);
 
     private static ExploreTree Tree(DirectoryContents contents, IOccupancyProbe probe)
     {

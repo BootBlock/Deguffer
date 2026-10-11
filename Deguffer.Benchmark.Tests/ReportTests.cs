@@ -86,6 +86,14 @@ public sealed class ReportTests
             expected,
             Deguffer.Benchmark.Tuning.Describe(Route.ExploreWalk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots));
 
+    /// <summary>
+    /// The Explore walk counts what its walk listed, as the walk does, so the two results name the
+    /// same thing per second.
+    /// </summary>
+    [Fact]
+    public void TheExploreWalkCountsEntries() =>
+        Assert.Contains("entries/s", Render(Route.ExploreWalk, Run(1)), StringComparison.Ordinal);
+
     /// <summary>The same for a table route, whose values are the reads and the parse threads.</summary>
     [Fact]
     public void ATableRoutesValuesAreTheOnesItRanWith() =>

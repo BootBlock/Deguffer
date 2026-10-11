@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Testing;
@@ -308,6 +309,13 @@ public sealed class MftFixture
     /// </summary>
     public MftFixture CorruptAttributeLength(uint number) =>
         Corrupt(number, record => MftRecordBytes.DeclareFirstAttributeLength(record, MftRecordBytes.LengthJustUnderIntMax));
+
+    /// <summary>
+    /// Make a record's header declare it uses more bytes than a record holds, as a corrupt sector the
+    /// stamps do not cover would. Nothing in it can then be read.
+    /// </summary>
+    public MftFixture CorruptUsedLength(uint number) =>
+        Corrupt(number, record => BinaryPrimitives.WriteUInt32LittleEndian(record.AsSpan(0x18), (uint)record.Length + 1));
 
     /// <summary>
     /// Make a record's <c>$FILE_NAME</c> declare a value far longer than the attribute around it.

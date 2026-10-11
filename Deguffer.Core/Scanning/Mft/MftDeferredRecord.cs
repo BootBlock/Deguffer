@@ -111,27 +111,27 @@ internal sealed class MftDeferredRecord
     /// list says it is: in use, owned by this base record as it is now, carrying the sequence number
     /// the list recorded, and holding what it was read for. Anything else is a record caught
     /// mid-change, and the answer stays "could not establish", never a guess.
+    ///
+    /// <para>A record refused for lacking what it was read for can still hold a better-ranked name
+    /// or a reparse point, and nothing of it is kept: either would place the file, or mark it a
+    /// link, on the word of a record this has just refused to believe.</para>
     /// </summary>
-    /// <param name="record">The record's bytes, which the update sequence fixup modifies in place.</param>
-    public void Absorb(Span<byte> record, MftSegmentReference expected, MftAttributeKinds needs)
+    /// <param name="found">
+    /// What the record at <paramref name="expected"/>'s number holds, or null where no extension
+    /// record in use is there: a free record, a base record, or one that could not be read.
+    /// </param>
+    public void Absorb(MftExtensionRecord? found, MftSegmentReference expected, MftAttributeKinds needs)
     {
-        // Folded into a copy, kept only once the record is accepted. A record rejected for lacking
-        // what it was read for can still hold a better-ranked name or a reparse point, and either
-        // left in the draft would place the file, or mark it a link, on the word of a record this
-        // has just refused to believe.
-        var trial = _draft;
-
-        if (MftRecordHeader.ReadExtension(record, out var header) != MftParseOutcome.Parsed
-            || header.BaseReference != Self
-            || header.Sequence != expected.Sequence
-            || !trial.TryAbsorb(record[..header.UsedLength], header.FirstAttributeOffset, isBase: false, out var supplied, out _)
-            || (needs & ~supplied) != MftAttributeKinds.None)
+        if (found is not { Readable: true } extension
+            || extension.Owner != Self
+            || extension.Sequence != expected.Sequence
+            || (needs & ~extension.Supplied) != MftAttributeKinds.None)
         {
             Fail(needs);
             return;
         }
 
-        _draft = trial;
+        _draft.Absorb(extension.Attributes);
     }
 
     /// <summary>

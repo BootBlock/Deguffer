@@ -87,6 +87,17 @@ public sealed class ScansReadTheirTuningTests : IDisposable
         Assert.Equal(1, _queries.ExtentsAsked);
     }
 
+    [Fact]
+    public async Task TheSourceFolderWalkAsksAboutItsDrive()
+    {
+        var discovery = new SourceDirectoryDiscovery(new FakeDirectoryScanner(), new FakeVolumeInventory(), _tuner);
+        discovery.Include(["obj"]);
+
+        await discovery.FindAsync([new SourceRoot(Folder())]);
+
+        Assert.Equal(1, _queries.ExtentsAsked);
+    }
+
     /// <summary>
     /// Every scan walks through the overload that takes the tuner, so the walk is held here to the
     /// thread count the tuner resolves. One thread lists every folder on the calling thread, and
@@ -259,6 +270,9 @@ public sealed class ScansReadTheirTuningTests : IDisposable
 
             public bool TryReadClusters(long firstCluster, Span<byte> destination) =>
                 inner.TryReadClusters(firstCluster, destination);
+
+            public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+                inner.TryReadClustersAsync(firstCluster, destination, ct);
 
             public void Dispose() => inner.Dispose();
 

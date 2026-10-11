@@ -25,8 +25,9 @@ internal enum MftParseOutcome
     /// sizes of its data, or its reparse point — is in another record. NTFS does this once a file's
     /// attributes outgrow one record: a large fragmented file, or one with many hard links.
     ///
-    /// <para>Only the parser and <see cref="MftRecordStream"/> see this. The stream reads the other
-    /// records once the first pass is over and turns every one of these into
+    /// <para>Only the parser and <see cref="MftRecordStream"/> see this. Once the first pass is
+    /// over, the stream completes it from what the first pass kept of the other records, reading
+    /// again only those the first pass never reached, and turns every one of these into
     /// <see cref="Parsed"/> or <see cref="Unreadable"/> before any caller is told of it, so no
     /// caller has a third kind of record to make a policy for.</para>
     /// </summary>

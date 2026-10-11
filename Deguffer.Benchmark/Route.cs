@@ -29,13 +29,24 @@ internal enum Route
     /// assembling the pictures of the tree so far that it draws while it walks, unless told not to.
     /// </summary>
     ExploreWalk,
+
+    /// <summary>
+    /// Find build outputs in one folder through <c>SourceTreeWalk</c>, with every name the source
+    /// folder rows look for: what an approved source folder costs a scan that cannot read the table.
+    /// </summary>
+    Sources,
 }
 
 internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
-    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.ExploreWalk);
+    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.ExploreWalk or Route.Sources);
 
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
-    public static string ItemName(this Route route) => route.ReadsTable() ? "records" : "entries";
+    public static string ItemName(this Route route) => route switch
+    {
+        Route.Walk or Route.ExploreWalk => "entries",
+        Route.Sources => "candidates",
+        _ => "records",
+    };
 }

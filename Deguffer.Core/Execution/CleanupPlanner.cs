@@ -99,7 +99,7 @@ public sealed class CleanupPlanner
         // inspector beside it. Shared deliberately rather than defaulted per provider: six unshared
         // passes would each walk the developer's whole disk on an unelevated run, and the names each
         // provider registers on the way in are what make the one pass answer for all of them.
-        var sourceTrees = new SourceDirectoryDiscovery(scanner);
+        var sourceTrees = new SourceDirectoryDiscovery(scanner, tuning: tuning);
         liveTrees ??= LiveTreeInspector.Default;
 
         // One sweep of %LOCALAPPDATA% for both Squirrel providers, on the reasoning above: they ask
@@ -131,13 +131,7 @@ public sealed class CleanupPlanner
 
         return new CleanupPlanner(
         [
-            new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            .. SourceTreeProviders(roots, sourceTrees, liveTrees, environment, scanner),
             .. CacheProviders(
                 environment,
                 squirrel,
@@ -154,6 +148,27 @@ public sealed class CleanupPlanner
         ],
         declarations);
     }
+
+    /// <summary>
+    /// Every row that searches the user's approved source folders, sharing <paramref name="sourceTrees"/>.
+    /// Building them registers each one's names with it, which is how the benchmark walks with the set
+    /// a scan walks with rather than a copy of it.
+    /// </summary>
+    internal static IReadOnlyList<ICleanupProvider> SourceTreeProviders(
+        SourceRootStore roots,
+        SourceDirectoryDiscovery sourceTrees,
+        ILiveTreeInspector liveTrees,
+        IUserEnvironment environment,
+        IDirectoryScanner scanner) =>
+    [
+        new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+    ];
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
         IUserEnvironment environment,

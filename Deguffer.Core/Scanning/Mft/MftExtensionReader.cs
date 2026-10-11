@@ -1,13 +1,16 @@
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
-/// The second pass over a table: reads what the first pass's <see cref="MftDeferredRecord"/>s were
-/// sent elsewhere for, and folds it in.
+/// The second pass over a table: completes the first pass's <see cref="MftDeferredRecord"/>s from
+/// what the extension records they want hold.
 ///
-/// <para>A second pass rather than a read in the middle of the first, so the drive is not sent
-/// back and forth across the table. Every extension record wanted is collected first and read in
-/// record-number order, so this pass also moves forward through the table, one batch serving every
-/// wanted record that falls inside it.</para>
+/// <para>A second pass rather than a lookup in the middle of the first, because the first meets an
+/// extension record before its owner as often as after it. The first pass keeps what each extension
+/// record holding something the scan needs holds as it reads it, so an extension record it reached
+/// is never read again: every wanted one is collected, sorted by record number, and merged against
+/// what was kept.
+/// The disk is read again only for the attribute lists kept outside the table, and for a wanted
+/// record the first pass never reached because it stopped first.</para>
 ///
 /// <para>Bytes only, like <see cref="MftRecordStream"/>. What a record that could not be completed
 /// means is for the caller to decide, and each <see cref="MftDeferredRecord"/> already says which
@@ -16,63 +19,71 @@ namespace Deguffer.Core.Scanning.Mft;
 internal static class MftExtensionReader
 {
     /// <summary>
-    /// The longest run of unwanted records one read of the second pass reads across rather than
-    /// making two reads: sixty-four of the usual 1,024-byte records. Reading across a short gap saves
-    /// a second read, and reading across a long one brings records nobody wants.
+    /// The longest run of unwanted records one read of the records the first pass never reached
+    /// reads across rather than making two reads: sixty-four of the usual 1,024-byte records. Reading
+    /// across a short gap saves a second read, and reading across a long one brings records nobody
+    /// wants.
     /// </summary>
     private const int GapBytes = 64 * 1024;
 
+    private const MftAttributeKinds Everything =
+        MftAttributeKinds.Name | MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint | MftAttributeKinds.WofDataStart;
+
     /// <summary>
-    /// Complete every record in <paramref name="deferred"/>. Returns false where the lists read
-    /// here want more extension records than <paramref name="budget"/> allows, which a table NTFS
-    /// wrote never does; the records past that point are then lost whole rather than followed.
+    /// Complete every record the first pass deferred. Returns false where the lists read here want
+    /// more extension records than <paramref name="budget"/> allows, which a table NTFS wrote never
+    /// does; the records past that point are then lost whole rather than followed.
     /// </summary>
     /// <param name="budget">
     /// How many more extension records the table can hold for these records to want, after the
     /// first pass's own.
     /// </param>
+    /// <param name="readsInFlight">How many lists kept outside the table are read at once, at most.</param>
     /// <param name="batch">
-    /// A buffer of whole records to read into, lent by the caller so the second pass reuses the
-    /// first pass's pooled buffer rather than renting another.
+    /// A buffer of whole records to read a record the first pass never reached into, lent by the
+    /// caller so the second pass reuses the first pass's pooled buffer rather than renting another.
     /// </param>
     public static bool TryResolve(
         IMftSource source,
-        IReadOnlyList<MftDeferredRecord> deferred,
+        MftFirstPass first,
         long budget,
+        int readsInFlight,
         Span<byte> batch,
         CancellationToken ct)
     {
-        ClusterReader read = source.TryReadClusters;
-
-        foreach (var record in deferred)
+        // The first pass's own wants may already have spent it, and then no list is read at all.
+        if (budget >= 0)
         {
-            ct.ThrowIfCancellationRequested();
-
-            if (record.PendingList is not { } list)
+            MftAttributeListReader.Read(source, first.Deferred, readsInFlight, (record, entries) =>
             {
-                continue;
-            }
-
-            if (budget < 0)
-            {
-                record.Fail(
-                    MftAttributeKinds.Name | MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint | MftAttributeKinds.WofDataStart);
-                continue;
-            }
-
-            record.Follow(TryReadList(read, source.BytesPerCluster, list.Runs, list.Length));
-            budget -= record.Segments.Count;
+                record.Follow(entries);
+                budget -= record.Segments.Count;
+                return budget >= 0;
+            }, ct);
         }
 
-        ReadExtensionRecords(source, deferred, batch, ct);
+        if (budget < 0)
+        {
+            foreach (var record in first.Deferred)
+            {
+                if (record.PendingList is not null)
+                {
+                    record.Fail(Everything);
+                }
+            }
+        }
+
+        var wanted = Wanted(first.Deferred);
+        var unreached = Absorb(wanted, first.Extensions, first.Reached);
+
+        ReadUnreached(source, wanted, unreached, batch, ct);
         return budget >= 0;
     }
 
     /// <summary>
     /// The entries of a list kept outside the table, or null where any part of it cannot be read.
-    ///
-    /// <para>Also how <see cref="MftExtentMapReader"/> reads <c>$MFT</c>'s own list, which is why
-    /// it takes a <see cref="ClusterReader"/> rather than a source.</para>
+    /// How <see cref="MftExtentMapReader"/> reads <c>$MFT</c>'s own list, before there is a source to
+    /// read anything else through, which is why it takes a <see cref="ClusterReader"/>.
     /// </summary>
     /// <param name="length">At most <see cref="MftAttributeList.MaximumLength"/>.</param>
     internal static IReadOnlyList<MftAttributeListEntry>? TryReadList(
@@ -81,11 +92,9 @@ internal static class MftExtensionReader
             ? MftAttributeList.TryReadEntries(value)
             : null;
 
-    private static void ReadExtensionRecords(
-        IMftSource source,
-        IReadOnlyList<MftDeferredRecord> deferred,
-        Span<byte> batch,
-        CancellationToken ct)
+    /// <summary>Every extension record a record still able to be completed wants, in record order.</summary>
+    private static List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)> Wanted(
+        IReadOnlyList<MftDeferredRecord> deferred)
     {
         var wanted = new List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)>();
 
@@ -103,16 +112,54 @@ internal static class MftExtensionReader
         }
 
         wanted.Sort(static (a, b) => a.Segment.Record.CompareTo(b.Segment.Record));
+        return wanted;
+    }
 
+    /// <summary>
+    /// Fold in every wanted record the first pass reached, from what it kept. One it reached and kept
+    /// nothing for was free, a base record, unreadable, or held nothing the scan needs, and the record
+    /// wanting it fails. Returns where the wanted records the first pass never reached begin.
+    /// </summary>
+    private static int Absorb(
+        List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)> wanted,
+        IReadOnlyList<MftExtensionRecord> extensions,
+        long reached)
+    {
+        var kept = 0;
+        var next = 0;
+
+        for (; next < wanted.Count && wanted[next].Segment.Record < reached; next++)
+        {
+            var (owner, segment, needs) = wanted[next];
+
+            while (kept < extensions.Count && extensions[kept].Number < segment.Record)
+            {
+                kept++;
+            }
+
+            owner.Absorb(
+                kept < extensions.Count && extensions[kept].Number == segment.Record ? extensions[kept] : null,
+                segment,
+                needs);
+        }
+
+        return next;
+    }
+
+    /// <summary>
+    /// Read the wanted records from <paramref name="next"/> on, which the first pass stopped before
+    /// reaching, and fold each in.
+    /// </summary>
+    private static void ReadUnreached(
+        IMftSource source,
+        List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)> wanted,
+        int next,
+        Span<byte> batch,
+        CancellationToken ct)
+    {
         var bytesPerRecord = source.BytesPerRecord;
         var capacity = batch.Length / bytesPerRecord;
         var gapRecords = Math.Max(1, GapBytes / bytesPerRecord);
-
-        // Each record is parsed from a copy. The update sequence fixup rewrites a record in place,
-        // so a second owner naming the same record — only a damaged table produces one — would
-        // otherwise be handed bytes the first had already fixed up, and fail their stamp check.
-        var scratch = new byte[bytesPerRecord];
-        var next = 0;
 
         while (next < wanted.Count)
         {
@@ -145,13 +192,23 @@ internal static class MftExtensionReader
                 continue;
             }
 
+            // Each record is read once however many owners name it, and only a damaged table has two
+            // owners naming one: the fixup rewrites a record in place, so it cannot be run twice.
+            MftExtensionRecord? found = null;
+            var foundAt = -1L;
+
             while (next < wanted.Count && wanted[next].Segment.Record - first < read)
             {
                 var (owner, segment, needs) = wanted[next++];
-                var offset = (int)(segment.Record - first) * bytesPerRecord;
 
-                batch.Slice(offset, bytesPerRecord).CopyTo(scratch);
-                owner.Absorb(scratch, segment, needs);
+                if (segment.Record != foundAt)
+                {
+                    foundAt = segment.Record;
+                    found = MftExtensionRecord.TryRead(
+                        segment.Record, batch.Slice((int)(segment.Record - first) * bytesPerRecord, bytesPerRecord));
+                }
+
+                owner.Absorb(found, segment, needs);
             }
         }
     }

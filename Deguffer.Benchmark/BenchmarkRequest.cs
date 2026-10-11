@@ -10,12 +10,12 @@ namespace Deguffer.Benchmark;
 /// What to time, read from the command line.
 /// </summary>
 /// <param name="Path">
-/// For a route that reads the table, the root of the volume, such as <c>C:\</c>. For the walk, the
-/// folder, fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
+/// For a route that reads the table, the root of the volume, such as <c>C:\</c>. For a route that
+/// walks, the folder, fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
-/// <param name="Walk">The values the two walk routes run with. The table routes take none of them.</param>
-/// <param name="Table">The values the table routes run with. The walk routes take none of them.</param>
+/// <param name="Walk">The values the routes that walk run with. The table routes take none of them.</param>
+/// <param name="Table">The values the table routes run with. The routes that walk take none of them.</param>
 /// <param name="Snapshots">
 /// Whether the Explore walk assembles the pictures of the tree so far that Explore draws while it
 /// walks. Timed both ways, the difference is what they cost the walk. No other route takes any.
@@ -39,13 +39,15 @@ internal sealed record BenchmarkRequest(
           explorewalk <folder>
                             Build the Explore tree for the folder by walking it, as an
                             unelevated Explore does.
+          sources <folder>  Find build outputs in the folder as an unelevated scan does.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
-        --threads N            Walk routes only. How many folders are listed at once, 1 to 64.
-                               The default is what a scan uses.
-        --listing-buffer KiB   Walk routes only. How many KiB of entries each listing asks
-                               Windows for, 4 to 1024. The default is what a scan uses.
+        --threads N            Walk, explorewalk and sources only. How many folders are listed
+                               at once, 1 to 64. The default is what a scan uses.
+        --listing-buffer KiB   Walk, explorewalk and sources only. How many KiB of entries each
+                               listing asks Windows for, 4 to 1024. The default is what a scan
+                               uses.
         --snapshots on|off     Explore walk only. Whether it assembles the pictures of the tree
                                so far that Explore draws while it walks. The default is on.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
@@ -84,7 +86,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, walk or explorewalk.";
+            error = "The route must be table, index, explore, walk, explorewalk or sources.";
             return null;
         }
 
@@ -120,7 +122,7 @@ internal sealed record BenchmarkRequest(
             if (!accepted)
             {
                 error =
-                    $"--runs takes a number from 1 to {MaximumRuns}. For the walk, --threads takes a number from " +
+                    $"--runs takes a number from 1 to {MaximumRuns}. For walk, explorewalk and sources, --threads takes a number from " +
                     $"{WalkTuning.MinimumThreads} to {WalkTuning.MaximumThreads} and --listing-buffer from " +
                     $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. " +
                     $"For the table routes, --read-size takes a number from " +

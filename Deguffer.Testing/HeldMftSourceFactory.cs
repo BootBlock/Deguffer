@@ -69,6 +69,12 @@ public sealed class HeldMftSourceFactory(char driveLetter, MftFixture fixture) :
             return inner.TryReadClusters(firstCluster, destination);
         }
 
+        public async ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct)
+        {
+            await owner._released.Task.WaitAsync(ct).ConfigureAwait(false);
+            return await inner.TryReadClustersAsync(firstCluster, destination, ct).ConfigureAwait(false);
+        }
+
         public void Dispose()
         {
             inner.Dispose();
