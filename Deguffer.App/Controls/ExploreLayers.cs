@@ -37,6 +37,11 @@ namespace Deguffer.App.Controls;
 /// finest shows through. At rest the one on top covers the whole screen, because a viewport never
 /// shows past the picture's edge, so what a click picks is always what it drew (§7.1).</para>
 ///
+/// <para>While the camera moves, the tiles of the picture (<see cref="ExploreTiles"/>) are stacked
+/// round the drawing on top: those drawn more finely than it over it, so a zoom in is sharp, and the
+/// rest under it, where they show only past its edges. They go once the drawing the camera comes to
+/// rest at has arrived, and with the picture they are tiles of.</para>
+///
 /// <para>Separate from <see cref="ExploreMap"/>, which decides what is drawn and what the pointer is
 /// over; this holds surfaces and places them, and knows nothing of trees (G1).</para>
 ///
@@ -104,16 +109,34 @@ internal sealed class ExploreLayers
 
     private bool _hasOverview;
 
-    public ExploreLayers(Compositor compositor, MapGraphics graphics, MapCamera camera)
+    /// <summary>The tiles of the picture now, shown round the drawing on top while the camera moves.</summary>
+    private readonly ExploreTiles _tiles;
+
+    public ExploreLayers(Compositor compositor, MapGraphics graphics, MapCamera camera, ExploreTiles tiles)
     {
         _compositor = compositor;
         _graphics = graphics;
         _mapCamera = camera;
+        _tiles = tiles;
 
         _camera = compositor.CreateContainerVisual();
         _carried = compositor.CreateContainerVisual();
         _carried.Children.InsertAtTop(_camera);
+        _camera.Children.InsertAtBottom(tiles.Under);
+        _camera.Children.InsertAtTop(tiles.Over);
     }
+
+    /// <summary>The tiles of the picture now. See <see cref="ExploreTiles"/>.</summary>
+    public ExploreTiles Tiles => _tiles;
+
+    /// <summary>
+    /// The drawing the map works from, where it is of the picture now and is a treemap that can be cut
+    /// into tiles; null otherwise. A drawing of a picture that has changed would cut tiles of the old one.
+    /// </summary>
+    public TiledSurface? Tiled =>
+        _current is { Drawing: TiledSurface { Viewport: not null } drawing } current && current.Picture == _picture
+            ? drawing
+            : null;
 
     /// <summary>The top of these drawings in the composition tree.</summary>
     public Visual Root => _carried;
@@ -231,7 +254,11 @@ internal sealed class ExploreLayers
     /// theme. The drawings stay on screen until the next one has landed over them, and their surfaces
     /// are written into after that.
     /// </summary>
-    public void Forget() => _picture++;
+    public void Forget()
+    {
+        _picture++;
+        _tiles.Forget();
+    }
 
     /// <summary>
     /// The picture is of another place now: another tree, folder or view. The overview of the old
@@ -279,6 +306,8 @@ internal sealed class ExploreLayers
             layer.Renew();
         }
 
+        _tiles.Renew();
+
         // Made before the replacement, it would take a write and show nothing (see MapGraphics.Replaced).
         _current = null;
         _overview = null;
@@ -287,8 +316,8 @@ internal sealed class ExploreLayers
 
     /// <summary>
     /// Keep only the drawing on top, for a map leaving the screen. It is what the map shows when it
-    /// comes back, and the others are memory nothing shows until the picture moves again, which asks
-    /// for them afresh. Anything landing has been withdrawn first.
+    /// comes back, and the others and the tiles are memory nothing shows until the picture moves again,
+    /// which asks for them afresh. Anything landing has been withdrawn first.
     /// </summary>
     public void Trim()
     {
@@ -301,6 +330,7 @@ internal sealed class ExploreLayers
         }
 
         Release();
+        _tiles.Release();
     }
 
     /// <summary>
@@ -321,6 +351,8 @@ internal sealed class ExploreLayers
                 layer.Fit(width, height, origin);
             }
         }
+
+        _tiles.Fit(width, height, origin);
     }
 
     /// <summary>
@@ -342,13 +374,16 @@ internal sealed class ExploreLayers
     {
         layer.LastShown = ++_showings;
         _current = layer;
+        _tiles.Stack(layer.Viewport);
 
         Release();
     }
 
     /// <summary>
-    /// Stack the drawings by <see cref="Rank"/>, lowest first. Only what is shown, and which drawing
-    /// is worked from, changes the order, so this runs when they change and never as the picture moves.
+    /// Stack the drawings by <see cref="Rank"/>, lowest first, with the tiles round the one on top: the
+    /// finer under a drawing landing to replace it and over it, the coarser under it. Only what is
+    /// shown, and which drawing is worked from, changes the order, so this runs when they change and
+    /// never as the picture moves.
     /// </summary>
     private void Restack()
     {
@@ -356,6 +391,20 @@ internal sealed class ExploreLayers
         {
             _camera.Children.Remove(layer.Sprite);
             _camera.Children.InsertAtTop(layer.Sprite);
+        }
+
+        _camera.Children.Remove(_tiles.Under);
+        _camera.Children.Remove(_tiles.Over);
+
+        if (_current is { IsShown: true } current)
+        {
+            _camera.Children.InsertBelow(_tiles.Under, current.Sprite);
+            _camera.Children.InsertAbove(_tiles.Over, current.Sprite);
+        }
+        else
+        {
+            _camera.Children.InsertAtBottom(_tiles.Over);
+            _camera.Children.InsertAtBottom(_tiles.Under);
         }
     }
 

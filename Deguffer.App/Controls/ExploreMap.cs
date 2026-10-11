@@ -278,6 +278,19 @@ public sealed class ExploreMap : UserControl
     private double _scale = 1;
     private ExploreHit? _hovered;
 
+    /// <summary>
+    /// The tile <see cref="_hovered"/> was found on, while the camera moves, or null where it was found
+    /// on a drawing. Its outline is the tile's, because the drawing worked from may not draw it.
+    /// </summary>
+    private MapTile? _hoveredTile;
+
+    /// <summary>
+    /// The finest tile shown over the drawing worked from at a point of the picture, asked of whichever
+    /// set of layers is the picture on screen at the time. One for the life of the map, because the
+    /// pointer asks at the display's rate (G5).
+    /// </summary>
+    private readonly Func<double, double, MapTile?> _tileOver;
+
     /// <summary>Whether a node has gone since the scan. See <see cref="Excluding"/>.</summary>
     private Func<int, bool> _gone = _ => false;
 
@@ -292,12 +305,15 @@ public sealed class ExploreMap : UserControl
         _generation = _graphics.Generation;
         _camera = new MapCamera(compositor);
         _zoom = new ExploreZoom(ElementCompositionPreview.GetElementVisual(this), _camera, SystemMotion.Current, DispatcherQueue);
-        _pictures = new ExploreLayers(compositor, _graphics, _camera);
-        _departing = new ExploreLayers(compositor, _graphics, _camera);
+        var owner = new DispatcherQueueSynchronizationContext(DispatcherQueue);
+
+        _pictures = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
+        _departing = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
+        _tileOver = (x, y) => _pictures.Tiles.TileOver(x, y);
         _highlight = new ExploreHighlight(compositor, _graphics, _camera);
         _shift = new ExploreShift(compositor, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
-        _redraws = new CanvasRedraws(new DispatcherQueueSynchronizationContext(DispatcherQueue));
+        _redraws = new CanvasRedraws(owner);
         _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer);
 
         _pictures.Follow();
@@ -477,7 +493,9 @@ public sealed class ExploreMap : UserControl
             // screen is needed to come back to, and the rest is asked for again when the picture next
             // moves.
             _pictures.Trim();
+            _departing.Tiles.Release();
             _buffers.Release();
+            _graphics.Trim();
 
             // The labels go back with it. Dropping the redraw drops the thing that would have put
             // them back, and Loaded only redraws where the size has actually moved — so without
@@ -1065,6 +1083,7 @@ public sealed class ExploreMap : UserControl
             _pictures.Clear();
             _drawing = null;
             _hovered = null;
+            _hoveredTile = null;
             return;
         }
 
@@ -1083,6 +1102,7 @@ public sealed class ExploreMap : UserControl
             _drawing = null;
             _shapeColours = null;
             _hovered = null;
+            _hoveredTile = null;
             _labels.Clear();
             _highlight.Clear();
             Unlock();
@@ -1122,6 +1142,10 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnZoomArrived()
     {
+        // The drawing of where it stopped is on its way, and wants the cores the tiles would take. The
+        // tiles already under way still arrive, and show until it has.
+        _pictures.Tiles.Rest();
+
         // Left for Loaded, which shows the arrival when the map is back, as it does a redraw.
         if (!IsLoaded || Visibility != Visibility.Visible || _drawing is not { } drawing)
         {
@@ -1144,8 +1168,10 @@ public sealed class ExploreMap : UserControl
         // has changed since this drawing was made.
         if (_zoom.Shown == _drawn && _arriving is not { IsSettled: false })
         {
+            _pictures.Tiles.Hide();
             _labels.Reveal();
             Place();
+            ReportWhatThePointerIsOver();
             return;
         }
 
@@ -1258,6 +1284,13 @@ public sealed class ExploreMap : UserControl
             _drawn = MapViewport.Whole;
         }
 
+        // At rest where it was drawn, the drawing covers the screen and is the picture: it names its
+        // shapes and answers the pointer, and a tile drawn deeper would show detail it does not have.
+        if (_zoom.Shown == _drawn)
+        {
+            _pictures.Tiles.Hide();
+        }
+
         Unlock();
 
         // Over a change of folder still flying, too: the names ride the picture they name as it moves.
@@ -1362,7 +1395,10 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void ReportWhatThePointerIsOver()
     {
-        var hit = _pointer is { } pointer ? At(pointer) : null;
+        var spot = _pointer is { } pointer ? Locate(pointer) : null;
+        var hit = spot?.Hit;
+
+        _hoveredTile = spot?.Tile;
 
         if (hit == _hovered)
         {
@@ -1473,6 +1509,17 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
+        // Found on a tile, the shape may be one the drawing does not draw, so the tile outlines it, in
+        // the drawing's canvas. Nothing is lifted: the drawing's surface holds coarser pixels there.
+        if (_hoveredTile is { } tile && drawing.Viewport is { } drawn)
+        {
+            _highlight.ShowHovered(
+                _under.Count > 0 ? tile.Outlines(_under, drawn, drawing.Width, drawing.Height) : [],
+                null,
+                new Vector2(drawing.Width, drawing.Height));
+            return;
+        }
+
         _highlight.ShowHovered(
             _under.Count > 0 ? drawing.Outlines(_under) : [],
             _pictures.SurfaceOf(drawing),
@@ -1515,9 +1562,10 @@ public sealed class ExploreMap : UserControl
     ///
     /// <para>A redraw landing is the case once more. Its regions show where they have landed and the
     /// last drawing shows everywhere else, so each point is answered by whichever shows there: see
-    /// <see cref="MapHitTest"/>, which also refuses an answer from a drawing of an older tree.</para>
+    /// <see cref="MapHitTest"/>, which also refuses an answer from a drawing of an older tree. So are
+    /// the tiles a move shows over the drawing, which draw the folders it has opened.</para>
     /// </summary>
-    private ExploreHit? At(Point point) => Locate(point) is { } spot ? spot.Drawing.At(spot.X, spot.Y) : null;
+    private ExploreHit? At(Point point) => Locate(point)?.Hit;
 
     /// <summary>
     /// Where <paramref name="point"/>, in the control's own coordinates, falls in the drawing that
@@ -1529,33 +1577,14 @@ public sealed class ExploreMap : UserControl
             : MapHitTest.Locate(
                 _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing,
                 _shiftOwed ? null : _arriving,
-                _tree);
+                _tree,
+                _tileOver);
 
     /// <summary>
     /// Whether the screen is between two pictures: a change of folder flying or waiting for the
     /// picture it is to fly out to, shapes moving to a new layout, or a new drawing fading in.
     /// </summary>
     private bool Stepping => _descent.IsMoving || _awaitingOuter || _shift.IsMoving || _pictures.IsFading;
-
-    /// <summary>
-    /// Where the shape at <paramref name="spot"/> is on the screen, in fractions of it, or null where
-    /// there is no shape there or it is not a rectangle.
-    /// </summary>
-    private MapFrame? ShapeAt(MapLocation spot)
-    {
-        var drawing = spot.Drawing;
-
-        if (drawing.TileAt(spot.X, spot.Y) is not { } tile)
-        {
-            return null;
-        }
-
-        return _zoom.Shown.PlacementOf(spot.Viewport).OnScreen(new MapFrame(
-            tile.X / (double)drawing.Width,
-            tile.Y / (double)drawing.Height,
-            tile.Width / (double)drawing.Width,
-            tile.Height / (double)drawing.Height));
-    }
 
     /// <summary>
     /// Zoom at the pointer, or with Shift held, or on a wheel that tilts, pan across, where the page
@@ -1650,12 +1679,35 @@ public sealed class ExploreMap : UserControl
     {
         Place();
         ShowOverview();
+        Sharpen();
 
         // Not ReportWhatThePointerIsOver, which marks the shape out again whether or not it changed.
         // That is right once per new drawing and wrong at every frame of a move over the same one:
         // the outline is in the drawing's own pixels and moves with the placement, and redrawing it
         // is a pass over every shape and two new geometries, sixty times a second.
         FollowPointer();
+    }
+
+    /// <summary>
+    /// Show the tiles of the picture the screen shows as the camera moves, and draw those it is missing,
+    /// from the one under the pointer outwards (see <see cref="ExploreTiles"/>): what comes into view is
+    /// as sharp as the zoom it is seen at, rather than the drawing worked from magnified until the move
+    /// stops. Not while a change of folder flies or new shapes travel, which move a picture on its way
+    /// to being another one.
+    /// </summary>
+    private void Sharpen()
+    {
+        if (Stepping || !IsLoaded || ActualWidth <= 0 || ActualHeight <= 0 || _pictures.Tiled is not { } picture)
+        {
+            return;
+        }
+
+        var shown = _zoom.Shown;
+        var (x, y) = _pointer is { } pointer
+            ? shown.PictureAt(pointer.X / ActualWidth, pointer.Y / ActualHeight)
+            : shown.PictureAt(0.5, 0.5);
+
+        _pictures.Tiles.Want(picture, shown, _zoom.Target, x, y, Ground());
     }
 
     /// <summary>
@@ -1795,20 +1847,30 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var hit = At(pointer);
+        var spot = Locate(pointer);
+        var hit = spot?.Hit;
+        var tile = spot?.Tile;
 
         // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
         // shape for most of that, so reporting every move would rebuild the same string sixty times
-        // a second.
-        if (hit == _hovered)
+        // a second. The same shape found on another tile, or on the drawing, is outlined again from
+        // there, and not reported again.
+        if (hit == _hovered && tile == _hoveredTile)
         {
             return;
         }
 
+        var moved = hit != _hovered;
+
         _hovered = hit;
+        _hoveredTile = tile;
 
         ShowHovered();
-        Report(hit);
+
+        if (moved)
+        {
+            Report(hit);
+        }
     }
 
     /// <summary>Say what the pointer found.</summary>
@@ -1821,6 +1883,15 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
     {
+        // A window minimised or hidden shows no move to sharpen: its tiles, and what the device keeps
+        // for itself, go, and the next move draws them again.
+        if (!sender.IsHostVisible)
+        {
+            _pictures.Tiles.Release();
+            _departing.Tiles.Release();
+            _graphics.Trim();
+        }
+
         if (Math.Abs(sender.RasterizationScale - _scale) > 0.001)
         {
             Redraw();
@@ -1843,6 +1914,7 @@ public sealed class ExploreMap : UserControl
 
         _drawing = null;
         _hovered = null;
+        _hoveredTile = null;
         _labels.Hide();
         _highlight.Clear();
         Report(null);
@@ -1906,6 +1978,7 @@ public sealed class ExploreMap : UserControl
     {
         _pointer = null;
         _hovered = null;
+        _hoveredTile = null;
 
         ShowHovered();
         Report(null);
@@ -1964,7 +2037,7 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetPosition(this);
 
-        if (!_tapPress || _drag.Dragged || Locate(point) is not { } spot || spot.Drawing.At(spot.X, spot.Y) is not { } hit)
+        if (!_tapPress || _drag.Dragged || Locate(point) is not { } spot || spot.Hit is not { } hit)
         {
             return;
         }
@@ -1972,7 +2045,7 @@ public sealed class ExploreMap : UserControl
         var drawing = spot.Drawing;
 
         // Only a treemap nests: an icicle draws what a shape holds below it rather than in it.
-        var shape = drawing.Viewport is null ? null : ShapeAt(spot);
+        var shape = drawing.Viewport is null ? null : spot.ShapeOnScreen(_zoom.Shown);
 
         // The shape the whole drawing is of opens only out of what is drawn beside it: the volume's
         // free space, beside the root of a treemap of a whole drive. Anywhere else it is already

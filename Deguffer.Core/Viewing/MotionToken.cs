@@ -90,6 +90,16 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
     /// <summary>
+    /// A sharper tile of the map coming in over the coarser picture under it while the camera moves (see
+    /// <see cref="Exploring.Layout.MapTiling"/>). A short crossfade, so detail arriving a tile at a time
+    /// reads as the picture coming into focus rather than as squares flicking on. Nothing travels, so it
+    /// plays with motion off as well, only shorter, for the reason <see cref="Crossfade"/> does.
+    /// </summary>
+    public static MotionToken Sharpen { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(120), Travels: false),
+        new Motion(TimeSpan.FromMilliseconds(80), Travels: false));
+
+    /// <summary>
     /// A bound list changing under the reader: a row arriving fades and slides in, one leaving fades
     /// out as the rows below glide into its space, and one the sort moved glides to its new place
     /// (see <see cref="ListMotion"/>). With motion off nothing glides or slides, because the rows

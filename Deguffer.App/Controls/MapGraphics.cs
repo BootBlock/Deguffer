@@ -1,4 +1,5 @@
 using System.Numerics;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
@@ -98,16 +99,32 @@ internal sealed class MapGraphics
             DirectXAlphaMode.Premultiplied);
 
     /// <summary>
+    /// A surface for one tile of a moving map (see <see cref="MapTiling"/>), written whole each time it
+    /// is used. A plain surface rather than a virtual one, because a tile is never written in part.
+    /// </summary>
+    public CompositionDrawingSurface CreateTileSurface() =>
+        _graphics.CreateDrawingSurface2(
+            new SizeInt32(MapTiling.Size, MapTiling.Size),
+            DirectXPixelFormat.B8G8R8A8UIntNormalized,
+            DirectXAlphaMode.Premultiplied);
+
+    /// <summary>
     /// Let go of everything written into <paramref name="surface"/>, which shows nothing until it is
     /// written again. Trimming keeps what lies inside the rectangles it is given, so none are given.
     /// </summary>
     public static void Empty(CompositionVirtualDrawingSurface surface) => surface.Trim([]);
 
     /// <summary>
+    /// Give back what the device keeps for itself between drawings, for a window nobody can see. What
+    /// the surfaces hold is theirs and stays.
+    /// </summary>
+    public void Trim() => _device.Trim();
+
+    /// <summary>
     /// Write <paramref name="region"/> of <paramref name="pixels"/>, a canvas <paramref name="width"/>
     /// pixels across, into the same place on <paramref name="surface"/>, and nothing else of it.
     /// </summary>
-    public void Write(CompositionVirtualDrawingSurface surface, byte[] pixels, int width, CanvasRegion region)
+    public void Write(CompositionDrawingSurface surface, byte[] pixels, int width, CanvasRegion region)
     {
         PixelBuffer.CopyRegion(pixels, width, region, _staged);
 

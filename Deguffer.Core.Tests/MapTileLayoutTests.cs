@@ -1,0 +1,265 @@
+using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
+
+namespace Deguffer.Core.Tests;
+
+/// <summary>
+/// The tiles a moving map is drawn from are pieces of the one picture: a shape is where every level puts
+/// it, and a tile draws exactly what the drawing made at rest draws, so nothing moves, appears or goes
+/// as a move gives way to the drawing at its end.
+/// </summary>
+public sealed class MapTileLayoutTests
+{
+    private const int Width = 800;
+    private const int Height = 600;
+
+    /// <summary>Within a hundredth of a pixel of the finer of the two pictures compared.</summary>
+    private const double Tolerance = 0.01;
+
+    private static readonly ExploreTree Tree = Folders();
+
+    private static readonly MapTiling Tiling = new(Width, Height);
+
+    /// <summary>
+    /// Every shape a tile draws is drawn in the same place, magnified, by the tiles of the next level
+    /// over the same part of the picture, which add only what the deeper zoom opens.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void AShapeIsWhereTheNextLevelPutsIt(int level)
+    {
+        var picture = Drawing(MapViewport.Anchored(MapTiling.ZoomOf(level), 0.37, 0.61, 0.5, 0.5, MapCeiling.Most));
+        var coarse = picture.Tile(Tiling, Tiling.At(level, 0.37, 0.61)!.Value);
+        var finer = Overlapping(picture, coarse.Frame, level + 1);
+
+        var shapes = InPicture(coarse);
+        var deeper = finer.SelectMany(InPicture).ToLookup(shape => shape.Node);
+        var across = Tiling.AcrossAt(level + 1);
+
+        Assert.NotEmpty(shapes);
+        Assert.True(deeper.Count > shapes.Count, "the next level opened nothing, so it proves nothing");
+
+        foreach (var shape in shapes)
+        {
+            Assert.Contains(
+                deeper[shape.Node],
+                found => Same(shape.Frame, found.Frame, across));
+        }
+    }
+
+    /// <summary>
+    /// The tiles a zoom is shown from draw what the drawing made at that zoom draws, in the same places:
+    /// the same folders opened, the same files drawn one by one, and nothing more. Only finer, so the
+    /// drawing that arrives at rest replaces them without a shape moving or a folder closing.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.3)]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    [InlineData(3.3)]
+    [InlineData(5.9)]
+    [InlineData(11.0)]
+    [InlineData(23.0)]
+    public void ATileDrawsWhatTheDrawingAtThatZoomDraws(double zoom)
+    {
+        var viewport = MapViewport.Anchored(zoom, 0.42, 0.33, 0.5, 0.5, MapCeiling.Most);
+        var drawing = Drawing(viewport);
+        var level = MapTiling.LevelOf(zoom);
+        var screen = viewport.PictureOf(MapFrame.Whole);
+        var tiles = Tiling.Covering(viewport, level, 0.5, 0.5).Select(key => drawing.Tile(Tiling, key)).ToList();
+
+        var drawn = drawing.Tiles
+            .Where(shape => shape.IsNode)
+            .Select(shape => (shape.Node, Frame: Fraction(shape, viewport)))
+            .Where(shape => Overlaps(shape.Frame, screen))
+            .ToDictionary(shape => shape.Node, shape => shape.Frame);
+        var tiled = tiles
+            .SelectMany(InPicture)
+            .Where(shape => Overlaps(shape.Frame, screen))
+            .ToLookup(shape => shape.Node);
+
+        Assert.Equal(drawn.Keys.Order(), tiled.Select(group => group.Key).Order());
+
+        foreach (var (node, frame) in drawn)
+        {
+            Assert.All(tiled[node], found => Assert.True(
+                Same(frame, found.Frame, Tiling.AcrossAt(level)),
+                $"node {node} is at {found.Frame} in a tile and at {frame} in the drawing"));
+        }
+    }
+
+    /// <summary>The tiles of one level over a part of the picture tile it, with no gap and no overlap.</summary>
+    [Fact]
+    public void TheTilesOfALevelCoverWhatIsShownExactly()
+    {
+        var viewport = MapViewport.Anchored(6.5, 0.2, 0.8, 0.5, 0.5, MapCeiling.Most);
+        var level = MapTiling.LevelOf(viewport.Zoom);
+        var frames = Tiling.Covering(viewport, level, 0.2, 0.8).Select(Tiling.FrameOf).ToList();
+        var screen = viewport.PictureOf(MapFrame.Whole);
+
+        foreach (var (x, y) in Grid(screen).Append((screen.X, screen.Y)))
+        {
+            Assert.Equal(1, frames.Count(frame => x >= frame.X && x < frame.X + frame.Width && y >= frame.Y && y < frame.Y + frame.Height));
+        }
+    }
+
+    /// <summary>The tile under the point a reader is looking at is the first wanted.</summary>
+    [Fact]
+    public void TheTileAtTheFocusIsWantedFirst()
+    {
+        var viewport = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5, MapCeiling.Most);
+        var level = MapTiling.LevelOf(viewport.Zoom);
+
+        var keys = Tiling.Covering(viewport, level, 0.41, 0.57);
+
+        Assert.Equal(Tiling.At(level, 0.41, 0.57), keys[0]);
+    }
+
+    /// <summary>
+    /// Every zoom is shown from tiles drawn at least as finely as the screen, and at most half again as
+    /// finely each way, with the detail the drawing made at that zoom has.
+    /// </summary>
+    [Fact]
+    public void EveryZoomIsShownFromTilesNeverMagnifiedWithItsOwnDetail()
+    {
+        var zooms = Enumerable.Range(0, 2000).Select(i => Math.Pow(2, i / 100.0))
+            .Concat(Enumerable.Range(0, 30).SelectMany(power => new[] { Math.Pow(2, power), Math.Pow(2, power) * Math.Sqrt(2) }));
+
+        foreach (var zoom in zooms)
+        {
+            var level = MapTiling.LevelOf(zoom);
+            var drawn = MapTiling.ZoomOf(level);
+
+            Assert.True(drawn >= zoom * (1 - 1e-12), $"a zoom of {zoom} is shown from tiles drawn at {drawn}, magnified");
+            Assert.True(drawn <= zoom * Math.Sqrt(2) * (1 + 1e-12), $"a zoom of {zoom} is shown from tiles drawn at {drawn}");
+            Assert.Equal(TreemapDetail.LevelsAt(zoom), MapTiling.DetailOf(level));
+        }
+    }
+
+    /// <summary>Of the volume beside the root, a tile draws what the drawing does, where the drawing does.</summary>
+    [Fact]
+    public void ATileDrawsTheVolumeBesideTheRootAsTheDrawingDoes()
+    {
+        var volume = new VolumeSpace(Tree.SizeOf(Tree.RootNode) * 3, Tree.SizeOf(Tree.RootNode));
+        var viewport = MapViewport.Anchored(2.5, 0.9, 0.5, 0.5, 0.5, MapCeiling.Most);
+        var drawing = (TiledSurface)ExploreSurface.Create(
+            Tree, Tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, volume, viewport);
+        var level = MapTiling.LevelOf(viewport.Zoom);
+
+        var free = drawing.Tiles.Single(shape => shape.IsFreeSpace);
+        var tile = drawing.Tile(Tiling, Tiling.At(level, 0.9, 0.5)!.Value);
+        var tiled = tile.Shapes.Single(shape => shape.IsFreeSpace);
+
+        Assert.True(Same(Fraction(free, viewport), Frame(tile, tiled), Tiling.AcrossAt(level)));
+    }
+
+    /// <summary>A drawing that cannot be zoomed is not cut into tiles: it is the whole picture whatever the zoom.</summary>
+    [Fact]
+    public void OnlyATreemapThatZoomsIsCutIntoTiles()
+    {
+        var icicle = (TiledSurface)ExploreSurface.Create(
+            Tree, Tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+
+        Assert.Throws<InvalidOperationException>(() => icicle.Tile(Tiling, new MapTileKey(0, 0, 0)));
+        Assert.Throws<ArgumentException>(() => Drawing(MapViewport.Whole).Tile(new MapTiling(Width + 1, Height), new MapTileKey(0, 0, 0)));
+    }
+
+    private static TiledSurface Drawing(MapViewport viewport) => (TiledSurface)ExploreSurface.Create(
+        Tree, Tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
+        ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+
+    /// <summary>Every tile of <paramref name="level"/> with any of <paramref name="frame"/> of the picture in it.</summary>
+    private static List<MapTile> Overlapping(TiledSurface picture, MapFrame frame, int level)
+    {
+        var first = Tiling.At(level, frame.X, frame.Y)!.Value;
+        var last = Tiling.At(level, Math.Min(frame.X + frame.Width, 1 - 1e-12), Math.Min(frame.Y + frame.Height, 1 - 1e-12))!.Value;
+        var tiles = new List<MapTile>();
+
+        for (var row = first.Row; row <= last.Row; row++)
+        {
+            for (var column = first.Column; column <= last.Column; column++)
+            {
+                tiles.Add(picture.Tile(Tiling, new MapTileKey(level, column, row)));
+            }
+        }
+
+        return tiles;
+    }
+
+    private static List<(int Node, MapFrame Frame)> InPicture(MapTile tile) =>
+        [.. tile.Shapes.Where(shape => shape.IsNode).Select(shape => (shape.Node, Frame(tile, shape)))];
+
+    private static MapFrame Frame(MapTile tile, ExploreTile shape) => tile.Frame.Inside(new MapFrame(
+        shape.X / (double)tile.Width,
+        shape.Y / (double)tile.Height,
+        shape.Width / (double)tile.Width,
+        shape.Height / (double)tile.Height));
+
+    private static MapFrame Fraction(ExploreTile shape, MapViewport viewport) => new(
+        viewport.Left + (shape.X / (Width * viewport.Zoom)),
+        viewport.Top + (shape.Y / (Height * viewport.Zoom)),
+        shape.Width / (Width * viewport.Zoom),
+        shape.Height / (Height * viewport.Zoom));
+
+    /// <summary>Whether two frames of the picture are the same to within <see cref="Tolerance"/> of a pixel of a picture <paramref name="across"/> pixels wide.</summary>
+    private static bool Same(MapFrame a, MapFrame b, double across)
+    {
+        var down = across * Height / Width;
+
+        return Math.Abs(a.X - b.X) * across < Tolerance
+            && Math.Abs(a.Y - b.Y) * down < Tolerance
+            && Math.Abs(a.Width - b.Width) * across < Tolerance
+            && Math.Abs(a.Height - b.Height) * down < Tolerance;
+    }
+
+    private static bool Overlaps(MapFrame a, MapFrame b) =>
+        a.X < b.X + b.Width && a.X + a.Width > b.X && a.Y < b.Y + b.Height && a.Y + a.Height > b.Y;
+
+    private static IEnumerable<(double X, double Y)> Grid(MapFrame frame) =>
+        from i in Enumerable.Range(0, 40)
+        from j in Enumerable.Range(0, 40)
+        select (frame.X + ((i + 0.5) / 40 * frame.Width), frame.Y + ((j + 0.5) / 40 * frame.Height));
+
+    /// <summary>
+    /// Folders three deep, of files falling away in size, so each doubling of the zoom opens folders
+    /// and draws files one by one that the last did not.
+    /// </summary>
+    private static ExploreTree Folders()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var random = new Random(277);
+
+        Fill(ExploreTreeBuilder.RootNode, depth: 0);
+
+        return builder.Build(ExploreChildOrder.BySize);
+
+        void Fill(int parent, int depth)
+        {
+            var folders = depth < 3 ? 5 : 0;
+            var children = Enumerable.Range(0, folders)
+                .Select(i => new ExploreChild($"folder{i}", IsDirectory: true, IsLink: false, Size: 0))
+                .Concat(Enumerable.Range(0, 60).Select(i =>
+                    new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: (long)(1_000_000 * Math.Pow(0.9, i) * (1 + random.NextDouble())))))
+                .ToList();
+
+            var first = builder.AddChildren(parent, children);
+
+            for (var i = 0; i < folders; i++)
+            {
+                Fill(first + i, depth + 1);
+            }
+        }
+    }
+}

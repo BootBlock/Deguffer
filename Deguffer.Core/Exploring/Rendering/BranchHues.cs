@@ -38,6 +38,10 @@ public readonly record struct BranchHue(double From, double Sweep, bool Lifted)
 /// <para>Worked out as nodes are asked for and remembered for the life of the drawing, and a node's
 /// siblings are given their arcs in the same pass as the node, because a folder's children are
 /// drawn together (G4).</para>
+///
+/// <para>Asked from several threads at once: the tiles a moving map is drawn from are pieces of one
+/// drawing's picture, painted side by side on workers (see <see cref="MapTileDraws"/>), and each is
+/// coloured as that drawing colours.</para>
 /// </summary>
 internal sealed class BranchHues(ISizedTree tree, int root)
 {
@@ -47,12 +51,22 @@ internal sealed class BranchHues(ISizedTree tree, int root)
     /// </summary>
     private const double Kept = 0.75;
 
+    private readonly Lock _gate = new();
+
     private readonly Dictionary<int, BranchHue> _hues = [];
 
     private readonly Stack<int> _unresolved = new();
 
     /// <summary>The arc <paramref name="node"/> owns in this drawing.</summary>
     public BranchHue Of(int node)
+    {
+        lock (_gate)
+        {
+            return Resolve(node);
+        }
+    }
+
+    private BranchHue Resolve(int node)
     {
         // Up to the nearest node whose arc is already known, remembering the way. Iterative for the
         // reason the layouts are: an icicle can draw a very deep tree.

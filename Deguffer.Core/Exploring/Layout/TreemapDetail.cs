@@ -27,12 +27,23 @@ internal sealed class TreemapDetail
     private readonly Level[] _levels;
 
     public TreemapDetail(LayoutLimits limits, MapViewport viewport)
+        : this(limits, viewport.Zoom, LevelsAt(viewport.Zoom))
     {
-        _levels = new Level[(int)Math.Floor(Math.Log2(viewport.Zoom)) + 1];
+    }
+
+    /// <summary>
+    /// The first <paramref name="levels"/> levels of detail, for a picture magnified
+    /// <paramref name="zoom"/> times: the detail of a lesser zoom, drawn at a greater one. What a tile
+    /// of the map is (see <see cref="MapTiling"/>): the picture as every zoom of one level shows it,
+    /// drawn as finely as the deepest of them, so it is never magnified on screen.
+    /// </summary>
+    public TreemapDetail(LayoutLimits limits, double zoom, int levels)
+    {
+        _levels = new Level[levels];
 
         for (var level = 0; level < _levels.Length; level++)
         {
-            var pixel = viewport.Zoom / Math.Pow(2, level);
+            var pixel = zoom / Math.Pow(2, level);
 
             _levels[level] = new Level(
                 limits.At(pixel) with { MaximumDepth = limits.MaximumDepth + level },
@@ -42,6 +53,9 @@ internal sealed class TreemapDetail
 
     /// <summary>How many levels this zoom has reached: one at the whole picture.</summary>
     public int Count => _levels.Length;
+
+    /// <summary>How many levels a picture magnified <paramref name="zoom"/> times reaches: one more for each doubling.</summary>
+    public static int LevelsAt(double zoom) => (int)Math.Floor(Math.Log2(zoom)) + 1;
 
     /// <summary>The limits a space laid out at <paramref name="level"/> is held to.</summary>
     public LayoutLimits this[int level] => _levels[level].Limits;

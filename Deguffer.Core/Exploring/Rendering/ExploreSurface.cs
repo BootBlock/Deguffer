@@ -405,7 +405,7 @@ public abstract class ExploreSurface
                 tree, root, width, height, limits, colours,
                 TreemapLayout.Compute(tree, root, width, height, limits, beside, viewport),
                 viewport,
-                TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits)),
+                beside),
         };
     }
 
