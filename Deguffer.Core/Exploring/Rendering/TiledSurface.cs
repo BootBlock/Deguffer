@@ -126,6 +126,50 @@ public sealed class TiledSurface : ExploreSurface
             ? TreemapLayout.Locate(Tree, Root, Width, Height, Limits, _beside, viewport, node)
             : ShownAs(node) == node ? FrameOf(node) : null;
 
+    public override IReadOnlyList<MapShape> Shapes(int? folder) =>
+        Viewport is { } viewport
+            ? TreemapLayout.Within(Tree, Root, Width, Height, Limits, _beside, viewport, folder is null && HasVolumeBeside ? null : folder ?? Root)
+            : Held(folder ?? Root);
+
+    /// <summary>
+    /// The shapes in the row under <paramref name="folder"/>'s that it holds: an icicle draws what a
+    /// folder holds below it rather than in it. Its block of the rest is the one in that row under the
+    /// folder's own width.
+    /// </summary>
+    private List<MapShape> Held(int folder)
+    {
+        var shapes = new List<MapShape>();
+        var holder = -1;
+
+        for (var i = 0; i < _tiles.Count && holder < 0; i++)
+        {
+            holder = _tiles[i].IsNode && _tiles[i].Node == folder ? i : -1;
+        }
+
+        if (holder < 0)
+        {
+            return shapes;
+        }
+
+        const float Rounding = 1f / 64;
+        var outer = _tiles[holder];
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.Depth == outer.Depth + 1
+                && (tile.IsNode
+                    ? Tree.ParentOf(tile.Node) == folder
+                    : tile.X >= outer.X - Rounding && tile.X + tile.Width <= outer.X + outer.Width + Rounding))
+            {
+                shapes.Add(MapShape.Of(tile.Node, tile.Bytes, new MapFrame(tile.X / (double)Width, tile.Y / (double)Height, tile.Width / (double)Width, tile.Height / (double)Height)));
+            }
+        }
+
+        return shapes;
+    }
+
     /// <summary>
     /// A shape is under another where it lies inside it, which in a treemap is every shape with a
     /// folder drawn round it and in an icicle none, whose children sit beside their folder rather than

@@ -462,6 +462,19 @@ public abstract class ExploreSurface
     public abstract MapFrame? Locate(int node);
 
     /// <summary>
+    /// The shapes this drawing draws directly in <paramref name="folder"/>, in the order it draws them:
+    /// what the folder holds that has a shape of its own, largest first, then the block standing for the
+    /// rest where there is one. For a null folder, the top of the picture: what the drawing's root
+    /// holds, or where a volume is drawn beside the root, the root's own shape and the blocks beside it.
+    /// None where the folder is not drawn, or is drawn as one block.
+    ///
+    /// <para>What the keyboard moves between and a screen reader lists. A treemap that can be zoomed
+    /// gives the shapes of its whole picture at its zoom, off the canvas as well as on it, so a shape the
+    /// camera has left behind is still there to move to.</para>
+    /// </summary>
+    public abstract IReadOnlyList<MapShape> Shapes(int? folder);
+
+    /// <summary>
     /// The node whose shape shows <paramref name="node"/> on this drawing: its own, or where it is not
     /// drawn one by one, the deepest folder above it that is. Null where it is not under this drawing's
     /// root. What a card beside the map lights for a folder, so it lights where the screen shows it.

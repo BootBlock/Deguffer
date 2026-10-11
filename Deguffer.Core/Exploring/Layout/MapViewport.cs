@@ -85,6 +85,40 @@ public readonly record struct MapViewport
         Within(Zoom, Left - (screenX / Zoom), Top - (screenY / Zoom));
 
     /// <summary>
+    /// This viewport moved as little as brings <paramref name="part"/> of the picture into view at a
+    /// size it can be seen at: the shape the keyboard has moved to, which the camera follows.
+    ///
+    /// <para>Magnified, about the part's middle, only where the part shows smaller than
+    /// <paramref name="leastWidth"/> by <paramref name="leastHeight"/> of the screen, and then only until
+    /// it does not, as far as <paramref name="ceiling"/> allows. Never shrunk: the reader zoomed in for a
+    /// reason. Then moved, on each axis apart, as little as puts the part on the screen, or where it is
+    /// larger than the screen, as little as fills the screen with it. A part already in view at that size
+    /// leaves the viewport as it is.</para>
+    /// </summary>
+    public MapViewport Showing(MapFrame part, double leastWidth, double leastHeight, double ceiling)
+    {
+        var least = Math.Max(
+            part.Width > 0 ? leastWidth / part.Width : 1,
+            part.Height > 0 ? leastHeight / part.Height : 1);
+        var zoom = Math.Max(Zoom, Math.Min(least, Math.Max(ceiling, Zoom)));
+        var span = 1 / zoom;
+        var (centreX, centreY) = part.Centre;
+
+        // From where the screen is, or about the part where it has to be magnified to be seen.
+        var left = zoom == Zoom ? Left : centreX - (span / 2);
+        var top = zoom == Zoom ? Top : centreY - (span / 2);
+
+        return Within(zoom, Into(left, part.X, part.Width, span), Into(top, part.Y, part.Height, span));
+
+        // The nearest start to `from` that puts a part `length` long from `start` on a screen `span`
+        // long: all of it where it fits, and the screen all within it where it does not.
+        static double Into(double from, double start, double length, double span) =>
+            length <= span
+                ? Math.Clamp(from, start + length - span, start)
+                : Math.Clamp(from, start, start + length - span);
+    }
+
+    /// <summary>
     /// This viewport magnified <paramref name="factor"/> times more about screen point
     /// (<paramref name="screenX"/>, <paramref name="screenY"/>), so the thing there stays there, as
     /// far as the picture's edges, 1 and <paramref name="ceiling"/> allow. See <see cref="Anchored"/>.
