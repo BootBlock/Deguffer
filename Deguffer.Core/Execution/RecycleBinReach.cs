@@ -62,7 +62,8 @@ internal sealed class RecycleBinReach
     /// what became of the item.
     /// </summary>
     /// <param name="path">The item in display form, as the shell is handed it.</param>
-    internal string? WhyNot(string path)
+    /// <param name="ct">Stops the walk of a folder, which is of everything inside it.</param>
+    internal string? WhyNot(string path, CancellationToken ct = default)
     {
         if (NameTheShellRereads(path) is { } name)
         {
@@ -94,7 +95,7 @@ internal sealed class RecycleBinReach
                 + $"whole, and {DeletesWhatItCannotTake}";
         }
 
-        var (length, inside) = item is DirectoryInfo folder ? Walk(path, folder) : (((FileInfo)item).Length, null);
+        var (length, inside) = item is DirectoryInfo folder ? Walk(path, folder, ct) : (((FileInfo)item).Length, null);
 
         return inside ?? WhyTheBinCannotHold(path, length);
     }
@@ -132,7 +133,7 @@ internal sealed class RecycleBinReach
     /// its length. A link inside is moved as a link, and nothing on its far side goes with it, so it is
     /// not looked through; a folder that is itself a link is moved the same way.
     /// </summary>
-    private static (long Length, string? WhyNot) Walk(string path, DirectoryInfo folder)
+    private static (long Length, string? WhyNot) Walk(string path, DirectoryInfo folder, CancellationToken ct)
     {
         if (folder.Attributes.HasFlag(FileAttributes.ReparsePoint))
         {
@@ -144,6 +145,8 @@ internal sealed class RecycleBinReach
 
         while (folders.TryPop(out var next))
         {
+            ct.ThrowIfCancellationRequested();
+
             try
             {
                 foreach (var entry in new DirectoryInfo(next).EnumerateFileSystemInfos())

@@ -117,6 +117,19 @@ public sealed class RecycleBinReachTests : IDisposable
         Assert.Null(_reach.WhyNot(folder));
     }
 
+    /// <summary>
+    /// The walk of a folder is of everything inside it, and a confirmation waits on it, so it stops
+    /// when it is cancelled rather than answering.
+    /// </summary>
+    [Fact]
+    public void TheWalkOfAFolderStopsWhenCancelled()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(10, "folder", "short.txt");
+
+        Assert.Throws<OperationCanceledException>(() => _reach.WhyNot(folder, new CancellationToken(canceled: true)));
+    }
+
     /// <summary>A link inside a folder is moved as a link, so what lies on its far side is not the folder's.</summary>
     [Fact]
     public void ALinkInsideAFolderIsNotLookedThrough()

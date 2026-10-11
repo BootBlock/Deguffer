@@ -36,7 +36,9 @@ public sealed record ExploreRemovalPrompt(string Title, string Consequence, stri
 
                 // The bin's arithmetic said plainly. A user watching a free-space figure would
                 // otherwise reasonably expect this to move it, and §8's fourth question is exactly
-                // that the Recycle Bin reclaims nothing until it is emptied.
+                // that the Recycle Bin reclaims nothing until it is emptied. The bin is promised
+                // because it was asked first (ExploreRemover.WhatTheBinCannotTake), and what it
+                // cannot take is never put to the user here.
                 $"{subject} ({size}) goes to the Recycle Bin, where you can put it back. The drive "
                 + "gets the space only once the bin is emptied.",
                 "Move to Recycle Bin")

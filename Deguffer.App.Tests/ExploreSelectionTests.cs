@@ -270,13 +270,15 @@ public sealed class ExploreSelectionTests : IDisposable
     {
         var (tree, folder, file) = Scanned();
         var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
+        var prompt = new FakeExploreConfirmation(answer.Task);
+        _explore.Prompt = prompt;
         var selection = Selection(tree);
 
         Assert.Empty(selection.Removing.Nodes);
 
         selection.Select([folder]);
         var removing = selection.DeleteCommand.ExecuteAsync(null);
+        await prompt.FirstAsked;
 
         Assert.Same(tree, selection.Removing.Tree);
         Assert.Equal([folder], selection.Removing.Nodes);
@@ -301,12 +303,14 @@ public sealed class ExploreSelectionTests : IDisposable
     {
         var (tree, folder, file) = Scanned();
         var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
+        var prompt = new FakeExploreConfirmation(answer.Task);
+        _explore.Prompt = prompt;
         _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(folder)));
         var selection = Selection(tree);
 
         selection.Select([folder, file]);
         var removing = selection.DeleteCommand.ExecuteAsync(null);
+        await prompt.FirstAsked;
 
         Assert.Equal([file], selection.Removing.Nodes);
 

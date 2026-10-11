@@ -90,8 +90,9 @@ public sealed class FakeRecycleBin : IRecycleBin
     /// <summary>Every path the bin was asked whether it can take.</summary>
     public List<string> Asked { get; } = [];
 
-    public string? WhyItCannotTake(string path)
+    public string? WhyItCannotTake(string path, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         Asked.Add(path);
         return CannotTake(path);
     }

@@ -294,6 +294,47 @@ public static class ExploreRemover
         return (allowed, refused);
     }
 
+    /// <summary>
+    /// The refusals of whichever of <paramref name="allowed"/> the Recycle Bin cannot take as things
+    /// are now, asked of the bin <see cref="RemoveAsync"/> uses with the path it hands it.
+    ///
+    /// <para>Public because a shell has to know before it asks, for the reason
+    /// <see cref="Partition"/> is: a confirmation that promises the bin for an item the bin then
+    /// refuses is a yes given to a move that never happens (§7.1). The removal asks again, because the
+    /// item or the bin can change while the user reads.</para>
+    ///
+    /// <para>Synchronous and slow: a folder is answered by a walk of everything inside it. The caller
+    /// runs it off its own thread.</para>
+    /// </summary>
+    /// <param name="allowed">Items <see cref="Partition"/> allowed, so their paths are normalised.</param>
+    public static IReadOnlyList<ExploreItemOutcome> WhatTheBinCannotTake(
+        IReadOnlyList<ExploreItem> allowed,
+        IRecycleBin? recycleBin = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(allowed);
+
+        var bin = recycleBin ?? ShellRecycleBin.Default;
+        var refused = new List<ExploreItemOutcome>();
+
+        foreach (var item in allowed)
+        {
+            if (bin.WhyItCannotTake(BinPath(item), ct) is { } why)
+            {
+                refused.Add(new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, RecycleOutcome.CannotTake(why).Message!));
+            }
+        }
+
+        return refused;
+    }
+
+    /// <summary>
+    /// The display form, normalised: the shell namespace refuses the extended-length prefix §6.3
+    /// requires everywhere else. <see cref="IRecycleBin"/> says why that is a second seam rather than
+    /// an argument to the first.
+    /// </summary>
+    private static string BinPath(ExploreItem item) => LongPath.Display(LongPath.Extended(item.Path));
+
     private static async Task<ExploreItemOutcome> RemoveOneAsync(
         ExploreItem item,
         ExploreRemovalMode mode,
@@ -357,11 +398,7 @@ public static class ExploreRemover
                 }
             }
 
-            // The display form, normalised: the shell namespace refuses the extended-length prefix
-            // §6.3 requires everywhere else. IRecycleBin says why that is a second seam rather than
-            // an argument to the first.
-            var shellPath = LongPath.Display(LongPath.Extended(item.Path));
-            var recycled = bin.Recycle(shellPath);
+            var recycled = bin.Recycle(BinPath(item));
 
             return new ExploreItemOutcome(
                 item.Path,
