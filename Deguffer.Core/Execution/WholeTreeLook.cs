@@ -87,7 +87,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
                     // Gone since the plan was made, or never there: nothing inside it can be lost. A
                     // refusal part-way still looks at what was listed, since every finding stops the
                     // removal and the folder is named as unlisted either way.
-                    if (contents.Listed is PathPresence.Refused)
+                    if (contents.Presence is PathPresence.Refused)
                     {
                         unlisted.Enqueue(LongPath.Display(directory));
                     }
@@ -114,7 +114,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
                         Notice(marked);
                     }
                 },
-                static () => { },
+                static _ => { },
                 TimeProvider.System,
                 ct);
         }

@@ -88,9 +88,9 @@ public static class ChildDirectories
 
             // Not there is an answer, and a complete one: a directory that does not exist holds
             // nothing, so a caller reading this as empty is reading it correctly. Every caller but
-            // two checks existence first, and for those two — the walk popping a path a build has
-            // since removed, and the sweep of the application-data roots — "gone" must not be
-            // reported as "Deguffer could not list this", which is a sentence about permissions.
+            // one checks existence first, and for that one — the sweep of the application-data
+            // roots — "gone" must not be reported as "Deguffer could not list this", which is a
+            // sentence about permissions.
             PathPresence.Absent => new ChildDirectoryScan([], [], Unreadable: false),
 
             // Nothing rather than a partial view. A caller decides what a root holds from what it is

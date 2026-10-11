@@ -10,13 +10,18 @@ namespace Deguffer.Benchmark;
 /// What to time, read from the command line.
 /// </summary>
 /// <param name="Path">
-/// For a route that reads the table, the root of the volume, such as <c>C:\</c>. For the walk, the
-/// folder, fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
+/// For a route that reads the table, the root of the volume, such as <c>C:\</c>. For a route that
+/// walks, the folder, fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
-/// <param name="Walk">The values the walk runs with. The table routes take none of them.</param>
-/// <param name="Table">The values the table routes run with. The walk takes none of them.</param>
-internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, WalkTuning Walk, TableTuning Table)
+/// <param name="Walk">The values the routes that walk run with. The table routes take none of them.</param>
+/// <param name="Table">The values the table routes run with. The routes that walk take none of them.</param>
+/// <param name="Snapshots">
+/// Whether the Explore walk assembles the pictures of the tree so far that Explore draws while it
+/// walks. Timed both ways, the difference is what they cost the walk. No other route takes any.
+/// </param>
+internal sealed record BenchmarkRequest(
+    Route Route, string Path, int Runs, WalkTuning Walk, TableTuning Table, bool Snapshots)
 {
     public const int DefaultRuns = 5;
 
@@ -31,13 +36,20 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
           index <drive>     Build the file-table index the deletion path measures from. Elevated.
           explore <drive>   Build the Explore tree for the volume from its file table. Elevated.
           walk <folder>     Walk the folder as an unelevated scan does.
+          explorewalk <folder>
+                            Build the Explore tree for the folder by walking it, as an
+                            unelevated Explore does.
+          sources <folder>  Find build outputs in the folder as an unelevated scan does.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
-        --threads N            Walk only. How many folders are listed at once, 1 to 64. The
-                               default is what a scan uses.
-        --listing-buffer KiB   Walk only. How many KiB of entries each listing asks Windows for,
-                               4 to 1024. The default is what a scan uses.
+        --threads N            Walk, explorewalk and sources only. How many folders are listed
+                               at once, 1 to 64. The default is what a scan uses.
+        --listing-buffer KiB   Walk, explorewalk and sources only. How many KiB of entries each
+                               listing asks Windows for, 4 to 1024. The default is what a scan
+                               uses.
+        --snapshots on|off     Explore walk only. Whether it assembles the pictures of the tree
+                               so far that Explore draws while it walks. The default is on.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
                                to 16384.
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
@@ -74,7 +86,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore or walk.";
+            error = "The route must be table, index, explore, walk, explorewalk or sources.";
             return null;
         }
 
@@ -84,6 +96,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
         var readKiB = UnknownDrive.ReadBytes / 1024;
         var readsInFlight = UnknownDrive.ReadsInFlight;
         var parseThreads = UnknownDrive.ParseThreads;
+        var snapshots = true;
 
         for (var i = 2; i < args.Count; i += 2)
         {
@@ -102,13 +115,14 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                     value, TableTuning.MinimumReadsInFlight, TableTuning.MaximumReadsInFlight, out readsInFlight),
                 "--parse-threads" when route.ReadsTable() => TryNumber(
                     value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
+                "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
                 _ => false,
             };
 
             if (!accepted)
             {
                 error =
-                    $"--runs takes a number from 1 to {MaximumRuns}. For the walk, --threads takes a number from " +
+                    $"--runs takes a number from 1 to {MaximumRuns}. For walk, explorewalk and sources, --threads takes a number from " +
                     $"{WalkTuning.MinimumThreads} to {WalkTuning.MaximumThreads} and --listing-buffer from " +
                     $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. " +
                     $"For the table routes, --read-size takes a number from " +
@@ -116,7 +130,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
                     $"--reads-in-flight a number from {TableTuning.MinimumReadsInFlight} to " +
                     $"{TableTuning.MaximumReadsInFlight} and --parse-threads from " +
                     $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads}. " +
-                    "Nothing else is accepted after the target.";
+                    "For the Explore walk, --snapshots takes on or off. Nothing else is accepted after the target.";
                 return null;
             }
         }
@@ -135,7 +149,8 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
             path,
             runs,
             new WalkTuning(threads, bufferKiB * 1024),
-            new TableTuning(readKiB * 1024, readsInFlight, parseThreads));
+            new TableTuning(readKiB * 1024, readsInFlight, parseThreads),
+            snapshots);
     }
 
     /// <summary>
@@ -149,6 +164,12 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
         int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)
         && number >= minimum
         && number <= maximum;
+
+    private static bool TryOnOff(string? text, out bool on)
+    {
+        on = text is "on";
+        return text is "on" or "off";
+    }
 
     /// <summary>
     /// <c>C</c>, <c>C:</c> or <c>C:\</c> as the volume's root, or null. The table belongs to a

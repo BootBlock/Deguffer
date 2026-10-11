@@ -25,29 +25,16 @@ public sealed class ExploreScanner(
     ScanTuner? tuning = null,
     IOccupancyProbe? occupancy = null) : IExploreScanner
 {
-    /// <summary>
-    /// How often the walk publishes a tree to draw.
-    ///
-    /// <para>A snapshot copies every array, so it is not free — and the reason to take one at all is
-    /// that a scan of a full drive is long enough that an unchanging window reads as a hung one.
-    /// Three quarters of a second is slow enough that the copy is noise against the enumeration and
-    /// fast enough to look alive.</para>
-    ///
-    /// <para>Every disk tool surveyed for this feature — WinDirStat, KDirStat, QDirStat, Filelight,
-    /// Baobab, GrandPerspective, Disk Inventory X — refuses to draw its map until the scan finishes,
-    /// and DaisyDisk tried live rings and abandoned them. The measured reason is layout instability:
-    /// on the Bederson/Shneiderman/Wattenberg change metric a squarified treemap scores 14.82
-    /// against slice-and-dice's 0.25, so a map redrawn from growing data rearranges itself
-    /// continuously. Deguffer draws its snapshots anyway, and answers that instead — a snapshot is
-    /// ordered by <see cref="ExploreChildOrder.ByName"/>, under which a growing child widens where
-    /// it already is rather than overtaking its siblings.</para>
-    /// </summary>
-    public static readonly TimeSpan SnapshotInterval = TimeSpan.FromMilliseconds(750);
-
     private readonly IMftSourceFactory _sources = sources ?? VolumeMftSourceFactory.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly ScanTuner _tuning = tuning ?? ScanTuner.Shipped;
     private readonly IOccupancyProbe _occupancy = occupancy ?? OccupancyProbe.Default;
+
+    /// <summary>
+    /// How a walk assembles a snapshot. A test sets one that runs it on the spot, so which report
+    /// carries the snapshot does not depend on the thread pool.
+    /// </summary>
+    internal Func<Action, Task> AssembleSnapshot { get; init; } = WalkSnapshots.InBackground;
 
     /// <summary>
     /// Scan everything at or below <paramref name="root"/>, which is a volume root or any folder
@@ -81,6 +68,9 @@ public sealed class ExploreScanner(
     /// <para>Where the route is chosen stays here, for the reason <see cref="ScanAsync"/> chooses
     /// it: a caller asking about several folders has no more business knowing there are two routes
     /// than one asking about a single folder.</para>
+    ///
+    /// <para><paramref name="progress"/> is told counts only, never a snapshot: a caller asking
+    /// about several folders draws nothing until it has every one.</para>
     /// </summary>
     /// <param name="folders">Full paths of folders, in either form <see cref="Safety.LongPath"/> produces.</param>
     /// <returns>One scan per folder, in the order they were asked for.</returns>
@@ -173,7 +163,9 @@ public sealed class ExploreScanner(
         {
             if (scans[i] is null)
             {
-                var walked = Walk(folders[i], reasons[i], progress, ct, unlisted?[i]);
+                // No snapshots: what asks for several folders draws nothing until they are all
+                // read, and a snapshot nobody draws is a pass over the tree for nothing.
+                var walked = Walk(folders[i], reasons[i], progress, assembleSnapshot: null, ct, unlisted?[i]);
                 scans[i] = new ScannedFolder(
                     walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback, FromIncompleteTable: false);
             }
@@ -222,7 +214,7 @@ public sealed class ExploreScanner(
     {
         if (!VolumePath.TryParse(root, out var volume))
         {
-            return Walk(root, FallbackReason.VolumeNotAddressable, progress, ct);
+            return Walk(root, FallbackReason.VolumeNotAddressable, progress, AssembleSnapshot, ct);
         }
 
         // Each scan is a look at the machine of its own, so a drive attached since the last one is
@@ -231,13 +223,13 @@ public sealed class ExploreScanner(
 
         if (_tuning.WalkOnly)
         {
-            return Walk(root, FallbackReason.WalkChosen, progress, ct);
+            return Walk(root, FallbackReason.WalkChosen, progress, AssembleSnapshot, ct);
         }
 
         var source = _sources.TryOpen(volume.DriveLetter, out var reason);
         if (source is null)
         {
-            return Walk(root, reason, progress, ct);
+            return Walk(root, reason, progress, AssembleSnapshot, ct);
         }
 
         using (source)
@@ -268,7 +260,7 @@ public sealed class ExploreScanner(
 
         // Outside the using deliberately. The walk can run for minutes on a full drive, and holding
         // a raw volume handle open across it serves nothing once the table has been given up on.
-        return Walk(root, reason, progress, ct);
+        return Walk(root, reason, progress, AssembleSnapshot, ct);
     }
 
     private static MftExploreRead Read(
@@ -300,41 +292,12 @@ public sealed class ExploreScanner(
         string root,
         FallbackReason reason,
         IProgress<ExploreProgress>? progress,
+        Func<Action, Task>? assembleSnapshot,
         CancellationToken ct,
         LeavesUnlisted? unlisted = null)
     {
-        var since = _time.GetTimestamp();
-
-        var tree = WalkExploreReader.Read(
-            root,
-            _tuning,
-            _occupancy,
-            (builder, items, bytes) =>
-            {
-                if (progress is null)
-                {
-                    return;
-                }
-
-                var due = _time.GetElapsedTime(since) >= SnapshotInterval;
-                if (due)
-                {
-                    since = _time.GetTimestamp();
-                }
-
-                progress.Report(new ExploreProgress(
-                    items,
-                    Total: null,
-                    bytes,
-                    // By name, not by size. The sizes in a partial tree are still growing, and
-                    // ordering by one of them is what makes every snapshot a different picture of
-                    // the same disk. The finished tree is built by size, once, at the end.
-                    due ? builder.Build(ExploreChildOrder.ByName) : null));
-            },
-            // The scan's own clock, so the walk's reports and the snapshots above keep one time.
-            _time,
-            ct,
-            unlisted);
+        // The scan's own clock, so the walk's reports and its snapshots keep one time.
+        var tree = WalkExploreReader.Read(root, _tuning, _occupancy, progress, _time, ct, unlisted, assembleSnapshot);
 
         return ExploreScan.Walked(tree, reason);
     }

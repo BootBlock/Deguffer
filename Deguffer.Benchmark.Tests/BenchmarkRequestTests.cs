@@ -59,6 +59,18 @@ public sealed class BenchmarkRequestTests
         Assert.NotNull(error);
     }
 
+    /// <summary>The source search walks a folder, so it takes one and the walk's values.</summary>
+    [Fact]
+    public void TheSourceSearchTakesAFolderAndTheWalksValues()
+    {
+        var request = BenchmarkRequest.Parse(["sources", "relative", "--threads", "4"], out _);
+
+        Assert.Equal(Route.Sources, request!.Route);
+        Assert.Equal(Path.GetFullPath("relative"), request.Path);
+        Assert.Equal(4, request.Walk.Threads);
+        Assert.Null(BenchmarkRequest.Parse(["sources", "relative", "--read-size", "1024"], out _));
+    }
+
     [Fact]
     public void TheRunsCanBeChosen() =>
         Assert.Equal(3, BenchmarkRequest.Parse(["walk", @"C:\", "--runs", "3"], out _)!.Runs);
@@ -164,6 +176,37 @@ public sealed class BenchmarkRequestTests
     public void ARouteThatReadsTheTableTakesNoWalkValue(params string[] rest)
     {
         Assert.Null(BenchmarkRequest.Parse(["table", "C", .. rest], out var error));
+        Assert.NotNull(error);
+    }
+
+    /// <summary>
+    /// The Explore walk takes a folder and the walk's values, and takes snapshots unless told not
+    /// to, as Explore does.
+    /// </summary>
+    [Theory]
+    [InlineData(new string[0], true)]
+    [InlineData(new[] { "--snapshots", "on" }, true)]
+    [InlineData(new[] { "--snapshots", "off" }, false)]
+    public void TheExploreWalkTakesSnapshotsUnlessToldNotTo(string[] rest, bool expected)
+    {
+        var request = BenchmarkRequest.Parse(["explorewalk", @"C:\Users\testuser", "--threads", "4", .. rest], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.ExploreWalk, request!.Route);
+        Assert.Equal(@"C:\Users\testuser", request.Path);
+        Assert.Equal(4, request.Walk.Threads);
+        Assert.Equal(expected, request.Snapshots);
+    }
+
+    /// <summary>Only the Explore walk draws as it goes, so no other route has snapshots to switch.</summary>
+    [Theory]
+    [InlineData("walk", @"C:\", "on")]
+    [InlineData("explore", "C", "off")]
+    [InlineData("explorewalk", @"C:\", "yes")]
+    [InlineData("explorewalk", @"C:\", null)]
+    public void SnapshotsAreSwitchedOnTheExploreWalkAloneAndOnlyOnOrOff(string route, string target, string? value)
+    {
+        Assert.Null(BenchmarkRequest.Parse([route, target, "--snapshots", .. value is null ? Array.Empty<string>() : [value]], out var error));
         Assert.NotNull(error);
     }
 

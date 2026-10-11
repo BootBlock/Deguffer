@@ -42,6 +42,19 @@ public sealed class ReportTests
         Assert.DoesNotContain("MiB/s read", Render(Route.Walk, Run(2)), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The walk says how many folders it listed at once, so a run below its thread count shows as
+    /// one. The table lists no folders, so it shows no count rather than a count of zero.
+    /// </summary>
+    [Fact]
+    public void OnlyTheWalkReportsTheFoldersItListedAtOnce()
+    {
+        var text = Render(Route.Walk, Run(1, peak: 16), Run(1, peak: 12), Run(1, peak: 14), Run(1, peak: 10));
+
+        Assert.Equal("folders at once    16              12 (10 to 14)", Line(text, "folders at once"));
+        Assert.DoesNotContain("folders at once", Render(Route.Table, Run(2)), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ARateIsTheItemsOverTheTime()
     {
@@ -72,14 +85,34 @@ public sealed class ReportTests
     public void TheWalksValuesAreTheOnesItRanWith() =>
         Assert.Equal(
             "3 folders listed at once, 8 KiB listing buffer",
-            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default));
+            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots: true));
+
+    /// <summary>
+    /// The Explore walk also states whether it took snapshots, which is the value it is timed both
+    /// ways with, so the two results cannot be mistaken for each other.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "3 folders listed at once, 8 KiB listing buffer, snapshots on")]
+    [InlineData(false, "3 folders listed at once, 8 KiB listing buffer, snapshots off")]
+    public void TheExploreWalkSaysWhetherItTookSnapshots(bool snapshots, string expected) =>
+        Assert.Equal(
+            expected,
+            Deguffer.Benchmark.Tuning.Describe(Route.ExploreWalk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots));
+
+    /// <summary>
+    /// The Explore walk counts what its walk listed, as the walk does, so the two results name the
+    /// same thing per second.
+    /// </summary>
+    [Fact]
+    public void TheExploreWalkCountsEntries() =>
+        Assert.Contains("entries/s", Render(Route.ExploreWalk, Run(1)), StringComparison.Ordinal);
 
     /// <summary>The same for a table route, whose values are the reads and the parse threads.</summary>
     [Fact]
     public void ATableRoutesValuesAreTheOnesItRanWith() =>
         Assert.Equal(
             "2048 KiB reads, 8 in flight, parsed on 3 threads",
-            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3)));
+            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3), snapshots: true));
 
     [Fact]
     public void ADebugBuildIsCalledOut()
@@ -96,8 +129,8 @@ public sealed class ReportTests
 
     private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, Place, Machine, runs);
 
-    private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true) =>
-        new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete), AllocatedBytes: 1 << 20, PeakWorkingSet: 64 << 20);
+    private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0) =>
+        new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, PeakWorkingSet: 64 << 20);
 
     private static string Line(string text, string label) =>
         text.Split('\n').Single(line => line.StartsWith(label + " ", StringComparison.Ordinal));

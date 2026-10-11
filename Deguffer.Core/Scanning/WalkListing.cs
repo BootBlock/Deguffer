@@ -62,8 +62,6 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         SetReparsePointsApart();
 
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
-        // A directory gone since its parent was listed counts as refused too: its bytes were never
-        // read, so the totals above it are lower bounds either way.
         return new DirectoryContents(_entries, _links, _reparseFiles, end.Presence);
     }
 
@@ -87,10 +85,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         }
     }
 
-    /// <summary>
-    /// The directory as the volume holds it: what <see cref="WindowsFileSystem"/> lists, and so what
-    /// every walk lists outside a test.
-    /// </summary>
+    /// <summary>The listing every walk takes outside a test: the directory as the volume holds it.</summary>
     public static ListingEnd FromDisk(string directory, EnumerationOptions options, List<WalkEntry> into)
     {
         using var listing = new DirectoryListing<WalkEntry>(

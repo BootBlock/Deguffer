@@ -155,4 +155,190 @@ public class ExploreTreeBuilderTests
 
         Assert.True(builder.Build(ExploreChildOrder.BySize).HasUnknownSizes);
     }
+
+    /// <summary>
+    /// A capture is assembled without the lock every walk worker needs, so a snapshot being
+    /// assembled and a worker recording its next folder never wait for each other. The lock was once
+    /// held for the whole of the assembling, which on a large walk stopped every worker for as long
+    /// as each snapshot took.
+    ///
+    /// <para>A worker is held inside the lock, part way through recording a folder, while the
+    /// capture is assembled on another thread. The lock is the same either way round, so an
+    /// assembling that needed it would wait here until the wait gives up.</para>
+    /// </summary>
+    [Fact]
+    public async Task AssemblesACaptureWhileAWorkerHoldsTheLock()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("a.tgz", IsDirectory: false, IsLink: false, Size: 4096),
+        ]);
+
+        var capture = builder.Capture();
+
+        using var held = new HeldListing(new ExploreChild("b.tgz", IsDirectory: false, IsLink: false, Size: 8192));
+        var recording = Task.Run(() => builder.AddChildren(ExploreTreeBuilder.RootNode, held));
+        Assert.True(held.Entered.Wait(TimeSpan.FromSeconds(30)), "The worker never reached the lock.");
+
+        var assembling = Task.Run(() => capture.Build(ExploreChildOrder.ByName));
+        var first = await Task.WhenAny(assembling, Task.Delay(TimeSpan.FromSeconds(30)));
+
+        held.Release();
+        await recording;
+
+        Assert.Same(assembling, first);
+
+        var tree = await assembling;
+        Assert.Equal(2, tree.NodeCount);
+        Assert.Equal(4096, tree.TotalBytes);
+        Assert.Equal(12_288, builder.Build(ExploreChildOrder.BySize).TotalBytes);
+    }
+
+    /// <summary>
+    /// A capture's assembling stops when it is cancelled, so a snapshot of a walk that has ended
+    /// does not hold the end of the walk until it is finished.
+    /// </summary>
+    [Fact]
+    public void StopsAssemblingACaptureWhenCancelled()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("a.tgz", IsDirectory: false, IsLink: false, Size: 4096),
+        ]);
+
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            builder.Capture().Build(ExploreChildOrder.ByName, cancelled.Token));
+    }
+
+    /// <summary>
+    /// A mark on a node that was never added is refused when it is made. Marks are applied only when
+    /// a tree is assembled, often on another thread, where the caller's mistake could not be traced
+    /// back to it.
+    /// </summary>
+    [Fact]
+    public void RefusesToMarkANodeThatWasNeverAdded()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.MarkSizeUnknown(1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.MarkListingRefused(1));
+        Assert.False(builder.Build(ExploreChildOrder.BySize).HasUnknownSizes);
+    }
+
+    /// <summary>
+    /// A capture assembled while the walk keeps recording, and growing past the chunks it was
+    /// taken over, holds exactly what was recorded when it was taken, each node as it was recorded.
+    /// A reader outside the lock is only safe because nothing it reads is moved or written again.
+    /// </summary>
+    [Fact]
+    public async Task AssemblesWhatWasCapturedWhileTheWalkKeepsRecording()
+    {
+        const int batches = 200;
+        const int perBatch = 500;
+
+        var builder = new ExploreTreeBuilder(Root);
+        AddFiles(builder, 0, batches);
+
+        var capture = builder.Capture();
+        var recording = Task.Run(() => AddFiles(builder, batches, batches * 2));
+
+        var tree = capture.Build(ExploreChildOrder.ByName);
+        await recording;
+
+        Assert.Equal((batches * perBatch) + 1, tree.NodeCount);
+        Assert.Equal(batches * perBatch, tree.TotalBytes);
+
+        for (var node = 1; node < tree.NodeCount; node++)
+        {
+            var batch = (node - 1) / perBatch;
+            Assert.Equal($"{batch}-{(node - 1) % perBatch:D3}.bin", tree.NameOf(node));
+            Assert.Equal(ExploreTreeBuilder.RootNode, tree.ParentOf(node));
+        }
+
+        Assert.Equal((2 * batches * perBatch) + 1, builder.Build(ExploreChildOrder.ByName).NodeCount);
+
+        static void AddFiles(ExploreTreeBuilder builder, int from, int to)
+        {
+            for (var batch = from; batch < to; batch++)
+            {
+                builder.AddChildren(ExploreTreeBuilder.RootNode, [.. Enumerable.Range(0, perBatch).Select(entry =>
+                    new ExploreChild($"{batch}-{entry:D3}.bin", IsDirectory: false, IsLink: false, Size: 1))]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A snapshot puts each folder's children in name order from the order recorded with them,
+    /// which has to be the order <see cref="ExploreChildOrder.ByName"/> states: by name without
+    /// regard to case, and two names equal but for case by node number.
+    ///
+    /// <para>The root here is handed children in two calls, as nothing in a walk does but the
+    /// builder allows. Each call ranks its own children from zero, so placed by those ranks alone,
+    /// one child would take another's place and the tree would lose it.</para>
+    /// </summary>
+    [Fact]
+    public void PutsASnapshotsChildrenInNameOrder()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        var first = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("b.bin", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("Cache", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("a.bin", IsDirectory: false, IsLink: false, Size: 1),
+        ]);
+
+        var cache = first + 1;
+        var inCache = builder.AddChildren(cache, [
+            new ExploreChild("zeta", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("Alpha", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("beta", IsDirectory: false, IsLink: false, Size: 1),
+        ]);
+
+        var second = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("cache", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("A.bin", IsDirectory: false, IsLink: false, Size: 1),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.ByName);
+
+        Assert.Equal(
+            [first + 2, second + 1, first, cache, second],
+            tree.ChildrenOf(ExploreTreeBuilder.RootNode).ToArray());
+        Assert.Equal([inCache + 1, inCache + 2, inCache], tree.ChildrenOf(cache).ToArray());
+    }
+
+    /// <summary>
+    /// One folder's children whose enumeration waits to be released, which holds a worker inside the
+    /// builder's lock: the children are named before the lock is taken and enumerated inside it.
+    /// </summary>
+    private sealed class HeldListing(ExploreChild child) : IReadOnlyList<ExploreChild>, IDisposable
+    {
+        private readonly ManualResetEventSlim _released = new();
+
+        public ManualResetEventSlim Entered { get; } = new();
+
+        public int Count => 1;
+
+        public ExploreChild this[int index] => index == 0 ? child : throw new ArgumentOutOfRangeException(nameof(index));
+
+        public void Release() => _released.Set();
+
+        public IEnumerator<ExploreChild> GetEnumerator()
+        {
+            Entered.Set();
+            _released.Wait();
+            yield return child;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public void Dispose()
+        {
+            _released.Dispose();
+            Entered.Dispose();
+        }
+    }
 }

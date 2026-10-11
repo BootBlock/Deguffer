@@ -17,6 +17,7 @@ internal static class WalkRoute
     {
         long entries = 0;
         var refused = 0;
+        var listings = new ListingsInFlight(WalkListing.FromDisk);
 
         // §6.3: the walk is handed the extended form, as both scanners hand it, so a tree deeper
         // than MAX_PATH is walked rather than cut short and timed as though it were smaller.
@@ -24,6 +25,7 @@ internal static class WalkRoute
             LongPath.Extended(folder),
             rootState: 0,
             tuning,
+            listings.List,
             (_, contents, descend) =>
             {
                 if (contents.WasRefused)
@@ -41,10 +43,11 @@ internal static class WalkRoute
 
                 Interlocked.Add(ref entries, contents.Entries.Count + contents.Links.Count + contents.ReparseFiles.Count);
             },
-            onProgress: static () => { },
+            onProgress: static _ => { },
             TimeProvider.System,
             ct);
 
-        return new RunTally(Interlocked.Read(ref entries), BytesRead: 0, Complete: Volatile.Read(ref refused) == 0);
+        return new RunTally(
+            Interlocked.Read(ref entries), BytesRead: 0, Complete: Volatile.Read(ref refused) == 0, listings.Peak);
     }
 }

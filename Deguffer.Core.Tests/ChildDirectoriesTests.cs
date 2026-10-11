@@ -71,10 +71,9 @@ public sealed class ChildDirectoriesTests : IDisposable
     /// the flag. "Deguffer could not list this folder" is a sentence about permissions; a folder
     /// that does not exist holds nothing, which is a complete answer rather than the absence of one.
     ///
-    /// <para>Two callers reach here without checking existence first, and both would say the wrong
-    /// thing otherwise: the discovery walk pops a path a build has since removed, and the sweep of
-    /// the two application-data roots takes them as configured. Neither is a refusal, and neither
-    /// should raise a warning about permissions.</para>
+    /// <para>One caller reaches here without checking existence first, and would say the wrong thing
+    /// otherwise: the sweep of the two application-data roots takes them as configured. A root that
+    /// is not there is not a refusal, and should not raise a warning about permissions.</para>
     /// </summary>
     [Fact]
     public void AMissingRootIsEmptyRatherThanUnreadable()

@@ -14,11 +14,22 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class Tuning
 {
-    public static string Describe(Route route, WalkTuning walk, TableTuning table) => route.ReadsTable()
-        ? string.Create(
-            CultureInfo.InvariantCulture,
-            $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads")
-        : string.Create(
+    public static string Describe(Route route, WalkTuning walk, TableTuning table, bool snapshots)
+    {
+        if (route.ReadsTable())
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads");
+        }
+
+        var listing = string.Create(
             CultureInfo.InvariantCulture,
             $"{walk.Threads} folders listed at once, {walk.ListingBufferBytes / 1024} KiB listing buffer");
+
+        // Stated because it is the value the Explore walk is timed both ways with.
+        return route is Route.ExploreWalk
+            ? listing + (snapshots ? ", snapshots on" : ", snapshots off")
+            : listing;
+    }
 }

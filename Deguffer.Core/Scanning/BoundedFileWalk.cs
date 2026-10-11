@@ -146,6 +146,24 @@ internal static class BoundedFileWalk
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action onProgress,
         TimeProvider clock,
+        CancellationToken ct) =>
+        Visit(root, rootState, tuning, onDirectory, _ => onProgress(), clock, ct);
+
+    /// <summary>
+    /// <see cref="Visit{TState}(string, TState, WalkTuning, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>,
+    /// telling <paramref name="onProgress"/> whether the walk has finished: true only for the report
+    /// made once at the end.
+    ///
+    /// <para>For a caller whose report starts work that only a walk still running needs, such as a
+    /// picture of the tree so far, which the finished tree replaces as soon as it is built.</para>
+    /// </summary>
+    public static void Visit<TState>(
+        string root,
+        TState rootState,
+        WalkTuning tuning,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action<bool> onProgress,
+        TimeProvider clock,
         CancellationToken ct)
     {
         Visit(root, rootState, tuning, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
@@ -153,8 +171,9 @@ internal static class BoundedFileWalk
 
     /// <summary>
     /// The walk above, listing each directory through <paramref name="list"/> rather than from the
-    /// disk: how a removal lists through <see cref="IFileSystem"/>, the seam its tests observe and
-    /// refuse through.
+    /// disk: the seam a test lists a tree no volume holds through, the benchmark counts the listings
+    /// in flight through, and a removal lists through <see cref="IFileSystem"/>, which its tests
+    /// observe and refuse through.
     /// </summary>
     public static void Visit<TState>(
         string root,
@@ -162,7 +181,7 @@ internal static class BoundedFileWalk
         WalkTuning tuning,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
-        Action onProgress,
+        Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct)
     {

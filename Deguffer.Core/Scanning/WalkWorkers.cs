@@ -43,7 +43,7 @@ internal sealed class WalkWorkers<TState>
     private readonly ListingBuffer _buffer;
     private readonly ListDirectory _list;
     private readonly Action<TState, DirectoryContents, Action<WalkEntry, TState>> _onDirectory;
-    private readonly Action _onProgress;
+    private readonly Action<bool> _onProgress;
     private readonly TimeProvider _clock;
     private readonly long _progressTicks;
     private readonly CancellationToken _ct;
@@ -55,7 +55,7 @@ internal sealed class WalkWorkers<TState>
         WalkTuning tuning,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
-        Action onProgress,
+        Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct)
     {
@@ -94,7 +94,7 @@ internal sealed class WalkWorkers<TState>
         _crew.Finish();
         _ct.ThrowIfCancellationRequested();
 
-        _onProgress();
+        _onProgress(true);
     }
 
     private void WorkAndWait(Worker worker)
@@ -165,7 +165,7 @@ internal sealed class WalkWorkers<TState>
             // Set before the report rather than after it, so the interval runs from when a report
             // began, and a report slower than the interval does not stretch it.
             Volatile.Write(ref _nextReport, now + _progressTicks);
-            _onProgress();
+            _onProgress(false);
         }
     }
 

@@ -95,7 +95,7 @@ internal static class RemovalWalk
             tuning,
             fs.ListEntries,
             (folder, contents, descend) => folder.Gather(contents, descend, keep, bounds, bounded),
-            static () => { },
+            static _ => { },
             TimeProvider.System,
             ct);
 

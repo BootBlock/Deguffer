@@ -28,7 +28,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         _temp.CreateFile(2048, "cache", "content-v2", "sha512", "c.tgz");
         _temp.CreateDirectory("cache", "empty");
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(
@@ -71,7 +71,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         Assert.Equal(4608, tree.TotalBytes);
@@ -97,7 +97,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         using var denied = new DeniedDirectory(refused);
 
         ExploreTree? tree = null;
-        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default));
+        var thrown = ThrownExceptions.During(() => tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default));
 
         Assert.Empty(thrown);
         Assert.Equal(4096, tree!.TotalBytes);
@@ -124,7 +124,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         DirectoryLink.Create(kind, Path.Combine(root, "shortcut"), real);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
         var link = byPath[Path.Combine(root, "shortcut")];
 
@@ -156,7 +156,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         var file = _temp.CreateFile(64, "cache", "content-v2", "sha512", "a.tgz");
 
-        var tree = WalkExploreReader.Read(LongPath.Extended(root), ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(LongPath.Extended(root), ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
         var deepest = ByPath(tree)[file];
 
         Assert.Equal(root, tree.RootPath);
@@ -187,17 +187,59 @@ public sealed class WalkExploreReaderTests : IDisposable
 
         WalkExploreReader.Read(
             root, ScanTuner.Shipped, OccupancyProbe.Default,
-            (_, items, bytes) =>
+            new CallbackProgress<ExploreProgress>(report =>
             {
-                reports.Add((items, bytes));
+                reports.Add((report.Done, report.BytesSeen));
                 clock.Advance(BoundedFileWalk.ProgressInterval);
-            },
+            }),
             clock,
             default);
 
         Assert.True(reports.Count >= 3, $"Only {reports.Count} reports were made.");
         Assert.Equal(reports.OrderBy(r => r.Items).ThenBy(r => r.Bytes), reports);
         Assert.Equal((5, 7000), reports[^1]);
+    }
+
+    /// <summary>
+    /// The walk's last report, made once every folder is read, starts no snapshot and carries none.
+    /// The finished tree is built straight after it and replaces any picture of the walk so far, so
+    /// a snapshot started there would be a pass over the whole tree for nothing.
+    ///
+    /// <para>Every report moves the clock a whole snapshot interval, so every report the walk makes
+    /// while running finds a snapshot due, and the last would too if it were asked.</para>
+    /// </summary>
+    [Fact]
+    public void StartsNoSnapshotFromTheReportMadeOnceTheWalkIsOver()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(1000, "cache", "a.bin");
+        _temp.CreateFile(2000, "cache", "one", "b.bin");
+        _temp.CreateFile(4000, "cache", "one", "two", "c.bin");
+
+        var clock = new ManualTimeProvider();
+        var reports = new List<ExploreProgress>();
+        var startedAtReport = new List<int>();
+
+        WalkExploreReader.Read(
+            root, ScanTuner.Shipped, OccupancyProbe.Default,
+            new CallbackProgress<ExploreProgress>(report =>
+            {
+                reports.Add(report);
+                clock.Advance(WalkSnapshots.Interval);
+            }),
+            clock,
+            default,
+            assembleSnapshot: assemble =>
+            {
+                startedAtReport.Add(reports.Count);
+                assemble();
+                return Task.CompletedTask;
+            });
+
+        Assert.Equal(4, reports.Count);
+        Assert.Equal([1, 2], startedAtReport);
+        Assert.NotNull(reports[2].Snapshot);
+        Assert.Null(reports[3].Snapshot);
     }
 
     /// <summary>
@@ -226,7 +268,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         // layout was settled long before its contents were last rewritten.
         Directory.SetLastWriteTimeUtc(root, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
 
         var node = byPath[Path.Combine(root, "a.tgz")];
@@ -252,7 +294,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         Directory.SetCreationTimeUtc(root, made);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
 
         Assert.Equal(made, tree.CreatedOf(tree.RootNode).Utc);
     }
@@ -277,7 +319,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         DirectoryLink.Create(kind, link, target);
         Directory.SetCreationTimeUtc(link, made);
 
-        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
         var node = ByPath(tree)[link];
 
         Assert.True(tree.IsLink(node));
@@ -305,7 +347,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         Assert.False(listed.HasFlag(FileAttributes.ReparsePoint));
         Assert.False(listed.HasFlag(FileAttributes.SparseFile));
 
-        var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
         var byPath = ByPath(tree);
         var film = byPath[synced.At("film.mkv")];
 
@@ -332,7 +374,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         using var synced = new ScratchSyncRoot(_temp.CreateDirectory("Synced"));
         var online = synced.OnlineOnly("film.mkv", 5_000_000);
 
-        var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, onProgress: null, TimeProvider.System, default);
+        var tree = WalkExploreReader.Read(synced.Path, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
 
         Assert.Equal(0, synced.FetchRequests);
         Assert.Equal(0, tree.TotalBytes);
