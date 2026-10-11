@@ -15,7 +15,7 @@
     xmlns:execution="using:Deguffer.Core.Execution">
 
     <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
-        <ItemsRepeater ItemsSource="{x:Bind Checks, Mode=OneWay}">
+        <ItemsRepeater x:Name="ChecksList" ItemsSource="{x:Bind Checks, Mode=OneWay}">
             <ItemsRepeater.ItemTemplate>
                 <DataTemplate x:DataType="execution:VerificationCheck">
                     <StackPanel Margin="0,0,0,8">

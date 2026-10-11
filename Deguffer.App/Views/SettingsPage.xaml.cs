@@ -17,6 +17,12 @@ public sealed partial class SettingsPage : Page
         History = new ScanHistorySettingsViewModel(App.ScanHistory);
         InitializeComponent();
 
+        ListAnimation.Play(SourceRootsList, SystemMotion.Current);
+        ListAnimation.Play(EmulatorFoldersList, SystemMotion.Current);
+        ListAnimation.Play(KeptItemsList, SystemMotion.Current);
+        ListAnimation.Play(KeptScansList, SystemMotion.Current);
+        ListAnimation.Play(DrivesList, SystemMotion.Current);
+
         Loaded += OnLoaded;
         Unloaded += (_, _) =>
         {

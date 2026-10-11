@@ -1,4 +1,5 @@
 using Deguffer.Core.Viewing;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -21,6 +22,12 @@ namespace Deguffer.App.Shell;
 /// </summary>
 internal sealed class RowGhosts
 {
+    /// <summary>
+    /// The layer over each viewport, shared by every list seen through it: a page that scrolls holds
+    /// several repeaters, and each would otherwise stack a layer of its own over the same viewport.
+    /// </summary>
+    private static readonly ConditionalWeakTable<ScrollContentPresenter, RowGhosts> Layers = [];
+
     private readonly Canvas _layer;
 
     private RowGhosts(Canvas layer) => _layer = layer;
@@ -31,6 +38,11 @@ internal sealed class RowGhosts
     /// </summary>
     public static RowGhosts? Over(ScrollContentPresenter viewport)
     {
+        if (Layers.TryGetValue(viewport, out var shared))
+        {
+            return shared;
+        }
+
         if (VisualTreeHelper.GetParent(viewport) is not Panel panel)
         {
             return null;
@@ -47,15 +59,29 @@ internal sealed class RowGhosts
             Grid.SetColumnSpan(layer, Grid.GetColumnSpan(viewport));
         }
 
-        // Clipped to the viewport, so a ghost near an edge is cut where the rows are.
-        viewport.SizeChanged += (_, _) => layer.Clip = new RectangleGeometry
-        {
-            Rect = new Windows.Foundation.Rect(0, 0, viewport.ActualWidth, viewport.ActualHeight),
-        };
+        // Fitted now as well as on a resize, because a list found after its scroller was laid out
+        // hears no size change until the window is resized.
+        Fit();
+        viewport.SizeChanged += (_, _) => Fit();
 
         panel.Children.Insert(panel.Children.IndexOf(viewport) + 1, layer);
 
-        return new RowGhosts(layer);
+        var ghosts = new RowGhosts(layer);
+        Layers.Add(viewport, ghosts);
+
+        return ghosts;
+
+        // Inset as the viewport is, which a scroller with padding moves in from the cell they share,
+        // so a ghost's place in the viewport is its place on the layer. Clipped to the viewport, so
+        // a ghost near an edge is cut where the rows are.
+        void Fit()
+        {
+            layer.Margin = viewport.Margin;
+            layer.Clip = new RectangleGeometry
+            {
+                Rect = new Windows.Foundation.Rect(0, 0, viewport.ActualWidth, viewport.ActualHeight),
+            };
+        }
     }
 
     /// <summary>
@@ -97,10 +123,32 @@ internal sealed class RowGhosts
             if (container.ContentTemplateRoot is FrameworkElement root && VisualTreeHelper.GetParent(root) is not null)
             {
                 var origin = root.TransformToVisual(container).TransformPoint(default);
-                content = new Windows.Foundation.Rect(at.X + origin.X, at.Y + origin.Y, root.ActualWidth, root.ActualHeight);
+                content = WithMargin(root, new Windows.Foundation.Rect(at.X + origin.X, at.Y + origin.Y, root.ActualWidth, root.ActualHeight));
             }
 
             return new Stood(content, null, list.ItemTemplate, list.ItemTemplateSelector);
+        }
+
+        /// <summary>
+        /// How <paramref name="root"/>, a template's root standing at <paramref name="at"/>, is drawn
+        /// by <paramref name="template"/>: a <see cref="DataTemplate"/> or a <see cref="DataTemplateSelector"/>.
+        /// </summary>
+        public static Stood Of(FrameworkElement root, Windows.Foundation.Rect at, object? template) =>
+            new(WithMargin(root, at), null, template as DataTemplate, template as DataTemplateSelector);
+
+        /// <summary>
+        /// Where a template's root stood, with its margin. The ghost draws the template again, margin
+        /// and all, so a ghost sized to the root alone would squeeze it by the margin.
+        /// </summary>
+        private static Windows.Foundation.Rect WithMargin(FrameworkElement root, Windows.Foundation.Rect at)
+        {
+            var margin = root.Margin;
+
+            return new Windows.Foundation.Rect(
+                at.X - margin.Left,
+                at.Y - margin.Top,
+                Math.Max(0, at.Width + margin.Left + margin.Right),
+                Math.Max(0, at.Height + margin.Top + margin.Bottom));
         }
     }
 

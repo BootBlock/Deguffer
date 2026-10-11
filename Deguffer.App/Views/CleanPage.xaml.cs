@@ -10,7 +10,6 @@ using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
@@ -326,7 +325,7 @@ public sealed partial class CleanPage : Page
         }
     }
 
-    private static void GrowBarsIn(SelectorItem container)
+    private static void GrowBarsIn(UIElement container)
     {
         foreach (var bar in VisualTree.Descendants<FillBar>(container))
         {

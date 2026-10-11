@@ -1,17 +1,15 @@
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
-using Windows.Foundation.Collections;
 
 namespace Deguffer.App.Shell;
 
 /// <summary>
-/// One motion for every bound list: a row arriving fades and slides in, a row leaving fades out
+/// One motion for every bound list, whether a list view, a tree view or a repeater lays its rows out
+/// (<see cref="IListRows"/>): a row arriving fades and slides in, a row leaving fades out
 /// where it stood while the rows below glide up into its space, and a row the sort moved glides to
 /// its new place. A change that replaces most of what is on screen crossfades instead
 /// (<see cref="ListMotion"/>, timed by <see cref="MotionToken.List"/>).
@@ -27,23 +25,22 @@ namespace Deguffer.App.Shell;
 /// the pointer, or failing that the one with focus, keeps its place on screen unless it is the one
 /// that changed (<see cref="ListMotion.Hold"/>).</para>
 ///
-/// <para>Hears the list's own items, which reports a sort's move as a reset. That costs nothing:
-/// what a change did to each row is read from where the rows stood and stand, not from what kind of
-/// change the list reported.</para>
+/// <para>What a change did to each row is read from where the rows stood and stand, not from what
+/// kind of change the list reported, so a list that reports a sort's move as a reset costs nothing.</para>
 /// </summary>
 internal sealed class ListAnimation
 {
     private static readonly IEqualityComparer<object> Rows = ReferenceEqualityComparer.Instance;
 
-    private readonly ListViewBase _list;
+    private readonly IListRows _rows;
 
     private readonly IMotionPolicy _motion;
 
     /// <summary>The item each container last showed, kept past its recycling until the frame's change is played.</summary>
-    private readonly Dictionary<SelectorItem, object> _shown = [];
+    private readonly Dictionary<UIElement, object> _shown = [];
 
     /// <summary>The containers recycled since the last change was played, whose items go with it.</summary>
-    private readonly HashSet<SelectorItem> _released = [];
+    private readonly HashSet<UIElement> _released = [];
 
     private readonly RowMoves _moves = new();
 
@@ -73,16 +70,16 @@ internal sealed class ListAnimation
     /// </summary>
     private bool _reset;
 
-    private ListAnimation(ListViewBase list, IMotionPolicy motion)
+    private ListAnimation(IListRows rows, IMotionPolicy motion)
     {
-        _list = list;
+        _rows = rows;
         _motion = motion;
 
-        // The framework's own add, delete and reorder transitions would play under these, and they
-        // follow only the system setting, never MotionToken.List.
-        list.ItemContainerTransitions = new TransitionCollection();
-        list.ContainerContentChanging += OnContainerContentChanging;
-        list.Items.VectorChanged += OnItemsChanged;
+        rows.Shown += OnShown;
+        rows.Released += OnReleased;
+        rows.Changed += OnItemsChanged;
+
+        var list = rows.List;
         list.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnPointerMoved), handledEventsToo: true);
         list.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler((_, _) => _pointer = null), handledEventsToo: true);
         list.Loaded += (_, _) => FindViewport();
@@ -92,10 +89,16 @@ internal sealed class ListAnimation
     /// Raised for each row as its arrival plays, with the container it arrives in, so what the row
     /// draws can come in with it. Never for a row only scrolled into sight, which has not arrived.
     /// </summary>
-    public event Action<SelectorItem>? Arrived;
+    public event Action<UIElement>? Arrived;
 
     /// <summary>Give <paramref name="list"/> the motion, for as long as it lives.</summary>
-    public static ListAnimation Play(ListViewBase list, IMotionPolicy motion) => new(list, motion);
+    public static ListAnimation Play(ListViewBase list, IMotionPolicy motion) => new(new ListViewRows(list), motion);
+
+    /// <summary>
+    /// Give <paramref name="repeater"/> the motion, for as long as it lives. Its rows are seen through
+    /// the scroller around it, and only those inside that scroller's viewport move.
+    /// </summary>
+    public static ListAnimation Play(ItemsRepeater repeater, IMotionPolicy motion) => new(new RepeaterRows(repeater), motion);
 
     /// <summary>
     /// Give the list inside <paramref name="tree"/> the motion. A tree view lays its rows out as a
@@ -111,7 +114,7 @@ internal sealed class ListAnimation
             if (Descendant<TreeViewList>(tree) is { } list)
             {
                 tree.LayoutUpdated -= Find;
-                new ListAnimation(list, motion).FindViewport();
+                new ListAnimation(new ListViewRows(list), motion).FindViewport();
             }
         }
     }
@@ -123,42 +126,35 @@ internal sealed class ListAnimation
             return;
         }
 
-        _scroller = Descendant<ScrollViewer>(_list);
+        _scroller = _rows.Scroller();
         _viewport = _scroller is null ? null : Descendant<ScrollContentPresenter>(_scroller);
         _ghosts = _viewport is null ? null : RowGhosts.Over(_viewport);
     }
 
-    private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    // A container shown again, for this item or another, starts at rest: a fade or a glide left on
+    // it from its last row would play on a row that never moved.
+    private void OnShown(UIElement container, object row)
     {
-        if (args.ItemContainer is not { } container)
-        {
-            return;
-        }
-
-        // A container shown again, for this item or another, starts at rest: a fade or a glide left
-        // on it from its last row would play on a row that never moved.
         _moves.Rest(container);
+        _released.Remove(container);
+        _shown[container] = row;
+    }
 
-        if (args.InRecycleQueue)
-        {
-            _released.Add(container);
-        }
-        else if (Row(args.Item) is { } row)
-        {
-            _released.Remove(container);
-            _shown[container] = row;
-        }
+    private void OnReleased(UIElement container)
+    {
+        _moves.Rest(container);
+        _released.Add(container);
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e) =>
         _pointer = _viewport is null ? null : e.GetCurrentPoint(_viewport).Position;
 
-    private void OnItemsChanged(IObservableVector<object> sender, IVectorChangedEventArgs e)
+    private void OnItemsChanged(IReadOnlyList<object> arrived, bool reset)
     {
         // A list that was collapsed when it loaded had no template to look in until it was shown.
         FindViewport();
 
-        if (_viewport is null || !_list.IsLoaded)
+        if (_viewport is null || !_rows.List.IsLoaded)
         {
             return;
         }
@@ -170,12 +166,8 @@ internal sealed class ListAnimation
             CompositionTarget.Rendering += OnRendering;
         }
 
-        _reset |= e.CollectionChange == CollectionChange.Reset;
-
-        if (e.CollectionChange == CollectionChange.ItemInserted && e.Index < sender.Count && Row(sender[(int)e.Index]) is { } arriving)
-        {
-            _arrived.Add(arriving);
-        }
+        _reset |= reset;
+        _arrived.UnionWith(arrived);
     }
 
     /// <summary>
@@ -198,7 +190,7 @@ internal sealed class ListAnimation
             if (at.Bottom > 0 && at.Top < height)
             {
                 _stood.TryAdd(item, at);
-                _drawn.TryAdd(item, RowGhosts.Stood.Of(_list, container, at, _viewport));
+                _drawn.TryAdd(item, _rows.Draw(container, at, _viewport));
             }
         }
     }
@@ -233,7 +225,7 @@ internal sealed class ListAnimation
     {
         var played = _motion.For(MotionToken.List);
 
-        _list.UpdateLayout();
+        _rows.List.UpdateLayout();
 
         var before = _stood.ToDictionary(row => row.Key, row => row.Value.Y, Rows);
         var after = Standing();
@@ -243,7 +235,7 @@ internal sealed class ListAnimation
             && _scroller is not null)
         {
             _scroller.ChangeView(null, _scroller.VerticalOffset + shift, null, disableAnimation: true);
-            _list.UpdateLayout();
+            _rows.List.UpdateLayout();
             after = Standing();
         }
 
@@ -266,7 +258,7 @@ internal sealed class ListAnimation
 
         foreach (var item in before.Keys)
         {
-            if (!after.Exists(row => ReferenceEquals(row.Item, item)) && !(held ??= Held()).Contains(item))
+            if (!after.Exists(row => ReferenceEquals(row.Item, item)) && !(held ??= _rows.Held()).Contains(item))
             {
                 departed.Add(item);
             }
@@ -297,44 +289,15 @@ internal sealed class ListAnimation
         }
     }
 
-    /// <summary>
-    /// What a row is about. A tree view's flattened list can hold a node for each row rather than the
-    /// row itself, and its row is then the node's content.
-    /// </summary>
-    private static object? Row(object? item) => item is TreeViewNode node ? node.Content : item;
-
-    /// <summary>Every row the list holds, on screen or not.</summary>
-    private HashSet<object> Held()
-    {
-        var held = new HashSet<object>(_list.Items.Count, Rows);
-
-        foreach (var item in _list.Items)
-        {
-            if (Row(item) is { } row)
-            {
-                held.Add(row);
-            }
-        }
-
-        return held;
-    }
     /// <summary>Every row on screen now, and where it stands, from the top down.</summary>
-    private List<(object Item, SelectorItem Container, Rect At)> Standing()
+    private List<(object Item, UIElement Container, Rect At)> Standing()
     {
-        var rows = new List<(object, SelectorItem, Rect)>();
-
-        if (_list.ItemsPanelRoot is not { } panel)
-        {
-            return rows;
-        }
-
+        var rows = new List<(object, UIElement, Rect)>();
         var height = _viewport!.ActualHeight;
 
-        foreach (var child in panel.Children)
+        foreach (var (container, item) in _rows.Realised())
         {
-            if (child is SelectorItem container
-                && !_released.Contains(container)
-                && Row(_list.ItemFromContainer(container)) is { } item
+            if (!_released.Contains(container)
                 && Place(container) is { } at
                 && at.Bottom > 0
                 && at.Top < height)
@@ -365,20 +328,38 @@ internal sealed class ListAnimation
             }
         }
 
-        if (FocusManager.GetFocusedElement(_list.XamlRoot) is SelectorItem focused
-            && Row(_list.ItemFromContainer(focused)) is { } focusedItem)
+        if (Focused() is { } focused)
         {
-            anchors.Add(focusedItem);
+            anchors.Add(focused);
         }
 
         return anchors;
     }
 
     /// <summary>
+    /// The row that holds the keyboard focus, whether the focus is on its container or on a control
+    /// in it, such as a row's button in a list whose rows take no focus of their own.
+    /// </summary>
+    private object? Focused()
+    {
+        for (var at = FocusManager.GetFocusedElement(_rows.List.XamlRoot) as DependencyObject;
+             at is not null && !ReferenceEquals(at, _rows.List);
+             at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is UIElement container && !_released.Contains(container) && _shown.TryGetValue(container, out var row))
+            {
+                return row;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Where <paramref name="container"/> is laid out in the viewport, or null for one the list has
     /// taken out of its tree, which has no place to measure from.
     /// </summary>
-    private Rect? Place(SelectorItem container)
+    private Rect? Place(UIElement container)
     {
         if (VisualTreeHelper.GetParent(container) is null)
         {
@@ -387,10 +368,10 @@ internal sealed class ListAnimation
 
         var origin = container.TransformToVisual(_viewport).TransformPoint(default);
 
-        return new Rect(origin.X, origin.Y, container.ActualWidth, container.ActualHeight);
+        return new Rect(origin.X, origin.Y, container.ActualSize.X, container.ActualSize.Y);
     }
 
-    private static SelectorItem? Container(List<(object Item, SelectorItem Container, Rect At)> rows, object item) =>
+    private static UIElement? Container(List<(object Item, UIElement Container, Rect At)> rows, object item) =>
         rows.Find(row => ReferenceEquals(row.Item, item)).Container;
 
     private static T? Descendant<T>(DependencyObject root)
