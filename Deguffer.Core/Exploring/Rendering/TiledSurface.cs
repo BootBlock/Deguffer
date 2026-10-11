@@ -118,6 +118,15 @@ public sealed class TiledSurface : ExploreSurface
     public override int? ShownAs(int node) => Deepest(node)?.Node;
 
     /// <summary>
+    /// Laid out again for a treemap that can be zoomed, whose drawing holds only what reaches the
+    /// canvas. Any other drawing of rectangles holds all of its picture already.
+    /// </summary>
+    public override MapFrame? Locate(int node) =>
+        Viewport is { } viewport
+            ? TreemapLayout.Locate(Tree, Root, Width, Height, Limits, _beside, viewport, node)
+            : ShownAs(node) == node ? FrameOf(node) : null;
+
+    /// <summary>
     /// A shape is under another where it lies inside it, which in a treemap is every shape with a
     /// folder drawn round it and in an icicle none, whose children sit beside their folder rather than
     /// in it. Read from where the shapes are rather than from which layout made them, so the answer is

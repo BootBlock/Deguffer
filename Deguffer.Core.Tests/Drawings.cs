@@ -81,6 +81,8 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
 
     public override MapFrame? FrameOf(int node) => drawing.FrameOf(node);
 
+    public override MapFrame? Locate(int node) => drawing.Locate(node);
+
     public override int? ShownAs(int node) => drawing.ShownAs(node);
 
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes) => drawing.Outlines(nodes);

@@ -22,8 +22,9 @@ namespace Deguffer.Core.Exploring.Layout;
 /// <para>The layout is iterative throughout. A volume's tree can be arbitrarily deep, and a
 /// recursive layout over a real <c>node_modules</c> is a stack overflow in a repaint handler.</para>
 ///
-/// <para>Over 500 lines because the row packing, the aggregate and the blocks beside the volume are
-/// one pass over one rectangle type, and most of the length is the reasoning behind each rule. Which
+/// <para>Over 500 lines because the row packing, the aggregate, the blocks beside the volume and the
+/// walk to one shape (<see cref="Locate"/>) are one pass over one rectangle type, and most of the length
+/// is the reasoning behind each rule. Which
 /// limits a space is held to at a zoom is <see cref="TreemapDetail"/>'s (G1).</para>
 /// </summary>
 public static class TreemapLayout
@@ -151,6 +152,92 @@ public static class TreemapLayout
         }
 
         return tiles.ToArray();
+    }
+
+    /// <summary>
+    /// Where <paramref name="node"/>'s own shape is in the picture <see cref="Compute(ISizedTree, int, float, float, LayoutLimits, VolumeSpace, MapViewport)"/>
+    /// lays out at <paramref name="viewport"/>, in fractions of the canvas, on the canvas or however far
+    /// off it; or null where the node is not under <paramref name="root"/>, or that picture draws it
+    /// inside a shape rather than as one of its own.
+    ///
+    /// <para>The same layout, kept to the folders that hold the node: each of them is laid out as the
+    /// whole picture lays it out, and nothing beside them is opened. So the answer is exact for a shape
+    /// no drawing at that zoom has reached, at the cost of the rows along one path. Measured in double
+    /// precision and never cut, because a shape many canvases away is placed by sums as long as the
+    /// magnified picture (see <see cref="Reach"/>).</para>
+    /// </summary>
+    public static MapFrame? Locate(
+        ISizedTree tree,
+        int root,
+        float width,
+        float height,
+        LayoutLimits limits,
+        VolumeSpace volume,
+        MapViewport viewport,
+        int node)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        var path = new HashSet<int>();
+
+        for (var at = node; path.Add(at) && at != root; at = tree.ParentOf(at))
+        {
+            if (at == tree.ParentOf(at))
+            {
+                return null;
+            }
+        }
+
+        if (tree.ChildOrder != ExploreChildOrder.BySize || width <= 0 || height <= 0 || tree.SizeOf(root) <= 0)
+        {
+            return null;
+        }
+
+        var detail = new TreemapDetail(limits, viewport);
+        var picture = new Rectangle(
+            -viewport.Left * width * viewport.Zoom,
+            -viewport.Top * height * viewport.Zoom,
+            width * viewport.Zoom,
+            height * viewport.Zoom);
+
+        // The window is the whole picture, so nothing on the path is passed over for being off the
+        // canvas. The shapes laid beside it are laid and dropped.
+        var bounds = new Bounds(new Rectangle(0, 0, width, height), picture);
+        var dropped = new List<ExploreTile>();
+        var pending = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
+        pending.Push((root, 0, BesideTheVolume(tree.SizeOf(root), volume, picture, bounds, limits, dropped), 0));
+
+        while (pending.TryPop(out var next))
+        {
+            var (at, depth, frame, from) = next;
+
+            if (!path.Contains(at))
+            {
+                continue;
+            }
+
+            if (at == node)
+            {
+                return new MapFrame(frame.X / width, frame.Y / height, frame.Width / width, frame.Height / height);
+            }
+
+            var level = detail.OpeningLevel(tree, at, depth, frame.Width, frame.Height, from);
+
+            if (level < 0)
+            {
+                return null;
+            }
+
+            var (header, gap) = detail.FrameOf(frame.Width, frame.Height, level);
+            var top = header > 0 ? header : gap;
+            var area = new Rectangle(
+                frame.X + gap, frame.Y + top,
+                frame.Width - (gap * 2), frame.Height - top - gap);
+
+            Place(tree, at, depth + 1, area, level, detail, bounds, dropped, pending);
+        }
+
+        return null;
     }
 
     /// <summary>

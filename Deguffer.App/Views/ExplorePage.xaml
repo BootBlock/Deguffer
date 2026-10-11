@@ -466,6 +466,7 @@
             <Grid>
                 <controls:ExploreMap x:Name="Map"
                                      Zoomable="True"
+                                     Description="A picture of what is using the space. Choose List in the View box for the same contents as a readable list. Double-click a shape to open what is inside it. The mouse's Back and Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through the folders opened and the zooms to a shape."
                                      KeyboardAcceleratorPlacementMode="Hidden">
                     <!--
                         What the thing under the pointer actually is, where the app knows. Not the

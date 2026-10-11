@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
 > composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
-> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). Its treemaps are shaded on the GPU where effects are fast since #284 ([what that found](#what-landing-284-found)), lit by the pointer there ([how](#the-pointers-light)). The maintainer has
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). Its treemaps are shaded on the GPU where effects are fast since #284 ([what that found](#what-landing-284-found)), lit by the pointer there ([how](#the-pointers-light)). Since #290 the Memory page's map has the same camera, which follows what the reader zoomed into from one reading to the next ([what that found](#what-landing-290-found)). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -432,6 +432,39 @@ canvas the CPU painted, and not in high contrast (§6.5).
 - **Driven** on `C:\Windows`: the light followed a smooth pointer move and left no trace behind it,
   went when the pointer left the map, and after five wheel notches in, the drawing at rest was whole
   and lit at the pointer.
+
+## What landing #290 found
+
+The Memory page's map now has Explore's camera, and each reading of memory moves the map from the
+last layout to the new one, as a scan's snapshots do (#310). Its readings are treemaps, so this was
+the first time that move ran on a zoomed picture, and on a canvas shaded on the GPU.
+
+- **The camera follows the shape at the middle of the screen** (`MapFollow`). A treemap ordered by
+  size moves a process that grew past a sibling to the other side of its parent, so a camera held
+  where it was in the picture showed whatever moved into that place. The point under the middle is
+  kept at the same share of the deepest shape it was over, found again in the new reading by what it
+  is, and the camera moves with it over the same 250 ms as the shapes. The zoom is the reader's and
+  never changes. A shape that went hands over to the folder it was in.
+- **A zoomed drawing holds only what reaches the canvas**, so the shape followed was not in the new
+  drawing once a reordering sent it a few screens away. `TreemapLayout.Locate` lays out only the
+  folders on the path to one shape, as the whole picture lays them out, and places it exactly, on
+  the canvas or off it.
+- **A drawing landed empty but for the light's rectangle, or showed the whole picture at the wrong
+  size, on about half the readings.** The renderer shades every canvas into one render target
+  of its own and Win2D copies it into the layer's surface. Ending the drawing session left that copy
+  queued in Direct2D, and Direct2D cannot see the renderer write its target through Direct3D, so
+  the next shading overwrote what the copy read before it ran. In the same few milliseconds a reading
+  shades the new drawing whole, shades the light off the drawing it replaces, and shades the whole
+  picture under it, so the new layer received one of the other two. Each session that reads the
+  renderer's target now flushes before it ends (`MapGraphics.Shade`, `Shrink`). Measured on a zoomed
+  Memory map: 13 of 24 captures dark before, none of 16 after.
+- **This is also what #284 met** when a drawing shaded whole and lit at once showed only the
+  rectangle round the pointer ([above](#the-pointers-light)). Waiting for a commit before shading the
+  light hid it for one layer, as the queued copy had run by then. It did not cover two layers, which
+  is what a reading does. The light still waits for a commit, which shades it once a frame rather
+  than once a pointer move.
+- **Driven** on a machine's live memory: zoomed in, readings moved the shapes and kept the zoom,
+  the overview and the light; zoomed onto one process, the camera stayed on it through five readings.
 
 ## Still open
 

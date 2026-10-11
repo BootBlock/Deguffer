@@ -22,11 +22,10 @@
                            Style="{StaticResource SubtitleTextBlockStyle}" />
 
                 <!-- The bar states the same figure as the words above it, so it is not the only
-                     place the figure is readable, and it carries no colour of its own. -->
-                <ProgressBar Maximum="100"
-                             Height="4"
-                             Value="{x:Bind ViewModel.Committed, Mode=OneWay}"
-                             AutomationProperties.AccessibilityView="Raw" />
+                     place the figure is readable, and it carries no colour of its own. It eases to
+                     each reading's figure rather than jumping, well inside the time between two. -->
+                <controls:FillBar Height="4"
+                                  Value="{x:Bind ViewModel.Committed, Mode=OneWay}" />
 
                 <TextBlock Text="Committed memory against the commit limit. Allocations start to fail as it reaches the limit."
                            TextWrapping="Wrap"
@@ -118,12 +117,14 @@
                 CornerRadius="6">
             <Grid>
                 <!--
-                    The picture. Its own name and help text, rather than the map's defaults, which
-                    name Explore's picker and call the drawing a scan.
+                    The picture. Its own name and description, rather than the map's defaults, which
+                    call the drawing a scan. The camera is Explore's, and stays where the reader put
+                    it from one reading to the next, following what they zoomed into.
                 -->
                 <controls:ExploreMap x:Name="Map"
+                                     Zoomable="True"
                                      AutomationProperties.Name="Map of where memory is"
-                                     AutomationProperties.HelpText="A picture of where physical memory is. Choose List in the View box for the same contents as a readable list.">
+                                     Description="A picture of where physical memory is. Choose List in the View box for the same contents as a readable list. Double-click a shape to open what is inside it.">
                     <!--
                         What the thing under the pointer is, and why the size it is drawn at is
                         normal (§7.2). A floating tooltip, where the readout below deliberately is

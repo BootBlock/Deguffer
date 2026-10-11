@@ -265,8 +265,12 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// </summary>
     public void JumpTo(MapViewport target) => MoveTo(target, Motion.Instant);
 
-    /// <summary>To <paramref name="target"/> as <paramref name="motion"/> says. See <see cref="GlideTo"/>.</summary>
-    private void MoveTo(MapViewport target, Motion motion)
+    /// <summary>
+    /// To <paramref name="target"/> as <paramref name="motion"/> says, for a move timed with something
+    /// else on the map, such as the camera following a shape that travels to a new layout. See
+    /// <see cref="GlideTo"/>.
+    /// </summary>
+    public void MoveTo(MapViewport target, Motion motion)
     {
         // Already going there: at either end of the zoom a further notch asks for nothing, and
         // restarting the move would ease again over a distance of nothing.

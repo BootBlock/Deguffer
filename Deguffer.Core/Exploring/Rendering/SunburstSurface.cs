@@ -50,6 +50,9 @@ public sealed class SunburstSurface : ExploreSurface
     /// <summary>Null throughout, for the same reason.</summary>
     public override MapFrame? FrameOf(int node) => null;
 
+    /// <summary>Null throughout, for the same reason.</summary>
+    public override MapFrame? Locate(int node) => null;
+
     /// <summary>
     /// The deepest sector that is the node or a folder above it. A folder's ring holds nothing inside
     /// it, because what it holds is drawn in the rings further out, so the deepest is the node's own
