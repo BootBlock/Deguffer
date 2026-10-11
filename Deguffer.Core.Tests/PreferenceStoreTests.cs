@@ -29,6 +29,7 @@ public class PreferenceStoreTests
             SunburstScheme: ExploreScheme.Deep,
             ExploreNotesDismissed: true,
             ExploreOverviewHidden: true,
+            MemoryOverviewHidden: true,
             ShowNotInstalled: true,
             ShowAlreadyClear: true,
             BackdropEnabled: false,
@@ -69,6 +70,7 @@ public class PreferenceStoreTests
 
         // Not the default, on the same reasoning.
         Assert.True(loaded.ExploreOverviewHidden);
+        Assert.True(loaded.MemoryOverviewHidden);
 
         Assert.True(loaded.ShowNotInstalled);
         Assert.True(loaded.ShowAlreadyClear);

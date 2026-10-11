@@ -230,6 +230,11 @@ public enum ExploreScheme
 /// its place that brings it back. Stored for the reason <paramref name="ExploreNotesDismissed"/> is:
 /// it answers "I do not want this" rather than "not just now". Presentation only.
 /// </param>
+/// <param name="MemoryOverviewHidden">
+/// The same choice on the Memory page's map, kept apart because the two maps are zoomed for different
+/// reasons: a reader who hides it over a drive they know may want it over a machine that keeps moving.
+/// Presentation only.
+/// </param>
 /// <param name="BackdropEnabled">
 /// Whether to ask for the Acrylic backdrop. High contrast overrides this to off regardless — the
 /// backdrop fights the user's stated accessibility requirement, and that is not negotiable by a
@@ -359,6 +364,7 @@ public sealed record AppPreferences(
     ExploreScheme SunburstScheme = ExploreScheme.Standard,
     bool ExploreNotesDismissed = false,
     bool ExploreOverviewHidden = false,
+    bool MemoryOverviewHidden = false,
     bool ShowNotInstalled = false,
     bool ShowAlreadyClear = false,
     bool BackdropEnabled = true,

@@ -112,6 +112,11 @@ public sealed partial class MemoryPage : Page
         Map.Activated += (_, node) => ViewModel.Descend(node);
         Map.Picked += (_, node) => ViewModel.Selection.Select(node);
 
+        // Read once, as Explore reads its own, and kept as the reader leaves it on the overview itself.
+        Map.OverviewHidden = App.Preferences.Current.MemoryOverviewHidden;
+        Map.OverviewHiddenChanged += (_, _) =>
+            App.Preferences.Update(current => current with { MemoryOverviewHidden = Map.OverviewHidden });
+
         // Both screens are wired the same way and share the one answer, because only one of them is
         // ever on screen: the guard is about whether the user has touched the rows, and there is one
         // user. A TreeViewItem is a ListViewItem, so the same handlers read both.

@@ -565,9 +565,9 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Whether the wheel, the touchpad, touch, a drag and the keyboard move the picture, where the
-    /// drawing can be zoomed at all. Off unless the page asks, because every new tree starts from the
-    /// whole picture, and a page that draws a new tree every few seconds would take the reader's zoom
-    /// away every few seconds.
+    /// drawing can be zoomed at all. Off unless the page asks. A new tree of the same place keeps the
+    /// zoom, and the camera follows what the reader zoomed into (<see cref="Follow"/>), so a page that
+    /// draws a new reading every few seconds can offer it too.
     /// </summary>
     public bool Zoomable
     {
@@ -621,24 +621,37 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
+    /// What the picture is, where the same contents can be read instead, and what the page does with a
+    /// shape opened or a step back: the page's to say, as the pages differ in all three. The map adds
+    /// how the pointer and the keys move the picture, where they do.
+    /// </summary>
+    public string Description
+    {
+        get;
+        set
+        {
+            field = value;
+            DescribeControls();
+        }
+    } = "A picture of what is using the space. Choose List in the View box for the same contents as a readable list.";
+
+    /// <summary>
     /// Say what the map is and how the pointer moves it, for a screen reader on the focused map:
     /// the caption naming the same on the page is only reached by browsing to it.
     /// </summary>
     private void DescribeControls() =>
         AutomationProperties.SetHelpText(
             this,
-            "A picture of what is using the space. Choose List in the View box for the same "
-            + "contents as a readable list. Double-click a shape to open what is inside it."
+            Description
             + (Zoomable
                 ? " On the treemap, turn the mouse wheel or pinch to zoom, and hold Shift with the wheel "
                     + "to move across. Drag with the left or middle button, two fingers or a touch to move a "
                     + "zoomed picture, and double-click anything else to zoom to it. Plus and minus zoom "
-                    + "about the middle, the arrow keys move the picture, and Home shows all of it. The mouse's Back and "
-                    + "Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through "
-                    + "the folders opened and the zooms to a shape. While the picture is zoomed in, an overview "
-                    + "in a corner shows all of it with the part on the screen marked: drag the mark to move the "
-                    + "picture, or click anywhere in the overview to go there. The keys above move the picture as "
-                    + "the overview does, and Tab reaches its button to hide it or bring it back."
+                    + "about the middle, the arrow keys move the picture, and Home shows all of it. While the "
+                    + "picture is zoomed in, an overview in a corner shows all of it with the part on the screen "
+                    + "marked: drag the mark to move the picture, or click anywhere in the overview to go there. "
+                    + "The keys above move the picture as the overview does, and Tab reaches its button to hide "
+                    + "it or bring it back."
                 : string.Empty));
 
     /// <summary>
@@ -1352,6 +1365,7 @@ public sealed class ExploreMap : UserControl
         {
             _shiftOwed = false;
             MoveFrom(earlier, drawing);
+            Follow(earlier, drawing);
         }
 
         // The whole picture under a zoomed drawing only shows once the picture moves, so it waits
@@ -2283,6 +2297,30 @@ public sealed class ExploreMap : UserControl
         _labels.Hide();
         _highlight.Hide();
         ReportWhatThePointerIsOver();
+    }
+
+    /// <summary>
+    /// Keep the reader on what they zoomed into, now that <paramref name="later"/> has laid the same
+    /// place out again where <paramref name="earlier"/> was on screen (<see cref="MapFollow"/>): the
+    /// camera moves with the shape at the middle of the screen over the same time as the shapes travel,
+    /// so that shape holds still while the rest moves round it. Only from a camera at rest where both
+    /// were drawn: one the reader is moving is the reader's.
+    /// </summary>
+    private void Follow(ExploreSurface? earlier, ExploreSurface later)
+    {
+        if (!_zoom.Movable
+            || earlier is null
+            || later.Viewport is not { } drawn
+            || _zoom.Shown != drawn
+            || _zoom.Target != drawn)
+        {
+            return;
+        }
+
+        var motion = SystemMotion.Current.For(MotionToken.Shift);
+
+        // With animation effects off nothing travels, and the camera goes straight to where the shape is.
+        _zoom.MoveTo(MapFollow.Onward(earlier, later), motion.Travels ? motion : Motion.Instant);
     }
 
     /// <summary>A new drawing has finished fading in: the pointer is over what it shows.</summary>
