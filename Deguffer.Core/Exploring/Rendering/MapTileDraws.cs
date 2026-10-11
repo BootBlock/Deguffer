@@ -98,7 +98,17 @@ public sealed class MapTileDraws
 
         for (var i = 0; i < start; i++)
         {
-            new Thread(Run) { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "Map tiles" }.Start();
+            // A thread of its own, so its priority can be lowered without lowering a pool thread's.
+            // A layout or a paint that fails is a defect, so it is raised on the owner's thread, where
+            // the application's handling of an unexpected failure sees it, rather than lost with the task.
+            Task.Factory.StartNew(Work, CancellationToken.None, TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach, TaskScheduler.Default)
+                .ContinueWith(
+                    failed => _owner.Post(
+                        state => ((ExceptionDispatchInfo)state!).Throw(),
+                        ExceptionDispatchInfo.Capture(failed.Exception!.Flatten().InnerException!)),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.DenyChildAttach,
+                    TaskScheduler.Default);
         }
     }
 
@@ -129,28 +139,13 @@ public sealed class MapTileDraws
         }
     }
 
-    /// <summary>Draw tiles until none is wanted, on a worker thread of its own.</summary>
-    private void Run()
-    {
-        try
-        {
-            Work();
-        }
-        catch (Exception failure)
-        {
-            // A layout or a paint that fails is a defect. Raised on the owner's thread, where the
-            // application's handling of an unexpected failure sees it, rather than ending the process
-            // from a worker with nothing said.
-            var raised = ExceptionDispatchInfo.Capture(failure);
-
-            _owner.Post(_ => raised.Throw(), null);
-        }
-    }
-
-    /// <summary>Draw tiles until none is wanted.</summary>
+    /// <summary>Draw tiles until none is wanted, below the normal priority.</summary>
     private void Work()
     {
         var finished = false;
+        var priority = Thread.CurrentThread.Priority;
+
+        Thread.CurrentThread.Priority = ThreadPriority.BelowNormal;
 
         try
         {
@@ -184,8 +179,10 @@ public sealed class MapTileDraws
         }
         finally
         {
-            // A layout or a paint that failed is a defect, raised on the owner's thread by Run. The
-            // worker it took is free again either way.
+            Thread.CurrentThread.Priority = priority;
+
+            // A layout or a paint that failed is a defect, raised on the owner's thread by the task's
+            // continuation. The worker it took is free again either way.
             if (!finished)
             {
                 lock (_gate)

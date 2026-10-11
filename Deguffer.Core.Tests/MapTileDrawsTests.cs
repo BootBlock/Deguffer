@@ -86,8 +86,8 @@ public sealed class MapTileDrawsTests
     }
 
     /// <summary>
-    /// Stopped, for a picture that has changed, nothing started before the stop is handed over, whether
-    /// it was still being drawn or already finished and on its way to the owner's thread.
+    /// Stopped, for a picture that has changed, nothing still being drawn when the stop came is handed
+    /// over, and what is wanted after it is.
     /// </summary>
     [Fact]
     public void NothingStartedBeforeAStopIsHandedOver()
@@ -114,6 +114,24 @@ public sealed class MapTileDrawsTests
         Assert.Same(next, _drawn[0].Tile.Picture);
     }
 
+    /// <summary>
+    /// Stopped once a tile has been finished and posted to the owner's thread, but before that thread
+    /// has run what was posted, the tile is still not handed over.
+    /// </summary>
+    [Fact]
+    public void NothingFinishedBeforeAStopIsHandedOverAfterIt()
+    {
+        var draws = Draws(workers: 1);
+
+        draws.Want(Picture(Tree()), Tiling, Ground, Keys(level: 4, count: 1));
+        _owner.WaitUntilPosted("the tile to be finished");
+
+        draws.Stop();
+        _owner.RunPending();
+
+        Assert.Empty(_drawn);
+    }
+
     /// <summary>At rest, the tiles not yet started are not drawn, and the one under way is still handed over.</summary>
     [Fact]
     public void AtRestOnlyTheTileUnderWayIsHandedOver()
@@ -122,6 +140,7 @@ public sealed class MapTileDrawsTests
         var picture = Picture(tree);
         var draws = Draws(workers: 1);
         var keys = Keys(level: 4, count: 5);
+        var next = new MapTileKey(5, 1, 1);
 
         tree.Close();
         draws.Want(picture, Tiling, Ground, keys);
@@ -132,11 +151,14 @@ public sealed class MapTileDrawsTests
 
         _owner.RunUntil(() => _drawn.Count > 0, "the tile under way");
 
-        // Anything else would have been handed over by now: one worker draws the tiles in turn.
-        Thread.Sleep(200);
+        // Wanted next, by the one worker: any tile it had gone on to after the rest would be handed
+        // over before this one.
+        draws.Want(picture, Tiling, Ground, [next]);
+
+        _owner.RunUntil(() => _drawn.Any(drawn => drawn.Tile.Key == next), "the tile wanted after the rest");
         _owner.RunPending();
 
-        Assert.Equal([keys[0]], _drawn.Select(drawn => drawn.Tile.Key));
+        Assert.Equal([keys[0], next], _drawn.Select(drawn => drawn.Tile.Key));
     }
 
     private MapTileDraws Draws(int workers) => new(_owner, (tile, pixels) => _drawn.Add((tile, pixels[..(int)tile.Bytes])), workers);
