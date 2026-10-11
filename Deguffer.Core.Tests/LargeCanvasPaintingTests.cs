@@ -107,10 +107,12 @@ public sealed class LargeCanvasPaintingTests
         var pixels = new byte[PixelBuffer.LengthFor(Width, Height)];
 
         new TileRasteriser(
-            tiles, Width, Height, Ground,
-            (node, depth) => node == ExploreTile.Aggregated
-                ? TilePalette.Aggregate
-                : Hues.Colour(node, depth))
+            new CushionQuads(
+                tiles, Width, Height,
+                (node, depth) => node == ExploreTile.Aggregated
+                    ? TilePalette.Aggregate
+                    : Hues.Colour(node, depth)),
+            Ground)
             .PaintRegions(pixels);
 
         return pixels;

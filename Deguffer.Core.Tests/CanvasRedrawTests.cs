@@ -43,11 +43,56 @@ public sealed class CanvasRedrawTests
             PaintOrder.Regions(Drawings.Size, Drawings.Size, focus: null).OrderBy(Key),
             _target.Landed.Select(landed => landed.Region).OrderBy(Key));
 
-        var whole = new byte[redraw.Pixels.Length];
+        var whole = new byte[redraw.Pixels!.Length];
         drawing.Painter(Drawings.Ground).PaintRegions(whole);
 
         Assert.Equal(whole, redraw.Pixels);
         Assert.Same(drawing, redraw.Surface);
+    }
+
+    /// <summary>
+    /// A redraw the GPU shades begins, is shaded once from the quads its drawing's own painter paints,
+    /// on the ground asked for, and arrives, all in one go: nothing lands a region at a time, and
+    /// nothing is painted on the CPU.
+    /// </summary>
+    [Fact]
+    public void AShadedRedrawIsShadedWholeOnceAndThenArrives()
+    {
+        var drawing = Drawings.Covering(Drawings.Tree(), node: 1);
+        var redraw = _redraws.Shade(() => drawing, Drawings.Ground, _target);
+
+        _owner.RunUntil(() => redraw.IsArrived, "the redraw to arrive");
+
+        Assert.Equal([RedrawCall.Begin, RedrawCall.Shade, RedrawCall.Arrive], _target.Of(redraw));
+        Assert.Empty(_target.Landed);
+        Assert.Null(redraw.Pixels);
+        Assert.Same(drawing, redraw.Surface);
+
+        var (_, quads, ground) = Assert.Single(_target.Shaded);
+
+        Assert.Equal(Drawings.Ground, ground);
+        Assert.Equal(drawing.Quads().Quads.ToArray(), quads.Quads.ToArray());
+    }
+
+    /// <summary>
+    /// A shaded redraw superseded once it is laid out, but before its owner has put it up, puts
+    /// nothing on screen, as a painted one does not.
+    /// </summary>
+    [Fact]
+    public async Task AShadedRedrawSupersededAfterItWasLaidOutPutsNothingOnScreen()
+    {
+        var older = _redraws.Shade(() => Drawings.Covering(Drawings.Tree(), node: 1), Drawings.Ground, _target);
+
+        await older.Finished.WaitAsync(TimeSpan.FromSeconds(20));
+
+        var newer = _redraws.Shade(() => Drawings.Covering(Drawings.Tree(), node: 2), Drawings.Ground, _target);
+
+        _owner.RunUntil(() => newer.IsArrived, "the newer redraw to arrive");
+        _owner.RunPending();
+
+        Assert.Empty(_target.Of(older));
+        Assert.True(older.IsSuperseded);
+        Assert.Equal([RedrawCall.Begin, RedrawCall.Shade, RedrawCall.Arrive], _target.Of(newer));
     }
 
     /// <summary>

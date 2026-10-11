@@ -23,6 +23,8 @@ public sealed class MapTileDrawsTests
 
     private readonly List<(MapTile Tile, byte[] Pixels)> _drawn = [];
 
+    private readonly List<(MapTile Tile, CushionQuads Quads, TileColour Ground)> _shaded = [];
+
     /// <summary>Each tile is handed over painted as the tile paints itself, on the ground asked for.</summary>
     [Fact]
     public void EachTileIsHandedOverPainted()
@@ -31,7 +33,7 @@ public sealed class MapTileDrawsTests
         var draws = Draws(workers: 3);
         var keys = Keys(level: 4, count: 6);
 
-        draws.Want(picture, Tiling, Ground, keys);
+        draws.Want(picture, Tiling, Ground, shade: false, keys);
         _owner.RunUntil(() => _drawn.Count == keys.Count, "every tile to be drawn");
 
         Assert.Equal(keys.Count, _drawn.Count);
@@ -47,13 +49,54 @@ public sealed class MapTileDrawsTests
         }
     }
 
+    /// <summary>
+    /// A tile the GPU shades is handed over as the quads its own painter paints, and nothing of it is
+    /// painted on the CPU: painting it too would cost the cores the shading frees.
+    /// </summary>
+    [Fact]
+    public void EachTileTheGpuShadesIsHandedOverAsItsQuadsUnpainted()
+    {
+        var picture = Picture(Tree());
+        var draws = Draws(workers: 3);
+        var keys = Keys(level: 4, count: 6);
+
+        draws.Want(picture, Tiling, Ground, shade: true, keys);
+        _owner.RunUntil(() => _shaded.Count == keys.Count, "every tile to be laid out");
+
+        Assert.Empty(_drawn);
+        Assert.Equal(keys.ToHashSet(), _shaded.Select(shaded => shaded.Tile.Key).ToHashSet());
+
+        foreach (var (tile, quads, ground) in _shaded)
+        {
+            Assert.Equal(Ground, ground);
+            Assert.Equal((tile.Width, tile.Height), (quads.Width, quads.Height));
+            Assert.Equal(tile.Quads().Quads.ToArray(), quads.Quads.ToArray());
+            Assert.NotEqual(0, quads.Quads.Length);
+        }
+    }
+
+    /// <summary>A tile for the GPU finished before a stop is not handed over after it, as a painted one is not.</summary>
+    [Fact]
+    public void NoTileForTheGpuFinishedBeforeAStopIsHandedOverAfterIt()
+    {
+        var draws = Draws(workers: 1);
+
+        draws.Want(Picture(Tree()), Tiling, Ground, shade: true, Keys(level: 4, count: 1));
+        _owner.WaitUntilPosted("the tile to be laid out");
+
+        draws.Stop();
+        _owner.RunPending();
+
+        Assert.Empty(_shaded);
+    }
+
     /// <summary>One at a time, the tiles are drawn in the order they were wanted: the first is the one the reader is looking at.</summary>
     [Fact]
     public void TilesAreDrawnInTheOrderWanted()
     {
         var keys = Keys(level: 4, count: 8);
 
-        Draws(workers: 1).Want(Picture(Tree()), Tiling, Ground, keys);
+        Draws(workers: 1).Want(Picture(Tree()), Tiling, Ground, shade: false, keys);
         _owner.RunUntil(() => _drawn.Count == keys.Count, "every tile to be drawn");
 
         Assert.Equal(keys, _drawn.Select(drawn => drawn.Tile.Key));
@@ -73,10 +116,10 @@ public sealed class MapTileDrawsTests
         var after = new MapTileKey(5, 0, 0);
 
         tree.Close();
-        draws.Want(picture, Tiling, Ground, before);
+        draws.Want(picture, Tiling, Ground, shade: false, before);
         tree.WaitUntilEntered();
 
-        draws.Want(picture, Tiling, Ground, [after]);
+        draws.Want(picture, Tiling, Ground, shade: false, [after]);
         tree.Open();
 
         _owner.RunUntil(() => _drawn.Any(drawn => drawn.Tile.Key == after), "the tile wanted now");
@@ -98,14 +141,14 @@ public sealed class MapTileDrawsTests
         var after = new MapTileKey(5, 1, 1);
 
         tree.Close();
-        draws.Want(picture, Tiling, Ground, Keys(level: 4, count: 5));
+        draws.Want(picture, Tiling, Ground, shade: false, Keys(level: 4, count: 5));
         tree.WaitUntilEntered();
 
         draws.Stop();
         tree.Open();
 
         var next = Picture(Tree());
-        draws.Want(next, Tiling, Ground, [after]);
+        draws.Want(next, Tiling, Ground, shade: false, [after]);
 
         _owner.RunUntil(() => _drawn.Count > 0, "the tile wanted after the stop");
         _owner.RunPending();
@@ -123,7 +166,7 @@ public sealed class MapTileDrawsTests
     {
         var draws = Draws(workers: 1);
 
-        draws.Want(Picture(Tree()), Tiling, Ground, Keys(level: 4, count: 1));
+        draws.Want(Picture(Tree()), Tiling, Ground, shade: false, Keys(level: 4, count: 1));
         _owner.WaitUntilPosted("the tile to be finished");
 
         draws.Stop();
@@ -143,7 +186,7 @@ public sealed class MapTileDrawsTests
         var next = new MapTileKey(5, 1, 1);
 
         tree.Close();
-        draws.Want(picture, Tiling, Ground, keys);
+        draws.Want(picture, Tiling, Ground, shade: false, keys);
         tree.WaitUntilEntered();
 
         draws.Rest();
@@ -153,7 +196,7 @@ public sealed class MapTileDrawsTests
 
         // Wanted next, by the one worker: any tile it had gone on to after the rest would be handed
         // over before this one.
-        draws.Want(picture, Tiling, Ground, [next]);
+        draws.Want(picture, Tiling, Ground, shade: false, [next]);
 
         _owner.RunUntil(() => _drawn.Any(drawn => drawn.Tile.Key == next), "the tile wanted after the rest");
         _owner.RunPending();
@@ -161,7 +204,11 @@ public sealed class MapTileDrawsTests
         Assert.Equal([keys[0], next], _drawn.Select(drawn => drawn.Tile.Key));
     }
 
-    private MapTileDraws Draws(int workers) => new(_owner, (tile, pixels) => _drawn.Add((tile, pixels[..(int)tile.Bytes])), workers);
+    private MapTileDraws Draws(int workers) => new(
+        _owner,
+        (tile, pixels) => _drawn.Add((tile, pixels[..(int)tile.Bytes])),
+        (tile, quads, ground) => _shaded.Add((tile, quads, ground)),
+        workers);
 
     private static List<MapTileKey> Keys(int level, int count) =>
         [.. Tiling.Covering(MapViewport.Whole, level, 0.5, 0.5).Take(count)];

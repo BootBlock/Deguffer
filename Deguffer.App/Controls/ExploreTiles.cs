@@ -67,7 +67,7 @@ internal sealed class ExploreTiles
         _compositor = compositor;
         _graphics = graphics;
         _motion = motion;
-        _draws = new MapTileDraws(owner, Arrived);
+        _draws = new MapTileDraws(owner, Arrived, Shaded);
 
         Over = compositor.CreateContainerVisual();
         Under = compositor.CreateContainerVisual();
@@ -122,7 +122,7 @@ internal sealed class ExploreTiles
         Over.IsVisible = true;
         Under.IsVisible = true;
 
-        _draws.Want(picture, tiling, ground, wanted);
+        _draws.Want(picture, tiling, ground, _graphics.Shades, wanted);
     }
 
     /// <summary>The camera has come to rest: draw nothing more, but keep what is under way, and go on showing.</summary>
@@ -243,12 +243,20 @@ internal sealed class ExploreTiles
         }
     }
 
-    /// <summary>A tile has been drawn: put it on screen and keep it.</summary>
-    private void Arrived(MapTile tile, byte[] pixels)
+    /// <summary>A tile has been painted: put it on screen and keep it.</summary>
+    private void Arrived(MapTile tile, byte[] pixels) =>
+        Show(tile, surface => _graphics.Write(surface, pixels, tile.Width, new CanvasRegion(0, 0, tile.Width, tile.Height)));
+
+    /// <summary>A tile has been laid out for the GPU: shade it, put it on screen and keep it.</summary>
+    private void Shaded(MapTile tile, CushionQuads quads, TileColour ground) =>
+        Show(tile, surface => _graphics.Shade(surface, quads, ground));
+
+    /// <summary>Put <paramref name="tile"/> on screen, written into its surface by <paramref name="write"/>, and keep it.</summary>
+    private void Show(MapTile tile, Action<CompositionDrawingSurface> write)
     {
         var sprite = _spare.TryPop(out var spare) ? spare : new TileSprite(_compositor, _graphics.CreateTileSurface());
 
-        _graphics.Write(sprite.Surface, pixels, tile.Width, new CanvasRegion(0, 0, tile.Width, tile.Height));
+        write(sprite.Surface);
 
         sprite.Tile = tile;
         sprite.Answers = false;

@@ -80,8 +80,10 @@ public sealed class MapTile
     public ExploreTile? TileAt(float x, float y) => _hits.At(x, y) is { } index ? _shapes[index] : null;
 
     /// <summary>What paints the tile on <paramref name="background"/>, in one region the tile's size.</summary>
-    public CanvasPainter Painter(TileColour background) =>
-        new TileRasteriser(_shapes, Width, Height, background, _colourOf);
+    public CanvasPainter Painter(TileColour background) => new TileRasteriser(Quads(), background);
+
+    /// <summary>The tile's shapes as the GPU shades them, or as <see cref="Painter"/> paints them.</summary>
+    public CushionQuads Quads() => new(_shapes, Width, Height, _colourOf);
 
     /// <summary>
     /// Where the tile goes in a picture laid out over a screen <paramref name="width"/> by

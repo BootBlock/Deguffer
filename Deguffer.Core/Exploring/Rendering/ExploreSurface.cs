@@ -415,6 +415,13 @@ public abstract class ExploreSurface
     /// </summary>
     public abstract CanvasPainter Painter(TileColour background);
 
+    /// <summary>
+    /// The drawing's shapes as the GPU shades them (see <see cref="CushionQuads"/>), or null for a
+    /// drawing whose shapes are not rectangles: a sunburst's sectors are painted on the CPU alone.
+    /// Made once per shading of the drawing, for the reason <see cref="Painter"/> is.
+    /// </summary>
+    public abstract CushionQuads? Quads();
+
     /// <summary>What is at this canvas point, or null where the point is over nothing.</summary>
     public abstract ExploreHit? At(float x, float y);
 

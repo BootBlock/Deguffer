@@ -30,6 +30,8 @@ public sealed class SunburstSurface : ExploreSurface
     public override CanvasPainter Painter(TileColour background) =>
         new SectorRasteriser(_hits, Width, Height, background, ColourFor);
 
+    public override CushionQuads? Quads() => null;
+
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index
             ? new ExploreHit(_hits.Sunburst.Sectors[index].Node, _hits.Sunburst.Sectors[index].Bytes)

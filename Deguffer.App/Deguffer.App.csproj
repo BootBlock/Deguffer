@@ -141,7 +141,7 @@
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.*" />
 
-        <!-- For drawing the map into composition surfaces, which nothing does yet. 1.4.0 is the first
+        <!-- For drawing the map into composition surfaces. 1.4.0 is the first
              release that depends on the WinUI package alone, and needs WinUI 1.8.260204000 or later.
              docs/todo/composition-stack.md has what was measured in this build. -->
         <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.*" />
@@ -153,6 +153,10 @@
         <InternalsVisibleTo Include="Deguffer.App.Tests" />
 
         <Manifest Include="$(ApplicationManifest)" />
+
+        <!-- Compiled when the map first shades a canvas, by the d3dcompiler_47 every Windows 10 and 11
+             carries: see CushionRenderer. -->
+        <EmbeddedResource Include="Controls\Cushions.hlsl" />
 
         <!-- The window icon is set from the file at runtime, so it has to reach the output. -->
         <Content Include="Assets\Deguffer.ico" CopyToOutputDirectory="PreserveNewest" />

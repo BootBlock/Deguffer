@@ -100,6 +100,9 @@ internal sealed class ExploreLayer
         }
     }
 
+    /// <summary>Shade the whole canvas, a canvas this surface's size, from <paramref name="quads"/> on <paramref name="ground"/>.</summary>
+    public void Shade(CushionQuads quads, TileColour ground) => _graphics.Shade(_surface, quads, ground);
+
     /// <summary>
     /// Put the canvas where its part of the picture is, in a picture laid out over a screen
     /// <paramref name="width"/> by <paramref name="height"/> and measured from

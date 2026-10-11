@@ -71,6 +71,8 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
     public override CanvasPainter Painter(TileColour background) =>
         new GatedPainter(drawing.Painter(background), painted, _open, background);
 
+    public override CushionQuads? Quads() => drawing.Quads();
+
     public override ExploreHit? At(float x, float y) => drawing.At(x, y);
 
     public override ExploreTile? TileAt(float x, float y) => drawing.TileAt(x, y);
