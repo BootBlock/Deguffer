@@ -190,11 +190,10 @@
 
                                 <!-- Scaled against what holds this row, so it answers "how much of
                                      this part is that". -->
-                                <ProgressBar Grid.Column="1"
-                                             VerticalAlignment="Center"
-                                             Maximum="100"
-                                             Value="{x:Bind Share, Mode=OneWay}"
-                                             AutomationProperties.AccessibilityView="Raw" />
+                                <controls:FillBar Grid.Column="1"
+                                                  Style="{StaticResource ShareBar}"
+                                                  VerticalAlignment="Center"
+                                                  Value="{x:Bind Share, Mode=OneWay}" />
 
                                 <TextBlock Grid.Column="2"
                                            Text="{x:Bind Held, Mode=OneWay}"
@@ -280,11 +279,10 @@
                                                VerticalAlignment="Center" />
 
                                     <!-- Scaled against what holds this row, as the list's is. -->
-                                    <ProgressBar Grid.Column="1"
-                                                 VerticalAlignment="Center"
-                                                 Maximum="100"
-                                                 Value="{x:Bind Share, Mode=OneWay}"
-                                                 AutomationProperties.AccessibilityView="Raw" />
+                                    <controls:FillBar Grid.Column="1"
+                                                      Style="{StaticResource ShareBar}"
+                                                      VerticalAlignment="Center"
+                                                      Value="{x:Bind Share, Mode=OneWay}" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="{x:Bind Held, Mode=OneWay}"
