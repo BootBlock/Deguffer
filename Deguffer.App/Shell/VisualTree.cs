@@ -29,4 +29,19 @@ internal static class VisualTree
             }
         }
     }
+
+    /// <summary>The nearest element of type <typeparamref name="T"/> above <paramref name="element"/>, or null.</summary>
+    public static T? Ancestor<T>(DependencyObject element)
+        where T : DependencyObject
+    {
+        for (var at = VisualTreeHelper.GetParent(element); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is T found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
 }

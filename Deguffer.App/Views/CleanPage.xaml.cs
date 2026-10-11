@@ -326,7 +326,7 @@ public sealed partial class CleanPage : Page
         }
     }
 
-    private static void GrowBarsIn(SelectorItem container)
+    private static void GrowBarsIn(UIElement container)
     {
         foreach (var bar in VisualTree.Descendants<FillBar>(container))
         {
