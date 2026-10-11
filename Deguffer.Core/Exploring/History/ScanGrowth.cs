@@ -77,6 +77,9 @@ public sealed class ScanGrowth
 {
     private readonly Dictionary<int, FolderChange> _byNode;
 
+    /// <summary>See <see cref="Placed"/>.</summary>
+    private readonly int[] _placed;
+
     /// <summary><see cref="Listing"/>, made once: the comparison does not change.</summary>
     private IReadOnlyList<FolderChange>? _listing;
 
@@ -88,12 +91,14 @@ public sealed class ScanGrowth
         ScanSummary earlier,
         GrowthApproximation approximation,
         Dictionary<int, FolderChange> byNode,
+        int[] placed,
         IReadOnlyList<FolderChange> ranked)
     {
         Tree = tree;
         Earlier = earlier;
         Approximation = approximation;
         _byNode = byNode;
+        _placed = placed;
         Ranked = ranked;
     }
 
@@ -112,6 +117,14 @@ public sealed class ScanGrowth
 
     /// <summary>The summary this compares against.</summary>
     public ScanSummary Earlier { get; }
+
+    /// <summary>
+    /// Where each folder <see cref="Earlier"/> recorded is in <see cref="Tree"/>, by its place in
+    /// <see cref="ScanSummary.Folders"/>, or -1 where it is not: removed since, or under a folder that
+    /// was. The one matching of the two scans, so a picture of the earlier one (<see cref="GrowthReplay"/>)
+    /// puts each folder where this comparison found it.
+    /// </summary>
+    internal ReadOnlySpan<int> Placed => _placed;
 
     /// <summary>When the scan compared against finished.</summary>
     public DateTime SinceUtc => Earlier.TakenUtc;
@@ -353,7 +366,7 @@ public sealed class ScanGrowth
             approximation |= GrowthApproximation.LowerBound;
         }
 
-        return new ScanGrowth(tree, earlier, approximation, byNode, ranked);
+        return new ScanGrowth(tree, earlier, approximation, byNode, placed, ranked);
     }
 
     /// <summary>

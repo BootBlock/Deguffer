@@ -1,3 +1,4 @@
+using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Layout;
 
 namespace Deguffer.Core.Exploring.Rendering;
@@ -42,14 +43,22 @@ public sealed class MapReading
     public ISizedTree Current { get; }
 
     /// <summary>
+    /// Whether anything drawn of <paramref name="tree"/> answers the pointer. A step of a replay of
+    /// what grew does not: it is a picture of what the disk held, part of it estimated, and nothing in
+    /// it can be picked, opened or removed (§7.1). See <see cref="GrowthReplay"/>.
+    /// </summary>
+    public static bool Answers(ISizedTree? tree) => tree is not GrowthReplayFrame;
+
+    /// <summary>
     /// How a drawing of <paramref name="drawn"/> is read in <paramref name="current"/>, or null where
-    /// it cannot be: a tree of something else, or no tree on the page at all.
+    /// it cannot be: a tree of something else, no tree on the page at all, or either one a tree that
+    /// answers nothing (<see cref="Answers"/>).
     /// </summary>
     public static MapReading? Of(ISizedTree drawn, ISizedTree? current)
     {
         ArgumentNullException.ThrowIfNull(drawn);
 
-        if (current is null)
+        if (current is null || !Answers(drawn) || !Answers(current))
         {
             return null;
         }

@@ -83,6 +83,27 @@ public static class GrowthText
         _ => Signed(change.Bytes),
     };
 
+    /// <summary>
+    /// What a block in a replay's picture of the earlier scan is labelled: the rest of what a recorded
+    /// folder held, which that scan did not record one by one (<see cref="GrowthReplay"/>).
+    /// </summary>
+    /// <param name="floor">The earlier summary's <see cref="ScanSummary.UnrecordedAtMost"/>.</param>
+    public static string Unrecorded(long floor) => floor > 0
+        ? $"Files and folders under {FreeSpace.Format(floor)}, not recorded"
+        : "Files, not recorded";
+
+    /// <summary>
+    /// What the page says beside a replay: how much of the earlier picture is the earlier scan's, and
+    /// that nothing between the two ends was measured.
+    /// </summary>
+    public const string ReplayEstimate =
+        "The earlier picture is rebuilt from the largest folders that scan recorded, and what it did not "
+        + "record is one grey block in each folder. The steps in between are estimates, not scans.";
+
+    /// <summary>What the page says where the folder on screen has no earlier picture to replay.</summary>
+    public const string ReplayNotRecorded =
+        "The earlier scan did not record this folder, so there is no earlier picture of it to replay.";
+
     /// <summary>A size with its sign, so growth and shrinkage read apart without the colour.</summary>
     public static string Signed(long bytes) =>
         bytes > 0 ? "+" + FreeSpace.Format(bytes) : bytes < 0 ? "\u2212" + FreeSpace.Format(-bytes) : "No change";

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
@@ -151,12 +152,22 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Selection = new ExploreSelection(actions);
         Growth = new ExploreGrowth(history);
+        Replay = new ExploreReplay(SystemMotion.Current);
         Files = new ExploreFiles(actions, time);
         Types = new ExploreTypes();
 
         // A comparison that arrives, or stops, recolours a map coloured by growth, and the kinds of a
         // finished scan arriving recolour a map coloured by type.
-        Growth.Changed += (_, _) => ViewChanged?.Invoke(this, EventArgs.Empty);
+        Growth.Changed += (_, _) =>
+        {
+            FollowReplay();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        };
+        Replay.Changed += (_, _) =>
+        {
+            StandDown();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        };
         Types.Changed += (_, _) => ViewChanged?.Invoke(this, EventArgs.Empty);
 
         // A clean or a removal on another page ends with this process as surely as one here.
@@ -194,6 +205,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>What grew since the last scan of the volume on screen. See <see cref="ExploreGrowth"/>.</summary>
     public ExploreGrowth Growth { get; }
+
+    /// <summary>The map moving from the earlier scan to now. See <see cref="ExploreReplay"/>.</summary>
+    public ExploreReplay Replay { get; }
 
     /// <summary>The largest files below the folder on screen, for the Files layout. See <see cref="ExploreFiles"/>.</summary>
     public ExploreFiles Files { get; }
@@ -252,7 +266,24 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ScanWholeDriveCommand))]
     public partial bool IsBusy { get; set; }
 
-    partial void OnIsBusyChanged(bool value) => Selection.CanAct = !value;
+    partial void OnIsBusyChanged(bool value) => StandDown();
+
+    /// <summary>
+    /// Let the selection act only while nothing else is under way, and while the map shows the drive
+    /// as it is now. A step of a replay is a picture of what the drive held, and the outlines of what
+    /// is picked are not drawn on it, so nothing is acted on from it (§7.1).
+    /// </summary>
+    private void StandDown() => Selection.CanAct = !IsBusy && !Replay.Shows;
+
+    /// <summary>
+    /// Replay the comparison, the tree and the folder on screen, while the map is coloured by growth,
+    /// and nothing otherwise. See <see cref="ExploreReplay.Follow"/>.
+    /// </summary>
+    private void FollowReplay()
+    {
+        Replay.Follow(ShowsGrowth ? Growth.Comparison : null, Tree, CurrentNode);
+        StandDown();
+    }
 
     /// <summary>
     /// Whether the page will accept a new instruction. The folder picker is opened by the page
@@ -464,6 +495,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         LiveList.Rewrite(Legend, ExploreLegendBand.For(value, SelectedScheme));
         Types.IsActive = value == ExploreColouring.Type;
+        FollowReplay();
     }
 
     /// <summary>
@@ -1274,6 +1306,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         Files.Show(tree, position.Node);
         Types.Show(tree, position.Node);
         BuildTrail(tree);
+        FollowReplay();
 
         // What the pointer is over is the map's to say, and it says it again for the drawing this
         // redraw is about to produce. Clearing it here left a reader who had not moved with the

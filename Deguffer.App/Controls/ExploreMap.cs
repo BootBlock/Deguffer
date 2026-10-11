@@ -2067,6 +2067,12 @@ public sealed class ExploreMap : UserControl
 
     private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
+        // A picture that answers nothing has nothing to offer a menu for (§7.1).
+        if (!MapReading.Answers(_tree))
+        {
+            return;
+        }
+
         var point = e.GetPosition(this);
 
         Pick(point);
@@ -2076,10 +2082,17 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Say what is at <paramref name="point"/>. Neither block picks anything. The one standing in
     /// for items too small to draw is several thousand files at once, and §7.1 has no bulk action,
-    /// and free space is not on the disk to be acted on.
+    /// and free space is not on the disk to be acted on. A picture that answers nothing, such as a
+    /// step of a replay of what grew (<see cref="MapReading.Answers"/>), says nothing, so a click on it
+    /// leaves the selection as it is rather than clearing it.
     /// </summary>
     private void Pick(Point point)
     {
+        if (!MapReading.Answers(_tree))
+        {
+            return;
+        }
+
         // A click on nothing at all, with no picture yet, leaves the selection as it is. A click on a
         // picture still landing picks what has landed under it, as the readout already names.
         if (_drawing is null && _arriving is not { Landed.Count: > 0 })
