@@ -59,6 +59,18 @@ public sealed class BenchmarkRequestTests
         Assert.NotNull(error);
     }
 
+    /// <summary>The source search walks a folder, so it takes one and the walk's values.</summary>
+    [Fact]
+    public void TheSourceSearchTakesAFolderAndTheWalksValues()
+    {
+        var request = BenchmarkRequest.Parse(["sources", "relative", "--threads", "4"], out _);
+
+        Assert.Equal(Route.Sources, request!.Route);
+        Assert.Equal(Path.GetFullPath("relative"), request.Path);
+        Assert.Equal(4, request.Walk.Threads);
+        Assert.Null(BenchmarkRequest.Parse(["sources", "relative", "--read-size", "1024"], out _));
+    }
+
     [Fact]
     public void TheRunsCanBeChosen() =>
         Assert.Equal(3, BenchmarkRequest.Parse(["walk", @"C:\", "--runs", "3"], out _)!.Runs);

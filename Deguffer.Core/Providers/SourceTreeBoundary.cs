@@ -19,8 +19,8 @@ namespace Deguffer.Core.Providers;
 /// <para><b>The rules are what agree. The reach is not, and cannot be made to.</b> A search's reach
 /// is a property of the token it runs under, and the two routes do not share one. The walk
 /// enumerates, so a directory the account may not list yields nothing at all — <see
-/// cref="Safety.ChildDirectories.Under"/> returns nothing rather than a partial view — and the whole
-/// subtree below it is out of the walk's reach. The MFT reads file records, which no ACL guards, so
+/// cref="SourceTreeWalk"/> uses nothing a refused listing returned rather than a partial view — and
+/// the whole subtree below it is out of the walk's reach. The MFT reads file records, which no ACL guards, so
 /// an elevated run offers candidates from inside that subtree that an unelevated one never finds.
 /// Established against a real denied directory rather than reasoned about; see
 /// <c>RouteAgreementTests</c>.</para>

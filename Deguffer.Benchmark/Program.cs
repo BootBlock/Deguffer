@@ -35,9 +35,12 @@ else if (LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
     return 2;
 }
 
-Func<CancellationToken, RunTally> run = request.Route.ReadsTable()
-    ? ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Drive, request.Table, ct)
-    : ct => WalkRoute.Run(request.Path, request.Walk, ct);
+Func<CancellationToken, RunTally> run = request.Route switch
+{
+    Route.Walk => ct => WalkRoute.Run(request.Path, request.Walk, ct),
+    Route.Sources => ct => SourcesRoute.Run(request.Path, request.Walk, ct),
+    _ => ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Drive, request.Table, ct),
+};
 
 using var cancel = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
