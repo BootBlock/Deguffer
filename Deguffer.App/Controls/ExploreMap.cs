@@ -140,6 +140,12 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private bool _pressLandedMorph;
 
+    /// <summary>
+    /// Whether the press before the last one landed a change of view: a double-click is two presses,
+    /// and the second finds the move already landed by the first.
+    /// </summary>
+    private bool _earlierPressLandedMorph;
+
     private readonly ExploreLabels _labels;
 
     private readonly ExploreHighlight _highlight;
@@ -1115,10 +1121,14 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Morph()
     {
-        Redraw(SystemMotion.Current.For(MotionToken.Morph));
+        var motion = SystemMotion.Current.For(MotionToken.Morph);
 
-        // Owed only to a drawing on its way, as a shift is.
-        _morphOwed = _redraws.Pending is not null;
+        Redraw(motion);
+
+        // Owed only to a drawing on its way, as a shift is, and only where the shapes travel. A swap at
+        // once lands the new view in sight a region at a time, and what has landed answers the pointer
+        // as it would for any other picture (§7.1).
+        _morphOwed = motion.Travels && _redraws.Pending is not null;
     }
 
     private void Redraw() => Redraw(Motion.Instant);
@@ -1825,6 +1835,7 @@ public sealed class ExploreMap : UserControl
         var point = e.GetCurrentPoint(this);
 
         _tapPress = point.PointerDeviceType != PointerDeviceType.Mouse || point.Properties.IsLeftButtonPressed;
+        _earlierPressLandedMorph = _pressLandedMorph;
         _pressLandedMorph = _morph.IsMoving;
 
         SettleStep();
@@ -2179,7 +2190,7 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetPosition(this);
 
-        if (!_tapPress || _pressLandedMorph || _drag.Dragged || Locate(point) is not { } spot || spot.Hit is not { } hit)
+        if (!_tapPress || _pressLandedMorph || _earlierPressLandedMorph || _drag.Dragged || Locate(point) is not { } spot || spot.Hit is not { } hit)
         {
             return;
         }
