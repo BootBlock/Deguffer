@@ -92,10 +92,11 @@ internal sealed class WorkerCrew
         {
             _run(_help);
         }
-        catch (OutOfMemoryException ex)
+        catch (Exception ex) when (ex is OutOfMemoryException or ThreadStartException)
         {
-            // What starting a thread throws when the system will not start one. Counted out, or
-            // Finish would wait for a helper that never ran.
+            // What starting a thread throws when the system will not create one, or when the thread
+            // fails before it can run any code. Counted out, or Finish would wait for a helper that
+            // never ran.
             Interlocked.Decrement(ref _helpers);
             Fail(ex);
             return false;

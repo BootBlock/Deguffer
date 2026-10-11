@@ -84,8 +84,8 @@ internal sealed class WorkerThreads
             return;
         }
 
-        // Counted once started, so a thread the system would not start is never counted. A thread
-        // ends only after an idle lifetime, long after this.
+        // Counted once started, so a thread the system would not start is never counted. With a short
+        // idle lifetime the thread may end before this, and the count is one low only until it runs.
         new Parked(this, work).Start();
         Interlocked.Increment(ref _alive);
     }
