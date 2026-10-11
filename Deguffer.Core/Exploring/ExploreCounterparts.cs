@@ -39,7 +39,9 @@ internal sealed class ExploreCounterparts(ExploreTree earlier, ExploreTree later
 
     private int? Child(int folder, string name, int number)
     {
-        if (number < later.NodeCount
+        // Held, because a node taken out of the later tree since its scan keeps its number and its
+        // parent there, and is no counterpart of anything (ExploreTree.Without).
+        if (later.Holds(number)
             && number != later.RootNode
             && later.ParentOf(number) == folder
             && string.Equals(later.NameOf(number), name, StringComparison.OrdinalIgnoreCase))

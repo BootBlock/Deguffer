@@ -35,7 +35,6 @@ public sealed partial class ExploreFiles : ObservableObject
     private static readonly IReadOnlyList<string> Ages = [.. FileAges.All.Select(FileAges.Label)];
 
     private readonly ExploreActions _actions;
-    private readonly Func<int, bool> _wasRemoved;
     private readonly TimeProvider _time;
 
     private ExploreTree? _tree;
@@ -72,16 +71,10 @@ public sealed partial class ExploreFiles : ObservableObject
     /// </summary>
     private int _generation;
 
-    /// <param name="wasRemoved">
-    /// Whether a node of the tree on screen has gone since the scan. See
-    /// <see cref="ExploreSelection.WasRemoved"/>: a removed file is no longer listed, because nothing
-    /// may offer it.
-    /// </param>
     /// <param name="time">Where the instant ages are measured from is read.</param>
-    public ExploreFiles(ExploreActions actions, Func<int, bool> wasRemoved, TimeProvider time)
+    public ExploreFiles(ExploreActions actions, TimeProvider time)
     {
         _actions = actions;
-        _wasRemoved = wasRemoved;
         _time = time;
 
         // A refusal on a row is the one thing here whose answer can arrive late: until the policy is
@@ -296,8 +289,8 @@ public sealed partial class ExploreFiles : ObservableObject
 
             _ranking = ranking;
 
-            var gone = ShowRows(rows);
-            Summary = SummaryOf(ranking, gone);
+            ShowRows(rows);
+            Summary = SummaryOf(ranking);
         }
         catch (OperationCanceledException)
         {
@@ -305,19 +298,14 @@ public sealed partial class ExploreFiles : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Bring <see cref="Rows"/> to <paramref name="arriving"/>, less anything removed since the scan.
-    /// </summary>
-    /// <returns>How many of <paramref name="arriving"/> were left out for having been removed.</returns>
-    private int ShowRows(IReadOnlyList<ExploreFileRow> arriving)
+    /// <summary>Bring <see cref="Rows"/> to <paramref name="arriving"/>.</summary>
+    private void ShowRows(IReadOnlyList<ExploreFileRow> arriving)
     {
-        ExploreFileRow[] kept = [.. arriving.Where(row => !_wasRemoved(row.Node))];
-
         IsShowingRows = true;
 
         try
         {
-            LiveList.Show(Rows, kept, row => row.Key);
+            LiveList.Show(Rows, arriving, row => row.Key);
         }
         finally
         {
@@ -325,22 +313,15 @@ public sealed partial class ExploreFiles : ObservableObject
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
-
-        return arriving.Count - kept.Length;
     }
 
     /// <summary>
     /// How many files are listed and of how many. The count is of what matched, so a reader whose
     /// filter matches fifty thousand files is told the list is the top of it rather than all of it.
     /// </summary>
-    /// <param name="gone">
-    /// How many listed files were removed since the scan. They are taken off the counts as they are
-    /// off the rows, so the sentence describes the list under it. A file removed from outside the
-    /// list is still counted, as the sizes on the page still count it, and the stale note says so.
-    /// </param>
-    private static string SummaryOf(FileRanking ranking, int gone)
+    private static string SummaryOf(FileRanking ranking)
     {
-        var (matched, listed) = (ranking.Matched - gone, ranking.Files.Count - gone);
+        var (matched, listed) = (ranking.Matched, ranking.Files.Count);
 
         return (matched, ranking.IsComplete, ranking.Filter.IsEverything) switch
         {

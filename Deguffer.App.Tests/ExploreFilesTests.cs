@@ -184,7 +184,9 @@ public sealed class ExploreFilesTests : IDisposable
         Assert.False(File.Exists(removed.Path));
         await Eventually.HoldsAsync(() => page.Files.Rows.Count == 3, "the removed file gone from the list");
         Assert.DoesNotContain(page.Files.Rows, row => row.Node == removed.Node);
-        Assert.Equal("3 files here, largest first.", page.Files.Summary);
+
+        // Said once the tree without it has been searched.
+        await Eventually.HoldsAsync(() => page.Files.Summary == "3 files here, largest first.", "the list counted again");
         Assert.True(File.Exists(tree.PathOf(Find(tree, "game.iso"))));
         Assert.True(File.Exists(tree.PathOf(Find(tree, "keep.bin"))));
     });
@@ -221,7 +223,6 @@ public sealed class ExploreFilesTests : IDisposable
     {
         var files = new ExploreFiles(
             new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, _explore.Running),
-            _ => false,
             _explore.Time)
         {
             IsActive = true,

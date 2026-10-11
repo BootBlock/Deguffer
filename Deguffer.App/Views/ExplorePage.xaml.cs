@@ -206,11 +206,6 @@ public sealed partial class ExplorePage : Page
             }
         };
 
-        // Once, because the rule does not change — only what it answers, as things are removed. The
-        // map draws descendants the list never lists, so it is the one screen that can put a shape
-        // under the pointer whose folder has already gone.
-        Map.Excluding(ViewModel.Selection.WasRemoved);
-
         Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
         Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);

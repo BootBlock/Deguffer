@@ -17,18 +17,12 @@ namespace Deguffer.App.ViewModels;
 /// about one thing in it and what happens to that thing (G1). It decides nothing:
 /// <see cref="ExploreActions"/> settles what may be removed and carries it out,
 /// <see cref="ExploreRefusalNote"/> says why a selection will not be, <see cref="ExploreRemovals"/>
-/// what has gone since the scan, and <see cref="ExplorePlace.TryCarry"/> what a selection still
-/// names in a later tree — all in Core, all provable without a WinUI host.</para>
+/// what is left of the tree after a removal, and <see cref="ExplorePlace.TryCarry"/> what a selection
+/// still names in a later tree — all in Core, all provable without a WinUI host.</para>
 /// </summary>
 public sealed partial class ExploreSelection : ObservableObject
 {
     private readonly ExploreActions _actions;
-
-    /// <summary>
-    /// What has gone since the scan. The list stops showing it, and <see cref="StaleNote"/> says
-    /// plainly that the totals and the picture are now larger than what is on the disk.
-    /// </summary>
-    private readonly ExploreRemovals _removals = new();
 
     private ExploreTree? _tree;
 
@@ -73,8 +67,11 @@ public sealed partial class ExploreSelection : ObservableObject
     /// </summary>
     public event EventHandler<OutcomeStatement>? Reported;
 
-    /// <summary>Raised when something was removed, so the list and the picture are rebuilt.</summary>
-    public event EventHandler? Changed;
+    /// <summary>
+    /// Raised when something was removed, with what is left of the tree it was removed from, so the
+    /// page shows that in its place. Raised before the selection lets go of what was acted on.
+    /// </summary>
+    public event EventHandler<RemovedFrom>? Removed;
 
     /// <summary>
     /// What is selected, by node.
@@ -132,26 +129,16 @@ public sealed partial class ExploreSelection : ObservableObject
     public (ExploreTree? Tree, IReadOnlyList<int> Nodes) Removing { get; private set; } = (null, []);
 
     /// <summary>
-    /// How the picture now differs from the disk, or null while they still agree. See
-    /// <see cref="_removals"/>.
+    /// How the picture may now differ from the disk, or null while nothing has been removed since
+    /// the scan. The removals themselves are out of the sizes and the picture
+    /// (<see cref="ExploreRemovals"/>), and nothing else that changed on the disk since is.
     /// </summary>
-    public string? StaleNote => _removals.CountIn(_tree) is > 0 and var count
-        ? $"{count} item(s) have been removed since this scan. The sizes above still count them, and "
-          + "the map still draws them. Scan again for a current picture."
+    public string? StaleNote => _tree is { RemovedSinceScan: > 0 and var count }
+        ? $"{count} item(s) have been removed since this scan. The sizes and the map leave them out, "
+          + "but nothing else on the drive has been scanned again. Scan again for a current picture."
         : null;
 
     public bool HasStaleNote => StaleNote is not null;
-
-    /// <summary>
-    /// Whether this node has gone since the scan, so nothing on screen may offer it.
-    ///
-    /// <para>The list stops showing such a node; the map cannot, because the tree behind the
-    /// picture is not rebuilt for a deletion — see <see cref="_removals"/> — so the shape stays where
-    /// it was. What both must stop doing is <em>acting</em> on it, and the map must stop marking it
-    /// out under the pointer, which reads as an offer to pick something that can only select
-    /// nothing (§7.1). Asked of the tree on screen: see <see cref="ExploreRemovals.WasRemoved"/>.</para>
-    /// </summary>
-    public bool WasRemoved(int node) => _removals.WasRemoved(_tree, node);
 
     /// <summary>
     /// Ask what may be removed again, because part of the answer is about this minute: a folder an
@@ -216,7 +203,9 @@ public sealed partial class ExploreSelection : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        _nodes = [.. nodes.Where(n => !WasRemoved(n))];
+        // A node the tree on screen no longer holds was removed since the scan, and is never picked
+        // again (§7.1).
+        _nodes = [.. nodes.Where(n => _tree is null || _tree.Holds(n))];
 
         // Worked out once, here, rather than on each read. Each of the three walks the selection
         // rebuilding a path per node, and the note asks the policy for a verdict on top of that, so
@@ -303,16 +292,23 @@ public sealed partial class ExploreSelection : ObservableObject
                 return;
             }
 
-            _removals.Record(tree, picked, report);
+            var left = ExploreRemovals.Without(tree, picked, report);
+
+            // Every Select replaces the list, so the same list means nothing was picked meanwhile.
+            // Asked before the page shows what is left, which carries the selection into it.
+            var pickedMeanwhile = !ReferenceEquals(_nodes, picked);
 
             Reported?.Invoke(this, report.Statement);
 
-            // Every Select replaces the list, so the same list means nothing was picked meanwhile and
-            // what was acted on is let go. A pick made while this ran is the user's and stays, less
-            // anything the removal took from under it.
-            Select(ReferenceEquals(_nodes, picked) ? [] : _nodes);
+            if (!ReferenceEquals(left, tree))
+            {
+                Removed?.Invoke(this, new RemovedFrom(tree, left));
+            }
+
+            // What was acted on is let go. A pick made while this ran is the user's and stays, less
+            // anything the removal took from under it, which carrying it into what is left dropped.
+            Select(pickedMeanwhile ? _nodes : []);
             Stale();
-            Changed?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                                        or NotSupportedException or ArgumentException)
@@ -381,4 +377,11 @@ public sealed partial class ExploreSelection : ObservableObject
     private bool CanRemove() => CanAct && _nodes.Count > 0 && _tree is not null;
 
     private bool CanActOnOne() => CanAct && _nodes.Count == 1 && _tree is not null;
+
+    /// <summary>
+    /// A removal that has finished: the tree it was made in, and what is left of that tree. The page
+    /// may have moved on to another tree while it ran, and what is left replaces only the one it came
+    /// from.
+    /// </summary>
+    public readonly record struct RemovedFrom(ExploreTree Tree, ExploreTree Left);
 }

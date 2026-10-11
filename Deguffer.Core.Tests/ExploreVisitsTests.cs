@@ -13,8 +13,6 @@ public sealed class ExploreVisitsTests
 
     private static readonly MapViewport Zoomed = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5), MapCeiling.Least);
 
-    private static readonly Func<int, bool> NothingRemoved = _ => false;
-
     /// <summary>The treemap on screen, where a zoom is part of where the reader is.</summary>
     private const bool Zooms = true;
 
@@ -28,17 +26,17 @@ public sealed class ExploreVisitsTests
         visits.Leave(top);
         visits.Leave(At(outer));
 
-        var back = visits.Back(At(inner), tree, Volume, Zooms, NothingRemoved);
+        var back = visits.Back(At(inner), tree, Volume, Zooms);
         Assert.Equal(At(outer), back);
 
-        var further = visits.Back(back!.Value, tree, Volume, Zooms, NothingRemoved);
+        var further = visits.Back(back!.Value, tree, Volume, Zooms);
         Assert.Equal(top, further);
-        Assert.False(visits.CanGoBack(top, tree, Volume, Zooms, NothingRemoved));
+        Assert.False(visits.CanGoBack(top, tree, Volume, Zooms));
 
-        var forward = visits.Forward(top, tree, Volume, Zooms, NothingRemoved);
+        var forward = visits.Forward(top, tree, Volume, Zooms);
         Assert.Equal(At(outer), forward);
-        Assert.Equal(At(inner), visits.Forward(forward!.Value, tree, Volume, Zooms, NothingRemoved));
-        Assert.False(visits.CanGoForward(At(inner), tree, Volume, Zooms, NothingRemoved));
+        Assert.Equal(At(inner), visits.Forward(forward!.Value, tree, Volume, Zooms));
+        Assert.False(visits.CanGoForward(At(inner), tree, Volume, Zooms));
     }
 
     /// <summary>
@@ -53,13 +51,13 @@ public sealed class ExploreVisitsTests
         var top = At(ExplorePosition.Top(tree));
 
         visits.Leave(top);
-        visits.Back(At(outer), tree, Volume, Zooms, NothingRemoved);
-        Assert.True(visits.CanGoForward(top, tree, Volume, Zooms, NothingRemoved));
+        visits.Back(At(outer), tree, Volume, Zooms);
+        Assert.True(visits.CanGoForward(top, tree, Volume, Zooms));
 
         visits.Leave(top);
 
-        Assert.False(visits.CanGoForward(At(inner), tree, Volume, Zooms, NothingRemoved));
-        Assert.Null(visits.Forward(At(inner), tree, Volume, Zooms, NothingRemoved));
+        Assert.False(visits.CanGoForward(At(inner), tree, Volume, Zooms));
+        Assert.Null(visits.Forward(At(inner), tree, Volume, Zooms));
     }
 
     /// <summary>
@@ -76,37 +74,40 @@ public sealed class ExploreVisitsTests
 
         visits.Leave(whole);
 
-        Assert.Equal(whole, visits.Back(zoomed, tree, Volume, Zooms, NothingRemoved));
-        Assert.Equal(zoomed, visits.Forward(whole, tree, Volume, Zooms, NothingRemoved));
+        Assert.Equal(whole, visits.Back(zoomed, tree, Volume, Zooms));
+        Assert.Equal(zoomed, visits.Forward(whole, tree, Volume, Zooms));
     }
 
     /// <summary>
-    /// A folder removed since is passed over and forgotten. Shown, it would draw a folder that is no
+    /// A folder removed since is forgotten as the tree without it arrives. Shown, it would draw a folder that is no
     /// longer on the disk, which the page refuses to open by any other route.
     /// </summary>
     [Fact]
-    public void AStepIntoARemovedFolderIsPassedOverAndForgotten()
+    public void AStepIntoARemovedFolderIsForgotten()
     {
         var (tree, outer, inner) = Tree(@"D:\");
         var visits = new ExploreVisits();
         var top = At(ExplorePosition.Top(tree));
-        Func<int, bool> outerRemoved = node => node == outer.Node || node == inner.Node;
 
         visits.Leave(top);
         visits.Leave(At(outer));
         visits.Leave(At(inner));
 
-        var current = At(ExplorePosition.Inside(tree.RootNode));
+        var left = tree.Without([outer.Node]);
+        visits.Carry(tree, left);
 
-        Assert.Equal(top, visits.Back(current, tree, Volume, Zooms, outerRemoved));
+        var current = At(ExplorePosition.Inside(left.RootNode));
 
-        // Forward goes back to where Back left, not to the folders passed over on the way.
-        Assert.Equal(current, visits.Forward(top, tree, Volume, Zooms, outerRemoved));
-        Assert.False(visits.CanGoForward(current, tree, Volume, Zooms, NothingRemoved));
+        Assert.Equal(top, visits.Back(current, left, Volume, Zooms));
+
+        // Forward goes back to where Back left, not to the folders that went.
+        Assert.Equal(current, visits.Forward(top, left, Volume, Zooms));
+        Assert.False(visits.CanGoForward(current, left, Volume, Zooms));
     }
 
     /// <summary>
-    /// Nothing leads anywhere where every step is gone, and asking changes nothing.
+    /// Nothing leads anywhere where every step is where the reader already stands, and asking changes
+    /// nothing.
     /// </summary>
     [Fact]
     public void BackWithNowhereToGoChangesNothing()
@@ -117,10 +118,10 @@ public sealed class ExploreVisitsTests
 
         visits.Leave(At(outer));
 
-        Assert.False(visits.CanGoBack(top, tree, Volume, Zooms, _ => true));
-        Assert.Null(visits.Back(top, tree, Volume, Zooms, _ => true));
-        Assert.False(visits.CanGoForward(top, tree, Volume, Zooms, NothingRemoved));
-        Assert.True(visits.CanGoBack(top, tree, Volume, Zooms, NothingRemoved));
+        Assert.False(visits.CanGoBack(At(outer), tree, Volume, Zooms));
+        Assert.Null(visits.Back(At(outer), tree, Volume, Zooms));
+        Assert.False(visits.CanGoForward(top, tree, Volume, Zooms));
+        Assert.True(visits.CanGoBack(top, tree, Volume, Zooms));
     }
 
     /// <summary>
@@ -137,8 +138,8 @@ public sealed class ExploreVisitsTests
 
         var opened = At(ExplorePosition.Inside(tree.RootNode));
 
-        Assert.False(visits.CanGoBack(opened, tree, VolumeSpace.None, Zooms, NothingRemoved));
-        Assert.True(visits.CanGoBack(opened, tree, Volume, Zooms, NothingRemoved));
+        Assert.False(visits.CanGoBack(opened, tree, VolumeSpace.None, Zooms));
+        Assert.True(visits.CanGoBack(opened, tree, Volume, Zooms));
     }
 
     /// <summary>
@@ -160,7 +161,7 @@ public sealed class ExploreVisitsTests
         var current = At(inner);
         var steps = 0;
 
-        while (visits.Back(current, tree, Volume, Zooms, NothingRemoved) is { } back)
+        while (visits.Back(current, tree, Volume, Zooms) is { } back)
         {
             current = back;
             steps++;
@@ -171,7 +172,7 @@ public sealed class ExploreVisitsTests
 
         steps = 0;
 
-        while (visits.Forward(current, tree, Volume, Zooms, NothingRemoved) is { } forward)
+        while (visits.Forward(current, tree, Volume, Zooms) is { } forward)
         {
             current = forward;
             steps++;
@@ -194,9 +195,9 @@ public sealed class ExploreVisitsTests
 
         visits.Leave(whole with { Viewport = Zoomed });
 
-        Assert.True(visits.CanGoBack(whole, tree, Volume, Zooms, NothingRemoved));
-        Assert.False(visits.CanGoBack(whole, tree, Volume, zooms: false, NothingRemoved));
-        Assert.Null(visits.Back(whole, tree, Volume, zooms: false, NothingRemoved));
+        Assert.True(visits.CanGoBack(whole, tree, Volume, Zooms));
+        Assert.False(visits.CanGoBack(whole, tree, Volume, zooms: false));
+        Assert.Null(visits.Back(whole, tree, Volume, zooms: false));
     }
 
     /// <summary>
@@ -218,8 +219,8 @@ public sealed class ExploreVisitsTests
 
         var current = At(ExplorePosition.Inside(second.RootNode));
 
-        Assert.Equal(At(outer), visits.Back(current, second, Volume, Zooms, NothingRemoved));
-        Assert.Equal(top, visits.Back(At(outer), second, Volume, Zooms, NothingRemoved));
+        Assert.Equal(At(outer), visits.Back(current, second, Volume, Zooms));
+        Assert.Equal(top, visits.Back(At(outer), second, Volume, Zooms));
     }
 
     /// <summary>
@@ -247,8 +248,8 @@ public sealed class ExploreVisitsTests
 
         var current = At(ExplorePosition.Inside(arriving.RootNode));
 
-        Assert.Equal(top, visits.Back(current, arriving, Volume, Zooms, NothingRemoved));
-        Assert.False(visits.CanGoBack(top, arriving, Volume, Zooms, NothingRemoved));
+        Assert.Equal(top, visits.Back(current, arriving, Volume, Zooms));
+        Assert.False(visits.CanGoBack(top, arriving, Volume, Zooms));
     }
 
     [Fact]
@@ -263,7 +264,7 @@ public sealed class ExploreVisitsTests
 
         visits.Carry(first, elsewhere);
 
-        Assert.False(visits.CanGoBack(At(ExplorePosition.Inside(elsewhere.RootNode)), elsewhere, Volume, Zooms, NothingRemoved));
+        Assert.False(visits.CanGoBack(At(ExplorePosition.Inside(elsewhere.RootNode)), elsewhere, Volume, Zooms));
     }
 
     /// <summary>The same tree handed over again is no replacement, and the zooms on its steps stand.</summary>
@@ -277,7 +278,7 @@ public sealed class ExploreVisitsTests
         visits.Leave(zoomed);
         visits.Carry(tree, tree);
 
-        Assert.Equal(zoomed, visits.Back(At(outer), tree, Volume, Zooms, NothingRemoved));
+        Assert.Equal(zoomed, visits.Back(At(outer), tree, Volume, Zooms));
     }
 
     private static ExploreVisit At(ExplorePosition position) => new(position, MapViewport.Whole);

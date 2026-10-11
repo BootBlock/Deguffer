@@ -11,10 +11,9 @@ namespace Deguffer.Core.Exploring;
 /// from the page, which only asks (G1). The rules are in Core so they are provable without a window
 /// (G8).</para>
 ///
-/// <para>A place that can no longer be shown is passed over rather than shown: a folder removed from
-/// the page since, and the place the reader is already standing in, which would be a step that goes
-/// nowhere. What is passed over is forgotten, because it cannot become showable again in the same
-/// tree.</para>
+/// <para>The place the reader is already standing in is passed over rather than shown, because it
+/// would be a step that goes nowhere, and what is passed over is forgotten. A folder removed from the
+/// page since is forgotten as the tree without it arrives (<see cref="Carry"/>).</para>
 /// </summary>
 public sealed class ExploreVisits
 {
@@ -50,26 +49,24 @@ public sealed class ExploreVisits
     /// Whether the view on screen shows a zoom. Where it does not, a step that differs from here only
     /// by its zoom shows nothing new, and is passed over.
     /// </param>
-    /// <param name="wasRemoved">Whether a node of <paramref name="tree"/> has gone from the page since the scan.</param>
-    public bool CanGoBack(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
-        _back.Exists(visit => Leads(visit, current, tree, volume, zooms, wasRemoved));
+    public bool CanGoBack(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms) =>
+        _back.Exists(visit => Leads(visit, current, tree, volume, zooms));
 
     /// <summary>The same as <see cref="CanGoBack"/>, ahead.</summary>
-    public bool CanGoForward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
-        _forward.Exists(visit => Leads(visit, current, tree, volume, zooms, wasRemoved));
+    public bool CanGoForward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms) =>
+        _forward.Exists(visit => Leads(visit, current, tree, volume, zooms));
 
     /// <summary>
     /// The nearest step behind <paramref name="current"/> that can be shown, with
     /// <paramref name="current"/> put ahead, or null where none can. Nothing changes on null.
     /// </summary>
     /// <param name="zooms">See <see cref="CanGoBack"/>.</param>
-    /// <param name="wasRemoved">Whether a node of <paramref name="tree"/> has gone from the page since the scan.</param>
-    public ExploreVisit? Back(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
-        Step(_back, _forward, current, tree, volume, zooms, wasRemoved);
+    public ExploreVisit? Back(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms) =>
+        Step(_back, _forward, current, tree, volume, zooms);
 
     /// <summary>The same as <see cref="Back"/>, ahead.</summary>
-    public ExploreVisit? Forward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms, Func<int, bool> wasRemoved) =>
-        Step(_forward, _back, current, tree, volume, zooms, wasRemoved);
+    public ExploreVisit? Forward(ExploreVisit current, ExploreTree tree, VolumeSpace volume, bool zooms) =>
+        Step(_forward, _back, current, tree, volume, zooms);
 
     /// <summary>
     /// Bring every step into <paramref name="arriving"/>, which replaces <paramref name="leaving"/>:
@@ -116,13 +113,11 @@ public sealed class ExploreVisits
         ExploreVisit current,
         ExploreTree tree,
         VolumeSpace volume,
-        bool zooms,
-        Func<int, bool> wasRemoved)
+        bool zooms)
     {
         ArgumentNullException.ThrowIfNull(tree);
-        ArgumentNullException.ThrowIfNull(wasRemoved);
 
-        var nearest = from.FindLastIndex(visit => Leads(visit, current, tree, volume, zooms, wasRemoved));
+        var nearest = from.FindLastIndex(visit => Leads(visit, current, tree, volume, zooms));
 
         if (nearest < 0)
         {
@@ -144,9 +139,8 @@ public sealed class ExploreVisits
         ExploreVisit current,
         ExploreTree tree,
         VolumeSpace volume,
-        bool zooms,
-        Func<int, bool> wasRemoved) =>
-        !wasRemoved(visit.Position.Node) && !visit.Shows(current, tree, volume, zooms);
+        bool zooms) =>
+        !visit.Shows(current, tree, volume, zooms);
 
     private static void Push(List<ExploreVisit> steps, ExploreVisit visit)
     {

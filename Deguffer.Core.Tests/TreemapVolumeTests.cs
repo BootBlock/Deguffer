@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Testing;
@@ -257,6 +258,34 @@ public sealed class TreemapVolumeTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 900, freeBytes: 500);
 
         Assert.Equal(new VolumeSpace(900, 500), VolumeSpace.Of(volumes, @"\\?\D:\"));
+    }
+
+    /// <summary>
+    /// After a removal the volume is read again: what was deleted is free now. What Windows stated
+    /// about the space no folder accounts for, and whether the scan counted the shadow copy storage,
+    /// are the scan's, and stay.
+    /// </summary>
+    [Fact]
+    public void AVolumeRemeasuredAfterARemovalHasItsNewFreeSpaceAndKeepsWhatTheScanFound()
+    {
+        var hidden = new HiddenSpace(new ShadowStorage(Statement.Stated, UsedBytes: 40, AllocatedBytes: 60), new ReservedStorage(Statement.Stated, 30));
+        var scanned = new VolumeSpace(900, 500, hidden, CountedSystemVolumeInformation: true);
+        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 900, freeBytes: 650);
+
+        Assert.Equal(scanned with { FreeBytes = 650 }, scanned.Remeasured(volumes, @"D:\"));
+    }
+
+    /// <summary>
+    /// Nothing is drawn beside a scan of a folder, and nothing is after a removal from it either; and a
+    /// volume that no longer states its figures has nothing to draw, rather than the old ones.
+    /// </summary>
+    [Fact]
+    public void AVolumeRemeasuredIsNothingWhereThereIsNothingToDraw()
+    {
+        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 900, freeBytes: 650);
+
+        Assert.Equal(VolumeSpace.None, VolumeSpace.None.Remeasured(volumes, @"D:\"));
+        Assert.Equal(VolumeSpace.None, new VolumeSpace(900, 500).Remeasured(new FakeVolumeInventory(), @"D:\"));
     }
 
     [Fact]

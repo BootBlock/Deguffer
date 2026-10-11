@@ -99,7 +99,7 @@ public sealed partial class ExploreGrowth : ObservableObject
     /// pointer is over on the map, or nothing. A comparison of another tree speaks for nothing in it.
     /// </summary>
     public void Point(ExploreTree? tree, int? node) =>
-        Pointed = Comparison is { } growth && ReferenceEquals(growth.Tree, tree) && node is { } over
+        Pointed = Comparison is { } growth && growth.Describes(tree) && node is { } over
             ? growth.ListedFor(over)?.Path
             : null;
 

@@ -144,6 +144,33 @@ public class ScanGrowthTests
     }
 
     /// <summary>
+    /// A comparison describes the scan it compared and what is left of that scan after a removal, whose
+    /// node numbers are the same, and paints a map of it. It describes no other tree.
+    /// </summary>
+    [Fact]
+    public void AComparisonDescribesWhatIsLeftOfItsScanAfterARemoval()
+    {
+        var before = Tree(@"C:\", ("Logs", 10 * Megabyte), ("Cache", 5 * Megabyte));
+        var after = Tree(@"C:\", ("Logs", 2000 * Megabyte), ("Cache", 5 * Megabyte));
+        var growth = Compare(before, after);
+        var left = after.Without([Child(after, "Cache")]);
+
+        Assert.True(growth.Describes(after));
+        Assert.True(growth.Describes(left));
+        Assert.False(growth.Describes(before));
+        Assert.False(growth.Describes(Tree(@"C:\", ("Logs", 2000 * Megabyte), ("Cache", 5 * Megabyte))));
+        Assert.False(growth.Describes(null));
+
+        var file = left.ChildrenOf(Child(after, "Logs"))[0];
+        var colours = ShapeColours.For(left, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth, types: null);
+        var surface = ExploreSurface.Create(
+            left, left.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, ExploreSpacing.Comfortable, VolumeSpace.None);
+
+        Assert.Equal(GrowthPalette.BandOf(growth.BytesAt(file)).Colour, colours.For(surface, file, depth: 2));
+        Assert.NotEqual(GrowthPalette.BandOf((long?)null).Colour, colours.For(surface, file, depth: 2));
+    }
+
+    /// <summary>
     /// Each change falls in the band that names it, a boundary belongs to the larger band, and growth
     /// and shrinkage of the same size never share a colour.
     /// </summary>

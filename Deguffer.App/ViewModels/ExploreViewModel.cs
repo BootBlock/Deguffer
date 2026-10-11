@@ -151,7 +151,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Selection = new ExploreSelection(actions);
         Growth = new ExploreGrowth(history);
-        Files = new ExploreFiles(actions, Selection.WasRemoved, time);
+        Files = new ExploreFiles(actions, time);
         Types = new ExploreTypes();
 
         // A comparison that arrives, or stops, recolours a map coloured by growth, and the kinds of a
@@ -167,7 +167,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // the selection says when it is working, and this says when the page is free to act.
         Selection.Working += (_, working) => IsBusy = working;
         Selection.Reported += (_, report) => Say(report);
-        Selection.Changed += (_, _) => Refresh();
+        Selection.Removed += (_, removed) => ShowLeft(removed);
 
         // Two of the four notes are the selection's, so what the card shows in their corner turns
         // partly on a type this one does not speak for. Without following it, picking something
@@ -349,8 +349,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     ///
     /// <para>Two states rather than one, because one of the four notes is a warning and the other
     /// three are not. §7.1 lets Explore's totals be lower bounds "provided the picture states which
-    /// it is", and after a removal the stale note is the whole of that statement: the sizes on
-    /// screen still count what has gone. Collapsed behind a fixed <c>i</c> it would arrive with
+    /// it is", and after a removal the stale note is the whole of that statement: the sizes leave out
+    /// what went, and nothing else on the disk is measured again. Collapsed behind a fixed <c>i</c> it would arrive with
     /// nothing on screen changing, because the route note usually has the button on screen already.
     /// So the glyph and the name change with it, and neither is colour alone.</para>
     /// </summary>
@@ -564,10 +564,11 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// How large the volume was and how much of it was free when the scan on screen finished, where
     /// it covered the whole of one, and <see cref="VolumeSpace.None"/> otherwise.
     ///
-    /// <para>Read once, as the scan finishes, rather than kept current. Everything else on screen
+    /// <para>Read as the scan finishes, rather than kept current. Everything else on screen
     /// describes the disk as that scan found it, so a figure that moved on its own would set the
-    /// blocks against sizes they no longer match. A removal from this page makes both stale
-    /// together, and the stale note says so.</para>
+    /// blocks against sizes they no longer match. A removal from this page reads it again with the
+    /// sizes it changed (<see cref="ShowLeft"/>), and the stale note says the rest of the drive is
+    /// not scanned again.</para>
     ///
     /// <para>Replaced with every tree, because it belongs to the tree it describes: the snapshots a
     /// running scan publishes have none, being partial, so a scan of a folder never runs with the
@@ -790,9 +791,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         var record = await Task.Run(() => _history.Record(scan, volume, space, scoped, taken));
 
-        // A comparison describes one tree, and a removal on this page can have taken the page to
-        // another while this ran. Shown only for the tree it was taken from.
-        if (ReferenceEquals(Tree, scan.Tree))
+        // A comparison describes one scan, and the page can have moved to another while this ran.
+        // Shown only for the scan it was taken from, or what a removal left of it.
+        if (ReferenceEquals(Tree?.Scanned, scan.Tree))
         {
             Growth.Show(record);
         }
@@ -807,8 +808,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(row);
 
-        if (Tree is { } tree && row.CanOpen && ReferenceEquals(Growth.Comparison?.Tree, tree)
-            && !Selection.WasRemoved(row.Node))
+        if (Tree is { } tree && row.CanOpen && Growth.Comparison?.Describes(tree) == true && tree.Holds(row.Node))
         {
             Visit(tree, ExplorePosition.Inside(row.Node));
         }
@@ -980,13 +980,13 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Show what is inside <paramref name="node"/>. Ignored for anything removed since the scan,
-    /// which the map still draws, and wherever <see cref="ExplorePosition.Opening"/> says the step
+    /// Show what is inside <paramref name="node"/>. Ignored for anything the tree on screen no longer
+    /// holds, removed since the scan, and wherever <see cref="ExplorePosition.Opening"/> says the step
     /// leads nowhere.
     /// </summary>
     public void Descend(int node)
     {
-        if (Tree is not { } tree || Selection.WasRemoved(node)
+        if (Tree is not { } tree || !tree.Holds(node)
             || _position.Opening(tree, node, Volume) is not { } opened)
         {
             return;
@@ -1035,7 +1035,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (Tree is { } tree)
         {
-            Revisit(tree, _visits.Back(Here, tree, Volume, Zooms, Selection.WasRemoved));
+            Revisit(tree, _visits.Back(Here, tree, Volume, Zooms));
         }
     }
 
@@ -1045,7 +1045,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (Tree is { } tree)
         {
-            Revisit(tree, _visits.Forward(Here, tree, Volume, Zooms, Selection.WasRemoved));
+            Revisit(tree, _visits.Forward(Here, tree, Volume, Zooms));
         }
     }
 
@@ -1187,7 +1187,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // dates. A shape painted by the folder above it has none of its own, and the readout says
         // nothing rather than borrow that one.
         if (SelectedColouring == ExploreColouring.Growth
-            && Growth.Comparison is { } growth && ReferenceEquals(growth.Tree, tree)
+            && Growth.Comparison is { } growth && growth.Describes(tree)
             && growth.ChangeOf(node) is { } change)
         {
             figures += $", {GrowthText.Change(change, growth.Earlier.UnrecordedAtMost)} since the last scan";
@@ -1281,21 +1281,27 @@ public sealed partial class ExploreViewModel : ObservableObject
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Rebuild the list and the picture from what is left, without rescanning.</summary>
-    private void Refresh()
+    /// <summary>
+    /// Show what is left of the tree on screen after a removal from it, without rescanning, as a
+    /// snapshot of the same place is shown: the reader stays where they were, the rows are brought up
+    /// to date in place, and the map moves to the new layout, where what went shrinks away and its
+    /// neighbours grow into the room it left.
+    ///
+    /// <para>The volume is read again, because a removal frees what it deleted, and drawn from the old
+    /// figures that would be space no folder accounts for (<see cref="VolumeSpace.Remeasured"/>).</para>
+    /// </summary>
+    private void ShowLeft(ExploreSelection.RemovedFrom removed)
     {
-        // A removal can take away a folder Back or Forward led to.
-        NotifyVisits();
-
-        if (Tree is { } tree)
+        if (!ReferenceEquals(Tree, removed.Tree))
         {
-            // The same directory of the same tree, with something taken out of it, so the rows are
-            // brought up to date rather than rebuilt and the list stays where the user left it.
-            ShowRows(tree, CurrentNode, reconcile: true);
-            Files.Show(tree, CurrentNode);
+            return;
         }
 
-        ViewChanged?.Invoke(this, EventArgs.Empty);
+        var left = removed.Left;
+
+        _volumes.Invalidate();
+
+        Show(left, _position.CarriedTo(removed.Tree, left), Volume.Remeasured(_volumes, left.RootPath));
     }
 
     /// <summary>
@@ -1348,10 +1354,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         foreach (var child in tree.ChildrenOf(node))
         {
-            if (!Selection.WasRemoved(child))
-            {
-                _arriving.Add(child);
-            }
+            _arriving.Add(child);
         }
 
         LiveList.Show(
@@ -1477,7 +1480,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     private bool CanAscend() => Tree is { } tree && _position.Up(tree, Volume) is not null;
 
-    private bool CanGoBack() => Tree is { } tree && _visits.CanGoBack(Here, tree, Volume, Zooms, Selection.WasRemoved);
+    private bool CanGoBack() => Tree is { } tree && _visits.CanGoBack(Here, tree, Volume, Zooms);
 
-    private bool CanGoForward() => Tree is { } tree && _visits.CanGoForward(Here, tree, Volume, Zooms, Selection.WasRemoved);
+    private bool CanGoForward() => Tree is { } tree && _visits.CanGoForward(Here, tree, Volume, Zooms);
 }

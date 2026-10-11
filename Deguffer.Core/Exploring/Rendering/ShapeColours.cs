@@ -66,7 +66,7 @@ public abstract class ShapeColours
         colouring switch
         {
             ExploreColouring.Age => new AgeColours(tree, scheme, nowUtc),
-            ExploreColouring.Growth => new GrowthColours(tree, ReferenceEquals(growth?.Tree, tree) ? growth : null),
+            ExploreColouring.Growth => new GrowthColours(tree, growth?.Describes(tree) == true ? growth : null),
             ExploreColouring.Type => new TypeColours(tree, ReferenceEquals(types?.Tree, tree) ? types : null),
             _ => ByBranch(scheme),
         };
