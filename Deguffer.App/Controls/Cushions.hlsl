@@ -5,13 +5,26 @@
 //
 // The light is CushionShading's, and has to stay it: ambient plus Lambertian diffuse from van Wijk's
 // light, the same constants, the same flat shapes. CushionRenderer's test compares this picture with
-// the rasteriser's, pixel by pixel.
+// the rasteriser's, pixel by pixel. The pointer's light (PointerLight) is added to it, and adds
+// nothing past its reach.
 
 cbuffer Canvas : register(b0)
 {
     // The canvas's size in pixels, which is where the viewport puts it.
     float2 size;
-    float2 unused;
+
+    // The canvas point under the pointer's light.
+    float2 lightAt;
+
+    // The part of the canvas shaded: left, top, right, bottom. Nothing outside it is touched.
+    float4 region;
+
+    // How far the pointer's light reaches, in pixels; how much it adds facing it straight on, zero for
+    // no light; and how high above the canvas it is, in pixels.
+    float reach;
+    float strength;
+    float height;
+    float unused;
 };
 
 struct Quad
@@ -33,7 +46,8 @@ Pixel vs(Quad quad)
 {
     Pixel pixel;
     float4 edges = float4(quad.edges);
-    float2 at = lerp(edges.xy, edges.zw, float2(quad.corner & 1, quad.corner >> 1));
+    // Cut to the region. The edges stay whole, so the cushion is still measured across the whole quad.
+    float2 at = clamp(lerp(edges.xy, edges.zw, float2(quad.corner & 1, quad.corner >> 1)), region.xy, region.zw);
 
     pixel.position = float4((at.x / size.x * 2) - 1, 1 - (at.y / size.y * 2), 0, 1);
     pixel.edges = edges;
@@ -56,6 +70,17 @@ float4 ps(Pixel pixel) : SV_Target
     // CushionShading.LightAt, with its light above and to the left.
     float cosine = ((nx * -0.09759) + (ny * -0.19518) + 0.9759) / sqrt((nx * nx) + (ny * ny) + 1);
     float light = 0.13 + (0.87 * saturate(cosine));
+
+    // The pointer's light: a point above the canvas, so a slope facing it catches more of it, fading to
+    // nothing at its reach.
+    if (strength > 0)
+    {
+        float3 normal = normalize(float3(nx, ny, 1));
+        float2 apart = lightAt - (at + 0.5);
+        float fade = 1 - saturate(dot(apart, apart) / (reach * reach));
+
+        light += strength * saturate(dot(normal, normalize(float3(apart, height)))) * fade * fade;
+    }
 
     // Truncated to a byte as CushionShading.Write truncates, so the two agree but for rounding at the
     // last bit of a float against a double.

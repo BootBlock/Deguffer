@@ -66,7 +66,9 @@ public sealed class CushionRendererTests : IDisposable
     [Fact]
     public void ASmallerCanvasAfterALargerIsShadedAtItsOwnSize()
     {
-        _renderer.Shade(Picture(MapViewport.Whole, Width * 2, Height * 2).Quads()!, new TileColour(250, 0, 250));
+        var larger = Picture(MapViewport.Whole, Width * 2, Height * 2).Quads()!;
+
+        _renderer.Shade(larger, new TileColour(250, 0, 250), Whole(larger), light: null);
 
         AssertShadedAsPainted(Picture(MapViewport.Whole, 300, 200));
     }
@@ -77,6 +79,61 @@ public sealed class CushionRendererTests : IDisposable
     /// </summary>
     [Fact]
     public void ARendererOnWarpSaysItRunsOnSoftware() => Assert.True(_renderer.OnSoftware);
+
+    /// <summary>
+    /// The pointer's light brightens the cushions round it and darkens none, and past its reach the
+    /// picture is the one shaded without it, pixel for pixel: a light that moves on leaves nothing
+    /// behind.
+    /// </summary>
+    [Fact]
+    public void ThePointerLightBrightensWithinItsReachAndChangesNothingPastIt()
+    {
+        var quads = Picture(MapViewport.Whole).Quads()!;
+        var light = new PointerLight(400, 300, 120);
+        var unlit = Shaded(quads);
+        var lit = _renderer.Shade(quads, Ground, Whole(quads), light).GetPixelBytes(0, 0, quads.Width, quads.Height);
+        var brighter = 0;
+
+        for (var i = 0; i < unlit.Length; i += 4)
+        {
+            var x = (i / 4 % quads.Width) + 0.5f - light.X;
+            var y = (i / 4 / quads.Width) + 0.5f - light.Y;
+            var within = (x * x) + (y * y) < light.Reach * light.Reach;
+
+            for (var channel = 0; channel < 3; channel++)
+            {
+                if (within)
+                {
+                    Assert.True(lit[i + channel] >= unlit[i + channel], $"the light darkened pixel {i / 4}");
+                }
+                else
+                {
+                    Assert.Equal(unlit[i + channel], lit[i + channel]);
+                }
+            }
+
+            brighter += within && lit[i + 1] > unlit[i + 1] + 8 ? 1 : 0;
+        }
+
+        Assert.True(brighter > 1000, $"only {brighter} pixels were lit");
+    }
+
+    /// <summary>
+    /// A region shaded on its own, as the light shades where it moves, is the same picture as the same
+    /// region of the whole canvas: the cushions are measured across their whole shapes, not across the
+    /// part in the region.
+    /// </summary>
+    [Fact]
+    public void ARegionShadedOnItsOwnIsThePictureOfTheWhole()
+    {
+        var quads = Picture(MapViewport.Whole).Quads()!;
+        var light = new PointerLight(400, 300, 120);
+        var region = new CanvasRegion(260, 170, 290, 250);
+        var whole = _renderer.Shade(quads, Ground, Whole(quads), light).GetPixelBytes(region.X, region.Y, region.Width, region.Height);
+        var part = _renderer.Shade(quads, Ground, region, light).GetPixelBytes(region.X, region.Y, region.Width, region.Height);
+
+        Assert.Equal(whole, part);
+    }
 
     /// <summary>A canvas with no shapes on it is the ground alone.</summary>
     [Fact]
@@ -126,7 +183,9 @@ public sealed class CushionRendererTests : IDisposable
     }
 
     private byte[] Shaded(CushionQuads quads) =>
-        _renderer.Shade(quads, Ground).GetPixelBytes(0, 0, quads.Width, quads.Height);
+        _renderer.Shade(quads, Ground, Whole(quads), light: null).GetPixelBytes(0, 0, quads.Width, quads.Height);
+
+    private static CanvasRegion Whole(CushionQuads quads) => new(0, 0, quads.Width, quads.Height);
 
     private static string Colour(byte[] pixels, int i) => $"#{pixels[i + 2]:X2}{pixels[i + 1]:X2}{pixels[i]:X2}";
 

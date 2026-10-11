@@ -331,7 +331,8 @@ internal static class Direct3D
 
         void Unmap();
 
-        void PSSetConstantBuffers();
+        [PreserveSig]
+        void PSSetConstantBuffers(uint start, uint count, in nint buffers);
 
         [PreserveSig]
         void IASetInputLayout(nint layout);

@@ -2,6 +2,7 @@ using System.Numerics;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.UI.Composition;
+using Microsoft.UI.Dispatching;
 using Windows.Graphics;
 
 namespace Deguffer.App.Controls;
@@ -17,14 +18,23 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class ExploreLayer
 {
+    private readonly Compositor _compositor;
+
+    private readonly DispatcherQueue _dispatcher;
+
     private readonly MapGraphics _graphics;
 
     private readonly CompositionSurfaceBrush _brush;
 
     private CompositionVirtualDrawingSurface _surface;
 
+    /// <summary>The pointer's light on the canvas, where it was shaded on the GPU.</summary>
+    private readonly CanvasLight _light = new();
+
     public ExploreLayer(Compositor compositor, MapGraphics graphics)
     {
+        _compositor = compositor;
+        _dispatcher = DispatcherQueue.GetForCurrentThread();
         _graphics = graphics;
         _surface = graphics.CreateSurface(1, 1);
 
@@ -79,6 +89,7 @@ internal sealed class ExploreLayer
     public void Prepare(int width, int height)
     {
         MapGraphics.Empty(_surface);
+        _light.Forget();
 
         if (Size.Width != width || Size.Height != height)
         {
@@ -101,7 +112,24 @@ internal sealed class ExploreLayer
     }
 
     /// <summary>Shade the whole canvas, a canvas this surface's size, from <paramref name="quads"/> on <paramref name="ground"/>.</summary>
-    public void Shade(CushionQuads quads, TileColour ground) => _graphics.Shade(_surface, quads, ground);
+    public void Shade(CushionQuads quads, TileColour ground)
+    {
+        _graphics.Shade(_surface, quads, ground);
+        AfterCommit(_light.Shaded(quads, ground));
+    }
+
+    /// <summary>
+    /// Put the pointer's light at <paramref name="light"/> on a canvas shaded on the GPU, or take it off
+    /// with null, once the compositor has taken the surface: see <see cref="CanvasLight"/>. Nothing on a
+    /// canvas painted on the CPU, which has nothing to shade it again from.
+    /// </summary>
+    public void Light(PointerLight? light)
+    {
+        if (_light.Want(light) is { } commit)
+        {
+            AfterCommit(commit);
+        }
+    }
 
     /// <summary>
     /// Put the canvas where its part of the picture is, in a picture laid out over a screen
@@ -125,6 +153,7 @@ internal sealed class ExploreLayer
         Sprite.IsVisible = false;
 
         MapGraphics.Empty(_surface);
+        _light.Forget();
     }
 
     /// <summary>
@@ -140,5 +169,16 @@ internal sealed class ExploreLayer
 
         _surface = _graphics.CreateSurface(Size.Width, Size.Height);
         _brush.Surface = _surface;
+        _light.Forget();
     }
+
+    /// <summary>Ask the compositor for <paramref name="commit"/>, and shade the light it settles once it is done.</summary>
+    private void AfterCommit(int commit) =>
+        _compositor.RequestCommitAsync().Completed = (_, _) => _dispatcher.TryEnqueue(() =>
+        {
+            if (_light.Committed(commit) is { } shading)
+            {
+                _graphics.Shade(_surface, shading.Quads, shading.Ground, shading.Region, shading.Light);
+            }
+        });
 }

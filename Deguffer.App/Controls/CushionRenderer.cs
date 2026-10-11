@@ -26,6 +26,9 @@ internal sealed class CushionRenderer : IDisposable
 {
     private const int QuadSize = 24;
 
+    /// <summary>How many floats the shader's constant buffer holds: see <c>Cushions.hlsl</c>.</summary>
+    private const int CanvasConstants = 12;
+
     private static readonly Lazy<(byte[] Vertices, byte[] Pixels)> Shaders = new(Compile);
 
     /// <summary>The names the shader's inputs go by. Made once, and never freed: every layout reads them.</summary>
@@ -52,6 +55,9 @@ internal sealed class CushionRenderer : IDisposable
 
     private nint _quads;
 
+    /// <summary>The quads in the buffer, so a light moving over one canvas does not send them again.</summary>
+    private CushionQuads? _uploaded;
+
     private int _capacity;
 
     private nint _texture;
@@ -74,7 +80,7 @@ internal sealed class CushionRenderer : IDisposable
         Check(_direct3D.CreatePixelShader(pixels, (nuint)pixels.Length, 0, out _pixelShader));
         Check(_direct3D.CreateInputLayout(Inputs, (uint)Inputs.Length, vertices, (nuint)vertices.Length, out _layout));
         Check(_direct3D.CreateBuffer(
-            new BufferDescription { ByteWidth = 16, BindFlags = BindConstantBuffer },
+            new BufferDescription { ByteWidth = CanvasConstants * sizeof(float), BindFlags = BindConstantBuffer },
             0,
             out _constants));
     }
@@ -106,11 +112,12 @@ internal sealed class CushionRenderer : IDisposable
     }
 
     /// <summary>
-    /// Shade <paramref name="quads"/> on <paramref name="ground"/>, and return the bitmap they are shaded
-    /// in. The canvas is its corner, <see cref="CushionQuads.Width"/> by <see cref="CushionQuads.Height"/>
-    /// pixels, and holds it until the next shading.
+    /// Shade <paramref name="region"/> of <paramref name="quads"/>' canvas on <paramref name="ground"/>,
+    /// under <paramref name="light"/> where there is one, and return the bitmap it is shaded in. The canvas
+    /// is its corner, <see cref="CushionQuads.Width"/> by <see cref="CushionQuads.Height"/> pixels, and the
+    /// region holds the picture until the next shading. Nothing else of the bitmap is.
     /// </summary>
-    public CanvasBitmap Shade(CushionQuads quads, TileColour ground)
+    public CanvasBitmap Shade(CushionQuads quads, TileColour ground, CanvasRegion region, PointerLight? light)
     {
         using var held = _device.Lock();
 
@@ -123,8 +130,13 @@ internal sealed class CushionRenderer : IDisposable
 
         if (shapes.Length > 0)
         {
-            Upload(shapes);
-            Draw(quads.Width, quads.Height, shapes.Length);
+            if (!ReferenceEquals(quads, _uploaded))
+            {
+                Upload(shapes);
+                _uploaded = quads;
+            }
+
+            Draw(quads.Width, quads.Height, region, light, shapes.Length);
         }
 
         return bitmap;
@@ -335,6 +347,8 @@ internal sealed class CushionRenderer : IDisposable
                 new BufferDescription { ByteWidth = (uint)(_capacity * QuadSize), BindFlags = BindVertexBuffer },
                 0,
                 out _quads));
+
+            _uploaded = null;
         }
 
         var bytes = MemoryMarshal.AsBytes(shapes);
@@ -349,13 +363,30 @@ internal sealed class CushionRenderer : IDisposable
     }
 
     /// <summary>
-    /// Draw <paramref name="count"/> quads over a canvas <paramref name="width"/> by
-    /// <paramref name="height"/>. Every piece of state the draw depends on is set, because the device is
-    /// shared with Win2D, and the target is let go of after, so Win2D can read it.
+    /// Draw <paramref name="count"/> quads over <paramref name="region"/> of a canvas
+    /// <paramref name="width"/> by <paramref name="height"/>, under <paramref name="light"/> where there
+    /// is one. Every piece of state the draw depends on is set, because the device is shared with Win2D,
+    /// and the target is let go of after, so Win2D can read it.
     /// </summary>
-    private void Draw(int width, int height, int count)
+    private void Draw(int width, int height, CanvasRegion region, PointerLight? light, int count)
     {
-        Span<float> size = [width, height, 0, 0];
+        var shining = light ?? default;
+
+        Span<float> constants =
+        [
+            width,
+            height,
+            shining.X,
+            shining.Y,
+            region.X,
+            region.Y,
+            region.Right,
+            region.Bottom,
+            shining.Reach,
+            light is null ? 0 : PointerLight.Strength,
+            shining.Reach * PointerLight.Height,
+            0,
+        ];
 
         // The whole buffer, with no box: Direct3D 11 refuses a box on a constant buffer, and drops the
         // update without an error, which left every quad at a size of zero.
@@ -363,7 +394,7 @@ internal sealed class CushionRenderer : IDisposable
             _constants,
             0,
             in Unsafe.NullRef<Box>(),
-            ref MemoryMarshal.GetReference(MemoryMarshal.AsBytes(size)),
+            ref MemoryMarshal.GetReference(MemoryMarshal.AsBytes(constants)),
             0,
             0);
 
@@ -379,6 +410,7 @@ internal sealed class CushionRenderer : IDisposable
         _context.VSSetConstantBuffers(0, 1, _constants);
         _context.GSSetShader(0, 0, 0);
         _context.PSSetShader(_pixelShader, 0, 0);
+        _context.PSSetConstantBuffers(0, 1, _constants);
 
         _context.DrawInstanced(4, (uint)count, 0, 0);
 

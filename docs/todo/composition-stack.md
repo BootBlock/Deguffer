@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
 > composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
-> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). Its treemaps are shaded on the GPU where effects are fast since #284 ([what that found](#what-landing-284-found)). The maintainer has
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). Its treemaps are shaded on the GPU where effects are fast since #284 ([what that found](#what-landing-284-found)), lit by the pointer there ([how](#the-pointers-light)). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -399,6 +399,39 @@ CPU's route, a region at a time and off the UI thread. The map asks Win2D's devi
 adapter's software flag (`CushionRenderer.OnSoftware`), rather than trust `AreEffectsFast()`, which
 speaks for the compositor's device, a separate one. What `AreEffectsFast()` reports on WARP and in a
 remote session was not observed here.
+
+### The pointer's light
+
+A soft point light follows the pointer over a treemap shaded on the GPU (`PointerLight`): 160 DIPs
+of reach, half its reach above the canvas, adding at most 35% of a shape's colour where a cushion
+faces it. A slope facing the pointer catches more of it than one facing away, so the shape under the
+pointer shows by its relief, beside the outline. It is added in the cushion shader, and fades to
+nothing at its reach, so past it the canvas is the picture without a light, pixel for pixel. Only the
+drawing at rest on screen is lit: not a tile while the map moves, not a drawing on its way in, not a
+canvas the CPU painted, and not in high contrast (§6.5).
+
+- **Only what the light touched is shaded again.** A move shades one rectangle round where the light
+  was and where it is (`PointerLight.Between`), from the quads already on the GPU, which are not sent
+  again. The vertex shader clamps each quad to that rectangle, so the pixel work is the rectangle's.
+  The vertex work is the whole canvas's quads, so a move costs no more than shading the canvas whole,
+  which the table above puts at 0.39 to 0.68 ms on the discrete GPU and 2.2 to 6.2 ms on the
+  integrated one. The light's own pass was not timed apart from that.
+- **Once a commit, and never in the commit that shaded the canvas whole.** A part of a virtual
+  surface written in the same commit as the whole of it left the rest of the surface empty on screen:
+  after a zoom, the new drawing was shaded whole and lit at once, and only the rectangle round the
+  pointer showed. The map without the light did not do it, nor did a light shaded 100 ms later. So a layer keeps
+  where the light is wanted and shades it after `Compositor.RequestCommitAsync` completes, and a
+  whole shading asks for its own commit, which supersedes any asked before it. A pointer moves
+  several times a frame, so this also shades the light once a commit rather than once a move.
+- **Not a composition `PointLight`.** A composition light lights a visual as a flat surface unless an
+  effect brush gives it a normal map (`SceneLightingEffect`). For the light to follow the cushions'
+  slopes, each drawing would need a second canvas of the same size holding the cushions' normals,
+  shaded alongside it, and an effect brush per layer that samples both, on every frame the light
+  moves. The cushion shader already has each pixel's normal, so the light costs one constant buffer
+  and a region pass. The composition light was therefore not built or measured.
+- **Driven** on `C:\Windows`: the light followed a smooth pointer move and left no trace behind it,
+  went when the pointer left the map, and after five wheel notches in, the drawing at rest was whole
+  and lit at the pointer.
 
 ## Still open
 
