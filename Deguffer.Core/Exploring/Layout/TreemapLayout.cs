@@ -178,66 +178,181 @@ public static class TreemapLayout
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var path = new HashSet<int>();
+        return new Walk(tree, root, width, height, limits, volume, viewport).To(node) is { } reached
+            ? Fraction(reached.Frame, width, height)
+            : null;
+    }
 
-        for (var at = node; path.Add(at) && at != root; at = tree.ParentOf(at))
+    /// <summary>
+    /// The shapes the picture <see cref="Compute(ISizedTree, int, float, float, LayoutLimits, VolumeSpace, MapViewport)"/>
+    /// lays out at <paramref name="viewport"/> draws directly in <paramref name="folder"/>, in the order
+    /// it lays them: what the folder holds that has a shape of its own, largest first, then the block
+    /// standing for the rest where there is one. For a null folder, <paramref name="root"/>'s own shape
+    /// and the blocks of the volume beside it. In fractions of the canvas, on it or however far off it,
+    /// as <see cref="Locate"/> places one.
+    ///
+    /// <para>What the keyboard moves between and a screen reader lists, on a picture the screen may show
+    /// only a part of: a shape the camera has left behind is still there to move to. None where the
+    /// folder is not under the root, or the picture draws it as one block.</para>
+    /// </summary>
+    public static IReadOnlyList<MapShape> Within(
+        ISizedTree tree,
+        int root,
+        float width,
+        float height,
+        LayoutLimits limits,
+        VolumeSpace volume,
+        MapViewport viewport,
+        int? folder)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        var walk = new Walk(tree, root, width, height, limits, volume, viewport);
+        var blocks = new List<ExploreTile>();
+        var laid = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
+
+        if (folder is not { } inside)
         {
-            if (at == tree.ParentOf(at))
+            if (walk.To(root) is { } whole)
             {
-                return null;
+                laid.Push((root, 0, whole.Frame, 0));
+                blocks.AddRange(walk.Beside);
             }
         }
-
-        if (tree.ChildOrder != ExploreChildOrder.BySize || width <= 0 || height <= 0 || tree.SizeOf(root) <= 0)
+        else if (walk.To(inside) is { } reached
+            && walk.Detail.OpeningLevel(tree, inside, reached.Depth, reached.Frame.Width, reached.Frame.Height, reached.Level) is >= 0 and var level)
         {
-            return null;
-        }
-
-        var detail = new TreemapDetail(limits, viewport);
-        var picture = new Rectangle(
-            -viewport.Left * width * viewport.Zoom,
-            -viewport.Top * height * viewport.Zoom,
-            width * viewport.Zoom,
-            height * viewport.Zoom);
-
-        // The window is the whole picture, so nothing on the path is passed over for being off the
-        // canvas. The shapes laid beside it are laid and dropped.
-        var bounds = new Bounds(new Rectangle(0, 0, width, height), picture);
-        var dropped = new List<ExploreTile>();
-        var pending = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
-        pending.Push((root, 0, BesideTheVolume(tree.SizeOf(root), volume, picture, bounds, limits, dropped), 0));
-
-        while (pending.TryPop(out var next))
-        {
-            var (at, depth, frame, from) = next;
-
-            if (!path.Contains(at))
-            {
-                continue;
-            }
-
-            if (at == node)
-            {
-                return new MapFrame(frame.X / width, frame.Y / height, frame.Width / width, frame.Height / height);
-            }
-
-            var level = detail.OpeningLevel(tree, at, depth, frame.Width, frame.Height, from);
-
-            if (level < 0)
-            {
-                return null;
-            }
-
-            var (header, gap) = detail.FrameOf(frame.Width, frame.Height, level);
+            var frame = reached.Frame;
+            var (header, gap) = walk.Detail.FrameOf(frame.Width, frame.Height, level);
             var top = header > 0 ? header : gap;
             var area = new Rectangle(
                 frame.X + gap, frame.Y + top,
                 frame.Width - (gap * 2), frame.Height - top - gap);
 
-            Place(tree, at, depth + 1, area, level, detail, bounds, dropped, pending);
+            Place(tree, inside, reached.Depth + 1, area, level, walk.Detail, walk.Bounds, blocks, laid);
         }
 
-        return null;
+        var shapes = new List<MapShape>(laid.Count + blocks.Count);
+
+        // Pushed in the order they were laid, so the stack hands them back last first.
+        foreach (var (node, _, frame, _) in laid.Reverse())
+        {
+            shapes.Add(MapShape.Of(node, tree.SizeOf(node), Fraction(frame, width, height)));
+        }
+
+        // A block is placed in single precision once cut (see Tile), which is as near as one needs.
+        foreach (var block in blocks)
+        {
+            shapes.Add(MapShape.Of(block.Node, block.Bytes, new MapFrame(block.X / width, block.Y / height, block.Width / width, block.Height / height)));
+        }
+
+        return shapes;
+    }
+
+    private static MapFrame Fraction(Rectangle frame, float width, float height) =>
+        new(frame.X / width, frame.Y / height, frame.Width / width, frame.Height / height);
+
+    /// <summary>
+    /// One picture's layout kept to the folders above one shape: each laid out as the whole picture lays
+    /// it out, and nothing beside them opened. Its window is the whole picture, so nothing on the way is
+    /// passed over for being off the canvas. What <see cref="Locate"/> and <see cref="Within"/> walk.
+    /// </summary>
+    private sealed class Walk
+    {
+        private readonly ISizedTree _tree;
+        private readonly int _root;
+        private readonly float _width;
+        private readonly float _height;
+        private readonly LayoutLimits _limits;
+        private readonly VolumeSpace _volume;
+        private readonly Rectangle _picture;
+
+        public Walk(ISizedTree tree, int root, float width, float height, LayoutLimits limits, VolumeSpace volume, MapViewport viewport)
+        {
+            _tree = tree;
+            _root = root;
+            _width = width;
+            _height = height;
+            _limits = limits;
+            _volume = volume;
+            _picture = new Rectangle(
+                -viewport.Left * width * viewport.Zoom,
+                -viewport.Top * height * viewport.Zoom,
+                width * viewport.Zoom,
+                height * viewport.Zoom);
+
+            Detail = new TreemapDetail(limits, viewport);
+            Bounds = new Bounds(new Rectangle(0, 0, width, height), _picture);
+        }
+
+        public TreemapDetail Detail { get; }
+
+        public Bounds Bounds { get; }
+
+        /// <summary>The blocks of the volume laid beside the root by the last walk.</summary>
+        public List<ExploreTile> Beside { get; } = [];
+
+        /// <summary>
+        /// Where <paramref name="node"/>'s own shape is laid, how deep it is, and the level of detail
+        /// the folder holding it was laid at; or null where it is not under the root, or the picture
+        /// draws it inside a shape rather than as one of its own.
+        /// </summary>
+        public (Rectangle Frame, int Depth, int Level)? To(int node)
+        {
+            var path = new HashSet<int>();
+
+            for (var at = node; path.Add(at) && at != _root; at = _tree.ParentOf(at))
+            {
+                if (at == _tree.ParentOf(at))
+                {
+                    return null;
+                }
+            }
+
+            if (_tree.ChildOrder != ExploreChildOrder.BySize || _width <= 0 || _height <= 0 || _tree.SizeOf(_root) <= 0)
+            {
+                return null;
+            }
+
+            Beside.Clear();
+
+            // The shapes laid beside the path are laid and dropped.
+            var dropped = new List<ExploreTile>();
+            var pending = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
+            pending.Push((_root, 0, BesideTheVolume(_tree.SizeOf(_root), _volume, _picture, Bounds, _limits, Beside), 0));
+
+            while (pending.TryPop(out var next))
+            {
+                var (at, depth, frame, from) = next;
+
+                if (!path.Contains(at))
+                {
+                    continue;
+                }
+
+                if (at == node)
+                {
+                    return (frame, depth, from);
+                }
+
+                var level = Detail.OpeningLevel(_tree, at, depth, frame.Width, frame.Height, from);
+
+                if (level < 0)
+                {
+                    return null;
+                }
+
+                var (header, gap) = Detail.FrameOf(frame.Width, frame.Height, level);
+                var top = header > 0 ? header : gap;
+                var area = new Rectangle(
+                    frame.X + gap, frame.Y + top,
+                    frame.Width - (gap * 2), frame.Height - top - gap);
+
+                Place(_tree, at, depth + 1, area, level, Detail, Bounds, dropped, pending);
+            }
+
+            return null;
+        }
     }
 
     /// <summary>

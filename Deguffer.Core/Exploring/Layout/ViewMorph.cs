@@ -82,7 +82,7 @@ public static class ViewMorph
             .. later.MorphShapes(largest)
                 .OrderBy(shape => shape.Depth)
                 .ThenBy(shape => shape.Node)
-                .Select(to => new ShapeMorph(to.Node, to.Colour, from[to.Node].Outline, to.Outline)),
+                .Select(to => new ShapeMorph(to.Node, to.Colour, from[to.Node].Outline, to.Outline, to.Edges)),
         ];
     }
 

@@ -82,6 +82,37 @@ public sealed class MemoryViewModelTests : IDisposable
         await shown;
     }
 
+    /// <summary>
+    /// What the map tells a screen reader of a shape: a program, whether opening it shows what it holds,
+    /// and nothing of removing, which this page does not do. Nothing of a tree other than the reading
+    /// on screen.
+    /// </summary>
+    [Fact]
+    public void TheMapIsToldWhatThePageKnowsOfTheReadingOnScreen() => UiThread.Run(async () =>
+    {
+        var page = Page(First());
+        using var leave = new CancellationTokenSource();
+
+        var shown = ShownAsync(page);
+        var watching = page.WatchAsync(leave.Token);
+        await shown;
+
+        var tree = page.Tree!;
+        var alpha = page.ShapeFacts(tree, tree.Find(Alpha)!.Value);
+        var beta = page.ShapeFacts(tree, tree.Find(Beta)!.Value);
+
+        Assert.NotNull(alpha);
+        Assert.NotNull(beta);
+        Assert.Equal("Program", alpha.Kind);
+        Assert.True(alpha.Opens);
+        Assert.False(beta.Opens);
+        Assert.Null(alpha.Removal);
+        Assert.Null(page.ShapeFacts(new Core.Exploring.ExploreTreeBuilder(@"C:\").Build(Core.Exploring.ExploreChildOrder.BySize), tree.Find(Alpha)!.Value));
+
+        await leave.CancelAsync();
+        await watching;
+    });
+
     private static List<NotifyCollectionChangedAction> Watch(INotifyCollectionChanged list)
     {
         var told = new List<NotifyCollectionChangedAction>();

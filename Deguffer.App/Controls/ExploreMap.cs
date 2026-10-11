@@ -11,6 +11,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
@@ -296,6 +297,13 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private ShapeColours? _shapeColours;
 
+    /// <summary>
+    /// The high contrast theme's colours the drawings of the picture on screen are in, or null where
+    /// they are coloured and shaded: read with <see cref="_shapeColours"/>, so the ground under them
+    /// agrees with them, and read again to tell whether a change of the system's colours changed them.
+    /// </summary>
+    private ContrastColours? _contrast;
+
     private double _scale = 1;
     private ExploreHit? _hovered;
 
@@ -324,6 +332,16 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>What a card beside the map lights on it, or null. See <see cref="Light"/>.</summary>
     private MapLight? _light;
+
+    /// <summary>Which shape the keyboard is on. See <see cref="ExploreFocus"/>.</summary>
+    private readonly ExploreFocus _focus = new();
+
+    /// <summary>
+    /// Whether the map has the focus from the keyboard, or from a screen reader, rather than from a click:
+    /// what marks the shape the keyboard is on and makes Enter open it. A click focuses the map too, so
+    /// the keys go to it, and marks nothing until a key moves between the shapes.
+    /// </summary>
+    private bool _keyboard;
 
     public ExploreMap()
     {
@@ -441,6 +459,10 @@ public sealed class ExploreMap : UserControl
         PointerWheelChanged += OnPointerWheelChanged;
         DoubleTapped += OnDoubleTapped;
         KeyDown += OnKeyDown;
+        PreviewKeyDown += OnPreviewKeyDown;
+        GotFocus += OnGotFocus;
+        LostFocus += OnLostFocus;
+        ContextRequested += OnContextRequested;
 
         // Picking is separate from opening, on the file-manager idiom: one click says which one, two
         // says go in. A right-click picks as well, so the menu that follows is about the shape under
@@ -557,15 +579,14 @@ public sealed class ExploreMap : UserControl
         // this same event for the same reason.
         ActualThemeChanged += (_, _) => Redraw();
 
-        // The map is one focusable thing rather than one per shape, and the status line beside it
-        // carries what is under the pointer. A screen reader needs the same information without a
-        // pointer, which the list view provides in full — so this announces its role and defers.
+        // One tab stop, inside which the arrow keys move between the shapes, as they move between the
+        // items of a list. A screen reader is given the shapes as a tree of their own (see
+        // MapAutomationPeer), with the one the keyboard is on as the focus.
         IsTabStop = true;
         AutomationProperties.SetName(this, "Map of what was scanned");
 
-        // Naming where the same content is readable, because deferring to the list view only helps
-        // somebody who knows it is there. It is one of four options in the View picker and it is
-        // not the default.
+        // Naming where the same content is readable as well, because a list is still the quicker way
+        // to read a great many names.
         DescribeControls();
     }
 
@@ -575,6 +596,28 @@ public sealed class ExploreMap : UserControl
     /// <see cref="OnDoubleTapped"/>.
     /// </summary>
     public event EventHandler<int>? Activated;
+
+    /// <summary>
+    /// The reader pressed Backspace on the map, which goes up to the folder that holds the one on
+    /// screen. The page goes, as it decides what is above.
+    /// </summary>
+    public event EventHandler? Ascending;
+
+    /// <summary>
+    /// What the page knows of a node of a tree it handed over that a screen reader is told and the map
+    /// does not: see <see cref="MapShapeFacts"/>. Null from the page for a tree it has nothing to say of,
+    /// such as a step of a replay, and then a screen reader is given no shapes on it, only the map.
+    /// </summary>
+    public Func<ISizedTree, int, MapShapeFacts?>? Facts { get; set; }
+
+    /// <summary>
+    /// Whether the picture is drawn in a high contrast theme's two colours, so its colours say nothing
+    /// of what the page coloured it by. See <see cref="ContrastColours"/>.
+    /// </summary>
+    public bool Contrasted => _contrast is not null;
+
+    /// <summary><see cref="Contrasted"/> has a new answer.</summary>
+    public event EventHandler? ContrastChanged;
 
     /// <summary>
     /// A double-click is zooming to a shape it could not open, away from this part of the picture.
@@ -675,11 +718,14 @@ public sealed class ExploreMap : UserControl
         AutomationProperties.SetHelpText(
             this,
             Description
+            + " The arrow keys move between the shapes, and pick the one they reach. Enter opens it, "
+            + "Backspace goes up a folder, and the menu key or Shift+F10 opens its menu."
             + (Zoomable
                 ? " On the treemap, turn the mouse wheel or pinch to zoom, and hold Shift with the wheel "
                     + "to move across. Drag with the left or middle button, two fingers or a touch to move a "
                     + "zoomed picture, and double-click anything else to zoom to it. Plus and minus zoom "
-                    + "about the middle, the arrow keys move the picture, and Home shows all of it. While the "
+                    + "about the middle, the arrow keys with Shift move the picture, and Home shows all of it. "
+                    + "The picture follows the arrow keys to a shape off the screen or too small to see. While the "
                     + "picture is zoomed in, an overview in a corner shows all of it with the part on the screen "
                     + "marked: drag the mark to move the picture, or click anywhere in the overview to go there. "
                     + "The keys above move the picture as the overview does, and Tab reaches its button to hide "
@@ -881,6 +927,11 @@ public sealed class ExploreMap : UserControl
         if (another && !samePlace)
         {
             _pictures.ForgetOverview();
+        }
+
+        if (another)
+        {
+            CarryFocus(tree, node, volume != VolumeSpace.None, samePlace);
         }
 
         _tree = tree;
@@ -1199,7 +1250,18 @@ public sealed class ExploreMap : UserControl
         // The clock is read here rather than held, because the age bands are relative to now and
         // a map left on screen overnight would otherwise keep yesterday's answer. A repaint costs
         // one read of it against a full rasterisation.
-        _shapeColours = _colours(DateTime.UtcNow);
+        //
+        // In a high contrast theme the colours say nothing but where each shape's edges are: see
+        // ContrastColours.
+        var wasContrasted = Contrasted;
+
+        _contrast = Contrast();
+        _shapeColours = _contrast is { } contrast ? ShapeColours.Contrasted(contrast) : _colours(DateTime.UtcNow);
+
+        if (Contrasted != wasContrasted)
+        {
+            ContrastChanged?.Invoke(this, EventArgs.Empty);
+        }
 
         // Every drawing kept is of the picture as it was, so none of them is shown again, though
         // they stay on screen until the new one has landed over them. Drawn at the zoom on screen
@@ -1381,6 +1443,9 @@ public sealed class ExploreMap : UserControl
         // Over a change of folder still flying, too: the names ride the picture they name as it moves.
         _labels.Show(drawing, _scale, LabelText);
 
+        // A screen reader's shapes are this drawing's now.
+        (FrameworkElementAutomationPeer.FromElement(this) as MapAutomationPeer)?.Redrawn();
+
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
         // now, and so is whatever the pointer is over.
         Fit();
@@ -1526,22 +1591,38 @@ public sealed class ExploreMap : UserControl
     /// sets it on the application — so the application dictionary answers for the *system* theme.
     /// Asking it for a colour gives a light ground behind a dark page whenever the two disagree,
     /// which is the §6.5 failure this method exists to avoid.</para>
-    private TileColour Ground() => ActualTheme == ElementTheme.Dark
-        ? new TileColour(32, 32, 32)
-        : new TileColour(243, 243, 243);
+    ///
+    /// <para>In a high contrast theme, the theme's own window colour, which the shapes are filled with too.</para>
+    private TileColour Ground() => _contrast is { } contrast
+        ? contrast.Window
+        : ActualTheme == ElementTheme.Dark
+            ? new TileColour(32, 32, 32)
+            : new TileColour(243, 243, 243);
+
+    /// <summary>
+    /// The colours of the high contrast theme Windows is in, or null where it is in none. Read from the
+    /// system rather than the application's resources, as <see cref="TintHighlight"/> reads them.
+    /// </summary>
+    private static ContrastColours? Contrast()
+    {
+        if (!HighContrast.IsEnabled())
+        {
+            return null;
+        }
+
+        var window = SystemSettings.UIElementColor(UIElementType.Window);
+        var text = SystemSettings.UIElementColor(UIElementType.WindowText);
+
+        return new ContrastColours(new TileColour(window.R, window.G, window.B), new TileColour(text.R, text.G, text.B));
+    }
 
     /// <summary>
     /// What to write on a labelled shape. The blocks standing for the rest of the volume are the
     /// map's own, because they are not nodes of the page's tree.
     /// </summary>
-    private string LabelText(ExploreLabel label) => label.Node switch
-    {
-        ExploreTile.FreeSpace => $"Free space  {FreeSpace.Format(label.Bytes)}",
-        ExploreTile.Unaccounted => $"Not accounted for  {FreeSpace.Format(label.Bytes)}",
-        ExploreTile.ShadowCopies => $"Restore points and shadow copies  {FreeSpace.Format(label.Bytes)}",
-        ExploreTile.ReservedStorage => $"Reserved storage  {FreeSpace.Format(label.Bytes)}",
-        _ => _labelText(label.Node),
-    };
+    private string LabelText(ExploreLabel label) => label.Node >= 0
+        ? _labelText(label.Node)
+        : $"{MapShapeText.BlockName(label.Node)}  {FreeSpace.Format(label.Bytes)}";
 
     /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
     private void ShowPicked()
@@ -1599,6 +1680,10 @@ public sealed class ExploreMap : UserControl
     /// <para>A shape already picked gets nothing, because it would carry two outlines, leaving the
     /// weaker claim on top of the stronger one. Nor does a block that stands for something other than
     /// a node, which cannot be picked (§7.1).</para>
+    ///
+    /// <para>The shape the keyboard is on is outlined the same way, while the keyboard has the map,
+    /// blocks too: a reader moving with the arrow keys has to see where they are, and a block is where
+    /// they can be.</para>
     /// </summary>
     private void ShowHovered()
     {
@@ -1617,24 +1702,45 @@ public sealed class ExploreMap : UserControl
         }
 
         var drawing = outlining.Drawing;
+        var focused = FocusOutlines(drawing);
 
         // Found on a tile, the shape may be one the drawing does not draw, so the tile outlines it, in
         // the drawing's canvas. Nothing is lifted: the drawing's surface holds coarser pixels there.
         if (_hoveredTile is { } tile && drawing.Viewport is { } drawn)
         {
             _highlight.ShowHovered(
-                _under.Count > 0 && ReadingOf(tile.Picture.Tree) is { } inTile
-                    ? tile.Outlines(inTile.InDrawing(_under), drawn, drawing.Width, drawing.Height)
-                    : [],
+                [
+                    .. _under.Count > 0 && ReadingOf(tile.Picture.Tree) is { } inTile
+                        ? tile.Outlines(inTile.InDrawing(_under), drawn, drawing.Width, drawing.Height)
+                        : [],
+                    .. focused,
+                ],
                 null,
                 new Vector2(drawing.Width, drawing.Height));
             return;
         }
 
         _highlight.ShowHovered(
-            _under.Count > 0 ? drawing.Outlines(outlining.Reading.InDrawing(_under)) : [],
+            [.. _under.Count > 0 ? drawing.Outlines(outlining.Reading.InDrawing(_under)) : [], .. focused],
             _pictures.SurfaceOf(drawing),
             new Vector2(drawing.Width, drawing.Height));
+    }
+
+    /// <summary>
+    /// The outline of the shape the keyboard is on, while the keyboard has the map and the shape is
+    /// neither picked nor under the pointer, which mark it already; and none otherwise. Only in a drawing
+    /// of the tree the page handed over last, which is the one the keyboard's nodes are numbers in.
+    /// </summary>
+    private IReadOnlyList<ExploreOutline> FocusOutlines(ExploreSurface drawing)
+    {
+        if (!_keyboard || !ReferenceEquals(drawing, Readable) || _focus.Find(drawing) is not { } found)
+        {
+            return [];
+        }
+
+        var shape = found.Shapes[found.Index];
+
+        return _picked.Contains(shape.Node) || _under.Contains(shape.Node) ? [] : drawing.OutlineOf(shape);
     }
 
     /// <summary>
@@ -1740,13 +1846,25 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Move the picture with the keyboard, on the focused map: plus and minus zoom about the middle,
-    /// the arrows pan, and Home shows the whole picture. A key with Alt or Ctrl held is left alone,
-    /// because Alt+Left and Alt+Right step back and forward.
+    /// Move between the shapes with the arrow keys, on the focused map, and move the picture with the
+    /// rest: plus and minus zoom about the middle, the arrows with Shift pan, and Home shows the whole
+    /// picture. A key with Alt or Ctrl held is left alone, because Alt+Left and Alt+Right step back and
+    /// forward. On the overview's buttons, which are inside the map, the arrows pan as they always have.
     /// </summary>
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (!_zoom.Movable || Held(VirtualKey.Menu) || Held(VirtualKey.Control) || KeyOf(e.Key) is not { } key)
+        if (Held(VirtualKey.Menu) || Held(VirtualKey.Control))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(e.OriginalSource, this) && !Held(VirtualKey.Shift) && DirectionOf(e.Key) is { } direction)
+        {
+            e.Handled = MoveFocus(direction);
+            return;
+        }
+
+        if (!_zoom.Movable || KeyOf(e.Key) is not { } key)
         {
             return;
         }
@@ -1757,10 +1875,43 @@ public sealed class ExploreMap : UserControl
         _zoom.Press(key);
 
         e.Handled = true;
-
-        static bool Held(VirtualKey modifier) =>
-            InputKeyboardSource.GetKeyStateForCurrentThread(modifier).HasFlag(CoreVirtualKeyStates.Down);
     }
+
+    /// <summary>
+    /// Enter opens the shape the keyboard is on, and Backspace goes up a folder, on the map itself. Taken
+    /// before the page's own keys for them, which open what is picked and go back.
+    /// </summary>
+    private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, this) || Held(VirtualKey.Menu) || Held(VirtualKey.Control) || Held(VirtualKey.Shift))
+        {
+            return;
+        }
+
+        if (e.Key == VirtualKey.Enter && _keyboard && Readable is { } drawing && FocusedShape() is { } focused && ShapeOf(focused) is { } shape)
+        {
+            OpenShape(drawing, focused.Folder, shape);
+            e.Handled = true;
+        }
+        else if (e.Key == VirtualKey.Back && Ascending is { } ascending)
+        {
+            ascending(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+    }
+
+    private static bool Held(VirtualKey modifier) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(modifier).HasFlag(CoreVirtualKeyStates.Down);
+
+    /// <summary>Which way <paramref name="key"/> moves between the shapes, or null where it is not an arrow.</summary>
+    private static MapDirection? DirectionOf(VirtualKey key) => key switch
+    {
+        VirtualKey.Left => MapDirection.Left,
+        VirtualKey.Right => MapDirection.Right,
+        VirtualKey.Up => MapDirection.Up,
+        VirtualKey.Down => MapDirection.Down,
+        _ => null,
+    };
 
     /// <summary>What <paramref name="key"/> does to the camera, or null where it does nothing.</summary>
     private static MapKey? KeyOf(VirtualKey key) => key switch
@@ -1835,6 +1986,13 @@ public sealed class ExploreMap : UserControl
         var point = e.GetCurrentPoint(this);
 
         _tapPress = point.PointerDeviceType != PointerDeviceType.Mouse || point.Properties.IsLeftButtonPressed;
+
+        // The pointer has the map now: the shape the keyboard was on is not marked until a key moves again.
+        if (_keyboard)
+        {
+            _keyboard = false;
+            ShowHovered();
+        }
         _earlierPressLandedMorph = _pressLandedMorph;
         _pressLandedMorph = _morph.IsMoving;
 
@@ -2068,11 +2226,20 @@ public sealed class ExploreMap : UserControl
     private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(Redraw);
 
     /// <summary>
-    /// Follow a change of accent colour, or high contrast turned on or off. Raised off the UI thread,
-    /// like the text size above.
+    /// Follow a change of accent colour, or high contrast turned on or off or to another theme, which
+    /// draws the picture again in the colours it now has. Raised off the UI thread, like the text size
+    /// above.
     /// </summary>
     private void OnSystemColoursChanged(UISettings sender, object args) =>
-        DispatcherQueue.TryEnqueue(TintHighlight);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            TintHighlight();
+
+            if (Contrast() != _contrast)
+            {
+                Redraw();
+            }
+        });
 
     /// <summary>Follow the compositor's word on whether effects are fast, which a remote session changes.</summary>
     private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
@@ -2195,11 +2362,17 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var drawing = spot.Drawing;
-
         // Only a treemap nests: an icicle draws what a shape holds below it rather than in it.
-        var shape = drawing.Viewport is null ? null : spot.ShapeOnScreen(_zoom.Shown);
+        Open(spot.Drawing, hit, spot.Drawing.Viewport is null ? null : spot.ShapeOnScreen(_zoom.Shown));
+    }
 
+    /// <summary>
+    /// Open <paramref name="hit"/>, drawn in <paramref name="drawing"/> where <paramref name="shape"/>
+    /// is on the screen, and zoom to it where it cannot be opened: what a double-click does, and Enter on
+    /// the shape the keyboard is on. See <see cref="OnDoubleTapped"/>.
+    /// </summary>
+    private void Open(ExploreSurface drawing, ExploreHit hit, MapFrame? shape)
+    {
         // The shape the whole drawing is of opens only out of what is drawn beside it: the volume's
         // free space, beside the root of a treemap of a whole drive. Anywhere else it is already
         // open, and asking the page to open it again would be asking for the picture on screen.
@@ -2230,6 +2403,359 @@ public sealed class ExploreMap : UserControl
             Underlay();
             _zoom.GlideTo(fitting);
         }
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new MapAutomationPeer(this);
+
+    /// <summary>
+    /// The drawing the keyboard and a screen reader work from: the one the map works from, while it is
+    /// of the tree the page handed over last, which the page's facts, the selection and the keyboard's
+    /// shape are numbered in. Null while there is none, or one of an older tree is still on screen.
+    /// </summary>
+    internal ExploreSurface? Readable => _drawing is { } drawing && ReferenceEquals(drawing.Tree, _tree) ? drawing : null;
+
+    /// <summary>Whether what is picked on this picture is acted on: not on a step of a replay (<see cref="MapReading.Answers"/>).</summary>
+    internal bool Answers => MapReading.Answers(_tree);
+
+    /// <summary>
+    /// The shapes of <paramref name="folder"/>, or of the top of the picture for null, that a screen
+    /// reader is given: none where the page has given no facts to describe them with.
+    /// </summary>
+    internal IReadOnlyList<MapShape> ShapesIn(int? folder) =>
+        Readable is { } drawing && FactsOf(drawing, DrawnNode) is not null ? drawing.Shapes(folder) : [];
+
+    private MapShapeFacts? FactsOf(ExploreSurface drawing, int node) => Facts?.Invoke(drawing.Tree, node);
+
+    /// <summary>The folder whose shapes hold <paramref name="node"/>'s, or null for the top of the picture. See <see cref="MapFolders.Of"/>.</summary>
+    internal int? FolderOf(int node) =>
+        Readable is { } drawing ? MapFolders.Of(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, node) : null;
+
+    /// <summary>
+    /// What a screen reader calls <paramref name="shape"/>: its name, its size and its share of what
+    /// holds it, which at the top of a volume's picture is the drive. See <see cref="MapShapeText.Name"/>.
+    /// </summary>
+    internal string NameOf(int? folder, MapShape shape)
+    {
+        if (Readable is not { } drawing)
+        {
+            return string.Empty;
+        }
+
+        var name = shape.IsNode ? FactsOf(drawing, shape.Node)?.Name : MapShapeText.BlockName(shape.Node);
+        var (ofBytes, named) = MapFolders.ShareBasis(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, drawing.Shapes(null));
+
+        // A share of the drive is named by no node. A share of a folder the page says nothing of is not
+        // said at all, rather than said to be of the drive.
+        return (name, named) switch
+        {
+            (null, _) => string.Empty,
+            (_, null) => MapShapeText.Name(name, shape.Bytes, ofBytes, ofName: null),
+            (_, { } folderNode) when FactsOf(drawing, folderNode) is { } of => MapShapeText.Name(name, shape.Bytes, ofBytes, of.Name),
+            _ => MapShapeText.Name(name, shape.Bytes, ofBytes: 0, ofName: null),
+        };
+    }
+
+    /// <summary>What <paramref name="shape"/> is and what can be done with it. See <see cref="MapShapeText.Help"/>.</summary>
+    internal string HelpOf(MapShape shape) =>
+        !shape.IsNode ? MapShapeText.BlockHelp(shape.Node)
+        : Readable is { } drawing && FactsOf(drawing, shape.Node) is { } facts ? MapShapeText.Help(facts)
+        : string.Empty;
+
+    /// <summary>Where <paramref name="shape"/> is on the screen now, in fractions of the map, or null where there is no drawing to say.</summary>
+    internal MapFrame? OnScreenOf(MapShape shape) =>
+        Readable is { } drawing ? PlacementOn(_zoom.Shown, drawing).OnScreen(shape.Frame) : null;
+
+    /// <summary>The shape the keyboard is on, while it has the map, and null otherwise.</summary>
+    internal (int? Folder, int Node)? FocusedShape() =>
+        _keyboard && FocusState != FocusState.Unfocused && _focus.Node is { } node ? (_focus.Folder, node) : null;
+
+    internal bool HasFocusOn(int? folder, int node) => FocusedShape() == (folder, node);
+
+    internal bool IsPicked(int node) => _picked.Contains(node);
+
+    /// <summary>What is picked, each with the folder whose shapes hold it.</summary>
+    internal IEnumerable<(int? Folder, int Node)> PickedShapes() => _picked.Select(node => (FolderOf(node), node));
+
+    /// <summary>
+    /// Put the keyboard on <paramref name="shape"/> of <paramref name="drawing"/>, as a screen reader
+    /// asks: the map takes the focus if it has not got it. Nothing where that drawing is no longer the
+    /// one on screen, whose node numbers may be other nodes now (§7.1).
+    /// </summary>
+    internal void FocusShape(ExploreSurface drawing, int? folder, MapShape shape)
+    {
+        if (!ReferenceEquals(drawing, Readable))
+        {
+            return;
+        }
+
+        _keyboard = true;
+        _focus.Set(drawing, folder, shape);
+
+        if (FocusState == FocusState.Unfocused)
+        {
+            Focus(FocusState.Programmatic);
+        }
+
+        Focused(drawing, folder, shape, pick: false);
+    }
+
+    /// <summary>
+    /// Pick <paramref name="shape"/> of <paramref name="drawing"/> and put the keyboard on it, as a screen
+    /// reader selecting it asks: the same pick a click makes, which Delete and the menu then act on
+    /// (§7.1). Nothing where that drawing is no longer the one on screen: a peer a screen reader kept
+    /// from an earlier drawing names a node number that may be another node in the tree on screen now.
+    /// </summary>
+    internal void PickShape(ExploreSurface drawing, int? folder, MapShape shape)
+    {
+        if (!ReferenceEquals(drawing, Readable))
+        {
+            return;
+        }
+
+        _keyboard = true;
+        Focused(drawing, folder, shape, pick: true);
+    }
+
+    /// <summary>Pick nothing, as a click on empty space does.</summary>
+    internal void Unpick()
+    {
+        if (Answers)
+        {
+            Picked?.Invoke(this, null);
+        }
+    }
+
+    /// <summary>Bring <paramref name="shape"/> of <paramref name="drawing"/> into view, as a screen reader scrolling to it asks, while that drawing is on screen.</summary>
+    internal void BringIntoView(ExploreSurface drawing, MapShape shape)
+    {
+        if (ReferenceEquals(drawing, Readable))
+        {
+            Bring(drawing, shape);
+        }
+    }
+
+    /// <summary>
+    /// Open <paramref name="shape"/> of <paramref name="drawing"/>, or zoom to it where it cannot be
+    /// opened: what Enter and a double-click do. Nothing where that drawing is no longer on screen.
+    /// </summary>
+    internal void OpenShape(ExploreSurface drawing, int? folder, MapShape shape)
+    {
+        SettleStep();
+
+        if (!ReferenceEquals(drawing, Readable))
+        {
+            return;
+        }
+
+        _focus.Set(drawing, folder, shape);
+
+        Open(
+            drawing,
+            new ExploreHit(shape.Node, shape.Bytes),
+            drawing.Viewport is null ? null : PlacementOn(_zoom.Shown, drawing).OnScreen(shape.Frame));
+    }
+
+    /// <summary>The shape the keyboard is on, as the drawing on screen lists it, or null where it does not.</summary>
+    private MapShape? ShapeOf((int? Folder, int Node) focused)
+    {
+        foreach (var shape in Readable?.Shapes(focused.Folder) ?? [])
+        {
+            if (shape.Node == focused.Node)
+            {
+                return shape;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The one node picked, which the keyboard starts on where it is at the top of the picture.</summary>
+    private int? PickedAlone => _picked.Count == 1 ? _picked.First() : null;
+
+    /// <summary>Where <paramref name="drawing"/> lies on a screen showing <paramref name="shown"/>.</summary>
+    private static MapPlacement PlacementOn(MapViewport shown, ExploreSurface drawing) =>
+        shown.PlacementOf(drawing.Viewport ?? MapViewport.Whole);
+
+    /// <summary>
+    /// Move the keyboard to the shape next to the one it is on in <paramref name="direction"/>, and pick
+    /// it, as a list's arrow keys pick the row they reach; and stay where there is none that way. Starts
+    /// from the shape picked where the keyboard was not moving. False where there is no drawing with
+    /// shapes to move between, so the key goes on to the page.
+    /// </summary>
+    private bool MoveFocus(MapDirection direction)
+    {
+        SettleStep();
+
+        // From what a click picked, where the keyboard was not already moving.
+        if (!_keyboard && PickedAlone is { } picked)
+        {
+            _focus.Expect(FolderOf(picked), picked);
+        }
+
+        if (Readable is not { } drawing || _focus.Find(drawing) is not { } found)
+        {
+            return false;
+        }
+
+        // The first key onto a map nothing is picked on marks the shape it starts on, rather than leave it.
+        var moves = _keyboard || PickedAlone is not null;
+        var next = moves ? MapNeighbours.Toward(found.Shapes, found.Index, direction, drawing.Width, drawing.Height) : null;
+
+        _keyboard = true;
+        Focused(drawing, _focus.Folder, found.Shapes[next ?? found.Index], pick: next is not null);
+
+        return true;
+    }
+
+    /// <summary>
+    /// The keyboard is on <paramref name="shape"/> of <paramref name="folder"/>: it is marked, the line
+    /// under the map names it, the camera brings it into view, and a screen reader hears it. Picked as
+    /// well where <paramref name="pick"/> says, a block picking nothing as a click on one does.
+    /// </summary>
+    private void Focused(ExploreSurface drawing, int? folder, MapShape shape, bool pick)
+    {
+        _focus.Set(drawing, folder, shape);
+
+        if (pick && Answers)
+        {
+            Picked?.Invoke(this, shape.IsNode ? shape.Node : null);
+        }
+
+        ShowHovered();
+        Report(new ExploreHit(shape.Node, shape.Bytes));
+        Bring(drawing, shape);
+
+        if (AutomationPeer.ListenerExists(AutomationEvents.AutomationFocusChanged)
+            && FrameworkElementAutomationPeer.FromElement(this) is MapAutomationPeer peer
+            && peer.PeerOf(folder, shape.Node) is { } focused)
+        {
+            focused.RaiseAutomationEvent(AutomationEvents.AutomationFocusChanged);
+        }
+    }
+
+    /// <summary>
+    /// Move the camera as little as brings <paramref name="shape"/> into view at a size it can be seen at
+    /// (<see cref="MapViewport.Showing"/>): big enough to carry its name, at the reader's text size.
+    /// </summary>
+    private void Bring(ExploreSurface drawing, MapShape shape)
+    {
+        if (!_zoom.Movable || drawing.Viewport is not { } drawn || ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var text = SystemSettings.TextScaleFactor;
+        var target = _zoom.Target.Showing(
+            drawn.PictureOf(shape.Frame),
+            LayoutLimits.Default.MinimumLabelWidth * text / ActualWidth,
+            LayoutLimits.Default.MinimumLabelHeight * text / ActualHeight,
+            _zoom.Ceiling);
+
+        if (target != _zoom.Target)
+        {
+            Underlay();
+            _zoom.GlideTo(target);
+        }
+    }
+
+    /// <summary>
+    /// The map has the focus from the keyboard or a screen reader: the keyboard is on the shape it was
+    /// on, or the one picked, or the first, and it is marked and named.
+    /// </summary>
+    private void OnGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, this) || FocusState is not (FocusState.Keyboard or FocusState.Programmatic))
+        {
+            return;
+        }
+
+        _keyboard = true;
+
+        if (_focus.Node is null && PickedAlone is { } picked)
+        {
+            _focus.Expect(FolderOf(picked), picked);
+        }
+
+        if (Readable is { } drawing && _focus.Find(drawing) is { } found)
+        {
+            Focused(drawing, _focus.Folder, found.Shapes[found.Index], pick: false);
+        }
+    }
+
+    private void OnLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, this))
+        {
+            _keyboard = false;
+            ShowHovered();
+        }
+    }
+
+    /// <summary>
+    /// The menu key or Shift+F10 on the map: the menu opens on the shape the keyboard is on, picked first
+    /// as a right-click picks, at the middle of where the camera is taking it. Where the keyboard has not
+    /// been moving, on what a click picked and nothing else, because that is what the reader chose
+    /// (§7.1); and not at all where a click picked nothing. A right-click has a position and is
+    /// <see cref="OnRightTapped"/>'s.
+    /// </summary>
+    private void OnContextRequested(UIElement sender, ContextRequestedEventArgs e)
+    {
+        if (e.TryGetPosition(this, out _) || !Answers || Readable is not { } drawing)
+        {
+            return;
+        }
+
+        var picked = PickedAlone;
+
+        if (!_keyboard)
+        {
+            if (picked is not { } clicked)
+            {
+                return;
+            }
+
+            _focus.Expect(FolderOf(clicked), clicked);
+        }
+
+        if (_focus.Find(drawing) is not { } found || (!_keyboard && found.Shapes[found.Index].Node != picked))
+        {
+            return;
+        }
+
+        var shape = found.Shapes[found.Index];
+
+        _keyboard = true;
+        Focused(drawing, _focus.Folder, shape, pick: true);
+
+        var placed = PlacementOn(_zoom.Target, drawing);
+
+        MenuRequested?.Invoke(this, new Point(
+            Math.Clamp(placed.X + (shape.X * placed.Scale), 0, 1) * ActualWidth,
+            Math.Clamp(placed.Y + (shape.Y * placed.Scale), 0, 1) * ActualHeight));
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Where the keyboard is in the picture handed over: on the same shapes in a new tree of the same
+    /// place, read through their counterparts; on the folder it came out of, in a folder above it; on the
+    /// root, where the root is drawn again beside its volume; and on the first shape of anything else.
+    /// </summary>
+    private void CarryFocus(ISizedTree? tree, int node, bool beside, bool samePlace)
+    {
+        if (samePlace && _tree is ITrackedTree shown && tree is not null && shown.CounterpartsIn(tree) is { } counterpart)
+        {
+            _focus.Carry(counterpart);
+            return;
+        }
+
+        if (tree is not null && ReferenceEquals(tree, _tree) && MapFolders.CameUpFrom(tree, _node, node, beside) is { } left)
+        {
+            _focus.Expect(null, left);
+            return;
+        }
+
+        _focus.Clear();
     }
 
     /// <summary>

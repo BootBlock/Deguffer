@@ -462,6 +462,26 @@ public abstract class ExploreSurface
     public abstract MapFrame? Locate(int node);
 
     /// <summary>
+    /// The shapes this drawing draws directly in <paramref name="folder"/>, in the order it draws them:
+    /// what the folder holds that has a shape of its own, largest first, then the block standing for the
+    /// rest where there is one. For a null folder, the top of the picture: what the drawing's root
+    /// holds, or where a volume is drawn beside the root, the root's own shape and the blocks beside it.
+    /// None where the folder is not drawn, or is drawn as one block.
+    ///
+    /// <para>What the keyboard moves between and a screen reader lists. A treemap that can be zoomed
+    /// gives the shapes of its whole picture at its zoom, off the canvas as well as on it, so a shape the
+    /// camera has left behind is still there to move to.</para>
+    /// </summary>
+    public abstract IReadOnlyList<MapShape> Shapes(int? folder);
+
+    /// <summary>
+    /// The outline of <paramref name="shape"/>, one of <see cref="Shapes"/>, in canvas pixels: what marks
+    /// out the shape the keyboard is on. A block too, which <see cref="Outlines"/> never gives, because the
+    /// keyboard reaches a block to hear what it is even though nothing acts on it (§7.1).
+    /// </summary>
+    public abstract IReadOnlyList<ExploreOutline> OutlineOf(MapShape shape);
+
+    /// <summary>
     /// The node whose shape shows <paramref name="node"/> on this drawing: its own, or where it is not
     /// drawn one by one, the deepest folder above it that is. Null where it is not under this drawing's
     /// root. What a card beside the map lights for a folder, so it lights where the screen shows it.
@@ -559,17 +579,40 @@ public abstract class ExploreSurface
     /// too small to draw, and the others for the rest of the volume, so none belongs to a branch
     /// or has a date. Giving one a colour that reads as a thing on the disk would invite the user to
     /// act on it.</para>
+    ///
+    /// <para>In a high contrast theme's colours every shape and block is the theme's window colour, and
+    /// only its edges tell it from its neighbour (<see cref="Edges"/>).</para>
     /// </summary>
-    protected TileColour ColourFor(int node, int depth) => node switch
-    {
-        ExploreTile.Aggregated => TilePalette.Aggregate,
-        ExploreTile.FreeSpace => TilePalette.FreeSpace,
-        ExploreTile.Unaccounted => TilePalette.Unaccounted,
-        ExploreTile.ShadowCopies => TilePalette.ShadowCopies,
-        ExploreTile.ReservedStorage => TilePalette.ReservedStorage,
-        _ => _colours.For(this, node, depth),
-    };
+    protected TileColour ColourFor(int node, int depth) => _colours.Contrast is { } contrast
+        ? contrast.Window
+        : node switch
+        {
+            ExploreTile.Aggregated => TilePalette.Aggregate,
+            ExploreTile.FreeSpace => TilePalette.FreeSpace,
+            ExploreTile.Unaccounted => TilePalette.Unaccounted,
+            ExploreTile.ShadowCopies => TilePalette.ShadowCopies,
+            ExploreTile.ReservedStorage => TilePalette.ReservedStorage,
+            _ => _colours.For(this, node, depth),
+        };
 
-    /// <summary>The colour text over a shape of this node at this depth has to be drawn in.</summary>
-    protected TileColour TextColourFor(int node, int depth) => ColourFor(node, depth).ContrastingText;
+    /// <summary>
+    /// The colour text over a shape of this node at this depth has to be drawn in: in a high contrast
+    /// theme's colours, the theme's own text colour, which every shape shares.
+    /// </summary>
+    protected TileColour TextColourFor(int node, int depth) =>
+        _colours.Contrast is { } contrast ? contrast.Text : ColourFor(node, depth).ContrastingText;
+
+    /// <summary>
+    /// The edges each shape is drawn with in place of its cushion, where the drawing is in a high
+    /// contrast theme's colours, and null where it is shaded. See <see cref="QuadEdges"/>.
+    ///
+    /// <para>One device pixel at 100%, and as many as the display's scale makes of one, so the line is
+    /// as heavy on a screen at 200% as on one at 100%. The scale is the one the limits were measured at
+    /// (<see cref="LayoutLimits.At"/>), which the row height carries untouched by the reader's text
+    /// size.</para>
+    /// </summary>
+    protected QuadEdges? Edges =>
+        _colours.Contrast is { } contrast
+            ? new QuadEdges(contrast.Text, Math.Max(1, (int)MathF.Round(Limits.RowHeight / LayoutLimits.Default.RowHeight)))
+            : null;
 }

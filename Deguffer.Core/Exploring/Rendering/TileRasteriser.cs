@@ -25,6 +25,9 @@ public sealed class TileRasteriser : CanvasPainter
     /// </summary>
     private readonly CushionQuad[] _quads;
 
+    /// <summary>The edges drawn in place of cushions, or null. See <see cref="CushionQuads.Edges"/>.</summary>
+    private readonly QuadEdges? _edges;
+
     /// <summary>
     /// Get ready to paint <paramref name="quads"/> on <paramref name="background"/>, on a canvas of
     /// their size.
@@ -36,6 +39,7 @@ public sealed class TileRasteriser : CanvasPainter
         : base(quads.Width, quads.Height, background)
     {
         _quads = quads.Array;
+        _edges = quads.Edges;
     }
 
     /// <summary>
@@ -62,7 +66,46 @@ public sealed class TileRasteriser : CanvasPainter
         // backwards: a shape can only show where nothing nested inside it already does.
         for (var i = _quads.Length - 1; i >= 0 && !claimed.IsFull; i--)
         {
-            Cushion(pixels, claimed, Width, Height, _quads[i]);
+            if (_edges is { } edges)
+            {
+                Edged(pixels, claimed, Width, Height, _quads[i], edges);
+            }
+            else
+            {
+                Cushion(pixels, claimed, Width, Height, _quads[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draw one quad flat in its own colour, with <paramref name="edges"/> inside each of its sides,
+    /// into whichever of <paramref name="claimed"/>'s pixels are still free. A side off the canvas is
+    /// not drawn: the shape goes on past it, as a cushion does.
+    /// </summary>
+    private static void Edged(byte[] pixels, ClaimedPixels claimed, int width, int height, CushionQuad quad, QuadEdges edges)
+    {
+        var area = claimed.Region;
+        var left = Math.Max(Math.Max(0, quad.Left), area.X);
+        var right = Math.Min(Math.Min(width, quad.Right), area.Right);
+        var firstRow = Math.Max(Math.Max(0, quad.Top), area.Y);
+        var lastRow = Math.Min(Math.Min(height, quad.Bottom), area.Bottom);
+
+        for (var y = firstRow; y < lastRow; y++)
+        {
+            var across = y < quad.Top + edges.Width || y >= quad.Bottom - edges.Width;
+            var offset = ((y * width) + left) * 4;
+
+            for (var x = left; x < right; x++)
+            {
+                if (claimed.Claim(x, y))
+                {
+                    var edge = across || x < quad.Left + edges.Width || x >= quad.Right - edges.Width;
+
+                    PixelBuffer.Write(pixels, offset, edge ? edges.Colour : quad.Colour);
+                }
+
+                offset += 4;
+            }
         }
     }
 
