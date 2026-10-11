@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -295,14 +296,7 @@ public sealed class ChecksumCacheTests : IDisposable
         var file = Candidate(path);
         var before = Describe(path);
         var cache = new ChecksumCache(Store, _clock);
-        using var checksum = new OnFirstAppend(() =>
-        {
-            var info = new FileInfo(path);
-            var security = info.GetAccessControl();
-            security.AddAccessRule(new FileSystemAccessRule(
-                new SecurityIdentifier(WellKnownSidType.WorldSid, null), FileSystemRights.Read, AccessControlType.Allow));
-            info.SetAccessControl(security);
-        });
+        using var checksum = new OnFirstAppend(() => ChangeSecurityUntilTheChangeTimeMoves(path, before.Changed));
 
         var reading = Reader(cache).Read(file, ContentPart.Whole, checksum, default);
 
@@ -433,6 +427,37 @@ public sealed class ChecksumCacheTests : IDisposable
             .Order(StringComparer.Ordinal)];
 
     private static FileDescription Describe(string path) => FileInformation.Default.Describe(path, IdentityRoute.FileId).Description!;
+
+    /// <summary>
+    /// Grants and withdraws a right on the file in turn until its change time is no longer
+    /// <paramref name="changed"/>. NTFS stamps a change with the system time as of the last clock
+    /// interrupt, so one made within the tick that stamped the file's last change leaves the change time
+    /// where it was, as most made straight after it do; every pass is a real change, since each undoes
+    /// the last. The limit only keeps a broken premise from hanging the test.
+    /// </summary>
+    private static void ChangeSecurityUntilTheChangeTimeMoves(string path, DateTime changed)
+    {
+        var everyone = new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.WorldSid, null), FileSystemRights.Read, AccessControlType.Allow);
+        var info = new FileInfo(path);
+        var limit = Stopwatch.StartNew();
+
+        for (var grant = true; Describe(path).Changed == changed && limit.Elapsed < TimeSpan.FromSeconds(10); grant = !grant)
+        {
+            var security = info.GetAccessControl();
+
+            if (grant)
+            {
+                security.AddAccessRule(everyone);
+            }
+            else
+            {
+                security.RemoveAccessRule(everyone);
+            }
+
+            info.SetAccessControl(security);
+        }
+    }
 
     /// <summary>The file as a search on an NTFS volume identified it.</summary>
     private static DuplicateCandidate Candidate(string path)
