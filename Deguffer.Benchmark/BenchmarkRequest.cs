@@ -31,13 +31,14 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
           index <drive>     Build the file-table index the deletion path measures from. Elevated.
           explore <drive>   Build the Explore tree for the volume from its file table. Elevated.
           walk <folder>     Walk the folder as an unelevated scan does.
+          sources <folder>  Find build outputs in the folder as an unelevated scan does.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
-        --threads N            Walk only. How many folders are listed at once, 1 to 64. The
-                               default is what a scan uses.
-        --listing-buffer KiB   Walk only. How many KiB of entries each listing asks Windows for,
-                               4 to 1024. The default is what a scan uses.
+        --threads N            Walk and sources only. How many folders are listed at once, 1 to
+                               64. The default is what a scan uses.
+        --listing-buffer KiB   Walk and sources only. How many KiB of entries each listing asks
+                               Windows for, 4 to 1024. The default is what a scan uses.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
                                to 16384.
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
@@ -74,7 +75,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore or walk.";
+            error = "The route must be table, index, explore, walk or sources.";
             return null;
         }
 
@@ -108,7 +109,7 @@ internal sealed record BenchmarkRequest(Route Route, string Path, int Runs, Walk
             if (!accepted)
             {
                 error =
-                    $"--runs takes a number from 1 to {MaximumRuns}. For the walk, --threads takes a number from " +
+                    $"--runs takes a number from 1 to {MaximumRuns}. For walk and sources, --threads takes a number from " +
                     $"{WalkTuning.MinimumThreads} to {WalkTuning.MaximumThreads} and --listing-buffer from " +
                     $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. " +
                     $"For the table routes, --read-size takes a number from " +

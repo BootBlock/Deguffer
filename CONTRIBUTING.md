@@ -43,19 +43,23 @@ dotnet build Deguffer.Benchmark -c Release
 cd Deguffer.Benchmark\bin\Release\net10.0-windows10.0.19041.0
 
 Deguffer.Benchmark walk C:\Users\<user>\source --runs 5
+Deguffer.Benchmark sources C:\Users\<user>\source --runs 5
 Deguffer.Benchmark table C
 Deguffer.Benchmark index C
 Deguffer.Benchmark explore C
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
+- `sources <folder>` finds the build outputs in a folder as an unelevated scan does when the folder
+  is an approved source folder. It stops at each one it finds and never enters `.git` or
+  `node_modules`, so it lists fewer folders than `walk`.
 - `table`, `index` and `explore` read a volume's file table, which needs an elevated prompt.
   `table` reads and parses every record and keeps nothing. `index` builds what the clean measures
   locations from. `explore` builds the Explore tree for the whole volume.
 - `--runs N` runs the route N times. The default is 5.
 - `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
   how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan
-  uses, and only the walk takes them.
+  uses, and only `walk` and `sources` take them.
 - `--read-size KiB`, `--reads-in-flight N` and `--parse-threads N` set how many KiB of records each
   read of the file table asks for (4 to 16384), how many reads are outstanding at once (1 to 32),
   and how many threads parse what arrives (1 to 64). They default to what a scan uses on a drive of

@@ -62,9 +62,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         SetReparsePointsApart();
 
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
-        // A directory gone since its parent was listed counts as refused too: its bytes were never
-        // read, so the totals above it are lower bounds either way.
-        return new DirectoryContents(_entries, _links, _reparseFiles, WasRefused: end.Presence is not PathPresence.Present);
+        return new DirectoryContents(_entries, _links, _reparseFiles, end.Presence);
     }
 
     private void SetReparsePointsApart()

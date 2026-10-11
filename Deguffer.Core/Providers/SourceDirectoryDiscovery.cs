@@ -65,6 +65,7 @@ public sealed class SourceDirectoryDiscovery
 {
     private readonly IDirectoryScanner _scanner;
     private readonly IVolumeInventory _volumes;
+    private readonly ScanTuner _tuning;
     private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
 
@@ -75,12 +76,14 @@ public sealed class SourceDirectoryDiscovery
     /// on a cloud client's mount. The shared inventory by default, whose list a planning pass drops
     /// at its start like every other cached view of the machine.
     /// </param>
-    public SourceDirectoryDiscovery(IDirectoryScanner scanner, IVolumeInventory? volumes = null)
+    /// <param name="tuning">What the walk runs with. <see cref="ScanTuner.Shipped"/> where none is given.</param>
+    public SourceDirectoryDiscovery(IDirectoryScanner scanner, IVolumeInventory? volumes = null, ScanTuner? tuning = null)
     {
         ArgumentNullException.ThrowIfNull(scanner);
 
         _scanner = scanner;
         _volumes = volumes ?? VolumeInventory.Current;
+        _tuning = tuning ?? ScanTuner.Shipped;
     }
 
     /// <summary>
@@ -287,7 +290,8 @@ public sealed class SourceDirectoryDiscovery
         }
     }
 
-    private FrozenSet<string> Names()
+    /// <summary>Every name registered so far. Internal for the benchmark, which walks with the set a scan uses.</summary>
+    internal FrozenSet<string> Names()
     {
         lock (_gate)
         {
@@ -361,51 +365,11 @@ public sealed class SourceDirectoryDiscovery
         return new RootSearch(candidates, [], RootListed: true);
     }
 
-    /// <summary>
-    /// The guaranteed route: enumerate the root ourselves. Iterative rather than recursive, because
-    /// the trees this runs over are exactly the deeply nested ones that overflow a stack.
-    /// </summary>
-    private static RootSearch Walk(FrozenSet<string> names, string root, CancellationToken ct)
+    /// <summary>The guaranteed route: enumerate the root ourselves.</summary>
+    private RootSearch Walk(FrozenSet<string> names, string root, CancellationToken ct)
     {
-        var candidates = new List<string>();
-        var unreadable = new List<string>();
-        var rootListed = true;
-        var top = LongPath.Extended(root);
-        var pending = new Stack<string>();
-        pending.Push(top);
+        var walked = SourceTreeWalk.Under(root, names, _tuning.For(root).Walk, ct);
 
-        while (pending.TryPop(out var directory))
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var scan = ChildDirectories.Under(directory);
-
-            if (scan.Unreadable)
-            {
-                // Everything below here went unsearched. Silence would leave the plan describing a
-                // sweep of the whole approved root, which is not what happened.
-                unreadable.Add(LongPath.Display(directory));
-                rootListed &= !ReferenceEquals(directory, top);
-                continue;
-            }
-
-            foreach (var child in scan.Directories)
-            {
-                if (names.Contains(child.Name))
-                {
-                    // Not descended into: anything below a candidate belongs to that candidate, and
-                    // an obj nested inside an obj is part of the output already being considered.
-                    candidates.Add(LongPath.Display(child.FullName));
-                    continue;
-                }
-
-                if (!SourceTreeBoundary.IsNeverEntered(child.Name))
-                {
-                    pending.Push(child.FullName);
-                }
-            }
-        }
-
-        return new RootSearch(candidates, unreadable, rootListed);
+        return new RootSearch(walked.Candidates, walked.Unreadable, walked.RootListed);
     }
 }

@@ -2,6 +2,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
@@ -476,7 +477,7 @@ public class RouteAgreementTests
             ],
             [],
             [],
-            WasRefused: false);
+            PathPresence.Present);
 
         var probe = new FakeOccupancyProbe()
             .Occupying("film.mkv", 0)
