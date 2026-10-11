@@ -150,7 +150,7 @@ Code, comments, commit messages, branch names and history are world-readable.
 ## Actioning a GitHub issue
 
 A Deguffer issue URL, `#<id>` or "issue <id>" with no other instruction asks you to action it end to
-end, reviewed by the global `auto-review` at `high` ([its rules](.claude/review-rules.md)), landed
+end, reviewed by the global `auto-review` at `medium` ([its rules](.claude/review-rules.md)), landed
 and closed with no pause for approval. A message that only wants discussion gets an answer. Memory
 notes: *Actioning a Deguffer issue end to end*, *Close a Deguffer issue once its work has landed*.
 
