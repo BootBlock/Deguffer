@@ -3,7 +3,9 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Execution;
 
 /// <summary>What a removal of one tree would act on, gathered before anything is deleted.</summary>
-/// <param name="Directories">Every directory the walk reached, the root first.</param>
+/// <param name="Directories">
+/// Every directory the walk reached, the root first, each with the directory it was found in.
+/// </param>
 /// <param name="Files">Every file the guard and the bounds leave to the removal, with its length.</param>
 /// <param name="Links">Junctions and symbolic links, which are removed as links and never followed.</param>
 /// <param name="Kept">Files and links the guard on recently changed files held back.</param>
@@ -16,12 +18,23 @@ namespace Deguffer.Core.Execution;
 /// <paramref name="Files"/>, so nothing hands one to a delete. See <see cref="MailStore"/>.
 /// </param>
 internal sealed record RemovalInventory(
-    IReadOnlyList<string> Directories,
+    IReadOnlyList<GatheredDirectory> Directories,
     IReadOnlyList<(string Path, long Length)> Files,
     IReadOnlyList<FileSystemEntry> Links,
     int Kept,
     IReadOnlyList<string> Spared,
     IReadOnlyList<string> MailStores);
+
+/// <summary>A directory the walk reached, in the extended form it met it in.</summary>
+/// <param name="Parent">
+/// The index in <see cref="RemovalInventory.Directories"/> of the directory the walk found this one
+/// in, or <see cref="NoParent"/> for the root. Recorded here, where the walk knows it, rather than
+/// recovered from the path, which a volume root's trailing separator makes a second spelling of.
+/// </param>
+internal readonly record struct GatheredDirectory(string Path, int Parent)
+{
+    public const int NoParent = -1;
+}
 
 /// <summary>
 /// The walk a removal makes before it deletes anything, shared with the check that asks what Windows
@@ -48,22 +61,24 @@ internal static class RemovalWalk
         IFileSystem fs,
         CancellationToken ct)
     {
-        var directories = new List<string>();
+        var directories = new List<GatheredDirectory>();
         var files = new List<(string, long)>();
         var links = new List<FileSystemEntry>();
         var mailStores = new List<string>();
         var spared = new List<string>();
 
-        var kept = Visit(extendedRoot, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
+        var kept = Visit(
+            extendedRoot, GatheredDirectory.NoParent, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
 
         return new RemovalInventory(directories, files, links, kept, spared, mailStores);
     }
 
     private static int Visit(
         string extendedDirectory,
+        int parent,
         MinimumAge keep,
         RemovalBounds bounds,
-        List<string> directories,
+        List<GatheredDirectory> directories,
         List<(string, long)> files,
         List<FileSystemEntry> links,
         List<string> spared,
@@ -72,7 +87,9 @@ internal static class RemovalWalk
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        directories.Add(extendedDirectory);
+
+        var index = directories.Count;
+        directories.Add(new GatheredDirectory(extendedDirectory, parent));
 
         IReadOnlyList<FileSystemEntry> entries;
         try
@@ -140,7 +157,8 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
-                kept += Visit(entry.FullName, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
+                kept += Visit(
+                    entry.FullName, index, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
             }
             else if (keep.Protects(entry.NewestFileTime))
             {
