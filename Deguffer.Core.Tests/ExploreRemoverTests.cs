@@ -296,7 +296,7 @@ public sealed class ExploreRemoverTests : IDisposable
             _policy,
             recycleBin: null,
             fileSystem: new CancellingFileSystem(WindowsFileSystem.Default, cts),
-            cts.Token);
+            ct: cts.Token);
 
         Assert.True(report.Cancelled);
         Assert.StartsWith("Stopped part-way.", report.Summary);

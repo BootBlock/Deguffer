@@ -229,18 +229,18 @@ public sealed class ExploreActions
 
         // Everything else goes back in, the policy's refusals included: the remover partitions again
         // and reports what it would not take, so the user is told about each one rather than seeing
-        // it silently dropped from the count. What the bin refused stays out even if the bin would
-        // take it by now, because the user was not asked about it. Partition normalises the same
-        // path the same way, so it is matched by the form the refusal carries.
-        var report = await ExploreRemover.RemoveAsync(
+        // it silently dropped from the count. What the bin refused is handed over as refused, so it
+        // stays out even if the bin would take it by now, because the user was not asked about it,
+        // and §5.6 still asserts it survived. Partition normalises the same path the same way, so it
+        // is matched by the form the refusal carries.
+        return await ExploreRemover.RemoveAsync(
                 notGoing.Count == 0 ? items : [.. items.Where(item => LongPath.Entry(item.Path) is not { } path || !notGoing.Contains(path))],
                 mode,
                 policy,
                 _recycleBin,
+                refusedBeforeAsking: binRefused,
                 ct: ct)
             .ConfigureAwait(true);
-
-        return binRefused.Count == 0 ? report : report with { Items = [.. report.Items, .. binRefused] };
     }
 
     /// <summary>

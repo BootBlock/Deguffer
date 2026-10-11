@@ -28,11 +28,11 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
     public bool DeletedOutright { get; init; }
 
     /// <summary>
-    /// The refusal of an item the bin cannot take, for <paramref name="why"/>
+    /// What the user is told about an item the bin cannot take, for <paramref name="why"/>
     /// (<see cref="IRecycleBin.WhyItCannotTake"/>). Nothing was handed to the shell, so it says so.
     /// </summary>
-    public static RecycleOutcome CannotTake(string why) =>
-        new(Removed: false, $"{why} Deguffer did not ask Windows to move it, and it is still where it was.");
+    internal static string CannotTake(string why) =>
+        $"{why} Deguffer did not ask Windows to move it, and it is still where it was.";
 }
 
 /// <summary>
@@ -144,7 +144,7 @@ public sealed class ShellRecycleBin : IRecycleBin
 
         if (WhyItCannotTake(path) is { } cannotTake)
         {
-            return RecycleOutcome.CannotTake(cannotTake);
+            return new RecycleOutcome(Removed: false, RecycleOutcome.CannotTake(cannotTake));
         }
 
         // The shell's apartment requirement, met on a thread of our own rather than by initialising

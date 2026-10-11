@@ -130,6 +130,17 @@ public sealed class RecycleBinReachTests : IDisposable
         Assert.Throws<OperationCanceledException>(() => _reach.WhyNot(folder, new CancellationToken(canceled: true)));
     }
 
+    /// <summary>The shell's bin hands its caller's token to the walk, so a confirmation can stop it.</summary>
+    [Fact]
+    public void TheShellsBinStopsItsWalkWhenCancelled()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(10, "folder", "short.txt");
+        var bin = new ShellRecycleBin(_ => throw new InvalidOperationException("The shell must not be asked."), _reach);
+
+        Assert.Throws<OperationCanceledException>(() => bin.WhyItCannotTake(folder, new CancellationToken(canceled: true)));
+    }
+
     /// <summary>A link inside a folder is moved as a link, so what lies on its far side is not the folder's.</summary>
     [Fact]
     public void ALinkInsideAFolderIsNotLookedThrough()

@@ -278,7 +278,7 @@ public sealed class ExploreSelectionTests : IDisposable
 
         selection.Select([folder]);
         var removing = selection.DeleteCommand.ExecuteAsync(null);
-        await prompt.FirstAsked;
+        await prompt.FirstAsked.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Same(tree, selection.Removing.Tree);
         Assert.Equal([folder], selection.Removing.Nodes);
@@ -310,7 +310,7 @@ public sealed class ExploreSelectionTests : IDisposable
 
         selection.Select([folder, file]);
         var removing = selection.DeleteCommand.ExecuteAsync(null);
-        await prompt.FirstAsked;
+        await prompt.FirstAsked.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Equal([file], selection.Removing.Nodes);
 
