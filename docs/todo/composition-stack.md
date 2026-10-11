@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
 > composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
-> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). The maintainer has
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). Its treemaps are shaded on the GPU where effects are fast since #284 ([what that found](#what-landing-284-found)). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -195,7 +195,8 @@ startup.
   Hover and selection keep their outlines, which are composition shapes over the picture, and the
   hatch over what a removal is acting on stays, because it is plain geometry. High contrast turns
   the shadow and the dimming off in the same way, and gives the outlines and the hatch the theme's
-  colours. Cushions come from `CushionShading` on the CPU, as today.
+  colours. Cushions are painted on the CPU by `TileRasteriser`, rather than shaded on the GPU
+  ([why](#what-landing-284-found)).
 - **Either way:** transforms and opacity animations stay, because they cost the compositor almost
   nothing. They follow the motion policy in #273.
 
@@ -339,6 +340,65 @@ Every change of folder on a treemap of one tree is one flight of the map's camer
 - **The direction comes from the tree**, so Back, Forward, Up, a breadcrumb and a double-click fly alike. The double-click no longer hands the map a shape.
 - **With animation effects off the folder fades in place,** as `MotionToken.Entrance` already says, rather than cutting.
 - **Driven** on a fixture of nested folders: in one level and two at once, back out to the root in one pull-back, a flight turned round 70 ms in, and the same with animation effects off. A click after each picked the shape under the pointer.
+
+## What landing #284 found
+
+A treemap's canvas, and each tile of a moving one, is shaded on the GPU in one pass where
+`AreEffectsFast()` is true and Win2D's device is a hardware one that runs Direct3D feature level 10
+(`MapGraphics.Shades`).
+Everywhere else, and for the sunburst, whose sectors are not rectangles, the CPU paints it as before.
+Both routes shade the same `CushionQuads`, so they cannot disagree about a shape's edges, colour or
+ridge, and a test shades a tree on WARP and holds the result to the CPU's: every channel within one
+level, and fewer than one pixel in a thousand differing at all.
+
+- **The cost is in handing the GPU its shapes, not in shading them.** Win2D draws one rectangle per
+  call, and a large tree is 30,000 to 60,000 rectangles. Recording them took 20 to 40 ms a canvas
+  with `FillRectangle` and with a sprite batch alike, which is slower than the CPU's whole picture,
+  so a Win2D `PixelShaderEffect`, as the issue first proposed, loses before it shades a pixel.
+- **So the quads go up in one copy and are drawn by one instanced call**, through Direct3D 11 on the
+  device under Win2D's (`CushionRenderer`). The GPU keeps the order of the primitives of one draw,
+  so a later quad covers an earlier one, which is the rasteriser's picture. The result is copied
+  into the map's surface by Win2D, inside the device's lock.
+- **No new package.** The interop is a few `ComImport` interfaces (`Direct3D`), and the shader is
+  HLSL in the App, compiled once per process by the `d3dcompiler_47` every Windows 10 and 11
+  carries. `ComputeSharp.D2D1.WinUI` (MIT, IL only, so x86 works) was vetted and not
+  taken: it needs the App on the 10.0.22621 SDK, its last release is April 2025 with upstream tests
+  on x64 and ARM64 only, and it would compile a Win2D effect, which is the slow route above.
+- **Direct3D 11 refuses a box on a constant buffer, and drops the update without an error.** Every
+  quad was then drawn at a size of zero, and only the ground showed.
+- **A `ComImport` interface passes an array as a `SAFEARRAY`** unless it is marked as a C array, and
+  the device refuses that as an invalid argument.
+- **The overview is shrunk from the shaded canvas**, straight after the shading, so a shaded picture
+  is never copied back to the CPU.
+- **Driven** on `C:\Windows` (51.8 GB): the treemap arrived whole, zooming kept it sharp, the outline
+  and the readout named the shape under the pointer, the overview showed, and the sunburst and the
+  way back to the treemap worked. `d3dcompiler_47` was loaded in the process, which happens only when
+  the renderer compiles its shaders.
+
+Measured on `C:\Windows`, 306,675 nodes, laid out once per size, a release build, 15 runs each and
+the median, on a desktop with a 32-thread CPU, a discrete GPU and the CPU's integrated GPU. The
+machine was shared with other work, so the CPU figures moved by a few milliseconds between runs.
+
+| A whole canvas | 1080p, 32,114 quads | 4K, 62,786 quads |
+| --- | --- | --- |
+| CPU, 31 threads, as the map paints it | 15.5–17.3 ms | 15.5–25.0 ms |
+| CPU, one thread | 36.3 ms | 113.7 ms |
+| Uploading the CPU's canvas, discrete / integrated / WARP | 0.9 / 3.3 / 1.2–1.9 ms | 2.5–3.0 / 11.4–12.3 / 4.0–4.2 ms |
+| Win2D, one `FillRectangle` per quad, discrete GPU | 34.5 ms | 37.0 ms |
+| Win2D, a sprite batch, discrete / integrated / WARP | 20.8–21.7 / 20.4–20.5 / 26.3–27.8 ms | 28.5–44.3 / 53.4–55.7 / 66.1–67.9 ms |
+| Direct3D 11 instanced, discrete GPU | **0.39 ms** | **0.68 ms** |
+| Direct3D 11 instanced, integrated GPU | **2.19 ms** | **6.20 ms** |
+| Direct3D 11 instanced, WARP | 7.42 ms | 19.40 ms |
+
+Each GPU figure runs from the quads to a finished canvas read back, so it includes building the quads
+on the CPU (0.2 to 0.6 ms) and waiting for the GPU. Every route's picture matched the CPU's to within
+one level a channel, with 36 to 192 pixels of a canvas one level apart.
+
+WARP is no faster than the CPU at 4K and would shade on the UI thread, so a software device keeps the
+CPU's route, a region at a time and off the UI thread. The map asks Win2D's device itself, by its
+adapter's software flag (`CushionRenderer.OnSoftware`), rather than trust `AreEffectsFast()`, which
+speaks for the compositor's device, a separate one. What `AreEffectsFast()` reports on WARP and in a
+remote session was not observed here.
 
 ## Still open
 

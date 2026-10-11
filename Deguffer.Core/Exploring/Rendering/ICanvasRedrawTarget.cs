@@ -2,9 +2,10 @@ namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
 /// Where a <see cref="CanvasRedraw"/> puts its picture. Every call is made on the thread that
-/// started the redraw, in this order: <see cref="Begin"/> once, <see cref="Land"/> any number of
-/// times, then <see cref="Arrive"/> once. A redraw superseded after it began gets
-/// <see cref="Withdraw"/> instead of the rest, and a redraw superseded before it began gets nothing.
+/// started the redraw, in this order: <see cref="Begin"/> once, then <see cref="Land"/> any number of
+/// times for a redraw painted on the CPU or <see cref="Shade"/> once for one the GPU shades, then
+/// <see cref="Arrive"/> once. A redraw superseded after it began gets <see cref="Withdraw"/> instead of
+/// the rest, and a redraw superseded before it began gets nothing.
 /// </summary>
 public interface ICanvasRedrawTarget
 {
@@ -20,6 +21,12 @@ public interface ICanvasRedrawTarget
     /// twice.
     /// </summary>
     void Land(CanvasRedraw redraw, IReadOnlyList<CanvasRegion> regions);
+
+    /// <summary>
+    /// Put the whole of <paramref name="redraw"/> on screen, shading <paramref name="quads"/> on
+    /// <paramref name="ground"/> on the GPU. <see cref="Arrive"/> follows at once.
+    /// </summary>
+    void Shade(CanvasRedraw redraw, CushionQuads quads, TileColour ground);
 
     /// <summary>Every region of <paramref name="redraw"/> is on screen, so its drawing is the picture now.</summary>
     void Arrive(CanvasRedraw redraw);

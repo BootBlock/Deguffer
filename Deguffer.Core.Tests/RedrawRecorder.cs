@@ -7,6 +7,7 @@ internal enum RedrawCall
 {
     Begin,
     Land,
+    Shade,
     Arrive,
     Withdraw,
 }
@@ -18,12 +19,20 @@ internal sealed class RedrawRecorder : ICanvasRedrawTarget
 
     public List<(CanvasRedraw Redraw, CanvasRegion Region)> Landed { get; } = [];
 
+    public List<(CanvasRedraw Redraw, CushionQuads Quads, TileColour Ground)> Shaded { get; } = [];
+
     public void Begin(CanvasRedraw redraw) => Calls.Add((redraw, RedrawCall.Begin));
 
     public void Land(CanvasRedraw redraw, IReadOnlyList<CanvasRegion> regions)
     {
         Calls.Add((redraw, RedrawCall.Land));
         Landed.AddRange(regions.Select(region => (redraw, region)));
+    }
+
+    public void Shade(CanvasRedraw redraw, CushionQuads quads, TileColour ground)
+    {
+        Calls.Add((redraw, RedrawCall.Shade));
+        Shaded.Add((redraw, quads, ground));
     }
 
     public void Arrive(CanvasRedraw redraw) => Calls.Add((redraw, RedrawCall.Arrive));

@@ -97,7 +97,7 @@ internal sealed class ExploreHighlight
 
     private const float HatchWidth = HatchSpacing / 2;
 
-    private readonly MapGraphics _graphics;
+    private readonly MapGeometry _geometry;
 
     /// <summary>Where the picture is on the screen: the map's camera, followed.</summary>
     private readonly ContainerVisual _camera;
@@ -169,9 +169,9 @@ internal sealed class ExploreHighlight
 
     private bool _effects = true;
 
-    public ExploreHighlight(Compositor compositor, MapGraphics graphics, MapCamera camera)
+    public ExploreHighlight(Compositor compositor, MapGeometry geometry, MapCamera camera)
     {
-        _graphics = graphics;
+        _geometry = geometry;
 
         _camera = compositor.CreateContainerVisual();
         camera.Follow(_camera);
@@ -180,13 +180,13 @@ internal sealed class ExploreHighlight
         _dimBounds = compositor.CreateShapeVisual();
         _dimPlaced = compositor.CreateContainerShape();
         _dimBounds.Shapes.Add(_dimPlaced);
-        _dimmed = compositor.CreatePathGeometry(graphics.Nothing);
+        _dimmed = compositor.CreatePathGeometry(geometry.Nothing);
         var dim = compositor.CreateSpriteShape(_dimmed);
         dim.FillBrush = compositor.CreateColorBrush(Shade(0, Dimming));
         _dimPlaced.Shapes.Add(dim);
         _camera.Children.InsertAtTop(_dimBounds);
 
-        _lift = new ExploreLift(compositor, graphics, camera);
+        _lift = new ExploreLift(compositor, geometry, camera);
         _camera.Children.InsertAtTop(_lift.Root);
 
         _bounds = compositor.CreateShapeVisual();
@@ -195,11 +195,11 @@ internal sealed class ExploreHighlight
         _placed = compositor.CreateContainerShape();
         _bounds.Shapes.Add(_placed);
 
-        _lit = compositor.CreatePathGeometry(graphics.Nothing);
-        _hovered = compositor.CreatePathGeometry(graphics.Nothing);
-        _picked = compositor.CreatePathGeometry(graphics.Nothing);
-        _marked = compositor.CreatePathGeometry(graphics.Nothing);
-        _markedBetween = compositor.CreatePathGeometry(graphics.Nothing);
+        _lit = compositor.CreatePathGeometry(geometry.Nothing);
+        _hovered = compositor.CreatePathGeometry(geometry.Nothing);
+        _picked = compositor.CreatePathGeometry(geometry.Nothing);
+        _marked = compositor.CreatePathGeometry(geometry.Nothing);
+        _markedBetween = compositor.CreatePathGeometry(geometry.Nothing);
 
         _hoveredHalo = compositor.CreateColorBrush();
         _hoveredEdge = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
@@ -228,13 +228,13 @@ internal sealed class ExploreHighlight
     /// <summary>
     /// Mark out what the user picked, and dim the rest of the picture round it, to
     /// <paramref name="far"/> canvas pixels from the canvas's corner each way (see
-    /// <see cref="MapGraphics.Around"/>).
+    /// <see cref="MapGeometry.Around"/>).
     /// </summary>
     public void ShowPicked(IReadOnlyList<ExploreOutline> outlines, float far)
     {
         _pickedOutlines = outlines;
         _far = far;
-        _picked.Path = _graphics.Trace(outlines);
+        _picked.Path = _geometry.Trace(outlines);
 
         Dim();
     }
@@ -253,7 +253,7 @@ internal sealed class ExploreHighlight
     public void ShowLit(IReadOnlyList<ExploreOutline>? outlines)
     {
         _litOutlines = outlines;
-        _lit.Path = !_effects && outlines is { Count: > 0 } ? _graphics.Trace(outlines) : _graphics.Nothing;
+        _lit.Path = !_effects && outlines is { Count: > 0 } ? _geometry.Trace(outlines) : _geometry.Nothing;
 
         Dim();
     }
@@ -261,12 +261,12 @@ internal sealed class ExploreHighlight
     /// <summary>Dim round what is lit, or failing that round what is picked, where the effects are on.</summary>
     private void Dim() =>
         _dimmed.Path = !_effects
-            ? _graphics.Nothing
+            ? _geometry.Nothing
             : _litOutlines switch
             {
-                null => _graphics.Around(_pickedOutlines, _far),
-                [] => _graphics.Everything(_far),
-                var lit => _graphics.Around(lit, _far),
+                null => _geometry.Around(_pickedOutlines, _far),
+                [] => _geometry.Everything(_far),
+                var lit => _geometry.Around(lit, _far),
             };
 
     /// <summary>
@@ -279,7 +279,7 @@ internal sealed class ExploreHighlight
         _hoveredOutlines = outlines;
         _hoveredSurface = surface;
         _hoveredCanvas = canvas;
-        _hovered.Path = _graphics.Trace(outlines);
+        _hovered.Path = _geometry.Trace(outlines);
 
         _lift.Show(_hovered.Path, _effects ? surface : null, canvas);
     }
@@ -296,8 +296,8 @@ internal sealed class ExploreHighlight
         var spacing = (float)(HatchSpacing * scale);
         var width = (float)(HatchWidth * scale);
 
-        _marked.Path = _graphics.Hatch(outlines, spacing, width, 0);
-        _markedBetween.Path = _graphics.Hatch(outlines, spacing, width, width);
+        _marked.Path = _geometry.Hatch(outlines, spacing, width, 0);
+        _markedBetween.Path = _geometry.Hatch(outlines, spacing, width, width);
     }
 
     /// <summary>

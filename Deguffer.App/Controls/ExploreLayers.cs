@@ -543,12 +543,12 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>
-    /// Copy <paramref name="pixels"/>, a whole drawing <paramref name="width"/> by
-    /// <paramref name="height"/> that has just arrived, small, for the overview: at the overview's size
-    /// on the screen now, in the drawing's own pixels to each device-independent one. A map too small
-    /// for an overview keeps none.
+    /// Copy a whole drawing <paramref name="width"/> by <paramref name="height"/> that has just arrived,
+    /// small, for the overview: at the overview's size on the screen now, in the drawing's own pixels to
+    /// each device-independent one. A map too small for an overview keeps none.
     /// </summary>
-    private void Miniaturise(byte[] pixels, int width, int height)
+    /// <param name="pixels">The drawing as painted on the CPU, or null for one just shaded on the GPU.</param>
+    private void Miniaturise(byte[]? pixels, int width, int height)
     {
         if (MapOverview.Size(_size.Width, _size.Height) is not { } shown)
         {
@@ -560,7 +560,11 @@ internal sealed class ExploreLayers
             Math.Max(1, (int)Math.Round(width * shown.Width / _size.Width)),
             Math.Max(1, (int)Math.Round(height * shown.Height / _size.Height)));
 
-        if (_graphics.Shrink(_overview, pixels, width, height, size) is not { } overview)
+        var shrunk = pixels is null
+            ? _graphics.ShrinkShaded(_overview, width, height, size)
+            : _graphics.Shrink(_overview, pixels, width, height, size);
+
+        if (shrunk is not { } overview)
         {
             return;
         }
@@ -597,7 +601,10 @@ internal sealed class ExploreLayers
         }
 
         public void Land(CanvasRedraw redraw, IReadOnlyList<CanvasRegion> regions) =>
-            _layer!.Land(redraw.Pixels, regions);
+            _layer!.Land(redraw.Pixels!, regions);
+
+        public void Shade(CanvasRedraw redraw, CushionQuads quads, TileColour ground) =>
+            _layer!.Shade(quads, ground);
 
         public void Arrive(CanvasRedraw redraw)
         {

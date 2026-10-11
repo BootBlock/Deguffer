@@ -6,7 +6,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
 /// The tiles of a map's picture wanted while it moves, each laid out and painted on a worker thread and
-/// handed to the thread that wanted it as soon as it is finished, the most wanted first.
+/// handed to the thread that wanted it as soon as it is finished, the most wanted first. A tile the GPU
+/// shades is only laid out here, and handed over as the quads it shades.
 ///
 /// <para>Off that thread for the reason <see cref="CanvasRedraws"/> gives: it is the UI thread, and the
 /// camera keeps moving while the tiles are drawn. A tile is small, so it is one job rather than regions
@@ -26,6 +27,8 @@ public sealed class MapTileDraws
     private readonly SynchronizationContext _owner;
 
     private readonly Action<MapTile, byte[]> _drawn;
+
+    private readonly Action<MapTile, CushionQuads, TileColour> _shaded;
 
     private readonly int _workers;
 
@@ -47,22 +50,30 @@ public sealed class MapTileDraws
 
     /// <param name="owner">The thread tiles are wanted on, and handed to.</param>
     /// <param name="drawn">
-    /// Told of each tile on the owner's thread, with its pixels, a buffer at least the tile's size. The
-    /// buffer is used again once this returns, so whatever it holds is put on screen before then.
+    /// Told of each tile painted on the CPU, on the owner's thread, with its pixels, a buffer at least
+    /// the tile's size. The buffer is used again once this returns, so whatever it holds is put on screen
+    /// before then.
     /// </param>
-    public MapTileDraws(SynchronizationContext owner, Action<MapTile, byte[]> drawn)
-        : this(owner, drawn, Math.Max(1, Environment.ProcessorCount / 2))
+    /// <param name="shaded">Told of each tile for the GPU to shade, on the owner's thread, with its quads and the ground they are shaded on.</param>
+    public MapTileDraws(SynchronizationContext owner, Action<MapTile, byte[]> drawn, Action<MapTile, CushionQuads, TileColour> shaded)
+        : this(owner, drawn, shaded, Math.Max(1, Environment.ProcessorCount / 2))
     {
     }
 
     /// <param name="workers">How many tiles are drawn at once. One makes the order they are handed over in the order they were wanted, which is what a test can hold to.</param>
-    internal MapTileDraws(SynchronizationContext owner, Action<MapTile, byte[]> drawn, int workers)
+    internal MapTileDraws(
+        SynchronizationContext owner,
+        Action<MapTile, byte[]> drawn,
+        Action<MapTile, CushionQuads, TileColour> shaded,
+        int workers)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(drawn);
+        ArgumentNullException.ThrowIfNull(shaded);
 
         _owner = owner;
         _drawn = drawn;
+        _shaded = shaded;
         _workers = workers;
     }
 
@@ -71,7 +82,11 @@ public sealed class MapTileDraws
     /// <paramref name="tiling"/>, on <paramref name="ground"/>: the first of them first, and none that is
     /// being drawn already. Replaces whatever was wanted before and not yet started.
     /// </summary>
-    public void Want(TiledSurface picture, MapTiling tiling, TileColour ground, IReadOnlyList<MapTileKey> keys)
+    /// <param name="shade">
+    /// Whether the GPU shades the tiles, so a worker only lays each out and hands over its quads, or the
+    /// CPU paints them, so a worker paints each too.
+    /// </param>
+    public void Want(TiledSurface picture, MapTiling tiling, TileColour ground, bool shade, IReadOnlyList<MapTileKey> keys)
     {
         ArgumentNullException.ThrowIfNull(picture);
         ArgumentNullException.ThrowIfNull(tiling);
@@ -81,7 +96,7 @@ public sealed class MapTileDraws
 
         lock (_gate)
         {
-            _source = new TileSource(picture, tiling, ground);
+            _source = new TileSource(picture, tiling, ground, shade);
             _wanted.Clear();
 
             foreach (var key in keys)
@@ -170,6 +185,15 @@ public sealed class MapTileDraws
                 }
 
                 var tile = source.Picture.Tile(source.Tiling, key);
+
+                if (source.Shades)
+                {
+                    var quads = tile.Quads();
+
+                    _owner.Post(_ => HandOver(tile, quads, source.Ground, generation), null);
+                    continue;
+                }
+
                 var pixels = ArrayPool<byte>.Shared.Rent((int)tile.Bytes);
 
                 tile.Painter(source.Ground).Paint(pixels, new CanvasRegion(0, 0, tile.Width, tile.Height));
@@ -196,21 +220,9 @@ public sealed class MapTileDraws
     /// <summary>Hand <paramref name="tile"/> to the owner, on its thread, unless a stop came since it was started.</summary>
     private void HandOver(MapTile tile, byte[] pixels, int generation)
     {
-        bool current;
-
-        lock (_gate)
-        {
-            current = generation == _generation;
-
-            if (current)
-            {
-                _drawing.Remove(tile.Key);
-            }
-        }
-
         try
         {
-            if (current)
+            if (IsCurrent(tile, generation))
             {
                 _drawn(tile, pixels);
             }
@@ -221,6 +233,33 @@ public sealed class MapTileDraws
         }
     }
 
-    /// <summary>What every tile wanted is a tile of, and the ground it is painted on.</summary>
-    private sealed record TileSource(TiledSurface Picture, MapTiling Tiling, TileColour Ground);
+    /// <summary>Hand <paramref name="tile"/> to the owner to shade, as <see cref="HandOver(MapTile, byte[], int)"/> does a painted one.</summary>
+    private void HandOver(MapTile tile, CushionQuads quads, TileColour ground, int generation)
+    {
+        if (IsCurrent(tile, generation))
+        {
+            _shaded(tile, quads, ground);
+        }
+    }
+
+    /// <summary>
+    /// Whether no stop came since <paramref name="tile"/> was started, at <paramref name="generation"/>;
+    /// and if none did, it is no longer being drawn.
+    /// </summary>
+    private bool IsCurrent(MapTile tile, int generation)
+    {
+        lock (_gate)
+        {
+            if (generation != _generation)
+            {
+                return false;
+            }
+
+            _drawing.Remove(tile.Key);
+            return true;
+        }
+    }
+
+    /// <summary>What every tile wanted is a tile of, the ground it is painted on, and whether the GPU shades it instead.</summary>
+    private sealed record TileSource(TiledSurface Picture, MapTiling Tiling, TileColour Ground, bool Shades);
 }

@@ -310,7 +310,7 @@ public sealed class ExploreMap : UserControl
         _pictures = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
         _departing = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
         _tileOver = (x, y) => _pictures.Tiles.TileOver(x, y);
-        _highlight = new ExploreHighlight(compositor, _graphics, _camera);
+        _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
         _shift = new ExploreShift(compositor, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(owner);
@@ -1203,13 +1203,23 @@ public sealed class ExploreMap : UserControl
         var width = DevicePixels(ActualWidth);
         var height = DevicePixels(ActualHeight);
 
-        _arriving = _redraws.Start(
+        _arriving = Redraw(
             Layout(viewport, width, height),
-            _buffers.PixelsFor(width, height),
-            Ground(),
+            width,
+            height,
             Focus(viewport, width, height),
             _pictures.Arrival(onTop: true, Present, fade));
     }
+
+    /// <summary>
+    /// Start a redraw of a drawing <paramref name="width"/> by <paramref name="height"/>, laid out by
+    /// <paramref name="layout"/>: shaded on the GPU in one pass where the device can, and the drawing is of
+    /// rectangles, and otherwise painted on the CPU a region at a time from <paramref name="focus"/> out.
+    /// </summary>
+    private CanvasRedraw Redraw(Func<ExploreSurface> layout, int width, int height, ExplorePoint? focus, ICanvasRedrawTarget target) =>
+        _graphics.Shades && ExploreSurface.Drawn(_tree!, _view) != ExploreView.Sunburst
+            ? _redraws.Shade(layout, Ground(), target)
+            : _redraws.Start(layout, _buffers.PixelsFor(width, height), Ground(), focus, target);
 
     /// <summary>
     /// The folder drawn: the one asked for, or the one a change of folder is passing through on its
@@ -1374,10 +1384,10 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _redraws.Start(
+        Redraw(
             Layout(MapViewport.Whole, drawing.Width, drawing.Height),
-            _buffers.PixelsFor(drawing.Width, drawing.Height),
-            Ground(),
+            drawing.Width,
+            drawing.Height,
             focus: null,
             _pictures.Arrival(onTop: false, static _ => { }, Motion.Instant));
     }

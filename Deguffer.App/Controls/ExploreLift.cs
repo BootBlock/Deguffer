@@ -27,7 +27,7 @@ internal sealed class ExploreLift
 
     private const float ShadowDrop = 2;
 
-    private readonly MapGraphics _graphics;
+    private readonly MapGeometry _geometry;
 
     /// <summary>Where the canvas lies in the picture, which the camera above it places on the screen.</summary>
     private readonly ContainerVisual _placed;
@@ -46,13 +46,13 @@ internal sealed class ExploreLift
 
     private readonly CompositionPathGeometry _shape;
 
-    public ExploreLift(Compositor compositor, MapGraphics graphics, MapCamera camera)
+    public ExploreLift(Compositor compositor, MapGeometry geometry, MapCamera camera)
     {
-        _graphics = graphics;
+        _geometry = geometry;
 
         _drawing = compositor.CreateUnstretchedBrush();
 
-        _shape = compositor.CreatePathGeometry(graphics.Nothing);
+        _shape = compositor.CreatePathGeometry(geometry.Nothing);
         var fill = compositor.CreateSpriteShape(_shape);
         fill.FillBrush = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
         _maskShape = compositor.CreateShapeVisual();
@@ -96,10 +96,10 @@ internal sealed class ExploreLift
     /// </summary>
     public void Show(CompositionPath shape, ICompositionSurface? surface, Vector2 canvas)
     {
-        var lifted = surface is not null && shape != _graphics.Nothing;
+        var lifted = surface is not null && shape != _geometry.Nothing;
 
         _drawing.Surface = lifted ? surface : null;
-        _shape.Path = lifted ? shape : _graphics.Nothing;
+        _shape.Path = lifted ? shape : _geometry.Nothing;
         _layer.Size = canvas;
         _sprite.Size = canvas;
         _maskShape.Size = canvas;

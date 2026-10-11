@@ -1,0 +1,184 @@
+using Deguffer.App.Controls;
+using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
+using Microsoft.Graphics.Canvas;
+
+namespace Deguffer.App.Tests;
+
+/// <summary>
+/// The GPU shades the same picture the CPU paints: the same shapes, the same colours and the same
+/// edges. The CPU's rasteriser is the reference, and the map falls back to it wherever the GPU is not
+/// used, so a picture that differed would change as the route did.
+///
+/// <para>Shaded on WARP, Direct3D's software device, so the test needs no GPU and sees the same
+/// result on any machine. The shader is the same on every device.</para>
+///
+/// <para>The tolerance: every channel of every pixel within one level of the CPU's, and fewer than one
+/// pixel in a thousand differing at all. A float against a double can put the last bit of a product
+/// either side of a whole level, and on a real volume that is a few dozen pixels of a canvas. Any
+/// difference in the edges, the colours or the light is far more than that.</para>
+/// </summary>
+public sealed class CushionRendererTests : IDisposable
+{
+    private const int Width = 777;
+    private const int Height = 555;
+
+    private static readonly TileColour Ground = new(32, 32, 32);
+
+    private readonly CanvasDevice _device = new(forceSoftwareRenderer: true);
+
+    private readonly CushionRenderer _renderer;
+
+    public CushionRendererTests() =>
+        _renderer = CushionRenderer.For(_device) ?? throw new InvalidOperationException("WARP cannot run the cushion shaders.");
+
+    public void Dispose()
+    {
+        _renderer.Dispose();
+        _device.Dispose();
+    }
+
+    /// <summary>A whole tree of nested folders, flat bands and files at many depths, shaded as it is painted.</summary>
+    [Fact]
+    public void AWholeTreeIsShadedAsItIsPainted() => AssertShadedAsPainted(Picture(MapViewport.Whole));
+
+    /// <summary>
+    /// Zoomed in, most shapes run off the canvas, and a cushion is measured across its whole shape and
+    /// not across the part on the canvas.
+    /// </summary>
+    [Fact]
+    public void AZoomedPictureIsShadedAsItIsPainted()
+    {
+        var picture = Picture(MapViewport.Seen(zoom: 2.5, left: 0.31, top: 0.42));
+        var quads = picture.Quads()!.Quads.ToArray();
+
+        Assert.Contains(quads, quad => quad.Left < 0 || quad.Top < 0 || quad.Right > Width || quad.Bottom > Height);
+
+        AssertShadedAsPainted(picture);
+    }
+
+    /// <summary>
+    /// The renderer keeps one texture for every size, so a smaller canvas after a larger one is shaded
+    /// at its own size, with nothing of the larger one in it.
+    /// </summary>
+    [Fact]
+    public void ASmallerCanvasAfterALargerIsShadedAtItsOwnSize()
+    {
+        _renderer.Shade(Picture(MapViewport.Whole, Width * 2, Height * 2).Quads()!, new TileColour(250, 0, 250));
+
+        AssertShadedAsPainted(Picture(MapViewport.Whole, 300, 200));
+    }
+
+    /// <summary>
+    /// WARP runs on the CPU, and the renderer says so: the map paints on the CPU for a software device,
+    /// a region at a time and off the UI thread, rather than shade on it on the UI thread.
+    /// </summary>
+    [Fact]
+    public void ARendererOnWarpSaysItRunsOnSoftware() => Assert.True(_renderer.OnSoftware);
+
+    /// <summary>A canvas with no shapes on it is the ground alone.</summary>
+    [Fact]
+    public void ACanvasWithNoShapesIsTheGround()
+    {
+        var shaded = Shaded(new CushionQuads([], 64, 48, (_, _) => default));
+
+        for (var i = 0; i < shaded.Length; i += 4)
+        {
+            Assert.Equal((Ground.Blue, Ground.Green, Ground.Red, (byte)255), (shaded[i], shaded[i + 1], shaded[i + 2], shaded[i + 3]));
+        }
+    }
+
+    private void AssertShadedAsPainted(ExploreSurface picture)
+    {
+        var quads = picture.Quads()!;
+        var painted = new byte[PixelBuffer.LengthFor(picture.Width, picture.Height)];
+
+        picture.Painter(Ground).Paint(painted, new CanvasRegion(0, 0, picture.Width, picture.Height));
+
+        var shaded = Shaded(quads);
+        var differing = 0;
+
+        Assert.True(quads.Quads.Length > 100, $"only {quads.Quads.Length} shapes drawn, too few to say anything");
+        Assert.Equal(painted.Length, shaded.Length);
+
+        for (var i = 0; i < painted.Length; i += 4)
+        {
+            var most = 0;
+
+            for (var channel = 0; channel < 3; channel++)
+            {
+                most = Math.Max(most, Math.Abs(painted[i + channel] - shaded[i + channel]));
+            }
+
+            Assert.True(
+                most <= 1,
+                $"pixel ({i / 4 % picture.Width}, {i / 4 / picture.Width}) is {Colour(shaded, i)} shaded and {Colour(painted, i)} painted");
+            Assert.Equal(255, shaded[i + 3]);
+
+            differing += most > 0 ? 1 : 0;
+        }
+
+        Assert.True(
+            differing * 1000 < painted.Length / 4,
+            $"{differing} of {painted.Length / 4} pixels differ by a level");
+    }
+
+    private byte[] Shaded(CushionQuads quads) =>
+        _renderer.Shade(quads, Ground).GetPixelBytes(0, 0, quads.Width, quads.Height);
+
+    private static string Colour(byte[] pixels, int i) => $"#{pixels[i + 2]:X2}{pixels[i + 1]:X2}{pixels[i]:X2}";
+
+    private static ExploreSurface Picture(MapViewport viewport, int width = Width, int height = Height) =>
+        ExploreSurface.Create(
+            Tree,
+            Tree.RootNode,
+            ExploreView.Treemap,
+            width,
+            height,
+            1,
+            1,
+            ShapeColours.ByBranch(ExploreScheme.Standard),
+            ExploreSpacing.Comfortable,
+            VolumeSpace.None,
+            viewport);
+
+    /// <summary>
+    /// Folders inside folders four levels down, each with files of falling sizes, so the picture has
+    /// bands, cushions at every depth, and slivers too thin to cover a pixel.
+    /// </summary>
+    private static readonly ExploreTree Tree = Build();
+
+    private static ExploreTree Build()
+    {
+        var builder = new ExploreTreeBuilder("Sample");
+
+        Fill(builder, ExploreTreeBuilder.RootNode, depth: 0);
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    private static void Fill(ExploreTreeBuilder builder, int folder, int depth)
+    {
+        var folders = depth < 3 ? 4 : 0;
+        var children = new List<ExploreChild>();
+
+        for (var i = 0; i < folders; i++)
+        {
+            children.Add(new ExploreChild($"folder{i}", IsDirectory: true, IsLink: false, Size: 0));
+        }
+
+        for (var i = 0; i < 12; i++)
+        {
+            children.Add(new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: (12 - i) * (12 - i) * 1000L));
+        }
+
+        var first = builder.AddChildren(folder, children);
+
+        for (var i = 0; i < folders; i++)
+        {
+            Fill(builder, first + i, depth + 1);
+        }
+    }
+}

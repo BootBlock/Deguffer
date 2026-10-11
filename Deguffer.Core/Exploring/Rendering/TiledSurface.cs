@@ -69,8 +69,9 @@ public sealed class TiledSurface : ExploreSurface
 
     public override IReadOnlyList<ExploreTile> Tiles => _tiles;
 
-    public override CanvasPainter Painter(TileColour background) =>
-        new TileRasteriser(_tiles, Width, Height, background, ColourFor);
+    public override CanvasPainter Painter(TileColour background) => new TileRasteriser(Quads(), background);
+
+    public override CushionQuads Quads() => new(_tiles, Width, Height, ColourFor);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;

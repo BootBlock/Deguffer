@@ -3,8 +3,9 @@ using System.Collections.Concurrent;
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
-/// One drawing of a canvas on its way to the screen: laid out and painted on worker threads, and put
-/// on screen a region at a time on the thread that asked for it. Made by <see cref="CanvasRedraws"/>.
+/// One drawing of a canvas on its way to the screen: laid out on a worker thread, and either painted
+/// on worker threads and put on screen a region at a time, or shaded by the GPU in one pass, on the
+/// thread that asked for it. Made by <see cref="CanvasRedraws"/>.
 ///
 /// <para>Every property here is read and changed only on the owner's thread, the one that started
 /// the redraw. So what it says about the screen is what the screen shows: a region is
@@ -36,7 +37,7 @@ public sealed class CanvasRedraw
     internal CanvasRedraw(
         SynchronizationContext owner,
         Func<ExploreSurface> layout,
-        byte[] pixels,
+        byte[]? pixels,
         TileColour ground,
         ExplorePoint? focus,
         ICanvasRedrawTarget target)
@@ -51,9 +52,10 @@ public sealed class CanvasRedraw
 
     /// <summary>
     /// The buffer the regions are painted into, at the drawing's size. A region's pixels in it are
-    /// final once the region is handed to <see cref="ICanvasRedrawTarget.Land"/>.
+    /// final once the region is handed to <see cref="ICanvasRedrawTarget.Land"/>. Null for a redraw the
+    /// GPU shades, which paints nothing on the CPU.
     /// </summary>
-    public byte[] Pixels { get; }
+    public byte[]? Pixels { get; }
 
     /// <summary>The drawing, from <see cref="ICanvasRedrawTarget.Begin"/> on, and null before it.</summary>
     public ExploreSurface? Surface { get; private set; }
@@ -117,7 +119,7 @@ public sealed class CanvasRedraw
 
     /// <summary>
     /// Lay the drawing out and paint it, on a worker thread, with at most <paramref name="workers"/>
-    /// threads painting at once.
+    /// threads painting at once; or for a redraw the GPU shades, lay it out and hand its quads over.
     ///
     /// <para>The regions are handed to the painting threads one at a time and in
     /// <see cref="PaintOrder"/>, so the first to finish are the ones the reader is looking at. A
@@ -136,6 +138,17 @@ public sealed class CanvasRedraw
 
             token.ThrowIfCancellationRequested();
 
+            if (Pixels is not { } pixels)
+            {
+                // Asked only of a drawing of rectangles: the caller chooses the route before the
+                // layout, from the view it asked for.
+                var quads = surface.Quads()
+                    ?? throw new InvalidOperationException("A drawing that is not of rectangles cannot be shaded by the GPU.");
+
+                _owner.Post(_ => Shade(surface, quads), null);
+                return;
+            }
+
             var painter = surface.Painter(_ground);
             var regions = PaintOrder.Regions(surface.Width, surface.Height, _focus);
 
@@ -146,7 +159,7 @@ public sealed class CanvasRedraw
                 new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = token },
                 region =>
                 {
-                    painter.Paint(Pixels, region);
+                    painter.Paint(pixels, region);
                     _painted.Enqueue(region);
 
                     // One hand-over posted at a time. Each one takes every region finished by the
@@ -165,6 +178,22 @@ public sealed class CanvasRedraw
             // Superseded, which the owner's thread has already acted on. The picture it was drawing
             // is not wanted, so there is nothing more to do with it.
         }
+    }
+
+    /// <summary>Put the whole drawing on screen at once, shaded by the GPU from <paramref name="quads"/>.</summary>
+    private void Shade(ExploreSurface surface, CushionQuads quads)
+    {
+        if (IsSuperseded)
+        {
+            return;
+        }
+
+        Surface = surface;
+        _target.Begin(this);
+        _target.Shade(this, quads, _ground);
+
+        IsArrived = true;
+        _target.Arrive(this);
     }
 
     private void Begin(ExploreSurface surface)

@@ -1,8 +1,6 @@
-using System.Numerics;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.Graphics.Canvas;
-using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.Graphics.Canvas.UI.Composition;
 using Microsoft.Graphics.DirectX;
 using Microsoft.UI.Composition;
@@ -20,15 +18,20 @@ namespace Deguffer.App.Controls;
 /// compositor (G5). Each map's surfaces are made here, on the one device, so a device lost is replaced
 /// for all of them at once, and each map then makes its surfaces again: see <see cref="Replaced"/>.</para>
 ///
-/// <para>The canvas is still painted on the CPU, by <see cref="CanvasPainter"/>, and only what each
-/// region holds is written to the GPU, a region at a time as it lands. A whole canvas is 33 MB at 4K,
-/// too much to send through the UI thread at every hand-over for regions a fraction of that size.</para>
+/// <para>A treemap's canvas is shaded here on the GPU when the compositor says effects are fast (see
+/// <see cref="Shades"/>), in one pass from its quads. Otherwise it is painted on the CPU, by
+/// <see cref="CanvasPainter"/>, and only what each region holds is written to the GPU, a region at a
+/// time as it lands. A whole canvas is 33 MB at 4K, too much to send through the UI thread at every
+/// hand-over for regions a fraction of that size.</para>
 /// </summary>
 internal sealed class MapGraphics
 {
     private static MapGraphics? _shared;
 
     private readonly CompositionGraphicsDevice _graphics;
+
+    /// <summary>Whether the compositor has the GPU time for effects, which a remote session can change.</summary>
+    private readonly CompositionCapabilities _capabilities = new();
 
     /// <summary>
     /// One region's pixels, packed, before they go up. A region is never larger than
@@ -42,6 +45,12 @@ internal sealed class MapGraphics
     /// <summary>The GPU bitmap a region is staged in on its way to a surface, made once per device.</summary>
     private CanvasBitmap? _staging;
 
+    /// <summary>What shades a canvas on the device, made the first time it is asked for: see <see cref="Renderer"/>.</summary>
+    private CushionRenderer? _renderer;
+
+    /// <summary>Whether <see cref="_renderer"/> has been asked for on this device, so a device that cannot have one is asked once.</summary>
+    private bool _rendererAsked;
+
     private MapGraphics(Compositor compositor)
     {
         _device = new CanvasDevice();
@@ -49,8 +58,7 @@ internal sealed class MapGraphics
 
         _graphics = CanvasComposition.CreateCompositionGraphicsDevice(compositor, _device);
 
-        // A geometry is the factory's, not the device's, so this one outlives a replacement.
-        Nothing = new CompositionPath(CanvasGeometry.CreatePath(new CanvasPathBuilder(_device)));
+        Geometry = new MapGeometry(() => _device);
         _graphics.RenderingDeviceReplaced += (_, _) =>
         {
             Generation++;
@@ -68,19 +76,26 @@ internal sealed class MapGraphics
     /// </summary>
     public event EventHandler? Replaced;
 
-    /// <summary>
-    /// A path with nothing in it, for a geometry with nothing to draw. Never a null path: setting
-    /// <see cref="CompositionPathGeometry.Path"/> to null ended the process with an access violation
-    /// inside the setter on the Windows App SDK 1.8. Not at every such call, but once at the first of
-    /// them and once many calls in, so no number of calls that survive makes it safe.
-    /// </summary>
-    public CompositionPath Nothing { get; }
+    /// <summary>The outlines and the shapes over the picture, built on this device.</summary>
+    public MapGeometry Geometry { get; }
 
     /// <summary>
     /// How many times the device has been replaced, so a map that was off the screen when it happened
     /// knows on its return that what it kept is gone.
     /// </summary>
     public int Generation { get; private set; }
+
+    /// <summary>
+    /// Whether a treemap's canvas is shaded on the GPU (see <see cref="Shade"/>) rather than painted on
+    /// the CPU. Asked at each redraw, so a change of the compositor's word is followed at the next.
+    ///
+    /// <para>Only where the compositor says effects are fast, which a remote session is not, and only on
+    /// a hardware device. A software device's GPU time is the CPU's: WARP shades a 4K canvas in about
+    /// 20 ms on the UI thread, where the CPU paints it in about as long across all of its threads, a region
+    /// at a time and off the UI thread. Win2D's device is asked rather than the compositor's word alone,
+    /// because the two are separate devices. A device that cannot run the shaders is painted for too.</para>
+    /// </summary>
+    public bool Shades => _capabilities.AreEffectsFast() && Renderer is { OnSoftware: false };
 
     /// <summary>The device for <paramref name="compositor"/>, made the first time a map asks.</summary>
     public static MapGraphics For(Compositor compositor) => _shared ??= new MapGraphics(compositor);
@@ -128,9 +143,9 @@ internal sealed class MapGraphics
     {
         PixelBuffer.CopyRegion(pixels, width, region, _staged);
 
-        var device = _device;
-
-        try
+        // A pass can meet the same loss at several regions, and skips each: everything is drawn again on
+        // the new device.
+        UnlessLost(device =>
         {
             var staging = _staging ??= CanvasBitmap.CreateFromBytes(
                 device,
@@ -160,19 +175,41 @@ internal sealed class MapGraphics
                 1,
                 CanvasImageInterpolation.NearestNeighbor,
                 CanvasComposite.Copy);
-        }
-        catch (Exception exception) when (device.IsDeviceLost(exception.HResult))
-        {
-            // The one failure to skip a region for: the device is replaced below, and everything is
-            // drawn again on the new one. Any other failure is a defect, an invalid argument above all,
-            // and is left to be raised. A pass can meet the same loss at several regions, and the
-            // device it was met on is reported lost only once.
-            if (device == _device)
-            {
-                device.RaiseDeviceLost();
-            }
-        }
+        });
     }
+
+    /// <summary>
+    /// Shade <paramref name="quads"/> on <paramref name="ground"/> into the corner of
+    /// <paramref name="surface"/> their canvas covers, every pixel of it, and keep the canvas for
+    /// <see cref="ShrinkShaded"/>. Asked only while <see cref="Shades"/> says so.
+    /// </summary>
+    public void Shade(CompositionDrawingSurface surface, CushionQuads quads, TileColour ground) =>
+        UnlessLost(_ =>
+        {
+            // None where the device was lost as the renderer was made: it is replaced, and every
+            // drawing is shaded again on the new one.
+            if (Renderer is not { } renderer)
+            {
+                return;
+            }
+
+            var shaded = renderer.Shade(quads, ground);
+
+            // Every pixel of the update rectangle is overwritten, as a draw into a surface has to be.
+            using var session = CanvasComposition.CreateDrawingSession(
+                surface,
+                new Rect(0, 0, quads.Width, quads.Height),
+                96);
+
+            session.DrawImage(
+                shaded,
+                0,
+                0,
+                new Rect(0, 0, quads.Width, quads.Height),
+                1,
+                CanvasImageInterpolation.NearestNeighbor,
+                CanvasComposite.Copy);
+        });
 
     /// <summary>
     /// <paramref name="pixels"/>, a canvas <paramref name="width"/> by <paramref name="height"/>,
@@ -185,44 +222,78 @@ internal sealed class MapGraphics
     /// pixel into account, so a treemap's fine lines thin out rather than break up as they do when a
     /// large surface is shown small.</para>
     /// </summary>
-    public CompositionDrawingSurface? Shrink(CompositionDrawingSurface? into, byte[] pixels, int width, int height, SizeInt32 size)
-    {
-        var device = _device;
-
-        try
+    public CompositionDrawingSurface? Shrink(CompositionDrawingSurface? into, byte[] pixels, int width, int height, SizeInt32 size) =>
+        UnlessLost(device =>
         {
-            // Resized rather than made again for each whole picture (G5).
-            var surface = into ?? _graphics.CreateDrawingSurface2(
-                size,
-                DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                DirectXAlphaMode.Premultiplied);
-
-            if (surface.SizeInt32 != size)
-            {
-                surface.Resize(size);
-            }
-
             using var bitmap = CanvasBitmap.CreateFromBytes(
                 device,
                 pixels,
                 width,
                 height,
                 Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized);
-            using var session = CanvasComposition.CreateDrawingSession(surface);
 
-            session.Clear(Microsoft.UI.Colors.Transparent);
-            session.DrawImage(
-                bitmap,
-                new Rect(0, 0, size.Width, size.Height),
-                new Rect(0, 0, width, height),
-                1,
-                CanvasImageInterpolation.HighQualityCubic);
+            return Shrink(into, bitmap, width, height, size);
+        });
 
-            return surface;
+    /// <summary>
+    /// The canvas <see cref="Shade"/> shaded last, <paramref name="width"/> by <paramref name="height"/>,
+    /// drawn small as <see cref="Shrink(CompositionDrawingSurface?, byte[], int, int, SizeInt32)"/> draws
+    /// a painted one. Asked straight after the shading, before anything else is shaded.
+    /// </summary>
+    public CompositionDrawingSurface? ShrinkShaded(CompositionDrawingSurface? into, int width, int height, SizeInt32 size) =>
+        _renderer is { Shaded: { } shaded } ? UnlessLost(_ => Shrink(into, shaded, width, height, size)) : null;
+
+    /// <summary>Draw the corner of <paramref name="canvas"/> a canvas covers into <paramref name="into"/>, small.</summary>
+    private CompositionDrawingSurface Shrink(
+        CompositionDrawingSurface? into,
+        CanvasBitmap canvas,
+        int width,
+        int height,
+        SizeInt32 size)
+    {
+        // Resized rather than made again for each whole picture (G5).
+        var surface = into ?? _graphics.CreateDrawingSurface2(
+            size,
+            DirectXPixelFormat.B8G8R8A8UIntNormalized,
+            DirectXAlphaMode.Premultiplied);
+
+        if (surface.SizeInt32 != size)
+        {
+            surface.Resize(size);
+        }
+
+        using var session = CanvasComposition.CreateDrawingSession(surface);
+
+        session.Clear(Microsoft.UI.Colors.Transparent);
+        session.DrawImage(
+            canvas,
+            new Rect(0, 0, size.Width, size.Height),
+            new Rect(0, 0, width, height),
+            1,
+            CanvasImageInterpolation.HighQualityCubic);
+
+        return surface;
+    }
+
+    /// <summary>
+    /// What <paramref name="draw"/> returns on the device, or null where the device was lost on the way,
+    /// which is then replaced.
+    ///
+    /// <para>The one failure to give up a drawing for: everything is drawn again on the new device. Any
+    /// other failure is a defect, an invalid argument above all, and is left to be raised. Several
+    /// drawings can meet the same loss, and the device it was met on is reported lost only once.</para>
+    /// </summary>
+    private T? UnlessLost<T>(Func<CanvasDevice, T?> draw)
+        where T : class
+    {
+        var device = _device;
+
+        try
+        {
+            return draw(device);
         }
         catch (Exception exception) when (device.IsDeviceLost(exception.HResult))
         {
-            // As a lost device is everywhere else here: replaced, and the copy not made.
             if (device == _device)
             {
                 device.RaiseDeviceLost();
@@ -231,6 +302,14 @@ internal sealed class MapGraphics
             return null;
         }
     }
+
+    /// <summary>Do <paramref name="draw"/> on the device, unless the device is lost on the way: see <see cref="UnlessLost{T}"/>.</summary>
+    private void UnlessLost(Action<CanvasDevice> draw) =>
+        UnlessLost(device =>
+        {
+            draw(device);
+            return this;
+        });
 
     /// <summary>
     /// A still of <paramref name="visual"/> and everything drawn under it as it is now, at
@@ -265,155 +344,23 @@ internal sealed class MapGraphics
     }
 
     /// <summary>
-    /// A geometry round every outline, in the canvas's own pixels, for an outline drawn in the
-    /// composition tree. <see cref="Nothing"/> where there is nothing to outline.
-    ///
-    /// <para>One geometry for all of them rather than one per outline, because the list view selects
-    /// any number of rows at once and a shape apiece would be hundreds of them (G4).</para>
+    /// What shades a canvas on the current device, or null where the device cannot run its shaders.
+    /// Made once per device, the first time it is asked for, and never on a device lost since.
     /// </summary>
-    public CompositionPath Trace(IReadOnlyList<ExploreOutline> outlines)
+    private CushionRenderer? Renderer
     {
-        if (outlines.Count == 0)
+        get
         {
-            return Nothing;
-        }
-
-        // Not disposed: making the geometry takes the builder over.
-        var path = new CanvasPathBuilder(_device);
-
-        foreach (var outline in outlines)
-        {
-            AddFigure(path, outline);
-        }
-
-        return new CompositionPath(CanvasGeometry.CreatePath(path));
-    }
-
-    /// <summary>
-    /// A geometry over everything but <paramref name="outlines"/> to <paramref name="far"/> pixels
-    /// from the canvas's corner each way, in the canvas's own pixels: what the map dims round a
-    /// selection. <see cref="Nothing"/> where there is nothing to leave out, because then nothing is
-    /// dimmed.
-    ///
-    /// <para>The caller says how far, because a canvas is a part of its picture as small as its zoom
-    /// is deep, and the dimming has to cover the whole picture while the canvas is shown zoomed out.
-    /// The shape visual the dimming is drawn in cuts it to the picture.</para>
-    /// </summary>
-    public CompositionPath Around(IReadOnlyList<ExploreOutline> outlines, float far)
-    {
-        if (Shapes(outlines) is not { } shapes)
-        {
-            return Nothing;
-        }
-
-        var everything = CanvasGeometry.CreateRectangle(_device, -far, -far, 2 * far, 2 * far);
-
-        return new CompositionPath(everything.CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Exclude));
-    }
-
-    /// <summary>
-    /// A geometry over everything to <paramref name="far"/> pixels from the canvas's corner each way:
-    /// what <see cref="Around"/> covers with nothing left out of it.
-    /// </summary>
-    public CompositionPath Everything(float far) =>
-        new(CanvasGeometry.CreateRectangle(_device, -far, -far, 2 * far, 2 * far));
-
-    /// <summary>
-    /// Stripes across <paramref name="outlines"/> and nowhere else, in the canvas's own pixels: one
-    /// stripe in every <paramref name="spacing"/>, <paramref name="width"/> wide, starting
-    /// <paramref name="phase"/> along. <see cref="Nothing"/> where there is nothing to stripe.
-    /// </summary>
-    public CompositionPath Hatch(IReadOnlyList<ExploreOutline> outlines, float spacing, float width, float phase)
-    {
-        if (Shapes(outlines) is not { } shapes)
-        {
-            return Nothing;
-        }
-
-        // Upright stripes over a square round the shapes wide enough to cover them at any turn, turned
-        // a quarter of the way round about its middle: a hatch reads as a hatch at any size of shape.
-        var bounds = shapes.ComputeBounds();
-        var side = (float)Math.Sqrt((bounds.Width * bounds.Width) + (bounds.Height * bounds.Height));
-        var centre = new Vector2((float)(bounds.X + (bounds.Width / 2)), (float)(bounds.Y + (bounds.Height / 2)));
-        var left = centre.X - (side / 2);
-        var top = centre.Y - (side / 2);
-        var stripes = new List<CanvasGeometry>();
-
-        for (var x = left + phase; x < left + side; x += spacing)
-        {
-            stripes.Add(CanvasGeometry.CreateRectangle(_device, x, top, width, side));
-        }
-
-        var turned = CanvasGeometry.CreateGroup(_device, [.. stripes], CanvasFilledRegionDetermination.Winding)
-            .Transform(Matrix3x2.CreateRotation(MathF.PI / 4, centre));
-
-        return new CompositionPath(turned.CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Intersect));
-    }
-
-    /// <summary>
-    /// The shapes <paramref name="outlines"/> bound, filled, as one geometry, or null where there are
-    /// none.
-    ///
-    /// <para>A node's boundaries are filled together, alternately, which is how a ring keeps its hole.
-    /// Each is then outlined, which leaves a geometry filled the same whichever rule fills it, and the
-    /// nodes are grouped under the rule that fills wherever any of them does: their union, so a folder
-    /// picked with a file inside it is one shape rather than a folder with the file cut out.</para>
-    /// </summary>
-    private CanvasGeometry? Shapes(IReadOnlyList<ExploreOutline> outlines)
-    {
-        var nodes = new List<CanvasGeometry>();
-        var i = 0;
-
-        while (i < outlines.Count)
-        {
-            // Not disposed: making the geometry takes the builder over.
-            var path = new CanvasPathBuilder(_device);
-            path.SetFilledRegionDetermination(CanvasFilledRegionDetermination.Alternate);
-
-            var node = outlines[i].Node;
-            var figures = 0;
-
-            // A node's boundaries come back one after another: see ExploreOutline.
-            for (; i < outlines.Count && outlines[i].Node == node; i++)
+            if (!_rendererAsked)
             {
-                figures += AddFigure(path, outlines[i]) ? 1 : 0;
+                // Asked once per device. A loss as it is made replaces the device, and the new one is
+                // asked again.
+                _rendererAsked = true;
+                _renderer = UnlessLost(CushionRenderer.For);
             }
 
-            if (figures > 0)
-            {
-                nodes.Add(CanvasGeometry.CreatePath(path).Outline());
-            }
+            return _renderer;
         }
-
-        return nodes.Count == 0
-            ? null
-            : CanvasGeometry.CreateGroup(_device, [.. nodes], CanvasFilledRegionDetermination.Winding);
-    }
-
-    /// <summary>
-    /// Add <paramref name="outline"/> to <paramref name="path"/> as one closed figure, and say whether
-    /// there was anything to add. The one way a boundary becomes a figure, so the line round a shape
-    /// and the area it fills are the same shape.
-    /// </summary>
-    private static bool AddFigure(CanvasPathBuilder path, ExploreOutline outline)
-    {
-        var points = outline.Points;
-
-        if (points.Count == 0)
-        {
-            return false;
-        }
-
-        path.BeginFigure(points[0].X, points[0].Y);
-
-        for (var i = 1; i < points.Count; i++)
-        {
-            path.AddLine(points[i].X, points[i].Y);
-        }
-
-        path.EndFigure(CanvasFigureLoop.Closed);
-
-        return true;
     }
 
     /// <summary>
@@ -425,6 +372,9 @@ internal sealed class MapGraphics
         sender.DeviceLost -= OnDeviceLost;
 
         _staging = null;
+        _renderer?.Dispose();
+        _renderer = null;
+        _rendererAsked = false;
         _device = new CanvasDevice();
         _device.DeviceLost += OnDeviceLost;
 

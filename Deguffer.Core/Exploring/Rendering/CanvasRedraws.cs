@@ -69,11 +69,36 @@ public sealed class CanvasRedraws
         ArgumentNullException.ThrowIfNull(pixels);
         ArgumentNullException.ThrowIfNull(target);
 
+        return Queue(new CanvasRedraw(_owner, layout, pixels, ground, focus, target));
+    }
+
+    /// <summary>
+    /// Lay out a drawing of rectangles with <paramref name="layout"/>, and hand its quads to
+    /// <paramref name="target"/> to shade on <paramref name="ground"/> on the GPU, in one pass.
+    /// Supersedes any redraw still pending.
+    ///
+    /// <para>Only the layout is off the owner's thread. The GPU shades a whole canvas in about a
+    /// millisecond on a discrete card and a few on an integrated one, so the picture arrives whole
+    /// rather than a region at a time, and nothing is painted on the CPU at all.</para>
+    /// </summary>
+    /// <param name="layout">
+    /// Called on a worker thread, as for <see cref="Start"/>. It must make a drawing whose
+    /// <see cref="ExploreSurface.Quads"/> are not null.
+    /// </param>
+    public CanvasRedraw Shade(Func<ExploreSurface> layout, TileColour ground, ICanvasRedrawTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(target);
+
+        return Queue(new CanvasRedraw(_owner, layout, pixels: null, ground, focus: null, target));
+    }
+
+    /// <summary>Supersede the redraw pending, and run <paramref name="redraw"/> once it has stopped.</summary>
+    private CanvasRedraw Queue(CanvasRedraw redraw)
+    {
         var previous = _latest;
 
         previous?.Supersede();
-
-        var redraw = new CanvasRedraw(_owner, layout, pixels, ground, focus, target);
 
         redraw.Finished = (previous?.Finished ?? Task.CompletedTask).ContinueWith(
             _ => redraw.Run(Workers),
