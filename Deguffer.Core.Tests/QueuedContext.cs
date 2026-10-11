@@ -40,6 +40,15 @@ internal sealed class QueuedContext : SynchronizationContext
         }
     }
 
+    /// <summary>Wait, running nothing, until something has been posted that has not been run.</summary>
+    public void WaitUntilPosted(string waitingFor)
+    {
+        if (!SpinWait.SpinUntil(() => _posts.Count > 0, Patience))
+        {
+            throw new TimeoutException($"Still waiting for {waitingFor}.");
+        }
+    }
+
     /// <summary>Run everything posted so far, and whatever that posts in turn.</summary>
     public void RunPending()
     {

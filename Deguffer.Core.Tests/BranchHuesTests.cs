@@ -128,6 +128,32 @@ public sealed class BranchHuesTests
     }
 
     /// <summary>
+    /// Asked for every node by many threads at once, as the tiles of a moving map are coloured, each
+    /// node gets the arc it gets asked alone, and no ask fails on another's half-done work.
+    /// </summary>
+    [Fact]
+    public void ManyThreadsAskingAtOnceGetTheArcsOneThreadGets()
+    {
+        var tree = Nested();
+        var nodes = Below(tree, tree.RootNode).ToArray();
+        var alone = new BranchHues(tree, tree.RootNode);
+        var expected = nodes.ToDictionary(node => node, alone.Of);
+
+        for (var round = 0; round < 50; round++)
+        {
+            var shared = new BranchHues(tree, tree.RootNode);
+
+            Parallel.For(0, 64, new ParallelOptions { MaxDegreeOfParallelism = 16 }, worker =>
+            {
+                foreach (var node in nodes.Reverse().Skip(worker % nodes.Length).Concat(nodes))
+                {
+                    Assert.Equal(expected[node], shared.Of(node));
+                }
+            });
+        }
+    }
+
+    /// <summary>
     /// The conversion checked against published values: sRGB red, green, white and black, in
     /// Ottosson's own figures for the space.
     /// </summary>

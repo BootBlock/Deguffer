@@ -27,13 +27,16 @@ public sealed class TiledSurface : ExploreSurface
     private readonly IReadOnlyList<ExploreTile> _tiles;
     private readonly TileHitTest _hits;
 
+    /// <summary>The volume a treemap of the whole of it draws beside its root, which each of its tiles lays out too.</summary>
+    private readonly VolumeSpace _beside;
+
     /// <param name="viewport">
     /// The part of the picture <paramref name="tiles"/> were laid out for, or null where their layout
     /// draws only the whole of it. See <see cref="ExploreSurface.Viewport"/>.
     /// </param>
-    /// <param name="volumeBeside">
-    /// Whether the layout draws anything of the volume beside the root, whether or not this
-    /// viewport shows it. See <see cref="ExploreSurface.HasVolumeBeside"/>.
+    /// <param name="beside">
+    /// The volume the layout was given to draw beside the root, or <see cref="VolumeSpace.None"/>.
+    /// See <see cref="ExploreSurface.HasVolumeBeside"/>.
     /// </param>
     public TiledSurface(
         ISizedTree tree,
@@ -44,14 +47,15 @@ public sealed class TiledSurface : ExploreSurface
         ShapeColours colours,
         IReadOnlyList<ExploreTile> tiles,
         MapViewport? viewport = null,
-        bool volumeBeside = false)
+        VolumeSpace beside = default)
         : base(tree, root, width, height, limits, colours, viewport)
     {
         ArgumentNullException.ThrowIfNull(tiles);
 
         _tiles = tiles;
         _hits = new TileHitTest(tiles, width, height);
-        HasVolumeBeside = volumeBeside;
+        _beside = beside;
+        HasVolumeBeside = TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits);
 
         Labels = BuildLabels();
         Ceiling = viewport is { } drawn ? MapCeiling.Of(drawn.Zoom, Deeper()) : null;
@@ -72,6 +76,38 @@ public sealed class TiledSurface : ExploreSurface
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;
 
     public override ExploreTile? TileAt(float x, float y) => _hits.At(x, y) is { } index ? _tiles[index] : null;
+
+    /// <summary>
+    /// Lay out <paramref name="key"/> of this treemap's picture, cut into tiles by
+    /// <paramref name="tiling"/>: the same tree, folder, limits and volume beside it, coloured as this
+    /// drawing is, at the tile's level of detail. Only for a treemap that can be zoomed, and a tiling of
+    /// this drawing's canvas.
+    /// </summary>
+    public MapTile Tile(MapTiling tiling, MapTileKey key)
+    {
+        ArgumentNullException.ThrowIfNull(tiling);
+
+        if (Viewport is not { } drawnAt)
+        {
+            throw new InvalidOperationException("Only a treemap that can be zoomed is cut into tiles.");
+        }
+
+        if (tiling.Width != Width || tiling.Height != Height)
+        {
+            throw new ArgumentException(
+                $"A {tiling.Width}x{tiling.Height} tiling is not of this {Width}x{Height} drawing's picture.",
+                nameof(tiling));
+        }
+
+        var zoom = MapTiling.ZoomOf(key.Level);
+        var (width, height) = tiling.PixelsOf(key);
+        var viewport = tiling.ViewportOf(key);
+        var shapes = TreemapLayout.Compute(
+            Tree, Root, Width, Height, Limits, _beside, viewport,
+            new TreemapDetail(Limits, zoom, MapTiling.DetailOf(key.Level)), width, height);
+
+        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourFor);
+    }
 
     public override MapFrame? FrameOf(int node) =>
         Deepest(node) is { } shape

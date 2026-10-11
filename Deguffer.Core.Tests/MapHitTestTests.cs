@@ -112,6 +112,77 @@ public sealed class MapHitTestTests
     }
 
     /// <summary>
+    /// While the camera moves, a tile drawn more finely than the drawing shows over it, and draws what
+    /// the drawing does not: a point it covers is its own, and every other point is the drawing's.
+    /// </summary>
+    [Fact]
+    public void ATileShownOverTheDrawingAnswersWhereItShows()
+    {
+        var tree = Drawings.Tree();
+        var old = Drawings.Covering(tree, Old, MapViewport.Whole);
+        var tile = CornerTile(old);
+
+        Assert.Equal(New, NodeAt(0.95, 0.95, old, arriving: null, tree, tile));
+        Assert.Equal(Old, NodeAt(0.05, 0.05, old, arriving: null, tree, tile));
+        Assert.Equal(Old, NodeAt(0.95, 0.95, old, arriving: null, tree));
+
+        var spot = MapHitTest.Locate(MapViewport.Whole, 0.95, 0.95, old, arriving: null, tree, Shown(tile))!.Value;
+        var shape = spot.ShapeOnScreen(MapViewport.Whole)!.Value;
+
+        Assert.Same(tile, spot.Tile);
+        Assert.True(shape.Contains(0.95, 0.95) && shape.X > 0.45 && shape.X + shape.Width <= 1 + 1e-9, $"the shape found is at {shape}");
+    }
+
+    /// <summary>
+    /// A tile drawn less finely than the drawing is under it, so it answers nothing: the drawing is what
+    /// shows over it.
+    /// </summary>
+    [Fact]
+    public void ATileUnderTheDrawingDoesNotAnswer()
+    {
+        var tree = Drawings.Tree();
+        var zoomedIn = MapViewport.Anchored(MapTiling.ZoomOf(4), 1, 1, 1, 1, MapCeiling.Least);
+        var old = Drawings.Covering(tree, Old, zoomedIn);
+        var tile = CornerTile(old, level: 3);
+        var (x, y) = zoomedIn.PictureAt(0.5, 0.5);
+
+        var spot = MapHitTest.Locate(zoomedIn, 0.5, 0.5, old, arriving: null, tree, Shown(tile));
+
+        Assert.True(tile.Frame.Contains(x, y));
+        Assert.Null(spot!.Value.Tile);
+        Assert.Equal(Old, spot.Value.Hit?.Node);
+    }
+
+    /// <summary>A redraw's landed region shows over every tile, so it answers there.</summary>
+    [Fact]
+    public void ALandedRegionAnswersOverATile()
+    {
+        const int Drawn = 3;
+
+        var tree = Drawings.Tree(files: 3);
+        var old = Drawings.Covering(tree, Drawn, MapViewport.Whole);
+        var topLeft = old.Tile(new MapTiling(Drawings.Size, Drawings.Size), new MapTileKey(0, 0, 0));
+        var (arriving, gated) = LandTopLeft(tree);
+
+        Assert.Equal(Old, NodeAt(0.1, 0.1, old, arriving: null, tree, topLeft));
+        Assert.Equal(New, NodeAt(0.1, 0.1, old, arriving, tree, topLeft));
+
+        gated.Open();
+    }
+
+    /// <summary>A tile of an older tree answers nothing, as a drawing of one does.</summary>
+    [Fact]
+    public void ATileOfAnOlderTreeAnswersNothing()
+    {
+        var older = Drawings.Tree();
+        var newer = Drawings.Tree();
+        var drawing = Drawings.Covering(newer, Old, MapViewport.Whole);
+        var tile = CornerTile(Drawings.Covering(older, Old, MapViewport.Whole));
+
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.95, 0.95, drawing, arriving: null, newer, Shown(tile)));
+    }
+
+    /// <summary>
     /// Start a redraw of <paramref name="tree"/> that is <see cref="New"/> everywhere, and stop it
     /// with only its top left region on screen.
     /// </summary>
@@ -133,10 +204,27 @@ public sealed class MapHitTestTests
         return (arriving, gated);
     }
 
-    private static int? NodeAt(double x, double y, ExploreSurface old, CanvasRedraw arriving, ISizedTree tree) =>
-        MapHitTest.Locate(MapViewport.Whole, x, y, old, arriving, tree) is { } spot
-            ? spot.Drawing.At(spot.X, spot.Y)?.Node
+    private static int? NodeAt(
+        double x, double y, ExploreSurface old, CanvasRedraw? arriving, ISizedTree tree, MapTile? over = null) =>
+        MapHitTest.Locate(MapViewport.Whole, x, y, old, arriving, tree, Shown(over)) is { } spot
+            ? spot.Hit?.Node
             : null;
+
+    /// <summary>What shows <paramref name="tile"/> at the points of the picture it covers, and no tile anywhere else.</summary>
+    private static Func<double, double, MapTile?>? Shown(MapTile? tile) =>
+        tile is null ? null : (x, y) => tile.Frame.Contains(x, y) ? tile : null;
+
+    /// <summary>
+    /// The tile of <paramref name="drawing"/>'s picture at its bottom right, cut from it at
+    /// <paramref name="level"/>. Laid out for real, the picture is its first file down the left half
+    /// and its second, node 2, down the right, which is all the bottom right tile shows.
+    /// </summary>
+    private static MapTile CornerTile(TiledSurface drawing, int level = 0)
+    {
+        var tiling = new MapTiling(Drawings.Size, Drawings.Size);
+
+        return drawing.Tile(tiling, tiling.At(level, 0.95, 0.95)!.Value);
+    }
 
     /// <summary>Points across the whole screen, a few in each region.</summary>
     private static IEnumerable<(double X, double Y)> Grid() =>

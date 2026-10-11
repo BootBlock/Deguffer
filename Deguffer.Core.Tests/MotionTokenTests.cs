@@ -143,6 +143,22 @@ public sealed class MotionTokenTests
     }
 
     /// <summary>
+    /// A sharper tile comes in over the coarser picture as a fade, with motion on or off, and is over
+    /// well inside the time a wheel's glide takes, so the picture is never waiting on it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ASharperTileFadesInQuickly(bool animationsEnabled)
+    {
+        var motion = MotionToken.Sharpen.For(animationsEnabled);
+
+        Assert.False(motion.Travels);
+        Assert.False(motion.IsInstant);
+        Assert.True(motion.Duration < MotionToken.Camera.Full.Duration);
+    }
+
+    /// <summary>
     /// A page's entrance, its header's and the rest's together, is over in under 300 ms, so it never
     /// stands between the reader and the page, and the rest of the page starts after its header.
     /// </summary>
