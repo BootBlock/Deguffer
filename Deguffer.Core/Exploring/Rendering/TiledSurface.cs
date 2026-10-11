@@ -214,6 +214,26 @@ public sealed class TiledSurface : ExploreSurface
         return outlines;
     }
 
+    public override IEnumerable<int> NodesDrawn => _tiles.Where(tile => tile.IsNode).Select(tile => tile.Node).Distinct();
+
+    public override IReadOnlyList<MorphShape> MorphShapes(IReadOnlySet<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        var shapes = new List<MorphShape>();
+        var found = new HashSet<int>();
+
+        foreach (var tile in _tiles)
+        {
+            if (tile.IsNode && nodes.Contains(tile.Node) && found.Add(tile.Node))
+            {
+                shapes.Add(new MorphShape(tile.Node, tile.Depth, ColourFor(tile.Node, tile.Depth), MorphOutline.Of(tile)));
+            }
+        }
+
+        return shapes;
+    }
+
     private static ExploreOutline OutlineOf(ExploreTile tile)
     {
         var right = tile.X + tile.Width;

@@ -12,7 +12,7 @@ public sealed class MotionTokenTests
     [Fact]
     public void WithMotionOnEveryMoveTravels()
     {
-        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark, MotionToken.Overview, MotionToken.Shift })
+        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark, MotionToken.Overview, MotionToken.Shift, MotionToken.Morph })
         {
             var motion = token.For(animationsEnabled: true);
 

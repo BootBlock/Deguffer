@@ -3,7 +3,7 @@
 > **Status:** 🟢 ACTIVE — the spike is finished and its answers below are what the
 > `direct-composition` work (#294) builds on. Since #274 the Explore map draws through Win2D into
 > composition surfaces: see [what landing it found](#what-landing-274-found). Since #276 its camera
-> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). Its treemaps are shaded on the GPU where effects are fast since #284 ([what that found](#what-landing-284-found)), lit by the pointer there ([how](#the-pointers-light)). Since #290 the Memory page's map has the same camera, which follows what the reader zoomed into from one reading to the next ([what that found](#what-landing-290-found)). The maintainer has
+> follows an `InteractionTracker`: see [what that found](#what-landing-276-found), measured from an origin since #307 ([what that found](#what-landing-307-found)), and zooms as deep as the detail in view since #306 ([what that found](#what-landing-306-found)). It flies into and out of folders on a spring since #278 ([what that found](#what-landing-278-found)). Its treemaps are shaded on the GPU where effects are fast since #284 ([what that found](#what-landing-284-found)), lit by the pointer there ([how](#the-pointers-light)). Since #290 the Memory page's map has the same camera, which follows what the reader zoomed into from one reading to the next ([what that found](#what-landing-290-found)). Since #283 a change of view carries the largest shapes from one view to the other ([what that found](#what-landing-283-found)). The maintainer has
 > cleared the Win2D package's licence. Three things stay [open](#still-open): a monitor of a
 > different scale, Remote Desktop, and an ARM64 machine. Re-measure against a newer Windows App SDK
 > or Win2D before trusting the figures.
@@ -465,6 +465,26 @@ the first time that move ran on a zoomed picture, and on a canvas shaded on the 
   than once a pointer move.
 - **Driven** on a machine's live memory: zoomed in, readings moved the shapes and kept the zoom,
   the overview and the light; zoomed onto one process, the camera stayed on it through five readings.
+
+## What landing #283 found
+
+A change between the treemap, the icicle and the sunburst carries the 200 largest shapes both views
+draw from one view's shape to the other's, while the two drawings crossfade under them for 450 ms
+(`ViewMorph`). This is the first use of `PathKeyFrameAnimation` here.
+
+- **The compositor blends two Win2D paths point by point when their figures match.** Each shape is
+  one closed figure of the same 194 points in every view (`MorphOutline`): along the edge nearest the
+  root, then back along the far edge. An icicle's bar becomes its wedge without turning over, because
+  its top is the wedge's inner arc and its left is where the wedge starts.
+- **The shapes are flat and the drawings are shaded,** so the shapes fade in over the first fifth of
+  the move and out over the last fifth. Without that, the picture would flatten as the move starts,
+  and the shading would flash on as it lands.
+- **A press during the move lands it and picks nothing,** because no shape is where either view
+  draws it. A zoomed treemap changes view with a crossfade only, as its shapes on screen are not
+  where the whole treemap draws them. With animation effects off the views swap at once.
+- **Driven** on a synthetic folder of 80 files in 25 folders: treemap to icicle, icicle to sunburst
+  and sunburst to treemap each showed 22 to 26 distinct frames over about 460 ms, and three with
+  animation effects off.
 
 ## Still open
 

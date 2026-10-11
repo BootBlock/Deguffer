@@ -507,6 +507,18 @@ public abstract class ExploreSurface
     public abstract IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes);
 
     /// <summary>
+    /// Each node this drawing draws a shape of, once. Not the blocks standing for the rest of the
+    /// volume, nor the lumps of shapes too small to draw, which stand for no node.
+    /// </summary>
+    public abstract IEnumerable<int> NodesDrawn { get; }
+
+    /// <summary>
+    /// The shapes of each of <paramref name="nodes"/> this drawing draws, for a change of view to carry
+    /// from one drawing to another (<see cref="Layout.ViewMorph"/>). A node it did not draw is absent.
+    /// </summary>
+    public abstract IReadOnlyList<MorphShape> MorphShapes(IReadOnlySet<int> nodes);
+
+    /// <summary>
     /// Which part of the hue circle a node owns, so a whole subtree shares one part of it.
     ///
     /// <para>Measured from this drawing's root rather than carried in the shape, because the same
