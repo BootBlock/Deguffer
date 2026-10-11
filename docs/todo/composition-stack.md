@@ -344,7 +344,8 @@ Every change of folder on a treemap of one tree is one flight of the map's camer
 ## What landing #284 found
 
 A treemap's canvas, and each tile of a moving one, is shaded on the GPU in one pass where
-`AreEffectsFast()` is true and the device runs Direct3D feature level 10 (`MapGraphics.Shades`).
+`AreEffectsFast()` is true and Win2D's device is a hardware one that runs Direct3D feature level 10
+(`MapGraphics.Shades`).
 Everywhere else, and for the sunburst, whose sectors are not rectangles, the CPU paints it as before.
 Both routes shade the same `CushionQuads`, so they cannot disagree about a shape's edges, colour or
 ridge, and a test shades a tree on WARP and holds the result to the CPU's: every channel within one
@@ -394,8 +395,10 @@ on the CPU (0.2 to 0.6 ms) and waiting for the GPU. Every route's picture matche
 one level a channel, with 36 to 192 pixels of a canvas one level apart.
 
 WARP is no faster than the CPU at 4K and would shade on the UI thread, so a software device keeps the
-CPU's route, a region at a time and off the UI thread. That is what `AreEffectsFast()` reports for it,
-and for a remote session, which is the case it exists for: neither was observed here.
+CPU's route, a region at a time and off the UI thread. The map asks Win2D's device itself, by its
+adapter's software flag (`CushionRenderer.OnSoftware`), rather than trust `AreEffectsFast()`, which
+speaks for the compositor's device, a separate one. What `AreEffectsFast()` reports on WARP and in a
+remote session was not observed here.
 
 ## Still open
 

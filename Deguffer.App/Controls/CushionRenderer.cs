@@ -66,6 +66,8 @@ internal sealed class CushionRenderer : IDisposable
         _direct3D = direct3D;
         _direct3D.GetImmediateContext(out _context);
 
+        OnSoftware = IsSoftware(direct3D);
+
         var (vertices, pixels) = Shaders.Value;
 
         Check(_direct3D.CreateVertexShader(vertices, (nuint)vertices.Length, 0, out _vertexShader));
@@ -76,6 +78,12 @@ internal sealed class CushionRenderer : IDisposable
             0,
             out _constants));
     }
+
+    /// <summary>
+    /// Whether the device runs on the CPU, as WARP does where there is no GPU to use. It shades the same
+    /// picture, but with the CPU's time, on the thread that asks.
+    /// </summary>
+    public bool OnSoftware { get; }
 
     /// <summary>The bitmap the last canvas was shaded into, at its corner, or null before the first.</summary>
     public CanvasBitmap? Shaded => _bitmap;
@@ -136,6 +144,26 @@ internal sealed class CushionRenderer : IDisposable
 
         Marshal.ReleaseComObject(_context);
         Marshal.ReleaseComObject(_direct3D);
+    }
+
+    /// <summary>Whether <paramref name="direct3D"/> runs on a software adapter.</summary>
+    private static bool IsSoftware(IDevice direct3D)
+    {
+        // A cast of a COM wrapper asks the object for the interface.
+        var dxgi = (IDxgiDevice)direct3D;
+
+        Check(dxgi.GetAdapter(out var adapter));
+
+        try
+        {
+            Check(adapter.GetDesc1(out var description));
+
+            return (description.Flags & SoftwareAdapter) != 0;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(adapter);
+        }
     }
 
     /// <summary>The Direct3D device under <paramref name="device"/>.</summary>

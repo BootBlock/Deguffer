@@ -31,6 +31,9 @@ internal static class Direct3D
     public const uint FormatB8G8R8A8Unorm = 87;
 
     public const uint PerInstance = 1;
+
+    /// <summary>DXGI_ADAPTER_FLAG_SOFTWARE: an adapter the CPU runs, WARP among them.</summary>
+    public const uint SoftwareAdapter = 2;
     public const uint TriangleStrip = 5;
 
     /// <summary>Optimisation, and IEEE arithmetic, so the shader's sums stay as near the CPU's as a float can.</summary>
@@ -97,6 +100,23 @@ internal static class Direct3D
         public uint InstanceDataStepRate;
     }
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct AdapterDescription
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string Description;
+        public uint VendorId;
+        public uint DeviceId;
+        public uint SubSysId;
+        public uint Revision;
+        public nuint DedicatedVideoMemory;
+        public nuint DedicatedSystemMemory;
+        public nuint SharedSystemMemory;
+        public uint LuidLowPart;
+        public int LuidHighPart;
+        public uint Flags;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct Viewport
     {
@@ -127,6 +147,47 @@ internal static class Direct3D
     {
         [PreserveSig]
         int GetInterface(in Guid id, out nint native);
+    }
+
+    /// <summary>The DXGI side of a Direct3D device, which names the adapter it runs on.</summary>
+    [ComImport]
+    [Guid("54ec77fa-1377-44e6-8c32-88fd5f44c84c")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IDxgiDevice
+    {
+        void SetPrivateData();
+
+        void SetPrivateDataInterface();
+
+        void GetPrivateData();
+
+        void GetParent();
+
+        [PreserveSig]
+        int GetAdapter(out IDxgiAdapter adapter);
+    }
+
+    [ComImport]
+    [Guid("29038f61-3839-4626-91fd-086879011a05")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IDxgiAdapter
+    {
+        void SetPrivateData();
+
+        void SetPrivateDataInterface();
+
+        void GetPrivateData();
+
+        void GetParent();
+
+        void EnumOutputs();
+
+        void GetDesc();
+
+        void CheckInterfaceSupport();
+
+        [PreserveSig]
+        int GetDesc1(out AdapterDescription description);
     }
 
     [ComImport]

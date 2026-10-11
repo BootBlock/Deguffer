@@ -22,12 +22,13 @@ namespace Deguffer.Core.Exploring.Rendering;
 public readonly record struct CushionQuad(int Left, int Top, int Right, int Bottom, float Ridge, TileColour Colour)
 {
     /// <summary>
-    /// <paramref name="tile"/>, painted <paramref name="colour"/>, as the pixels it covers.
+    /// <paramref name="tile"/> as the pixels it covers, with no colour yet: a colour climbs a node's
+    /// ancestors, so it is asked for only once the quad is known to show (see <see cref="CushionQuads"/>).
     ///
     /// <para>The edges are rounded, not truncated, so two shapes that share an edge share it on the
     /// canvas too, with no gap and no overlap between them.</para>
     /// </summary>
-    public static CushionQuad Of(ExploreTile tile, TileColour colour)
+    public static CushionQuad Of(ExploreTile tile)
     {
         // Three shapes are drawn flat. Neither block is a thing on the disk, and a cushion would give
         // it the same physical presence as the files it stands for. A folder with a band has its
@@ -43,7 +44,7 @@ public readonly record struct CushionQuad(int Left, int Top, int Right, int Bott
             (int)MathF.Round(tile.X + tile.Width),
             (int)MathF.Round(tile.Y + tile.Height),
             ridge,
-            colour);
+            default);
     }
 
     /// <summary>Whether the quad covers any pixel of a canvas <paramref name="width"/> by <paramref name="height"/>.</summary>

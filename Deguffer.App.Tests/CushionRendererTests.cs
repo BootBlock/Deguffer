@@ -71,6 +71,13 @@ public sealed class CushionRendererTests : IDisposable
         AssertShadedAsPainted(Picture(MapViewport.Whole, 300, 200));
     }
 
+    /// <summary>
+    /// WARP runs on the CPU, and the renderer says so: the map paints on the CPU for a software device,
+    /// a region at a time and off the UI thread, rather than shade on it on the UI thread.
+    /// </summary>
+    [Fact]
+    public void ARendererOnWarpSaysItRunsOnSoftware() => Assert.True(_renderer.OnSoftware);
+
     /// <summary>A canvas with no shapes on it is the ground alone.</summary>
     [Fact]
     public void ACanvasWithNoShapesIsTheGround()

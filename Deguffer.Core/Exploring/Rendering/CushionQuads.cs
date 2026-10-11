@@ -35,12 +35,11 @@ public sealed class CushionQuads
         var quads = new CushionQuad[tiles.Count];
         var count = 0;
 
-        // Through the list's own indexer once per shape, which is the one pass made over it (G4). A
-        // colour is asked for only for a shape that shows, because a colour climbs a node's ancestors.
+        // Through the list's own indexer once per shape, which is the one pass made over it (G4).
         for (var i = 0; i < tiles.Count; i++)
         {
             var tile = tiles[i];
-            var quad = CushionQuad.Of(tile, default);
+            var quad = CushionQuad.Of(tile);
 
             if (quad.Reaches(width, height))
             {

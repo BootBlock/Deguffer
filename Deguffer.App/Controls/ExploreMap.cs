@@ -310,7 +310,7 @@ public sealed class ExploreMap : UserControl
         _pictures = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
         _departing = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
         _tileOver = (x, y) => _pictures.Tiles.TileOver(x, y);
-        _highlight = new ExploreHighlight(compositor, _graphics, _camera);
+        _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
         _shift = new ExploreShift(compositor, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(owner);
