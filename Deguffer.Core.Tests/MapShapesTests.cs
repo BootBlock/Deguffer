@@ -154,8 +154,14 @@ public sealed class MapShapesTests
         // The row under it holds what its neighbours hold as well, their blocks of the rest included,
         // which are not its.
         Assert.Contains(drawing.Tiles, tile => tile.IsNode && tile.Depth == 2 && tree.ParentOf(tile.Node) == Named(tree, "other"));
-        Assert.Contains(crowded, shape => shape.Node == ExploreTile.Aggregated);
-        Assert.All(crowded.Where(shape => shape.IsNode), shape => Assert.Equal(crowd, tree.ParentOf(shape.Node)));
+        foreach (var tailed in (int[])[crowd, Named(tree, "throng")])
+        {
+            var its = drawing.Shapes(tailed);
+
+            Assert.Single(its, shape => shape.Node == ExploreTile.Aggregated);
+            Assert.All(its.Where(shape => shape.IsNode), shape => Assert.Equal(tailed, tree.ParentOf(shape.Node)));
+            Assert.All(its, shape => AssertDrawnAt(drawing, shape));
+        }
     }
 
     /// <summary>
@@ -180,8 +186,13 @@ public sealed class MapShapesTests
         Assert.All(held, shape => Assert.Equal(folder, tree.ParentOf(shape.Node)));
 
         // A folder's block of the rest is its own, and not its neighbour's in the same ring.
-        Assert.Contains(crowded, shape => shape.Node == ExploreTile.Aggregated);
-        Assert.All(crowded.Where(shape => shape.IsNode), shape => Assert.Equal(crowd, tree.ParentOf(shape.Node)));
+        foreach (var tailed in (int[])[crowd, Named(tree, "throng")])
+        {
+            var its = drawing.Shapes(tailed);
+
+            Assert.Single(its, shape => shape.Node == ExploreTile.Aggregated);
+            Assert.All(its.Where(shape => shape.IsNode), shape => Assert.Equal(tailed, tree.ParentOf(shape.Node)));
+        }
 
         foreach (var shape in top.Concat(held).Concat(crowded))
         {
@@ -293,6 +304,7 @@ public sealed class MapShapesTests
                 new ExploreChild("other", IsDirectory: true, IsLink: false, Size: 0),
                 new ExploreChild("crowd", IsDirectory: true, IsLink: false, Size: 0),
                 new ExploreChild("lost", IsDirectory: true, IsLink: false, Size: 0),
+                new ExploreChild("throng", IsDirectory: true, IsLink: false, Size: 0),
                 .. Enumerable.Range(0, 3).Select(i =>
                     new ExploreChild($"big{i}", IsDirectory: false, IsLink: false, Size: (3 - i) * 1_000_000L)),
                 .. Enumerable.Range(0, 500).Select(i =>
@@ -324,6 +336,15 @@ public sealed class MapShapesTests
             ]);
 
         builder.AddChildren(folder + 4, [new ExploreChild("dust", IsDirectory: false, IsLink: false, Size: 1)]);
+
+        builder.AddChildren(
+            folder + 5,
+            [
+                .. Enumerable.Range(0, 2).Select(i =>
+                    new ExploreChild($"half{i}", IsDirectory: false, IsLink: false, Size: 500_000)),
+                .. Enumerable.Range(0, 300).Select(i =>
+                    new ExploreChild($"mote{i}", IsDirectory: false, IsLink: false, Size: 1_000)),
+            ]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }
