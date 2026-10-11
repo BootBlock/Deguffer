@@ -67,7 +67,8 @@ internal static class RemovalWalk
         var mailStores = new List<string>();
         var spared = new List<string>();
 
-        var kept = Visit(extendedRoot, GatheredDirectory.NoParent, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
+        var kept = Visit(
+            extendedRoot, GatheredDirectory.NoParent, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
 
         return new RemovalInventory(directories, files, links, kept, spared, mailStores);
     }
@@ -156,7 +157,8 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
-                kept += Visit(entry.FullName, index, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
+                kept += Visit(
+                    entry.FullName, index, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
             }
             else if (keep.Protects(entry.NewestFileTime))
             {

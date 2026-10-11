@@ -59,6 +59,41 @@ public sealed class DirectoryRemoverFolderPassTests : IDisposable
     }
 
     /// <summary>
+    /// The folder pass keeps to the same bound as the file pass, however many folders are ready at
+    /// once. The thread pool is given threads enough for every folder here, so an unbounded pass
+    /// would run them all together rather than wait for the pool to grow.
+    /// </summary>
+    [Fact]
+    public async Task RemovesNoMoreFoldersAtOnceThanItsBound()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var folders = (DirectoryRemover.MostAtOnce * 2) + 8;
+
+        for (var folder = 0; folder < folders; folder++)
+        {
+            _temp.CreateDirectory("cache", $"d{folder}");
+        }
+
+        var watched = new WatchedDirectoryRemovals(WindowsFileSystem.Default, hold: _ => TimeSpan.FromMilliseconds(50));
+
+        ThreadPool.GetMinThreads(out var workers, out var completions);
+        ThreadPool.SetMinThreads(Math.Max(workers, folders * 2), completions);
+
+        try
+        {
+            var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, default, watched);
+
+            Assert.True(outcome.RootRemoved);
+        }
+        finally
+        {
+            ThreadPool.SetMinThreads(workers, completions);
+        }
+
+        Assert.InRange(watched.MostAtOnce, 2, DirectoryRemover.MostAtOnce);
+    }
+
+    /// <summary>
     /// A removal stopped while it is removing folders names exactly the folders still there: every one
     /// it never tried and every one it tried that stayed, and none it took. A folder that is gone but
     /// named would read to §5.6 as somewhere the removal left, and one still there but unnamed as a

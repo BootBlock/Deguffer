@@ -9,9 +9,9 @@ namespace Deguffer.Core.Execution;
 /// <para><b>§5.6 needs it because a refusal is evidence in itself.</b> Windows will not remove a
 /// folder a program is working in, and removal tries a folder only after every folder inside it, so a
 /// removal that reaches into a protected folder and meets one takes every file around it and leaves
-/// that folder standing, with every folder above it. Asked afterwards, the protected folder still holds a folder and reads as a
-/// survivor. One refused file does the same to any question about content, because the folder still
-/// holds the file. What neither shape can hide is that a removal was inside the folder at all, and
+/// that folder standing, with every folder above it. Asked afterwards, the protected folder still
+/// holds a folder and reads as a survivor. One refused file does the same to any question about
+/// content, because the folder still holds the file. What neither shape can hide is that a removal was inside the folder at all, and
 /// what it could not take is where it says so. See <see cref="PlanVerifier"/> for how that is
 /// read.</para>
 ///

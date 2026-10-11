@@ -181,8 +181,9 @@ public sealed class DirectoryRemoverTests : IDisposable
 
     /// <summary>
     /// A folder a program is working in is one Windows will not remove, and removal tries a folder only
-    /// after every folder inside it, so that folder stays and so does every folder above it. The defect in issue #118 was that the
-    /// removal recorded none of it: a tree left standing up to the scratch folder reported nothing.
+    /// after every folder inside it, so that folder stays and so does every folder above it. The defect
+    /// in issue #118 was that the removal recorded none of it: a tree left standing up to the scratch
+    /// folder reported nothing.
     /// Now it names every folder it could not take, and counts the one Windows refused for itself.
     /// </summary>
     [Fact]

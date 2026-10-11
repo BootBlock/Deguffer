@@ -12,6 +12,13 @@ namespace Deguffer.Core.Execution;
 /// </summary>
 public static class DirectoryRemover
 {
+    /// <summary>
+    /// The most deletions a removal runs at once, files and folders alike. Each is a short wait on
+    /// the disk rather than work for a processor, so it runs several to a processor, up to a ceiling
+    /// that keeps one removal from flooding the disk's queue.
+    /// </summary>
+    internal static readonly int MostAtOnce = Math.Min(Environment.ProcessorCount * 4, 32);
+
     /// <param name="fileSystem">
     /// Defaults to the real filesystem. Injectable so a test can assert that every path crossing
     /// the boundary is in extended-length form — see <see cref="IFileSystem"/> for why the outcome
@@ -179,7 +186,7 @@ public static class DirectoryRemover
         var options = new ParallelOptions
         {
             CancellationToken = ct,
-            MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 4, 32),
+            MaxDegreeOfParallelism = MostAtOnce,
         };
 
         var directories = inventory.Directories;
@@ -297,7 +304,7 @@ public static class DirectoryRemover
     /// to try the directory itself. The count of children still outstanding is all the threads share,
     /// so no directory is tried early and none waits for a thread to notice it is ready. Trying a
     /// parent whose child stayed is still right: Windows refuses it as not empty, which is how a folder
-    /// held up by what is inside it has always been recorded.</para>
+    /// held up by what is inside it is recorded.</para>
     /// </summary>
     private static void RemoveDirectories(
         IReadOnlyList<GatheredDirectory> directories,
