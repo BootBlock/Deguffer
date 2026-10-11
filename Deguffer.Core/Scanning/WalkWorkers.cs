@@ -41,6 +41,7 @@ internal sealed class WalkWorkers<TState>
     private readonly WorkerCrew _crew;
     private readonly Func<bool> _readyToLook;
     private readonly ListingBuffer _buffer;
+    private readonly ListDirectory _list;
     private readonly Action<TState, DirectoryContents, Action<WalkEntry, TState>> _onDirectory;
     private readonly Action _onProgress;
     private readonly TimeProvider _clock;
@@ -52,6 +53,7 @@ internal sealed class WalkWorkers<TState>
 
     public WalkWorkers(
         WalkTuning tuning,
+        ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action onProgress,
         TimeProvider clock,
@@ -60,6 +62,7 @@ internal sealed class WalkWorkers<TState>
         _crew = new WorkerCrew(tuning.Threads, NewHelper, () => !Stopping && !_pending.IsEmpty);
         _readyToLook = () => !_pending.IsEmpty || Stopping || Volatile.Read(ref _outstanding) == 0;
         _buffer = new ListingBuffer(tuning.ListingBufferBytes);
+        _list = list;
         _onDirectory = onDirectory;
         _onProgress = onProgress;
         _clock = clock;
@@ -180,7 +183,7 @@ internal sealed class WalkWorkers<TState>
         public Worker(WalkWorkers<TState> walk)
         {
             _walk = walk;
-            _listing = new WalkListing(walk._buffer);
+            _listing = new WalkListing(walk._buffer, walk._list);
             _descend = Descend;
         }
 

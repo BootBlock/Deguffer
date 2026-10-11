@@ -4,14 +4,14 @@ namespace Deguffer.Core.Scanning;
 
 /// <summary>
 /// The threads of one parallel run: the calling thread, which works and is the only one that waits,
-/// and up to a bound of thread-pool helpers, each started when there is work for it and ended when
-/// there is none.
+/// and up to a bound of helpers on <see cref="WorkerThreads"/>, each started when there is work for
+/// it and ended when there is none.
 ///
 /// <para>The walk (<see cref="WalkWorkers{TState}"/>) and the read of the file table
 /// (<see cref="Mft.MftReadPass"/>) differ in what their work is and in when they are over. They agree
 /// in how a helper starts, ends, fails and is waited for, which is what this holds.</para>
 ///
-/// <para><b>A helper that finds no work ends</b> rather than blocking a pool thread. The calling
+/// <para><b>A helper that finds no work ends</b> rather than holding a thread. The calling
 /// thread instead waits for a <see cref="Signal"/>, which anything that changes what it is waiting
 /// on has to give.</para>
 /// </summary>
@@ -24,6 +24,7 @@ internal sealed class WorkerCrew
     private readonly int _helpersAllowed;
     private readonly Func<Action> _newHelper;
     private readonly Func<bool> _hasWork;
+    private readonly Action _help;
 
     private int _helpers;
     private ExceptionDispatchInfo? _failure;
@@ -39,6 +40,7 @@ internal sealed class WorkerCrew
         _helpersAllowed = threads - 1;
         _newHelper = newHelper;
         _hasWork = hasWork;
+        _help = Help;
     }
 
     /// <summary>Whether a worker has failed, after which the run is stopping.</summary>
@@ -74,13 +76,24 @@ internal sealed class WorkerCrew
             return false;
         }
 
-        ThreadPool.UnsafeQueueUserWorkItem(static crew => crew.Help(), this, preferLocal: false);
+        try
+        {
+            WorkerThreads.Shared.Run(_help);
+        }
+        catch
+        {
+            // No thread to run it on. Counted out, or Finish would wait for a helper that never ran.
+            Interlocked.Decrement(ref _helpers);
+            _changed.Set();
+            throw;
+        }
+
         return true;
     }
 
     /// <summary>
     /// Keep the first exception a worker raised, to be thrown on the calling thread once every helper
-    /// has ended. A helper runs on a pool thread, where an exception would end the process.
+    /// has ended. A helper's thread catches nothing, so an exception there would end the process.
     /// </summary>
     public void Fail(Exception ex)
     {
