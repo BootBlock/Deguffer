@@ -61,7 +61,7 @@ internal static class SourceTreeWalk
                     // silence would leave the plan describing a sweep of the whole approved root.
                     // Nothing a refused listing returned part-way is used: a folder is searched whole
                     // or reported, never half of each.
-                    if (contents.WasDenied)
+                    if (contents.Presence is PathPresence.Refused)
                     {
                         unreadable.Add(LongPath.Display(directory));
                         rootListed &= !ReferenceEquals(directory, top);

@@ -45,11 +45,4 @@ internal readonly record struct DirectoryContents(
     /// since its parent was listed counts too: its bytes were never read either.
     /// </summary>
     public bool WasRefused => Presence is not PathPresence.Present;
-
-    /// <summary>
-    /// Whether Windows would not list the directory, as opposed to its being gone. A caller that
-    /// names the folders it could not search needs the difference: "could not be listed" is a sentence
-    /// about permissions, and a build output removed mid-walk was never refused anything.
-    /// </summary>
-    public bool WasDenied => Presence is PathPresence.Refused;
 }
