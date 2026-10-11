@@ -16,15 +16,18 @@ internal static class Drawings
 
     public static readonly TileColour Ground = new(32, 32, 32);
 
-    /// <summary>A tree of <paramref name="files"/> files under the root, numbered 1 upwards.</summary>
-    public static ExploreTree Tree(int files = 2)
+    /// <summary>A tree of <paramref name="files"/> files under <paramref name="root"/>, numbered 1 upwards.</summary>
+    public static ExploreTree Tree(int files = 2, string root = @"C:\") =>
+        Tree([.. Enumerable.Range(0, files).Select(i => $"file{i}")], root);
+
+    /// <summary>A tree of files named <paramref name="names"/> under <paramref name="root"/>, numbered 1 upwards in that order.</summary>
+    public static ExploreTree Tree(string[] names, string root = @"C:\")
     {
-        var builder = new ExploreTreeBuilder(@"C:\");
+        var builder = new ExploreTreeBuilder(root);
 
         builder.AddChildren(
             ExploreTreeBuilder.RootNode,
-            [.. Enumerable.Range(0, files).Select(i =>
-                new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 1000))]);
+            [.. names.Select(name => new ExploreChild(name, IsDirectory: false, IsLink: false, Size: 1000))]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }

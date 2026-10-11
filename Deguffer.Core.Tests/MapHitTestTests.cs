@@ -71,22 +71,39 @@ public sealed class MapHitTestTests
 
     /// <summary>
     /// A redraw of a new tree landing over a drawing of the old one: the landed region answers in the
-    /// new tree, and the old drawing showing round it answers nothing, because its node numbers are
-    /// another tree's and the page reads every answer in the new one.
+    /// new tree, and the old drawing showing round it answers in the new tree too, with the node that
+    /// is the same thing there. The newer tree numbered it otherwise, so a number read as it is would
+    /// name another file.
     /// </summary>
     [Fact]
-    public void ADrawingOfAnOlderTreeAnswersNothing()
+    public void ADrawingOfAnOlderTreeOfTheSamePlaceAnswersInTheNewer()
     {
-        var older = Drawings.Tree(files: 3);
-        var newer = Drawings.Tree(files: 3);
+        var older = Drawings.Tree(["file0", "file1", "file2"]);
+        var newer = Drawings.Tree(["early", "file0", "file1", "file2"]);
         var old = Drawings.Covering(older, Old);
         var (arriving, gated) = LandTopLeft(newer);
 
-        Assert.Equal(New, NodeAt(0.1, 0.1, old, arriving, newer));
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.9, 0.9, old, arriving, newer));
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, old, arriving: null, newer));
+        Assert.Equal("file0", older.NameOf(Old));
+        Assert.Equal("file0", newer.NameOf(New));
+        Assert.Equal(New, NodeAt(0.9, 0.9, old, arriving, newer));
+        Assert.Equal(New, NodeAt(0.5, 0.5, old, arriving: null, newer));
 
         gated.Open();
+    }
+
+    /// <summary>
+    /// What the older drawing shows and the newer tree does not hold answers nothing: a file removed
+    /// since, and the whole of a drawing of another place (§7.1).
+    /// </summary>
+    [Fact]
+    public void AShapeWithNoCounterpartInTheNewerTreeAnswersNothing()
+    {
+        var older = Drawings.Tree(files: 3);
+        var old = Drawings.Covering(older, Old);
+
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, old, arriving: null, ReadingIn(older.Without([Old])))?.Hit);
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, old, arriving: null, ReadingIn(Drawings.Tree(files: 3, root: @"D:\"))));
+        Assert.Equal(Old, NodeAt(0.5, 0.5, old, arriving: null, older.Without([Old + 1])));
     }
 
     /// <summary>
@@ -100,15 +117,15 @@ public sealed class MapHitTestTests
         var zoomedIn = MapViewport.Anchored(2, 0, 0, 0, 0, MapCeiling.Least);
         var drawing = Drawings.Covering(tree, Old, zoomedIn);
 
-        var middle = MapHitTest.Locate(zoomedIn, 0.5, 0.5, drawing, arriving: null, tree);
+        var middle = MapHitTest.Locate(zoomedIn, 0.5, 0.5, drawing, arriving: null, ReadingIn(tree));
 
         Assert.NotNull(middle);
         Assert.Equal(Drawings.Size / 2f, middle.Value.X, 1);
         Assert.Equal(Drawings.Size / 2f, middle.Value.Y, 1);
 
         // Zoomed out to the whole picture, the drawing of its top left quarter covers only that.
-        Assert.NotNull(MapHitTest.Locate(MapViewport.Whole, 0.25, 0.25, drawing, arriving: null, tree));
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.75, 0.75, drawing, arriving: null, tree));
+        Assert.NotNull(MapHitTest.Locate(MapViewport.Whole, 0.25, 0.25, drawing, arriving: null, ReadingIn(tree)));
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.75, 0.75, drawing, arriving: null, ReadingIn(tree)));
     }
 
     /// <summary>
@@ -126,7 +143,7 @@ public sealed class MapHitTestTests
         Assert.Equal(Old, NodeAt(0.05, 0.05, old, arriving: null, tree, tile));
         Assert.Equal(Old, NodeAt(0.95, 0.95, old, arriving: null, tree));
 
-        var spot = MapHitTest.Locate(MapViewport.Whole, 0.95, 0.95, old, arriving: null, tree, Shown(tile))!.Value;
+        var spot = MapHitTest.Locate(MapViewport.Whole, 0.95, 0.95, old, arriving: null, ReadingIn(tree), Shown(tile))!.Value;
         var shape = spot.ShapeOnScreen(MapViewport.Whole)!.Value;
 
         Assert.Same(tile, spot.Tile);
@@ -146,7 +163,7 @@ public sealed class MapHitTestTests
         var tile = CornerTile(old, level: 3);
         var (x, y) = zoomedIn.PictureAt(0.5, 0.5);
 
-        var spot = MapHitTest.Locate(zoomedIn, 0.5, 0.5, old, arriving: null, tree, Shown(tile));
+        var spot = MapHitTest.Locate(zoomedIn, 0.5, 0.5, old, arriving: null, ReadingIn(tree), Shown(tile));
 
         Assert.True(tile.Frame.Contains(x, y));
         Assert.Null(spot!.Value.Tile);
@@ -170,16 +187,21 @@ public sealed class MapHitTestTests
         gated.Open();
     }
 
-    /// <summary>A tile of an older tree answers nothing, as a drawing of one does.</summary>
+    /// <summary>
+    /// A tile of an older tree is read as a drawing of one is: in the newer tree where it is of the same
+    /// place, and not at all where it is of another.
+    /// </summary>
     [Fact]
-    public void ATileOfAnOlderTreeAnswersNothing()
+    public void ATileOfAnOlderTreeIsReadInTheNewer()
     {
-        var older = Drawings.Tree();
-        var newer = Drawings.Tree();
+        var older = Drawings.Tree(["file0", "file1"]);
+        var newer = Drawings.Tree(["early", "file0", "file1"]);
         var drawing = Drawings.Covering(newer, Old, MapViewport.Whole);
         var tile = CornerTile(Drawings.Covering(older, Old, MapViewport.Whole));
+        var elsewhere = CornerTile(Drawings.Covering(Drawings.Tree(root: @"D:\"), Old, MapViewport.Whole));
 
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.95, 0.95, drawing, arriving: null, newer, Shown(tile)));
+        Assert.Equal(newer.ChildrenOf(newer.RootNode).ToArray().Single(node => newer.NameOf(node) == "file1"), NodeAt(0.95, 0.95, drawing, arriving: null, newer, tile));
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.95, 0.95, drawing, arriving: null, ReadingIn(newer), Shown(elsewhere)));
     }
 
     /// <summary>
@@ -206,9 +228,12 @@ public sealed class MapHitTestTests
 
     private static int? NodeAt(
         double x, double y, ExploreSurface old, CanvasRedraw? arriving, ISizedTree tree, MapTile? over = null) =>
-        MapHitTest.Locate(MapViewport.Whole, x, y, old, arriving, tree, Shown(over)) is { } spot
+        MapHitTest.Locate(MapViewport.Whole, x, y, old, arriving, ReadingIn(tree), Shown(over)) is { } spot
             ? spot.Hit?.Node
             : null;
+
+    /// <summary>How the map reads a drawing in <paramref name="tree"/>, the tree the page holds.</summary>
+    private static Func<ISizedTree, MapReading?> ReadingIn(ISizedTree tree) => drawn => MapReading.Of(drawn, tree);
 
     /// <summary>What shows <paramref name="tile"/> at the points of the picture it covers, and no tile anywhere else.</summary>
     private static Func<double, double, MapTile?>? Shown(MapTile? tile) =>

@@ -11,10 +11,20 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// <param name="X">Where the point is across the drawing's canvas, or across the tile where there is one.</param>
 /// <param name="Y">Where it is down it.</param>
 /// <param name="Tile">The tile found, or null where the drawing itself was.</param>
-public readonly record struct MapLocation(ExploreSurface Drawing, MapViewport Viewport, float X, float Y, MapTile? Tile = null)
+/// <param name="Reading">
+/// How what was found is read in the tree the page holds now, or null where it is read as it is.
+/// </param>
+public readonly record struct MapLocation(
+    ExploreSurface Drawing, MapViewport Viewport, float X, float Y, MapTile? Tile = null, MapReading? Reading = null)
 {
-    /// <summary>What is at the point, or null where it is over nothing.</summary>
-    public ExploreHit? Hit => Tile is { } tile ? tile.At(X, Y) : Drawing.At(X, Y);
+    /// <summary>
+    /// What is at the point, read in the tree the page holds now, or null where it is over nothing or
+    /// over a shape with no counterpart in that tree.
+    /// </summary>
+    public ExploreHit? Hit =>
+        (Tile is { } tile ? tile.At(X, Y) : Drawing.At(X, Y)) is { } found
+            ? Reading is { } reading ? reading.Read(found) : found
+            : null;
 
     /// <summary>
     /// Where the shape at the point is on a screen showing <paramref name="shown"/>, in fractions of it,
@@ -65,19 +75,26 @@ public readonly record struct MapLocation(ExploreSurface Drawing, MapViewport Vi
 /// opened. Where one shows, it answers, so a click on a shape the tile drew picks that shape rather
 /// than the folder round it. Only a redraw's landed regions show over a tile.</para>
 ///
-/// <para>A drawing of another tree answers nothing. A node is a number in the tree it was drawn
-/// from, and the page reads every answer in the tree it handed over last, so a number from an older
-/// tree would name whatever that number is in the newer one.</para>
+/// <para>A node is a number in the tree it was drawn from, and the page reads every answer in the
+/// tree it handed over last, so a number from an older tree would name whatever that number is in the
+/// newer one. A drawing of an older tree of the same place, still on screen while the next one is on
+/// its way, answers through <see cref="MapReading"/>: each shape with the node that is the same thing
+/// in the newer tree, and nothing where none is. A drawing of anything else answers nothing.</para>
 /// </summary>
 public static class MapHitTest
 {
     /// <summary>
     /// Find the point <paramref name="x"/>, <paramref name="y"/>, in fractions of a screen showing
-    /// <paramref name="shown"/>, in what shows there. Null where nothing of <paramref name="tree"/> does.
+    /// <paramref name="shown"/>, in what shows there. Null where what shows there cannot be read in the
+    /// tree the page holds now.
     /// </summary>
     /// <param name="drawing">The last drawing that arrived, or null where none has.</param>
     /// <param name="arriving">A redraw on its way, or null.</param>
-    /// <param name="tree">The tree the page handed over last.</param>
+    /// <param name="readingOf">
+    /// How a drawing of a tree is read in the tree the page handed over last (<see cref="MapReading.Of"/>),
+    /// or null where it cannot be. Asked rather than worked out here, because the point is asked at the
+    /// pointer's rate and finding nodes again is worth doing once per drawing (G5).
+    /// </param>
     /// <param name="tileOver">
     /// The finest tile shown over <paramref name="drawing"/> at a point of the picture, given in
     /// fractions of it, or null where none is; or null where no tile is shown at all.
@@ -88,7 +105,7 @@ public static class MapHitTest
         double y,
         ExploreSurface? drawing,
         CanvasRedraw? arriving,
-        ISizedTree? tree,
+        Func<ISizedTree, MapReading?> readingOf,
         Func<double, double, MapTile?>? tileOver = null)
     {
         var found = arriving is { Surface: { } landing }
@@ -97,7 +114,11 @@ public static class MapHitTest
                 ? there
                 : drawing is null ? null : Over(shown, x, y, drawing, tileOver) ?? Place(shown, x, y, drawing);
 
-        return found is { } location && ReferenceEquals(location.Drawing.Tree, tree) ? location : null;
+        ArgumentNullException.ThrowIfNull(readingOf);
+
+        return found is { } location && readingOf(location.Drawing.Tree) is { } reading
+            ? location with { Reading = reading }
+            : null;
     }
 
     /// <summary>
