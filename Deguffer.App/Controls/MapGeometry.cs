@@ -53,7 +53,7 @@ internal sealed class MapGeometry
 
         foreach (var outline in outlines)
         {
-            AddFigure(path, outline);
+            AddFigure(path, outline.Points);
         }
 
         return new CompositionPath(CanvasGeometry.CreatePath(path));
@@ -79,6 +79,21 @@ internal sealed class MapGeometry
         var everything = CanvasGeometry.CreateRectangle(_device(), -far, -far, 2 * far, 2 * far);
 
         return new CompositionPath(everything.CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Exclude));
+    }
+
+    /// <summary>
+    /// A geometry of one closed figure through <paramref name="points"/>, in the canvas's own pixels:
+    /// a shape a change of view carries (<see cref="ExploreMorph"/>). Built the same way whatever the
+    /// points, so two of the same number of points are one figure the compositor can blend.
+    /// </summary>
+    public CompositionPath Figure(IReadOnlyList<ExplorePoint> points)
+    {
+        // Not disposed: making the geometry takes the builder over.
+        var path = new CanvasPathBuilder(_device());
+
+        AddFigure(path, points);
+
+        return new CompositionPath(CanvasGeometry.CreatePath(path));
     }
 
     /// <summary>
@@ -146,7 +161,7 @@ internal sealed class MapGeometry
             // A node's boundaries come back one after another: see ExploreOutline.
             for (; i < outlines.Count && outlines[i].Node == node; i++)
             {
-                figures += AddFigure(path, outlines[i]) ? 1 : 0;
+                figures += AddFigure(path, outlines[i].Points) ? 1 : 0;
             }
 
             if (figures > 0)
@@ -161,14 +176,12 @@ internal sealed class MapGeometry
     }
 
     /// <summary>
-    /// Add <paramref name="outline"/> to <paramref name="path"/> as one closed figure, and say whether
+    /// Add <paramref name="points"/> to <paramref name="path"/> as one closed figure, and say whether
     /// there was anything to add. The one way a boundary becomes a figure, so the line round a shape
     /// and the area it fills are the same shape.
     /// </summary>
-    private static bool AddFigure(CanvasPathBuilder path, ExploreOutline outline)
+    private static bool AddFigure(CanvasPathBuilder path, IReadOnlyList<ExplorePoint> points)
     {
-        var points = outline.Points;
-
         if (points.Count == 0)
         {
             return false;
