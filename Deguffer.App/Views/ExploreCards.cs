@@ -57,7 +57,7 @@ internal sealed class ExploreCards
 
         // A kind's bar comes in from nothing as its row arrives, rather than standing at its figure
         // under a row still fading in. A row only scrolled into sight has not arrived.
-        ListAnimation.Play(typeRows, SystemMotion.Current).Arrived += container => Grow(container);
+        ListAnimation.Play(typeRows, SystemMotion.Current).Arrived += BarMotion.GrowIn;
 
         foreach (var rows in new[] { growthRows, typeRows })
         {
@@ -76,7 +76,7 @@ internal sealed class ExploreCards
                 Later(() =>
                 {
                     _usedSpaceOwed = false;
-                    Grow(usedSpace);
+                    BarMotion.GrowIn(usedSpace);
                 });
             }
         };
@@ -147,7 +147,7 @@ internal sealed class ExploreCards
         {
             if (_page.ShowsTypes)
             {
-                Later(() => Grow(_typeRows));
+                Later(() => BarMotion.GrowIn(_typeRows));
             }
 
             Relight();
@@ -156,7 +156,7 @@ internal sealed class ExploreCards
         {
             if (_page.ShowsGrowth)
             {
-                Later(() => Grow(_usedSpace));
+                Later(() => BarMotion.GrowIn(_usedSpace));
             }
 
             Relight();
@@ -191,20 +191,6 @@ internal sealed class ExploreCards
         if (container.ContentTemplateRoot is FrameworkElement root && root.FindName("Mark") is UIElement mark)
         {
             mark.Opacity = marked ? 1 : 0;
-        }
-    }
-
-    /// <summary>Grow every bar under <paramref name="holder"/> in from nothing.</summary>
-    private static void Grow(DependencyObject holder)
-    {
-        foreach (var bar in VisualTree.Descendants<FillBar>(holder))
-        {
-            bar.Grow();
-        }
-
-        foreach (var column in VisualTree.Descendants<ColumnBar>(holder))
-        {
-            column.Grow();
         }
     }
 
