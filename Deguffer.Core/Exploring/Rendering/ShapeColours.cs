@@ -71,6 +71,19 @@ public abstract class ShapeColours
             _ => ByBranch(scheme),
         };
 
+    /// <summary>
+    /// A step of a replay of what grew, painted as the map coloured by growth paints the tree now:
+    /// each shape by the change it ends with, the same at every step, so a shape keeps its colour as it
+    /// moves. A folder only the earlier scan had shrank by all of it, and a block of what that scan
+    /// did not record is not compared. See <see cref="GrowthReplay"/>.
+    /// </summary>
+    public static ShapeColours ForReplay(GrowthReplayFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+
+        return new ReplayColours(frame);
+    }
+
     internal abstract TileColour For(ExploreSurface surface, int node, int depth);
 
     /// <summary>
@@ -106,6 +119,22 @@ public abstract class ShapeColours
     {
         internal override TileColour For(ExploreSurface surface, int node, int depth) =>
             GrowthPalette.For(growth?.BytesAt(node));
+    }
+
+    private sealed class ReplayColours(GrowthReplayFrame frame) : ShapeColours
+    {
+        internal override TileColour For(ExploreSurface surface, int node, int depth) =>
+            GrowthPalette.For(frame.Replay.ChangeOf(node));
+
+        internal override void EnsureDescribes(ISizedTree drawn)
+        {
+            if (!ReferenceEquals(drawn, frame))
+            {
+                throw new ArgumentException(
+                    "These colours are of one step of a replay, so they describe nothing else.",
+                    nameof(drawn));
+            }
+        }
     }
 
     /// <summary>A shape painted by the kind of file it holds most of. See <see cref="DominantTypes"/>.</summary>

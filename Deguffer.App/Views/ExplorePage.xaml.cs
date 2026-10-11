@@ -7,6 +7,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -118,7 +119,8 @@ public sealed partial class ExplorePage : Page
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
             App.Running,
-            App.ScanHistory);
+            App.ScanHistory,
+            SystemMotion.Current);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
@@ -148,6 +150,9 @@ public sealed partial class ExplorePage : Page
         ListAnimation.Play(RowsList, SystemMotion.Current);
 
         _cards = new ExploreCards(ViewModel, Map, GrowthList, TypesList, UsedSpaceStrip);
+
+        // Kept alive by the page's events and the replay's, which it follows for the page's life.
+        _ = new ExploreReplayClock(ViewModel.Replay, this);
 
         _rowsMargin = RowsList.Margin;
 
@@ -400,6 +405,23 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void ShowCurrentNode()
     {
+        // A step of the replay of what grew, in place of the tree now: the same folder, as the map
+        // coloured by growth paints it, with the volume beside it as it was at that step (#285).
+        if (ViewModel.Replay.Frame is { } frame)
+        {
+            Map.Show(
+                frame,
+                ViewModel.CurrentNode,
+                ViewModel.SelectedView,
+                _ => ShapeColours.ForReplay(frame),
+                frame.Label,
+                _appearance.Look.Spacing,
+                frame.Replay.VolumeAt(frame.Step, ViewModel.VolumeBeside));
+
+            _cards.Relight();
+            return;
+        }
+
         Map.Show(
             ViewModel.Tree,
             ViewModel.CurrentNode,

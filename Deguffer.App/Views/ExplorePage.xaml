@@ -870,7 +870,7 @@
                     BorderThickness="1"
                     CornerRadius="6"
                     Visibility="{x:Bind ViewModel.ShowsGrowth, Mode=OneWay}">
-                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,*">
+                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
                     <TextBlock Grid.Row="0"
                                Text="What grew"
                                Style="{StaticResource SubtitleTextBlockStyle}"
@@ -886,11 +886,52 @@
                                TextWrapping="Wrap"
                                Visibility="{x:Bind ViewModel.Growth.HasNote, Mode=OneWay}" />
 
+                    <!-- The map replaying the change, from the earlier scan to now (#285). At the
+                         far end the map is the drive now, and anywhere else a picture only: nothing
+                         on it can be picked, and the selection does nothing until it is back (§7.1).
+                         With animation effects off the scrubber has only its two ends. -->
+                    <StackPanel Grid.Row="3"
+                                Spacing="2"
+                                Visibility="{x:Bind ViewModel.Replay.IsOffered, Mode=OneWay}">
+                        <Grid ColumnSpacing="8" ColumnDefinitions="Auto,*">
+                            <Button Command="{x:Bind ViewModel.Replay.PlayCommand}"
+                                    ToolTipService.ToolTip="{x:Bind ViewModel.Replay.PlayText, Mode=OneWay}"
+                                    AutomationProperties.Name="{x:Bind ViewModel.Replay.PlayText, Mode=OneWay}">
+                                <FontIcon FontSize="14" Glyph="{x:Bind ViewModel.Replay.PlayGlyph, Mode=OneWay}" />
+                            </Button>
+                            <Slider Grid.Column="1"
+                                    x:Name="ReplaySlider"
+                                    Minimum="0"
+                                    Maximum="{x:Bind ViewModel.Replay.Steps}"
+                                    StepFrequency="{x:Bind ViewModel.Replay.StepFrequency, Mode=OneWay}"
+                                    SnapsTo="StepValues"
+                                    IsThumbToolTipEnabled="False"
+                                    IsEnabled="{x:Bind ViewModel.Replay.CanReplay, Mode=OneWay}"
+                                    Value="{x:Bind ViewModel.Replay.Step, Mode=TwoWay}"
+                                    AutomationProperties.Name="Replay from the earlier scan to now"
+                                    AutomationProperties.HelpText="At the left end the map shows the earlier scan, and at the right end the drive now." />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="Then"
+                                       Style="{StaticResource SecondaryText}"
+                                       FontSize="12"
+                                       Margin="48,0,0,0" />
+                            <TextBlock Grid.Column="1"
+                                       Text="Now"
+                                       Style="{StaticResource SecondaryText}"
+                                       FontSize="12" />
+                        </Grid>
+                        <TextBlock Text="{x:Bind ViewModel.Replay.Note, Mode=OneWay}"
+                                   Style="{StaticResource SecondaryText}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
                     <!-- Used space at each kept scan: one series, so no legend, and the sentence
                          under it names the first and last figures for a reader who cannot see the
                          bars. Bars rise from a zero baseline against the volume's capacity, so a
                          small change looks small. -->
-                    <StackPanel Grid.Row="3" Spacing="4">
+                    <StackPanel Grid.Row="4" Spacing="4">
                         <Grid Height="33" VerticalAlignment="Bottom">
                             <ItemsControl x:Name="UsedSpaceStrip"
                                           ItemsSource="{x:Bind ViewModel.Growth.UsedSpace}"
@@ -928,7 +969,7 @@
 
                     <!-- Largest growth first and largest shrinkage last. A click opens the folder in
                          the map and the list; a removed folder has nothing to open. -->
-                    <ListView Grid.Row="4"
+                    <ListView Grid.Row="5"
                               x:Name="GrowthList"
                               Margin="-12,0,-12,0"
                               SelectionMode="None"
