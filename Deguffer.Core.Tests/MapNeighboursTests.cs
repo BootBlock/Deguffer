@@ -73,6 +73,24 @@ public sealed class MapNeighboursTests
     }
 
     /// <summary>
+    /// Between two shapes equally in line, the one whose point is nearer in pixels wins: on a canvas ten
+    /// times taller than it is wide, a shape a little below is further than one far to the side.
+    /// </summary>
+    [Fact]
+    public void BetweenEqualsTheNearerPointInPixelsWins()
+    {
+        IReadOnlyList<MapShape> shapes =
+        [
+            Box(0, 0, 0.5, 0.5),
+            Box(0.5, 0.2, 0.5, 0.1),
+            Box(0.5, 0.4, 0.1, 0.1),
+        ];
+
+        Assert.Equal(1, MapNeighbours.Toward(shapes, 0, MapDirection.Right, 100, 1000));
+        Assert.Equal(2, MapNeighbours.Toward(shapes, 0, MapDirection.Right, 1000, 100));
+    }
+
+    /// <summary>
     /// On a real drawing in every view, every move lands on a shape whose point is past the one it left,
     /// in the direction asked, and every shape at the top of the picture is reachable from the first.
     /// </summary>
@@ -121,6 +139,25 @@ public sealed class MapNeighboursTests
         }
 
         Assert.Equal(shapes.Count, reached.Count);
+    }
+
+    /// <summary>
+    /// Where the shape the keyboard was on has gone, it goes on from the shape nearest where that one
+    /// stood, in pixels; and from nowhere where there are none.
+    /// </summary>
+    [Fact]
+    public void WhereItsShapeHasGoneTheKeyboardGoesOnFromTheNearest()
+    {
+        IReadOnlyList<MapShape> shapes =
+        [
+            Box(0, 0, 0.2, 0.2),
+            Box(0.4, 0, 0.2, 0.2),
+            Box(0, 0.5, 0.2, 0.2),
+        ];
+
+        Assert.Equal(1, MapNeighbours.Nearest(shapes, 0.45, 0.45, 100, 100));
+        Assert.Equal(2, MapNeighbours.Nearest(shapes, 0.45, 0.45, 100, 1000));
+        Assert.Null(MapNeighbours.Nearest([], 0.5, 0.5, 100, 100));
     }
 
     private static MapShape Box(double x, double y, double width, double height) =>

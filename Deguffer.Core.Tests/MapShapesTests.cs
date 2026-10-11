@@ -144,6 +144,9 @@ public sealed class MapShapesTests
         Assert.NotEmpty(held);
         Assert.All(held, shape => Assert.Equal(folder, tree.ParentOf(shape.Node)));
         Assert.All(top.Concat(held), shape => AssertDrawnAt(drawing, shape));
+
+        // The row under it holds what its neighbour holds as well, which is not its.
+        Assert.Contains(drawing.Tiles, tile => tile.IsNode && tile.Depth == 2 && tree.ParentOf(tile.Node) == Named(tree, "other"));
     }
 
     /// <summary>
@@ -170,6 +173,61 @@ public sealed class MapShapesTests
             Assert.InRange(shape.X, shape.Frame.X, shape.Frame.X + shape.Frame.Width);
             Assert.InRange(shape.Y, shape.Frame.Y, shape.Frame.Y + shape.Frame.Height);
         }
+    }
+
+    /// <summary>
+    /// Every shape the keyboard can be on has an outline to mark it out with, blocks too: a treemap's is
+    /// its box, and a sunburst's is the wedge its point is in.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Icicle)]
+    [InlineData(ExploreView.Sunburst)]
+    public void EveryShapeHasAnOutlineOfItsOwn(ExploreView view)
+    {
+        var tree = Tree();
+        var drawing = Drawn(tree, view);
+        var shapes = drawing.Shapes(null);
+
+        Assert.Contains(shapes, shape => !shape.IsNode);
+
+        foreach (var shape in shapes)
+        {
+            var outlines = drawing.OutlineOf(shape);
+            var points = outlines.SelectMany(outline => outline.Points).ToList();
+
+            Assert.NotEmpty(outlines);
+            Assert.All(outlines, outline => Assert.Equal(shape.Node, outline.Node));
+            Assert.Equal(shape.Frame.X * Width, points.Min(point => point.X), 0.01);
+            Assert.Equal((shape.Frame.X + shape.Frame.Width) * Width, points.Max(point => point.X), 0.01);
+            Assert.Equal(shape.Frame.Y * Height, points.Min(point => point.Y), 0.01);
+            Assert.Equal((shape.Frame.Y + shape.Frame.Height) * Height, points.Max(point => point.Y), 0.01);
+        }
+    }
+
+    /// <summary>
+    /// A wedge wider than half the disc stands at the middle of its arc, which is in it, and not at the
+    /// middle of its box, which is over the disc in the middle of the picture.
+    /// </summary>
+    [Fact]
+    public void AWedgeWiderThanHalfTheDiscStandsOnItsArc()
+    {
+        var builder = new ExploreTreeBuilder(@"C:");
+
+        builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [
+                new ExploreChild("most", IsDirectory: false, IsLink: false, Size: 3_000),
+                new ExploreChild("rest", IsDirectory: false, IsLink: false, Size: 1_000),
+            ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        var drawing = Drawn(tree, ExploreView.Sunburst);
+        var most = drawing.Shapes(null).Single(shape => shape.Node == Named(tree, "most"));
+        var (boxX, boxY) = most.Frame.Centre;
+
+        Assert.NotEqual(most.Node, drawing.At((float)(boxX * Width), (float)(boxY * Height))?.Node);
+        Assert.Equal(most.Node, drawing.At((float)(most.X * Width), (float)(most.Y * Height))?.Node);
     }
 
     /// <summary>
@@ -203,9 +261,9 @@ public sealed class MapShapesTests
         Enumerable.Range(0, tree.NodeCount).First(node => tree.NameOf(node) == name);
 
     /// <summary>
-    /// A folder of four files beside three large files, a folder too small to frame, and a long tail of
-    /// tiny ones: nesting, siblings of different sizes, a folder drawn as one block, and a block of the
-    /// rest at the top.
+    /// Two folders of files beside three large files, a folder too small to frame, and a long tail of
+    /// tiny ones: nesting, a row of what two folders hold side by side, siblings of different sizes, a
+    /// folder drawn as one block, and a block of the rest at the top.
     /// </summary>
     private static ExploreTree Tree()
     {
@@ -215,6 +273,7 @@ public sealed class MapShapesTests
             [
                 new ExploreChild("folder", IsDirectory: true, IsLink: false, Size: 0),
                 new ExploreChild("nook", IsDirectory: true, IsLink: false, Size: 0),
+                new ExploreChild("other", IsDirectory: true, IsLink: false, Size: 0),
                 .. Enumerable.Range(0, 3).Select(i =>
                     new ExploreChild($"big{i}", IsDirectory: false, IsLink: false, Size: (3 - i) * 1_000_000L)),
                 .. Enumerable.Range(0, 500).Select(i =>
@@ -230,6 +289,11 @@ public sealed class MapShapesTests
             folder + 1,
             [.. Enumerable.Range(0, 2).Select(i =>
                 new ExploreChild($"crumb{i}", IsDirectory: false, IsLink: false, Size: 2_500))]);
+
+        builder.AddChildren(
+            folder + 2,
+            [.. Enumerable.Range(0, 2).Select(i =>
+                new ExploreChild($"part{i}", IsDirectory: false, IsLink: false, Size: 1_500_000))]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }

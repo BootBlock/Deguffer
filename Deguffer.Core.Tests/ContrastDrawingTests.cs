@@ -115,6 +115,43 @@ public sealed class ContrastDrawingTests
             && Neighbourhood(pixels, (int)point.X, (int)point.Y).Contains(Text));
     }
 
+    /// <summary>
+    /// A wedge with nothing outside it ends in an edge of its own: along the line from the middle of the
+    /// disc through the wedge, the last pixel of the wedge is the text colour. The ground beyond it is
+    /// the window colour, so that edge is all that shows where it ends.
+    /// </summary>
+    [Fact]
+    public void AWedgeWithNothingOutsideItEndsInItsOwnEdge()
+    {
+        var drawing = Drawn(ExploreView.Sunburst);
+        var pixels = Paint(drawing);
+        var outermost = drawing.Shapes(null).Where(shape => shape.IsNode && drawing.Shapes(shape.Node).Count == 0).ToList();
+
+        Assert.NotEmpty(outermost);
+
+        foreach (var shape in outermost)
+        {
+            var (centreX, centreY) = (Width / 2.0, Height / 2.0);
+            var (towardX, towardY) = ((shape.X * Width) - centreX, (shape.Y * Height) - centreY);
+            var length = Math.Sqrt((towardX * towardX) + (towardY * towardY));
+            (int X, int Y) last = default;
+
+            for (var step = length; step < Width; step += 0.25)
+            {
+                var (x, y) = ((int)(centreX + (towardX / length * step)), (int)(centreY + (towardY / length * step)));
+
+                if (x < 0 || y < 0 || x >= Width || y >= Height || drawing.At(x + 0.5f, y + 0.5f)?.Node != shape.Node)
+                {
+                    break;
+                }
+
+                last = (x, y);
+            }
+
+            Assert.Equal(Text, ColourAt(pixels, last.X, last.Y));
+        }
+    }
+
     /// <summary>Every name is written in the theme's text colour, which every shape shares.</summary>
     [Theory]
     [InlineData(ExploreView.Treemap)]

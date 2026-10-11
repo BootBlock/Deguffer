@@ -34,6 +34,9 @@ public static class MapNeighbours
     /// </summary>
     private const double Across = 2;
 
+    /// <summary>A hundredth of a pixel.</summary>
+    private const double Hair = 0.01;
+
     /// <summary>
     /// The index of the shape next to <paramref name="shapes"/>[<paramref name="from"/>] in
     /// <paramref name="direction"/>, on a canvas <paramref name="width"/> by <paramref name="height"/>
@@ -72,6 +75,35 @@ public static class MapNeighbours
         return nearest;
     }
 
+    /// <summary>
+    /// The index of the shape whose point is nearest (<paramref name="x"/>, <paramref name="y"/>), in
+    /// fractions of a canvas <paramref name="width"/> by <paramref name="height"/> pixels, or null where
+    /// there are none: where the keyboard goes on from when the shape it was on is no longer drawn, as
+    /// a block of the rest is not once a zoom has drawn what it stood for one by one.
+    /// </summary>
+    public static int? Nearest(IReadOnlyList<MapShape> shapes, double x, double y, double width, double height)
+    {
+        ArgumentNullException.ThrowIfNull(shapes);
+
+        int? nearest = null;
+        var best = double.MaxValue;
+
+        for (var i = 0; i < shapes.Count; i++)
+        {
+            var across = (shapes[i].X - x) * width;
+            var down = (shapes[i].Y - y) * height;
+            var distance = (across * across) + (down * down);
+
+            if (distance < best)
+            {
+                nearest = i;
+                best = distance;
+            }
+        }
+
+        return nearest;
+    }
+
     /// <summary>How far a point <paramref name="x"/>, <paramref name="y"/> pixels away is along the way and across it.</summary>
     private static (double Along, double Aside) Apart(MapDirection direction, double x, double y) => direction switch
     {
@@ -92,9 +124,6 @@ public static class MapNeighbours
         MapDirection.Up => (from.Y - to.Y) * height,
         _ => (to.Y + to.Height - (from.Y + from.Height)) * height,
     } > Hair;
-
-    /// <summary>A hundredth of a pixel.</summary>
-    private const double Hair = 0.01;
 
     /// <summary>The gap between the near side of <paramref name="to"/> and the far side of <paramref name="from"/> along the way, or none where they overlap.</summary>
     private static double Gap(MapDirection direction, MapFrame from, MapFrame to, double width, double height) => Math.Max(0, direction switch

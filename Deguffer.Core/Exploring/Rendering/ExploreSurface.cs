@@ -475,6 +475,13 @@ public abstract class ExploreSurface
     public abstract IReadOnlyList<MapShape> Shapes(int? folder);
 
     /// <summary>
+    /// The outline of <paramref name="shape"/>, one of <see cref="Shapes"/>, in canvas pixels: what marks
+    /// out the shape the keyboard is on. A block too, which <see cref="Outlines"/> never gives, because the
+    /// keyboard reaches a block to hear what it is even though nothing acts on it (§7.1).
+    /// </summary>
+    public abstract IReadOnlyList<ExploreOutline> OutlineOf(MapShape shape);
+
+    /// <summary>
     /// The node whose shape shows <paramref name="node"/> on this drawing: its own, or where it is not
     /// drawn one by one, the deepest folder above it that is. Null where it is not under this drawing's
     /// root. What a card beside the map lights for a folder, so it lights where the screen shows it.

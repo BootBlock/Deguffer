@@ -131,6 +131,18 @@ public sealed class TiledSurface : ExploreSurface
             ? TreemapLayout.Within(Tree, Root, Width, Height, Limits, _beside, viewport, folder is null && HasVolumeBeside ? null : folder ?? Root)
             : Held(folder ?? Root);
 
+    public override IReadOnlyList<ExploreOutline> OutlineOf(MapShape shape) =>
+    [
+        OutlineOf(new ExploreTile(
+            shape.Node,
+            Depth: 0,
+            shape.Bytes,
+            (float)(shape.Frame.X * Width),
+            (float)(shape.Frame.Y * Height),
+            (float)(shape.Frame.Width * Width),
+            (float)(shape.Frame.Height * Height))),
+    ];
+
     /// <summary>
     /// The shapes in the row under <paramref name="folder"/>'s that it holds: an icicle draws what a
     /// folder holds below it rather than in it. Its block of the rest is the one in that row under the

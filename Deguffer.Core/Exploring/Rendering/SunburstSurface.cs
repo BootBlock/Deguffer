@@ -94,6 +94,19 @@ public sealed class SunburstSurface : ExploreSurface
         return shapes;
     }
 
+    /// <summary>The wedge or ring the shape stands at the middle of, traced as any outline is.</summary>
+    public override IReadOnlyList<ExploreOutline> OutlineOf(MapShape shape)
+    {
+        var outlines = new List<ExploreOutline>();
+
+        if (_hits.At((float)(shape.X * Width), (float)(shape.Y * Height)) is { } index)
+        {
+            Trace(_hits.Sunburst, _hits.Sunburst.Sectors[index], outlines);
+        }
+
+        return outlines;
+    }
+
     /// <summary>The box round <paramref name="sector"/>, in fractions of the canvas, measured round its arcs a degree at a time.</summary>
     private MapFrame BoxOf(Sunburst sunburst, ExploreSector sector)
     {
