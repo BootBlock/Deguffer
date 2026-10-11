@@ -6,7 +6,7 @@ namespace Deguffer.Core.Scanning;
 /// <param name="Denied">
 /// Whether a refusal was the account not being allowed to read the directory, which no retry changes.
 /// </param>
-internal readonly record struct ListingEnd(PathPresence Presence, bool Denied);
+public readonly record struct ListingEnd(PathPresence Presence, bool Denied);
 
 /// <summary>
 /// List <paramref name="directory"/> into <paramref name="into"/> with <paramref name="options"/>,
@@ -33,11 +33,6 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
     private readonly List<WalkEntry> _entries = [];
     private readonly List<WalkEntry> _links = [];
     private readonly List<WalkEntry> _reparseFiles = [];
-
-    public WalkListing(ListingBuffer buffer)
-        : this(buffer, FromDisk)
-    {
-    }
 
     /// <param name="directory">In the extended form (§6.3).</param>
     public DirectoryContents Read(string directory)
@@ -69,7 +64,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
         // A directory gone since its parent was listed counts as refused too: its bytes were never
         // read, so the totals above it are lower bounds either way.
-        return new DirectoryContents(_entries, _links, _reparseFiles, WasRefused: end.Presence is not PathPresence.Present);
+        return new DirectoryContents(_entries, _links, _reparseFiles, end.Presence);
     }
 
     private void SetReparsePointsApart()
@@ -92,7 +87,11 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         }
     }
 
-    private static ListingEnd FromDisk(string directory, EnumerationOptions options, List<WalkEntry> into)
+    /// <summary>
+    /// The directory as the volume holds it: what <see cref="WindowsFileSystem"/> lists, and so what
+    /// every walk lists outside a test.
+    /// </summary>
+    public static ListingEnd FromDisk(string directory, EnumerationOptions options, List<WalkEntry> into)
     {
         using var listing = new DirectoryListing<WalkEntry>(
             directory,

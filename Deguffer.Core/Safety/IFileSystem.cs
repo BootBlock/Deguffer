@@ -1,28 +1,6 @@
-namespace Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
-/// <param name="FullName">The entry's path, in whatever form the enumeration returned it.</param>
-/// <param name="Length">Size in bytes; zero for a directory, and for a reparse point.</param>
-/// <param name="NewestFileTime">
-/// The newer of the entry's creation and last-write times, as a FILETIME, for
-/// <see cref="MinimumAge"/> to judge. Taken from the enumeration that produced the entry, so it
-/// costs no further I/O — and it has to travel with the entry, because a removal that re-read the
-/// timestamp would be asking about a file the walk has already classified.
-///
-/// <para>Zero by default, which is what NTFS writes for a timestamp it never set and what no guard
-/// protects. A filesystem implementation that does not answer this leaves every entry deletable,
-/// which is the behaviour with the guard off.</para>
-/// </param>
-/// <remarks>
-/// A struct because these trees run to hundreds of thousands of entries and G4's per-entry
-/// overhead dominates: enumeration already allocates a <see cref="FileSystemInfo"/> apiece, and a
-/// class here would double that for no benefit.
-/// </remarks>
-public readonly record struct FileSystemEntry(
-    string FullName,
-    bool IsDirectory,
-    bool IsReparsePoint,
-    long Length,
-    long NewestFileTime = 0);
+namespace Deguffer.Core.Safety;
 
 /// <summary>
 /// The filesystem operations a deletion performs, behind an interface so a test can observe the
@@ -58,16 +36,22 @@ public interface IFileSystem
     /// Whether <paramref name="path"/> is a junction or symbolic link.
     ///
     /// Asked of the removal root, which is the one entry no enumeration ever classifies: every
-    /// other entry arrives through <see cref="EnumerateEntries"/> carrying
-    /// <see cref="FileSystemEntry.IsReparsePoint"/> already.
+    /// other entry arrives through <see cref="ListEntries"/> carrying
+    /// <see cref="WalkEntry.IsReparsePoint"/> already.
     /// </summary>
     bool IsReparsePoint(string path);
 
     /// <summary>
-    /// The immediate children of <paramref name="directory"/>, materialised so that an enumeration
-    /// failure surfaces here rather than part-way through a deletion.
+    /// List the immediate children of <paramref name="directory"/> into <paramref name="into"/>, and
+    /// say how the listing ended rather than throwing: a refused or vanished folder is ordinary
+    /// (§5.3), and a removal of a large tree meets many. Entries listed before a failure stay in
+    /// <paramref name="into"/>, and whether to act on them is the caller's decision.
+    ///
+    /// <para>The shape of <see cref="ListDirectory"/>, so a removal walks through this seam on the
+    /// walk every scan takes.</para>
     /// </summary>
-    IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory);
+    /// <param name="directory">In the extended form (§6.3), so every entry carries the prefix too.</param>
+    ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into);
 
     /// <summary>
     /// The length of the file at <paramref name="path"/>, or null when no file is there.
@@ -80,7 +64,7 @@ public interface IFileSystem
 
     /// <summary>
     /// The newer of the entry's creation and last-write times as a FILETIME, or null when nothing is
-    /// there — the same question <see cref="FileSystemEntry.NewestFileTime"/> answers for an
+    /// there — the same question <see cref="WalkEntry.NewestFileTime"/> answers for an
     /// enumerated entry, asked of a path nothing enumerated.
     ///
     /// <para>Asked by <see cref="Execution.FileRemover"/>, which is handed a single named path. It
@@ -158,16 +142,8 @@ public sealed class WindowsFileSystem : IFileSystem
 
     public bool IsReparsePoint(string path) => LongPath.IsReparsePoint(path);
 
-    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) =>
-        new DirectoryInfo(directory)
-            .EnumerateFileSystemInfos()
-            .Select(entry => new FileSystemEntry(
-                entry.FullName,
-                entry is DirectoryInfo,
-                entry.Attributes.HasFlag(FileAttributes.ReparsePoint),
-                entry is FileInfo file ? file.Length : 0,
-                MinimumAge.NewestFileTimeOf(entry)))
-            .ToList();
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
+        WalkListing.FromDisk(directory, options, into);
 
     public long? TryGetFileLength(string path)
     {

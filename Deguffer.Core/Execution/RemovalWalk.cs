@@ -1,12 +1,16 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
 /// <summary>What a removal of one tree would act on, gathered before anything is deleted.</summary>
 /// <param name="Directories">
-/// Every directory the walk reached, the root first, each with the directory it was found in.
+/// Every directory the walk reached, the root first, each after the directory it was found in.
 /// </param>
-/// <param name="Files">Every file the guard and the bounds leave to the removal, with its length.</param>
+/// <param name="Files">
+/// Every file the guard and the bounds leave to the removal, as the listing read it: its length, and
+/// the attributes that say whether its read-only bit has to be cleared before it can go.
+/// </param>
 /// <param name="Links">Junctions and symbolic links, which are removed as links and never followed.</param>
 /// <param name="Kept">Files and links the guard on recently changed files held back.</param>
 /// <param name="Spared">
@@ -19,8 +23,8 @@ namespace Deguffer.Core.Execution;
 /// </param>
 internal sealed record RemovalInventory(
     IReadOnlyList<GatheredDirectory> Directories,
-    IReadOnlyList<(string Path, long Length)> Files,
-    IReadOnlyList<FileSystemEntry> Links,
+    IReadOnlyList<WalkEntry> Files,
+    IReadOnlyList<WalkEntry> Links,
     int Kept,
     IReadOnlyList<string> Spared,
     IReadOnlyList<string> MailStores);
@@ -50,6 +54,13 @@ internal readonly record struct GatheredDirectory(string Path, int Parent)
 /// and gathering is also where a file the removal must not touch stops being a candidate at all. An
 /// entry filtered out here is never handed to a delete, so there is no second place holding the same
 /// rule.</para>
+///
+/// <para><b>On the walk every scan takes.</b> A tree of a million files and a hundred thousand
+/// folders is listed by several workers at once, with no recursion for a deep tree to exhaust the
+/// stack with, and through <see cref="IFileSystem.ListEntries"/>, so its tests still see every
+/// listing. Each folder's findings stay with the folder until the walk is over, and are put in order
+/// only then, so the inventory is the same however many workers there were and however their work
+/// interleaved.</para>
 /// </summary>
 internal static class RemovalWalk
 {
@@ -59,66 +70,110 @@ internal static class RemovalWalk
         MinimumAge keep,
         RemovalBounds bounds,
         IFileSystem fs,
-        CancellationToken ct)
-    {
-        var directories = new List<GatheredDirectory>();
-        var files = new List<(string, long)>();
-        var links = new List<FileSystemEntry>();
-        var mailStores = new List<string>();
-        var spared = new List<string>();
+        CancellationToken ct) =>
+        Gather(extendedRoot, keep, bounds, fs, WalkTuning.Default, ct);
 
-        var kept = Visit(
-            extendedRoot, GatheredDirectory.NoParent, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
-
-        return new RemovalInventory(directories, files, links, kept, spared, mailStores);
-    }
-
-    private static int Visit(
-        string extendedDirectory,
-        int parent,
+    /// <summary>The same walk with <paramref name="tuning"/>'s workers, which is how a test sets them.</summary>
+    internal static RemovalInventory Gather(
+        string extendedRoot,
         MinimumAge keep,
         RemovalBounds bounds,
-        List<GatheredDirectory> directories,
-        List<(string, long)> files,
-        List<FileSystemEntry> links,
-        List<string> spared,
-        List<string> mailStores,
         IFileSystem fs,
+        WalkTuning tuning,
         CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested();
+        var root = new Folder(extendedRoot);
 
-        var index = directories.Count;
-        directories.Add(new GatheredDirectory(extendedDirectory, parent));
+        // Most removals hold nothing back, and only a bound needs an entry's full path before the
+        // removal acts on it. Building one per file to look up in an empty set would be most of what
+        // gathering a large tree allocates.
+        var bounded = bounds.SparedPaths.Count > 0 || bounds.OwnedElsewherePaths.Count > 0;
 
-        IReadOnlyList<FileSystemEntry> entries;
-        try
+        BoundedFileWalk.Visit(
+            extendedRoot,
+            root,
+            tuning,
+            fs.ListEntries,
+            (folder, contents, descend) => folder.Gather(contents, descend, keep, bounds, bounded),
+            static () => { },
+            TimeProvider.System,
+            ct);
+
+        return root.Inventory();
+    }
+
+    /// <summary>
+    /// One directory the walk reached, and what the walk found directly inside it. Written only by the
+    /// worker that listed the directory, so the workers share nothing and take no lock.
+    /// </summary>
+    private sealed class Folder(string path)
+    {
+        private List<Folder>? _folders;
+        private List<WalkEntry>? _files;
+        private List<WalkEntry>? _links;
+        private List<string>? _spared;
+        private List<string>? _mailStores;
+        private int _kept;
+
+        // How many entries the listing held that could be files, which the file list is sized for
+        // when the first file arrives: a list grown by doubling allocates twice what it ends up holding.
+        private int _listed;
+
+        public void Gather(
+            DirectoryContents contents,
+            Action<WalkEntry, Folder> descend,
+            MinimumAge keep,
+            RemovalBounds bounds,
+            bool bounded)
         {
-            entries = fs.EnumerateEntries(extendedDirectory);
+            // Unreadable, or gone: nothing to gather, and §5.3 says skip rather than fail. What a
+            // listing read before it failed is dropped too, so a removal acts only inside a folder it
+            // read to the end, as it did when a failed listing threw.
+            if (contents.WasRefused)
+            {
+                return;
+            }
+
+            _listed = contents.Entries.Count + contents.ReparseFiles.Count;
+
+            foreach (var entry in contents.Entries)
+            {
+                Classify(entry, descend, keep, bounds, bounded);
+            }
+
+            foreach (var entry in contents.Links)
+            {
+                Classify(entry, descend, keep, bounds, bounded);
+            }
+
+            foreach (var entry in contents.ReparseFiles)
+            {
+                Classify(entry, descend, keep, bounds, bounded);
+            }
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Unreadable directory: nothing to gather, and §5.3 says skip rather than fail.
-            return 0;
-        }
 
-        var kept = 0;
-
-        foreach (var entry in entries)
+        private void Classify(
+            WalkEntry entry,
+            Action<WalkEntry, Folder> descend,
+            MinimumAge keep,
+            RemovalBounds bounds,
+            bool bounded)
         {
+            var path = bounded ? entry.FullName : null;
+
             // Asked before the link branch below, because a spared entry is spared whatever it
             // turns out to be. A scratch directory a running program was handed as a junction is
             // still that program's, and removing the link is still taking it away.
-            if (bounds.SparedPaths.Contains(entry.FullName))
+            if (path is not null && bounds.SparedPaths.Contains(path))
             {
-                spared.Add(entry.FullName);
-                continue;
+                (_spared ??= []).Add(path);
+                return;
             }
 
             // Another row's, so it is neither this removal's subject nor something it held back.
-            if (bounds.OwnedElsewherePaths.Contains(entry.FullName))
+            if (path is not null && bounds.OwnedElsewherePaths.Contains(path))
             {
-                continue;
+                return;
             }
 
             // §9, asked before the link branch and before the guard. Before the link branch, because the
@@ -128,10 +183,10 @@ internal static class RemovalWalk
             // the guard, because the rule is unconditional and the guard is a preference, so a store both
             // would keep is reported as the store it is. Its folders stay standing by the rule every kept
             // file relies on — a folder still holding something cannot be removed.
-            if (!entry.IsDirectory && MailStore.Is(entry.FullName))
+            if (!entry.IsDirectory && MailStore.Is(entry.Name))
             {
-                mailStores.Add(entry.FullName);
-                continue;
+                (_mailStores ??= []).Add(path ?? entry.FullName);
+                return;
             }
 
             if (entry.IsReparsePoint)
@@ -145,31 +200,70 @@ internal static class RemovalWalk
                 // did either.
                 if (keep.Protects(entry.NewestFileTime))
                 {
-                    kept++;
-                    continue;
+                    _kept++;
+                    return;
                 }
 
                 // Never followed: deletion would escape the target tree. The removal takes the link
                 // itself and stops there.
-                links.Add(entry);
-                continue;
+                (_links ??= []).Add(entry);
+                return;
             }
 
             if (entry.IsDirectory)
             {
-                kept += Visit(
-                    entry.FullName, index, keep, bounds, directories, files, links, spared, mailStores, fs, ct);
+                var folder = new Folder(path ?? entry.FullName);
+                (_folders ??= []).Add(folder);
+                descend(entry, folder);
             }
             else if (keep.Protects(entry.NewestFileTime))
             {
-                kept++;
+                _kept++;
             }
             else
             {
-                files.Add((entry.FullName, entry.Length));
+                (_files ??= new List<WalkEntry>(_listed)).Add(entry);
             }
         }
 
-        return kept;
+        /// <summary>
+        /// Everything gathered at and below this folder, each folder after the one it was found in.
+        /// Read once the walk is over, with an explicit stack for the reason the walk has one.
+        /// </summary>
+        public RemovalInventory Inventory()
+        {
+            var directories = new List<GatheredDirectory>();
+            var files = new List<WalkEntry>();
+            var links = new List<WalkEntry>();
+            var spared = new List<string>();
+            var mailStores = new List<string>();
+            var kept = 0;
+
+            var pending = new Stack<(Folder Folder, int Parent)>();
+            pending.Push((this, GatheredDirectory.NoParent));
+
+            while (pending.TryPop(out var next))
+            {
+                var folder = next.Folder;
+                var index = directories.Count;
+                directories.Add(new GatheredDirectory(folder.Path, next.Parent));
+
+                files.AddRange(folder._files ?? []);
+                links.AddRange(folder._links ?? []);
+                spared.AddRange(folder._spared ?? []);
+                mailStores.AddRange(folder._mailStores ?? []);
+                kept += folder._kept;
+
+                // Pushed last first, so the folders come out in the order the listing met them.
+                for (var child = (folder._folders?.Count ?? 0) - 1; child >= 0; child--)
+                {
+                    pending.Push((folder._folders![child], index));
+                }
+            }
+
+            return new RemovalInventory(directories, files, links, kept, spared, mailStores);
+        }
+
+        private string Path { get; } = path;
     }
 }

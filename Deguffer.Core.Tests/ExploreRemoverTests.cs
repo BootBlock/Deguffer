@@ -2,6 +2,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -976,14 +977,14 @@ public sealed class ExploreRemoverTests : IDisposable
 
         public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-        public IReadOnlyList<FileSystemEntry> EnumerateEntries(string path)
+        public ListingEnd ListEntries(string path, EnumerationOptions options, List<WalkEntry> into)
         {
             if (LongPath.Display(path).Equals(directory, StringComparison.OrdinalIgnoreCase))
             {
                 listed();
             }
 
-            return inner.EnumerateEntries(path);
+            return inner.ListEntries(path, options, into);
         }
 
         public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);

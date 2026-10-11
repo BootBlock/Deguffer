@@ -148,6 +148,24 @@ internal static class BoundedFileWalk
         TimeProvider clock,
         CancellationToken ct)
     {
-        new WalkWorkers<TState>(tuning, onDirectory, onProgress, clock, ct).Run(LongPath.Extended(root), rootState);
+        Visit(root, rootState, tuning, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
+    }
+
+    /// <summary>
+    /// The walk above, listing each directory through <paramref name="list"/> rather than from the
+    /// disk: how a removal lists through <see cref="IFileSystem"/>, the seam its tests observe and
+    /// refuse through.
+    /// </summary>
+    public static void Visit<TState>(
+        string root,
+        TState rootState,
+        WalkTuning tuning,
+        ListDirectory list,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action onProgress,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        new WalkWorkers<TState>(tuning, list, onDirectory, onProgress, clock, ct).Run(LongPath.Extended(root), rootState);
     }
 }

@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -215,8 +216,8 @@ public sealed class FileRemoverTests : IDisposable
 
         public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-        public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) =>
-            inner.EnumerateEntries(directory);
+        public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
+            inner.ListEntries(directory, options, into);
 
         public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 

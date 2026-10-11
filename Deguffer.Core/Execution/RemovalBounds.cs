@@ -43,7 +43,7 @@ public sealed record RemovalBounds(
 
     /// <summary>
     /// The spared paths as a set the walk can ask cheaply, in the form
-    /// <see cref="Safety.FileSystemEntry.FullName"/> arrives in.
+    /// <see cref="Scanning.WalkEntry.FullName"/> arrives in.
     ///
     /// <para>Built once per removal rather than per entry: the walk asks this of every file and
     /// directory in a tree of hundreds of thousands, and a linear scan of a list there is per-entry

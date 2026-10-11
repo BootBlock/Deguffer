@@ -204,10 +204,9 @@ public readonly record struct MinimumAge
     /// <summary>
     /// The one number this guard reads, from an entry an enumeration has already materialised.
     ///
-    /// Public because the deletion path stores it rather than re-asking: <see cref="IFileSystem"/>
-    /// hands a <see cref="FileSystemEntry"/> across, which is a struct sized for trees of hundreds
-    /// of thousands of files and cannot carry a <see cref="FileSystemInfo"/>. Encoding it in one
-    /// place is what keeps the walk's answer and the removal's answer the same answer.
+    /// Public because <see cref="WindowsFileSystem"/> asks it of a single named path, and the other
+    /// overloads ask it of the timestamps a listing read. Encoding it in one place is what keeps the
+    /// walk's answer and the removal's answer the same answer.
     /// </summary>
     public static long NewestFileTimeOf(FileSystemInfo entry)
     {

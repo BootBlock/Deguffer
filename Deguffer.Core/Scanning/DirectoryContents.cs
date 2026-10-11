@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
@@ -24,14 +26,23 @@ namespace Deguffer.Core.Scanning;
 /// always has, and handed back so a caller asking a file's type still meets them. See
 /// <see cref="Safety.MailStore"/>.
 /// </param>
-/// <param name="WasRefused">
-/// Whether the directory could not be listed to the end. §5.3 makes that ordinary rather than an
-/// error, so the walk still skips it silently — but a caller reporting a total needs to know the total
-/// is now a lower bound, and one that never hears about it cannot say so. What was listed before a
-/// listing failed part-way is still in the three lists.
+/// <param name="Listed">
+/// How the listing ended: <see cref="PathPresence.Present"/> where the directory was listed to the
+/// end, <see cref="PathPresence.Absent"/> where it was gone, and <see cref="PathPresence.Refused"/>
+/// for any other failure. Kept whole rather than as <see cref="WasRefused"/> alone, because a caller
+/// stopping a removal on a folder it could not look inside must not stop it on one that is not there.
 /// </param>
 internal readonly record struct DirectoryContents(
     IReadOnlyList<WalkEntry> Entries,
     IReadOnlyList<WalkEntry> Links,
     IReadOnlyList<WalkEntry> ReparseFiles,
-    bool WasRefused);
+    PathPresence Listed)
+{
+    /// <summary>
+    /// Whether the directory could not be listed to the end. §5.3 makes that ordinary rather than an
+    /// error, so the walk still skips it silently — but a caller reporting a total needs to know the
+    /// total is now a lower bound, and one that never hears about it cannot say so. What was listed
+    /// before a listing failed part-way is still in the three lists.
+    /// </summary>
+    public bool WasRefused => Listed is not PathPresence.Present;
+}

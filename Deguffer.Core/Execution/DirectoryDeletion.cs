@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -107,15 +108,11 @@ internal static class DirectoryDeletion
     /// </summary>
     private static bool IsEmpty(string extendedPath, IFileSystem fs)
     {
-        try
-        {
-            return fs.EnumerateEntries(extendedPath).Count == 0;
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Unreadable or already gone: neither is a directory to go on clearing attributes on.
-            return false;
-        }
+        var entries = new List<WalkEntry>();
+
+        // Unreadable or already gone: neither is a directory to go on clearing attributes on.
+        return fs.ListEntries(extendedPath, DirectoryListing.EveryEntry, entries) is { Presence: PathPresence.Present }
+            && entries.Count == 0;
     }
 
     /// <summary>
