@@ -360,6 +360,148 @@ public sealed class TreemapZoomTests
         }
     }
 
+    /// <summary>
+    /// Every shape a zoomed layout draws on the canvas is where <see cref="TreemapLayout.Locate"/> says,
+    /// to well within a pixel: the walk to one shape is the same layout. Deep enough that folders open
+    /// at levels of detail past the first, whose bands and gaps are their own.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void LocateFindsEachShapeWhereTheZoomedLayoutDrawsIt(int depth)
+    {
+        var tree = MixedTree();
+        var folder = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default)
+            .Where(tile => tile.IsNode && tile.Depth == depth && tree.IsDirectory(tile.Node))
+            .MaxBy(tile => tile.Width * tile.Height);
+        var viewport = MapViewport.Fitting(
+            new MapFrame(folder.X / Width, folder.Y / Height, folder.Width / Width, folder.Height / Height),
+            MapCeiling.Least);
+        var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: viewport);
+
+        Assert.True(tiles.Count(tile => tile.IsNode) > 50, "too few shapes on the canvas to say anything");
+
+        foreach (var tile in tiles.Where(tile => tile.IsNode))
+        {
+            var located = TreemapLayout.Locate(
+                tree, tree.RootNode, Width, Height, LayoutLimits.Default, VolumeSpace.None, viewport, tile.Node);
+
+            Assert.NotNull(located);
+            Assert.Equal(tile.X, located.Value.X * Width, 0.01);
+            Assert.Equal(tile.Y, located.Value.Y * Height, 0.01);
+            Assert.Equal(tile.Width, located.Value.Width * Width, 0.01);
+            Assert.Equal(tile.Height, located.Value.Height * Height, 0.01);
+        }
+    }
+
+    /// <summary>
+    /// A folder too small to open in the whole picture opens at a deeper level of detail, with that
+    /// level's band and gap, and what it holds is located where the zoomed layout draws it.
+    /// </summary>
+    [Fact]
+    public void LocateFindsWhatAFolderHoldsWhereOnlyAZoomOpensIt()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var top = builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [
+                new ExploreChild("large.bin", IsDirectory: false, IsLink: false, Size: 40_000_000),
+                new ExploreChild("small", IsDirectory: true, IsLink: false, Size: 0),
+            ]);
+        builder.AddChildren(
+            top + 1,
+            [.. Enumerable.Range(0, 4).Select(i => new ExploreChild($"part{i}.bin", IsDirectory: false, IsLink: false, Size: 40_000 - (i * 5_000)))]);
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        // Found by name, because the tree is renumbered as it is built.
+        var small = tree.ChildrenOf(tree.RootNode).ToArray().Single(child => tree.NameOf(child) == "small");
+        var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
+
+        Assert.DoesNotContain(whole, tile => tile.IsNode && tree.ParentOf(tile.Node) == small);
+
+        // Closed in the whole picture, so nothing in it has a shape of its own there.
+        Assert.All(
+            tree.ChildrenOf(small).ToArray(),
+            part => Assert.Null(TreemapLayout.Locate(
+                tree, tree.RootNode, Width, Height, LayoutLimits.Default, VolumeSpace.None, MapViewport.Whole, part)));
+
+        var folder = whole.Single(tile => tile.Node == small);
+        var viewport = MapViewport.Anchored(
+            MapCeiling.Least,
+            (folder.X + (folder.Width / 2)) / Width,
+            (folder.Y + (folder.Height / 2)) / Height,
+            0.5,
+            0.5,
+            MapCeiling.Least);
+        var parts = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: viewport)
+            .Where(tile => tile.IsNode && tree.ParentOf(tile.Node) == small)
+            .ToList();
+
+        Assert.NotEmpty(parts);
+
+        foreach (var part in parts)
+        {
+            var located = TreemapLayout.Locate(
+                tree, tree.RootNode, Width, Height, LayoutLimits.Default, VolumeSpace.None, viewport, part.Node)!.Value;
+
+            Assert.Equal(part.X, located.X * Width, 0.01);
+            Assert.Equal(part.Y, located.Y * Height, 0.01);
+            Assert.Equal(part.Width, located.Width * Width, 0.01);
+            Assert.Equal(part.Height, located.Height * Height, 0.01);
+        }
+    }
+
+    /// <summary>
+    /// A shape the zoomed layout never reached, because it is screens away inside a folder that is
+    /// screens away too, is placed where the magnified picture puts it: where the whole picture has it,
+    /// seen through the viewport.
+    /// </summary>
+    [Fact]
+    public void LocateFindsAShapeOffTheCanvas()
+    {
+        var tree = MixedTree();
+        var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default)
+            .Where(tile => tile.IsNode && tile.Depth == 2)
+            .MaxBy(tile => tile.Width * tile.Height);
+        var (x, y) = ((whole.X + (whole.Width / 2)) / Width, (whole.Y + (whole.Height / 2)) / Height);
+        var viewport = MapViewport.Anchored(16, 1 - x, 1 - y, 0.5, 0.5, MapCeiling.Least);
+        var target = whole.Node;
+
+        Assert.DoesNotContain(
+            TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, viewport: viewport),
+            tile => tile.Node == target || tile.Node == tree.ParentOf(target));
+
+        var located = TreemapLayout.Locate(
+            tree, tree.RootNode, Width, Height, LayoutLimits.Default, VolumeSpace.None, viewport, target)!.Value;
+
+        Assert.Equal(((whole.X / Width) - viewport.Left) * viewport.Zoom, located.X, 1e-4);
+        Assert.Equal(((whole.Y / Height) - viewport.Top) * viewport.Zoom, located.Y, 1e-4);
+        Assert.Equal(whole.Width / Width * viewport.Zoom, located.Width, 1e-4);
+        Assert.Equal(whole.Height / Height * viewport.Zoom, located.Height, 1e-4);
+    }
+
+    /// <summary>
+    /// No shape of its own is no answer: a file lumped in with others too small to draw, and a node
+    /// outside the folder laid out.
+    /// </summary>
+    [Fact]
+    public void LocateFindsNothingForANodeWithNoShapeOfItsOwn()
+    {
+        var tree = FilesOf([.. Enumerable.Range(1, 400).Select(i => (long)(401 - i) * 10)]);
+        var smallest = tree.ChildrenOf(tree.RootNode)[^1];
+
+        Assert.DoesNotContain(
+            TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default),
+            tile => tile.Node == smallest);
+        Assert.Null(TreemapLayout.Locate(
+            tree, tree.RootNode, Width, Height, LayoutLimits.Default, VolumeSpace.None, MapViewport.Whole, smallest));
+
+        var mixed = MixedTree();
+        var (folder, other) = (mixed.ChildrenOf(mixed.RootNode)[0], mixed.ChildrenOf(mixed.RootNode)[1]);
+
+        Assert.Null(TreemapLayout.Locate(
+            mixed, folder, Width, Height, LayoutLimits.Default, VolumeSpace.None, MapViewport.Whole, other));
+    }
+
     private static ExploreSurface Draw(ExploreTree tree, ExploreView view, MapViewport viewport) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,

@@ -454,6 +454,14 @@ public abstract class ExploreSurface
     public abstract MapFrame? FrameOf(int node);
 
     /// <summary>
+    /// Where <paramref name="node"/>'s own shape is in the picture at this drawing's zoom, in fractions
+    /// of the canvas, whether or not this drawing reached it: off the canvas too, for a treemap that can
+    /// be zoomed (<see cref="TreemapLayout.Locate"/>). Null where the picture draws no shape of the
+    /// node's own, or is not made of rectangles.
+    /// </summary>
+    public abstract MapFrame? Locate(int node);
+
+    /// <summary>
     /// The node whose shape shows <paramref name="node"/> on this drawing: its own, or where it is not
     /// drawn one by one, the deepest folder above it that is. Null where it is not under this drawing's
     /// root. What a card beside the map lights for a folder, so it lights where the screen shows it.
