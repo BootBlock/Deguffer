@@ -10,4 +10,7 @@ namespace Deguffer.Benchmark;
 /// build did not abandon the volume; or the walk was refused no folder. A run that gave up early is
 /// faster for the wrong reason, so the report counts these rather than hiding them in the median.
 /// </param>
-internal readonly record struct RunTally(long Items, long BytesRead, bool Complete);
+/// <param name="PeakListings">
+/// The most folders the walk was listing at once. Zero for a table route, which lists no folders.
+/// </param>
+internal readonly record struct RunTally(long Items, long BytesRead, bool Complete, int PeakListings = 0);

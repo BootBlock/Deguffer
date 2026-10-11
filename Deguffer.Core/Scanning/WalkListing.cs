@@ -34,11 +34,6 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
     private readonly List<WalkEntry> _links = [];
     private readonly List<WalkEntry> _reparseFiles = [];
 
-    public WalkListing(ListingBuffer buffer)
-        : this(buffer, FromDisk)
-    {
-    }
-
     /// <param name="directory">In the extended form (§6.3).</param>
     public DirectoryContents Read(string directory)
     {
@@ -90,7 +85,8 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         }
     }
 
-    private static ListingEnd FromDisk(string directory, EnumerationOptions options, List<WalkEntry> into)
+    /// <summary>The listing every walk takes outside a test: the directory as the volume holds it.</summary>
+    public static ListingEnd FromDisk(string directory, EnumerationOptions options, List<WalkEntry> into)
     {
         using var listing = new DirectoryListing<WalkEntry>(
             directory,

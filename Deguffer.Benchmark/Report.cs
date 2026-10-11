@@ -52,6 +52,10 @@ internal static class Report
         {
             Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
         }
+        else
+        {
+            Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
+        }
 
         Row(text, "allocated", Bytes(first.AllocatedBytes), Over(later, r => r.AllocatedBytes, Bytes));
         Row(text, "peak working set", Bytes(first.PeakWorkingSet), later.Length > 0 ? Bytes(later.Max(r => r.PeakWorkingSet)) : string.Empty);

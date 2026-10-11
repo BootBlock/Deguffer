@@ -40,6 +40,23 @@ public sealed class WalkRouteTests : IDisposable
         Assert.True(tally.Complete);
     }
 
+    /// <summary>
+    /// A walk of one thread lists one folder at a time however many it holds, so the figure is
+    /// listings at once rather than listings in all.
+    /// </summary>
+    [Fact]
+    public void AWalkOfOneThreadListsOneFolderAtATime()
+    {
+        var root = _temp.CreateDirectory("root");
+        _temp.CreateDirectory("root", "a");
+        _temp.CreateDirectory("root", "b");
+        _temp.CreateDirectory("root", "a", "c");
+
+        var tally = WalkRoute.Run(root, new WalkTuning(1, WalkTuning.MinimumListingBuffer), CancellationToken.None);
+
+        Assert.Equal(1, tally.PeakListings);
+    }
+
     [Fact]
     public void AFolderItWasRefusedLeavesTheRunIncomplete()
     {

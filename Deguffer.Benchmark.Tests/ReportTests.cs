@@ -42,6 +42,19 @@ public sealed class ReportTests
         Assert.DoesNotContain("MiB/s read", Render(Route.Walk, Run(2)), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The walk says how many folders it listed at once, so a run below its thread count shows as
+    /// one. The table lists no folders, so it shows no count rather than a count of zero.
+    /// </summary>
+    [Fact]
+    public void OnlyTheWalkReportsTheFoldersItListedAtOnce()
+    {
+        var text = Render(Route.Walk, Run(1, peak: 16), Run(1, peak: 12), Run(1, peak: 14), Run(1, peak: 10));
+
+        Assert.Equal("folders at once    16              12 (10 to 14)", Line(text, "folders at once"));
+        Assert.DoesNotContain("folders at once", Render(Route.Table, Run(2)), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ARateIsTheItemsOverTheTime()
     {
@@ -116,8 +129,8 @@ public sealed class ReportTests
 
     private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, Place, Machine, runs);
 
-    private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true) =>
-        new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete), AllocatedBytes: 1 << 20, PeakWorkingSet: 64 << 20);
+    private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0) =>
+        new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, PeakWorkingSet: 64 << 20);
 
     private static string Line(string text, string label) =>
         text.Split('\n').Single(line => line.StartsWith(label + " ", StringComparison.Ordinal));
