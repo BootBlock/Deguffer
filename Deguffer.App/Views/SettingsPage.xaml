@@ -233,8 +233,10 @@
                        Margin="4,0,0,0"
                        Visibility="{x:Bind ViewModel.HasNoSourceRoots, Mode=OneWay}" />
 
-            <ItemsControl ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,2,0,0">
-                <ItemsControl.ItemTemplate>
+            <!-- Every list on this page is a repeater, so that ListAnimation can play its rows in and
+                 out: an ItemsControl's rows would appear and vanish at once. -->
+            <ItemsRepeater x:Name="SourceRootsList" ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,2,0,0">
+                <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="configuration:SourceRoot">
                         <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
                               Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -270,8 +272,8 @@
                                     AutomationProperties.Name="Remove source folder" />
                         </Grid>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
 
             <!-- The second list that widens where Deguffer looks. An emulator run from its own folder
                  records that folder nowhere Deguffer may rely on, so the user is the only source.
@@ -302,8 +304,8 @@
                        Margin="4,0,0,0"
                        Visibility="{x:Bind ViewModel.HasNoEmulatorFolders, Mode=OneWay}" />
 
-            <ItemsControl ItemsSource="{x:Bind ViewModel.EmulatorFolders, Mode=OneWay}" Margin="0,2,0,0">
-                <ItemsControl.ItemTemplate>
+            <ItemsRepeater x:Name="EmulatorFoldersList" ItemsSource="{x:Bind ViewModel.EmulatorFolders, Mode=OneWay}" Margin="0,2,0,0">
+                <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                         <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
                               Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -327,8 +329,8 @@
                                     AutomationProperties.Name="Remove emulator folder" />
                         </Grid>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
 
             <!-- The one setting on this page that only ever narrows what Deguffer deletes. Listed in
                  full, including items no scan finds any more, so it never becomes a protection
@@ -356,7 +358,7 @@
                  kept and the items can number in the hundreds. It realises only the entries inside
                  the page's scrolling viewport, and draws none of a list's selection chrome over a
                  list that has nothing to select. -->
-            <ItemsRepeater ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,2,0,0">
+            <ItemsRepeater x:Name="KeptItemsList" ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,2,0,0">
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="configuration:KeptItem">
                         <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
@@ -419,7 +421,7 @@
                        Margin="4,0,0,0"
                        Visibility="{x:Bind History.HasNoKept, Mode=OneWay}" />
 
-            <ItemsRepeater ItemsSource="{x:Bind History.Kept, Mode=OneWay}" Margin="0,2,0,0">
+            <ItemsRepeater x:Name="KeptScansList" ItemsSource="{x:Bind History.Kept, Mode=OneWay}" Margin="0,2,0,0">
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="viewModels:KeptScanRow">
                         <Grid ColumnSpacing="10" Padding="12,8" Margin="0,0,0,4"
@@ -590,15 +592,16 @@
                        Margin="4,6,0,0"
                        Text="What each drive is scanned with:" />
 
-            <ItemsControl ItemsSource="{x:Bind Scanning.Drives, Mode=OneWay}"
-                          Margin="4,0,0,0"
-                          AutomationProperties.Name="What each drive is scanned with">
-                <ItemsControl.ItemTemplate>
+            <ItemsRepeater x:Name="DrivesList"
+                           ItemsSource="{x:Bind Scanning.Drives, Mode=OneWay}"
+                           Margin="4,0,0,0"
+                           AutomationProperties.Name="What each drive is scanned with">
+                <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="viewModels:DriveLine">
                         <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
 
             <TextBlock Style="{StaticResource SecondaryText}"
                        FontSize="12"

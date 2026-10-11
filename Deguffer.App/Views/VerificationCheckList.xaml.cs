@@ -1,3 +1,4 @@
+using Deguffer.App.Shell;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -12,7 +13,11 @@ public sealed partial class VerificationCheckList : UserControl
     public static readonly DependencyProperty ChecksProperty =
         DependencyProperty.Register(nameof(Checks), typeof(object), typeof(VerificationCheckList), new PropertyMetadata(null));
 
-    public VerificationCheckList() => InitializeComponent();
+    public VerificationCheckList()
+    {
+        InitializeComponent();
+        ListAnimation.Play(ChecksList, SystemMotion.Current);
+    }
 
     /// <summary>The checks to list, as a collection the page keeps up to date in place.</summary>
     public object? Checks
