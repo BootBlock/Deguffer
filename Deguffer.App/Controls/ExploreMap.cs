@@ -872,12 +872,6 @@ public sealed class ExploreMap : UserControl
         if (samePlace)
         {
             Shift();
-
-            // The drawing on screen is of the tree before, and stays until the new one has arrived and
-            // moved into place. What the pointer is over and what is picked are read in this tree now,
-            // through the counterparts of the shapes it draws (MapReading).
-            ShowPicked();
-            ReportWhatThePointerIsOver();
         }
         else
         {
@@ -888,6 +882,16 @@ public sealed class ExploreMap : UserControl
         if (_step != FolderStep.Across && _drawing is null && _redraws.Pending is null)
         {
             LandStep();
+        }
+
+        // What the pointer is over and what is picked were read in the tree before, and are read in
+        // this one now. The drawing on screen stays until the new one has arrived, and answers through
+        // the counterparts of the shapes it draws where it is of the same place (MapReading); a change
+        // of folder has none on screen, and the pointer is over nothing until it lands.
+        if (another)
+        {
+            ShowPicked();
+            ReportWhatThePointerIsOver();
         }
 
         // The same picture, zoomed to where the reader was, moves there as a zoom to a shape does.
@@ -1604,8 +1608,9 @@ public sealed class ExploreMap : UserControl
     ///
     /// <para>A redraw landing is the case once more. Its regions show where they have landed and the
     /// last drawing shows everywhere else, so each point is answered by whichever shows there: see
-    /// <see cref="MapHitTest"/>, which also refuses an answer from a drawing of an older tree. So are
-    /// the tiles a move shows over the drawing, which draw the folders it has opened.</para>
+    /// <see cref="MapHitTest"/>, which also reads a drawing of an older tree of the same place in the
+    /// newer one, and refuses an answer from a drawing of anything else. So are the tiles a move shows
+    /// over the drawing, which draw the folders it has opened.</para>
     /// </summary>
     private ExploreHit? At(Point point) => Locate(point)?.Hit;
 
