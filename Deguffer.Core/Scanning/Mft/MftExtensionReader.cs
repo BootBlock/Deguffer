@@ -5,9 +5,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// what the extension records they want hold.
 ///
 /// <para>A second pass rather than a lookup in the middle of the first, because the first meets an
-/// extension record before its owner as often as after it. The first pass keeps what every
-/// extension record in use holds as it reads it, so an extension record it reached is never read
-/// again: every wanted one is collected, sorted by record number, and merged against what was kept.
+/// extension record before its owner as often as after it. The first pass keeps what each extension
+/// record holding something the scan needs holds as it reads it, so an extension record it reached
+/// is never read again: every wanted one is collected, sorted by record number, and merged against
+/// what was kept.
 /// The disk is read again only for the attribute lists kept outside the table, and for a wanted
 /// record the first pass never reached because it stopped first.</para>
 ///

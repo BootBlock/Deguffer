@@ -156,6 +156,96 @@ public sealed class MftRecordStreamTests
     }
 
     /// <summary>
+    /// A record past where the first pass stopped is read once however many lists name it: reading
+    /// it runs its fixup, which rewrites it in place and cannot run twice. Here the file naming it
+    /// first does not own it, so the owner, second, still has to get its size from the same read.
+    /// </summary>
+    [Fact]
+    public void ReadsAnExtensionRecordPastTheStopOnceForEveryFileNamingIt()
+    {
+        // Added second, so the extension record the table holds is the one owned by 21.
+        using var table = new MftFixture()
+            .AddFileWithDataInAnExtensionRecord(20, MftRecord.RootRecordNumber, "claims.tgz", allocated: 4096, logical: 4000, extension: 40)
+            .AddFileWithDataInAnExtensionRecord(21, MftRecord.RootRecordNumber, "owns.tgz", allocated: 8192, logical: 8000, extension: 40)
+            .WithoutBitmap()
+            .Build();
+        using var source = new RecordedReads(table, unreadableFrom: 30, unreadableTo: 35);
+
+        var handed = ReadAll(source, TableTuning.Default, out _);
+
+        Assert.Equal([(40L, 1)], source.Reads);
+        Assert.Equal(8000, handed[21].Record.Size?.Logical);
+        Assert.Null(handed[20].Record.Size);
+    }
+
+    /// <summary>
+    /// Lists kept outside the table are handed on in the order their reads were made, whatever order
+    /// they complete in, so a table whose lists want more than it holds loses the same files on every
+    /// run. Here the reads complete in reverse, and the budget runs out at the second list in cluster
+    /// order: the first two are followed, so the records they name are read, and the third is not.
+    /// </summary>
+    [Fact]
+    public void LosesTheSameListsWhicheverOrderTheirReadsComplete()
+    {
+        using var table = new MftFixture()
+            .AddFileWhoseListOutsideTheTableNamesRecords(16, listCluster: 900, firstNamed: 1_000, count: 12)
+            .AddFileWhoseListOutsideTheTableNamesRecords(17, listCluster: 700, firstNamed: 2_000, count: 12)
+            .AddFileWhoseListOutsideTheTableNamesRecords(18, listCluster: 800, firstNamed: 3_000, count: 12)
+            .Build();
+        using var source = new RecordedReads(new ScriptedClusterReads(
+            table, (cluster, ct) => Task.Delay(TimeSpan.FromMilliseconds(1_000 - cluster), ct)));
+
+        Assert.True(source.RecordCount < 24, "two lists must want more than the table holds, and one must not");
+
+        ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1), out var wholeTable);
+
+        Assert.False(wholeTable);
+        Assert.Contains(source.Reads, r => r.First is >= 2_000 and < 2_012);
+        Assert.Contains(source.Reads, r => r.First is >= 3_000 and < 3_012);
+        Assert.DoesNotContain(source.Reads, r => r.First is >= 1_000 and < 1_012);
+    }
+
+    /// <summary>
+    /// A list read that fails leaves no other list read in flight: the reads still landing in their
+    /// buffers are cancelled and waited for before the failure is thrown, so no buffer is released
+    /// while a read can still land in it.
+    /// </summary>
+    [Fact]
+    public void WaitsForEveryListReadInFlightBeforeAFailureLeaves()
+    {
+        var cancelled = false;
+        using var table = new MftFixture()
+            .AddFileWithANonResidentAttributeList(20, MftRecord.RootRecordNumber, "a.tgz", allocated: 4096, logical: 1000, extension: 30, listCluster: 700)
+            .AddFileWithANonResidentAttributeList(21, MftRecord.RootRecordNumber, "b.tgz", allocated: 4096, logical: 2000, extension: 31, listCluster: 800)
+            .Build();
+        using var source = new ScriptedClusterReads(table, async (cluster, ct) =>
+        {
+            if (cluster == 700)
+            {
+                throw new IOException("The volume refused the read.");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Lands a little after the cancellation, as a real read does, so a reader that
+                // cancels without waiting returns while this is still in flight.
+                cancelled = true;
+                await Task.Delay(TimeSpan.FromMilliseconds(200), CancellationToken.None);
+                throw;
+            }
+        });
+
+        Assert.Throws<IOException>(() => ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1), out _));
+
+        Assert.True(cancelled, "the read still in flight was cancelled");
+        Assert.Equal(0, source.InFlight);
+    }
+
+    /// <summary>
     /// Where the lists inside records already want more than the table holds, no list kept outside
     /// the table is read: its file is lost whole, as every file past that point is, rather than
     /// followed on the word of a table NTFS did not write.
@@ -253,6 +343,51 @@ public sealed class MftRecordStreamTests
                 ? (int)Math.Min(bytes / BytesPerRecord, unreadableFrom - firstRecord) * BytesPerRecord
                 : bytes;
         }
+    }
+
+    /// <summary>
+    /// A table whose overlapped cluster reads each run <c>before</c> first, given the cluster the read
+    /// starts at, and read nothing where it throws. Counts the reads in flight.
+    /// </summary>
+    private sealed class ScriptedClusterReads(IMftSource table, Func<long, CancellationToken, Task> before) : IMftSource
+    {
+        private int _inFlight;
+
+        public int InFlight => Volatile.Read(ref _inFlight);
+
+        public int BytesPerRecord => table.BytesPerRecord;
+
+        public long RecordCount => table.RecordCount;
+
+        public MftBitmapPlacement? Bitmap => table.Bitmap;
+
+        public int BatchLength(long firstRecord, int capacity) => table.BatchLength(firstRecord, capacity);
+
+        public int ReadBatch(long firstRecord, Span<byte> destination) => table.ReadBatch(firstRecord, destination);
+
+        public ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct) =>
+            table.ReadBatchAsync(firstRecord, destination, ct);
+
+        public int BytesPerCluster => table.BytesPerCluster;
+
+        public bool TryReadClusters(long firstCluster, Span<byte> destination) => table.TryReadClusters(firstCluster, destination);
+
+        public async ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _inFlight);
+
+            try
+            {
+                await before(firstCluster, ct).ConfigureAwait(false);
+                return await table.TryReadClustersAsync(firstCluster, destination, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _inFlight);
+            }
+        }
+
+        public void Dispose() => table.Dispose();
     }
 
     /// <summary>
