@@ -207,6 +207,12 @@ public class GrowthReplayTests
         Assert.Equal(1, GrowthReplay.Next(0, travels));
         Assert.Equal(Steps, GrowthReplay.Next(Steps, travels));
         Assert.Equal(Steps, GrowthReplay.Next(0, still));
+        Assert.Equal(1, GrowthReplay.Stride(travels));
+        Assert.Equal(Steps, GrowthReplay.Stride(still));
+        Assert.Equal(0, GrowthReplay.PlayFrom(Steps));
+        Assert.Equal(5, GrowthReplay.PlayFrom(5));
+        Assert.True(GrowthReplay.IsNow(Steps));
+        Assert.False(GrowthReplay.IsNow(Steps - 1));
         Assert.True(GrowthReplay.Pace(travels) > travels.Duration);
         Assert.True(GrowthReplay.Pace(still) >= TimeSpan.FromSeconds(1));
     }

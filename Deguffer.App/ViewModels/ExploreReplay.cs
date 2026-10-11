@@ -64,11 +64,8 @@ public sealed partial class ExploreReplay : ObservableObject
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>
-    /// How far a move of the scrubber goes: one step where the shapes travel, and from one end to the
-    /// other where the reader has animation effects off (#273), so only the two scans are shown.
-    /// </summary>
-    public double StepFrequency => _motion.For(MotionToken.Shift).Travels ? 1 : Steps;
+    /// <summary>How far a move of the scrubber goes. See <see cref="GrowthReplay.Stride"/>.</summary>
+    public double StepFrequency => GrowthReplay.Stride(_motion.For(MotionToken.Shift));
 
     /// <summary>Whether the folder on screen has an earlier picture to replay.</summary>
     [ObservableProperty]
@@ -100,7 +97,7 @@ public sealed partial class ExploreReplay : ObservableObject
     /// The step the map is to draw, or null where it draws the tree now: at the scrubber's far end, or
     /// where there is nothing to replay.
     /// </summary>
-    public GrowthReplayFrame? Frame => CanReplay && _replay is { } replay && At < Steps ? replay.At(At) : null;
+    public GrowthReplayFrame? Frame => CanReplay && _replay is { } replay && !GrowthReplay.IsNow(At) ? replay.At(At) : null;
 
     /// <summary>The scrubber moved, so the map is drawn again.</summary>
     public event EventHandler? Changed;
@@ -152,12 +149,7 @@ public sealed partial class ExploreReplay : ObservableObject
         }
 
         IsPlaying = true;
-
-        // From where a pause left it, and from the earlier scan where it is at now.
-        if (At >= Steps)
-        {
-            Move(0);
-        }
+        Move(GrowthReplay.PlayFrom(At));
     }
 
     /// <summary>
@@ -174,7 +166,7 @@ public sealed partial class ExploreReplay : ObservableObject
         var next = GrowthReplay.Next(At, _motion.For(MotionToken.Shift));
         Move(next);
 
-        if (next >= Steps)
+        if (GrowthReplay.IsNow(next))
         {
             IsPlaying = false;
         }

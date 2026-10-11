@@ -33,8 +33,9 @@ namespace Deguffer.Core.Exploring.History;
 public sealed class GrowthReplay
 {
     /// <summary>
-    /// How many steps there are from the earlier scan to now. Twelve moves of a quarter of a second
-    /// each play the change in about three seconds, and each move is short enough to follow.
+    /// How many steps there are from the earlier scan to now. Twelve moves of a quarter of a second,
+    /// each given a moment to land (<see cref="Pace"/>), play the change in a little over four
+    /// seconds, and each move is short enough to follow.
     /// </summary>
     public const int Steps = 12;
 
@@ -197,7 +198,22 @@ public sealed class GrowthReplay
     /// shapes travel, and straight to now where the reader has animation effects off, which shows the
     /// two ends and nothing estimated between them (#273).
     /// </summary>
-    public static int Next(int step, Motion shift) => shift.Travels ? Math.Min(step + 1, Steps) : Steps;
+    public static int Next(int step, Motion shift) => Math.Min(step + Stride(shift), Steps);
+
+    /// <summary>
+    /// How far one move of the scrubber goes: one step where the shapes travel, and from one end to
+    /// the other where the reader has animation effects off, so only the two scans are shown (#273).
+    /// </summary>
+    public static int Stride(Motion shift) => shift.Travels ? 1 : Steps;
+
+    /// <summary>
+    /// Where a play starts from <paramref name="step"/>: where a pause left it, and from the earlier
+    /// scan where the scrubber is at now, which has nothing left to play.
+    /// </summary>
+    public static int PlayFrom(int step) => IsNow(step) ? 0 : step;
+
+    /// <summary>Whether <paramref name="step"/> is now, where the map is the tree now and a play is over.</summary>
+    public static bool IsNow(int step) => step >= Steps;
 
     /// <summary>
     /// How long a play of the replay stays on a step: the move to it and a moment for the drawing to

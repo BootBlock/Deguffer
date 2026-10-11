@@ -127,7 +127,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
     /// <param name="running">See <see cref="_running"/>.</param>
     /// <param name="history">See <see cref="_history"/>.</param>
-    public ExploreViewModel(
+    /// <param name="motion">How the reader wants things to move, which a play of the replay follows.</param>
+    internal ExploreViewModel(
         IExploreScanner scanner,
         IVolumeInventory volumes,
         IHiddenSpaceSource hidden,
@@ -137,7 +138,8 @@ public sealed partial class ExploreViewModel : ObservableObject
         bool isElevated,
         Func<ExploreRequest, bool> relaunch,
         RunningActions running,
-        ScanHistory history)
+        ScanHistory history,
+        IMotionPolicy motion)
     {
         _scanner = scanner;
         _volumes = volumes;
@@ -152,7 +154,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Selection = new ExploreSelection(actions);
         Growth = new ExploreGrowth(history);
-        Replay = new ExploreReplay(SystemMotion.Current);
+        Replay = new ExploreReplay(motion);
         Files = new ExploreFiles(actions, time);
         Types = new ExploreTypes();
 

@@ -72,7 +72,11 @@ internal sealed class ExploreFixture : IDisposable
                 return RelaunchStarts;
             },
             Running,
-            History);
+            History,
+            Motion);
+
+    /// <summary>The reader's Animation effects setting, as the page's replay follows it.</summary>
+    public ScriptedMotion Motion { get; } = new(animationsEnabled: true);
 
     /// <summary>The kept scan summaries, stored under the fake profile's own local data.</summary>
     public ScanHistory History => _history ??= new ScanHistory(new ScanHistoryStore(Environment));

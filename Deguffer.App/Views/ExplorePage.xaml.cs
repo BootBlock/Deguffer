@@ -119,7 +119,8 @@ public sealed partial class ExplorePage : Page
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
             App.Running,
-            App.ScanHistory);
+            App.ScanHistory,
+            SystemMotion.Current);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
