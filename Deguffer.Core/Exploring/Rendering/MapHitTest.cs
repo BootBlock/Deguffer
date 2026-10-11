@@ -124,7 +124,7 @@ public static class MapHitTest
 
         return new MapLocation(
             tile.Picture,
-            tile.Picture.Viewport ?? MapViewport.Whole,
+            tile.DrawnAt,
             (float)((pictureX - frame.X) / frame.Width * tile.Width),
             (float)((pictureY - frame.Y) / frame.Height * tile.Height),
             tile);

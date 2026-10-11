@@ -126,6 +126,106 @@ public sealed class MapTileLayoutTests
     }
 
     /// <summary>
+    /// The tile holding the focus is wanted first even where a short tile at the picture's edge has its
+    /// middle nearer the focus than the tile's own has.
+    /// </summary>
+    [Fact]
+    public void TheTileAtTheFocusIsWantedFirstBesideAShortEdgeTile()
+    {
+        // At level 0 a 600 by 400 picture is 848.5 pixels across: three whole columns and one 80.5
+        // pixels wide. A focus at 760 is 120 pixels from the middle of its own column, and 48 from the
+        // middle of the short one beside it.
+        var tiling = new MapTiling(600, 400);
+        var focusX = 760 / tiling.AcrossAt(0);
+        var focusY = 128 / tiling.DownAt(0);
+
+        var keys = tiling.Covering(MapViewport.Whole, 0, focusX, focusY);
+
+        Assert.Equal(new MapTileKey(0, 2, 0), keys[0]);
+    }
+
+    /// <summary>
+    /// No screen at any zoom needs more tiles than <see cref="MapTiling.MostOnScreen"/>, so a budget of
+    /// screens of them always holds the screen and where a move is going, however small the map.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(100, 60)]
+    [InlineData(600, 400)]
+    [InlineData(1920, 1080)]
+    public void TheBudgetHoldsEveryTileOfTheScreenAndOfWhereItIsGoing(int width, int height)
+    {
+        var tiling = new MapTiling(width, height);
+        var most = 0;
+
+        foreach (var zoom in Enumerable.Range(0, 1200).Select(i => Math.Pow(2, i / 100.0)))
+        {
+            foreach (var (x, y) in new[] { (0.0, 0.0), (0.3, 0.7), (0.5, 0.5), (0.999, 0.001), (0.123, 0.456) })
+            {
+                var shown = MapViewport.Anchored(zoom, x, y, 0.5, 0.5, MapCeiling.Most);
+                var keys = tiling.Covering(shown, MapTiling.LevelOf(shown.Zoom), x, y);
+
+                most = Math.Max(most, keys.Count);
+            }
+        }
+
+        Assert.True(most <= tiling.MostOnScreen, $"a screen needed {most} tiles, more than the {tiling.MostOnScreen} allowed for");
+        Assert.True(
+            tiling.Budget >= 2 * tiling.MostOnScreen * PixelBuffer.LengthFor(MapTiling.Size, MapTiling.Size),
+            $"a budget of {tiling.Budget} bytes cannot hold two screens of {tiling.MostOnScreen} tiles");
+    }
+
+    /// <summary>A tile is placed where it lies in the picture, as a drawing's canvas is placed.</summary>
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(3, 2, 1)]
+    [InlineData(6, 5, 4)]
+    public void ATileIsPlacedWhereItLiesInThePicture(int level, long column, long row)
+    {
+        var tile = Drawing(MapViewport.Whole).Tile(Tiling, new MapTileKey(level, column, row));
+        var origin = new MapOrigin(0.25, 0.125);
+        const double ScreenWidth = 1000;
+        const double ScreenHeight = 750;
+
+        var placed = tile.Canvas(ScreenWidth, ScreenHeight, origin);
+        var (left, top) = placed.Apply(0, 0);
+        var (right, bottom) = placed.Apply(tile.Width, tile.Height);
+
+        Assert.Equal((tile.Frame.X - origin.Left) * ScreenWidth, left, 6);
+        Assert.Equal((tile.Frame.Y - origin.Top) * ScreenHeight, top, 6);
+        Assert.Equal((tile.Frame.X + tile.Frame.Width - origin.Left) * ScreenWidth, right, 6);
+        Assert.Equal((tile.Frame.Y + tile.Frame.Height - origin.Top) * ScreenHeight, bottom, 6);
+    }
+
+    /// <summary>
+    /// A shape a tile draws is outlined over a coarser drawing where that drawing draws it, so the outline
+    /// of a shape found on a tile is the outline the drawing would give it.
+    /// </summary>
+    [Fact]
+    public void ATileOutlinesAShapeWhereTheDrawingDrawsIt()
+    {
+        var drawn = MapViewport.Anchored(MapTiling.ZoomOf(2), 0.42, 0.33, 0.5, 0.5, MapCeiling.Most);
+        var drawing = Drawing(drawn);
+        var tile = drawing.Tile(Tiling, Tiling.At(5, 0.42, 0.33)!.Value);
+        var nodes = tile.Shapes.Where(shape => shape.IsNode).Select(shape => shape.Node).ToHashSet();
+        var common = drawing.Outlines(nodes).Select(outline => outline.Node).ToHashSet();
+
+        nodes.IntersectWith(common);
+        Assert.NotEmpty(nodes);
+
+        var expected = drawing.Outlines(nodes).ToDictionary(outline => outline.Node);
+
+        foreach (var outline in tile.Outlines(nodes, drawn, Width, Height))
+        {
+            var corners = expected[outline.Node].Points;
+
+            Assert.True(
+                outline.Points.Zip(corners).All(pair => Math.Abs(pair.First.X - pair.Second.X) < Tolerance && Math.Abs(pair.First.Y - pair.Second.Y) < Tolerance),
+                $"node {outline.Node} is outlined at {string.Join(", ", outline.Points)} by the tile and at {string.Join(", ", corners)} by the drawing");
+        }
+    }
+
+    /// <summary>
     /// Every zoom is shown from tiles drawn at least as finely as the screen, and at most half again as
     /// finely each way, with the detail the drawing made at that zoom has.
     /// </summary>

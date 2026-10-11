@@ -22,7 +22,9 @@ public sealed class MapTile
 
     internal MapTile(
         ExploreSurface picture,
+        MapViewport drawnAt,
         MapTileKey key,
+        MapViewport viewport,
         MapFrame frame,
         int width,
         int height,
@@ -30,7 +32,9 @@ public sealed class MapTile
         Func<int, int, TileColour> colourOf)
     {
         Picture = picture;
+        DrawnAt = drawnAt;
         Key = key;
+        Viewport = viewport;
         Frame = frame;
         Width = width;
         Height = height;
@@ -42,10 +46,16 @@ public sealed class MapTile
     /// <summary>The drawing whose picture this is a piece of.</summary>
     public ExploreSurface Picture { get; }
 
-    /// <summary>The tree drawn. A node is a number in it, and means nothing in another.</summary>
-    public ISizedTree Tree => Picture.Tree;
+    /// <summary>The part of the picture <see cref="Picture"/> shows: what a point found on the tile is found in.</summary>
+    public MapViewport DrawnAt { get; }
 
     public MapTileKey Key { get; }
+
+    /// <summary>
+    /// The viewport whose canvas, the size of <see cref="Picture"/>'s, has the tile at its corner: what
+    /// it was laid out at, and so what places it (see <see cref="MapTiling.ViewportOf"/>).
+    /// </summary>
+    public MapViewport Viewport { get; }
 
     /// <summary>Where the tile lies in the whole picture, as fractions of it.</summary>
     public MapFrame Frame { get; }
@@ -74,6 +84,14 @@ public sealed class MapTile
         new TileRasteriser(_shapes, Width, Height, background, _colourOf);
 
     /// <summary>
+    /// Where the tile goes in a picture laid out over a screen <paramref name="width"/> by
+    /// <paramref name="height"/> and measured from <paramref name="origin"/>: as a drawing's canvas is
+    /// placed, because the tile is the corner of a canvas the size of the drawing's.
+    /// </summary>
+    public MapTransform Canvas(double width, double height, MapOrigin origin) =>
+        Viewport.Canvas(Picture.Width, Picture.Height, width, height, origin);
+
+    /// <summary>
     /// Where each of <paramref name="nodes"/> this tile draws lies on the canvas of a drawing
     /// <paramref name="width"/> by <paramref name="height"/> pixels made at <paramref name="drawn"/>: the
     /// outline a node the pointer found on this tile is marked with, over a drawing that may not draw it.
@@ -83,13 +101,8 @@ public sealed class MapTile
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        // A tile pixel is a fraction of the picture its frame says, and a drawing's canvas pixel the
-        // fraction its viewport says: one scale and one offset on each axis between the two.
-        var scaleX = Frame.Width / Width * drawn.Zoom * width;
-        var scaleY = Frame.Height / Height * drawn.Zoom * height;
-        var offsetX = (Frame.X - drawn.Left) * drawn.Zoom * width;
-        var offsetY = (Frame.Y - drawn.Top) * drawn.Zoom * height;
-
+        // The tile's canvas placed in the drawing's, as a drawing is placed on a screen.
+        var placed = drawn.PlacementOf(Viewport);
         var outlines = new List<ExploreOutline>();
 
         foreach (var shape in _shapes)
@@ -99,10 +112,16 @@ public sealed class MapTile
                 continue;
             }
 
-            var left = (float)(offsetX + (shape.X * scaleX));
-            var top = (float)(offsetY + (shape.Y * scaleY));
-            var right = (float)(offsetX + ((shape.X + shape.Width) * scaleX));
-            var bottom = (float)(offsetY + ((shape.Y + shape.Height) * scaleY));
+            var inDrawing = placed.OnScreen(new MapFrame(
+                shape.X / (double)Picture.Width,
+                shape.Y / (double)Picture.Height,
+                shape.Width / (double)Picture.Width,
+                shape.Height / (double)Picture.Height));
+
+            var left = (float)(inDrawing.X * width);
+            var top = (float)(inDrawing.Y * height);
+            var right = (float)((inDrawing.X + inDrawing.Width) * width);
+            var bottom = (float)((inDrawing.Y + inDrawing.Height) * height);
 
             outlines.Add(new ExploreOutline(shape.Node, [
                 new ExplorePoint(left, top),

@@ -87,7 +87,7 @@ public sealed class TiledSurface : ExploreSurface
     {
         ArgumentNullException.ThrowIfNull(tiling);
 
-        if (Viewport is null)
+        if (Viewport is not { } drawnAt)
         {
             throw new InvalidOperationException("Only a treemap that can be zoomed is cut into tiles.");
         }
@@ -101,11 +101,12 @@ public sealed class TiledSurface : ExploreSurface
 
         var zoom = MapTiling.ZoomOf(key.Level);
         var (width, height) = tiling.PixelsOf(key);
+        var viewport = tiling.ViewportOf(key);
         var shapes = TreemapLayout.Compute(
-            Tree, Root, Width, Height, Limits, _beside, tiling.ViewportOf(key),
+            Tree, Root, Width, Height, Limits, _beside, viewport,
             new TreemapDetail(Limits, zoom, MapTiling.DetailOf(key.Level)), width, height);
 
-        return new MapTile(this, key, tiling.FrameOf(key), width, height, shapes, ColourFor);
+        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourFor);
     }
 
     public override MapFrame? FrameOf(int node) =>

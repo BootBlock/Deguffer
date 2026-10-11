@@ -35,6 +35,12 @@ public sealed class MapTiling
     /// </summary>
     public const int Size = PaintOrder.RegionSize;
 
+    /// <summary>
+    /// The screens of tiles kept: the one shown, the one a move is going to, and one more, so a move
+    /// back over the picture finds its tiles still there.
+    /// </summary>
+    public const int Screens = 3;
+
     /// <param name="width">The width of the canvas the picture is drawn on at rest, in device pixels.</param>
     /// <param name="height">Its height.</param>
     public MapTiling(int width, int height)
@@ -138,6 +144,10 @@ public sealed class MapTiling
         var keys = new List<MapTileKey>();
         var distances = new List<double>();
 
+        // By middles alone, a short tile at the picture's edge can be nearer the focus than the tile
+        // that holds it, so that one is put first outright, as a redraw's focus region is.
+        var focus = At(level, focusX, focusY);
+
         for (var row = firstRow; row <= lastRow; row++)
         {
             for (var column = firstColumn; column <= lastColumn; column++)
@@ -146,7 +156,7 @@ public sealed class MapTiling
                 var (x, y) = FrameOf(key).Centre;
 
                 keys.Add(key);
-                distances.Add(Squared((x - focusX) * across) + Squared((y - focusY) * down));
+                distances.Add(key == focus ? -1 : Squared((x - focusX) * across) + Squared((y - focusY) * down));
             }
         }
 
@@ -157,6 +167,24 @@ public sealed class MapTiling
 
         static double Squared(double value) => value * value;
     }
+
+    /// <summary>
+    /// The most tiles <see cref="Covering"/> gives for any screen at the level of its zoom. The screen
+    /// spans the picture at that level's zoom divided by its own, which is under the square root of two
+    /// (see <see cref="ZoomOf"/>), so at most that many canvases' widths of the level's pixels, and a
+    /// span starting partway into a tile reaches into one more.
+    /// </summary>
+    public int MostOnScreen => Along(Width) * Along(Height);
+
+    /// <summary>
+    /// How many bytes of drawn tiles a moving map keeps: <see cref="Screens"/> screens' worth, each as
+    /// many whole tiles as a screen can need, so no tile on screen, or wanted for where the move is
+    /// going, is ever let go to make room for another, however small the map.
+    /// </summary>
+    public long Budget => Screens * MostOnScreen * PixelBuffer.LengthFor(Size, Size);
+
+    /// <summary>The most tiles along one axis a screen <paramref name="pixels"/> across needs.</summary>
+    private static int Along(int pixels) => (int)Math.Ceiling(pixels * Math.Sqrt(2) / Size) + 1;
 
     /// <summary>The first and last tile along one axis with any of the part from <paramref name="start"/> for <paramref name="span"/> in it.</summary>
     private static (long First, long Last) Range(double start, double span, double pixels)
