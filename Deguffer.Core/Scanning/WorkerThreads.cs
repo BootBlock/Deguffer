@@ -7,18 +7,19 @@ namespace Deguffer.Core.Scanning;
 ///
 /// <para><b>Not the thread pool.</b> A walk's helper spends most of its life blocked in a directory
 /// listing. The pool starts threads past its minimum, one per processor, only once it finds itself
-/// starved, about one every half second, so a walk of 64 threads on a machine of 32 processors, in a
-/// test whose listings blocked, took 28 seconds to have 64 directories listing at once. Every measurement of the walk was taken below
-/// the count it named, and the rest of the process's pool work waited behind it meanwhile. Raising
-/// the pool's minimum would fix the walk by changing every other user of the pool, which is not the
-/// walk's to change.</para>
+/// starved, about one every half second. A walk of 64 threads on a machine of 32 processors, in a
+/// test whose listings blocked, took 29 seconds to have 64 directories listing at once, and the
+/// default of up to 16 threads is past the minimum on any machine of fewer than 16 processors. A
+/// walk tuned past it ran below its count, and the rest of the process's pool work waited behind it
+/// meanwhile. Raising the pool's minimum would fix the walk by changing every other user of the
+/// pool, which is not the walk's to change.</para>
 ///
 /// <para><b>A helper never waits for a thread.</b> A parked thread takes it where there is one, and
 /// a new thread starts where there is not. A set capped below what the crews ask for would leave a
 /// helper a crew has counted waiting for a thread another run holds, and a crew returns only once
 /// every helper it counted has ended, so a run inside another run's callback could wait for itself.
-/// The bound is the crews' own: there are never more threads than helpers have run at once, and the
-/// ones a while's work no longer needs end.</para>
+/// The bound is the crews' own: a thread starts only when none is parked, so the set holds about as
+/// many threads as helpers have run at once, and the ones a while's work no longer needs end.</para>
 /// </summary>
 internal sealed class WorkerThreads
 {
@@ -83,19 +84,10 @@ internal sealed class WorkerThreads
             return;
         }
 
+        // Counted once started, so a thread the system would not start is never counted. A thread
+        // ends only after an idle lifetime, long after this.
+        new Parked(this, work).Start();
         Interlocked.Increment(ref _alive);
-
-        try
-        {
-            new Parked(this, work).Start();
-        }
-        catch
-        {
-            // A thread the system would not start. Counted out again, so Count stays the threads that
-            // exist, and raised to the crew, which counts its helper out too.
-            Interlocked.Decrement(ref _alive);
-            throw;
-        }
     }
 
     /// <summary>One thread of the set, and the work it is handed while parked.</summary>

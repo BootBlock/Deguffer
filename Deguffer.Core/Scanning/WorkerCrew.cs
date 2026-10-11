@@ -24,6 +24,7 @@ internal sealed class WorkerCrew
     private readonly int _helpersAllowed;
     private readonly Func<Action> _newHelper;
     private readonly Func<bool> _hasWork;
+    private readonly Action<Action> _run;
     private readonly Action _help;
 
     private int _helpers;
@@ -36,10 +37,17 @@ internal sealed class WorkerCrew
     /// </param>
     /// <param name="hasWork">Whether work is waiting that a helper could take.</param>
     public WorkerCrew(int threads, Func<Action> newHelper, Func<bool> hasWork)
+        : this(threads, newHelper, hasWork, WorkerThreads.Shared.Run)
+    {
+    }
+
+    /// <param name="run">Runs a helper on a thread of its own: the seam a test fails a start through.</param>
+    public WorkerCrew(int threads, Func<Action> newHelper, Func<bool> hasWork, Action<Action> run)
     {
         _helpersAllowed = threads - 1;
         _newHelper = newHelper;
         _hasWork = hasWork;
+        _run = run;
         _help = Help;
     }
 
@@ -68,7 +76,11 @@ internal sealed class WorkerCrew
         }
     }
 
-    /// <summary>Start a helper, if work is waiting and the bound allows another.</summary>
+    /// <summary>
+    /// Start a helper, if work is waiting and the bound allows another. Never throws: a helper that
+    /// cannot be started fails the run, which <see cref="Finish"/> throws, because a caller may be
+    /// starting it from a read's completion, where nothing would see an exception.
+    /// </summary>
     public bool TryStartHelper()
     {
         if (!TryClaimHelper())
@@ -78,14 +90,15 @@ internal sealed class WorkerCrew
 
         try
         {
-            WorkerThreads.Shared.Run(_help);
+            _run(_help);
         }
-        catch
+        catch (OutOfMemoryException ex)
         {
-            // No thread to run it on. Counted out, or Finish would wait for a helper that never ran.
+            // What starting a thread throws when the system will not start one. Counted out, or
+            // Finish would wait for a helper that never ran.
             Interlocked.Decrement(ref _helpers);
-            _changed.Set();
-            throw;
+            Fail(ex);
+            return false;
         }
 
         return true;

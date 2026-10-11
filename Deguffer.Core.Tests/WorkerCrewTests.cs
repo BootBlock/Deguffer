@@ -44,4 +44,23 @@ public sealed class WorkerCrewTests
         Assert.Equal(Helpers, started);
         Assert.True(reached, $"{atWork} of {Helpers} helpers were at work {Deadline.TotalMilliseconds} ms after they were started.");
     }
+
+    /// <summary>
+    /// A helper the system will not start a thread for fails the run rather than throwing where it was
+    /// asked for, which may be a read's completion that nothing watches, and is counted out, or the
+    /// run would wait for it for ever.
+    /// </summary>
+    [Fact]
+    public async Task AHelperThatCannotBeStartedFailsTheRunAndIsNotWaitedFor()
+    {
+        var refused = new OutOfMemoryException("No thread could be started.");
+        var crew = new WorkerCrew(2, () => static () => { }, () => true, _ => throw refused);
+
+        var started = crew.TryStartHelper();
+        var finished = Task.Run(crew.Finish);
+
+        Assert.False(started);
+        Assert.True(crew.Failed);
+        Assert.Same(refused, await Assert.ThrowsAsync<OutOfMemoryException>(() => finished.WaitAsync(TimeSpan.FromSeconds(10))));
+    }
 }

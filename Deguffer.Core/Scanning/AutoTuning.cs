@@ -29,11 +29,12 @@ internal static class AutoTuning
     ///
     /// <para>The walk's helpers were thread-pool work items then, and the pool starts threads past one
     /// per processor only slowly, but no count measured exceeded the 32 processors, and each reached its
-    /// count. Timed again once the helpers had threads of their own, alternating with the pool's
-    /// helpers, five runs each, 8 to 32 threads were level within the noise: medians of 1.59 to 1.88 s
-    /// against 1.44 to 1.72 s on WinSxS, and 87 to 158 ms against 98 to 143 ms on Program Files. Only
-    /// 64 threads changed what ran, from 33 to 43 folders listed at once to 64, at 1.72 s against
-    /// 1.75 s on WinSxS and 91 ms against 106 ms on Program Files.</para>
+    /// count. Timed again once the helpers had threads of their own, against the pool's helpers, 8 to
+    /// 32 threads were level within the noise. At 8 and 16, three rounds alternating which came first,
+    /// the medians of the later runs were 1.49 to 2.07 s against 1.53 to 2.39 s on WinSxS, and 106 to
+    /// 192 ms against 106 to 161 ms on Program Files, with neither ahead in every round. Only 64 threads
+    /// changed what ran, from 33 to 43 folders listed at once to 64, at 1.72 s against 1.75 s on WinSxS
+    /// and 91 ms against 106 ms on Program Files.</para>
     ///
     /// <para>The SATA SSD held too little to walk for a measurement, so it is not measured.</para>
     /// </summary>

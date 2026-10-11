@@ -59,6 +59,43 @@ public sealed class WorkerThreadsTests
         Assert.Equal(1, set.Count);
     }
 
+    /// <summary>
+    /// Work handed to a thread in the moment its idle wait gives up still runs. With no idle lifetime
+    /// at all, every parked thread is giving up as soon as it parks, so callers handing over work
+    /// together keep taking threads in that moment, and a thread that ended regardless would leave a
+    /// piece unrun.
+    /// </summary>
+    [Fact]
+    public async Task WorkHandedOverAsTheIdleWaitEndsStillRuns()
+    {
+        const int Callers = 4;
+        const int PiecesEach = 5000;
+        var set = new WorkerThreads(TimeSpan.Zero);
+
+        var callers = Enumerable.Range(0, Callers).Select(_ => Task.Factory.StartNew(
+            () =>
+            {
+                using var ran = new SemaphoreSlim(0);
+
+                for (var i = 0; i < PiecesEach; i++)
+                {
+                    set.Run(() => ran.Release());
+
+                    if (!ran.Wait(Patience))
+                    {
+                        return i;
+                    }
+                }
+
+                return PiecesEach;
+            },
+            TaskCreationOptions.LongRunning));
+
+        var ranEach = await Task.WhenAll(callers);
+
+        Assert.All(ranEach, ran => Assert.Equal(PiecesEach, ran));
+    }
+
     [Fact]
     public void AThreadParkedForItsIdleLifetimeEnds()
     {
