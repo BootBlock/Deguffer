@@ -171,8 +171,9 @@ internal static class BoundedFileWalk
 
     /// <summary>
     /// The walk above, listing each directory through <paramref name="list"/> rather than from the
-    /// disk: the seam a test lists a tree no volume holds through, and the benchmark counts the
-    /// listings in flight through.
+    /// disk: the seam a test lists a tree no volume holds through, the benchmark counts the listings
+    /// in flight through, and a removal lists through <see cref="IFileSystem"/>, which its tests
+    /// observe and refuse through.
     /// </summary>
     public static void Visit<TState>(
         string root,
@@ -180,7 +181,7 @@ internal static class BoundedFileWalk
         WalkTuning tuning,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
-        Action onProgress,
+        Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct)
     {

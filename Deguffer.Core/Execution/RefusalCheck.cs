@@ -213,10 +213,12 @@ internal static class RefusalCheck
 
             Parallel.ForEach(inventory.Files, options, file =>
             {
-                if (fs.ProbeRemoval(file.Path) is { } reason)
+                var path = file.FullName;
+
+                if (fs.ProbeRemoval(path) is { } reason)
                 {
                     counter.Add(reason, file.Length);
-                    files.Add(file.Path);
+                    files.Add(path);
                 }
             });
 

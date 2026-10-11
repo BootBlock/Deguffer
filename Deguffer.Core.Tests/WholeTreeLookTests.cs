@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -148,6 +149,75 @@ public sealed class WholeTreeLookTests : IDisposable
         var look = WholeTreeLook.Take([root, nested], MinimumAge.Off, WindowsFileSystem.Default, default);
 
         Assert.Equal([store], look.Stores);
+    }
+
+    /// <summary>
+    /// A folder Windows will not list is learned from the listing's answer, never from an exception:
+    /// these looks cross entire Windows installations, which hold hundreds of such folders.
+    /// </summary>
+    [Fact]
+    public void NamesAFolderWindowsWillNotListWithoutThrowing()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var locked = _temp.CreateDirectory("cache", "a", "locked");
+        var store = _temp.CreateFile(16, "cache", "b", "mail.ost");
+
+        using var denied = new DeniedDirectory(locked);
+
+        // One worker, which is the calling thread: an exception on a helper would not be seen here,
+        // because the walk starts its helpers without the context that records what is thrown.
+        WholeTreeLook? look = null;
+        var thrown = ThrownExceptions.During(
+            () => look = WholeTreeLook.Take(
+                [root], MinimumAge.Off, WindowsFileSystem.Default, new WalkTuning(1, WalkTuning.MinimumListingBuffer), default));
+
+        Assert.Empty(thrown);
+        Assert.Equal([store], look!.Stores);
+        Assert.Equal([locked], look.Unlisted);
+    }
+
+    /// <summary>
+    /// The answer is the same however many workers looked, and names each store and each unlisted
+    /// folder once, in one order, when one path asked about lies inside another.
+    /// </summary>
+    [Fact]
+    public void GivesTheSameAnswerWithOneWorkerAsWithMany()
+    {
+        var root = _temp.CreateDirectory("cache");
+        for (var branch = 0; branch < 8; branch++)
+        {
+            for (var level = 0; level < 4; level++)
+            {
+                _temp.CreateFile(4, [.. new[] { "cache", $"branch-{branch}" }, .. Enumerable.Range(0, level).Select(l => $"level-{l}"), $"blob-{level}.bin"]);
+            }
+
+            _temp.CreateFile(4, "cache", $"branch-{branch}", "level-0", $"mail-{branch}.pst");
+        }
+
+        var nested = Path.Combine(root, "branch-3");
+        var locked = _temp.CreateDirectory("cache", "branch-5", "locked");
+
+        using var denied = new DeniedDirectory(locked);
+
+        var keep = MinimumAge.Within(TimeSpan.FromDays(1), DateTime.UtcNow);
+        var one = WholeTreeLook.Take([nested, root], keep, WindowsFileSystem.Default, new WalkTuning(1, WalkTuning.MinimumListingBuffer), default);
+
+        Assert.Equal(8, one.Stores.Count);
+        Assert.Equal([locked], one.Unlisted);
+        Assert.True(one.Recent);
+
+        foreach (var tuning in new[]
+        {
+            new WalkTuning(WalkTuning.MaximumThreads, WalkTuning.MinimumListingBuffer),
+            new WalkTuning(WalkTuning.MaximumThreads, WalkTuning.MaximumListingBuffer),
+        })
+        {
+            var many = WholeTreeLook.Take([nested, root], keep, WindowsFileSystem.Default, tuning, default);
+
+            Assert.Equal(one.Stores, many.Stores);
+            Assert.Equal(one.Unlisted, many.Unlisted);
+            Assert.Equal(one.Recent, many.Recent);
+        }
     }
 
     private static IReadOnlyList<string> Stores(string root) =>

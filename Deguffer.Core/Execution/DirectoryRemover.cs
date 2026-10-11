@@ -163,9 +163,10 @@ public static class DirectoryRemover
         // standing, because what §5.6 reads from it is where the removal went, not what it weighed.
         foreach (var link in inventory.Links)
         {
+            var linkPath = link.FullName;
             var gone = link.IsDirectory
-                ? DirectoryDeletion.TryDelete(link.FullName, fs) is null
-                : TryDeleteFile(link.FullName, fs) is null;
+                ? DirectoryDeletion.TryDelete(linkPath, fs) is null
+                : TryDeleteFile(linkPath, link.Attributes, fs) is null;
 
             if (gone)
             {
@@ -173,7 +174,7 @@ public static class DirectoryRemover
             }
             else if (link.IsDirectory)
             {
-                leftStanding.Add(link.FullName);
+                leftStanding.Add(linkPath);
             }
         }
 
@@ -201,10 +202,12 @@ public static class DirectoryRemover
         {
             Parallel.ForEach(inventory.Files, options, file =>
             {
-                if (TryDeleteFile(file.Path, fs) is { } reason)
+                var filePath = file.FullName;
+
+                if (TryDeleteFile(filePath, file.Attributes, fs) is { } reason)
                 {
                     refused.Add(reason, file.Length);
-                    refusedAt.TryAdd(EntryHolding(extended, file.Path), 0);
+                    refusedAt.TryAdd(EntryHolding(extended, filePath), 0);
                 }
                 else
                 {
@@ -378,16 +381,27 @@ public static class DirectoryRemover
     /// Delete one file, and say why Windows would not let it go — or null where it went, or where it
     /// had already gone.
     /// </summary>
-    private static RefusalReason? TryDeleteFile(string extendedPath, IFileSystem fs)
+    /// <param name="attributes">
+    /// The file's attributes as the walk's listing read them. A read-only bit there is cleared before
+    /// the delete rather than after Windows refuses it: package manager caches set the bit on every
+    /// file, and each refusal is a thrown exception and a second delete.
+    /// </param>
+    private static RefusalReason? TryDeleteFile(string extendedPath, FileAttributes attributes, IFileSystem fs)
     {
         try
         {
+            if (attributes.HasFlag(FileAttributes.ReadOnly))
+            {
+                fs.ClearAttributes(extendedPath);
+            }
+
             fs.DeleteFile(extendedPath);
             return null;
         }
         catch (UnauthorizedAccessException)
         {
-            // Commonly just the read-only bit — package manager caches set it liberally.
+            // The read-only bit, set since the walk listed the file, or a refusal of another kind
+            // that clearing it cannot change and the second attempt reports.
             try
             {
                 fs.ClearAttributes(extendedPath);

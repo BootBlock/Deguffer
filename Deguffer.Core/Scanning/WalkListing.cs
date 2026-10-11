@@ -6,7 +6,7 @@ namespace Deguffer.Core.Scanning;
 /// <param name="Denied">
 /// Whether a refusal was the account not being allowed to read the directory, which no retry changes.
 /// </param>
-internal readonly record struct ListingEnd(PathPresence Presence, bool Denied);
+public readonly record struct ListingEnd(PathPresence Presence, bool Denied);
 
 /// <summary>
 /// List <paramref name="directory"/> into <paramref name="into"/> with <paramref name="options"/>,

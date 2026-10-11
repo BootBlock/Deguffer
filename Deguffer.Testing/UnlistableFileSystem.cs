@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Testing;
 
@@ -18,10 +19,14 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IF
 
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) =>
+    /// <summary>
+    /// Refused as Windows refuses a folder the account may not read: an answer, never an exception,
+    /// and one no smaller listing buffer changes.
+    /// </summary>
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
         LongPath.Display(directory).Equals(refused, StringComparison.OrdinalIgnoreCase)
-            ? throw new UnauthorizedAccessException($"Refused: {directory}")
-            : inner.EnumerateEntries(directory);
+            ? new ListingEnd(PathPresence.Refused, Denied: true)
+            : inner.ListEntries(directory, options, into);
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 

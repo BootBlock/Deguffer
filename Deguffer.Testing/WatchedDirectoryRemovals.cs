@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Testing;
 
@@ -46,7 +47,8 @@ public sealed class WatchedDirectoryRemovals(
 
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) => inner.EnumerateEntries(directory);
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
+        inner.ListEntries(directory, options, into);
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 
@@ -62,7 +64,10 @@ public sealed class WatchedDirectoryRemovals(
 
         // A child still there when its parent is tried was not finished first, whether nobody had
         // tried it yet or its removal was still under way.
-        if (inner.EnumerateEntries(path).Any(entry => entry.IsDirectory))
+        var entries = new List<WalkEntry>();
+        inner.ListEntries(path, DirectoryListing.EveryEntry, entries);
+
+        if (entries.Any(entry => entry.IsDirectory))
         {
             _triedEarly.Enqueue(path);
         }

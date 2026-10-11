@@ -345,6 +345,32 @@ public sealed class DirectoryRemoverTests : IDisposable
         File.SetAttributes(directory, FileAttributes.Normal);
     }
 
+    /// <summary>
+    /// The same gate where the folder will not be listed. A refused listing says nothing about what
+    /// the folder holds, so it is not read as empty, and a folder the removal leaves standing keeps
+    /// the attributes it had.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAReadOnlyDirectoryUntouchedWhenItsListingIsRefused()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var free = _temp.CreateFile(1024, "cache", "free.bin");
+        var directory = _temp.CreateDirectory("cache", "unlisted");
+        File.SetAttributes(directory, File.GetAttributes(directory) | FileAttributes.ReadOnly);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, fileSystem: new UnlistableFileSystem(WindowsFileSystem.Default, directory));
+
+        Assert.True(Directory.Exists(directory));
+        Assert.True(
+            File.GetAttributes(directory).HasFlag(FileAttributes.ReadOnly),
+            "a directory that survived the removal had its attributes reset");
+        Assert.False(File.Exists(free));
+        Assert.False(outcome.RootRemoved);
+
+        File.SetAttributes(directory, FileAttributes.Normal);
+    }
+
     [Fact]
     public async Task LeavesAFileHeldOpenInPlaceRatherThanFailingTheRun()
     {

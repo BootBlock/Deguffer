@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Testing;
 
@@ -42,10 +43,10 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
         return inner.IsReparsePoint(path);
     }
 
-    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory)
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into)
     {
         _paths.Enqueue(directory);
-        return inner.EnumerateEntries(directory);
+        return inner.ListEntries(directory, options, into);
     }
 
     public long? TryGetNewestFileTime(string path)

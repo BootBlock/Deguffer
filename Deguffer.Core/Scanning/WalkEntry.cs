@@ -16,7 +16,7 @@ namespace Deguffer.Core.Scanning;
 /// <see cref="FullName"/> carries the prefix too. Every entry of one listing shares the one string.
 /// </param>
 /// <param name="Length">The file's length in bytes, and zero for a directory.</param>
-internal readonly record struct WalkEntry(
+public readonly record struct WalkEntry(
     string Directory,
     string Name,
     FileAttributes Attributes,

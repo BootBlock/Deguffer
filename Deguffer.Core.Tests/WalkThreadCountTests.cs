@@ -42,7 +42,7 @@ public sealed class WalkThreadCountTests
                         descend(entry, 0);
                     }
                 },
-                static () => { },
+                static _ => { },
                 TimeProvider.System,
                 CancellationToken.None),
             TaskCreationOptions.LongRunning);

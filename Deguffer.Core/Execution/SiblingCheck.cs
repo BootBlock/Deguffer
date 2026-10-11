@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -142,15 +143,12 @@ public sealed class SiblingCheck
 
     private static IReadOnlyList<string>? Names(string directory, IFileSystem fs)
     {
-        try
-        {
-            return [.. fs.EnumerateEntries(LongPath.Extended(directory)).Select(e => Path.GetFileName(e.FullName))];
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // Nothing rather than a partial view, on ChildDirectories.Under's reasoning: half a
-            // listing would let a missing sibling read as one that was never there.
-            return null;
-        }
+        var entries = new List<WalkEntry>();
+
+        // Nothing rather than a partial view, on ChildDirectories.Under's reasoning: half a listing
+        // would let a missing sibling read as one that was never there.
+        return fs.ListEntries(LongPath.Extended(directory), DirectoryListing.EveryEntry, entries) is { Presence: PathPresence.Present }
+            ? [.. entries.Select(entry => entry.Name)]
+            : null;
     }
 }

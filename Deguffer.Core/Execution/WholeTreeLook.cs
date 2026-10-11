@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -44,66 +46,98 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         Task.Run(() => Take(paths, keep, WindowsFileSystem.Default, ct), ct);
 
     /// <summary>The same look through <paramref name="fs"/>, which is how a test hands it a refusal.</summary>
-    internal static WholeTreeLook Take(IReadOnlyList<string> paths, MinimumAge keep, IFileSystem fs, CancellationToken ct)
+    internal static WholeTreeLook Take(IReadOnlyList<string> paths, MinimumAge keep, IFileSystem fs, CancellationToken ct) =>
+        Take(paths, keep, fs, WalkTuning.Default, ct);
+
+    /// <summary>The same look with <paramref name="tuning"/>'s workers, which is how a test sets them.</summary>
+    internal static WholeTreeLook Take(
+        IReadOnlyList<string> paths,
+        MinimumAge keep,
+        IFileSystem fs,
+        WalkTuning tuning,
+        CancellationToken ct)
     {
-        var stores = new List<string>();
-        var unlisted = new List<string>();
-        var recent = false;
+        // Written by several workers at once, and put in one order at the end, so the answer is the
+        // same however their work interleaved.
+        var stores = new ConcurrentQueue<string>();
+        var unlisted = new ConcurrentQueue<string>();
+        var recent = 0;
 
         // A command's measured paths can nest, and a folder walked twice would name its stores twice.
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
 
-        // An explicit stack rather than recursion, because these are entire Windows installations and
-        // the deepest trees on a developer's disk.
-        var pending = new Stack<string>(paths.Select(LongPath.Extended));
-
-        while (pending.TryPop(out var directory))
+        // On the walk every scan takes, which lists with several workers and never recurses: these are
+        // entire Windows installations and the deepest trees on a developer's disk.
+        foreach (var path in paths)
         {
-            ct.ThrowIfCancellationRequested();
+            var root = LongPath.Extended(path);
 
-            if (!visited.Add(directory))
-            {
-                continue;
-            }
-
-            IReadOnlyList<FileSystemEntry> entries;
-            try
-            {
-                entries = fs.EnumerateEntries(directory);
-            }
-            catch (DirectoryNotFoundException)
-            {
-                // Gone since the plan was made, or never there: nothing inside it can be lost.
-                continue;
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-            {
-                unlisted.Add(LongPath.Display(directory));
-                continue;
-            }
-
-            foreach (var entry in entries)
-            {
-                recent |= keep.IsOn && keep.Protects(entry.NewestFileTime);
-
-                if (entry.IsDirectory)
+            BoundedFileWalk.Visit(
+                root,
+                root,
+                tuning,
+                fs.ListEntries,
+                (directory, contents, descend) =>
                 {
-                    if (!entry.IsReparsePoint)
+                    if (!visited.TryAdd(directory, 0))
                     {
-                        pending.Push(entry.FullName);
+                        return;
                     }
-                }
 
-                // Whatever mark it carries: a OneDrive placeholder and a deduplicated file carry the mark
-                // Windows puts on a link, and every removal this look stands in front of would take one.
-                else if (MailStore.Is(entry.FullName))
-                {
-                    stores.Add(LongPath.Display(entry.FullName));
-                }
-            }
+                    // Gone since the plan was made, or never there: nothing inside it can be lost. A
+                    // refusal part-way still looks at what was listed, since every finding stops the
+                    // removal and the folder is named as unlisted either way.
+                    if (contents.Presence is PathPresence.Refused)
+                    {
+                        unlisted.Enqueue(LongPath.Display(directory));
+                    }
+
+                    foreach (var entry in contents.Entries)
+                    {
+                        Notice(entry);
+
+                        if (entry.IsDirectory)
+                        {
+                            descend(entry, entry.FullName);
+                        }
+                    }
+
+                    // A link is listed for its own timestamps and never followed: what is on its far
+                    // side belongs to wherever it points.
+                    foreach (var link in contents.Links)
+                    {
+                        Notice(link);
+                    }
+
+                    foreach (var marked in contents.ReparseFiles)
+                    {
+                        Notice(marked);
+                    }
+                },
+                static _ => { },
+                TimeProvider.System,
+                ct);
         }
 
-        return new WholeTreeLook(stores, recent, unlisted);
+        return new WholeTreeLook(
+            [.. stores.Order(StringComparer.OrdinalIgnoreCase)],
+            Volatile.Read(ref recent) == 1,
+            [.. unlisted.Order(StringComparer.OrdinalIgnoreCase)]);
+
+        void Notice(WalkEntry entry)
+        {
+            if (keep.IsOn && keep.Protects(entry.NewestFileTime))
+            {
+                Volatile.Write(ref recent, 1);
+            }
+
+            // Whatever mark it carries: a OneDrive placeholder and a deduplicated file carry the mark
+            // Windows puts on a link, and every removal this look stands in front of would take one.
+            if (!entry.IsDirectory && MailStore.Is(entry.Name))
+            {
+                stores.Enqueue(LongPath.Display(entry.FullName));
+            }
+        }
     }
 
     /// <summary>

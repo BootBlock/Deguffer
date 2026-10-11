@@ -43,7 +43,7 @@ internal static class WalkRoute
 
                 Interlocked.Add(ref entries, contents.Entries.Count + contents.Links.Count + contents.ReparseFiles.Count);
             },
-            onProgress: static () => { },
+            onProgress: static _ => { },
             TimeProvider.System,
             ct);
 

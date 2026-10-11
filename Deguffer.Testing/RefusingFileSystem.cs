@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Testing;
 
@@ -29,7 +30,8 @@ public sealed class RefusingFileSystem(IFileSystem inner, IReadOnlyDictionary<st
 
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory) => inner.EnumerateEntries(directory);
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
+        inner.ListEntries(directory, options, into);
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 

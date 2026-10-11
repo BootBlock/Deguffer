@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Testing;
 
@@ -22,14 +23,14 @@ public sealed class CancellingFileSystem(
 
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-    public IReadOnlyList<FileSystemEntry> EnumerateEntries(string directory)
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into)
     {
         if (whileListing)
         {
             cancel.Cancel();
         }
 
-        return inner.EnumerateEntries(directory);
+        return inner.ListEntries(directory, options, into);
     }
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
