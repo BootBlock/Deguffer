@@ -28,20 +28,8 @@ internal sealed class ExploreLayer
 
     private CompositionVirtualDrawingSurface _surface;
 
-    /// <summary>What the canvas was shaded from on the GPU, or null for one painted on the CPU, which has no light.</summary>
-    private (CushionQuads Quads, TileColour Ground)? _shaded;
-
-    /// <summary>The pointer's light as it is on the surface now, or null where none is.</summary>
-    private PointerLight? _light;
-
-    /// <summary>Where the pointer's light is to go, once the compositor has taken the surface as it is: see <see cref="Light"/>.</summary>
-    private PointerLight? _wanted;
-
-    /// <summary>Whether a commit is asked for, after which the light goes where it is wanted.</summary>
-    private bool _awaiting;
-
-    /// <summary>The last commit asked for. Only its completion settles the surface: see <see cref="AfterCommit"/>.</summary>
-    private int _asked;
+    /// <summary>The pointer's light on the canvas, where it was shaded on the GPU.</summary>
+    private readonly CanvasLight _light = new();
 
     public ExploreLayer(Compositor compositor, MapGraphics graphics)
     {
@@ -101,7 +89,7 @@ internal sealed class ExploreLayer
     public void Prepare(int width, int height)
     {
         MapGraphics.Empty(_surface);
-        Forget();
+        _light.Forget();
 
         if (Size.Width != width || Size.Height != height)
         {
@@ -127,34 +115,19 @@ internal sealed class ExploreLayer
     public void Shade(CushionQuads quads, TileColour ground)
     {
         _graphics.Shade(_surface, quads, ground);
-        _shaded = (quads, ground);
-        _light = null;
-        AfterCommit();
+        AfterCommit(_light.Shaded(quads, ground));
     }
 
     /// <summary>
     /// Put the pointer's light at <paramref name="light"/> on a canvas shaded on the GPU, or take it off
-    /// with null: only what it lit, and what it lights now, is shaded again. Nothing on a canvas painted
-    /// on the CPU, which has nothing to shade it again from.
-    ///
-    /// <para>Not at once, but after the compositor next takes what is on the surface, and then only
-    /// where the light was last wanted. A part of a virtual surface written in the same commit as the
-    /// whole canvas left the rest of it empty on screen, which a light landing with a new drawing did
-    /// every time. And a pointer moves several times a frame, so the light is shaded once a commit
-    /// rather than once a move.</para>
+    /// with null, once the compositor has taken the surface: see <see cref="CanvasLight"/>. Nothing on a
+    /// canvas painted on the CPU, which has nothing to shade it again from.
     /// </summary>
     public void Light(PointerLight? light)
     {
-        if (_shaded is null)
+        if (_light.Want(light) is { } commit)
         {
-            return;
-        }
-
-        _wanted = light;
-
-        if (!_awaiting && _wanted != _light)
-        {
-            AfterCommit();
+            AfterCommit(commit);
         }
     }
 
@@ -180,7 +153,7 @@ internal sealed class ExploreLayer
         Sprite.IsVisible = false;
 
         MapGraphics.Empty(_surface);
-        Forget();
+        _light.Forget();
     }
 
     /// <summary>
@@ -196,53 +169,16 @@ internal sealed class ExploreLayer
 
         _surface = _graphics.CreateSurface(Size.Width, Size.Height);
         _brush.Surface = _surface;
-        Forget();
+        _light.Forget();
     }
 
-    /// <summary>The surface no longer holds a shaded canvas, or a light on one.</summary>
-    private void Forget()
-    {
-        _shaded = null;
-        _light = null;
-        _wanted = null;
-    }
-
-    /// <summary>
-    /// Ask for the commit that takes the surface as it is now, and settle it once that commit is done.
-    /// A later ask supersedes this one, so a canvas shaded whole after a light was asked for waits for
-    /// its own commit rather than settling on the light's.
-    /// </summary>
-    private void AfterCommit()
-    {
-        var asked = ++_asked;
-        _awaiting = true;
-
+    /// <summary>Ask the compositor for <paramref name="commit"/>, and shade the light it settles once it is done.</summary>
+    private void AfterCommit(int commit) =>
         _compositor.RequestCommitAsync().Completed = (_, _) => _dispatcher.TryEnqueue(() =>
         {
-            if (asked == _asked)
+            if (_light.Committed(commit) is { } shading)
             {
-                Settle();
+                _graphics.Shade(_surface, shading.Quads, shading.Ground, shading.Region, shading.Light);
             }
         });
-    }
-
-    /// <summary>Put the light where it was last wanted, on a surface the compositor has taken.</summary>
-    private void Settle()
-    {
-        _awaiting = false;
-
-        if (_shaded is not { } shaded || _wanted == _light)
-        {
-            return;
-        }
-
-        var (quads, ground) = shaded;
-
-        if (PointerLight.Between(_light, _wanted, Size.Width, Size.Height) is { } region)
-        {
-            _graphics.Shade(_surface, quads, ground, region, _wanted);
-        }
-
-        _light = _wanted;
-    }
 }
