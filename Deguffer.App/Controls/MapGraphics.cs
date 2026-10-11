@@ -222,6 +222,12 @@ internal sealed class MapGraphics
                 1,
                 CanvasImageInterpolation.NearestNeighbor,
                 CanvasComposite.Copy);
+
+            // Now rather than when Direct2D chooses. The renderer writes its canvas straight through
+            // Direct3D, so Direct2D cannot see that the next shading overwrites what this copy reads,
+            // and ending the session leaves the copy queued. Measured: a new drawing landed with the
+            // light shaded into the drawing before it, a few milliseconds later, and nothing else.
+            session.Flush();
         });
 
     /// <summary>
@@ -284,6 +290,9 @@ internal sealed class MapGraphics
             new Rect(0, 0, width, height),
             1,
             CanvasImageInterpolation.HighQualityCubic);
+
+        // Before the next shading overwrites the renderer's canvas this may be reading, as Shade does.
+        session.Flush();
 
         return surface;
     }
