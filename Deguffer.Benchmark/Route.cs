@@ -23,12 +23,18 @@ internal enum Route
     /// one every run takes where the table declines.
     /// </summary>
     Walk,
+
+    /// <summary>
+    /// Build the Explore tree for one folder by walking it: the route an unelevated Explore takes,
+    /// assembling the pictures of the tree so far that it draws while it walks, unless told not to.
+    /// </summary>
+    ExploreWalk,
 }
 
 internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
-    public static bool ReadsTable(this Route route) => route is not Route.Walk;
+    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.ExploreWalk);
 
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route.ReadsTable() ? "records" : "entries";

@@ -26,24 +26,47 @@ internal static class WalkExploreReader
     /// Walk <paramref name="root"/> and return everything under it, asking <paramref name="probe"/>
     /// what each file occupies where its listing cannot say.
     ///
-    /// <paramref name="onProgress"/> is called with the running counts at the walk's
+    /// <paramref name="progress"/> is told the running counts at the walk's
     /// <see cref="BoundedFileWalk.ProgressInterval"/> of <paramref name="clock"/>, which is the
     /// cadence §5.5 wants for a UI: coarse enough to be worth marshalling and frequent enough that a
-    /// large scan does not look stalled. It is never called beside itself.
+    /// large scan does not look stalled. It is never told beside itself, and never after this
+    /// returns. Some reports also carry a snapshot, where <paramref name="assembleSnapshot"/> says
+    /// how to assemble one: see <see cref="WalkSnapshots"/> for when.
     /// </summary>
     /// <param name="unlisted">
     /// The folders not to list, or null to list every one. A folder left unlisted is still in the
     /// tree, with nothing below it, so a caller going through the tree meets it and can name it; and
     /// it is never marked as refused, because nothing asked Windows for its listing.
     /// </param>
+    /// <param name="assembleSnapshot">
+    /// How a snapshot is assembled (<see cref="WalkSnapshots.InBackground"/> for a scan), or null to
+    /// take none, for a caller that draws nothing until the walk is over.
+    /// </param>
     public static ExploreTree Read(
         string root,
         ScanTuner tuning,
         IOccupancyProbe probe,
-        Action<ExploreTreeBuilder, long, long>? onProgress,
+        IProgress<ExploreProgress>? progress,
         TimeProvider clock,
         CancellationToken ct,
-        LeavesUnlisted? unlisted = null)
+        LeavesUnlisted? unlisted = null,
+        Func<Action, Task>? assembleSnapshot = null) =>
+        Read(root, tuning.For(LongPath.Extended(root)).Walk, probe, progress, clock, ct, unlisted, assembleSnapshot);
+
+    /// <summary>
+    /// <see cref="Read(string, ScanTuner, IOccupancyProbe, IProgress{ExploreProgress}?, TimeProvider, CancellationToken, LeavesUnlisted?, Func{Action, Task}?)"/>
+    /// with the walk's values given rather than resolved for the drive, for a benchmark that sets
+    /// them itself.
+    /// </summary>
+    public static ExploreTree Read(
+        string root,
+        WalkTuning tuning,
+        IOccupancyProbe probe,
+        IProgress<ExploreProgress>? progress,
+        TimeProvider clock,
+        CancellationToken ct,
+        LeavesUnlisted? unlisted = null,
+        Func<Action, Task>? assembleSnapshot = null)
     {
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
         // the parent it was handed — so the whole traversal stays past MAX_PATH. The tree keeps the
@@ -58,66 +81,82 @@ internal static class WalkExploreReader
         long items = 0;
         long bytes = 0;
 
-        BoundedFileWalk.Visit(
-            LongPath.Extended(root),
-            ExploreTreeBuilder.RootNode,
-            tuning,
-            (parent, contents, descend) =>
-            {
-                if (contents.WasRefused)
+        var snapshots = progress is not null && assembleSnapshot is not null
+            ? new WalkSnapshots(builder, clock, assembleSnapshot)
+            : null;
+
+        try
+        {
+            BoundedFileWalk.Visit(
+                LongPath.Extended(root),
+                ExploreTreeBuilder.RootNode,
+                tuning,
+                (parent, contents, descend) =>
                 {
-                    // §5.3 keeps the walk quiet about this, and it stays quiet — but the bytes
-                    // behind a refused directory are real, so the totals above it are marked as
-                    // lower bounds rather than presented as measurements, and the directory is
-                    // named, so a caller going through its files can tell it from an empty one.
-                    //
-                    // Whatever was listed before the refusal is still recorded below rather than
-                    // discarded. Enumeration can fail part way through, and the entries already in
-                    // hand are as real as any others — dropping them would make the picture worse
-                    // and the total shorter for no gain, and it is what the file-callback walk
-                    // does with them too.
-                    builder.MarkListingRefused(parent);
-                }
-
-                var children = Describe(contents, probe);
-                if (children.Count == 0)
-                {
-                    return;
-                }
-
-                var first = builder.AddChildren(parent, children);
-
-                Interlocked.Add(ref items, children.Count);
-                Interlocked.Add(ref bytes, children.Sum(c => c.Size));
-
-                // Every entry of one listing shares its directory, so its display form is made once.
-                string? folder = null;
-
-                for (var i = 0; i < contents.Entries.Count; i++)
-                {
-                    var entry = contents.Entries[i];
-
-                    if (!entry.IsDirectory)
+                    if (contents.WasRefused)
                     {
-                        continue;
+                        // §5.3 keeps the walk quiet about this, and it stays quiet — but the bytes
+                        // behind a refused directory are real, so the totals above it are marked as
+                        // lower bounds rather than presented as measurements, and the directory is
+                        // named, so a caller going through its files can tell it from an empty one.
+                        //
+                        // Whatever was listed before the refusal is still recorded below rather than
+                        // discarded. Enumeration can fail part way through, and the entries already in
+                        // hand are as real as any others — dropping them would make the picture worse
+                        // and the total shorter for no gain, and it is what the file-callback walk
+                        // does with them too.
+                        builder.MarkListingRefused(parent);
                     }
 
-                    if (unlisted is not null)
+                    var children = Describe(contents, probe);
+                    if (children.Count == 0)
                     {
-                        folder ??= LongPath.Display(entry.Directory);
+                        return;
+                    }
 
-                        if (unlisted(folder, parent == ExploreTreeBuilder.RootNode, Path.Join(folder, entry.Name), entry.Name))
+                    var first = builder.AddChildren(parent, children);
+
+                    Interlocked.Add(ref items, children.Count);
+                    Interlocked.Add(ref bytes, children.Sum(c => c.Size));
+
+                    // Every entry of one listing shares its directory, so its display form is made once.
+                    string? folder = null;
+
+                    for (var i = 0; i < contents.Entries.Count; i++)
+                    {
+                        var entry = contents.Entries[i];
+
+                        if (!entry.IsDirectory)
                         {
                             continue;
                         }
-                    }
 
-                    descend(entry, first + i);
-                }
-            },
-            () => onProgress?.Invoke(builder, Interlocked.Read(ref items), Interlocked.Read(ref bytes)),
-            clock,
-            ct);
+                        if (unlisted is not null)
+                        {
+                            folder ??= LongPath.Display(entry.Directory);
+
+                            if (unlisted(folder, parent == ExploreTreeBuilder.RootNode, Path.Join(folder, entry.Name), entry.Name))
+                            {
+                                continue;
+                            }
+                        }
+
+                        descend(entry, first + i);
+                    }
+                },
+                finished => progress?.Report(new ExploreProgress(
+                    Interlocked.Read(ref items),
+                    Total: null,
+                    Interlocked.Read(ref bytes),
+                    // None from the last report: the finished tree is built next, and replaces it.
+                    finished ? null : snapshots?.Take())),
+                clock,
+                ct);
+        }
+        finally
+        {
+            snapshots?.Stop();
+        }
 
         return builder.Build(ExploreChildOrder.BySize);
     }

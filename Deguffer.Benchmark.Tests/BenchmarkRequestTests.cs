@@ -167,6 +167,37 @@ public sealed class BenchmarkRequestTests
         Assert.NotNull(error);
     }
 
+    /// <summary>
+    /// The Explore walk takes a folder and the walk's values, and takes snapshots unless told not
+    /// to, as Explore does.
+    /// </summary>
+    [Theory]
+    [InlineData(new string[0], true)]
+    [InlineData(new[] { "--snapshots", "on" }, true)]
+    [InlineData(new[] { "--snapshots", "off" }, false)]
+    public void TheExploreWalkTakesSnapshotsUnlessToldNotTo(string[] rest, bool expected)
+    {
+        var request = BenchmarkRequest.Parse(["explorewalk", @"C:\Users\testuser", "--threads", "4", .. rest], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.ExploreWalk, request!.Route);
+        Assert.Equal(@"C:\Users\testuser", request.Path);
+        Assert.Equal(4, request.Walk.Threads);
+        Assert.Equal(expected, request.Snapshots);
+    }
+
+    /// <summary>Only the Explore walk draws as it goes, so no other route has snapshots to switch.</summary>
+    [Theory]
+    [InlineData("walk", @"C:\", "on")]
+    [InlineData("explore", "C", "off")]
+    [InlineData("explorewalk", @"C:\", "yes")]
+    [InlineData("explorewalk", @"C:\", null)]
+    public void SnapshotsAreSwitchedOnTheExploreWalkAloneAndOnlyOnOrOff(string route, string target, string? value)
+    {
+        Assert.Null(BenchmarkRequest.Parse([route, target, "--snapshots", .. value is null ? Array.Empty<string>() : [value]], out var error));
+        Assert.NotNull(error);
+    }
+
     [Fact]
     public void ARouteWithoutATargetIsRefused()
     {

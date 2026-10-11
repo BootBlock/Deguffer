@@ -1,3 +1,4 @@
+using System.Buffers;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
@@ -51,18 +52,21 @@ public sealed class ExploreTreeBuilder
     public const int RootNode = 0;
 
     private readonly string _rootPath;
-    private readonly List<string> _names;
-    private readonly List<int> _parents;
-    private readonly List<long> _sizes;
-    private readonly List<long> _lengths;
-    private readonly List<FileStorage> _storage;
-    private readonly List<bool> _isDirectory;
-    private readonly List<bool> _isLink;
-    private readonly List<bool> _sizeUnknown;
-    private readonly List<ExploreTimestamp> _created;
-    private readonly List<ExploreTimestamp> _modified;
-    private readonly List<FileVisibility> _visibility;
+
+    // One record per node rather than a list per column. A snapshot reads what is published here
+    // without the lock (see Capture), which a List cannot allow, because it moves its array to grow.
+    private readonly AppendOnlyChunks<Node> _nodes = new();
+
+    // Marks made on a node after it was added, kept apart from it so that what a capture reads is
+    // never written again. A refusal is rare against the nodes, so copying these under the lock
+    // costs next to nothing.
+    private readonly List<int> _sizeUnknown = [];
     private readonly List<int> _listingRefused = [];
+
+    // Each parent handed children in more than one call, whose children are not in one batch's name
+    // order. The walk lists each folder once, so a walk never adds to this.
+    private readonly HashSet<int> _listedTwice = [];
+
     private readonly Lock _gate = new();
 
     /// <param name="created">
@@ -85,17 +89,14 @@ public sealed class ExploreTreeBuilder
 
         // The root is node zero and its own parent, which is what stops the link inversion in
         // ExploreTree.Create from making the tree cyclic.
-        _names = [rootPath];
-        _parents = [RootNode];
-        _sizes = [0];
-        _lengths = [0];
-        _storage = [FileStorage.Plain];
-        _isDirectory = [true];
-        _isLink = [false];
-        _sizeUnknown = [false];
-        _created = [created];
-        _modified = [lastWritten];
-        _visibility = [FileVisibility.Shown];
+        _nodes.Add() = new Node
+        {
+            Name = rootPath,
+            Parent = RootNode,
+            IsDirectory = true,
+            Created = created,
+            Modified = lastWritten,
+        };
     }
 
     /// <summary>
@@ -107,31 +108,72 @@ public sealed class ExploreTreeBuilder
     /// cost. A directory holds tens to thousands of entries and a volume holds hundreds of
     /// thousands of directories, so batching turns one contended acquisition per file into one per
     /// directory (G4).</para>
+    ///
+    /// <para>The children are put in name order here, once and before the lock is taken, rather
+    /// than in every snapshot. A directory's children arrive together and never change, so their
+    /// order is known as soon as they are, and a snapshot places each one where its rank says
+    /// without sorting anything.</para>
     /// </summary>
     public int AddChildren(int parent, IReadOnlyList<ExploreChild> children)
     {
         ArgumentNullException.ThrowIfNull(children);
 
-        lock (_gate)
-        {
-            var first = _names.Count;
+        var rented = ArrayPool<int>.Shared.Rent(children.Count);
 
-            foreach (var child in children)
+        try
+        {
+            var byName = rented.AsSpan(0, children.Count);
+            for (var i = 0; i < byName.Length; i++)
             {
-                _names.Add(child.Name);
-                _parents.Add(parent);
-                _sizes.Add(child.Size);
-                _lengths.Add(child.Length ?? child.Size);
-                _storage.Add(child.Storage);
-                _isDirectory.Add(child.IsDirectory);
-                _isLink.Add(child.IsLink);
-                _sizeUnknown.Add(child.SizeUnknown);
-                _created.Add(child.Created);
-                _modified.Add(child.LastWritten);
-                _visibility.Add(child.Visibility);
+                byName[i] = i;
             }
 
-            return first;
+            // Ties go by index within the batch, which is the tree's own tie-break: a batch is
+            // numbered consecutively, so index order is node-number order.
+            byName.Sort((left, right) =>
+                ExploreTree.CompareByName(children[left].Name, left, children[right].Name, right));
+
+            lock (_gate)
+            {
+                var first = _nodes.Count;
+
+                ref var listed = ref _nodes[parent];
+                if (listed.HasChildren)
+                {
+                    _listedTwice.Add(parent);
+                }
+
+                listed.HasChildren = true;
+
+                foreach (var child in children)
+                {
+                    _nodes.Add() = new Node
+                    {
+                        Name = child.Name,
+                        Parent = parent,
+                        Size = child.Size,
+                        Length = child.Length ?? child.Size,
+                        Storage = child.Storage,
+                        IsDirectory = child.IsDirectory,
+                        IsLink = child.IsLink,
+                        SizeUnknown = child.SizeUnknown,
+                        Created = child.Created,
+                        Modified = child.LastWritten,
+                        Visibility = child.Visibility,
+                    };
+                }
+
+                for (var rank = 0; rank < byName.Length; rank++)
+                {
+                    _nodes[first + byName[rank]].NameRank = rank;
+                }
+
+                return first;
+            }
+        }
+        finally
+        {
+            ArrayPool<int>.Shared.Return(rented);
         }
     }
 
@@ -146,7 +188,7 @@ public sealed class ExploreTreeBuilder
     {
         lock (_gate)
         {
-            _sizeUnknown[node] = true;
+            _sizeUnknown.Add(node);
         }
     }
 
@@ -163,7 +205,7 @@ public sealed class ExploreTreeBuilder
     {
         lock (_gate)
         {
-            _sizeUnknown[node] = true;
+            _sizeUnknown.Add(node);
             _listingRefused.Add(node);
         }
     }
@@ -173,38 +215,55 @@ public sealed class ExploreTreeBuilder
     ///
     /// <para>Callable while the walk is still running, which is what makes a snapshot possible, and
     /// it is the snapshot that wants an order other than by size — see
-    /// <see cref="ExploreChildOrder"/>. Node numbers are indices into these lists and the lists only
-    /// ever grow, so a node in one snapshot is the same node in the next and in the finished
+    /// <see cref="ExploreChildOrder"/>. Node numbers are positions in what this holds, which only
+    /// ever grows, so a node in one snapshot is the same node in the next and in the finished
     /// tree.</para>
-    ///
-    /// <para>Every slot was filled by this builder, so every one is present — the distinction
-    /// <see cref="ExploreTree.Create"/> needs exists for the file table, which leaves free and
-    /// unreadable records empty.</para>
     /// </summary>
-    public ExploreTree Build(ExploreChildOrder childOrder)
+    public ExploreTree Build(ExploreChildOrder childOrder) => Capture().Build(childOrder);
+
+    /// <summary>
+    /// What has been recorded so far, to be assembled into a tree once the lock is released.
+    ///
+    /// <para>All the lock covers is a count and the few marks made since nodes were added.
+    /// Assembling a tree is several passes over every node, and while the lock was held for them
+    /// every walk worker that finished a listing waited for them to end.</para>
+    /// </summary>
+    internal ExploreTreeCapture Capture()
     {
         lock (_gate)
         {
-            var present = new bool[_names.Count];
-            Array.Fill(present, true);
-
-            return ExploreTree.Create(
-                _rootPath,
-                RootNode,
-                [.. _names],
-                [.. _parents],
-                [.. _sizes],
-                [.. _lengths],
-                [.. _storage],
-                [.. _isDirectory],
-                [.. _isLink],
-                [.. _sizeUnknown],
-                [.. _created],
-                [.. _modified],
-                [.. _visibility],
-                present,
-                childOrder,
-                [.. _listingRefused]);
+            return new ExploreTreeCapture(
+                _rootPath, _nodes.Freeze(), [.. _sizeUnknown], [.. _listingRefused], [.. _listedTwice]);
         }
+    }
+
+    /// <summary>
+    /// One node as it was recorded. Nothing but <see cref="HasChildren"/> and, in the call that adds
+    /// the node, <see cref="NameRank"/> is written after it is added, which is what lets a capture
+    /// read the rest without the lock.
+    /// </summary>
+    internal struct Node
+    {
+        public string Name;
+        public int Parent;
+
+        /// <summary>Where the node falls by name among the children recorded with it.</summary>
+        public int NameRank;
+
+        public long Size;
+        public long Length;
+        public ExploreTimestamp Created;
+        public ExploreTimestamp Modified;
+        public FileStorage Storage;
+        public FileVisibility Visibility;
+        public bool IsDirectory;
+        public bool IsLink;
+        public bool SizeUnknown;
+
+        /// <summary>
+        /// Whether children have been recorded under this node. Read and written only under the
+        /// builder's lock, and never read by a capture.
+        /// </summary>
+        public bool HasChildren;
     }
 }

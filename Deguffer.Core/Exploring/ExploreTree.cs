@@ -396,6 +396,12 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// <paramref name="listingRefused"/> names the folders the walk was refused a listing of, which
     /// <see cref="ListingWasRefused"/> answers for. A set rather than a column, because a refusal is
     /// rare against the millions of nodes a column would spend a slot on each.
+    ///
+    /// <paramref name="nameRanks"/>, where given, is each node's place by name among its siblings,
+    /// which the walk knows as soon as a folder's children arrive. Each child is then placed in name
+    /// order as it is linked, and a tree ordered <see cref="ExploreChildOrder.ByName"/> is not sorted
+    /// at all — the sort that, done again on every snapshot of a scan in progress, was most of its
+    /// cost.
     /// </summary>
     internal static ExploreTree Create(
         string rootPath,
@@ -413,13 +419,18 @@ public sealed class ExploreTree : Layout.ITrackedTree
         FileVisibility[] visibility,
         bool[] present,
         ExploreChildOrder childOrder,
-        IReadOnlyCollection<int>? listingRefused = null)
+        IReadOnlyCollection<int>? listingRefused = null,
+        int[]? nameRanks = null)
     {
-        var (childStart, children) = InvertParentLinks(parents, present);
+        var (childStart, children) = InvertParentLinks(parents, present, nameRanks);
         var order = DepthFirstOrder(childStart, children, rootNode);
 
         RollUp(order, parents, sizes, lengths, storage, sizeUnknown, modified, rootNode);
-        SortChildren(childStart, children, sizes, names, childOrder);
+
+        if (childOrder is ExploreChildOrder.BySize || nameRanks is null)
+        {
+            SortChildren(childStart, children, sizes, names, childOrder);
+        }
 
         return new ExploreTree(
             rootPath, rootNode, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
@@ -432,8 +443,12 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// prefix sum, then one pass to place them. Two linear passes and two arrays, with no list per
     /// directory — which on a volume with 240k directories is 240k objects avoided for a structure
     /// that never changes after construction (G4).
+    ///
+    /// <para>With <paramref name="nameRanks"/>, a child goes where its rank puts it in its parent's
+    /// range rather than after the sibling placed before it, so the ranges come out in name order.
+    /// </para>
     /// </summary>
-    private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, bool[] present)
+    private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, bool[] present, int[]? nameRanks)
     {
         var count = parents.Length;
         var start = new int[count + 1];
@@ -460,14 +475,14 @@ public sealed class ExploreTree : Layout.ITrackedTree
         }
 
         var children = new int[start[count]];
-        var cursor = new int[count];
+        var cursor = nameRanks is null ? new int[count] : null;
 
         for (var i = 0; i < count; i++)
         {
             if (present[i] && parents[i] != i)
             {
                 var parent = parents[i];
-                children[start[parent] + cursor[parent]++] = i;
+                children[start[parent] + (cursor is null ? nameRanks![i] : cursor[parent]++)] = i;
             }
         }
 
@@ -581,8 +596,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         int[] childStart, int[] children, long[] sizes, string[] names, ExploreChildOrder order)
     {
         // One delegate each for the whole tree rather than one per directory. A volume has hundreds
-        // of thousands of directories, and this runs again on every snapshot of a scan in progress
-        // (G5).
+        // of thousands of directories (G5).
         var byName = ByName(names);
         Func<int, long> sizeOf = node => sizes[node];
 
@@ -661,9 +675,16 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// <summary>Two siblings of this tree in name order. See <see cref="ByName"/>.</summary>
     internal int CompareByName(int left, int right) => CompareByName(_names, left, right);
 
-    private static int CompareByName(string[] names, int left, int right)
+    private static int CompareByName(string[] names, int left, int right) =>
+        CompareByName(names[left], left, names[right], right);
+
+    /// <summary>
+    /// Two siblings in name order, by name and node number, for a caller that has the names before
+    /// there is a tree to hold them. See <see cref="ByName"/>.
+    /// </summary>
+    internal static int CompareByName(string leftName, int left, string rightName, int right)
     {
-        var byName = string.Compare(names[left], names[right], StringComparison.OrdinalIgnoreCase);
+        var byName = string.Compare(leftName, rightName, StringComparison.OrdinalIgnoreCase);
         return byName != 0 ? byName : left.CompareTo(right);
     }
 }

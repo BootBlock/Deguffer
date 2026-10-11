@@ -155,4 +155,118 @@ public class ExploreTreeBuilderTests
 
         Assert.True(builder.Build(ExploreChildOrder.BySize).HasUnknownSizes);
     }
+
+    /// <summary>
+    /// A tree is assembled from a capture without the lock every walk worker needs, so a worker
+    /// records its next folder while a snapshot is still being assembled rather than waiting for it.
+    /// The lock was once held for the whole of the assembling, which on a large walk stopped every
+    /// worker for as long as each snapshot took.
+    ///
+    /// <para>The worker records from another thread, so a capture that still held the lock would
+    /// keep it waiting until the wait gives up.</para>
+    /// </summary>
+    [Fact]
+    public async Task RecordsMoreWhileACaptureIsStillToBeAssembled()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("a.tgz", IsDirectory: false, IsLink: false, Size: 4096),
+        ]);
+
+        var capture = builder.Capture();
+
+        var recording = Task.Run(() => builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("b.tgz", IsDirectory: false, IsLink: false, Size: 8192),
+        ]));
+
+        Assert.Same(recording, await Task.WhenAny(recording, Task.Delay(TimeSpan.FromSeconds(30))));
+
+        var tree = capture.Build(ExploreChildOrder.ByName);
+
+        Assert.Equal(2, tree.NodeCount);
+        Assert.Equal(4096, tree.TotalBytes);
+        Assert.Equal(12_288, builder.Build(ExploreChildOrder.BySize).TotalBytes);
+    }
+
+    /// <summary>
+    /// A capture assembled while the walk keeps recording, and growing past the chunks it was
+    /// taken over, holds exactly what was recorded when it was taken, each node as it was recorded.
+    /// A reader outside the lock is only safe because nothing it reads is moved or written again.
+    /// </summary>
+    [Fact]
+    public async Task AssemblesWhatWasCapturedWhileTheWalkKeepsRecording()
+    {
+        const int batches = 200;
+        const int perBatch = 500;
+
+        var builder = new ExploreTreeBuilder(Root);
+        AddFiles(builder, 0, batches);
+
+        var capture = builder.Capture();
+        var recording = Task.Run(() => AddFiles(builder, batches, batches * 2));
+
+        var tree = capture.Build(ExploreChildOrder.ByName);
+        await recording;
+
+        Assert.Equal((batches * perBatch) + 1, tree.NodeCount);
+        Assert.Equal(batches * perBatch, tree.TotalBytes);
+
+        for (var node = 1; node < tree.NodeCount; node++)
+        {
+            var batch = (node - 1) / perBatch;
+            Assert.Equal($"{batch}-{(node - 1) % perBatch:D3}.bin", tree.NameOf(node));
+            Assert.Equal(ExploreTreeBuilder.RootNode, tree.ParentOf(node));
+        }
+
+        Assert.Equal((2 * batches * perBatch) + 1, builder.Build(ExploreChildOrder.ByName).NodeCount);
+
+        static void AddFiles(ExploreTreeBuilder builder, int from, int to)
+        {
+            for (var batch = from; batch < to; batch++)
+            {
+                builder.AddChildren(ExploreTreeBuilder.RootNode, [.. Enumerable.Range(0, perBatch).Select(entry =>
+                    new ExploreChild($"{batch}-{entry:D3}.bin", IsDirectory: false, IsLink: false, Size: 1))]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A snapshot puts each folder's children in name order from the order recorded with them,
+    /// which has to be the order <see cref="ExploreChildOrder.ByName"/> states: by name without
+    /// regard to case, and two names equal but for case by node number.
+    ///
+    /// <para>The root here is handed children in two calls, as nothing in a walk does but the
+    /// builder allows. Each call ranks its own children from zero, so placed by those ranks alone,
+    /// one child would take another's place and the tree would lose it.</para>
+    /// </summary>
+    [Fact]
+    public void PutsASnapshotsChildrenInNameOrder()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        var first = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("b.bin", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("Cache", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("a.bin", IsDirectory: false, IsLink: false, Size: 1),
+        ]);
+
+        var cache = first + 1;
+        var inCache = builder.AddChildren(cache, [
+            new ExploreChild("zeta", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("Alpha", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("beta", IsDirectory: false, IsLink: false, Size: 1),
+        ]);
+
+        var second = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("cache", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("A.bin", IsDirectory: false, IsLink: false, Size: 1),
+        ]);
+
+        var tree = builder.Build(ExploreChildOrder.ByName);
+
+        Assert.Equal(
+            [first + 2, second + 1, first, cache, second],
+            tree.ChildrenOf(ExploreTreeBuilder.RootNode).ToArray());
+        Assert.Equal([inCache + 1, inCache + 2, inCache], tree.ChildrenOf(cache).ToArray());
+    }
 }

@@ -18,8 +18,9 @@ namespace Deguffer.Core.Exploring;
 /// </param>
 /// <param name="BytesSeen">Bytes accounted for so far.</param>
 /// <param name="Snapshot">
-/// The tree as it stood, where one was taken. Null on most reports: assembling a snapshot copies
-/// every array, so it happens on a slower cadence than the counts.
+/// The tree as it stood, where one was taken. Null on most reports: assembling a snapshot is a pass
+/// over every node found so far, so it happens on a slower cadence than the counts. See
+/// <see cref="WalkSnapshots"/>.
 /// </param>
 public sealed record ExploreProgress(long Done, long? Total, long BytesSeen, ExploreTree? Snapshot = null)
 {
