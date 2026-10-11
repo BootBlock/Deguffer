@@ -148,6 +148,12 @@ public sealed partial class ExploreSelection : ObservableObject
     public void Reconsider() => _actions.Reconsider();
 
     /// <summary>
+    /// Whether <paramref name="path"/> may be removed, and if not why: the answer a removal asks again
+    /// before anything is deleted (§7.1), for a screen reader to hear before Delete is pressed.
+    /// </summary>
+    public ExploreVerdict VerdictOf(string path) => _actions.Verdict(path);
+
+    /// <summary>
     /// Point at a tree and select nothing. Called on every navigation, because a selection made in
     /// one folder is not a selection in the next one.
     /// </summary>

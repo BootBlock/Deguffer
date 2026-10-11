@@ -3,6 +3,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
@@ -970,6 +971,41 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal(1, replaced);
     }
+
+    /// <summary>
+    /// What the map tells a screen reader of a shape is the page's own answers: a folder with something
+    /// in it opens and a file does not, a refusal is said with the policy's reason, and a tree the page
+    /// did not scan is not described at all, because its numbers mean nothing here.
+    /// </summary>
+    [Fact]
+    public void TheMapIsToldWhatThePageKnowsOfTheTreeItScanned() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", @"C:\kept"));
+
+        var page = _explore.Page();
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var kept = builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("kept"), ExploreFixture.File("loose.bin", 100)]);
+
+        builder.AddChildren(kept, [ExploreFixture.File("inside.bin", 50)]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+
+        Assert.Same(tree, page.Tree);
+        Assert.Equal(
+            new MapShapeFacts("kept", "Folder", Opens: true, ExploreVerdict.Refuse("Kept for a reason.")),
+            page.ShapeFacts(tree, Child(tree, "kept")));
+
+        var loose = page.ShapeFacts(tree, Child(tree, "loose.bin"));
+
+        Assert.NotNull(loose);
+        Assert.Equal("File", loose.Kind);
+        Assert.False(loose.Opens);
+        Assert.True(loose.Removal?.IsAllowed);
+        Assert.Null(page.ShapeFacts(Drive(ExploreFixture.Folder("kept")), Child(tree, "kept")));
+    });
 
     private static ExploreTree Drive(params ExploreChild[] children)
     {

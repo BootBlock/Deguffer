@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Viewing;
@@ -212,6 +214,16 @@ public sealed partial class MemoryViewModel : ObservableObject
             Show(tree, inside, MemoryViewChange.Navigation);
         }
     }
+
+    /// <summary>
+    /// What a screen reader is told of <paramref name="node"/> of <paramref name="tree"/> on the map: its
+    /// name, what part of memory it is, and whether opening it shows what it holds. Nothing of removing:
+    /// what this page does to a program is close it, which its own button says (§7.2.1).
+    /// </summary>
+    public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) =>
+        ReferenceEquals(tree, Tree) && Tree is { } reading && reading.Holds(node)
+            ? new MapShapeFacts(MemoryText.Name(reading, node), MemoryText.Kind(reading, node), MemoryPlace.Inside(reading, node) is not null, Removal: null)
+            : null;
 
     public void Ascend()
     {

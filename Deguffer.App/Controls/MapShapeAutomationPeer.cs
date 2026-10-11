@@ -1,0 +1,125 @@
+using Deguffer.Core.Exploring.Layout;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
+using Windows.Foundation;
+
+namespace Deguffer.App.Controls;
+
+/// <summary>
+/// One shape on the map as a screen reader reads it: its name, its size and share of what holds it,
+/// what it is and what can be done with it (<see cref="Core.Exploring.MapShapeText"/>), where it is on
+/// the screen, and the shapes it holds under it.
+///
+/// <para>Acts as the keyboard does. Invoking it opens it, as Enter does; selecting it picks it, as a
+/// click does, so Delete and the menu then ask the same questions of it as of a shape picked by the
+/// pointer (§7.1); and scrolling it into view brings the camera to it.</para>
+/// </summary>
+internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokeProvider, ISelectionItemProvider, IScrollItemProvider
+{
+    private readonly MapAutomationPeer _owner;
+
+    private readonly ExploreMap _map;
+
+    private readonly int? _folder;
+
+    private MapShape _shape;
+
+    private int _position;
+
+    private int _count;
+
+    public MapShapeAutomationPeer(MapAutomationPeer owner, ExploreMap map, int? folder)
+    {
+        _owner = owner;
+        _map = map;
+        _folder = folder;
+    }
+
+    public bool IsSelected => _shape.IsNode && _map.IsPicked(_shape.Node);
+
+    public IRawElementProviderSimple SelectionContainer => ProviderFromPeer(_owner);
+
+    /// <summary>Where the shape is in the drawing on screen, and which of its folder's shapes it is.</summary>
+    public void Describe(MapShape shape, int position, int count)
+    {
+        _shape = shape;
+        _position = position;
+        _count = count;
+    }
+
+    public void Invoke() => _map.OpenShape(_folder, _shape);
+
+    public void Select() => _map.PickShape(_folder, _shape);
+
+    public void AddToSelection() => _map.PickShape(_folder, _shape);
+
+    public void RemoveFromSelection()
+    {
+        if (IsSelected)
+        {
+            _map.Unpick();
+        }
+    }
+
+    public void ScrollIntoView() => _map.BringIntoView(_shape);
+
+    protected override string GetNameCore() => _map.NameOf(_folder, _shape);
+
+    protected override string GetHelpTextCore() => _map.HelpOf(_shape);
+
+    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TreeItem;
+
+    protected override string GetClassNameCore() => "MapShape";
+
+    protected override bool IsContentElementCore() => true;
+
+    protected override bool IsControlElementCore() => true;
+
+    protected override bool IsEnabledCore() => true;
+
+    protected override bool IsKeyboardFocusableCore() => true;
+
+    protected override bool HasKeyboardFocusCore() => _map.HasFocusOn(_folder, _shape.Node);
+
+    protected override void SetFocusCore() => _map.FocusShape(_folder, _shape);
+
+    protected override bool IsOffscreenCore() => _map.OnScreenOf(_shape) is not { } frame
+        || frame.X + frame.Width <= 0 || frame.Y + frame.Height <= 0 || frame.X >= 1 || frame.Y >= 1;
+
+    /// <summary>
+    /// The part of the map's own rectangle the shape covers on the screen, cut to the map, so it is in
+    /// whatever units a screen reader is given the map's in.
+    /// </summary>
+    protected override Rect GetBoundingRectangleCore()
+    {
+        if (_map.OnScreenOf(_shape) is not { } frame)
+        {
+            return default;
+        }
+
+        var map = _owner.GetBoundingRectangle();
+        var shown = frame.Clipped(MapFrame.Whole);
+
+        return new Rect(
+            map.X + (shown.X * map.Width),
+            map.Y + (shown.Y * map.Height),
+            Math.Max(0, shown.Width * map.Width),
+            Math.Max(0, shown.Height * map.Height));
+    }
+
+    protected override IList<AutomationPeer>? GetChildrenCore() =>
+        _shape.IsNode ? [.. _owner.Children(_shape.Node)] : null;
+
+    protected override int GetPositionInSetCore() => _position;
+
+    protected override int GetSizeOfSetCore() => _count;
+
+    protected override object? GetPatternCore(PatternInterface patternInterface) => patternInterface switch
+    {
+        PatternInterface.Invoke => this,
+        PatternInterface.ScrollItem => this,
+        PatternInterface.SelectionItem when _shape.IsNode && _map.Answers => this,
+        _ => null,
+    };
+}

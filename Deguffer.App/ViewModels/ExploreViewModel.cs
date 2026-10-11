@@ -1014,6 +1014,21 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
+    /// What a screen reader is told of <paramref name="node"/> of <paramref name="tree"/> on the map: its
+    /// name, whether it is a folder, whether opening it shows what it holds (<see cref="Descend"/>), and
+    /// whether it may be removed (§7.1). Nothing of a tree other than the one this page scanned, such as
+    /// a step of a replay of what grew, whose node numbers mean nothing here.
+    /// </summary>
+    public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) =>
+        ReferenceEquals(tree, Tree) && Tree is { } scanned && scanned.Holds(node)
+            ? new MapShapeFacts(
+                scanned.NameOf(node),
+                scanned.IsDirectory(node) ? "Folder" : "File",
+                _position.Opening(scanned, node, Volume) is not null,
+                Selection.VerdictOf(scanned.PathOf(node)))
+            : null;
+
+    /// <summary>
     /// Show what is inside <paramref name="node"/>. Ignored for anything the tree on screen no longer
     /// holds, removed since the scan, and wherever <see cref="ExplorePosition.Opening"/> says the step
     /// leads nowhere.

@@ -110,6 +110,8 @@ public sealed partial class MemoryPage : Page
 
         Map.Hovered += (_, hit) => ViewModel.Hover(hit);
         Map.Activated += (_, node) => ViewModel.Descend(node);
+        Map.Ascending += (_, _) => ViewModel.Ascend();
+        Map.Facts = ViewModel.ShapeFacts;
         Map.Picked += (_, node) => ViewModel.Selection.Select(node);
 
         // Read once, as Explore reads its own, and kept as the reader leaves it on the overview itself.
