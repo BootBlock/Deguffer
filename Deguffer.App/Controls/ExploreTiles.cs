@@ -30,13 +30,6 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class ExploreTiles
 {
-    /// <summary>
-    /// How many canvases' worth of tiles to keep. A screen's tiles are at most twice the canvas, those
-    /// of the zoom a move is going to as many again, and the coarser levels under them a third of that;
-    /// the rest is what lets a move back over the picture find its tiles still there.
-    /// </summary>
-    private const int Canvases = 6;
-
     /// <summary>How many tiles let go keep their surface to be written again, rather than giving its memory back (G5).</summary>
     private const int Spare = 16;
 
@@ -66,6 +59,9 @@ internal sealed class ExploreTiles
 
     private MapOrigin _origin;
 
+    /// <summary>Whether a tile that answered the pointer has been let go of since that was last said.</summary>
+    private bool _answerLost;
+
     public ExploreTiles(Compositor compositor, MapGraphics graphics, IMotionPolicy motion, SynchronizationContext owner)
     {
         _compositor = compositor;
@@ -89,6 +85,12 @@ internal sealed class ExploreTiles
     public bool IsShown => Over.IsVisible;
 
     /// <summary>
+    /// Which tiles answer the pointer has changed: one has finished coming in, or one that answered has
+    /// gone, so what the pointer is over may be something else although neither it nor the camera moved.
+    /// </summary>
+    public event EventHandler? AnswersChanged;
+
+    /// <summary>
     /// Show the tiles of <paramref name="picture"/>'s picture for a screen showing
     /// <paramref name="shown"/> on its way to <paramref name="target"/>, and draw those still missing on
     /// <paramref name="ground"/>: the screen's first, from the one at <paramref name="focusX"/>,
@@ -100,7 +102,7 @@ internal sealed class ExploreTiles
         {
             Forget();
             tiling = _tiling = new MapTiling(picture.Width, picture.Height);
-            _cache = new MapTileCache<TileSprite>((long)Canvases * PixelBuffer.LengthFor(picture.Width, picture.Height), Recycle);
+            _cache = new MapTileCache<TileSprite>(tiling.Budget, Recycle);
         }
 
         var level = MapTiling.LevelOf(shown.Zoom);
@@ -149,7 +151,8 @@ internal sealed class ExploreTiles
 
     /// <summary>
     /// The finest tile shown over the drawing the map works from at picture point (<paramref name="x"/>,
-    /// <paramref name="y"/>), or null where none is: what the screen shows there (§7.1).
+    /// <paramref name="y"/>), or null where none is: what the screen shows there (§7.1). A tile still
+    /// coming in answers nothing, as a drawing fading in does not: the screen shows what is under it.
     /// </summary>
     public MapTile? TileOver(double x, double y)
     {
@@ -160,7 +163,7 @@ internal sealed class ExploreTiles
 
         for (var level = _deepest; level >= 0 && MapTiling.Over(level, _drawn); level--)
         {
-            if (tiling.At(level, x, y) is { } key && cache.TryGet(key, out var sprite))
+            if (tiling.At(level, x, y) is { } key && cache.TryGet(key, out var sprite) && sprite.Answers)
             {
                 return sprite.Tile;
             }
@@ -191,6 +194,8 @@ internal sealed class ExploreTiles
         _cache?.Clear();
         Over.IsVisible = false;
         Under.IsVisible = false;
+
+        RaiseIfAnswerLost();
     }
 
     /// <summary>Let go of every tile and every surface kept, for a map nobody can see.</summary>
@@ -246,21 +251,27 @@ internal sealed class ExploreTiles
         _graphics.Write(sprite.Surface, pixels, tile.Width, new CanvasRegion(0, 0, tile.Width, tile.Height));
 
         sprite.Tile = tile;
+        sprite.Answers = false;
         sprite.Visual.Size = new Vector2(tile.Width, tile.Height);
         Fit(sprite);
 
         Level(tile.Key.Level).Children.InsertAtTop(sprite.Visual);
-        FadeIn(sprite.Visual);
 
+        // Kept before it comes in, so a tile it lets go of is gone before this one can answer.
         _cache!.Add(tile.Key, sprite, tile.Bytes);
+        RaiseIfAnswerLost();
+
+        FadeIn(sprite, tile);
     }
 
     /// <summary>
-    /// Fade <paramref name="visual"/> in over what is under it. The motion is asked for each time, so a
+    /// Fade <paramref name="sprite"/> in over what is under it, and let it answer the pointer once it
+    /// covers that, while it still shows <paramref name="tile"/>. The motion is asked for each time, so a
     /// reader who changes the setting is followed at the next tile.
     /// </summary>
-    private void FadeIn(Visual visual)
+    private void FadeIn(TileSprite sprite, MapTile tile)
     {
+        var visual = sprite.Visual;
         var motion = _motion.For(MotionToken.Sharpen);
 
         visual.StopAnimation(nameof(Visual.Opacity));
@@ -268,6 +279,7 @@ internal sealed class ExploreTiles
         if (motion.IsInstant)
         {
             visual.Opacity = 1;
+            Answer(sprite, tile);
             return;
         }
 
@@ -276,8 +288,39 @@ internal sealed class ExploreTiles
         rise.InsertKeyFrame(1, 1);
         rise.Duration = motion.Duration;
 
+        var fading = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         visual.Opacity = 0;
         visual.StartAnimation(nameof(Visual.Opacity), rise);
+        fading.End();
+
+        fading.Completed += (_, _) => Answer(sprite, tile);
+    }
+
+    /// <summary>
+    /// Let <paramref name="sprite"/> answer the pointer, unless it has been let go of, or holds another
+    /// tile now, since it began to come in.
+    /// </summary>
+    private void Answer(TileSprite sprite, MapTile tile)
+    {
+        if (sprite.Tile != tile)
+        {
+            return;
+        }
+
+        sprite.Answers = true;
+        AnswersChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Say that a tile which answered the pointer has gone, if one has since this was last said.</summary>
+    private void RaiseIfAnswerLost()
+    {
+        if (!_answerLost)
+        {
+            return;
+        }
+
+        _answerLost = false;
+        AnswersChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>The visual of <paramref name="level"/>, made the first time a tile of it arrives, stacked among the others.</summary>
@@ -322,24 +365,23 @@ internal sealed class ExploreTiles
     /// <summary>Put <paramref name="sprite"/> where its tile lies in the picture.</summary>
     private void Fit(TileSprite sprite)
     {
-        var frame = sprite.Tile!.Frame;
-        var (width, height) = _size;
+        var placed = sprite.Tile!.Canvas(_size.Width, _size.Height, _origin);
 
-        sprite.Visual.Scale = new Vector3(
-            (float)(frame.Width * width / sprite.Tile.Width),
-            (float)(frame.Height * height / sprite.Tile.Height),
-            1);
-        sprite.Visual.Offset = new Vector3(
-            (float)((frame.X - _origin.Left) * width),
-            (float)((frame.Y - _origin.Top) * height),
-            0);
+        sprite.Visual.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
+        sprite.Visual.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
     }
 
-    /// <summary>A tile let go: off the screen, and its surface kept to be written again, or given back.</summary>
+    /// <summary>
+    /// A tile let go: off the screen, and its surface kept to be written again, or given back. One that
+    /// answered the pointer is said to have gone once the cache is done with it, not while it is still
+    /// making room.
+    /// </summary>
     private void Recycle(TileSprite sprite)
     {
         sprite.Visual.Parent?.Children.Remove(sprite.Visual);
+        _answerLost |= sprite.Answers;
         sprite.Tile = null;
+        sprite.Answers = false;
 
         if (_spare.Count < Spare)
         {
@@ -369,6 +411,9 @@ internal sealed class ExploreTiles
         public SpriteVisual Visual { get; }
 
         public MapTile? Tile { get; set; }
+
+        /// <summary>Whether <see cref="Tile"/> has come in in full, and so answers the pointer.</summary>
+        public bool Answers { get; set; }
 
         public void Dispose()
         {

@@ -391,6 +391,8 @@ public sealed class ExploreMap : UserControl
         // Both sets, as the two change places with each change of folder that flies (see Swap).
         _pictures.Faded += OnFaded;
         _departing.Faded += OnFaded;
+        _pictures.Tiles.AnswersChanged += OnTileAnswersChanged;
+        _departing.Tiles.AnswersChanged += OnTileAnswersChanged;
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -2247,6 +2249,12 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>A new drawing has finished fading in: the pointer is over what it shows.</summary>
     private void OnFaded(object? sender, EventArgs e) => ReportWhatThePointerIsOver();
+
+    /// <summary>
+    /// A tile has come in under a pointer that has not moved, or one it was over has gone: the pointer
+    /// is over what the screen shows now (§7.1).
+    /// </summary>
+    private void OnTileAnswersChanged(object? sender, EventArgs e) => ReportWhatThePointerIsOver();
 
     /// <summary>The shapes have landed: the names, the outlines and the readout are the new drawing's again.</summary>
     private void OnShiftArrived(object? sender, EventArgs e)
