@@ -291,6 +291,16 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private readonly Func<double, double, MapTile?> _tileOver;
 
+    /// <summary>
+    /// How a drawing is read in the tree the page handed over last, for <see cref="MapHitTest"/>. One
+    /// for the life of the map, because the pointer asks at the display's rate (G5). See
+    /// <see cref="ReadingOf"/>.
+    /// </summary>
+    private readonly Func<ISizedTree, MapReading?> _readingOf;
+
+    /// <summary>The last reading found, kept while it is of the same two trees. See <see cref="ReadingOf"/>.</summary>
+    private MapReading? _reading;
+
     /// <summary>What a card beside the map lights on it, or null. See <see cref="Light"/>.</summary>
     private MapLight? _light;
 
@@ -307,6 +317,7 @@ public sealed class ExploreMap : UserControl
         _pictures = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
         _departing = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
         _tileOver = (x, y) => _pictures.Tiles.TileOver(x, y);
+        _readingOf = ReadingOf;
         _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
         _shift = new ExploreShift(compositor, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
@@ -861,6 +872,12 @@ public sealed class ExploreMap : UserControl
         if (samePlace)
         {
             Shift();
+
+            // The drawing on screen is of the tree before, and stays until the new one has arrived and
+            // moved into place. What the pointer is over and what is picked are read in this tree now,
+            // through the counterparts of the shapes it draws (MapReading).
+            ShowPicked();
+            ReportWhatThePointerIsOver();
         }
         else
         {
@@ -1460,18 +1477,20 @@ public sealed class ExploreMap : UserControl
     /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
     private void ShowPicked()
     {
-        if (Outlining is not { } drawing)
+        if (Outlining is not { } outlining)
         {
             _highlight.ShowPicked([], 0);
             return;
         }
+
+        var drawing = outlining.Drawing;
 
         // Twice the whole picture in the drawing's canvas pixels, which is a canvas as many times
         // over as the drawing is zoomed: the picture is within that of the canvas's corner whichever
         // part of it the canvas shows, and so is the margin the outlines are drawn into round it.
         var far = 2 * Math.Max(drawing.Width, drawing.Height) * (drawing.Viewport?.Zoom ?? 1);
 
-        _highlight.ShowPicked(drawing.Outlines(_picked), (float)far);
+        _highlight.ShowPicked(drawing.Outlines(outlining.Reading.InDrawing(_picked)), (float)far);
     }
 
     /// <summary>
@@ -1479,15 +1498,31 @@ public sealed class ExploreMap : UserControl
     /// nothing while that drawing is of another tree or a change of folder is still on its way.
     /// </summary>
     private void ShowLit() =>
-        _highlight.ShowLit(_light is { } light && Outlining is { } drawing ? light.On(drawing) : null);
+        _highlight.ShowLit(_light is { } light && Outlining is { } outlining ? light.On(outlining.Drawing) : null);
     /// <summary>
-    /// The drawing the outlines are drawn in, which is the one the map works from, while it is of the
-    /// tree the page handed over last. What is picked is named in that tree, and the same numbers in
-    /// an older one are other shapes, so a drawing of an older tree, still on screen while the new one
-    /// lands, marks nothing out until the new one arrives.
+    /// The drawing the outlines are drawn in, which is the one the map works from, with how it is read
+    /// in the tree the page handed over last. What is picked is named in that tree, and the same
+    /// numbers in an older one are other shapes, so a drawing of an older tree of the same place,
+    /// still on screen while the new one lands, marks out each node where it draws the node's
+    /// counterpart (<see cref="MapReading"/>). A drawing of anything else marks nothing out.
     /// </summary>
-    private ExploreSurface? Outlining =>
-        _drawing is { } drawing && ReferenceEquals(drawing.Tree, _tree) ? drawing : null;
+    private (ExploreSurface Drawing, MapReading Reading)? Outlining =>
+        _drawing is { } drawing && ReadingOf(drawing.Tree) is { } reading ? (drawing, reading) : null;
+
+    /// <summary>
+    /// How a drawing of <paramref name="drawn"/> is read in the tree the page handed over last, or null
+    /// where it cannot be. Found once for each pair of trees, because finding nodes again builds an
+    /// index of each folder it looks in.
+    /// </summary>
+    private MapReading? ReadingOf(ISizedTree drawn)
+    {
+        if (_reading is not { } reading || !ReferenceEquals(reading.Drawn, drawn) || !ReferenceEquals(reading.Current, _tree))
+        {
+            _reading = MapReading.Of(drawn, _tree);
+        }
+
+        return _reading;
+    }
 
     /// <summary>
     /// Draw the accent outline round whatever the pointer is over.
@@ -1506,25 +1541,29 @@ public sealed class ExploreMap : UserControl
             _under.Add(hit.Node);
         }
 
-        if (Outlining is not { } drawing)
+        if (Outlining is not { } outlining)
         {
             _highlight.ShowHovered([], null, Vector2.Zero);
             return;
         }
+
+        var drawing = outlining.Drawing;
 
         // Found on a tile, the shape may be one the drawing does not draw, so the tile outlines it, in
         // the drawing's canvas. Nothing is lifted: the drawing's surface holds coarser pixels there.
         if (_hoveredTile is { } tile && drawing.Viewport is { } drawn)
         {
             _highlight.ShowHovered(
-                _under.Count > 0 ? tile.Outlines(_under, drawn, drawing.Width, drawing.Height) : [],
+                _under.Count > 0 && ReadingOf(tile.Picture.Tree) is { } inTile
+                    ? tile.Outlines(inTile.InDrawing(_under), drawn, drawing.Width, drawing.Height)
+                    : [],
                 null,
                 new Vector2(drawing.Width, drawing.Height));
             return;
         }
 
         _highlight.ShowHovered(
-            _under.Count > 0 ? drawing.Outlines(_under) : [],
+            _under.Count > 0 ? drawing.Outlines(outlining.Reading.InDrawing(_under)) : [],
             _pictures.SurfaceOf(drawing),
             new Vector2(drawing.Width, drawing.Height));
     }
@@ -1580,7 +1619,7 @@ public sealed class ExploreMap : UserControl
             : MapHitTest.Locate(
                 _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing,
                 _shiftOwed ? null : _arriving,
-                _tree,
+                _readingOf,
                 _tileOver);
 
     /// <summary>
