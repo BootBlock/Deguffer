@@ -545,6 +545,36 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
+    /// A removal frees space on the volume, and the page reads the volume again rather than drawing
+    /// the freed space beside the scan as in use and unaccounted for.
+    /// </summary>
+    [Fact]
+    public void ARemovalReadsTheVolumeAgain() => UiThread.Run(async () =>
+    {
+        var page = _explore.Page();
+        var (tree, folder) = _explore.OnDisk();
+        var root = tree.PathOf(tree.RootNode) + Path.DirectorySeparatorChar;
+
+        _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!).With(root, totalBytes: 1_000, freeBytes: 100);
+
+        page.ScopeTo(tree.PathOf(tree.RootNode));
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+
+        var scanned = page.Volume;
+
+        Assert.Equal(100, scanned.FreeBytes);
+
+        // What the volume will say once the folder has gone.
+        _explore.Volumes.Without(root).With(root, totalBytes: 1_000, freeBytes: 110);
+
+        page.Selection.Select([folder]);
+        await page.Selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Equal(scanned with { FreeBytes = 110 }, page.Volume);
+        Assert.Equal(5, page.Tree!.TotalBytes);
+    });
+
+    /// <summary>
     /// #301: a removal that took something beside what was picked names the check that failed, by
     /// the folder it failed on and what went, beside the sentence that counts it. The sentence asks
     /// the user to look at the folders, and a count does not say which. The next sentence takes the

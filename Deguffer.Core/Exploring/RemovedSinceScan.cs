@@ -125,6 +125,7 @@ internal sealed class RemovedSinceScan
         }
 
         var children = new Dictionary<int, int[]>(earlier?._children ?? []);
+        Comparison<int> byName = tree.CompareByName;
 
         foreach (var folder in reordered)
         {
@@ -132,11 +133,7 @@ internal sealed class RemovedSinceScan
 
             if (tree.ChildOrder == ExploreChildOrder.BySize)
             {
-                Array.Sort(kept, (left, right) =>
-                {
-                    var bySize = SizeAfter(right).CompareTo(SizeAfter(left));
-                    return bySize != 0 ? bySize : tree.CompareByName(left, right);
-                });
+                ExploreTree.OrderBySize(kept, SizeAfter, byName);
             }
 
             children[folder] = kept;

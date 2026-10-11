@@ -749,13 +749,15 @@ public sealed class ExploreMap : UserControl
         var was = _zoom.Shown;
         var another = !ReferenceEquals(tree, _tree) || node != _node || view != _view || volume != _volume;
 
-        // The same place in a new tree, drawn the same way: a scan's next snapshot. The same picture
-        // laid out again, so the zoom stays and the shapes move to where they are now. A change of
-        // view, such as a finished scan drawn as a treemap after its snapshots' icicles, is not.
+        // The same place in a new tree, drawn the same way: a scan's next snapshot, or what a removal
+        // left. The same picture laid out again, so the zoom stays and the shapes move to where they
+        // are now. A change of view, such as a finished scan drawn as a treemap after its snapshots'
+        // icicles, is not. The volume beside it may have new figures, as a removal frees space, but
+        // it is drawn beside both or beside neither.
         var samePlace = another
             && viewport is null
             && view == _view
-            && volume == _volume
+            && (volume == VolumeSpace.None) == (_volume == VolumeSpace.None)
             && tree is not null
             && _tree is ITrackedTree shown
             && ExploreSurface.Drawn(tree, view) == ExploreSurface.Drawn(shown, _view)

@@ -16,6 +16,10 @@ namespace Deguffer.Core.Exploring;
 ///
 /// <para>It is drawn through <see cref="Layout.ISizedTree"/>, which is the part of it a layout reads.
 /// The other tree behind that seam is <see cref="Memory.MemoryTree"/>.</para>
+///
+/// <para>One file past the usual length because every member reads the same private arrays, and
+/// building them is the three passes that make them mean anything. What is taken out after a
+/// removal is its own type, <see cref="Exploring.RemovedSinceScan"/>, which this only consults.</para>
 /// </summary>
 public sealed class ExploreTree : Layout.ITrackedTree
 {
@@ -573,10 +577,11 @@ public sealed class ExploreTree : Layout.ITrackedTree
     private static void SortChildren(
         int[] childStart, int[] children, long[] sizes, string[] names, ExploreChildOrder order)
     {
-        // One delegate for the whole tree rather than one per directory. A volume has hundreds of
-        // thousands of directories, and this runs again on every snapshot of a scan in progress
+        // One delegate each for the whole tree rather than one per directory. A volume has hundreds
+        // of thousands of directories, and this runs again on every snapshot of a scan in progress
         // (G5).
         var byName = ByName(names);
+        Func<int, long> sizeOf = node => sizes[node];
 
         for (var node = 0; node + 1 < childStart.Length; node++)
         {
@@ -596,30 +601,41 @@ public sealed class ExploreTree : Layout.ITrackedTree
                 continue;
             }
 
-            var keys = new long[length];
+            OrderBySize(slice, sizeOf, byName);
+        }
+    }
 
-            for (var i = 0; i < length; i++)
+    /// <summary>
+    /// Put <paramref name="siblings"/> in <see cref="ExploreChildOrder.BySize"/>, in place: the largest
+    /// first, and siblings of one size in name order. The one statement of that order, for a tree as
+    /// it is scanned and for the child lists a removal changes (<see cref="Without"/>).
+    /// </summary>
+    internal static void OrderBySize(Span<int> siblings, Func<int, long> sizeOf, Comparison<int> byName)
+    {
+        var length = siblings.Length;
+        var keys = new long[length];
+
+        for (var i = 0; i < length; i++)
+        {
+            // Negated, so the sort puts the largest first; siblings of one size are put in name
+            // order below.
+            keys[i] = -sizeOf(siblings[i]);
+        }
+
+        MemoryExtensions.Sort(keys.AsSpan(), siblings);
+
+        // Equal sizes are put in name order. Left as the sort leaves them, they can come out in a
+        // different order in each tree of the same disk, and a map moving from one layout to the next
+        // would show equal siblings trading places for no reason (#309).
+        for (int start = 0, end; start < length; start = end)
+        {
+            for (end = start + 1; end < length && keys[end] == keys[start]; end++)
             {
-                // Negated, so the sort puts the largest first; siblings of one size are put in name
-                // order below.
-                keys[i] = -sizes[slice[i]];
             }
 
-            MemoryExtensions.Sort(keys.AsSpan(), slice);
-
-            // Equal sizes are put in name order. Left as the sort leaves them, they can come out in
-            // a different order in each tree of the same disk, and a map moving from one layout to
-            // the next would show equal siblings trading places for no reason (#309).
-            for (int start = 0, end; start < length; start = end)
+            if (end - start > 1)
             {
-                for (end = start + 1; end < length && keys[end] == keys[start]; end++)
-                {
-                }
-
-                if (end - start > 1)
-                {
-                    MemoryExtensions.Sort(slice[start..end], byName);
-                }
+                MemoryExtensions.Sort(siblings[start..end], byName);
             }
         }
     }

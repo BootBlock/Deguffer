@@ -69,10 +69,12 @@ public readonly record struct VolumeSpace(
 
     /// <summary>
     /// This space with the volume's size and free space read again from <paramref name="volumes"/>,
-    /// after a removal from the page: deleting frees what it took, and moving to the Recycle Bin
-    /// leaves it in use, outside what is left of the scan. Without this, either becomes space in use
-    /// that no folder accounts for. What Windows states about that space is kept, because a removal
-    /// through this page changes neither part of it. <see cref="None"/> where nothing is drawn beside
+    /// after a removal from the page. Deleting frees what it took, and drawn from the old figures that
+    /// space would be in use with no folder accounting for it. Moving to the Recycle Bin frees
+    /// nothing: the bin is outside what is left of the scan, so what it holds now is in use and
+    /// unaccounted for, which is true until a scan counts it again. What Windows states about the
+    /// space no folder accounts for is kept, because a removal through this page changes neither
+    /// part of it. <see cref="None"/> where nothing is drawn beside
     /// the scan, or where the volume no longer states both figures.
     /// </summary>
     public VolumeSpace Remeasured(IVolumeInventory volumes, string scannedRoot) =>

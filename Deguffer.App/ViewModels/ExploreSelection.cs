@@ -135,7 +135,7 @@ public sealed partial class ExploreSelection : ObservableObject
     /// </summary>
     public string? StaleNote => _tree is { RemovedSinceScan: > 0 and var count }
         ? $"{count} item(s) have been removed since this scan. The sizes and the map leave them out, "
-          + "and nothing else has been measured again. Scan again for a current picture."
+          + "but nothing else on the drive has been scanned again. Scan again for a current picture."
         : null;
 
     public bool HasStaleNote => StaleNote is not null;

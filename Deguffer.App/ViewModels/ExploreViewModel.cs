@@ -567,7 +567,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>Read as the scan finishes, rather than kept current. Everything else on screen
     /// describes the disk as that scan found it, so a figure that moved on its own would set the
     /// blocks against sizes they no longer match. A removal from this page reads it again with the
-    /// sizes it changed (<see cref="ShowLeft"/>), and the stale note says nothing else is.</para>
+    /// sizes it changed (<see cref="ShowLeft"/>), and the stale note says the rest of the drive is
+    /// not scanned again.</para>
     ///
     /// <para>Replaced with every tree, because it belongs to the tree it describes: the snapshots a
     /// running scan publishes have none, being partial, so a scan of a folder never runs with the
@@ -790,9 +791,9 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         var record = await Task.Run(() => _history.Record(scan, volume, space, scoped, taken));
 
-        // A comparison describes one tree, and a removal on this page can have taken the page to
-        // another while this ran. Shown only for the tree it was taken from.
-        if (ReferenceEquals(Tree, scan.Tree))
+        // A comparison describes one scan, and the page can have moved to another while this ran.
+        // Shown only for the scan it was taken from, or what a removal left of it.
+        if (ReferenceEquals(Tree?.Scanned, scan.Tree))
         {
             Growth.Show(record);
         }
@@ -1286,9 +1287,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// to date in place, and the map moves to the new layout, where what went shrinks away and its
     /// neighbours grow into the room it left.
     ///
-    /// <para>The volume is read again, because the removal freed what it deleted and left what it
-    /// moved to the Recycle Bin in use, and either drawn from the old figures would be space no
-    /// folder accounts for (<see cref="VolumeSpace.Remeasured"/>).</para>
+    /// <para>The volume is read again, because a removal frees what it deleted, and drawn from the old
+    /// figures that would be space no folder accounts for (<see cref="VolumeSpace.Remeasured"/>).</para>
     /// </summary>
     private void ShowLeft(ExploreSelection.RemovedFrom removed)
     {
