@@ -40,6 +40,7 @@ internal sealed class MftReadPass : IDisposable
     private readonly IMftSource _source;
     private readonly int _readsAllowed;
     private readonly int _bytesPerRecord;
+    private readonly int _count;
     private readonly CancellationToken _ct;
     private readonly MftBatchPlanner _planner;
     private readonly MftRecordHandOff _records;
@@ -76,6 +77,7 @@ internal sealed class MftReadPass : IDisposable
     {
         _source = source;
         _bytesPerRecord = source.BytesPerRecord;
+        _count = count;
         _readsAllowed = tuning.ReadsInFlight;
         _ct = ct;
         _cancelReads = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -137,11 +139,15 @@ internal sealed class MftReadPass : IDisposable
         // calling thread, so no report comes after this returns.
         _progress.Advance(_skippedAtEnd);
 
+        var stopAt = Interlocked.Read(ref _stopAt);
+
         return new MftFirstPass(
-            WholeTable: Interlocked.Read(ref _stopAt) == long.MaxValue,
+            WholeTable: stopAt == long.MaxValue,
             Abandoned: _abandoned,
             _records.Deferred(),
-            _records.Wanted);
+            _records.Wanted,
+            _records.Extensions(),
+            Reached: Math.Min(stopAt, _count));
     }
 
     public void Dispose()

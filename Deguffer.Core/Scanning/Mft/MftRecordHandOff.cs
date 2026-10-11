@@ -18,7 +18,8 @@ internal enum MftHandOn
 
 /// <summary>
 /// What the first pass does with each record it reads: passes over one the bitmap marks free, holds
-/// back one whose attributes continue in extension records, and hands on the rest.
+/// back one whose attributes continue in extension records, keeps what an extension record holds for
+/// the second pass, and hands on the rest.
 ///
 /// <para>Called from every parse thread at once, each with a different record.</para>
 /// </summary>
@@ -26,6 +27,7 @@ internal enum MftHandOn
 internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHandler onRecord)
 {
     private readonly List<MftDeferredRecord> _deferred = [];
+    private readonly List<MftExtensionRecord> _extensions = [];
 
     private long _wanted;
 
@@ -39,6 +41,13 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
         return _deferred;
     }
 
+    /// <summary>The extension records in use the pass read, in record order. Only once every parse has finished.</summary>
+    public IReadOnlyList<MftExtensionRecord> Extensions()
+    {
+        _extensions.Sort(static (a, b) => a.Number.CompareTo(b.Number));
+        return _extensions;
+    }
+
     /// <param name="record">The record's bytes, exactly, which the parse fixes up in place.</param>
     public MftHandOn Take(long number, Span<byte> record)
     {
@@ -47,7 +56,15 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
             return MftHandOn.Done;
         }
 
-        var outcome = MftRecordParser.Parse(record, number, out var parsed, out var continued);
+        var outcome = MftRecordParser.Parse(record, number, out var parsed, out var continued, out var extension);
+
+        if (extension is { } kept)
+        {
+            lock (_extensions)
+            {
+                _extensions.Add(kept);
+            }
+        }
 
         if (continued is not null)
         {

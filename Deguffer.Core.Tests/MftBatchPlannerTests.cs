@@ -118,6 +118,9 @@ public sealed class MftBatchPlannerTests
 
         public bool TryReadClusters(long firstCluster, Span<byte> destination) => throw new NotSupportedException();
 
+        public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public void Dispose()
         {
         }

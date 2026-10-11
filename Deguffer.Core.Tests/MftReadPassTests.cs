@@ -628,6 +628,9 @@ public sealed class MftReadPassTests
 
         public bool TryReadClusters(long firstCluster, Span<byte> destination) => inner.TryReadClusters(firstCluster, destination);
 
+        public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+            inner.TryReadClustersAsync(firstCluster, destination, ct);
+
         public void Dispose() => inner.Dispose();
     }
 }

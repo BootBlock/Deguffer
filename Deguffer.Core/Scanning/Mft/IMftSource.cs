@@ -73,4 +73,16 @@ public interface IMftSource : IDisposable
     /// <see cref="ReadBatch"/>, a caller passes a <see cref="VolumeReadBuffer"/>.</para>
     /// </summary>
     bool TryReadClusters(long firstCluster, Span<byte> destination);
+
+    /// <summary>
+    /// <see cref="TryReadClusters"/>, without holding a thread while the disk works. Several can be
+    /// outstanding at once, each into its own buffer.
+    ///
+    /// <para>Needed for the attribute lists kept outside the table, which a large volume holds
+    /// thousands of, scattered across the disk. Read one at a time, each would wait for the last.</para>
+    ///
+    /// <para>As for <see cref="ReadBatchAsync"/>, a caller passes the memory of a
+    /// <see cref="VolumeReadBuffer"/> and keeps it until the read has completed, cancelled or not.</para>
+    /// </summary>
+    ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct);
 }

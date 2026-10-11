@@ -90,6 +90,9 @@ public class VolumeReadTests
 
         public bool TryReadClusters(long firstCluster, Span<byte> destination) => false;
 
+        public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+            ValueTask.FromResult(false);
+
         public void Dispose()
         {
         }
@@ -119,6 +122,12 @@ public class VolumeReadTests
         {
             Address = VolumeReadTests.Address(destination);
             return table.TryReadClusters(firstCluster, destination);
+        }
+
+        public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct)
+        {
+            Address = VolumeReadTests.Address(destination.Span);
+            return table.TryReadClustersAsync(firstCluster, destination, ct);
         }
 
         public void Dispose() => table.Dispose();

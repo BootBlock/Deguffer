@@ -224,21 +224,25 @@ public sealed partial class VolumeMftSource : IMftSource
     public bool TryReadClusters(long firstCluster, Span<byte> destination) =>
         ReadClusters(_volume, BytesPerCluster, firstCluster, destination);
 
-    private static bool ReadClusters(IRawVolume volume, int bytesPerCluster, long firstCluster, Span<byte> destination)
-    {
-        // Whole clusters only, so the read stays sector aligned as a raw volume handle requires. The
-        // cluster comes from a run list on the disk, so its byte offset is bounded by division
-        // before it is formed: a corrupt run naming a cluster near 2^63 would otherwise wrap the
-        // offset negative and throw out of the read.
-        if (firstCluster < 0
-            || destination.Length % bytesPerCluster != 0
-            || firstCluster > (long.MaxValue - destination.Length) / bytesPerCluster)
-        {
-            return false;
-        }
+    public async ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+        IsClusterRead(BytesPerCluster, firstCluster, destination.Length)
+        && await _volume.ReadAsync(destination, firstCluster * BytesPerCluster, ct).ConfigureAwait(false) == destination.Length;
 
-        return volume.Read(destination, firstCluster * bytesPerCluster) == destination.Length;
-    }
+    private static bool ReadClusters(IRawVolume volume, int bytesPerCluster, long firstCluster, Span<byte> destination) =>
+        IsClusterRead(bytesPerCluster, firstCluster, destination.Length)
+        && volume.Read(destination, firstCluster * bytesPerCluster) == destination.Length;
+
+    /// <summary>
+    /// Whether a read of <paramref name="bytes"/> from <paramref name="firstCluster"/> is whole
+    /// clusters at an offset that can be formed, so the read stays sector aligned as a raw volume
+    /// handle requires. The cluster comes from a run list on the disk, so its byte offset is bounded
+    /// by division before it is formed: a corrupt run naming a cluster near 2^63 would otherwise wrap
+    /// the offset negative and throw out of the read.
+    /// </summary>
+    private static bool IsClusterRead(int bytesPerCluster, long firstCluster, int bytes) =>
+        firstCluster >= 0
+        && bytes % bytesPerCluster == 0
+        && firstCluster <= (long.MaxValue - bytes) / bytesPerCluster;
 
     public void Dispose() => _volume.Dispose();
 

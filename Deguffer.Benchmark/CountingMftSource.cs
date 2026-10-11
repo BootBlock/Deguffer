@@ -42,17 +42,11 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
 
     public int BytesPerCluster => inner.BytesPerCluster;
 
-    public bool TryReadClusters(long firstCluster, Span<byte> destination)
-    {
-        var read = inner.TryReadClusters(firstCluster, destination);
+    public bool TryReadClusters(long firstCluster, Span<byte> destination) =>
+        CountClusters(inner.TryReadClusters(firstCluster, destination), destination.Length);
 
-        if (read)
-        {
-            Interlocked.Add(ref _bytesRead, destination.Length);
-        }
-
-        return read;
-    }
+    public async ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
+        CountClusters(await inner.TryReadClustersAsync(firstCluster, destination, ct).ConfigureAwait(false), destination.Length);
 
     public void Dispose() => inner.Dispose();
 
@@ -62,6 +56,16 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
         {
             Interlocked.Add(ref _recordsRead, read);
             Interlocked.Add(ref _bytesRead, (long)read * BytesPerRecord);
+        }
+
+        return read;
+    }
+
+    private bool CountClusters(bool read, int bytes)
+    {
+        if (read)
+        {
+            Interlocked.Add(ref _bytesRead, bytes);
         }
 
         return read;

@@ -47,7 +47,7 @@ internal static class MftRecordStream
     /// but it always gets to make it.</para>
     ///
     /// <para>A record whose attributes continue in extension records is held back and handed on
-    /// after the first pass, once <see cref="MftExtensionReader"/> has read what it needs, so
+    /// after the first pass, once <see cref="MftExtensionReader"/> has folded in what it needs, so
     /// records do not all arrive in table order. Those held back are still handed on where the
     /// first pass stopped at a region it could not read, because a caller that keeps going has a
     /// use for every record that was read. They are handed on one at a time, in record order.</para>
@@ -86,7 +86,7 @@ internal static class MftRecordStream
         }
 
         var wholeTable = first.WholeTable
-            & MftExtensionReader.TryResolve(source, first.Deferred, count - first.Wanted, pass.SpareBuffer, ct);
+            & MftExtensionReader.TryResolve(source, first, count - first.Wanted, tuning.ReadsInFlight, pass.SpareBuffer, ct);
 
         foreach (var held in first.Deferred)
         {

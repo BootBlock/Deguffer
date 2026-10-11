@@ -181,6 +181,30 @@ internal struct MftRecordDraft
     }
 
     /// <summary>
+    /// Fold in what one extension record said, as <paramref name="extension"/>, a draft that has
+    /// absorbed that record alone with <c>isBase: false</c>, holds it.
+    ///
+    /// <para>The same answer as absorbing the record's bytes here. A name is kept only where it is
+    /// strictly better, so a record's own best name, the first of its best rank, is the only one of
+    /// its names that could displace what is known. A size is kept only where none is known yet, so
+    /// a record's own first size is the only one of its sizes that could be kept. Everything else
+    /// is a flag, and an extension record sets no date, attribute or base-record fact.</para>
+    /// </summary>
+    public void Absorb(in MftRecordDraft extension)
+    {
+        if (extension._bestRank < _bestRank)
+        {
+            (_parent, _name, _bestRank) = (extension._parent, extension._name, extension._bestRank);
+        }
+
+        _isReparsePoint |= extension._isReparsePoint;
+        _sawUnnamedData |= extension._sawUnnamedData;
+        _size ??= extension._size;
+        _sawWofData |= extension._sawWofData;
+        _wofSize ??= extension._wofSize;
+    }
+
+    /// <summary>
     /// The record this draft describes, or why there is none.
     /// </summary>
     /// <param name="list">
