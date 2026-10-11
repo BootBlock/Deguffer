@@ -6,8 +6,8 @@ namespace Deguffer.Core.Scanning.Mft;
 ///
 /// <para>Taken for every extension record in use, wanted or not. The first pass meets an extension
 /// record before its owner as often as after it, on whichever parse thread, so it cannot yet know
-/// which ones a list will name. One is a small fraction of the record it describes, and a table holds
-/// at most one per record.</para>
+/// which ones a list will name. Only those holding something the scan needs are kept, and one is a
+/// small fraction of the record it describes.</para>
 /// </summary>
 /// <param name="Number">The record's position in the table.</param>
 /// <param name="Sequence">How many times the record has been reused, which a list's reference to it must match.</param>

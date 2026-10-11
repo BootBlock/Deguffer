@@ -41,7 +41,10 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
         return _deferred;
     }
 
-    /// <summary>The extension records in use the pass read, in record order. Only once every parse has finished.</summary>
+    /// <summary>
+    /// The extension records the pass read that hold something the scan needs, in record order. Only
+    /// once every parse has finished.
+    /// </summary>
     public IReadOnlyList<MftExtensionRecord> Extensions()
     {
         _extensions.Sort(static (a, b) => a.Number.CompareTo(b.Number));
@@ -58,7 +61,10 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
 
         var outcome = MftRecordParser.Parse(record, number, out var parsed, out var continued, out var extension);
 
-        if (extension is { } kept)
+        // Most extension records hold only what the scan never asks for: the later pieces of a
+        // fragmented stream, or a directory's index. Every want asks for something, so one of those,
+        // or one that cannot be read, would only fail its owner as a record never kept does.
+        if (extension is { Readable: true, Supplied: not MftAttributeKinds.None } kept)
         {
             lock (_extensions)
             {

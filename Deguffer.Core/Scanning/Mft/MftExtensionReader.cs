@@ -116,8 +116,8 @@ internal static class MftExtensionReader
 
     /// <summary>
     /// Fold in every wanted record the first pass reached, from what it kept. One it reached and kept
-    /// nothing for was free, a base record, or unreadable, and the record wanting it fails. Returns
-    /// where the wanted records the first pass never reached begin.
+    /// nothing for was free, a base record, unreadable, or held nothing the scan needs, and the record
+    /// wanting it fails. Returns where the wanted records the first pass never reached begin.
     /// </summary>
     private static int Absorb(
         List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)> wanted,
