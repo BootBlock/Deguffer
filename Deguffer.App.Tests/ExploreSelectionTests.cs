@@ -154,35 +154,37 @@ public sealed class ExploreSelectionTests : IDisposable
     });
 
     /// <summary>
-    /// What went is remembered against the tree it went from: gone from what may be picked, the
-    /// files inside it with it, and stated by the stale note — until a new tree arrives, whose node
-    /// numbers mean something else.
+    /// What went leaves the tree it went from, with the files inside it, and the owner is handed what
+    /// is left. Once that is on screen, what went cannot be picked, and the stale note says it went —
+    /// until a new scan arrives, which has nothing removed from it.
     /// </summary>
     [Fact]
-    public void ARemovalIsRememberedAgainstTheTreeItCameFrom() => UiThread.Run(async () =>
+    public void ARemovalHandsTheOwnerWhatIsLeftOfTheTree() => UiThread.Run(async () =>
     {
         var (tree, folder, file) = Scanned();
         var selection = Selection(tree);
         var working = new List<bool>();
         var reported = new List<string>();
-        var changed = 0;
+        var removed = new List<ExploreSelection.RemovedFrom>();
 
         selection.Working += (_, busy) => working.Add(busy);
         selection.Reported += (_, report) => reported.Add(report.Sentence);
-        selection.Changed += (_, _) => changed++;
+        selection.Removed += (_, from) => ShowLeft(selection, removed, from);
 
         selection.Select([folder]);
         await selection.DeleteCommand.ExecuteAsync(null);
 
         Assert.False(Directory.Exists(tree.PathOf(folder)));
         Assert.Equal([true, false], working);
-        Assert.Equal(1, changed);
         Assert.StartsWith("Moved 'old'", Assert.Single(reported));
         Assert.Empty(selection.Nodes);
 
-        Assert.True(selection.WasRemoved(folder));
-        Assert.True(selection.WasRemoved(tree.ChildrenOf(folder)[0]));
-        Assert.False(selection.WasRemoved(file));
+        var (from, left) = Assert.Single(removed);
+
+        Assert.Same(tree, from);
+        Assert.False(left.Holds(folder));
+        Assert.False(left.Holds(tree.ChildrenOf(folder)[0]));
+        Assert.True(left.Holds(file));
         Assert.StartsWith("1 item(s) have been removed since this scan.", selection.StaleNote);
 
         selection.Select([folder, file]);
@@ -192,7 +194,6 @@ public sealed class ExploreSelectionTests : IDisposable
         var (rescan, _, _) = Scanned();
         selection.Show(rescan);
 
-        Assert.False(selection.WasRemoved(folder));
         Assert.Null(selection.StaleNote);
     });
 
@@ -209,6 +210,9 @@ public sealed class ExploreSelectionTests : IDisposable
         _explore.Prompt = new FakeExploreConfirmation(answer.Task);
         var selection = Selection(tree);
 
+        var removed = new List<ExploreSelection.RemovedFrom>();
+        selection.Removed += (_, from) => ShowLeft(selection, removed, from);
+
         selection.Select([folder]);
         var removing = selection.DeleteCommand.ExecuteAsync(null);
 
@@ -217,13 +221,13 @@ public sealed class ExploreSelectionTests : IDisposable
         await removing;
 
         Assert.False(Directory.Exists(tree.PathOf(folder)));
-        Assert.True(selection.WasRemoved(folder));
+        Assert.False(Assert.Single(removed).Left.Holds(folder));
         Assert.StartsWith("1 item(s) have been removed since this scan.", selection.StaleNote);
 
         // §5.6: what was not picked is still there, and so is the folder the scan started from.
         Assert.True(File.Exists(tree.PathOf(file)));
         Assert.True(Directory.Exists(tree.PathOf(tree.RootNode)));
-        Assert.False(selection.WasRemoved(file));
+        Assert.True(removed[0].Left.Holds(file));
     });
 
     /// <summary>
@@ -238,6 +242,9 @@ public sealed class ExploreSelectionTests : IDisposable
         _explore.Prompt = new FakeExploreConfirmation(answer.Task);
         var selection = Selection(tree);
 
+        var removed = new List<ExploreSelection.RemovedFrom>();
+        selection.Removed += (_, from) => ShowLeft(selection, removed, from);
+
         selection.Select([folder]);
         var removing = selection.DeleteCommand.ExecuteAsync(null);
 
@@ -245,8 +252,10 @@ public sealed class ExploreSelectionTests : IDisposable
         answer.SetResult(true);
         await removing;
 
-        Assert.True(selection.WasRemoved(folder));
-        Assert.False(selection.WasRemoved(file));
+        var left = Assert.Single(removed).Left;
+
+        Assert.False(left.Holds(folder));
+        Assert.True(left.Holds(file));
         Assert.True(File.Exists(tree.PathOf(file)));
         Assert.Equal([file], selection.Nodes);
     });
@@ -349,6 +358,16 @@ public sealed class ExploreSelectionTests : IDisposable
         selection.Show(tree);
 
         return selection;
+    }
+
+    /// <summary>
+    /// What the page does with a removal: it shows what is left of the tree, which carries the
+    /// selection into it (<see cref="ExploreViewModel"/>).
+    /// </summary>
+    private static void ShowLeft(ExploreSelection selection, List<ExploreSelection.RemovedFrom> removed, ExploreSelection.RemovedFrom from)
+    {
+        removed.Add(from);
+        selection.Carry(from.Left);
     }
 
     /// <summary>A folder holding one file, beside a file, all on the disk so a removal has something to remove.</summary>

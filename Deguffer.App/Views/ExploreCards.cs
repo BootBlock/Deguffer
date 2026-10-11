@@ -118,9 +118,9 @@ internal sealed class ExploreCards
 
             // Only a row still in the list: one carried over from an earlier comparison names a node of
             // that comparison's tree.
-            ExploreGrowthRow { CanOpen: true } folder when _page.ShowsGrowth && _page.Growth.Comparison is { } growth
-                && _page.Growth.Rows.Contains(folder) =>
-                MapLight.Folder(growth.Tree, folder.Node),
+            ExploreGrowthRow { CanOpen: true } folder when _page.ShowsGrowth && _page.Tree is { } tree
+                && _page.Growth.Comparison is { } growth && growth.Describes(tree) && _page.Growth.Rows.Contains(folder) =>
+                MapLight.Folder(tree, folder.Node),
 
             _ => null,
         });

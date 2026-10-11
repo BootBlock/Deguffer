@@ -291,9 +291,6 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private readonly Func<double, double, MapTile?> _tileOver;
 
-    /// <summary>Whether a node has gone since the scan. See <see cref="Excluding"/>.</summary>
-    private Func<int, bool> _gone = _ => false;
-
     /// <summary>What a card beside the map lights on it, or null. See <see cref="Light"/>.</summary>
     private MapLight? _light;
 
@@ -945,26 +942,6 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// How to tell whether a node has gone since the scan, so the map stops offering it.
-    ///
-    /// <para>The rule rather than a list of nodes, and told rather than worked out. A removal takes
-    /// everything inside it, so the list would be every file under a deleted directory; and §7.1
-    /// allows one answer to "may this be acted on", which is <see cref="ExploreSelection"/>'s to
-    /// give. A second copy here would be a second answer.</para>
-    ///
-    /// <para>Given once, because the rule does not change — only what it answers, as things are
-    /// removed.</para>
-    /// </summary>
-    public void Excluding(Func<int, bool> gone)
-    {
-        ArgumentNullException.ThrowIfNull(gone);
-
-        _gone = gone;
-
-        ShowHovered();
-    }
-
-    /// <summary>
     /// Wait for the drag to stop before redrawing, on the terms
     /// <see cref="ResizeSettleTime"/> gives.
     ///
@@ -1500,7 +1477,7 @@ public sealed class ExploreMap : UserControl
     /// nothing while that drawing is of another tree or a change of folder is still on its way.
     /// </summary>
     private void ShowLit() =>
-        _highlight.ShowLit(_light is { } light && Outlining is { } drawing ? light.On(drawing, _gone) : null);
+        _highlight.ShowLit(_light is { } light && Outlining is { } drawing ? light.On(drawing) : null);
     /// <summary>
     /// The drawing the outlines are drawn in, which is the one the map works from, while it is of the
     /// tree the page handed over last. What is picked is named in that tree, and the same numbers in
@@ -1513,20 +1490,16 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// Draw the accent outline round whatever the pointer is over.
     ///
-    /// <para>Four shapes get nothing. One already picked would carry two outlines, leaving the
-    /// weaker claim on top of the stronger one. The other three cannot be picked at all (§7.1), so
-    /// marking any of them out would invite a click that selects nothing: the block standing in for
-    /// items too small to draw, the block standing for free space, and anything removed since the
-    /// scan, which the picture goes on showing because the tree behind it is not rebuilt for a
-    /// deletion.</para>
+    /// <para>A shape already picked gets nothing, because it would carry two outlines, leaving the
+    /// weaker claim on top of the stronger one. Nor does a block that stands for something other than
+    /// a node, which cannot be picked (§7.1).</para>
     /// </summary>
     private void ShowHovered()
     {
         _under.Clear();
 
         if (_hovered is { IsNode: true } hit
-            && !_picked.Contains(hit.Node)
-            && !_gone(hit.Node))
+            && !_picked.Contains(hit.Node))
         {
             _under.Add(hit.Node);
         }

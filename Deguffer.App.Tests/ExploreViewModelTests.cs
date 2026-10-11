@@ -453,9 +453,9 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
-    /// A removal takes its row out of the list, one removal rather than a rebuild. The map still
-    /// draws what went, so the folder cannot be opened or picked from it, and the notes button says
-    /// one of the notes is a warning.
+    /// A removal takes its row out of the list, one removal rather than a rebuild. The tree on screen
+    /// is what is left, so the folder cannot be opened or picked, and the notes button says one of the
+    /// notes is a warning.
     /// </summary>
     [Fact]
     public void ARemovedFolderLeavesTheListAndCannotBeOpenedOrPicked() => UiThread.Run(async () =>
@@ -483,6 +483,8 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal([NotifyCollectionChangedAction.Remove], changes);
         Assert.DoesNotContain(page.Rows, row => row.Node == folder);
+        Assert.False(page.Tree!.Holds(folder));
+        Assert.Same(tree, page.Tree.Scanned);
         Assert.StartsWith("Moved 'old'", page.Status);
         Assert.Equal([true, false], busy);
         Assert.True(page.ShowsNotesButton);
@@ -502,6 +504,44 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Contains(page.Rows, row => row.Node == again);
         Assert.Null(page.Selection.StaleNote);
+    });
+
+    /// <summary>
+    /// After a removal every size on the page leaves out what went, as the map does: the folder it
+    /// went from, that folder's share of the one above, and the total. The rows are the same rows,
+    /// brought up to date, and the reader stays where they were.
+    /// </summary>
+    [Fact]
+    public void ARemovalTakesWhatWentOutOfEverySize() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!);
+        var page = _explore.Page();
+        var (tree, folder) = _explore.OnDisk();
+        var file = tree.ChildrenOf(folder)[0];
+
+        page.ScopeTo(tree.PathOf(tree.RootNode));
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+
+        var old = Assert.Single(page.Rows, row => row.Node == folder);
+        var keep = Assert.Single(page.Rows, row => row.Node != folder);
+
+        Assert.Equal(FreeSpace.Format(10), old.SizeLabel);
+
+        page.Selection.Select([file]);
+        await page.Selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.False(File.Exists(tree.PathOf(file)));
+        Assert.Equal(5, page.Tree!.TotalBytes);
+        Assert.Equal(tree.RootNode, page.CurrentNode);
+        Assert.Equal([keep, old], page.Rows);
+        Assert.Equal(FreeSpace.Format(0), old.SizeLabel);
+        Assert.Equal(0, old.Share);
+        Assert.Equal(100, keep.Share);
+        Assert.StartsWith("1 item(s) have been removed since this scan.", page.Selection.StaleNote);
+
+        // §5.6: what was not picked is still there, and so is the folder it was in.
+        Assert.True(Directory.Exists(tree.PathOf(folder)));
+        Assert.True(File.Exists(tree.PathOf(keep.Node)));
     });
 
     /// <summary>

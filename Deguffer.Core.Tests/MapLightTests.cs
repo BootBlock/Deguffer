@@ -19,8 +19,6 @@ public sealed class MapLightTests
 
     private static readonly DateTime Now = new(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc);
 
-    private static readonly Func<int, bool> NothingGone = _ => false;
-
     /// <summary>
     /// On a treemap a folder is drawn round what it holds, so a folder of films is not lit as a whole:
     /// its own colour shows only round its files. Each film is, wherever it is, and nothing else.
@@ -32,7 +30,7 @@ public sealed class MapLightTests
         var measured = DominantTypes.Measure(tree);
         var drawing = Draw(tree, ExploreView.Treemap);
 
-        var lit = Nodes(MapLight.Kind(tree, measured, FileCategory.Video).On(drawing, NothingGone));
+        var lit = Nodes(MapLight.Kind(tree, measured, FileCategory.Video).On(drawing));
 
         // The fixture draws every file one by one, so every film is there to be lit.
         var films = Named(tree, name => name.EndsWith(".mp4", StringComparison.Ordinal));
@@ -59,8 +57,8 @@ public sealed class MapLightTests
         var measured = DominantTypes.Measure(tree);
         var films = Find(tree, "films");
 
-        var icicle = Nodes(MapLight.Kind(tree, measured, FileCategory.Video).On(Draw(tree, ExploreView.Icicle), NothingGone));
-        var sunburst = Nodes(MapLight.Kind(tree, measured, FileCategory.Video).On(Draw(tree, ExploreView.Sunburst), NothingGone));
+        var icicle = Nodes(MapLight.Kind(tree, measured, FileCategory.Video).On(Draw(tree, ExploreView.Icicle)));
+        var sunburst = Nodes(MapLight.Kind(tree, measured, FileCategory.Video).On(Draw(tree, ExploreView.Sunburst)));
 
         Assert.Contains(films, icicle);
         Assert.Contains(films, sunburst);
@@ -74,8 +72,8 @@ public sealed class MapLightTests
         var tree = Media();
         var films = Find(tree, "films");
 
-        var outline = Assert.Single(Lit(MapLight.Folder(tree, films).On(Draw(tree, ExploreView.Treemap), NothingGone)));
-        var sector = Assert.Single(Lit(MapLight.Folder(tree, films).On(Draw(tree, ExploreView.Sunburst), NothingGone)));
+        var outline = Assert.Single(Lit(MapLight.Folder(tree, films).On(Draw(tree, ExploreView.Treemap))));
+        var sector = Assert.Single(Lit(MapLight.Folder(tree, films).On(Draw(tree, ExploreView.Sunburst))));
 
         Assert.Equal(films, outline.Node);
         Assert.Equal(films, sector.Node);
@@ -95,7 +93,7 @@ public sealed class MapLightTests
             .Select(level => Find(tree, $"level{level}"))
             .Last(node => drawing.Outlines(new HashSet<int> { node }).Count > 0);
 
-        var outline = Assert.Single(Lit(MapLight.Folder(tree, deepest).On(drawing, NothingGone)));
+        var outline = Assert.Single(Lit(MapLight.Folder(tree, deepest).On(drawing)));
 
         Assert.NotEqual(Find(tree, "level0"), drawn);
         Assert.Equal(drawn, outline.Node);
@@ -109,24 +107,29 @@ public sealed class MapLightTests
         var other = Media();
         var drawing = Draw(other, ExploreView.Treemap);
 
-        Assert.NotEmpty(Lit(MapLight.Folder(other, Find(other, "films")).On(drawing, NothingGone)));
-        Assert.Null(MapLight.Folder(tree, Find(tree, "films")).On(drawing, NothingGone));
-        Assert.Null(MapLight.Kind(tree, DominantTypes.Measure(tree), FileCategory.Video).On(drawing, NothingGone));
+        Assert.NotEmpty(Lit(MapLight.Folder(other, Find(other, "films")).On(drawing)));
+        Assert.Null(MapLight.Folder(tree, Find(tree, "films")).On(drawing));
+        Assert.Null(MapLight.Kind(tree, DominantTypes.Measure(tree), FileCategory.Video).On(drawing));
     }
 
+    /// <summary>
+    /// What was removed since the scan is drawn nowhere and lit nowhere. A row naming it lights
+    /// nothing, rather than the folder above it, which is still drawn where it was.
+    /// </summary>
     [Fact]
     public void WhatWasRemovedSinceTheScanIsNotLit()
     {
         var tree = Media();
-        var drawing = Draw(tree, ExploreView.Treemap);
-        var films = Find(tree, "films");
         var removed = Find(tree, "film0.mp4");
+        var left = tree.Without([removed]);
+        var drawing = Draw(left, ExploreView.Treemap);
 
-        var lit = Nodes(MapLight.Kind(tree, DominantTypes.Measure(tree), FileCategory.Video).On(drawing, node => node == removed));
+        var lit = Nodes(MapLight.Kind(left, DominantTypes.Measure(left), FileCategory.Video).On(drawing));
 
         Assert.DoesNotContain(removed, lit);
         Assert.Contains(Find(tree, "film1.mp4"), lit);
-        Assert.Empty(Lit(MapLight.Folder(tree, films).On(drawing, node => node == films)));
+        Assert.Empty(Lit(MapLight.Folder(left, removed).On(drawing)));
+        Assert.NotEmpty(Lit(MapLight.Folder(left, Find(tree, "film1.mp4")).On(drawing)));
     }
 
     private static HashSet<int> Nodes(IReadOnlyList<ExploreOutline>? outlines) => [.. Lit(outlines).Select(outline => outline.Node)];

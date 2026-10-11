@@ -27,7 +27,7 @@ public abstract class MapLight
     /// one by one, the shape of the deepest folder above it that is (see
     /// <see cref="ExploreSurface.ShownAs"/>).
     /// </summary>
-    public static MapLight Folder(ISizedTree tree, int node)
+    public static MapLight Folder(ExploreTree tree, int node)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
@@ -49,33 +49,34 @@ public abstract class MapLight
     }
 
     /// <summary>
-    /// The outlines lit on <paramref name="drawing"/>, leaving out whatever <paramref name="gone"/>
-    /// says was removed since the scan: the picture goes on drawing it, and it is no longer there to be
-    /// found.
+    /// The outlines lit on <paramref name="drawing"/>.
     ///
     /// <para>Empty where the drawing has nothing of it to light, which is an answer: what was asked
     /// for is nowhere the map draws one by one, and the map dims all of itself to say so. Null for a
     /// drawing of another tree, about which the light has nothing to say at all.</para>
     /// </summary>
-    public IReadOnlyList<ExploreOutline>? On(ExploreSurface drawing, Func<int, bool> gone)
+    public IReadOnlyList<ExploreOutline>? On(ExploreSurface drawing)
     {
         ArgumentNullException.ThrowIfNull(drawing);
-        ArgumentNullException.ThrowIfNull(gone);
 
-        return ReferenceEquals(drawing.Tree, Tree) ? Lit(drawing, gone) : null;
+        return ReferenceEquals(drawing.Tree, Tree) ? Lit(drawing) : null;
     }
 
-    private protected abstract IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing, Func<int, bool> gone);
+    private protected abstract IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing);
 
-    private sealed class FolderLight(ISizedTree tree, int node) : MapLight(tree)
+    /// <summary>
+    /// A folder the tree no longer holds, removed since the scan, lights nothing: the folder above it
+    /// is drawn where it was, and lighting that would say the folder is still there.
+    /// </summary>
+    private sealed class FolderLight(ExploreTree tree, int node) : MapLight(tree)
     {
-        private protected override IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing, Func<int, bool> gone) =>
-            !gone(node) && drawing.ShownAs(node) is { } shown ? drawing.Outlines(new HashSet<int> { shown }) : [];
+        private protected override IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing) =>
+            tree.Holds(node) && drawing.ShownAs(node) is { } shown ? drawing.Outlines(new HashSet<int> { shown }) : [];
     }
 
     private sealed class KindLight(ExploreTree tree, DominantTypes? measured, FileCategory kind) : MapLight(tree)
     {
-        private protected override IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing, Func<int, bool> gone) =>
-            drawing.Uncovered(node => DominantTypes.KindOf(tree, node, measured) == kind && !gone(node));
+        private protected override IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing) =>
+            drawing.Uncovered(node => DominantTypes.KindOf(tree, node, measured) == kind);
     }
 }

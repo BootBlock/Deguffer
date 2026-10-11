@@ -97,8 +97,18 @@ public sealed class ScanGrowth
         Ranked = ranked;
     }
 
-    /// <summary>The tree this compares, and the only one its node numbers mean anything in.</summary>
+    /// <summary>
+    /// The tree this compares, as the scan found it. Its node numbers mean the same in it and in the
+    /// tree left after a removal from it, and in no other: see <see cref="Describes"/>.
+    /// </summary>
     public ExploreTree Tree { get; }
+
+    /// <summary>
+    /// Whether this comparison is about <paramref name="tree"/>: the scan it compared, or what is left
+    /// of that scan after a removal (<see cref="ExploreTree.Scanned"/>). It compares the two scans, so a
+    /// change it reports does not count a removal made since.
+    /// </summary>
+    public bool Describes(ExploreTree? tree) => tree is not null && ReferenceEquals(tree.Scanned, Tree);
 
     /// <summary>The summary this compares against.</summary>
     public ScanSummary Earlier { get; }

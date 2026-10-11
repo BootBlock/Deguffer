@@ -44,6 +44,34 @@ public sealed class ShapeChangesTests
         Assert.True(gamma.To.Width * gamma.To.Height > gamma.From.Width * gamma.From.Height);
     }
 
+    /// <summary>
+    /// A removal closes up. The folder that went shrinks away, as nothing in the tree left is it, and
+    /// the shapes beside it grow into the room it left. Nothing appears.
+    /// </summary>
+    [Fact]
+    public void AFolderRemovedSinceTheScanShrinksAwayAndItsNeighboursGrowIntoItsRoom()
+    {
+        var tree = Scan(("alpha", 300), ("beta", 200), ("gamma", 100));
+        var left = tree.Without([Find(tree, "beta")]);
+
+        var changes = ShapeChanges.Between(Treemap(tree), Treemap(left));
+
+        var went = Assert.Single(changes, change => change.Kind == ShapeChangeKind.Disappeared);
+
+        Assert.Equal(Find(tree, "beta.bin"), went.Node);
+        Assert.Equal(0, went.To.Width);
+        Assert.Equal(0, went.To.Height);
+        Assert.DoesNotContain(changes, change => change.Kind == ShapeChangeKind.Appeared);
+
+        foreach (var name in new[] { "alpha.bin", "gamma.bin" })
+        {
+            var grew = Assert.Single(changes, change => change.Node == Find(tree, name));
+
+            Assert.Equal(ShapeChangeKind.Moved, grew.Kind);
+            Assert.True(grew.To.Width * grew.To.Height > grew.From.Width * grew.From.Height, name);
+        }
+    }
+
     [Fact]
     public void ANewFolderGrowsOutOfTheMiddleOfItsPlace()
     {

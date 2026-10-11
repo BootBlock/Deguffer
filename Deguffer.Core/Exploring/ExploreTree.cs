@@ -35,6 +35,9 @@ public sealed class ExploreTree : Layout.ITrackedTree
     private readonly bool[] _placed;
     private readonly FrozenSet<int> _listingRefused;
 
+    /// <summary>What has been taken out since the scan, or null for the tree as the scan found it.</summary>
+    private readonly RemovedSinceScan? _removed;
+
     private ExploreTree(
         string rootPath,
         int rootNode,
@@ -73,7 +76,47 @@ public sealed class ExploreTree : Layout.ITrackedTree
         _children = children;
         _placed = placed;
         _listingRefused = listingRefused;
+        Scanned = this;
     }
+
+    /// <summary>
+    /// <paramref name="scanned"/> with <paramref name="removed"/> taken out. Every array is the
+    /// scanned tree's own, so this costs what was taken out and not the size of the tree.
+    /// </summary>
+    private ExploreTree(ExploreTree scanned, RemovedSinceScan removed)
+    {
+        RootPath = scanned.RootPath;
+        RootNode = scanned.RootNode;
+        ChildOrder = scanned.ChildOrder;
+        _names = scanned._names;
+        _parents = scanned._parents;
+        _sizes = scanned._sizes;
+        _lengths = scanned._lengths;
+        _storage = scanned._storage;
+        _isDirectory = scanned._isDirectory;
+        _isLink = scanned._isLink;
+        _sizeUnknown = scanned._sizeUnknown;
+        _created = scanned._created;
+        _modified = scanned._modified;
+        _visibility = scanned._visibility;
+        _childStart = scanned._childStart;
+        _children = scanned._children;
+        _placed = scanned._placed;
+        _listingRefused = scanned._listingRefused;
+        _removed = removed;
+        Scanned = scanned;
+    }
+
+    /// <summary>
+    /// The tree as the scan found it: this one, or for a tree with items taken out since
+    /// (<see cref="Without"/>), the one they were taken from. Whatever was measured from the scan,
+    /// such as what grew since the scan before it, describes that tree and holds for this one, whose
+    /// node numbers are the same.
+    /// </summary>
+    public ExploreTree Scanned { get; }
+
+    /// <summary>How many items have been taken out since the scan. See <see cref="Without"/>.</summary>
+    public int RemovedSinceScan => _removed?.Count ?? 0;
 
     /// <summary>Where the scan started, as the user picked it — <c>C:\</c>.</summary>
     public string RootPath { get; }
@@ -100,10 +143,10 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// Bytes on the disk under the root, as far as the scan established them. See
     /// <see cref="SizeOf"/> for why this is the figure rather than the length.
     /// </summary>
-    public long TotalBytes => _sizes[RootNode];
+    public long TotalBytes => SizeOf(RootNode);
 
     /// <summary>The length of every file under the root added up: what Explorer calls their size.</summary>
-    public long TotalLength => _lengths[RootNode];
+    public long TotalLength => LengthOf(RootNode);
 
     /// <summary>
     /// Whether any node has a size the scan could not establish, which makes every total above it
@@ -140,13 +183,13 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// included. The walk learns lengths alone, so there it is the length for every file nothing marks
     /// as cloud, compressed or sparse, and what the file system states for the rest.</para>
     /// </summary>
-    public long SizeOf(int node) => _sizes[node];
+    public long SizeOf(int node) => _removed is null ? _sizes[node] : _sizes[node] - _removed.BytesLost(node);
 
     /// <summary>
     /// The length of this file, or of every file at or below this folder: what Explorer calls its
     /// size, and what a download of it would cost.
     /// </summary>
-    public long LengthOf(int node) => _lengths[node];
+    public long LengthOf(int node) => _removed is null ? _lengths[node] : _lengths[node] - _removed.LengthLost(node);
 
     /// <summary>
     /// Why this file occupies less than its length, or every reason found at or below this folder.
@@ -226,7 +269,41 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// (G4/G5).
     /// </summary>
     public ReadOnlySpan<int> ChildrenOf(int node) =>
-        _children.AsSpan(_childStart[node], _childStart[node + 1] - _childStart[node]);
+        _removed is not null && _removed.TryChildren(node, out var kept)
+            ? kept
+            : _children.AsSpan(_childStart[node], _childStart[node + 1] - _childStart[node]);
+
+    /// <summary>
+    /// Whether this tree holds <paramref name="node"/>: a number in range, reachable from the root,
+    /// and not taken out since the scan (<see cref="Without"/>). Everything the tree lists, draws or
+    /// names a path for is a node it holds.
+    /// </summary>
+    public bool Holds(int node) =>
+        node >= 0 && node < NodeCount && _placed[node] && _removed?.Covers(node, ParentOf) != true;
+
+    /// <summary>
+    /// This tree with <paramref name="removed"/> taken out, each with everything under it: the
+    /// folders above each lose its size and length, it leaves its folder's children, and those are
+    /// ordered again. The nodes keep their numbers, so a node of this tree is the same node of the
+    /// one returned wherever that holds it (<see cref="Holds"/>). This tree itself, where none of
+    /// <paramref name="removed"/> is in it.
+    ///
+    /// <para>What is answered for here is what the disk holds after a removal, without scanning it
+    /// again. A removal takes a folder and everything in it, and nothing else, so the folders above
+    /// it lose exactly its size. What only the scan measured stays as the scan found it: whether a
+    /// size below a folder was unknown, the kinds of storage under it, and its newest write, each of
+    /// which can only overstate what is left.</para>
+    ///
+    /// <para>The root stays, as the place the scan was of. Taken out, it leaves nothing under it.</para>
+    /// </summary>
+    public ExploreTree Without(IEnumerable<int> removed)
+    {
+        ArgumentNullException.ThrowIfNull(removed);
+
+        return Exploring.RemovedSinceScan.Taking(this, _removed, removed) is { } taken
+            ? new ExploreTree(Scanned, taken)
+            : this;
+    }
 
     /// <summary>
     /// The full path of <paramref name="node"/>, rebuilt by walking to the root.
@@ -247,8 +324,9 @@ public sealed class ExploreTree : Layout.ITrackedTree
             nameof(node), node, "This node is not reachable from the root, so it has no path.");
 
     /// <summary>
-    /// The full path of <paramref name="node"/>, or null where this tree cannot place it: a node
-    /// number it does not hold, or one whose parent chain does not reach the root.
+    /// The full path of <paramref name="node"/>, or null where this tree does not hold it
+    /// (<see cref="Holds"/>): a number past its end, one whose parent chain does not reach the root,
+    /// or one taken out since the scan.
     ///
     /// <para>Rebuilt rather than stored: a path per node would cost more than every other array
     /// here combined, and the UI asks for one only when the user points at something.</para>
@@ -259,11 +337,11 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// </summary>
     public string? TryPathOf(int node)
     {
-        // Both halves of "this tree cannot place it", asked before the walk rather than discovered
+        // Every way of "this tree cannot place it", asked before the walk rather than discovered
         // during it. A node number from another tree can be past the end of this one, and a record
         // the file table never described is in range and holds nothing — see Placed for why walking
         // out of one of those does not end where it looks as though it should.
-        if (node < 0 || node >= NodeCount || !_placed[node])
+        if (!Holds(node))
         {
             return null;
         }
@@ -559,10 +637,14 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// sensitivity enabled holds <c>Cache</c> and <c>cache</c> at once — and the size path three
     /// lines below says why an unspecified order among equals is not good enough here.</para>
     /// </summary>
-    private static Comparison<int> ByName(string[] names) =>
-        (left, right) =>
-        {
-            var byName = string.Compare(names[left], names[right], StringComparison.OrdinalIgnoreCase);
-            return byName != 0 ? byName : left.CompareTo(right);
-        };
+    private static Comparison<int> ByName(string[] names) => (left, right) => CompareByName(names, left, right);
+
+    /// <summary>Two siblings of this tree in name order. See <see cref="ByName"/>.</summary>
+    internal int CompareByName(int left, int right) => CompareByName(_names, left, right);
+
+    private static int CompareByName(string[] names, int left, int right)
+    {
+        var byName = string.Compare(names[left], names[right], StringComparison.OrdinalIgnoreCase);
+        return byName != 0 ? byName : left.CompareTo(right);
+    }
 }
