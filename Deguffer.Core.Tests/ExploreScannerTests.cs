@@ -24,6 +24,13 @@ public class ExploreScannerTests
 
     private const uint Sibling = 9;
 
+    // Assembles a snapshot in the report that starts it, so the report after it hands it over.
+    private static readonly Func<Action, Task> OnTheSpot = assemble =>
+    {
+        assemble();
+        return Task.CompletedTask;
+    };
+
     private static MftFixture Volume() => new MftFixture()
         .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
         .AddDirectory(Profile, Users, "testuser")
@@ -250,12 +257,15 @@ public class ExploreScannerTests
     /// results, and a snapshot is what "partial" means for a picture — a running total says a scan is
     /// progressing, but gives the view nothing to put on screen.
     ///
-    /// <para>The cadence is a wall-clock interval, deliberately: copying every array is not free, and
-    /// a scan of a full drive is long enough that an unchanging window reads as a hung one. So what
-    /// the test has to produce is elapsed time, and it moves the scanner's clock from the reporting
-    /// thread rather than spending real time, which would race the walk and every test running beside
-    /// it. The walk reports on the same clock, so each step is at least the walk's own interval, or
-    /// the walk would make no report for the snapshot to ride on.</para>
+    /// <para>The cadence is a wall-clock interval, deliberately: a snapshot is a pass over every node
+    /// found so far, and a scan of a full drive is long enough that an unchanging window reads as a
+    /// hung one. So what the test has to produce is elapsed time, and it moves the scanner's clock
+    /// from the reporting thread rather than spending real time, which would race the walk and every
+    /// test running beside it. The walk reports on the same clock, so each step is at least the
+    /// walk's own interval, or the walk would make no report for the snapshot to ride on.</para>
+    ///
+    /// <para>A snapshot is assembled away from the walk and handed over by the report after the one
+    /// that started it. Assembled on the spot here, so that is always the very next report.</para>
     /// </summary>
     [Fact]
     public async Task PublishesATreeToDrawOnlyOnceTheSnapshotIntervalHasPassed()
@@ -268,13 +278,16 @@ public class ExploreScannerTests
 
         var clock = new ManualTimeProvider();
         var reports = new List<ExploreProgress>();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock);
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock)
+        {
+            AssembleSnapshot = OnTheSpot,
+        };
 
-        // Short of the interval by the second report, and exactly on it by the third. The fourth
-        // follows one walk interval later, so it shows the snapshot interval starting again.
+        // Short of the interval by the second report, and exactly on it by the third, which starts a
+        // snapshot that the fourth hands over. The last report is the walk's own, once at the end.
         var walkStep = BoundedFileWalk.ProgressInterval;
         var steps = new Queue<TimeSpan>(
-            [ExploreScanner.SnapshotInterval - walkStep, walkStep, walkStep]);
+            [WalkSnapshots.Interval - walkStep, walkStep, walkStep]);
 
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
@@ -288,13 +301,14 @@ public class ExploreScannerTests
 
         var scan = await scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress);
 
-        Assert.True(reports.Count >= 4, $"The walk made {reports.Count} reports, not one for each of its four folders.");
+        Assert.True(reports.Count == 5, $"The walk made {reports.Count} reports, not one for each of its four folders and one at the end.");
         Assert.Null(reports[0].Snapshot);
         Assert.Null(reports[1].Snapshot);
-        Assert.NotNull(reports[2].Snapshot);
-        Assert.Null(reports[3].Snapshot);
+        Assert.Null(reports[2].Snapshot);
+        Assert.NotNull(reports[3].Snapshot);
+        Assert.Null(reports[4].Snapshot);
 
-        var published = reports[2].Snapshot!;
+        var published = reports[3].Snapshot!;
 
         Assert.True(
             published.NodeCount < scan.Tree.NodeCount,
@@ -309,7 +323,7 @@ public class ExploreScannerTests
     /// disk; a name does not grow.
     ///
     /// <para>Driven the same way as the interval test above, by moving the scanner's clock a whole
-    /// interval on every report, so every report after the first carries a snapshot.</para>
+    /// interval on every report, so every report after the second carries a snapshot.</para>
     /// </summary>
     [Fact]
     public async Task OrdersASnapshotByNameAndTheFinishedTreeBySize()
@@ -324,10 +338,14 @@ public class ExploreScannerTests
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
             reports.Add(report);
-            clock.Advance(ExploreScanner.SnapshotInterval);
+            clock.Advance(WalkSnapshots.Interval);
         });
 
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock);
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock)
+        {
+            AssembleSnapshot = OnTheSpot,
+        };
+
         var scan = await scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress);
 
         var published = reports.Select(report => report.Snapshot).OfType<ExploreTree>().ToList();
@@ -335,6 +353,41 @@ public class ExploreScannerTests
         Assert.NotEmpty(published);
         Assert.All(published, tree => Assert.Equal(ExploreChildOrder.ByName, tree.ChildOrder));
         Assert.Equal(ExploreChildOrder.BySize, scan.Tree.ChildOrder);
+    }
+
+    /// <summary>
+    /// A search across several folders is told counts and never a snapshot. Nothing draws its
+    /// folders until all of them are read, so a snapshot would be a pass over the tree, repeated
+    /// for as long as the walk runs, that nobody looks at.
+    ///
+    /// <para>Driven as the ordering test above is, where every report after the second carries a
+    /// snapshot from a single-folder scan.</para>
+    /// </summary>
+    [Fact]
+    public async Task ASearchAcrossFoldersIsToldCountsAndNoSnapshot()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(1000, "cache", "a.bin");
+        temp.CreateFile(2000, "cache", "one", "b.bin");
+        temp.CreateFile(4000, "cache", "one", "two", "c.bin");
+
+        var clock = new ManualTimeProvider();
+        var reports = new List<ExploreProgress>();
+        var progress = new CallbackProgress<ExploreProgress>(report =>
+        {
+            reports.Add(report);
+            clock.Advance(WalkSnapshots.Interval);
+        });
+
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock)
+        {
+            AssembleSnapshot = OnTheSpot,
+        };
+
+        await scanner.ScanFoldersAsync([Path.Combine(temp.Path, "cache")], progress);
+
+        Assert.True(reports.Count >= 4, $"The walk made {reports.Count} reports, not one for each of its three folders and one at the end.");
+        Assert.All(reports, report => Assert.Null(report.Snapshot));
     }
 
     /// <summary>

@@ -7,8 +7,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// the newest wanted.
 ///
 /// <para>Off that thread because it is the UI thread. A redraw of a large tree at 4K is a layout of
-/// tens of thousands of shapes and a pass over eight million pixels, and a scan asks for one every
-/// three quarters of a second. On the thread the pointer is heard on, each would be a pause in which
+/// tens of thousands of shapes and a pass over eight million pixels, and a scan asks for one as
+/// often as every three quarters of a second. On the thread the pointer is heard on, each would be a pause in which
 /// nothing the reader did had any effect.</para>
 ///
 /// <para>The newest only, because anything newer is more current: a resize, a zoom arriving, or a

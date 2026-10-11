@@ -507,8 +507,8 @@ internal sealed class ExploreLayers
             _camera.Children.InsertAtTop(layer.Sprite);
         }
 
-        // Emptied and resized rather than made again: a scan redraws a map every three quarters of a
-        // second, and the surface's size only changes with the window's (G5).
+        // Emptied and resized rather than made again: a scan redraws a map as often as every three
+        // quarters of a second, and the surface's size only changes with the window's (G5).
         layer.Drawing = null;
         layer.Prepare(width, height);
 

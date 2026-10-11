@@ -72,14 +72,34 @@ public sealed class ReportTests
     public void TheWalksValuesAreTheOnesItRanWith() =>
         Assert.Equal(
             "3 folders listed at once, 8 KiB listing buffer",
-            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default));
+            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots: true));
+
+    /// <summary>
+    /// The Explore walk also states whether it took snapshots, which is the value it is timed both
+    /// ways with, so the two results cannot be mistaken for each other.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "3 folders listed at once, 8 KiB listing buffer, snapshots on")]
+    [InlineData(false, "3 folders listed at once, 8 KiB listing buffer, snapshots off")]
+    public void TheExploreWalkSaysWhetherItTookSnapshots(bool snapshots, string expected) =>
+        Assert.Equal(
+            expected,
+            Deguffer.Benchmark.Tuning.Describe(Route.ExploreWalk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots));
+
+    /// <summary>
+    /// The Explore walk counts what its walk listed, as the walk does, so the two results name the
+    /// same thing per second.
+    /// </summary>
+    [Fact]
+    public void TheExploreWalkCountsEntries() =>
+        Assert.Contains("entries/s", Render(Route.ExploreWalk, Run(1)), StringComparison.Ordinal);
 
     /// <summary>The same for a table route, whose values are the reads and the parse threads.</summary>
     [Fact]
     public void ATableRoutesValuesAreTheOnesItRanWith() =>
         Assert.Equal(
             "2048 KiB reads, 8 in flight, parsed on 3 threads",
-            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3)));
+            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3), snapshots: true));
 
     [Fact]
     public void ADebugBuildIsCalledOut()
