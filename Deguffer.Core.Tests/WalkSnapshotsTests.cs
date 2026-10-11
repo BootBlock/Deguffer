@@ -146,6 +146,33 @@ public sealed class WalkSnapshotsTests
     }
 
     /// <summary>
+    /// A snapshot still being assembled when the walk stops is stopped too, and hands over nothing.
+    /// The walk is over, and a cancelled walk must not wait for a pass over every node it found.
+    ///
+    /// <para>Here the assembling only runs once the walk has stopped, so it can only see the stop
+    /// through the token it is given.</para>
+    /// </summary>
+    [Fact]
+    public void StopsTheSnapshotBeingAssembledWhenTheWalkStops()
+    {
+        Action? assemble = null;
+        var snapshots = new WalkSnapshots(_builder, _clock, work =>
+        {
+            assemble = work;
+            return Task.CompletedTask;
+        });
+
+        _clock.Advance(WalkSnapshots.Interval);
+        snapshots.Take();
+        Assert.NotNull(assemble);
+
+        snapshots.Stop();
+        assemble();
+
+        Assert.Null(snapshots.Take());
+    }
+
+    /// <summary>
     /// A snapshot that fails to assemble fails the walk, at the next report. Dropped instead, the
     /// fault would leave every later picture silently missing.
     /// </summary>

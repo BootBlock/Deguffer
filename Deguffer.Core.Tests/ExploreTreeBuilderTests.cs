@@ -157,16 +157,17 @@ public class ExploreTreeBuilderTests
     }
 
     /// <summary>
-    /// A tree is assembled from a capture without the lock every walk worker needs, so a worker
-    /// records its next folder while a snapshot is still being assembled rather than waiting for it.
-    /// The lock was once held for the whole of the assembling, which on a large walk stopped every
-    /// worker for as long as each snapshot took.
+    /// A capture is assembled without the lock every walk worker needs, so a snapshot being
+    /// assembled and a worker recording its next folder never wait for each other. The lock was once
+    /// held for the whole of the assembling, which on a large walk stopped every worker for as long
+    /// as each snapshot took.
     ///
-    /// <para>The worker records from another thread, so a capture that still held the lock would
-    /// keep it waiting until the wait gives up.</para>
+    /// <para>A worker is held inside the lock, part way through recording a folder, while the
+    /// capture is assembled on another thread. The lock is the same either way round, so an
+    /// assembling that needed it would wait here until the wait gives up.</para>
     /// </summary>
     [Fact]
-    public async Task RecordsMoreWhileACaptureIsStillToBeAssembled()
+    public async Task AssemblesACaptureWhileAWorkerHoldsTheLock()
     {
         var builder = new ExploreTreeBuilder(Root);
         builder.AddChildren(ExploreTreeBuilder.RootNode, [
@@ -175,17 +176,56 @@ public class ExploreTreeBuilderTests
 
         var capture = builder.Capture();
 
-        var recording = Task.Run(() => builder.AddChildren(ExploreTreeBuilder.RootNode, [
-            new ExploreChild("b.tgz", IsDirectory: false, IsLink: false, Size: 8192),
-        ]));
+        using var held = new HeldListing(new ExploreChild("b.tgz", IsDirectory: false, IsLink: false, Size: 8192));
+        var recording = Task.Run(() => builder.AddChildren(ExploreTreeBuilder.RootNode, held));
+        Assert.True(held.Entered.Wait(TimeSpan.FromSeconds(30)), "The worker never reached the lock.");
 
-        Assert.Same(recording, await Task.WhenAny(recording, Task.Delay(TimeSpan.FromSeconds(30))));
+        var assembling = Task.Run(() => capture.Build(ExploreChildOrder.ByName));
+        var first = await Task.WhenAny(assembling, Task.Delay(TimeSpan.FromSeconds(30)));
 
-        var tree = capture.Build(ExploreChildOrder.ByName);
+        held.Release();
+        await recording;
 
+        Assert.Same(assembling, first);
+
+        var tree = await assembling;
         Assert.Equal(2, tree.NodeCount);
         Assert.Equal(4096, tree.TotalBytes);
         Assert.Equal(12_288, builder.Build(ExploreChildOrder.BySize).TotalBytes);
+    }
+
+    /// <summary>
+    /// A capture's assembling stops when it is cancelled, so a snapshot of a walk that has ended
+    /// does not hold the end of the walk until it is finished.
+    /// </summary>
+    [Fact]
+    public void StopsAssemblingACaptureWhenCancelled()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("a.tgz", IsDirectory: false, IsLink: false, Size: 4096),
+        ]);
+
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            builder.Capture().Build(ExploreChildOrder.ByName, cancelled.Token));
+    }
+
+    /// <summary>
+    /// A mark on a node that was never added is refused when it is made. Marks are applied only when
+    /// a tree is assembled, often on another thread, where the caller's mistake could not be traced
+    /// back to it.
+    /// </summary>
+    [Fact]
+    public void RefusesToMarkANodeThatWasNeverAdded()
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.MarkSizeUnknown(1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.MarkListingRefused(1));
+        Assert.False(builder.Build(ExploreChildOrder.BySize).HasUnknownSizes);
     }
 
     /// <summary>
@@ -268,5 +308,37 @@ public class ExploreTreeBuilderTests
             [first + 2, second + 1, first, cache, second],
             tree.ChildrenOf(ExploreTreeBuilder.RootNode).ToArray());
         Assert.Equal([inCache + 1, inCache + 2, inCache], tree.ChildrenOf(cache).ToArray());
+    }
+
+    /// <summary>
+    /// One folder's children whose enumeration waits to be released, which holds a worker inside the
+    /// builder's lock: the children are named before the lock is taken and enumerated inside it.
+    /// </summary>
+    private sealed class HeldListing(ExploreChild child) : IReadOnlyList<ExploreChild>, IDisposable
+    {
+        private readonly ManualResetEventSlim _released = new();
+
+        public ManualResetEventSlim Entered { get; } = new();
+
+        public int Count => 1;
+
+        public ExploreChild this[int index] => index == 0 ? child : throw new ArgumentOutOfRangeException(nameof(index));
+
+        public void Release() => _released.Set();
+
+        public IEnumerator<ExploreChild> GetEnumerator()
+        {
+            Entered.Set();
+            _released.Wait();
+            yield return child;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public void Dispose()
+        {
+            _released.Dispose();
+            Entered.Dispose();
+        }
     }
 }

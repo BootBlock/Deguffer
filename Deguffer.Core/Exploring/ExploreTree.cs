@@ -397,11 +397,14 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// <see cref="ListingWasRefused"/> answers for. A set rather than a column, because a refusal is
     /// rare against the millions of nodes a column would spend a slot on each.
     ///
-    /// <paramref name="nameRanks"/>, where given, is each node's place by name among its siblings,
-    /// which the walk knows as soon as a folder's children arrive. Each child is then placed in name
-    /// order as it is linked, and a tree ordered <see cref="ExploreChildOrder.ByName"/> is not sorted
-    /// at all — the sort that, done again on every snapshot of a scan in progress, was most of its
-    /// cost.
+    /// <paramref name="nameRanks"/> is each node's place by name among its siblings, which the walk
+    /// knows as soon as a folder's children arrive, and a tree ordered
+    /// <see cref="ExploreChildOrder.ByName"/> needs it. Each child is placed in name order as it is
+    /// linked, so that tree is not sorted at all — the sort that, done again on every snapshot of a
+    /// scan in progress, was most of its cost.
+    ///
+    /// <paramref name="ct"/> is asked between the passes, so a snapshot of a walk that has ended
+    /// stops within one pass rather than holding the end of the walk until it is finished.
     /// </summary>
     internal static ExploreTree Create(
         string rootPath,
@@ -420,16 +423,26 @@ public sealed class ExploreTree : Layout.ITrackedTree
         bool[] present,
         ExploreChildOrder childOrder,
         IReadOnlyCollection<int>? listingRefused = null,
-        int[]? nameRanks = null)
+        int[]? nameRanks = null,
+        CancellationToken ct = default)
     {
+        if (childOrder is ExploreChildOrder.ByName && nameRanks is null)
+        {
+            throw new ArgumentNullException(nameof(nameRanks), "A tree in name order is placed by its name ranks.");
+        }
+
         var (childStart, children) = InvertParentLinks(parents, present, nameRanks);
+        ct.ThrowIfCancellationRequested();
+
         var order = DepthFirstOrder(childStart, children, rootNode);
+        ct.ThrowIfCancellationRequested();
 
         RollUp(order, parents, sizes, lengths, storage, sizeUnknown, modified, rootNode);
+        ct.ThrowIfCancellationRequested();
 
-        if (childOrder is ExploreChildOrder.BySize || nameRanks is null)
+        if (childOrder is ExploreChildOrder.BySize)
         {
-            SortChildren(childStart, children, sizes, names, childOrder);
+            SortChildren(childStart, children, sizes, names);
         }
 
         return new ExploreTree(
@@ -588,12 +601,11 @@ public sealed class ExploreTree : Layout.ITrackedTree
     }
 
     /// <summary>
-    /// Order each node's children, in place, once. See <see cref="ChildrenOf"/> for why the order
-    /// belongs here rather than in each consumer, and <see cref="ExploreChildOrder"/> for why there
-    /// is more than one of them.
+    /// Order each node's children by size, in place, once. See <see cref="ChildrenOf"/> for why the
+    /// order belongs here rather than in each consumer. Name order needs no sort: see
+    /// <see cref="Create"/>.
     /// </summary>
-    private static void SortChildren(
-        int[] childStart, int[] children, long[] sizes, string[] names, ExploreChildOrder order)
+    private static void SortChildren(int[] childStart, int[] children, long[] sizes, string[] names)
     {
         // One delegate each for the whole tree rather than one per directory. A volume has hundreds
         // of thousands of directories (G5).
@@ -610,15 +622,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
                 continue;
             }
 
-            var slice = children.AsSpan(from, length);
-
-            if (order == ExploreChildOrder.ByName)
-            {
-                MemoryExtensions.Sort(slice, byName);
-                continue;
-            }
-
-            OrderBySize(slice, sizeOf, byName);
+            OrderBySize(children.AsSpan(from, length), sizeOf, byName);
         }
     }
 

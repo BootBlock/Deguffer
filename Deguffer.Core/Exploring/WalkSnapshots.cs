@@ -53,8 +53,13 @@ internal sealed class WalkSnapshots
     private long _due;
     private long _started;
     private Task? _assembling;
+    private readonly CancellationTokenSource _stopping = new();
+
+    // Taken once, so an assembling that outlives Stop still asks a token rather than a disposed
+    // source.
+    private readonly CancellationToken _stopped;
+
     private ExploreTree? _ready;
-    private volatile bool _stopped;
 
     /// <param name="start">
     /// Runs one assembling and says when it has finished. <see cref="InBackground"/> outside tests.
@@ -66,6 +71,7 @@ internal sealed class WalkSnapshots
         _start = start;
         _intervalTicks = (long)(Interval.TotalSeconds * clock.TimestampFrequency);
         _due = clock.GetTimestamp() + _intervalTicks;
+        _stopped = _stopping.Token;
     }
 
     /// <summary>
@@ -107,24 +113,38 @@ internal sealed class WalkSnapshots
     }
 
     /// <summary>
-    /// Start no more, and return once the snapshot being assembled, if any, has stopped. One that
-    /// has not begun its passes is abandoned: the walk is over, and the tree that replaces it is
-    /// being built.
+    /// Start no more, stop the snapshot being assembled, if any, and return once it has stopped.
+    /// The walk has ended or been cancelled, so nothing will draw it: the finished tree replaces it,
+    /// or nothing does.
     /// </summary>
     public void Stop()
     {
-        _stopped = true;
-        _assembling?.GetAwaiter().GetResult();
+        _stopping.Cancel();
+
+        try
+        {
+            _assembling?.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            _stopping.Dispose();
+        }
     }
 
     private void Assemble(ExploreTreeCapture capture)
     {
-        if (_stopped)
+        ExploreTree tree;
+
+        try
         {
+            tree = capture.Build(ExploreChildOrder.ByName, _stopped);
+        }
+        catch (OperationCanceledException) when (_stopped.IsCancellationRequested)
+        {
+            // Stopped by Stop, which is waiting for exactly this, and not a failure of the walk.
             return;
         }
 
-        var tree = capture.Build(ExploreChildOrder.ByName);
         var ended = _clock.GetTimestamp();
 
         // Read by the walk only once it has seen this finish, so the task's completion publishes it.

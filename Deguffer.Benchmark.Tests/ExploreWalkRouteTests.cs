@@ -4,8 +4,12 @@ using Deguffer.Testing;
 namespace Deguffer.Benchmark.Tests;
 
 /// <summary>
-/// The Explore walk the benchmark times builds the tree Explore builds, whether or not it takes
-/// snapshots on the way, so the two timings describe the same work but for the snapshots.
+/// The Explore walk the benchmark times counts what the walk recorded, and is complete only where
+/// nothing was refused it.
+///
+/// <para>No test here claims anything about the snapshots. A folder small enough for a test is
+/// walked before the first snapshot falls due, and when snapshots are taken is
+/// <c>WalkSnapshotsTests</c>' subject, on a clock the test moves.</para>
 /// </summary>
 public sealed class ExploreWalkRouteTests : IDisposable
 {
@@ -16,7 +20,7 @@ public sealed class ExploreWalkRouteTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void CountsEveryEntryOnceWithOrWithoutSnapshots(bool snapshots)
+    public void CountsEveryEntryOnceWhicheverWayItIsAsked(bool snapshots)
     {
         var root = _temp.CreateDirectory("root");
         _temp.CreateFile(10, "root", "a", "one.bin");

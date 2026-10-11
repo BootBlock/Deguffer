@@ -188,6 +188,7 @@ public sealed class ExploreTreeBuilder
     {
         lock (_gate)
         {
+            ThrowIfNotAdded(node);
             _sizeUnknown.Add(node);
         }
     }
@@ -205,9 +206,18 @@ public sealed class ExploreTreeBuilder
     {
         lock (_gate)
         {
+            ThrowIfNotAdded(node);
             _sizeUnknown.Add(node);
             _listingRefused.Add(node);
         }
+    }
+
+    // A mark is applied only when a tree is assembled, so a node that was never added is refused
+    // here, where the caller made the mistake, rather than in a snapshot on another thread.
+    private void ThrowIfNotAdded(int node)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(node);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(node, _nodes.Count);
     }
 
     /// <summary>

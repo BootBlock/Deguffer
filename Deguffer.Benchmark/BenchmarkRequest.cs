@@ -14,8 +14,8 @@ namespace Deguffer.Benchmark;
 /// folder, fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
-/// <param name="Walk">The values the walk runs with. The table routes take none of them.</param>
-/// <param name="Table">The values the table routes run with. The walk takes none of them.</param>
+/// <param name="Walk">The values the two walk routes run with. The table routes take none of them.</param>
+/// <param name="Table">The values the table routes run with. The walk routes take none of them.</param>
 /// <param name="Snapshots">
 /// Whether the Explore walk assembles the pictures of the tree so far that Explore draws while it
 /// walks. Timed both ways, the difference is what they cost the walk. No other route takes any.

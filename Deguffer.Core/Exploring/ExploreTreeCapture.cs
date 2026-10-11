@@ -13,6 +13,10 @@ namespace Deguffer.Core.Exploring;
 /// </summary>
 internal sealed class ExploreTreeCapture
 {
+    // The token is asked once every 65,536 nodes copied: often enough that a cancelled copy stops
+    // at once, and rarely enough to cost nothing beside the copy.
+    private const int CancellationMask = (1 << 16) - 1;
+
     private readonly string _rootPath;
     private readonly AppendOnlyChunks<ExploreTreeBuilder.Node>.Prefix _nodes;
     private readonly int[] _sizeUnknown;
@@ -47,7 +51,11 @@ internal sealed class ExploreTreeCapture
     /// <see cref="ExploreTree.Create"/> needs exists for the file table, which leaves free and
     /// unreadable records empty.</para>
     /// </summary>
-    public ExploreTree Build(ExploreChildOrder childOrder)
+    /// <param name="ct">
+    /// Asked every so many nodes and between the passes, so a snapshot of a walk that has ended or
+    /// been cancelled stops part way rather than holding the walk until it is finished.
+    /// </param>
+    public ExploreTree Build(ExploreChildOrder childOrder, CancellationToken ct = default)
     {
         var count = _nodes.Count;
 
@@ -66,6 +74,11 @@ internal sealed class ExploreTreeCapture
 
         for (var i = 0; i < count; i++)
         {
+            if ((i & CancellationMask) == 0)
+            {
+                ct.ThrowIfCancellationRequested();
+            }
+
             // By reference, field by field, so that HasChildren, which the builder may still be
             // writing, is never read.
             ref readonly var node = ref _nodes[i];
@@ -114,7 +127,8 @@ internal sealed class ExploreTreeCapture
             present,
             childOrder,
             _listingRefused,
-            nameRanks);
+            nameRanks,
+            ct);
     }
 
     /// <summary>

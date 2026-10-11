@@ -93,7 +93,7 @@ see `Enumerating objects: 2369, done.` and then `Counting objects: 100% (2369/23
 **DaisyDisk is the counterpoint on the other technique.** It abandoned a live sunburst drawn during
 the scan: *"All we got was just a convulsing set of rings… Fail."* Deguffer's Explore walk draws
 partial trees anyway, and answers that by ordering a snapshot by name rather than by size — which is
-recorded in `ExploreScanner`.
+recorded in `WalkSnapshots`.
 
 WizTree, TreeSize, CCleaner, `cleanmgr` and Storage Sense could not be pinned down: no developer
 statement or documentation was found for any of their denominators. TreeSize is the one disk tool
