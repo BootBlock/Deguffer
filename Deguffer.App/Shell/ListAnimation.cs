@@ -107,7 +107,7 @@ internal sealed class ListAnimation
     /// animation is made only then, so a row's arrival is heard through <paramref name="arrived"/>
     /// rather than through <see cref="Arrived"/>.
     /// </summary>
-    public static void Play(TreeView tree, IMotionPolicy motion, Action<UIElement>? arrived = null)
+    public static void Play(TreeView tree, IMotionPolicy motion, Action<UIElement> arrived)
     {
         tree.LayoutUpdated += Find;
 
