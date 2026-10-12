@@ -10,7 +10,7 @@ namespace Deguffer.Core.Exploring;
 ///
 /// <para>Not whether it may be removed, which <see cref="MapShapeText.Help"/> is given apart. A screen
 /// reader names every shape in a search of the window, and the verdict asks the machine where the
-/// item's volume is mounted, so a verdict carried here was asked once a shape.</para>
+/// item's volume is mounted, so a verdict carried here would be asked once a shape.</para>
 /// </summary>
 /// <param name="Name">Its own name, not its path: the shapes round it are its siblings, and a screen reader reads the name first.</param>
 /// <param name="Kind">What it is, as one capitalised noun or two: "Folder", "File", "Program".</param>

@@ -38,7 +38,7 @@ public static class MapFolders
     ///
     /// <para>So a search of the window meets the shapes along one path and those the reader opened,
     /// rather than every shape of the picture. A picture of a large tree draws tens of thousands, and a
-    /// search that met them all stopped the window for over a minute.</para>
+    /// search asks the window across processes for each element it meets.</para>
     /// </summary>
     /// <param name="keyboard">The folder whose shapes the keyboard moves between, or null for the top of the picture.</param>
     /// <param name="expanded">The folders the reader expanded.</param>
@@ -63,6 +63,19 @@ public static class MapFolders
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The shapes a screen reader is given under <paramref name="folder"/>'s own shape in
+    /// <paramref name="drawing"/>: the folder's shapes where <see cref="Lists"/> says so, and none
+    /// otherwise. What the map's tree lists under a shape, so the rule bounds the tree itself rather than
+    /// a copy of it.
+    /// </summary>
+    public static IReadOnlyList<MapShape> Listed(Rendering.ExploreSurface drawing, int drawn, int folder, int? keyboard, IReadOnlySet<int> expanded)
+    {
+        ArgumentNullException.ThrowIfNull(drawing);
+
+        return Lists(drawing.Tree, drawn, drawing.HasVolumeBeside, folder, keyboard, expanded) ? drawing.Shapes(folder) : [];
     }
 
     /// <summary>

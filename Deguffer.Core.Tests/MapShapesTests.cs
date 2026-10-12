@@ -205,8 +205,7 @@ public sealed class MapShapesTests
     /// <summary>
     /// A drawing finds each folder's shapes once and answers with the same ones after. A screen reader's
     /// search of the window asks for every folder's shapes at each step through them, and each finding
-    /// is a pass over the drawing or a layout of the folders above, which on a large tree stopped the
-    /// window for over a minute.
+    /// is a pass over the drawing or a layout of the folders above.
     /// </summary>
     [Theory]
     [InlineData(ExploreView.Treemap)]
@@ -227,8 +226,8 @@ public sealed class MapShapesTests
 
     /// <summary>
     /// A search of the tree a screen reader is given meets the shapes along the keyboard's path and no
-    /// more, however many the picture draws. A search that met every shape of a large tree stopped the
-    /// window for over a minute.
+    /// more, however many the picture draws: a picture of a large tree draws tens of thousands, and a
+    /// search asks the window across processes for each one it meets.
     /// </summary>
     [Theory]
     [InlineData(ExploreView.Treemap)]
@@ -247,8 +246,8 @@ public sealed class MapShapesTests
     }
 
     /// <summary>
-    /// Every shape a search from the top of <paramref name="drawing"/> meets, going into a folder's
-    /// shapes where a screen reader is given them, or into every folder's for <paramref name="everything"/>.
+    /// Every shape a search from the top of <paramref name="drawing"/> meets, going into what the map's
+    /// tree lists under each shape, or into every folder's shapes for <paramref name="everything"/>.
     /// </summary>
     private static int Met(ExploreSurface drawing, int? keyboard, bool everything = false)
     {
@@ -261,10 +260,9 @@ public sealed class MapShapesTests
 
             foreach (var shape in shapes.Where(shape => shape.IsNode))
             {
-                if (everything || MapFolders.Lists(drawing.Tree, drawing.Tree.RootNode, drawing.HasVolumeBeside, shape.Node, keyboard, new HashSet<int>()))
-                {
-                    pending.Push(drawing.Shapes(shape.Node));
-                }
+                pending.Push(everything
+                    ? drawing.Shapes(shape.Node)
+                    : MapFolders.Listed(drawing, drawing.Tree.RootNode, shape.Node, keyboard, new HashSet<int>()));
             }
         }
 

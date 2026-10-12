@@ -1043,7 +1043,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// page scanned, as for <see cref="ShapeFacts"/>.
     ///
     /// <para>Apart from the facts because it asks the machine where the item's volume is mounted, each
-    /// time it is asked. Naming every shape in a search of the window asked it once a shape.</para>
+    /// time it is asked, and a search of the window names every shape it meets.</para>
     /// </summary>
     public ExploreVerdict? ShapeRemoval(ISizedTree tree, int node) =>
         Scanned(tree, node) is { } scanned ? Selection.VerdictOf(scanned.PathOf(node)) : null;

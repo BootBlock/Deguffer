@@ -190,7 +190,7 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     }
 
     protected override IList<AutomationPeer>? GetChildrenCore() =>
-        Current && _shape.IsNode && _map.Lists(_shape.Node) ? [.. _owner.Children(_shape.Node)] : null;
+        Current && _shape.IsNode ? [.. _owner.Children(_shape.Node)] : null;
 
     protected override int GetPositionInSetCore() => _position;
 
@@ -208,6 +208,8 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     /// <summary>The shapes under this one changed from <paramref name="was"/>, and a screen reader is told so.</summary>
     private void Restructured(ExpandCollapseState was)
     {
+        _owner.Relisted();
+
         if (ListenerExists(AutomationEvents.StructureChanged))
         {
             RaiseStructureChangedEvent(AutomationStructureChangeType.ChildrenInvalidated, null);

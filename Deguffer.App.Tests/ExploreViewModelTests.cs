@@ -1012,8 +1012,8 @@ public sealed class ExploreViewModelTests : IDisposable
 
     /// <summary>
     /// A shape's facts ask the machine nothing. A search of the window names every shape on the map,
-    /// and a verdict asks where each item's volume is mounted, so facts that carried one stopped the
-    /// window for over a minute on a large tree. Only what can be done with a shape asks it.
+    /// and a verdict asks where each item's volume is mounted, so facts that carried one would ask the
+    /// machine once a shape. Only what can be done with a shape asks it.
     /// </summary>
     [Fact]
     public void AShapesFactsAskTheMachineNothing() => UiThread.Run(async () =>

@@ -2445,6 +2445,12 @@ public sealed class ExploreMap : UserControl
     internal int? FolderOf(int node) =>
         Readable is { } drawing ? MapFolders.Of(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, node) : null;
 
+    /// <summary>The shapes a screen reader is given under <paramref name="folder"/>'s own shape, none while it is collapsed. See <see cref="MapFolders.Listed"/>.</summary>
+    internal IReadOnlyList<MapShape> ListedIn(int folder) =>
+        Readable is { } drawing && FactsOf(drawing, DrawnNode) is not null
+            ? MapFolders.Listed(drawing, DrawnNode, folder, _focus.Folder, _expanded)
+            : [];
+
     /// <summary>Whether a screen reader is given <paramref name="folder"/>'s shapes. See <see cref="MapFolders.Lists"/>.</summary>
     internal bool Lists(int folder) =>
         Readable is { } drawing && MapFolders.Lists(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, _focus.Folder, _expanded);

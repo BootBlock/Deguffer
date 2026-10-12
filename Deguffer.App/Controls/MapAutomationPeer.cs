@@ -52,7 +52,7 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
 
     /// <summary>
     /// The peers of <paramref name="folder"/>'s shapes, or the top of the picture's for null, as the
-    /// drawing on screen draws them.
+    /// drawing on screen draws them: none of a folder that is collapsed (<see cref="MapFolders.Listed"/>).
     /// </summary>
     public IReadOnlyList<MapShapeAutomationPeer> Children(int? folder)
     {
@@ -68,7 +68,7 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
             return known;
         }
 
-        var shapes = _map.ShapesIn(folder);
+        var shapes = folder is { } listed ? _map.ListedIn(listed) : _map.ShapesIn(null);
         var peers = new MapShapeAutomationPeer[shapes.Count];
 
         for (var i = 0; i < shapes.Count; i++)
@@ -145,11 +145,21 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
         }
 
         _listedFor = _map.KeyboardFolder;
+        Relisted();
 
         if (ListenerExists(AutomationEvents.StructureChanged))
         {
             RaiseStructureChangedEvent(AutomationStructureChangeType.ChildrenInvalidated, null);
         }
+    }
+
+    /// <summary>
+    /// Which folders are listed changed, so each folder's children are found again. The peers stay, so a
+    /// screen reader holding one still has the same one.
+    /// </summary>
+    public void Relisted()
+    {
+        _held.Clear();
     }
 
     public IRawElementProviderSimple[] GetSelection() =>
