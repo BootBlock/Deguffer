@@ -51,6 +51,9 @@ internal delegate IReadOnlyList<string>? NameLister(string extendedPath);
 /// <see cref="VolumeCalls.MountPointOf"/> gives it, and <c>OpenFileById</c>, which opens a file
 /// described here by its number rather than its path. The cloud files, the occupancy probe and the
 /// hard-link scanner open and read through the members here rather than declaring their own.</para>
+///
+/// <para><see cref="Standard"/> is the one read here that may need no handle: it asks
+/// <see cref="StatByName"/> first and turns to a handle only where that does not answer.</para>
 /// </summary>
 internal sealed unsafe partial class FileInformation
 {
@@ -105,6 +108,7 @@ internal sealed unsafe partial class FileInformation
     private readonly HandleOpener _open;
     private readonly IdentityReader _identify;
     private readonly NameLister _listNames;
+    private readonly StandardByNameReader _readByName;
 
     /// <param name="open">
     /// Opens the handle a path is resolved or described through, given the path in the form it
@@ -122,11 +126,52 @@ internal sealed unsafe partial class FileInformation
     /// <c>FindFirstFileNameW</c> (§6.3), which takes a path rather than a handle. Where none is
     /// given, <see cref="ListNames"/>.
     /// </param>
-    internal FileInformation(HandleOpener open, IdentityReader identify, NameLister? listNames = null)
+    /// <param name="readByName">
+    /// Reads a file's link count and sizes with no handle, so a test can stand for a file system that
+    /// does not answer by name and see the read turn to <paramref name="open"/>. Where none is given,
+    /// <see cref="StatByName.Read"/>.
+    /// </param>
+    internal FileInformation(
+        HandleOpener open,
+        IdentityReader identify,
+        NameLister? listNames = null,
+        StandardByNameReader? readByName = null)
     {
         _open = open;
         _identify = identify;
         _listNames = listNames ?? ListNames;
+        _readByName = readByName ?? StatByName.Read;
+    }
+
+    /// <summary>
+    /// The link count and both sizes of the file at <paramref name="extendedPath"/>, read by its name
+    /// while <paramref name="route"/> allows, and otherwise through a handle opened to describe it, or
+    /// null where neither answers. A file system that does not answer by name declines
+    /// <paramref name="route"/>, so the rest of its walk opens a handle without asking first.
+    ///
+    /// <para>Both read the entry the name is now, never what a link there points at, so a caller
+    /// gets the same answer whichever route gave it.</para>
+    /// </summary>
+    /// <param name="extendedPath">The path in the extended form §6.3 requires.</param>
+    public FileStandardInfo? Standard(string extendedPath, ByNameRoute route)
+    {
+        if (!route.Declined)
+        {
+            switch (_readByName(extendedPath, out var read))
+            {
+                case ByNameReading.Read:
+                    return read;
+                case ByNameReading.Gone:
+                    return null;
+                case ByNameReading.Unsupported:
+                    route.Decline();
+                    break;
+            }
+        }
+
+        using var handle = _open(extendedPath, HandleUse.Describe);
+
+        return !handle.IsInvalid && TryStandard(handle, out var info) ? info : null;
     }
 
     /// <summary>

@@ -62,7 +62,7 @@ public static class Junction
     {
         // The object manager's form is the extended-length form under its other prefix, a share's
         // UNC segment included, so both names come from LongPath rather than from the caller's spelling.
-        var substitute = @"\??\" + LongPath.Extended(fullTarget)[@"\\?\".Length..];
+        var substitute = LongPath.ObjectManagerForm(fullTarget);
         var print = LongPath.Display(fullTarget);
         var buffer = MountPointBuffer(substitute, print);
 

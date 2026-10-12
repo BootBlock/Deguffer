@@ -14,13 +14,20 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class Tuning
 {
-    public static string Describe(Route route, WalkTuning walk, TableTuning table, bool snapshots)
+    public static string Describe(Route route, WalkTuning walk, TableTuning table, bool snapshots, LinkRead readBy)
     {
         if (route.ReadsTable())
         {
             return string.Create(
                 CultureInfo.InvariantCulture,
                 $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads");
+        }
+
+        if (route is Route.Links)
+        {
+            return readBy is LinkRead.Name
+                ? "the walk a scan ships with, each file read by name"
+                : "the walk a scan ships with, each file read through a handle";
         }
 
         var listing = string.Create(

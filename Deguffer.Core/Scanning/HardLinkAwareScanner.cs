@@ -20,6 +20,14 @@ namespace Deguffer.Core.Scanning;
 /// <see cref="ScanResult.Fallback"/> is therefore <see cref="FallbackReason.None"/>: elevating
 /// would not change anything, and the offer would be false.</para>
 ///
+/// <para>Each file is read by name, with no handle, where its file system answers that
+/// (<see cref="FileInformation.Standard"/>): over a synthesised store of 100,000 files on NTFS, with
+/// no real-time antivirus scanning, the read by name took about four fifths of the time a handle per
+/// file took (<c>Deguffer.Benchmark links</c>). Both read whatever the listed name is when it is
+/// read, a link as the link, and the walk lists no file numbers to compare it with, so a file
+/// replaced since the listing is measured as the file of this tree it now is. The figure is a
+/// prediction marked approximate either way.</para>
+///
 /// <para>A file with several links all inside the tree is not counted, though deleting the whole
 /// tree would free it. Telling that case apart means enumerating every link's name per multi-linked
 /// file, for stores whose layout never produces it — content-addressed files link outward, not to
@@ -32,9 +40,24 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     public static readonly HardLinkAwareScanner Default = new(ScanTuner.Shipped);
 
     private readonly ScanTuner _tuner;
+    private readonly FileInformation _files;
 
     /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>
-    public HardLinkAwareScanner(ScanTuner tuner) => _tuner = tuner;
+    public HardLinkAwareScanner(ScanTuner tuner)
+        : this(tuner, FileInformation.Default)
+    {
+    }
+
+    /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>
+    /// <param name="files">
+    /// How each file's link count and sizes are read, so a test or the benchmark can choose the
+    /// route a file system would leave it.
+    /// </param>
+    internal HardLinkAwareScanner(ScanTuner tuner, FileInformation files)
+    {
+        _tuner = tuner;
+        _files = files;
+    }
 
     public ValueTask<ScanResult> MeasureAsync(
         string path,
@@ -59,7 +82,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var walked = Measure(path, keep, _tuner, progress, ct);
+            var walked = Measure(path, keep, _tuner, _files, progress, ct);
 
             return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
             {
@@ -75,7 +98,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var file = MeasureFile(path, keep);
+            var file = MeasureFile(path, keep, _files);
 
             return ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores };
         }
@@ -106,6 +129,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         string path,
         MinimumAge keep,
         ScanTuner tuning,
+        FileInformation files,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
@@ -117,6 +141,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         var withheld = 0;
 
         var stores = new ConcurrentBag<string>();
+        var route = new ByNameRoute();
 
         var listed = BoundedFileWalk.Visit(
             LongPath.Extended(path),
@@ -131,8 +156,8 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                     return;
                 }
 
-                // Asked before the handle is opened, because the guard is the cheaper question and
-                // the answer is the same either way: a file it keeps is one this store's eviction
+                // Asked before the file is read, because the guard is the cheaper question and the
+                // answer is the same either way: a file it keeps is one this store's eviction
                 // will not take, so its sole-linked bytes are not reclaimable here.
                 if (keep.Protects(file.NewestFileTime))
                 {
@@ -140,7 +165,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                     return;
                 }
 
-                if (TryQuery(file.FullName) is { NumberOfLinks: 1 } sole)
+                if (files.Standard(file.FullName, route) is { NumberOfLinks: 1 } sole)
                 {
                     Interlocked.Add(ref allocated, sole.AllocationSize);
                     Interlocked.Add(ref logical, sole.EndOfFile);
@@ -194,7 +219,8 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     /// </summary>
     private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) MeasureFile(
         string path,
-        MinimumAge keep)
+        MinimumAge keep,
+        FileInformation files)
     {
         if (MailStore.Is(path))
         {
@@ -207,23 +233,12 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         }
 
         return (
-            TryQuery(LongPath.Extended(path)) is { } info
+            files.Standard(LongPath.Extended(path), new ByNameRoute()) is { } info
                 ? Approximate(
                     info.NumberOfLinks == 1 ? info.AllocationSize : 0,
                     info.NumberOfLinks == 1 ? info.EndOfFile : 0)
                 : Approximate(0, 0),
             false,
             []);
-    }
-
-    /// <summary>
-    /// One file's link count and both sizes, from a single attributes-only handle, or null where
-    /// the file could not be opened — which skips the file, under-reporting rather than guessing.
-    /// </summary>
-    private static FileInformation.FileStandardInfo? TryQuery(string extendedPath)
-    {
-        using var handle = FileInformation.Open(extendedPath, HandleUse.Describe);
-
-        return !handle.IsInvalid && FileInformation.TryStandard(handle, out var info) ? info : null;
     }
 }

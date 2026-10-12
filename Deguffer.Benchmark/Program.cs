@@ -40,6 +40,7 @@ Func<CancellationToken, RunTally> run = request.Route switch
     Route.Walk => ct => WalkRoute.Run(request.Path, request.Walk, ct),
     Route.ExploreWalk => ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct),
     Route.Sources => ct => SourcesRoute.Run(request.Path, request.Walk, ct),
+    Route.Links => ct => LinksRoute.Run(request.Path, request.ReadBy, ct),
     _ => ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Drive, request.Table, ct),
 };
 
@@ -77,7 +78,7 @@ catch (IOException ex)
 
 Console.Out.Write(Report.Render(
     request.Route,
-    Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots),
+    Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy),
     MeasuredPlace.Of(request.Path),
     MachineFacts.Current,
     runs));

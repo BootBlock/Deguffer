@@ -87,33 +87,6 @@ internal static unsafe partial class NamedStreams
         }
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct UnicodeString
-    {
-        public ushort Length;
-        public ushort MaximumLength;
-        public char* Buffer;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ObjectAttributes
-    {
-        public uint Length;
-        public nint RootDirectory;
-        public UnicodeString* ObjectName;
-        public uint Attributes;
-        public nint SecurityDescriptor;
-        public nint SecurityQualityOfService;
-    }
-
-    /// <summary><c>IO_STATUS_BLOCK</c>: a status or pointer, then the information it returns.</summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IoStatusBlock
-    {
-        public nint Status;
-        public nint Information;
-    }
-
     [LibraryImport("ntdll.dll")]
     private static partial int NtCreateFile(
         out SafeFileHandle file,

@@ -210,6 +210,37 @@ public sealed class BenchmarkRequestTests
         Assert.NotNull(error);
     }
 
+    /// <summary>The links route takes a folder, and reads by name unless told to read through a handle, as a scan does.</summary>
+    [Theory]
+    [InlineData(new string[0], nameof(LinkRead.Name))]
+    [InlineData(new[] { "--read-by", "name" }, nameof(LinkRead.Name))]
+    [InlineData(new[] { "--read-by", "handle" }, nameof(LinkRead.Handle))]
+    public void TheLinksRouteReadsByNameUnlessToldOtherwise(string[] rest, string expected)
+    {
+        var request = BenchmarkRequest.Parse(["links", @"C:\Users\testuser\store", .. rest], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.Links, request!.Route);
+        Assert.Equal(@"C:\Users\testuser\store", request.Path);
+        Assert.Equal(expected, request.ReadBy.ToString());
+    }
+
+    /// <summary>
+    /// The links route walks with the values a scan ships with, so a walk value given to it would be
+    /// reported unused, and only it reads each file.
+    /// </summary>
+    [Theory]
+    [InlineData("links", "--threads", "4")]
+    [InlineData("links", "--listing-buffer", "64")]
+    [InlineData("links", "--read-by", "both")]
+    [InlineData("links", "--read-by")]
+    [InlineData("walk", "--read-by", "name")]
+    public void TheLinksRouteAloneChoosesHowEachFileIsRead(string route, params string[] rest)
+    {
+        Assert.Null(BenchmarkRequest.Parse([route, @"C:\", .. rest], out var error));
+        Assert.NotNull(error);
+    }
+
     [Fact]
     public void ARouteWithoutATargetIsRefused()
     {

@@ -44,6 +44,7 @@ cd Deguffer.Benchmark\bin\Release\net10.0-windows10.0.19041.0
 
 Deguffer.Benchmark walk C:\Users\<user>\source --runs 5
 Deguffer.Benchmark sources C:\Users\<user>\source --runs 5
+Deguffer.Benchmark links C:\Users\<user>\AppData\Local\pnpm\store --read-by handle
 Deguffer.Benchmark table C
 Deguffer.Benchmark index C
 Deguffer.Benchmark explore C
@@ -57,6 +58,10 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 - `sources <folder>` finds the build outputs in a folder as an unelevated scan does when the folder
   is an approved source folder. It stops at each one it finds and never enters `.git` or
   `node_modules`, so it lists fewer folders than `walk`.
+- `links <folder>` measures a folder as a hard-linked store such as pnpm's is measured, reading
+  each file's link count and sizes. `--read-by name|handle` sets whether each file is read by
+  name, as a scan does where the file system answers that, or through a handle opened on it. The
+  default is name. Time it both ways to see what the handles cost.
 - `table`, `index` and `explore` read a volume's file table, which needs an elevated prompt.
   `table` reads and parses every record and keeps nothing. `index` builds what the clean measures
   locations from. `explore` builds the Explore tree for the whole volume.

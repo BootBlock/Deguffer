@@ -186,6 +186,17 @@ public static partial class LongPath
     }
 
     /// <summary>
+    /// The name the object manager gives <paramref name="path"/>, for a native call that takes a
+    /// name rather than a Win32 path: its <see cref="Extended"/> form under the object manager's
+    /// prefix. <c>\\?\C:\a</c> is <c>\??\C:\a</c>, and <c>\\?\UNC\server\share\a</c> is
+    /// <c>\??\UNC\server\share\a</c>: the reverse of the renaming in <see cref="DeviceForm"/>, and
+    /// for the same reason nothing but the prefix changes.
+    /// </summary>
+    /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
+    internal static string ObjectManagerForm(string path) =>
+        string.Concat(ObjectManagerPrefix, Extended(path).AsSpan(DevicePrefix.Length));
+
+    /// <summary>
     /// Whether <paramref name="path"/> names a location on a network share, in ordinary or
     /// extended-length form. A volume named by its GUID, or any other device path, is not a share:
     /// it starts with two separators as a share does, and is a local volume.
