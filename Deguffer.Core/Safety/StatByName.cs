@@ -47,7 +47,12 @@ internal static unsafe partial class StatByName
     /// <summary><c>FILE_INFORMATION_CLASS</c>'s <c>FileStatInformation</c>.</summary>
     private const int FileStatInformationClass = 68;
 
-    /// <summary><c>OBJ_CASE_INSENSITIVE</c>: names are matched as <c>CreateFileW</c> matches them.</summary>
+    /// <summary>
+    /// <c>OBJ_CASE_INSENSITIVE</c>: names are matched as <c>CreateFileW</c> matches them. No test can
+    /// show it: with the kernel's <c>obcaseinsensitive</c> at its shipped value, Windows matched a name
+    /// in another case with the flag removed (measured on NTFS), and a folder marked case-sensitive
+    /// matches by case either way.
+    /// </summary>
     private const uint CaseInsensitive = 0x40;
 
     private const int StatusObjectNameNotFound = unchecked((int)0xC000_0034);
