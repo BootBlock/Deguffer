@@ -59,19 +59,20 @@ public class MftDirectorySearchTests
     {
         var found = Build(Tree()).TryFindDirectories(Volume, DirectorySearches.For("obj"));
 
-        // Compared in order: the table is descended in record order, which is an implementation
-        // detail no caller depends on.
+        // Compared as a set: the order the descent meets them in is an implementation detail no
+        // caller depends on.
         Assert.Equal(
             [@"Source\Assets\obj", @"Source\Example.Tests\obj", @"Source\Example\obj"],
             Joined(found));
     }
 
     /// <summary>
-    /// The point of the query: every name in one pass, rather than one pass per name over the whole
-    /// table.
+    /// One question answers for every name the search holds. That the discovery asks it once per
+    /// root is <see cref="SourceDirectoryDiscoveryTests.AsksTheIndexOnceForEveryNameInARoot"/>'s to
+    /// prove.
     /// </summary>
     [Fact]
-    public void FindsEveryNameOfTheSearchInOnePass()
+    public void FindsEveryNameTheSearchHolds()
     {
         var found = Build(Tree()).TryFindDirectories(Example, DirectorySearches.For("obj", "bin"));
 

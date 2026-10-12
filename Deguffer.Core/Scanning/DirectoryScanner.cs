@@ -270,9 +270,9 @@ public sealed class DirectoryScanner : IDirectoryScanner
         built.Reason == FallbackReason.None ? FallbackReason.MasterFileTableIncomplete : built.Reason;
 
     /// <summary>
-    /// A path the index rebuilt as components below a volume root, in the display form the walk
-    /// reports. One place, so a directory found by name and a mail store found by a total are spelled
-    /// the same way as everything else a plan compares them with.
+    /// A mail store's path, which the index rebuilt as components below a volume root, in the display
+    /// form the walk reports. A directory found by name is spelled from the root the caller gave
+    /// instead, as <see cref="FindAsync"/> says, because that is how the walk spells it.
     /// </summary>
     private static string PathOf(char driveLetter, IReadOnlyList<string> components) =>
         driveLetter + @":\" + string.Join(Path.DirectorySeparatorChar, components);

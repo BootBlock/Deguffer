@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -69,9 +70,8 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
 
         return new((IReadOnlyList<string>?)indexed
             .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            .Where(p => p[prefix.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries) is var below
-                && search.Reaches(below)
-                && search.Meet(below[^1]) is SearchStep.Found)
+            .Where(p => SourceTreeBoundary.IsInsideTheSearch(p, root, search)
+                && search.Meet(Path.GetFileName(p.TrimEnd(Path.DirectorySeparatorChar))) is SearchStep.Found)
             .Order(StringComparer.Ordinal)
             .ToList());
     }
