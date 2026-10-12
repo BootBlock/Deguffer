@@ -222,7 +222,7 @@ public sealed partial class MemoryViewModel : ObservableObject
     /// </summary>
     public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) =>
         ReferenceEquals(tree, Tree) && Tree is { } reading && reading.Holds(node)
-            ? new MapShapeFacts(MemoryText.Name(reading, node), MemoryText.Kind(reading, node), MemoryPlace.Inside(reading, node) is not null, Removal: null)
+            ? new MapShapeFacts(MemoryText.Name(reading, node), MemoryText.Kind(reading, node), MemoryPlace.Inside(reading, node) is not null)
             : null;
 
     public void Ascend()

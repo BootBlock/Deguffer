@@ -43,20 +43,20 @@ public sealed class MapShapeTextTests
     public void AFolderThatOpensAndCanBeRemovedSaysBoth() =>
         Assert.Equal(
             "Folder. Enter opens it. Delete sends it to the Recycle Bin, after asking.",
-            MapShapeText.Help(new MapShapeFacts("Documents", "Folder", Opens: true, ExploreVerdict.Unclassified)));
+            MapShapeText.Help(new MapShapeFacts("Documents", "Folder", Opens: true), ExploreVerdict.Unclassified));
 
     /// <summary>A refusal is said with its reason, before Delete is pressed (§7.1).</summary>
     [Fact]
     public void AShapeThatCannotBeRemovedSaysWhy() =>
         Assert.Equal(
             "File. It cannot be removed. Windows needs it.",
-            MapShapeText.Help(new MapShapeFacts("pagefile.sys", "File", Opens: false, ExploreVerdict.Refuse("Windows needs it."))));
+            MapShapeText.Help(new MapShapeFacts("pagefile.sys", "File", Opens: false), ExploreVerdict.Refuse("Windows needs it.")));
 
     [Fact]
     public void APageThatRemovesNothingSaysNothingOfRemoving() =>
         Assert.Equal(
             "Program. Enter opens it.",
-            MapShapeText.Help(new MapShapeFacts("explorer.exe", "Program", Opens: true, Removal: null)));
+            MapShapeText.Help(new MapShapeFacts("explorer.exe", "Program", Opens: true), removal: null));
 
     /// <summary>Every block has a name and a sentence saying nothing here acts on it, and a node has neither.</summary>
     [Fact]

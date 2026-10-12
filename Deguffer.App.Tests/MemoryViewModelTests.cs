@@ -106,7 +106,6 @@ public sealed class MemoryViewModelTests : IDisposable
         Assert.Equal("Program", alpha.Kind);
         Assert.True(alpha.Opens);
         Assert.False(beta.Opens);
-        Assert.Null(alpha.Removal);
         Assert.Null(page.ShapeFacts(new Core.Exploring.ExploreTreeBuilder(@"C:\").Build(Core.Exploring.ExploreChildOrder.BySize), tree.Find(Alpha)!.Value));
 
         await leave.CancelAsync();

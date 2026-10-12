@@ -203,6 +203,100 @@ public sealed class MapShapesTests
     }
 
     /// <summary>
+    /// A drawing finds each folder's shapes once and answers with the same ones after. A screen reader's
+    /// search of the window asks for every folder's shapes at each step through them, and each finding
+    /// is a pass over the drawing or a layout of the folders above, which on a large tree stopped the
+    /// window for over a minute.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Icicle)]
+    [InlineData(ExploreView.Sunburst)]
+    public void AFoldersShapesAreFoundOnceADrawing(ExploreView view)
+    {
+        var tree = Tree();
+        var drawing = Drawn(tree, view);
+        var folder = Named(tree, "folder");
+
+        Assert.NotEmpty(drawing.Shapes(null));
+        Assert.NotEmpty(drawing.Shapes(folder));
+        Assert.Same(drawing.Shapes(null), drawing.Shapes(null));
+        Assert.Same(drawing.Shapes(folder), drawing.Shapes(folder));
+        Assert.NotSame(drawing.Shapes(folder), Drawn(tree, view).Shapes(folder));
+    }
+
+    /// <summary>
+    /// A search of the tree a screen reader is given meets the shapes along the keyboard's path and no
+    /// more, however many the picture draws. A search that met every shape of a large tree stopped the
+    /// window for over a minute.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Icicle)]
+    [InlineData(ExploreView.Sunburst)]
+    public void ASearchOfTheReadersTreeMeetsTheKeyboardsPath(ExploreView view)
+    {
+        var tree = Wide();
+        var drawing = Drawn(tree, view);
+        var deep = drawing.Shapes(null).First(shape => shape.IsNode && drawing.Shapes(shape.Node).Count > 0).Node;
+        var path = drawing.Shapes(null).Count + drawing.Shapes(deep).Count;
+
+        Assert.Equal(drawing.Shapes(null).Count, Met(drawing, keyboard: null));
+        Assert.Equal(path, Met(drawing, keyboard: deep));
+        Assert.True(Met(drawing, keyboard: null, everything: true) > path * 4, "The picture draws few enough shapes that listing every one would prove nothing.");
+    }
+
+    /// <summary>
+    /// Every shape a search from the top of <paramref name="drawing"/> meets, going into a folder's
+    /// shapes where a screen reader is given them, or into every folder's for <paramref name="everything"/>.
+    /// </summary>
+    private static int Met(ExploreSurface drawing, int? keyboard, bool everything = false)
+    {
+        var met = 0;
+        var pending = new Stack<IReadOnlyList<MapShape>>([drawing.Shapes(null)]);
+
+        while (pending.TryPop(out var shapes))
+        {
+            met += shapes.Count;
+
+            foreach (var shape in shapes.Where(shape => shape.IsNode))
+            {
+                if (everything || MapFolders.Lists(drawing.Tree, drawing.Tree.RootNode, drawing.HasVolumeBeside, shape.Node, keyboard, new HashSet<int>()))
+                {
+                    pending.Push(drawing.Shapes(shape.Node));
+                }
+            }
+        }
+
+        return met;
+    }
+
+    /// <summary>Six folders of six folders of five files: more shapes than any one folder's, and big enough for every view to draw.</summary>
+    private static ExploreTree Wide()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var first = builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [.. Enumerable.Range(0, 6).Select(i => new ExploreChild($"folder{i}", IsDirectory: true, IsLink: false, Size: 0))]);
+
+        for (var folder = first; folder < first + 6; folder++)
+        {
+            var inner = builder.AddChildren(
+                folder,
+                [.. Enumerable.Range(0, 6).Select(i => new ExploreChild($"inner{i}", IsDirectory: true, IsLink: false, Size: 0))]);
+
+            for (var held = inner; held < inner + 6; held++)
+            {
+                builder.AddChildren(
+                    held,
+                    [.. Enumerable.Range(0, 5).Select(i => new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 1_000_000L * (i + 1)))]);
+            }
+        }
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    /// <summary>
     /// Every shape the keyboard can be on has an outline to mark it out with, blocks too: a treemap's is
     /// its box, and a sunburst's is the wedge its point is in.
     /// </summary>

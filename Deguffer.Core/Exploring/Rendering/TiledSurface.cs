@@ -126,7 +126,7 @@ public sealed class TiledSurface : ExploreSurface
             ? TreemapLayout.Locate(Tree, Root, Width, Height, Limits, _beside, viewport, node)
             : ShownAs(node) == node ? FrameOf(node) : null;
 
-    public override IReadOnlyList<MapShape> Shapes(int? folder) =>
+    protected override IReadOnlyList<MapShape> FindShapes(int? folder) =>
         Viewport is { } viewport
             ? TreemapLayout.Within(Tree, Root, Width, Height, Limits, _beside, viewport, folder is null && HasVolumeBeside ? null : folder ?? Root)
             : Held(folder ?? Root);

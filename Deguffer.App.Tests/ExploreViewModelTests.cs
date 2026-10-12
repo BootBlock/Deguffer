@@ -994,17 +994,46 @@ public sealed class ExploreViewModelTests : IDisposable
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         Assert.Same(tree, page.Tree);
-        Assert.Equal(
-            new MapShapeFacts("kept", "Folder", Opens: true, ExploreVerdict.Refuse("Kept for a reason.")),
-            page.ShapeFacts(tree, Child(tree, "kept")));
+        Assert.Equal(new MapShapeFacts("kept", "Folder", Opens: true), page.ShapeFacts(tree, Child(tree, "kept")));
+        Assert.Equal(ExploreVerdict.Refuse("Kept for a reason."), page.ShapeRemoval(tree, Child(tree, "kept")));
 
         var loose = page.ShapeFacts(tree, Child(tree, "loose.bin"));
 
         Assert.NotNull(loose);
         Assert.Equal("File", loose.Kind);
         Assert.False(loose.Opens);
-        Assert.True(loose.Removal?.IsAllowed);
-        Assert.Null(page.ShapeFacts(Drive(ExploreFixture.Folder("kept")), Child(tree, "kept")));
+        Assert.True(page.ShapeRemoval(tree, Child(tree, "loose.bin"))?.IsAllowed);
+
+        var other = Drive(ExploreFixture.Folder("kept"));
+
+        Assert.Null(page.ShapeFacts(other, Child(tree, "kept")));
+        Assert.Null(page.ShapeRemoval(other, Child(tree, "kept")));
+    });
+
+    /// <summary>
+    /// A shape's facts ask the machine nothing. A search of the window names every shape on the map,
+    /// and a verdict asks where each item's volume is mounted, so facts that carried one stopped the
+    /// window for over a minute on a large tree. Only what can be done with a shape asks it.
+    /// </summary>
+    [Fact]
+    public void AShapesFactsAskTheMachineNothing() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", @"C:\kept"));
+
+        var page = _explore.Page();
+        var tree = Drive(ExploreFixture.Folder("kept"), ExploreFixture.File("loose.bin", 100));
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+
+        var asked = _explore.Volumes.MountPointQueries.Count;
+
+        Assert.NotNull(page.ShapeFacts(tree, Child(tree, "kept")));
+        Assert.NotNull(page.ShapeFacts(tree, Child(tree, "loose.bin")));
+        Assert.Equal(asked, _explore.Volumes.MountPointQueries.Count);
+
+        Assert.NotNull(page.ShapeRemoval(tree, Child(tree, "kept")));
+        Assert.True(_explore.Volumes.MountPointQueries.Count > asked);
     });
 
     /// <summary>

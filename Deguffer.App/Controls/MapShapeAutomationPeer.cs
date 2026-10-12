@@ -10,13 +10,15 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// One shape on the map as a screen reader reads it: its name, its size and share of what holds it,
 /// what it is and what can be done with it (<see cref="Core.Exploring.MapShapeText"/>), where it is on
-/// the screen, and the shapes it holds under it.
+/// the screen, and the shapes it holds under it, while it is expanded.
 ///
 /// <para>Acts as the keyboard does. Invoking it opens it, as Enter does; selecting it picks it, as a
 /// click does, so Delete and the menu then ask the same questions of it as of a shape picked by the
-/// pointer (§7.1); and scrolling it into view brings the camera to it.</para>
+/// pointer (§7.1); and scrolling it into view brings the camera to it. Expanding it lists its shapes
+/// under it, as a tree view's item does, and it is expanded already where the keyboard's shape is
+/// inside it (<see cref="MapFolders.Lists"/>).</para>
 /// </summary>
-internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokeProvider, ISelectionItemProvider, IScrollItemProvider
+internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokeProvider, ISelectionItemProvider, IScrollItemProvider, IExpandCollapseProvider
 {
     private readonly MapAutomationPeer _owner;
 
@@ -93,6 +95,50 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
         }
     }
 
+    /// <summary>
+    /// A leaf where the drawing draws nothing in the shape, which is a file, a block, or a folder drawn
+    /// as one block; otherwise whether its shapes are listed under it.
+    /// </summary>
+    public ExpandCollapseState ExpandCollapseState =>
+        !Current || !_shape.IsNode || _map.ShapesIn(_shape.Node).Count == 0 ? ExpandCollapseState.LeafNode
+        : _map.Lists(_shape.Node) ? ExpandCollapseState.Expanded
+        : ExpandCollapseState.Collapsed;
+
+    public void Expand()
+    {
+        if (ExpandCollapseState == ExpandCollapseState.Collapsed && _map.Expand(_shape.Node))
+        {
+            Restructured(ExpandCollapseState.Collapsed);
+        }
+    }
+
+    /// <summary>
+    /// Where the keyboard is on a shape inside it, the keyboard comes up to this one first, as a tree
+    /// view's does, so the shape it is on stays in the tree. While the map does not have the focus, the
+    /// keyboard's place is left where it is, and the folders on its path stay listed.
+    /// </summary>
+    public void Collapse()
+    {
+        if (!Current || !_shape.IsNode || _drawing is not { } drawing)
+        {
+            return;
+        }
+
+        var was = ExpandCollapseState;
+
+        _map.Collapse(_shape.Node);
+
+        if (_map.Lists(_shape.Node) && _map.FocusedShape() is not null)
+        {
+            _map.FocusShape(drawing, _folder, _shape);
+        }
+
+        if (was == ExpandCollapseState.Expanded && ExpandCollapseState == ExpandCollapseState.Collapsed)
+        {
+            Restructured(was);
+        }
+    }
+
     protected override string GetNameCore() => Current ? _map.NameOf(_folder, _shape) : string.Empty;
 
     protected override string GetHelpTextCore() => Current ? _map.HelpOf(_shape) : string.Empty;
@@ -144,7 +190,7 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     }
 
     protected override IList<AutomationPeer>? GetChildrenCore() =>
-        Current && _shape.IsNode ? [.. _owner.Children(_shape.Node)] : null;
+        Current && _shape.IsNode && _map.Lists(_shape.Node) ? [.. _owner.Children(_shape.Node)] : null;
 
     protected override int GetPositionInSetCore() => _position;
 
@@ -155,6 +201,18 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
         PatternInterface.Invoke => this,
         PatternInterface.ScrollItem => this,
         PatternInterface.SelectionItem when _shape.IsNode && _map.Answers => this,
+        PatternInterface.ExpandCollapse => this,
         _ => null,
     };
+
+    /// <summary>The shapes under this one changed from <paramref name="was"/>, and a screen reader is told so.</summary>
+    private void Restructured(ExpandCollapseState was)
+    {
+        if (ListenerExists(AutomationEvents.StructureChanged))
+        {
+            RaiseStructureChangedEvent(AutomationStructureChangeType.ChildrenInvalidated, null);
+        }
+
+        RaisePropertyChangedEvent(ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty, was, ExpandCollapseState);
+    }
 }
