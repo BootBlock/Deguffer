@@ -32,14 +32,36 @@ public sealed class RefusalWatch
     }
 
     /// <summary>
-    /// Whether the child named <paramref name="childName"/> of <paramref name="parent"/> has to be
-    /// asked about, where <paramref name="parent"/> was not refused.
+    /// Whether every child of <paramref name="parent"/> has to be asked about, whatever its name, where
+    /// <paramref name="parent"/> was not refused: the children of the top of the volume and of a folder
+    /// on the way to a region's folder. It depends on the folder alone, so a caller asks it once a
+    /// folder rather than once a child; <see cref="MayRefuseByName"/> answers for the rest.
     /// </summary>
-    /// <param name="parent">The folder holding the child, in display form.</param>
+    /// <param name="parent">The folder holding the children, in display form.</param>
     /// <param name="parentIsRoot">Whether <paramref name="parent"/> is the folder the watch was made for.</param>
-    public bool MayRefuse(string parent, bool parentIsRoot, string childName) =>
-        (parentIsRoot && _rootIsVolumeTop)
-        || childName.Equals(OutlookDataFiles.SavedDataFilesFolder, StringComparison.OrdinalIgnoreCase)
-        || MailStore.Is(childName)
-        || _boundaries.Any(boundary => LongPath.Contains(parent, boundary));
+    public bool MayRefuseAnyChildOf(string parent, bool parentIsRoot)
+    {
+        if (parentIsRoot && _rootIsVolumeTop)
+        {
+            return true;
+        }
+
+        foreach (var boundary in _boundaries)
+        {
+            if (LongPath.Contains(parent, boundary))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether a child named <paramref name="childName"/> has to be asked about wherever it is:
+    /// Outlook's mail stores and the folder it saves them in, which are refused by name.
+    /// </summary>
+    public static bool MayRefuseByName(string childName) =>
+        childName.Equals(OutlookDataFiles.SavedDataFilesFolder, StringComparison.OrdinalIgnoreCase)
+        || MailStore.Is(childName);
 }

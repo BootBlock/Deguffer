@@ -99,12 +99,14 @@ internal sealed class CandidateWalk
                 _unread.Add(new UnreadPlace(folder.Path, Refused));
             }
 
+            var passing = passOver.In(folder.Path, folder.Node == scan.Node);
+
             foreach (var child in tree.ChildrenOf(folder.Node))
             {
                 var name = tree.NameOf(child);
-                var path = Path.Join(folder.Path, name);
+                var path = passing.MayPassOver(name) ? Path.Join(folder.Path, name) : null;
 
-                if (passOver.WhyPassedOver(folder.Path, folder.Node == scan.Node, path, name) is { } why)
+                if (path is not null && passing.WhyPassedOver(path, name) is { } why)
                 {
                     _passedOver.Add(new PassedOverPlace(path, why));
                 }
@@ -114,6 +116,7 @@ internal sealed class CandidateWalk
                 }
                 else if (tree.IsDirectory(child))
                 {
+                    path ??= Path.Join(folder.Path, name);
                     pending.Push((child, path, RoleOf(inner[path], path, folder.Role)));
                 }
                 else

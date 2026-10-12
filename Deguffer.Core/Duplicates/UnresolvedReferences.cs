@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Duplicates;
 
 /// <summary>
@@ -33,4 +35,22 @@ internal sealed class UnresolvedReferences
     /// <summary>Why <paramref name="path"/> is passed over with everything in it, or null where no unresolved reference names it.</summary>
     /// <param name="path">A path the search reached, in display form.</param>
     public string? WhyPassedOver(string path) => _places.Contains(path) ? Reason : null;
+
+    /// <summary>
+    /// Whether a place is at or inside <paramref name="folder"/>, ignoring case as the match does, so
+    /// that where none is, no child of the folder needs its path asked about.
+    /// </summary>
+    /// <param name="folder">A folder the search reached, in display form.</param>
+    public bool AnyAtOrInside(string folder)
+    {
+        foreach (var place in _places)
+        {
+            if (LongPath.Contains(folder, place))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
