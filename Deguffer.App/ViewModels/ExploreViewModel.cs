@@ -1025,18 +1025,31 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>
     /// What a screen reader is told of <paramref name="node"/> of <paramref name="tree"/> on the map: its
-    /// name, whether it is a folder, whether opening it shows what it holds (<see cref="Descend"/>), and
-    /// whether it may be removed (§7.1). Nothing of a tree other than the one this page scanned, such as
-    /// a step of a replay of what grew, whose node numbers mean nothing here.
+    /// name, whether it is a folder, and whether opening it shows what it holds (<see cref="Descend"/>).
+    /// Nothing of a tree other than the one this page scanned, such as a step of a replay of what grew,
+    /// whose node numbers mean nothing here.
     /// </summary>
     public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) =>
-        ReferenceEquals(tree, Tree) && Tree is { } scanned && scanned.Holds(node)
+        Scanned(tree, node) is { } scanned
             ? new MapShapeFacts(
                 scanned.NameOf(node),
                 scanned.IsDirectory(node) ? "Folder" : "File",
-                _position.Opening(scanned, node, Volume) is not null,
-                Selection.VerdictOf(scanned.PathOf(node)))
+                _position.Opening(scanned, node, Volume) is not null)
             : null;
+
+    /// <summary>
+    /// Whether <paramref name="node"/> of <paramref name="tree"/> may be removed, and if not why (§7.1),
+    /// for a screen reader to hear before Delete is pressed. Nothing of a tree other than the one this
+    /// page scanned, as for <see cref="ShapeFacts"/>.
+    ///
+    /// <para>Apart from the facts because it asks the machine where the item's volume is mounted, each
+    /// time it is asked, and a search of the window names every shape it meets.</para>
+    /// </summary>
+    public ExploreVerdict? ShapeRemoval(ISizedTree tree, int node) =>
+        Scanned(tree, node) is { } scanned ? Selection.VerdictOf(scanned.PathOf(node)) : null;
+
+    private ExploreTree? Scanned(ISizedTree tree, int node) =>
+        ReferenceEquals(tree, Tree) && Tree is { } scanned && scanned.Holds(node) ? scanned : null;
 
     /// <summary>
     /// Show what is inside <paramref name="node"/>. Ignored for anything the tree on screen no longer

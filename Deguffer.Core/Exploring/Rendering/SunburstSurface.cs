@@ -57,7 +57,7 @@ public sealed class SunburstSurface : ExploreSurface
     /// The sectors in the ring outside <paramref name="folder"/>'s that it holds, each standing at the
     /// middle of its arc. Its block of the rest is the one in that ring within the folder's own sweep.
     /// </summary>
-    public override IReadOnlyList<MapShape> Shapes(int? folder)
+    protected override IReadOnlyList<MapShape> FindShapes(int? folder)
     {
         var inside = folder ?? Root;
         var sunburst = _hits.Sunburst;

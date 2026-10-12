@@ -31,6 +31,54 @@ public static class MapFolders
     }
 
     /// <summary>
+    /// Whether a screen reader is given <paramref name="folder"/>'s shapes under the folder's own shape:
+    /// where the folder is the one whose shapes the keyboard moves between, or holds it at any depth, so
+    /// the shape the keyboard is on is in the tree with everything above it; and where the reader
+    /// expanded it. Any other folder's shape is a collapsed item, as a tree view's is.
+    ///
+    /// <para>So a search of the window meets the shapes along one path and those the reader opened,
+    /// rather than every shape of the picture. A picture of a large tree draws tens of thousands, and a
+    /// search asks the window across processes for each element it meets.</para>
+    /// </summary>
+    /// <param name="keyboard">The folder whose shapes the keyboard moves between, or null for the top of the picture.</param>
+    /// <param name="expanded">The folders the reader expanded.</param>
+    public static bool Lists(ISizedTree tree, int drawn, bool beside, int folder, int? keyboard, IReadOnlySet<int> expanded)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(expanded);
+
+        if (expanded.Contains(folder))
+        {
+            return true;
+        }
+
+        // Up through the folders holding the keyboard's, which ends at the top of the picture, or at
+        // the tree's root where the keyboard's folder is not in this picture at all.
+        for (var at = keyboard; at is { } inside; at = Of(tree, drawn, beside, inside) is var above && above != inside ? above : null)
+        {
+            if (inside == folder)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The shapes a screen reader is given under <paramref name="folder"/>'s own shape in
+    /// <paramref name="drawing"/>: the folder's shapes where <see cref="Lists"/> says so, and none
+    /// otherwise. What the map's tree lists under a shape, so the rule bounds the tree itself rather than
+    /// a copy of it.
+    /// </summary>
+    public static IReadOnlyList<MapShape> Listed(Rendering.ExploreSurface drawing, int drawn, int folder, int? keyboard, IReadOnlySet<int> expanded)
+    {
+        ArgumentNullException.ThrowIfNull(drawing);
+
+        return Lists(drawing.Tree, drawn, drawing.HasVolumeBeside, folder, keyboard, expanded) ? drawing.Shapes(folder) : [];
+    }
+
+    /// <summary>
     /// What a shape among <paramref name="folder"/>'s shapes is a share of: the folder, how much it
     /// holds and which node names it; at the top of the picture, the drawn node; and beside a volume,
     /// everything the top of the picture draws, which is the drive, named by no node.

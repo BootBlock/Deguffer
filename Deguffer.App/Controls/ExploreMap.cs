@@ -2,6 +2,7 @@ using System.Numerics;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
@@ -337,6 +338,12 @@ public sealed class ExploreMap : UserControl
     private readonly ExploreFocus _focus = new();
 
     /// <summary>
+    /// The folders a screen reader expanded on this picture, which list their shapes as the keyboard's
+    /// path does (<see cref="MapFolders.Lists"/>). Carried with the keyboard to a new tree of the same place.
+    /// </summary>
+    private readonly HashSet<int> _expanded = [];
+
+    /// <summary>
     /// Whether the map has the focus from the keyboard, or from a screen reader, rather than from a click:
     /// what marks the shape the keyboard is on and makes Enter open it. A click focuses the map too, so
     /// the keys go to it, and marks nothing until a key moves between the shapes.
@@ -609,6 +616,14 @@ public sealed class ExploreMap : UserControl
     /// such as a step of a replay, and then a screen reader is given no shapes on it, only the map.
     /// </summary>
     public Func<ISizedTree, int, MapShapeFacts?>? Facts { get; set; }
+
+    /// <summary>
+    /// Whether a node of a tree the page handed over may be removed, and if not why, which a screen
+    /// reader hears with what can be done with the shape. Asked only for that, because the page asks
+    /// the machine for it (see <see cref="MapShapeText.Help"/>). Null from a page that removes nothing,
+    /// and for a tree it has nothing to say of, and then nothing is said either way.
+    /// </summary>
+    public Func<ISizedTree, int, ExploreVerdict?>? Removal { get; set; }
 
     /// <summary>
     /// Whether the picture is drawn in a high contrast theme's two colours, so its colours say nothing
@@ -2430,6 +2445,25 @@ public sealed class ExploreMap : UserControl
     internal int? FolderOf(int node) =>
         Readable is { } drawing ? MapFolders.Of(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, node) : null;
 
+    /// <summary>The shapes a screen reader is given under <paramref name="folder"/>'s own shape, none while it is collapsed. See <see cref="MapFolders.Listed"/>.</summary>
+    internal IReadOnlyList<MapShape> ListedIn(int folder) =>
+        Readable is { } drawing && FactsOf(drawing, DrawnNode) is not null
+            ? MapFolders.Listed(drawing, DrawnNode, folder, _focus.Folder, _expanded)
+            : [];
+
+    /// <summary>Whether a screen reader is given <paramref name="folder"/>'s shapes. See <see cref="MapFolders.Lists"/>.</summary>
+    internal bool Lists(int folder) =>
+        Readable is { } drawing && MapFolders.Lists(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, _focus.Folder, _expanded);
+
+    /// <summary>The folder whose shapes the keyboard moves between, or null for the top of the picture.</summary>
+    internal int? KeyboardFolder => _focus.Folder;
+
+    /// <summary>A screen reader expanded <paramref name="folder"/>. False where it was already.</summary>
+    internal bool Expand(int folder) => _expanded.Add(folder);
+
+    /// <summary>A screen reader collapsed <paramref name="folder"/>. False where it had not expanded it.</summary>
+    internal bool Collapse(int folder) => _expanded.Remove(folder);
+
     /// <summary>
     /// What a screen reader calls <paramref name="shape"/>: its name, its size and its share of what
     /// holds it, which at the top of a volume's picture is the drive. See <see cref="MapShapeText.Name"/>.
@@ -2458,7 +2492,7 @@ public sealed class ExploreMap : UserControl
     /// <summary>What <paramref name="shape"/> is and what can be done with it. See <see cref="MapShapeText.Help"/>.</summary>
     internal string HelpOf(MapShape shape) =>
         !shape.IsNode ? MapShapeText.BlockHelp(shape.Node)
-        : Readable is { } drawing && FactsOf(drawing, shape.Node) is { } facts ? MapShapeText.Help(facts)
+        : Readable is { } drawing && FactsOf(drawing, shape.Node) is { } facts ? MapShapeText.Help(facts, Removal?.Invoke(drawing.Tree, shape.Node))
         : string.Empty;
 
     /// <summary>Where <paramref name="shape"/> is on the screen now, in fractions of the map, or null where there is no drawing to say.</summary>
@@ -2625,9 +2659,15 @@ public sealed class ExploreMap : UserControl
         Report(new ExploreHit(shape.Node, shape.Bytes));
         Bring(drawing, shape);
 
-        if (AutomationPeer.ListenerExists(AutomationEvents.AutomationFocusChanged)
-            && FrameworkElementAutomationPeer.FromElement(this) is MapAutomationPeer peer
-            && peer.PeerOf(folder, shape.Node) is { } focused)
+        if (FrameworkElementAutomationPeer.FromElement(this) is not MapAutomationPeer peer)
+        {
+            return;
+        }
+
+        // Into another folder: the shapes a screen reader is given follow the keyboard's path.
+        peer.KeyboardMoved();
+
+        if (AutomationPeer.ListenerExists(AutomationEvents.AutomationFocusChanged) && peer.PeerOf(folder, shape.Node) is { } focused)
         {
             focused.RaiseAutomationEvent(AutomationEvents.AutomationFocusChanged);
         }
@@ -2746,8 +2786,16 @@ public sealed class ExploreMap : UserControl
         if (samePlace && _tree is ITrackedTree shown && tree is not null && shown.CounterpartsIn(tree) is { } counterpart)
         {
             _focus.Carry(counterpart);
+
+            int[] expanded = [.. _expanded.Select(counterpart).OfType<int>()];
+
+            _expanded.Clear();
+            _expanded.UnionWith(expanded);
             return;
         }
+
+        // Another place is another picture, whose folders a reader has not expanded yet.
+        _expanded.Clear();
 
         if (tree is not null && ReferenceEquals(tree, _tree) && MapFolders.CameUpFrom(tree, _node, node, beside) is { } left)
         {

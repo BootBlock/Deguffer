@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Layout;
 
@@ -219,6 +220,12 @@ public abstract class ExploreSurface
     private readonly BranchHues _hues;
 
     private readonly ShapeColours _colours;
+
+    /// <summary>Each folder's <see cref="Shapes"/>, once asked. Concurrent because a drawing is made and read on any thread.</summary>
+    private readonly ConcurrentDictionary<int, IReadOnlyList<MapShape>> _held = new();
+
+    /// <summary>The shapes at the top of the picture, once asked.</summary>
+    private IReadOnlyList<MapShape>? _top;
 
     protected ExploreSurface(
         ISizedTree tree,
@@ -471,8 +478,19 @@ public abstract class ExploreSurface
     /// <para>What the keyboard moves between and a screen reader lists. A treemap that can be zoomed
     /// gives the shapes of its whole picture at its zoom, off the canvas as well as on it, so a shape the
     /// camera has left behind is still there to move to.</para>
+    ///
+    /// <para>Found once a folder for the life of the drawing, which never changes. A screen reader
+    /// asks for the same folder's shapes again on each step through them, and a search of the window
+    /// asks for every folder's, while each answer costs a pass over the drawing or a layout of the
+    /// folders above (G4).</para>
     /// </summary>
-    public abstract IReadOnlyList<MapShape> Shapes(int? folder);
+    public IReadOnlyList<MapShape> Shapes(int? folder) =>
+        folder is { } inside
+            ? _held.GetOrAdd(inside, static (held, drawing) => drawing.FindShapes(held), this)
+            : LazyInitializer.EnsureInitialized(ref _top, () => FindShapes(null));
+
+    /// <summary>The shapes <see cref="Shapes"/> answers with, found afresh. Asked at most once a folder.</summary>
+    protected abstract IReadOnlyList<MapShape> FindShapes(int? folder);
 
     /// <summary>
     /// The outline of <paramref name="shape"/>, one of <see cref="Shapes"/>, in canvas pixels: what marks

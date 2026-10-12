@@ -6,16 +6,16 @@ namespace Deguffer.Core.Exploring;
 
 /// <summary>
 /// What the page that owns a tree knows of one of its nodes and the map does not: what it is called,
-/// what kind of thing it is, whether opening it shows what it holds, and whether it may be removed.
+/// what kind of thing it is, and whether opening it shows what it holds.
+///
+/// <para>Not whether it may be removed, which <see cref="MapShapeText.Help"/> is given apart. A screen
+/// reader names every shape in a search of the window, and the verdict asks the machine where the
+/// item's volume is mounted, so a verdict carried here would be asked once a shape.</para>
 /// </summary>
 /// <param name="Name">Its own name, not its path: the shapes round it are its siblings, and a screen reader reads the name first.</param>
 /// <param name="Kind">What it is, as one capitalised noun or two: "Folder", "File", "Program".</param>
 /// <param name="Opens">Whether opening it shows what it holds, as a double-click on its shape does.</param>
-/// <param name="Removal">
-/// Whether it may be removed, and if not why; or null where the page removes nothing, so nothing is
-/// said either way. The verdict the removal itself asks again before anything is deleted (§7.1).
-/// </param>
-public sealed record MapShapeFacts(string Name, string Kind, bool Opens, ExploreVerdict? Removal);
+public sealed record MapShapeFacts(string Name, string Kind, bool Opens);
 
 /// <summary>
 /// What a screen reader says of one shape on the map: its name, how much it is and how much of what
@@ -49,7 +49,11 @@ public static class MapShapeText
     /// Delete sends it to the Recycle Bin, after asking." A shape that may not be removed says why, in
     /// the words the selection's note uses, so the reason is heard before Delete is pressed.
     /// </summary>
-    public static string Help(MapShapeFacts facts)
+    /// <param name="removal">
+    /// Whether it may be removed, and if not why; or null where the page removes nothing, so nothing is
+    /// said either way. The verdict the removal itself asks again before anything is deleted (§7.1).
+    /// </param>
+    public static string Help(MapShapeFacts facts, ExploreVerdict? removal)
     {
         ArgumentNullException.ThrowIfNull(facts);
 
@@ -60,7 +64,7 @@ public static class MapShapeText
             help += " Enter opens it.";
         }
 
-        return facts.Removal switch
+        return removal switch
         {
             null => help,
             { IsAllowed: true } => $"{help} Delete sends it to the Recycle Bin, after asking.",

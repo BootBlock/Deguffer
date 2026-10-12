@@ -78,6 +78,34 @@ public sealed class MapFoldersTests
         Assert.Null(MapFolders.CameUpFrom(Tree, Root, Root, beside: false));
     }
 
+    /// <summary>
+    /// A screen reader is given the shapes of the keyboard's folder and of every folder holding it, and
+    /// of a folder it expanded; any other folder's shape is collapsed.
+    /// </summary>
+    [Fact]
+    public void TheKeyboardsPathAndWhatTheReaderExpandedAreListed()
+    {
+        var windows = Named("Windows");
+
+        Assert.True(MapFolders.Lists(Tree, Root, beside: false, Testuser, keyboard: Testuser, new HashSet<int>()));
+        Assert.True(MapFolders.Lists(Tree, Root, beside: false, Users, keyboard: Testuser, new HashSet<int>()));
+        Assert.False(MapFolders.Lists(Tree, Root, beside: false, windows, keyboard: Testuser, new HashSet<int>()));
+        Assert.False(MapFolders.Lists(Tree, Root, beside: false, Users, keyboard: null, new HashSet<int>()));
+        Assert.True(MapFolders.Lists(Tree, Root, beside: false, windows, keyboard: null, new HashSet<int> { windows }));
+    }
+
+    /// <summary>
+    /// Beside a volume the root is a shape at the top like any other, listed on the keyboard's way up;
+    /// and a keyboard's folder outside the picture lists nothing in it, rather than going on for ever.
+    /// </summary>
+    [Fact]
+    public void BesideAVolumeTheRootIsOnTheKeyboardsPath()
+    {
+        Assert.True(MapFolders.Lists(Tree, Root, beside: true, Root, keyboard: Testuser, new HashSet<int>()));
+        Assert.False(MapFolders.Lists(Tree, Root, beside: false, Root, keyboard: Testuser, new HashSet<int>()));
+        Assert.False(MapFolders.Lists(Tree, Users, beside: false, Testuser, keyboard: Named("Windows"), new HashSet<int>()));
+    }
+
     private static int Named(string name) =>
         Enumerable.Range(0, Tree.NodeCount).First(node => Tree.NameOf(node) == name);
 
