@@ -434,7 +434,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         var (childStart, children) = InvertParentLinks(parents, present, nameRanks);
         ct.ThrowIfCancellationRequested();
 
-        var order = DepthFirstOrder(childStart, children, rootNode);
+        var order = TopDownOrder(childStart, children, rootNode);
         ct.ThrowIfCancellationRequested();
 
         RollUp(order, parents, sizes, lengths, storage, sizeUnknown, modified, rootNode);
@@ -459,7 +459,8 @@ public sealed class ExploreTree : Layout.ITrackedTree
     ///
     /// <para>With <paramref name="nameRanks"/>, a child goes where its rank puts it in its parent's
     /// range rather than after the sibling placed before it, so the ranges come out in name order.
-    /// </para>
+    /// Without, each parent's own start is the cursor that places its children, and the starts are
+    /// moved back afterwards: one pass rather than a cursor array the size of the tree.</para>
     /// </summary>
     private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, bool[] present, int[]? nameRanks)
     {
@@ -488,16 +489,37 @@ public sealed class ExploreTree : Layout.ITrackedTree
         }
 
         var children = new int[start[count]];
-        var cursor = nameRanks is null ? new int[count] : null;
+
+        if (nameRanks is not null)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                if (present[i] && parents[i] != i)
+                {
+                    children[start[parents[i]] + nameRanks[i]] = i;
+                }
+            }
+
+            return (start, children);
+        }
 
         for (var i = 0; i < count; i++)
         {
             if (present[i] && parents[i] != i)
             {
-                var parent = parents[i];
-                children[start[parent] + (cursor is null ? nameRanks![i] : cursor[parent]++)] = i;
+                children[start[parents[i]]++] = i;
             }
         }
+
+        // Each start has advanced to the end of its range, which is where the next node's range
+        // starts, so every start now sits one place early. The last never moved, because no node
+        // has a parent past the end.
+        for (var node = count; node > 0; node--)
+        {
+            start[node] = start[node - 1];
+        }
+
+        start[0] = 0;
 
         return (start, children);
     }
@@ -510,24 +532,30 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// either: a table read from a live volume holds records whose parent chain does not reach the
     /// root, and totalling those into anything would attribute bytes to a directory that does not
     /// contain them.</para>
+    ///
+    /// <para>Breadth first, so that the order is its own queue: one array sized to the tree, with no
+    /// stack beside it and no list doubling its way through the large object heap. Each node has one
+    /// parent, so none is reached twice and the array cannot overflow. Nothing needs depth first:
+    /// <see cref="RollUp"/> and <see cref="Placed"/> ask only that a parent comes before its
+    /// children.</para>
     /// </summary>
-    private static int[] DepthFirstOrder(int[] childStart, int[] children, int rootNode)
+    private static ReadOnlySpan<int> TopDownOrder(int[] childStart, int[] children, int rootNode)
     {
-        var order = new List<int>();
-        var stack = new Stack<int>();
-        stack.Push(rootNode);
+        var order = new int[childStart.Length - 1];
+        order[0] = rootNode;
+        var reached = 1;
 
-        while (stack.TryPop(out var node))
+        for (var next = 0; next < reached; next++)
         {
-            order.Add(node);
+            var node = order[next];
 
             for (var i = childStart[node]; i < childStart[node + 1]; i++)
             {
-                stack.Push(children[i]);
+                order[reached++] = children[i];
             }
         }
 
-        return [.. order];
+        return order.AsSpan(0, reached);
     }
 
     /// <summary>
@@ -542,7 +570,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// looks entirely ordinary. That is the plausible wrong answer <see cref="PathOf"/> exists to
     /// refuse, and no walk can detect it from the parent links alone.</para>
     /// </summary>
-    private static bool[] Placed(int[] order, int count)
+    private static bool[] Placed(ReadOnlySpan<int> order, int count)
     {
         var placed = new bool[count];
 
@@ -555,7 +583,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
     }
 
     /// <summary>
-    /// Total each subtree by walking the depth-first order backwards, so every node's children are
+    /// Total each subtree by walking the top-down order backwards, so every node's children are
     /// finished before it is reached. One pass, no recursion and no second traversal.
     ///
     /// <para>An unknown size travels the same way. One record the scan could not size makes every
@@ -570,7 +598,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// this: it is the one of the three that means something on its own.</para>
     /// </summary>
     private static void RollUp(
-        int[] order,
+        ReadOnlySpan<int> order,
         int[] parents,
         long[] sizes,
         long[] lengths,
@@ -612,6 +640,16 @@ public sealed class ExploreTree : Layout.ITrackedTree
         var byName = ByName(names);
         Func<int, long> sizeOf = node => sizes[node];
 
+        // One key buffer for every directory, sized to the largest, rather than one per directory.
+        var most = 0;
+
+        for (var node = 0; node + 1 < childStart.Length; node++)
+        {
+            most = Math.Max(most, childStart[node + 1] - childStart[node]);
+        }
+
+        var keys = new long[most];
+
         for (var node = 0; node + 1 < childStart.Length; node++)
         {
             var from = childStart[node];
@@ -622,7 +660,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
                 continue;
             }
 
-            OrderBySize(children.AsSpan(from, length), sizeOf, byName);
+            OrderBySize(children.AsSpan(from, length), keys, sizeOf, byName);
         }
     }
 
@@ -631,10 +669,14 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// first, and siblings of one size in name order. The one statement of that order, for a tree as
     /// it is scanned and for the child lists a removal changes (<see cref="Without"/>).
     /// </summary>
-    internal static void OrderBySize(Span<int> siblings, Func<int, long> sizeOf, Comparison<int> byName)
+    /// <param name="keyBuffer">
+    /// Room for at least one key per sibling, overwritten. Passed in so that a caller ordering many
+    /// lists allocates it once.
+    /// </param>
+    internal static void OrderBySize(Span<int> siblings, Span<long> keyBuffer, Func<int, long> sizeOf, Comparison<int> byName)
     {
         var length = siblings.Length;
-        var keys = new long[length];
+        var keys = keyBuffer[..length];
 
         for (var i = 0; i < length; i++)
         {
@@ -643,7 +685,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
             keys[i] = -sizeOf(siblings[i]);
         }
 
-        MemoryExtensions.Sort(keys.AsSpan(), siblings);
+        MemoryExtensions.Sort(keys, siblings);
 
         // Equal sizes are put in name order. Left as the sort leaves them, they can come out in a
         // different order in each tree of the same disk, and a map moving from one layout to the next
