@@ -47,7 +47,7 @@ public static class ChildDirectories
     /// says so*: §5.3 makes the refusal ordinary rather than an error, but ordinary is not the same
     /// as empty, and <see cref="ChildDirectoryScan.Unreadable"/> is the difference. Handing back a
     /// bare empty list would break the rule
-    /// <see cref="Scanning.IDirectoryScanner.TryFindDirectoriesNamedAsync"/> states for the seam
+    /// <see cref="Scanning.IDirectoryScanner.TryFindDirectoriesAsync"/> states for the seam
     /// next door — that an empty list a caller cannot tell from "there are none" is not an answer.
     ///
     /// <paramref name="root"/> may be given in either form. <see cref="LongPath.Extended"/> returns

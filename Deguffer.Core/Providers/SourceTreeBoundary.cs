@@ -1,20 +1,21 @@
 using System.Collections.Frozen;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// Where a search through a source folder stops, stated once for both routes that perform one.
 ///
-/// <para><see cref="SourceDirectoryDiscovery"/> walks a root and enforces these limits by not
-/// descending. The volume index has no traversal to stop — it already knows every directory on the
-/// volume — so it has to apply the same limits as a filter over what it returns. Two enforcements
-/// of one rule is the price of having two routes; keeping the rule itself here is what stops them
-/// becoming two different <em>rules</em>, chosen by whether the user happened to elevate.</para>
+/// <para>Both routes enforce these limits by not descending, and both take them from
+/// <see cref="Searching"/>: <see cref="SourceTreeWalk"/> as it lists each directory, and the volume
+/// index as it descends the table from the root. Two enforcements of one rule is the price of having
+/// two routes; stating the rule once is what stops them becoming two different <em>rules</em>,
+/// chosen by whether the user happened to elevate.</para>
 ///
-/// <para>The walk's third limit — that it never enters a reparse point — is not repeated here. The
-/// index applies that one where it can see it, in the table, and never offers a path that passes
-/// through a link at all.</para>
+/// <para>The walk's third limit — that it never enters a reparse point — is not repeated here. Each
+/// route holds that one where it can see it: the walk does not list a link as a directory, and the
+/// index does not descend through one in the table.</para>
 ///
 /// <para><b>The rules are what agree. The reach is not, and cannot be made to.</b> A search's reach
 /// is a property of the token it runs under, and the two routes do not share one. The walk
@@ -58,17 +59,9 @@ internal static class SourceTreeBoundary
     private static readonly FrozenSet<string> NeverEntered =
         FrozenSet.Create(StringComparer.OrdinalIgnoreCase, ".git", "node_modules");
 
-    public static bool IsNeverEntered(string name) => NeverEntered.Contains(name);
-
     /// <summary>
-    /// Whether <paramref name="candidate"/> lies inside the region this search covers.
-    ///
-    /// <para>Deliberately not named for what the walk would have found. It answers by name only, so
-    /// it can say that a candidate is within the rules and cannot say that the walk could have got
-    /// there — see the reach paragraphs above for why nothing here can.</para>
-    ///
-    /// <paramref name="candidate"/> must already be known to sit at or below <paramref name="root"/>;
-    /// the scanner narrows to the approved root before anything reaches here.
+    /// The search for <paramref name="names"/> through a source folder: it finds a directory of any
+    /// of them, and never enters one it refuses unless that one is sought.
     /// </summary>
     /// <param name="names">
     /// Every name the pass is looking for. The whole set matters rather than the one name that
@@ -76,10 +69,23 @@ internal static class SourceTreeBoundary
     /// <c>dist</c> inside a <c>node_modules</c> is out of reach exactly when <c>node_modules</c> is
     /// also being sought — which is the point at which the walk stops descending too.
     /// </param>
-    public static bool IsInsideTheSearch(string candidate, string root, FrozenSet<string> names)
+    public static DirectorySearch Searching(FrozenSet<string> names) => new(names, NeverEntered);
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> lies inside the region <paramref name="search"/> covers,
+    /// for a directory reached by neither route.
+    ///
+    /// <para>Deliberately not named for what the walk would have found. It answers by name only, so
+    /// it can say that a candidate is within the rules and cannot say that the walk could have got
+    /// there — see the reach paragraphs above for why nothing here can.</para>
+    ///
+    /// <paramref name="candidate"/> must already be known to sit at or below <paramref name="root"/>.
+    /// </summary>
+    /// <param name="search">The search, from <see cref="Searching"/>.</param>
+    public static bool IsInsideTheSearch(string candidate, string root, DirectorySearch search)
     {
         // Asked for rather than derived by slicing the candidate at the root's length: that
-        // arithmetic is only correct while this and the scanner's own narrowing spell a path the
+        // arithmetic is only correct while this and whoever reached the candidate spell a path the
         // same way, and a mis-slice would quietly start offering directories outside the root.
         var relative = LongPath.Relative(LongPath.Display(root), LongPath.Display(candidate))
             .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
@@ -95,14 +101,6 @@ internal static class SourceTreeBoundary
         // Everything above the candidate. Anything below a directory the walk refuses to enter was
         // never findable, and anything below another candidate belongs to that candidate — offering
         // it as well would make two steps where one deletes the other's parent.
-        for (var i = 0; i < relative.Length - 1; i++)
-        {
-            if (names.Contains(relative[i]) || IsNeverEntered(relative[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return search.Reaches(relative);
     }
 }

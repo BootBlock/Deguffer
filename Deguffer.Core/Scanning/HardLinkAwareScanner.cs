@@ -110,8 +110,8 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     }
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
-    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
-        string name,
+    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+        DirectorySearch search,
         string root,
         CancellationToken ct = default) => new((IReadOnlyList<string>?)null);
 

@@ -79,7 +79,7 @@ public sealed class ScanRouteSettingTests : IDisposable
         sources.Release();
 
         // A search by name waits for the table, so once it has answered the table is read.
-        Assert.NotNull(await scanner.TryFindDirectoriesNamedAsync("cache", path));
+        Assert.NotNull(await scanner.TryFindDirectoriesAsync(DirectorySearches.For("cache"), path));
         var indexed = await scanner.MeasureAsync(path);
 
         Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
@@ -216,7 +216,7 @@ public sealed class ScanRouteSettingTests : IDisposable
         var (preferences, tuner) = Tuner(ScanRoute.Auto);
         var scanner = new DirectoryScanner(factory, tuning: tuner);
 
-        Assert.NotNull(await scanner.TryFindDirectoriesNamedAsync(".npm-cache", @"C:\Users"));
+        Assert.NotNull(await scanner.TryFindDirectoriesAsync(DirectorySearches.For(".npm-cache"), @"C:\Users"));
 
         preferences.Current = preferences.Current with
         {
@@ -224,7 +224,7 @@ public sealed class ScanRouteSettingTests : IDisposable
         };
         scanner.Invalidate();
 
-        Assert.Null(await scanner.TryFindDirectoriesNamedAsync(".npm-cache", @"C:\Users"));
+        Assert.Null(await scanner.TryFindDirectoriesAsync(DirectorySearches.For(".npm-cache"), @"C:\Users"));
     }
 
     /// <summary>The scanner is built once for the session, and the route is read as each measurement starts.</summary>

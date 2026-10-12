@@ -14,8 +14,8 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class SourceTreeWalkTests : IDisposable
 {
-    private static readonly FrozenSet<string> Sought =
-        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj", "target");
+    private static readonly DirectorySearch Sought =
+        SourceTreeBoundary.Searching(FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj", "target"));
 
     private readonly TempDirectory _temp = new();
 

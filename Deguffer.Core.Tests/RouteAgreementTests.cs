@@ -201,9 +201,9 @@ public class RouteAgreementTests
 
     /// <summary>
     /// Discovery has two routes for the same reason measurement does, and the same obligation. The
-    /// index knows every directory on the volume, so the limits the walk gets from not descending
-    /// have to be applied to its answers deliberately — otherwise an elevated run offers to delete
-    /// directories an unelevated one would never have found.
+    /// index descends the table rather than the disk, so it has to stop where the walk stops by its
+    /// own hand — otherwise an elevated run offers to delete directories an unelevated one would
+    /// never have found.
     /// </summary>
     [Fact]
     public async Task TheTwoRoutesFindTheSameDirectoriesInASourceRoot()
@@ -226,6 +226,45 @@ public class RouteAgreementTests
         Assert.False(indexed.FellBack);
 
         Assert.Equal([Path.Combine(root, "Example", "obj")], walked.Candidates);
+        Assert.Equal(walked.Candidates, indexed.Candidates);
+    }
+
+    /// <summary>
+    /// The same agreement with several names sought at once, which is how a real pass searches. Each
+    /// route has to stop at every name: at a <c>target</c> inside an <c>obj</c>, at an <c>obj</c>
+    /// inside a sought <c>node_modules</c>, and at <c>.git</c>, which is never entered.
+    /// </summary>
+    [Fact]
+    public async Task TheTwoRoutesFindTheSameDirectoriesForSeveralNames()
+    {
+        using var temp = new TempDirectory();
+
+        var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "src",
+            new TreeDirectory(
+                "app",
+                new TreeDirectory("node_modules", new TreeDirectory("left-pad", new TreeDirectory("obj"))),
+                new TreeDirectory("obj", new TreeDirectory("target"))),
+            new TreeDirectory("crate", new TreeDirectory("target", new TreeDirectory("obj"))),
+            new TreeDirectory(".git", new TreeDirectory("target")),
+            new TreeDirectory("deep", new TreeDirectory("a", new TreeDirectory("b", new TreeDirectory("obj"))))));
+
+        string[] names = ["obj", "target", "node_modules"];
+
+        var walked = await Discovery(Walking(), names).FindAsync([new SourceRoot(root)]);
+        var indexed = await Discovery(Indexing(root, fixture), names).FindAsync([new SourceRoot(root)]);
+
+        Assert.True(walked.FellBack);
+        Assert.False(indexed.FellBack);
+
+        Assert.Equal(
+            [
+                Path.Combine(root, "app", "node_modules"),
+                Path.Combine(root, "app", "obj"),
+                Path.Combine(root, "crate", "target"),
+                Path.Combine(root, "deep", "a", "b", "obj"),
+            ],
+            walked.Candidates);
         Assert.Equal(walked.Candidates, indexed.Candidates);
     }
 
@@ -526,14 +565,14 @@ public class RouteAgreementTests
     }
 
     /// <summary>
-    /// A discovery looking for <c>obj</c> alone, which is what these tests compare the two routes
-    /// over. The names a discovery is given are part of what defines its answer, so both routes get
+    /// A discovery looking for <paramref name="names"/>, or for <c>obj</c> alone where none are
+    /// given, which is what most of these tests compare the two routes over. The names a discovery is given are part of what defines its answer, so both routes get
     /// the same ones.
     /// </summary>
-    private static SourceDirectoryDiscovery Discovery(IDirectoryScanner scanner)
+    private static SourceDirectoryDiscovery Discovery(IDirectoryScanner scanner, params string[] names)
     {
         var discovery = new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory());
-        discovery.Include(["obj"]);
+        discovery.Include(names is [] ? ["obj"] : names);
         return discovery;
     }
 }
