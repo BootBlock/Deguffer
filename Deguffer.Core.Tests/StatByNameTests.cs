@@ -57,23 +57,16 @@ public sealed class StatByNameTests
         Assert.Equal(ByNameReading.Gone, StatByName.Read(LongPath.Extended(Path.Combine(temp.Path, "nowhere", "a.bin")), out _));
     }
 
-    [Theory]
-    [InlineData(@"\\?\C:\store\a.bin", @"\??\C:\store\a.bin")]
-    [InlineData(@"\\?\UNC\server\share\a.bin", @"\??\UNC\server\share\a.bin")]
-    public void NamesTheFileAsTheObjectManagerDoes(string extended, string native)
-    {
-        Assert.Equal(native, StatByName.NativeName(extended));
-    }
-
-    /// <summary>A path not in the extended form is refused rather than guessed at, so a handle is opened on it as before.</summary>
+    /// <summary>
+    /// A name longer than a <c>UNICODE_STRING</c> can hold is refused, so a handle is opened on it,
+    /// rather than its length wrapping and Windows being asked about the first part of the name.
+    /// </summary>
     [Fact]
-    public void APathNotInTheExtendedFormIsRefused()
+    public void ANameTooLongForTheNativeStringIsRefused()
     {
-        using var temp = new TempDirectory();
-        var file = temp.CreateFile(10, "a.bin");
+        var name = @"\\?\C:\" + new string('a', 40_000);
 
-        Assert.Null(StatByName.NativeName(file));
-        Assert.Equal(ByNameReading.Refused, StatByName.Read(file, out _));
+        Assert.Equal(ByNameReading.Refused, StatByName.Read(name, out _));
     }
 
     /// <summary>

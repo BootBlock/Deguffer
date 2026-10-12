@@ -56,6 +56,18 @@ public class LongPathTests
     public void IsIdempotentSoItCanBeAppliedDefensively() =>
         Assert.Equal(@"\\?\C:\x", LongPath.Extended(LongPath.Extended(@"C:\x")));
 
+    /// <summary>
+    /// The name a native call is given, from either form: the extended form under the object
+    /// manager's prefix, a share's UNC segment kept, so the call names the file a Win32 call would open.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\store\a.bin", @"\??\C:\store\a.bin")]
+    [InlineData(@"\\?\C:\store\a.bin", @"\??\C:\store\a.bin")]
+    [InlineData(@"\\server\share\a.bin", @"\??\UNC\server\share\a.bin")]
+    [InlineData(@"\\?\UNC\server\share\a.bin", @"\??\UNC\server\share\a.bin")]
+    public void NamesAPathAsTheObjectManagerDoes(string path, string expected) =>
+        Assert.Equal(expected, LongPath.ObjectManagerForm(path));
+
     [Theory]
     [InlineData(@"\\?\C:\x", @"C:\x")]
     [InlineData(@"\\?\UNC\server\share", @"\\server\share")]

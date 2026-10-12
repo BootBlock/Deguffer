@@ -13,8 +13,11 @@ namespace Deguffer.Core.Scanning;
 /// It reports file lengths, and the entries a removal would take, and nothing else.
 /// <c>FileInfo.Length</c> cannot see how many clusters a
 /// compressed or sparse file occupies, and neither can any cheap call: <c>GetCompressedFileSize</c>
-/// returns the length again for anything not compressed, and the call that does answer needs a
-/// handle per file — measured at 156 times the cost of the length pass over a 426 MB cache. So the
+/// returns the length again for anything not compressed, and the call that does answer through a
+/// handle per file was measured at 156 times the cost of the length pass over a 426 MB cache. The
+/// read by name <see cref="Safety.StatByName"/> makes needs no handle, but took about four fifths of
+/// a handle's time on a synthesised store, so it would still cost many times the lengths if that
+/// ratio held on the cache, which was not measured. So the
 /// lengths are the measurement, they are exact, and <see cref="ScanSize.Reclaimable"/> is the
 /// number they feed. Nothing here is a guess, which is why <see cref="ScanSize.FromLengths"/> does
 /// not mark its results approximate.

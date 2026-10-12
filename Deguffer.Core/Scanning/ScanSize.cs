@@ -119,8 +119,11 @@ public readonly record struct ScanSize(
     /// walk to read allocated was measured rather than assumed: <c>GetCompressedFileSize</c> costs
     /// 1.1x to 5.4x a length pass and returns the file's length for anything not compressed or
     /// sparse, so it does not produce cluster slack at all; the call that does,
-    /// <c>FILE_STANDARD_INFO.AllocationSize</c>, needs a handle per file and took 16.7 seconds over
-    /// a 426 MB npm cache against 107 milliseconds for the lengths — 156 times the cost.</para>
+    /// <c>FILE_STANDARD_INFO.AllocationSize</c>, read through a handle per file, took 16.7 seconds over
+    /// a 426 MB npm cache against 107 milliseconds for the lengths — 156 times the cost. The same
+    /// figure read by name (<see cref="Safety.StatByName"/>) needs no handle, but took about four
+    /// fifths of a handle's time on a synthesised store, which would leave it far dearer than the
+    /// lengths if that held on the cache.</para>
     ///
     /// <para><b>Allocated is unavailable more often than it is available.</b> Only the file table
     /// knows it, only an administrator can read the table, and on a real volume the table declined

@@ -30,9 +30,9 @@ internal delegate ByNameReading StandardByNameReader(string extendedPath, out Fi
 /// <summary>
 /// A file's link count, allocation size and length from <c>NtQueryInformationByName</c> with
 /// <c>FileStatInformation</c>: one call, with no handle opened, closed or seen by a caller, where
-/// <see cref="FileInformation.Open"/> and <c>GetFileInformationByHandleEx</c> take three. Every
-/// file-system filter sees an open and a close for each handle, so on a large store the opens cost
-/// more than the listing.
+/// <see cref="FileInformation.Open"/> and <c>GetFileInformationByHandleEx</c> take three. Windows
+/// may still open the file inside the call, so what the caller is spared is the handle and two of
+/// the three calls; <c>Deguffer.Benchmark links</c> times the difference.
 ///
 /// <para>The call is present from Windows 10 1709, below the application's minimum, but a file
 /// system may not answer the class, which is <see cref="ByNameReading.Unsupported"/>.</para>
@@ -64,10 +64,6 @@ internal static unsafe partial class StatByName
     private const int StatusInvalidDeviceRequest = unchecked((int)0xC000_0010);
     private const int StatusNotSupported = unchecked((int)0xC000_00BB);
 
-    /// <summary>The Win32 extended-length prefix, and the native one it stands for.</summary>
-    private const string ExtendedPrefix = @"\\?\";
-    private const string NativePrefix = @"\??\";
-
     /// <summary>The longest name a <c>UNICODE_STRING</c> holds, in characters.</summary>
     private const int LongestName = ushort.MaxValue / sizeof(char);
 
@@ -76,10 +72,9 @@ internal static unsafe partial class StatByName
     {
         info = default;
 
-        // A path that is not in the extended form has no native name to give, and one too long
-        // for the native string cannot be named: both are asked through a handle instead, as the
-        // read did before this route existed.
-        if (NativeName(extendedPath) is not { Length: <= LongestName } name)
+        // A name too long for the native string cannot be given, so the file is asked through a
+        // handle instead, as it was before this route existed.
+        if (LongPath.ObjectManagerForm(extendedPath) is not { Length: <= LongestName } name)
         {
             return ByNameReading.Refused;
         }
@@ -116,23 +111,11 @@ internal static unsafe partial class StatByName
                 AllocationSize = stat.AllocationSize,
                 EndOfFile = stat.EndOfFile,
                 NumberOfLinks = stat.NumberOfLinks,
-                Directory = (stat.FileAttributes & (uint)FileAttributes.Directory) != 0 ? (byte)1 : (byte)0,
             };
         }
 
         return reading;
     }
-
-    /// <summary>
-    /// The native name Windows gives the object manager for <paramref name="extendedPath"/>, or null
-    /// where it is not in the extended form. <c>\\?\C:\a</c> is <c>\??\C:\a</c>, and
-    /// <c>\\?\UNC\server\share\a</c> is <c>\??\UNC\server\share\a</c>: the prefix is the only part
-    /// that differs, which is what the extended form is for.
-    /// </summary>
-    internal static string? NativeName(string extendedPath) =>
-        extendedPath.StartsWith(ExtendedPrefix, StringComparison.Ordinal)
-            ? string.Concat(NativePrefix, extendedPath.AsSpan(ExtendedPrefix.Length))
-            : null;
 
     /// <summary>What an <c>NTSTATUS</c> from the read says, per <see cref="ByNameReading"/>.</summary>
     internal static ByNameReading Answer(int status) => status switch
@@ -162,32 +145,6 @@ internal static unsafe partial class StatByName
         public uint ReparseTag;
         public uint NumberOfLinks;
         public uint EffectiveAccess;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct UnicodeString
-    {
-        public ushort Length;
-        public ushort MaximumLength;
-        public char* Buffer;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ObjectAttributes
-    {
-        public uint Length;
-        public nint RootDirectory;
-        public UnicodeString* ObjectName;
-        public uint Attributes;
-        public nint SecurityDescriptor;
-        public nint SecurityQualityOfService;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IoStatusBlock
-    {
-        public nint Status;
-        public nuint Information;
     }
 
     [LibraryImport("ntdll.dll")]

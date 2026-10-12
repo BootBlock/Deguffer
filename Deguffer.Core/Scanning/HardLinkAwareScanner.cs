@@ -21,8 +21,9 @@ namespace Deguffer.Core.Scanning;
 /// would not change anything, and the offer would be false.</para>
 ///
 /// <para>Each file is read by name, with no handle, where its file system answers that
-/// (<see cref="FileInformation.Standard"/>): over 100,000 files on NTFS the read by name took about
-/// four fifths of the time a handle per file took. Both read whatever the listed name is when it is
+/// (<see cref="FileInformation.Standard"/>): over a synthesised store of 100,000 files on NTFS, with
+/// no real-time antivirus scanning, the read by name took about four fifths of the time a handle per
+/// file took (<c>Deguffer.Benchmark links</c>). Both read whatever the listed name is when it is
 /// read, a link as the link, and the walk lists no file numbers to compare it with, so a file
 /// replaced since the listing is measured as the file of this tree it now is. The figure is a
 /// prediction marked approximate either way.</para>
