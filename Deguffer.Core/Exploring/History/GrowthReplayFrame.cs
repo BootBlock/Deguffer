@@ -91,7 +91,7 @@ public sealed class GrowthReplayFrame : ITrackedTree
 
         now.CopyTo(children);
         extras.CopyTo(children.AsSpan(now.Length));
-        ExploreTree.OrderBySize(children, _sizeOf, _byName);
+        ExploreTree.OrderBySize(children, new long[children.Length], _sizeOf, _byName);
 
         return children;
     }
