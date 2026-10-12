@@ -133,7 +133,7 @@ internal sealed class RemovedSinceScan
 
             if (tree.ChildOrder == ExploreChildOrder.BySize)
             {
-                ExploreTree.OrderBySize(kept, SizeAfter, byName);
+                ExploreTree.OrderBySize(kept, new long[kept.Length], SizeAfter, byName);
             }
 
             children[folder] = kept;

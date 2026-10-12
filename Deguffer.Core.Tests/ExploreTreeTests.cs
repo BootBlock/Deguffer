@@ -148,7 +148,7 @@ public class ExploreTreeTests
     ///
     /// <para>Three traversals are exercised at once, because all three walk the same chain and any
     /// one of them written recursively takes the process down rather than failing a test:
-    /// the depth-first ordering, the roll-up that rides on it, and <see cref="ExploreTree.PathOf"/>.
+    /// the top-down ordering, the roll-up that rides on it, and <see cref="ExploreTree.PathOf"/>.
     /// </para>
     /// </summary>
     [Fact]
@@ -449,6 +449,105 @@ public class ExploreTreeTests
 
         Assert.False(tree.ModifiedOf(tree.RootNode).IsKnown);
         Assert.False(tree.CreatedOf(tree.RootNode).IsKnown);
+    }
+
+    /// <summary>
+    /// Assembling a tree allocates what the finished tree keeps and one order array, and nothing
+    /// that grows: a walk assembles a tree on every snapshot, and on a disk of millions of nodes a
+    /// list doubling through the large object heap, a cursor array or a key array per directory is
+    /// a hundred megabytes thrown away each time.
+    ///
+    /// <para>What is kept is the child starts and the child list, four bytes a node each, and a
+    /// byte a node for whether it was reached. The order is four more, so thirteen in all, and the
+    /// bound leaves one for the key buffer and the tree itself.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreChildOrder.BySize)]
+    [InlineData(ExploreChildOrder.ByName)]
+    public void AssemblingATreeAllocatesNothingThatGrowsOrRepeatsPerDirectory(ExploreChildOrder order)
+    {
+        const int folders = 1_000;
+        const int filesInEach = 100;
+        const int count = 1 + folders + (folders * filesInEach);
+
+        new FoldersOfFiles(folders, filesInEach).Assemble(order);
+
+        var fixture = new FoldersOfFiles(folders, filesInEach);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var tree = fixture.Assemble(order);
+        var perNode = (GC.GetAllocatedBytesForCurrentThread() - before) / count;
+
+        Assert.Equal(folders * filesInEach, tree.TotalBytes);
+        Assert.Equal(filesInEach, tree.ChildrenOf(1).Length);
+
+        // From thirteen, so that a measurement that missed the large object heap, where every one
+        // of these arrays is, fails rather than passing at nothing.
+        Assert.InRange(perNode, 13, 14);
+    }
+
+    /// <summary>
+    /// A root holding <c>folders</c> folders of <c>filesInEach</c> one-byte files each, as the arrays
+    /// a reader hands to <see cref="ExploreTree.Create"/>, made before anything is measured.
+    /// </summary>
+    private sealed class FoldersOfFiles
+    {
+        private readonly int _count;
+        private readonly string[] _names;
+        private readonly int[] _parents;
+        private readonly int[] _nameRanks;
+        private readonly long[] _sizes;
+        private readonly bool[] _isDirectory;
+        private readonly bool[] _present;
+        private readonly long[] _lengths;
+        private readonly FileStorage[] _storage;
+        private readonly bool[] _isLink;
+        private readonly bool[] _sizeUnknown;
+        private readonly ExploreTimestamp[] _created;
+        private readonly ExploreTimestamp[] _modified;
+        private readonly FileVisibility[] _visibility;
+
+        public FoldersOfFiles(int folders, int filesInEach)
+        {
+            _count = 1 + folders + (folders * filesInEach);
+            _names = new string[_count];
+            _parents = new int[_count];
+            _nameRanks = new int[_count];
+            _sizes = new long[_count];
+            _isDirectory = new bool[_count];
+            _present = new bool[_count];
+            _lengths = new long[_count];
+            _storage = new FileStorage[_count];
+            _isLink = new bool[_count];
+            _sizeUnknown = new bool[_count];
+            _created = new ExploreTimestamp[_count];
+            _modified = new ExploreTimestamp[_count];
+            _visibility = new FileVisibility[_count];
+
+            Array.Fill(_present, true);
+            Array.Fill(_names, "f");
+
+            for (var folder = 0; folder < folders; folder++)
+            {
+                var node = 1 + folder;
+                _nameRanks[node] = folder;
+                _isDirectory[node] = true;
+
+                for (var file = 0; file < filesInEach; file++)
+                {
+                    var leaf = 1 + folders + (folder * filesInEach) + file;
+                    _parents[leaf] = node;
+                    _nameRanks[leaf] = file;
+                    _sizes[leaf] = 1;
+                }
+            }
+        }
+
+        /// <summary>Once only: assembling totals each subtree into the arrays.</summary>
+        public ExploreTree Assemble(ExploreChildOrder order) =>
+            ExploreTree.Create(
+                Root, 0, _names, _parents, _sizes, _lengths, _storage, _isDirectory, _isLink, _sizeUnknown,
+                _created, _modified, _visibility, _present, order,
+                nameRanks: order is ExploreChildOrder.ByName ? _nameRanks : null);
     }
 
     private static DateTime At(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
