@@ -100,8 +100,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// here would hide the walk behind the accelerator's signature, and §5.5 requires the slow
     /// route to be visible to the caller that takes it.
     /// </summary>
-    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
-        string name,
+    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+        DirectorySearch search,
         string root,
         CancellationToken ct = default) => new((IReadOnlyList<string>?)null);
 

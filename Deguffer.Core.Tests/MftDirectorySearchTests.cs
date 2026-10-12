@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
@@ -5,12 +7,12 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// Finding directories by name in the volume index — new capability, because the index was built to
-/// resolve a known path top-down and exposed nothing that searches.
+/// Finding directories by name in the volume index, below one root, in one pass over that root's
+/// subtree.
 ///
-/// The names are already in the table, so this is a linear pass rather than a new structure. What
-/// needs proving is the path rebuilt from each hit: a wrong path here is not a wrong number, it is
-/// a wrong deletion target.
+/// The names are already in the table, so this is a descent through the child links rather than a
+/// new structure. What needs proving is where the descent stops and the path built for each hit: a
+/// wrong path here is not a wrong number, it is a wrong deletion target.
 /// </summary>
 public class MftDirectorySearchTests
 {
@@ -23,6 +25,9 @@ public class MftDirectorySearchTests
     private const uint Bin = 11;
     private const uint Assets = 12;
     private const uint AssetObj = 13;
+
+    private static readonly string[] Volume = [];
+    private static readonly string[] Example = ["Source", "Example"];
 
     private static MftFixture Tree() => new MftFixture()
         .AddDirectory(Source, MftRecord.RootRecordNumber, "Source")
@@ -42,34 +47,65 @@ public class MftDirectorySearchTests
         return index;
     }
 
-    [Fact]
-    public void FindsEveryDirectoryOfThatNameWithItsFullPathRebuilt()
+    /// <summary>Each hit as components below the root joined, in ordinal order.</summary>
+    private static IEnumerable<string> Joined(IReadOnlyList<IReadOnlyList<string>>? found)
     {
-        var found = Build(Tree()).FindDirectoriesNamed("obj");
+        Assert.NotNull(found);
+        return found.Select(components => string.Join('\\', components)).Order(StringComparer.Ordinal);
+    }
 
-        // Compared as a set: the table is walked in record order, which is an implementation detail
-        // no caller depends on.
+    [Fact]
+    public void FindsEveryDirectoryOfThatNameWithItsPathBelowTheRoot()
+    {
+        var found = Build(Tree()).TryFindDirectories(Volume, DirectorySearches.For("obj"));
+
+        // Compared in order: the table is descended in record order, which is an implementation
+        // detail no caller depends on.
         Assert.Equal(
             [@"Source\Assets\obj", @"Source\Example.Tests\obj", @"Source\Example\obj"],
-            found.Select(components => string.Join('\\', components)).OrderBy(p => p, StringComparer.Ordinal));
+            Joined(found));
+    }
+
+    /// <summary>
+    /// The point of the query: every name in one pass, rather than one pass per name over the whole
+    /// table.
+    /// </summary>
+    [Fact]
+    public void FindsEveryNameOfTheSearchInOnePass()
+    {
+        var found = Build(Tree()).TryFindDirectories(Example, DirectorySearches.For("obj", "bin"));
+
+        Assert.Equal(["bin", "obj"], Joined(found));
+    }
+
+    /// <summary>
+    /// The answer is the root's own subtree and nothing else. <c>Example.Tests</c> shares the root's
+    /// name as a prefix, and <c>Assets</c> holds an <c>obj</c> of its own, and neither is inside.
+    /// </summary>
+    [Fact]
+    public void FindsNothingOutsideTheRoot()
+    {
+        var found = Build(Tree()).TryFindDirectories(Example, DirectorySearches.For("obj"));
+
+        Assert.Equal(["obj"], Joined(found));
     }
 
     /// <summary>
     /// The search must not become a name-prefix match. <c>bin</c> is a sibling of the same shape and
-    /// is explicitly out of scope, so a rule that returned it would offer directories that can hold
-    /// files no build reproduces.
+    /// is not sought here, so a rule that returned it would offer directories that can hold files no
+    /// build reproduces.
     /// </summary>
     [Fact]
     public void DoesNotReturnDirectoriesWithADifferentName()
     {
-        var found = Build(Tree()).FindDirectoriesNamed("obj");
+        var found = Build(Tree()).TryFindDirectories(Volume, DirectorySearches.For("obj"));
 
-        Assert.DoesNotContain(found, components => components.Contains("bin"));
+        Assert.DoesNotContain(found!, components => components.Contains("bin"));
     }
 
     /// <summary>
     /// NTFS is case-insensitive, and a project built on a machine that wrote <c>OBJ</c> holds the
-    /// same output as one that wrote <c>obj</c>.
+    /// same output as one that wrote <c>obj</c>. The path keeps the case the table holds.
     /// </summary>
     [Fact]
     public void MatchesTheNameWithoutRegardToCase()
@@ -79,7 +115,45 @@ public class MftDirectorySearchTests
             .AddDirectory(FirstProject, Source, "Example")
             .AddDirectory(FirstObj, FirstProject, "OBJ"));
 
-        Assert.Equal([["Source", "Example", "OBJ"]], index.FindDirectoriesNamed("obj").Select(c => c.ToArray()));
+        Assert.Equal([@"Source\Example\OBJ"], Joined(index.TryFindDirectories(Volume, DirectorySearches.For("obj"))));
+    }
+
+    /// <summary>
+    /// Everything below a found directory belongs to it, so the descent stops there. An <c>obj</c>
+    /// inside an <c>obj</c> is part of the output already offered, and offering it as well would make
+    /// two steps where one deletes the other's parent.
+    /// </summary>
+    [Fact]
+    public void StopsAtADirectoryItFinds()
+    {
+        var index = Build(Tree()
+            .AddDirectory(30, FirstObj, "Debug")
+            .AddDirectory(31, 30, "obj")
+            .AddDirectory(32, FirstObj, "bin"));
+
+        Assert.Equal(["bin", "obj"], Joined(index.TryFindDirectories(Example, DirectorySearches.For("obj", "bin"))));
+    }
+
+    /// <summary>
+    /// The source discovery's search never enters <c>.git</c> or <c>node_modules</c>, and the index
+    /// stops there exactly as the walk does. A name being sought overrides that: a search for
+    /// <c>node_modules</c> finds it and goes no further.
+    /// </summary>
+    [Fact]
+    public void NeverEntersWhatTheSearchRefusesUnlessItIsSought()
+    {
+        var index = Build(Tree()
+            .AddDirectory(30, FirstProject, ".git")
+            .AddDirectory(31, 30, "obj")
+            .AddDirectory(32, FirstProject, "node_modules")
+            .AddDirectory(33, 32, "left-pad")
+            .AddDirectory(34, 33, "obj"));
+
+        var obj = SourceTreeBoundary.Searching(FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj"));
+        var both = SourceTreeBoundary.Searching(FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj", "node_modules"));
+
+        Assert.Equal(["obj"], Joined(index.TryFindDirectories(Example, obj)));
+        Assert.Equal(["node_modules", "obj"], Joined(index.TryFindDirectories(Example, both)));
     }
 
     /// <summary>
@@ -94,7 +168,7 @@ public class MftDirectorySearchTests
             .AddDirectoryLink(30, Source, "Linked")
             .AddDirectory(31, 30, "obj"));
 
-        var found = index.FindDirectoriesNamed("obj").Select(c => string.Join('\\', c));
+        var found = Joined(index.TryFindDirectories(Volume, DirectorySearches.For("obj"))).ToList();
 
         Assert.DoesNotContain(@"Source\Linked\obj", found);
         Assert.Contains(@"Source\Example\obj", found);
@@ -103,7 +177,7 @@ public class MftDirectorySearchTests
     /// <summary>
     /// And the link itself is not a candidate. It is a name pointing somewhere else; deleting it
     /// removes the pointer, which is not what a user asked for when they asked to reclaim build
-    /// output.
+    /// output. The walk does not list a link as a directory either.
     /// </summary>
     [Fact]
     public void DoesNotReturnALinkThatCarriesTheName()
@@ -112,16 +186,20 @@ public class MftDirectorySearchTests
         // right by count.
         var index = Build(Tree().AddDirectoryLink(30, Assets, "obj"));
 
-        var found = index.FindDirectoriesNamed("obj").Select(c => string.Join('\\', c)).ToList();
+        var found = Joined(index.TryFindDirectories(Volume, DirectorySearches.For("obj"))).ToList();
 
         Assert.Contains(@"Source\Assets\obj", found);
         Assert.Equal(3, found.Count);
     }
 
+    /// <summary>An empty list rather than null: the index answered, and there are none.</summary>
     [Fact]
     public void FindsNothingWhenNoDirectoryCarriesTheName()
     {
-        Assert.Empty(Build(Tree()).FindDirectoriesNamed("node_modules"));
+        var found = Build(Tree()).TryFindDirectories(Volume, DirectorySearches.For("node_modules"));
+
+        Assert.NotNull(found);
+        Assert.Empty(found);
     }
 
     /// <summary>
@@ -133,13 +211,12 @@ public class MftDirectorySearchTests
     {
         var index = Build(Tree().AddFile(20, Source, "obj", allocated: 4096, logical: 4096));
 
-        Assert.Equal(3, index.FindDirectoriesNamed("obj").Count);
+        Assert.Equal(3, index.TryFindDirectories(Volume, DirectorySearches.For("obj"))!.Count);
     }
 
     /// <summary>
-    /// A record whose parent chain does not reach the root cannot have a path rebuilt for it. It is
-    /// dropped rather than guessed at: a partially-rebuilt path would name a real directory
-    /// somewhere else entirely.
+    /// A record whose parent chain does not reach the root is in no root's subtree, so no search
+    /// reaches it. A path guessed for it would name a real directory somewhere else entirely.
     /// </summary>
     [Fact]
     public void DropsAHitWhoseParentChainDoesNotReachTheRoot()
@@ -147,9 +224,9 @@ public class MftDirectorySearchTests
         // Parent 40 is never added, so the chain from this record dies at an absent record.
         var index = Build(Tree().AddDirectory(30, 40, "obj"));
 
-        var found = index.FindDirectoriesNamed("obj");
+        var found = index.TryFindDirectories(Volume, DirectorySearches.For("obj"));
 
-        Assert.Equal(3, found.Count);
+        Assert.Equal(3, found!.Count);
         Assert.All(found, components => Assert.Equal("Source", components[0]));
     }
 
@@ -158,7 +235,46 @@ public class MftDirectorySearchTests
     {
         var index = Build(new MftFixture().AddDirectory(Source, MftRecord.RootRecordNumber, "obj"));
 
-        Assert.Equal([["obj"]], index.FindDirectoriesNamed("obj").Select(c => c.ToArray()));
+        Assert.Equal(["obj"], Joined(index.TryFindDirectories(Volume, DirectorySearches.For("obj"))));
+    }
+
+    /// <summary>
+    /// The root is where the search starts, so it is never one of the answers, whatever it is
+    /// called. The user approved that folder as a place to search inside, which is not the same as
+    /// offering it up for deletion.
+    /// </summary>
+    [Fact]
+    public void NeverOffersTheRootItself()
+    {
+        var found = Build(Tree()).TryFindDirectories(["Source", "Example", "obj"], DirectorySearches.For("obj"));
+
+        Assert.NotNull(found);
+        Assert.Empty(found);
+    }
+
+    /// <summary>
+    /// Null, never an empty list, for a root the index has no subtree for. Null sends the caller to
+    /// walk the root, and an empty list would tell it there is nothing there.
+    /// </summary>
+    [Fact]
+    public void HasNoAnswerForARootItDoesNotHold()
+    {
+        Assert.Null(Build(Tree()).TryFindDirectories(["Source", "Elsewhere"], DirectorySearches.For("obj")));
+    }
+
+    /// <summary>
+    /// A root that is a link, or is reached through one, has no subtree here: whatever it points at
+    /// keeps its own place in the table. The walk follows it and is right.
+    /// </summary>
+    [Fact]
+    public void HasNoAnswerForARootReachedThroughALink()
+    {
+        var index = Build(Tree()
+            .AddDirectoryLink(30, Source, "Linked")
+            .AddDirectory(31, 30, "Inner"));
+
+        Assert.Null(index.TryFindDirectories(["Source", "Linked"], DirectorySearches.For("obj")));
+        Assert.Null(index.TryFindDirectories(["Source", "Linked", "Inner"], DirectorySearches.For("obj")));
     }
 
     /// <summary>
@@ -174,7 +290,7 @@ public class MftDirectorySearchTests
     {
         var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Tree()), tuning: RouteTuners.Table);
 
-        var found = await scanner.TryFindDirectoriesNamedAsync("obj", @"C:\Source\Example");
+        var found = await scanner.TryFindDirectoriesAsync(DirectorySearches.For("obj"), @"C:\Source\Example");
 
         Assert.NotNull(found);
         Assert.Equal([@"C:\Source\Example\obj"], found);
@@ -189,9 +305,23 @@ public class MftDirectorySearchTests
     {
         var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Tree()), tuning: RouteTuners.Table);
 
-        var found = await scanner.TryFindDirectoriesNamedAsync("obj", @"C:\Source\Example");
+        var found = await scanner.TryFindDirectoriesAsync(DirectorySearches.For("obj"), @"C:\Source\Example");
 
         Assert.DoesNotContain(@"C:\Source\Example.Tests\obj", found!);
+    }
+
+    /// <summary>
+    /// The root is spelled as the caller gave it, and what lies below it as the table holds it. That
+    /// is how the walk spells what it finds, so the two routes hand a plan the same path.
+    /// </summary>
+    [Fact]
+    public async Task TheScannerSpellsAPathAsTheWalkDoes()
+    {
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', Tree()), tuning: RouteTuners.Table);
+
+        var found = await scanner.TryFindDirectoriesAsync(DirectorySearches.For("OBJ", "bin"), @"C:\SOURCE\example\");
+
+        Assert.Equal([@"C:\SOURCE\example\bin", @"C:\SOURCE\example\obj"], found);
     }
 
     /// <summary>
@@ -203,6 +333,21 @@ public class MftDirectorySearchTests
     {
         var scanner = new DirectoryScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
 
-        Assert.Null(await scanner.TryFindDirectoriesNamedAsync("obj", @"C:\Source"));
+        Assert.Null(await scanner.TryFindDirectoriesAsync(DirectorySearches.For("obj"), @"C:\Source"));
+    }
+
+    /// <summary>
+    /// An approved root that is a junction, which is an ordinary way to keep source on a second
+    /// drive. The table holds nothing below the link, so an answer from it would be an empty list
+    /// and the plan would say the folder holds no build output. Null sends the caller to walk it.
+    /// </summary>
+    [Fact]
+    public async Task TheScannerSendsARootReachedThroughALinkToTheWalk()
+    {
+        var scanner = new DirectoryScanner(
+            FakeMftSourceFactory.Serving('C', Tree().AddDirectoryLink(30, Source, "Linked")),
+            tuning: RouteTuners.Table);
+
+        Assert.Null(await scanner.TryFindDirectoriesAsync(DirectorySearches.For("obj"), @"C:\Source\Linked"));
     }
 }

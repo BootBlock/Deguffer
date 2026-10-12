@@ -65,8 +65,8 @@ public sealed class CombinedFallbackTests : IDisposable
         public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
             MeasureAsync(path, ct: ct);
 
-        public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
-            string name,
+        public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+            DirectorySearch search,
             string root,
             CancellationToken ct = default) => new((IReadOnlyList<string>?)null);
 

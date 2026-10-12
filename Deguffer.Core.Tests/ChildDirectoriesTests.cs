@@ -47,7 +47,7 @@ public sealed class ChildDirectoriesTests : IDisposable
     /// two empty lists an empty root does, so every caller that reported "there is nothing here"
     /// was reporting a listing it never obtained.
     ///
-    /// <see cref="IDirectoryScanner.TryFindDirectoriesNamedAsync"/> already states the rule this
+    /// <see cref="IDirectoryScanner.TryFindDirectoriesAsync"/> already states the rule this
     /// answers to — an empty list a caller cannot tell from "there are none" is not an answer — and
     /// this seam is the one place in Core that broke it.
     /// </summary>

@@ -1045,7 +1045,7 @@ public class MftVolumeIndexTests
             .AddFile(20, Cache, "archive.pst", allocated: 4096, logical: 4096));
 
         Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache", "archive.pst"]));
-        Assert.Empty(index.FindDirectoriesNamed("archive.pst"));
+        Assert.Empty(index.TryFindDirectories([], DirectorySearches.For("archive.pst"))!);
     }
 
     /// <summary>

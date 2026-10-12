@@ -19,8 +19,6 @@ public sealed class DirectoryScanner : IDirectoryScanner
     private readonly ScanEstimateCache? _estimates;
     private readonly ParallelEnumerationScanner _fallback;
     private readonly ScanTuner _tuner;
-    private readonly Dictionary<(char Volume, string Name), IReadOnlyList<string>> _searches = [];
-    private readonly Lock _searchGate = new();
 
     /// <param name="tuning">
     /// The route the user allows and the values each read runs with, asked as each measurement
@@ -116,19 +114,18 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// Ask the volume index for directories by name, narrowed to <paramref name="root"/>.
+    /// Ask the volume index what <paramref name="search"/> finds inside <paramref name="root"/>.
     ///
-    /// The narrowing is the consent model, not an optimisation. The index knows every directory on
-    /// the volume, and a cheap answer must not turn into permission to act on something the user
-    /// never approved — so anything outside the root is dropped here rather than left for a caller
-    /// to remember.
+    /// The index is asked about the root's own subtree and nothing else, which is the consent model
+    /// as well as the cost: the index knows every directory on the volume, and a cheap answer must
+    /// not turn into permission to act on something the user never approved.
     /// </summary>
-    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
-        string name,
+    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+        DirectorySearch search,
         string root,
         CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(search);
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
 
         // Null under the walk-only setting, so a caller searches by walking as it does unelevated.
@@ -138,7 +135,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
             return new((IReadOnlyList<string>?)null);
         }
 
-        return new(FindAsync(name, root, volumeRoot.DriveLetter, ct));
+        return new(FindAsync(search, volumeRoot, ct));
     }
 
     /// <summary>
@@ -147,64 +144,29 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// </summary>
     public bool RacesTheWalk => _tuner.Route is ScanRoute.Auto;
 
-    private async Task<IReadOnlyList<string>?> FindAsync(string name, string root, char driveLetter, CancellationToken ct)
+    /// <summary>
+    /// The index's answer for one root, as full paths in ordinal order, or null where it has none.
+    ///
+    /// <para>Not remembered between calls. The pass costs what the root's own subtree costs, and the
+    /// discovery that asks remembers its whole answer for the planning pass, so a cache here would
+    /// hold a second copy of it.</para>
+    ///
+    /// <para>Each path is the root as the caller gave it, then the names the table holds below it,
+    /// which is how the walk spells what it finds. Ordinal, for the reason the walk sorts: a plan
+    /// built from the answer reads the same on every run.</para>
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> FindAsync(DirectorySearch search, VolumePath root, CancellationToken ct)
     {
-        var built = await _volumes.Get(driveLetter).WaitAsync(ct).ConfigureAwait(false);
+        var built = await _volumes.Get(root.DriveLetter).WaitAsync(ct).ConfigureAwait(false);
 
-        if (built.Index is not { } index)
+        if (built.Index?.TryFindDirectories(root.Components, search, ct) is not { } found)
         {
             return null;
         }
 
-        return [.. NamedDirectories(index, name, driveLetter, ct).Where(path => IsUnder(path, root))];
-    }
+        var prefix = root.FullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-    /// <summary>
-    /// Every directory of this name on the volume, as full paths, memoised for the life of the scan.
-    ///
-    /// The search is a linear pass over every record in the table, and discovery asks once per
-    /// approved root — so without this a user with four source folders on one drive pays four
-    /// complete passes over a multi-million-record array to answer the same question (G4). Cleared
-    /// with the volume indexes it derives from, since a stale answer here is a stale deletion target.
-    /// </summary>
-    private IReadOnlyList<string> NamedDirectories(
-        MftVolumeIndex index,
-        string name,
-        char driveLetter,
-        CancellationToken ct)
-    {
-        var key = (driveLetter, name);
-
-        lock (_searchGate)
-        {
-            if (_searches.TryGetValue(key, out var cached))
-            {
-                return cached;
-            }
-        }
-
-        var found = index.FindDirectoriesNamed(name, ct)
-            .Select(components => PathOf(driveLetter, components))
-            .ToList();
-
-        lock (_searchGate)
-        {
-            _searches[key] = found;
-        }
-
-        return found;
-    }
-
-    /// <summary>
-    /// Whether <paramref name="path"/> sits at or below <paramref name="root"/>. The separator is
-    /// part of the comparison: without it <c>C:\Source</c> would claim <c>C:\SourceControl</c>.
-    /// </summary>
-    private static bool IsUnder(string path, string root)
-    {
-        var normalised = LongPath.Display(root).TrimEnd(Path.DirectorySeparatorChar);
-
-        return path.Equals(normalised, StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith(normalised + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return [.. found.Select(components => prefix + string.Join(Path.DirectorySeparatorChar, components)).Order(StringComparer.Ordinal)];
     }
 
     private async ValueTask<ScanResult> MeasureFreshAsync(
@@ -328,13 +290,5 @@ public sealed class DirectoryScanner : IDirectoryScanner
     {
         _volumes.Invalidate();
         _tuner.Invalidate();
-
-        // Derived from the indexes just dropped, so it goes with them. Unlike the remembered
-        // estimates — which are a display convenience — a stale entry here would name a directory
-        // that may no longer exist, and that is a deletion target rather than a number.
-        lock (_searchGate)
-        {
-            _searches.Clear();
-        }
     }
 }

@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
@@ -18,22 +17,22 @@ namespace Deguffer.Benchmark;
 internal static class SourcesRoute
 {
     /// <summary>
-    /// Every name the source folder rows look for, registered by building those rows exactly as a scan
+    /// The search for every name the source folder rows look for, registered by building those rows exactly as a scan
     /// builds them, so the search here is never for a set that has drifted from theirs.
     /// </summary>
-    public static FrozenSet<string> Names { get; } = Registered();
+    public static DirectorySearch Search { get; } = Registered();
 
     /// <returns>
     /// The candidates found, and complete where no folder in the tree refused to be listed.
     /// </returns>
     public static RunTally Run(string folder, WalkTuning tuning, CancellationToken ct)
     {
-        var walked = SourceTreeWalk.Under(folder, Names, tuning, ct);
+        var walked = SourceTreeWalk.Under(folder, Search, tuning, ct);
 
         return new RunTally(walked.Candidates.Count, BytesRead: 0, Complete: walked.Unreadable.Count == 0);
     }
 
-    private static FrozenSet<string> Registered()
+    private static DirectorySearch Registered()
     {
         var environment = UserEnvironment.Current;
         var discovery = new SourceDirectoryDiscovery(ParallelEnumerationScanner.Default);
@@ -45,6 +44,6 @@ internal static class SourcesRoute
             environment,
             ParallelEnumerationScanner.Default);
 
-        return discovery.Names();
+        return discovery.Search();
     }
 }

@@ -67,26 +67,29 @@ public interface IDirectoryScanner
     ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default);
 
     /// <summary>
-    /// Every directory named <paramref name="name"/> at or below <paramref name="root"/>, or null
-    /// when this scanner cannot answer without walking.
+    /// Every directory <paramref name="search"/> finds below <paramref name="root"/>, as full paths
+    /// in ordinal order, or null when this scanner cannot answer without walking.
     ///
     /// Null is the observable fallback, in the same spirit as <see cref="FallbackReason"/>: the
     /// caller walks <paramref name="root"/> itself and says so, rather than being handed an empty
     /// list it cannot distinguish from "there are none". Only the volume index can answer this, and
     /// it exists only when Deguffer is elevated, so the walk is the guaranteed route and this is
-    /// strictly an accelerator.
+    /// strictly an accelerator. A root the index holds no subtree for, such as one reached through a
+    /// link, is answered with null for the same reason.
     ///
     /// <paramref name="root"/> is a boundary, not a hint. Directories found elsewhere on the volume
     /// are not returned — the index makes discovery cheap, and that must not make consent implicit.
+    /// The answer is the search's whole answer: it stops where <paramref name="search"/> stops, so a
+    /// caller has nothing left to filter.
     /// </summary>
-    ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
-        string name,
+    ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+        DirectorySearch search,
         string root,
         CancellationToken ct = default);
 
     /// <summary>
     /// Whether a caller that can walk <c>root</c> itself should walk while
-    /// <see cref="TryFindDirectoriesNamedAsync"/> waits for the volume index, and take whichever
+    /// <see cref="TryFindDirectoriesAsync"/> waits for the volume index, and take whichever
     /// answers first. False for a scanner that answers at once, and for one the user has asked to
     /// wait for the table. See <see cref="Configuration.ScanRoute.Auto"/>.
     /// </summary>
