@@ -126,7 +126,7 @@ internal static class MftExploreReader
             source,
             records,
             tuning,
-            (number, outcome, in record) =>
+            (number, outcome, in record, name) =>
             {
                 if (outcome != MftParseOutcome.Parsed)
                 {
@@ -170,7 +170,7 @@ internal static class MftExploreReader
                 // a name not met before, a copy, against a record parsed outside it.
                 lock (namesGate)
                 {
-                    nameNumbers[number] = names.Intern(record.Name);
+                    nameNumbers[number] = names.Intern(name);
                 }
 
                 parents[number] = (int)record.ParentRecordNumber;

@@ -20,11 +20,13 @@ internal sealed class MftDeferredRecord
     private readonly List<(MftSegmentReference Segment, MftAttributeKinds Needs)> _segments = [];
     private bool _declaresUnnamedData;
 
-    public MftDeferredRecord(long number, ushort sequence, bool isDirectory, MftRecordDraft draft)
+    /// <param name="record">The base record <paramref name="draft"/> was absorbed from, which this outlives.</param>
+    public MftDeferredRecord(long number, ushort sequence, bool isDirectory, MftRecordDraft draft, ReadOnlySpan<byte> record)
     {
         Self = new MftSegmentReference(number, sequence);
         _isDirectory = isDirectory;
         _draft = draft;
+        _draft.Keep(record);
     }
 
     /// <summary>The base record itself, as the extension records it owns must name it.</summary>
@@ -143,8 +145,8 @@ internal sealed class MftDeferredRecord
     /// </summary>
     public void Fail(MftAttributeKinds needs) => Lost |= needs;
 
-    public MftParseOutcome Finish(out MftRecord result) =>
-        _draft.Finish(_isDirectory, new MftListFindings(_declaresUnnamedData, Lost), out result);
+    public MftParseOutcome Finish(out MftRecord result, out ReadOnlySpan<char> name) =>
+        _draft.Finish(_isDirectory, new MftListFindings(_declaresUnnamedData, Lost), record: default, out result, out name);
 
     /// <summary>
     /// The list itself could not be trusted, so anything the base record did not settle could have

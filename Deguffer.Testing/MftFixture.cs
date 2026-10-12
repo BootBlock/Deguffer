@@ -199,6 +199,22 @@ public sealed class MftFixture
             bytesPerRecord: _bytesPerRecord));
 
     /// <summary>
+    /// A file with a long name, which NTFS gives an 8.3 alias as a second <c>$FILE_NAME</c> in the same
+    /// record. The alias is written first, so a reader that kept the first name it met would place
+    /// the file by its alias.
+    /// </summary>
+    public MftFixture AddFileWithAnAlias(uint number, uint parent, string name, string alias, long allocated, long logical) =>
+        Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            _bytesPerRecord,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            t => MftAttributeBytes.WriteFileName(t, Reference(parent), alias, allocated, logical, nameSpace: 2),
+            t => MftAttributeBytes.WriteFileName(t, Reference(parent), name, allocated, logical, nameSpace: 1),
+            t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0)));
+
+    /// <summary>
     /// A file whose record carries no <c>$STANDARD_INFORMATION</c>, so nothing can date it. It still
     /// has a name, a parent and a size, and it still has to place and draw —
     /// <see cref="MftRecordBytes.FileWithoutTimestamps"/> says why refusing it would be the wrong

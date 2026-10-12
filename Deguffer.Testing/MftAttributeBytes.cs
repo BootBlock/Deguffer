@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Text;
 using Deguffer.Core.Scanning.Mft;
 
@@ -117,7 +118,9 @@ internal static class MftAttributeBytes
     public static int WriteFileName(
         Span<byte> target, ulong parentReference, string name, long allocated, long logical, byte nameSpace = 3)
     {
-        var nameBytes = Encoding.Unicode.GetBytes(name);
+        // The code units exactly, as NTFS stores them. Encoding would replace an unpaired surrogate,
+        // which NTFS accepts in a name.
+        var nameBytes = MemoryMarshal.AsBytes(name.AsSpan());
         var valueLength = 0x42 + nameBytes.Length;
         var length = Align8(0x18 + valueLength);
 

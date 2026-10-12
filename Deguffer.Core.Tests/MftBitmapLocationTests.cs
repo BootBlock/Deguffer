@@ -184,7 +184,7 @@ public sealed class MftBitmapLocationTests
             source,
             (int)source.RecordCount,
             TableTuning.Default,
-            (_, _, in _) => Interlocked.Increment(ref handed) > 0,
+            (_, _, in _, _) => Interlocked.Increment(ref handed) > 0,
             onProgress: null,
             default);
 

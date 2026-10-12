@@ -36,7 +36,7 @@ public class VolumeReadTests
     {
         using var source = new AddressRecordingSource();
 
-        MftRecordStream.TryReadAll(source, count: 1, TableTuning.Default, (_, _, in _) => true, onProgress: null, CancellationToken.None);
+        MftRecordStream.TryReadAll(source, count: 1, TableTuning.Default, (_, _, in _, _) => true, onProgress: null, CancellationToken.None);
 
         Assert.NotNull(source.Address);
         Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);
@@ -56,7 +56,7 @@ public class VolumeReadTests
             .Build());
 
         MftRecordStream.TryReadAll(
-            source, (int)source.RecordCount, TableTuning.Default, (_, _, in _) => true, onProgress: null, CancellationToken.None);
+            source, (int)source.RecordCount, TableTuning.Default, (_, _, in _, _) => true, onProgress: null, CancellationToken.None);
 
         Assert.NotNull(source.Address);
         Assert.Equal(0, source.Address.Value % NtfsBootSector.MaximumBytesPerSector);
