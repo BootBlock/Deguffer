@@ -183,8 +183,7 @@ public sealed class CandidateFinder
 
         var scans = await _scanner.ScanFoldersAsync(
             [.. roots.Select(root => root.Folder)],
-            [.. passOver.Select(below => (LeavesUnlisted)((parent, parentIsRoot, folder, name) =>
-                below.WhyPassedOver(parent, parentIsRoot, folder, name) is not null))],
+            [.. passOver.Select(below => (LeavesUnlisted)((parent, parentIsRoot) => below.In(parent, parentIsRoot).PassesOver))],
             progress,
             ct).ConfigureAwait(false);
 

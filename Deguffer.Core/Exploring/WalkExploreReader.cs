@@ -4,13 +4,17 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
-/// Whether a walk leaves a folder unlisted, with everything in it: a place its caller passes over,
-/// where listing it would cost the walk time and tell the caller nothing.
+/// Which of the folders in <paramref name="parent"/> a walk leaves unlisted, with everything in them:
+/// places its caller passes over, where listing them would cost the walk time and tell the caller
+/// nothing. Asked once for each listed folder that holds a folder, so what depends on the folder
+/// alone is worked out once rather than once for each folder in it.
 /// </summary>
-/// <param name="parent">The folder holding it, in display form.</param>
+/// <param name="parent">The folder holding them, in display form.</param>
 /// <param name="parentIsRoot">Whether <paramref name="parent"/> is the folder the walk began at.</param>
-/// <param name="folder">The folder's own path, in display form.</param>
-internal delegate bool LeavesUnlisted(string parent, bool parentIsRoot, string folder, string name);
+internal delegate LeavesFolderUnlisted LeavesUnlisted(string parent, bool parentIsRoot);
+
+/// <summary>Whether a walk leaves the folder named <paramref name="name"/>, in the folder it was asked of, unlisted.</summary>
+internal delegate bool LeavesFolderUnlisted(string name);
 
 /// <summary>
 /// Builds an <see cref="ExploreTree"/> by walking directories — §5.5's guaranteed route, the one
@@ -119,8 +123,9 @@ internal static class WalkExploreReader
                     Interlocked.Add(ref items, children.Count);
                     Interlocked.Add(ref bytes, children.Sum(c => c.Size));
 
-                    // Every entry of one listing shares its directory, so its display form is made once.
-                    string? folder = null;
+                    // Every entry of one listing shares its directory, so what is left unlisted in it
+                    // is asked of the directory once.
+                    LeavesFolderUnlisted? leaves = null;
 
                     for (var i = 0; i < contents.Entries.Count; i++)
                     {
@@ -133,9 +138,9 @@ internal static class WalkExploreReader
 
                         if (unlisted is not null)
                         {
-                            folder ??= LongPath.Display(entry.Directory);
+                            leaves ??= unlisted(LongPath.Display(entry.Directory), parent == ExploreTreeBuilder.RootNode);
 
-                            if (unlisted(folder, parent == ExploreTreeBuilder.RootNode, Path.Join(folder, entry.Name), entry.Name))
+                            if (leaves(entry.Name))
                             {
                                 continue;
                             }

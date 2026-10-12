@@ -53,20 +53,66 @@ internal sealed class PassedOverPlaces
     internal sealed class Below(PassedOverPlaces places, RefusalWatch watch)
     {
         /// <summary>
-        /// Why the child <paramref name="child"/>, named <paramref name="childName"/>, of the searched
-        /// folder <paramref name="parent"/> is passed over with everything in it, or null where it is
-        /// searched as its folder was.
+        /// What is passed over among the children of <paramref name="parent"/>, a searched folder at
+        /// or below the root, asked once for the folder rather than once for each of its children.
         /// </summary>
-        public string? WhyPassedOver(string parent, bool parentIsRoot, string child, string childName)
+        /// <param name="parent">The folder, in display form.</param>
+        /// <param name="parentIsRoot">Whether <paramref name="parent"/> is the root itself.</param>
+        public InFolder In(string parent, bool parentIsRoot) =>
+            new(places, watch.MayRefuseAnyChildOf(parent, parentIsRoot), places.ProgramPlaceIsIn(parent));
+    }
+
+    private bool ProgramPlaceIsIn(string parent)
+    {
+        foreach (var place in _programPlaces)
         {
-            if (watch.MayRefuse(parent, parentIsRoot, childName) && places._policy.RefusedAtAndBelow(child) is { } refused)
+            if (LongPath.Contains(parent, place))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// What is passed over among the children of one searched folder: what of it depends on the folder
+    /// alone is worked out once, so each child is asked only what depends on its name, and its path is
+    /// needed only where <see cref="MayPassOver"/> says a rule may apply to it.
+    /// </summary>
+    internal readonly struct InFolder
+    {
+        private readonly PassedOverPlaces _places;
+        private readonly bool _mayRefuseAny;
+        private readonly bool _holdsProgramPlace;
+
+        internal InFolder(PassedOverPlaces places, bool mayRefuseAny, bool holdsProgramPlace)
+        {
+            _places = places;
+            _mayRefuseAny = mayRefuseAny;
+            _holdsProgramPlace = holdsProgramPlace;
+        }
+
+        /// <summary>
+        /// Whether the child named <paramref name="childName"/> may be passed over, so is to be asked
+        /// <see cref="WhyPassedOver"/>. Where not, it is searched as its folder was.
+        /// </summary>
+        public bool MayPassOver(string childName) =>
+            _mayRefuseAny || _holdsProgramPlace || RefusalWatch.MayRefuseByName(childName);
+
+        /// <summary>
+        /// Why the child <paramref name="child"/>, named <paramref name="childName"/>, is passed over
+        /// with everything in it, or null where it is searched as its folder was.
+        /// </summary>
+        /// <param name="child">The child's own path, in display form.</param>
+        public string? WhyPassedOver(string child, string childName)
+        {
+            if ((_mayRefuseAny || RefusalWatch.MayRefuseByName(childName)) && _places._policy.RefusedAtAndBelow(child) is { } refused)
             {
                 return refused.Reason;
             }
 
-            return places._programPlaces.Any(place => LongPath.Contains(parent, place))
-                ? places.ProgramFolderAt(child)
-                : null;
+            return _holdsProgramPlace ? _places.ProgramFolderAt(child) : null;
         }
     }
 }

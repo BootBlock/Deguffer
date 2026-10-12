@@ -24,7 +24,7 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
     /// <summary>
     /// A folder the walk is told to leave unlisted is in the tree, so it can be named, with nothing
     /// listed below it although it holds files; its sibling is listed as before. The rule is asked
-    /// with the folder holding it and its own path in display form.
+    /// once of the folder holding it, in display form, and then of each folder's name in it.
     /// </summary>
     [Fact]
     public async Task AFolderLeftUnlistedIsInTheTreeWithNothingBelowIt()
@@ -32,18 +32,27 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
         _tree.File(Length, "Data", "Skip", "Inner", "a.bin");
         _tree.File(Length, "Data", "Keep", "b.bin");
         var data = Path.Combine(_tree.Top, "Data");
-        List<(string Parent, bool ParentIsRoot, string Folder)> asked = [];
+        List<(string Parent, bool ParentIsRoot)> folders = [];
+        List<(string Parent, string Name)> asked = [];
 
         var scan = Assert.Single(await Walking().ScanFoldersAsync(
             [data],
-            [(parent, parentIsRoot, folder, name) =>
+            [(parent, parentIsRoot) =>
             {
                 lock (asked)
                 {
-                    asked.Add((parent, parentIsRoot, folder));
+                    folders.Add((parent, parentIsRoot));
                 }
 
-                return name == "Skip";
+                return name =>
+                {
+                    lock (asked)
+                    {
+                        asked.Add((parent, name));
+                    }
+
+                    return name == "Skip";
+                };
             }],
             progress: null,
             default));
@@ -54,8 +63,10 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
         Assert.Empty(tree.ChildrenOf(skip).ToArray());
         Assert.False(tree.ListingWasRefused(skip));
         Assert.Equal("b.bin", tree.NameOf(Assert.Single(tree.ChildrenOf(Child(tree, scan.Node, "Keep")).ToArray())));
-        Assert.Contains((data, true, Path.Combine(data, "Skip")), asked);
-        Assert.DoesNotContain(asked, question => question.Folder.Contains("Inner", StringComparison.Ordinal));
+        Assert.Single(folders, folder => folder == (data, true));
+        Assert.Contains((data, "Skip"), asked);
+        Assert.Contains((data, "Keep"), asked);
+        Assert.DoesNotContain(folders, folder => folder.Parent.Contains("Skip", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -76,7 +87,7 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
 
         var scan = Assert.Single(await Walking().ScanFoldersAsync(
             [_tree.Top],
-            [(_, _, folder, _) => policy.RefusedAtAndBelow(folder) is not null],
+            [(parent, _) => name => policy.RefusedAtAndBelow(Path.Join(parent, name)) is not null],
             progress: null,
             default));
         var found = await _tree.FindAsync(MatchCriteria.Size, new SearchLocation(_tree.Top));
