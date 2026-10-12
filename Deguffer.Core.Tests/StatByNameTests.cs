@@ -61,11 +61,18 @@ public sealed class StatByNameTests
     /// A name longer than a <c>UNICODE_STRING</c> can hold is refused, so a handle is opened on it,
     /// rather than its length wrapping and Windows being asked about the first part of the name.
     /// </summary>
+    /// <remarks>
+    /// The name is a real file's followed by exactly 32,768 more characters, so a length that wrapped
+    /// would name that file and be answered, where the name as given is refused.
+    /// </remarks>
     [Fact]
     public void ANameTooLongForTheNativeStringIsRefused()
     {
-        var name = @"\\?\C:\" + new string('a', 40_000);
+        using var temp = new TempDirectory();
+        var file = LongPath.Extended(temp.CreateFile(4096, "a.bin"));
+        var name = file + @"\" + new string('a', 32_767);
 
+        Assert.Equal(ByNameReading.Read, StatByName.Read(file, out _));
         Assert.Equal(ByNameReading.Refused, StatByName.Read(name, out _));
     }
 
