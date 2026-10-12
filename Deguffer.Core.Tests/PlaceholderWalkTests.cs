@@ -93,10 +93,11 @@ public sealed class PlaceholderWalkTests
         }
 
         // Fourteen files in each of twenty-three folders: the pinned folder's twenty, and the six each
-        // folder holds back for its own pin or for edits the cloud lacks, stay.
+        // folder holds back for its own pin or for edits the cloud lacks, stay. Sync is judged before
+        // the pin, so the pinned folder's three unsynced files count as unsynced.
         Assert.Equal(23 * 14, one.Files.Count);
-        Assert.True(one.HeldFor(HeldBack.Pinned).Files >= 23 * 3);
-        Assert.True(one.HeldFor(HeldBack.NotInSync).Files > 0);
+        Assert.Equal((23 * 3) + 17, one.HeldFor(HeldBack.Pinned).Files);
+        Assert.Equal(24 * 3, one.HeldFor(HeldBack.NotInSync).Files);
         Assert.Equal(1, one.Unreadable);
         Assert.DoesNotContain(one.Files, f => LongPath.Contains(At("Elsewhere"), f.Path));
         Assert.DoesNotContain(one.Files, f => LongPath.Contains(At("Locked"), f.Path));
