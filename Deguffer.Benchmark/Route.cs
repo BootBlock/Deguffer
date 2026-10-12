@@ -35,18 +35,31 @@ internal enum Route
     /// folder rows look for: what an approved source folder costs a scan that cannot read the table.
     /// </summary>
     Sources,
+
+    /// <summary>
+    /// Measure one folder as the hard-link-aware scan measures a store, reading each file's link
+    /// count and sizes by name or through a handle: what a pnpm store or the driver store costs.
+    /// </summary>
+    Links,
 }
 
 internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
-    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.ExploreWalk or Route.Sources);
+    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.ExploreWalk or Route.Sources or Route.Links);
+
+    /// <summary>
+    /// Whether the route walks with the values given on the command line. The links route walks with
+    /// the values a scan ships with, because what it compares is the read of each file.
+    /// </summary>
+    public static bool TakesWalkTuning(this Route route) => route is Route.Walk or Route.ExploreWalk or Route.Sources;
 
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route switch
     {
         Route.Walk or Route.ExploreWalk => "entries",
         Route.Sources => "candidates",
+        Route.Links => "files",
         _ => "records",
     };
 }

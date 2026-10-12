@@ -20,8 +20,9 @@ namespace Deguffer.Benchmark;
 /// Whether the Explore walk assembles the pictures of the tree so far that Explore draws while it
 /// walks. Timed both ways, the difference is what they cost the walk. No other route takes any.
 /// </param>
+/// <param name="ReadBy">How the links route reads each file. No other route reads any.</param>
 internal sealed record BenchmarkRequest(
-    Route Route, string Path, int Runs, WalkTuning Walk, TableTuning Table, bool Snapshots)
+    Route Route, string Path, int Runs, WalkTuning Walk, TableTuning Table, bool Snapshots, LinkRead ReadBy)
 {
     public const int DefaultRuns = 5;
 
@@ -40,6 +41,8 @@ internal sealed record BenchmarkRequest(
                             Build the Explore tree for the folder by walking it, as an
                             unelevated Explore does.
           sources <folder>  Find build outputs in the folder as an unelevated scan does.
+          links <folder>    Measure the folder as a hard-linked store such as pnpm's is
+                            measured, reading each file's link count and sizes.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
@@ -48,6 +51,9 @@ internal sealed record BenchmarkRequest(
         --listing-buffer KiB   Walk, explorewalk and sources only. How many KiB of entries each
                                listing asks Windows for, 4 to 1024. The default is what a scan
                                uses.
+        --read-by name|handle  Links only. Whether each file is read by name, as a scan does
+                               where the file system answers that, or through a handle opened
+                               on it. The default is name.
         --snapshots on|off     Explore walk only. Whether it assembles the pictures of the tree
                                so far that Explore draws while it walks. The default is on.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
@@ -86,7 +92,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, walk, explorewalk or sources.";
+            error = "The route must be table, index, explore, walk, explorewalk, sources or links.";
             return null;
         }
 
@@ -97,6 +103,7 @@ internal sealed record BenchmarkRequest(
         var readsInFlight = UnknownDrive.ReadsInFlight;
         var parseThreads = UnknownDrive.ParseThreads;
         var snapshots = true;
+        var readBy = LinkRead.Name;
 
         for (var i = 2; i < args.Count; i += 2)
         {
@@ -105,9 +112,9 @@ internal sealed record BenchmarkRequest(
             var accepted = args[i] switch
             {
                 "--runs" => TryNumber(value, 1, MaximumRuns, out runs),
-                "--threads" when !route.ReadsTable() =>
+                "--threads" when route.TakesWalkTuning() =>
                     TryNumber(value, WalkTuning.MinimumThreads, WalkTuning.MaximumThreads, out threads),
-                "--listing-buffer" when !route.ReadsTable() => TryNumber(
+                "--listing-buffer" when route.TakesWalkTuning() => TryNumber(
                     value, WalkTuning.MinimumListingBuffer / 1024, WalkTuning.MaximumListingBuffer / 1024, out bufferKiB),
                 "--read-size" when route.ReadsTable() => TryNumber(
                     value, TableTuning.MinimumReadBytes / 1024, TableTuning.MaximumReadBytes / 1024, out readKiB),
@@ -116,6 +123,7 @@ internal sealed record BenchmarkRequest(
                 "--parse-threads" when route.ReadsTable() => TryNumber(
                     value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
                 "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
+                "--read-by" when route is Route.Links => TryReadBy(value, out readBy),
                 _ => false,
             };
 
@@ -130,7 +138,8 @@ internal sealed record BenchmarkRequest(
                     $"--reads-in-flight a number from {TableTuning.MinimumReadsInFlight} to " +
                     $"{TableTuning.MaximumReadsInFlight} and --parse-threads from " +
                     $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads}. " +
-                    "For the Explore walk, --snapshots takes on or off. Nothing else is accepted after the target.";
+                    "For the Explore walk, --snapshots takes on or off. For links, --read-by takes name or handle. " +
+                    "Nothing else is accepted after the target.";
                 return null;
             }
         }
@@ -150,7 +159,8 @@ internal sealed record BenchmarkRequest(
             runs,
             new WalkTuning(threads, bufferKiB * 1024),
             new TableTuning(readKiB * 1024, readsInFlight, parseThreads),
-            snapshots);
+            snapshots,
+            readBy);
     }
 
     /// <summary>
@@ -164,6 +174,12 @@ internal sealed record BenchmarkRequest(
         int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)
         && number >= minimum
         && number <= maximum;
+
+    private static bool TryReadBy(string? text, out LinkRead readBy)
+    {
+        readBy = text is "handle" ? LinkRead.Handle : LinkRead.Name;
+        return text is "name" or "handle";
+    }
 
     private static bool TryOnOff(string? text, out bool on)
     {

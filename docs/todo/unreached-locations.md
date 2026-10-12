@@ -1710,6 +1710,11 @@ written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
    both is worth more than a faster route serving one. The result therefore carries no
    `FallbackReason`, because elevating would change nothing and offering it would be false.
 
+   The same three numbers now come from `NtQueryInformationByName` with `FileStatInformation`
+   first, which opens no handle, and from the handle only where a file system does not answer that.
+   Over a synthesised store of 100,000 files on NTFS, the read by name took about four fifths of
+   the time the handle per file took (`Deguffer.Benchmark links`).
+
    **What the answer does not cover, and this is the part to carry forward.** The rule counts a file
    only when it has exactly one link, so a file linked twice *inside* the measured tree is dropped
    even though removing the tree would free it. That under-reports rather than over-reports, which
