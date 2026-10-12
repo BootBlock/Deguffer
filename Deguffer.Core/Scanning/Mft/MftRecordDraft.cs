@@ -38,8 +38,14 @@ internal struct MftRecordDraft
     private const int NoName = int.MaxValue;
 
     private uint _parent;
-    private string _name;
     private int _bestRank;
+
+    // The best name, as a place in the record last absorbed, until Keep decodes it into _name. A
+    // draft finished while that record is in hand never decodes it, and almost every draft is.
+    private int _nameOffset;
+    private int _nameLength;
+    private string? _name;
+
     private ScanSize? _size;
     private bool _sawUnnamedData;
     private ScanSize? _wofSize;
@@ -51,7 +57,6 @@ internal struct MftRecordDraft
 
     public MftRecordDraft()
     {
-        _name = string.Empty;
         _bestRank = NoName;
         BaseRank = NoName;
     }
@@ -121,7 +126,8 @@ internal struct MftRecordDraft
                     var rank = MftRecordParser.RankOf(candidate.Namespace);
                     if (rank < _bestRank)
                     {
-                        (_parent, _name, _bestRank) = (candidate.Parent, candidate.Name, rank);
+                        (_parent, _bestRank, _name) = (candidate.Parent, rank, null);
+                        (_nameOffset, _nameLength) = (offset + candidate.NameOffset, candidate.NameLength);
                     }
 
                     break;
@@ -181,8 +187,21 @@ internal struct MftRecordDraft
     }
 
     /// <summary>
+    /// Decode the best name, so the draft can outlive <paramref name="record"/>, the record it was
+    /// last absorbed from. Only a draft that has to wait for other records, or one that is such a
+    /// record's contribution, pays for a string here.
+    /// </summary>
+    public void Keep(ReadOnlySpan<byte> record)
+    {
+        if (_name is null && _bestRank != NoName)
+        {
+            _name = new string(MftRecordParser.NameAt(record, _nameOffset, _nameLength));
+        }
+    }
+
+    /// <summary>
     /// Fold in what one extension record said, as <paramref name="extension"/>, a draft that has
-    /// absorbed that record alone with <c>isBase: false</c>, holds it.
+    /// absorbed that record alone with <c>isBase: false</c> and kept its name, holds it.
     ///
     /// <para>The same answer as absorbing the record's bytes here. A name is kept only where it is
     /// strictly better, so a record's own best name, the first of its best rank, is the only one of
@@ -211,9 +230,15 @@ internal struct MftRecordDraft
     /// What following the base record's <c>$ATTRIBUTE_LIST</c> established, or null where it has
     /// none. Without a list, every attribute the file has was in the base record.
     /// </param>
-    public readonly MftParseOutcome Finish(bool isDirectory, MftListFindings? list, out MftRecord result)
+    /// <param name="record">
+    /// The record this draft last absorbed, where its name has not been kept; empty where it has.
+    /// </param>
+    /// <param name="name">The file's name, which can point into <paramref name="record"/>.</param>
+    public readonly MftParseOutcome Finish(
+        bool isDirectory, MftListFindings? list, ReadOnlySpan<byte> record, out MftRecord result, out ReadOnlySpan<char> name)
     {
         result = default;
+        name = default;
 
         // No name anywhere: a record in use claiming no identity. Without a list it points nowhere
         // else for one, which no healthy volume produces. With one, the names were in records that
@@ -234,8 +259,9 @@ internal struct MftRecordDraft
         // walk.
         var isReparsePoint = _isReparsePoint && list?.Lost.HasFlag(MftAttributeKinds.ReparsePoint) != true;
 
+        name = _name ?? MftRecordParser.NameAt(record, _nameOffset, _nameLength);
         result = new MftRecord(
-            _parent, _name, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten, StorageOf(isDirectory),
+            _parent, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten, StorageOf(isDirectory),
             FileVisibilities.Of(_attributes));
         return MftParseOutcome.Parsed;
     }

@@ -33,7 +33,7 @@ public static class MftVolumeIndexBuilder
         var tree = new MftVolumeTree(count);
 
         if (!MftRecordStream.TryReadAll(
-                source, count, tuning, (number, outcome, in record) => Place(tree, number, outcome, in record), onProgress: null, ct))
+                source, count, tuning, (number, outcome, in record, name) => Place(tree, number, outcome, in record, name), onProgress: null, ct))
         {
             return false;
         }
@@ -51,7 +51,7 @@ public static class MftVolumeIndexBuilder
     /// <para>Called from several threads at once, each with its own record, which is all
     /// <see cref="MftVolumeTree.Set"/> needs.</para>
     /// </summary>
-    private static bool Place(MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record)
+    private static bool Place(MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record, ReadOnlySpan<char> name)
     {
         if (outcome == MftParseOutcome.NotAnEntry)
         {
@@ -94,7 +94,7 @@ public static class MftVolumeIndexBuilder
         // will be asked to total, and dropping it costs nothing.
         if (record.ParentRecordNumber < tree.Count)
         {
-            tree.Set(number, record);
+            tree.Set(number, in record, name);
         }
 
         return true;

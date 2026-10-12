@@ -1,8 +1,11 @@
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
-/// One parsed MFT entry, reduced to what a scan needs: where it sits in the tree, what it is
-/// called, how much space it occupies, and when it was made and last written.
+/// One parsed MFT entry, reduced to what a scan needs: where it sits in the tree, how much space it
+/// occupies, and when it was made and last written.
+///
+/// <para>Its name travels beside it rather than in it, as the UTF-16 the record holds. Most callers
+/// keep few names, so a string for every record would be built only to be thrown away.</para>
 ///
 /// Deliberately not a general-purpose NTFS record. Security descriptors, named streams and reparse
 /// data are all present on disk and all irrelevant here; carrying them would cost memory per record
@@ -15,7 +18,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// picture keeps is <see cref="Exploring.ExploreTimestamp"/>, which is a quarter of the size.
 /// </summary>
 /// <param name="ParentRecordNumber">Record number of the containing directory.</param>
-/// <param name="Name">The file or directory name, without any path.</param>
 /// <param name="Size">
 /// Allocated and logical bytes of the unnamed <c>$DATA</c> stream, or null where the record does
 /// not establish them — the attribute is in an extension record caught mid-change, or describes
@@ -52,7 +54,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </param>
 public readonly record struct MftRecord(
     uint ParentRecordNumber,
-    string Name,
     ScanSize? Size,
     bool IsDirectory,
     bool IsReparsePoint,

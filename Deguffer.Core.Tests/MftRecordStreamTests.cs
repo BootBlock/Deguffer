@@ -26,7 +26,7 @@ public sealed class MftRecordStreamTests
             .Build();
 
         Assert.True(source.RecordCount < 24, "the fixture's list must name more records than the table holds");
-        Assert.False(MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _) => true, onProgress: null, default));
+        Assert.False(MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _, _) => true, onProgress: null, default));
     }
 
     /// <summary>
@@ -44,7 +44,7 @@ public sealed class MftRecordStreamTests
             .Build();
         var handed = new List<long>();
 
-        MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, (number, _, in _) =>
+        MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, (number, _, in _, _) =>
         {
             handed.Add(number);
             return true;
@@ -78,7 +78,7 @@ public sealed class MftRecordStreamTests
         Assert.Empty(source.Reads);
         Assert.Equal(8000, handed[20].Record.Size?.Logical);
         Assert.Equal(3000, handed[30].Record.Size?.Logical);
-        Assert.Equal("named.dll", handed[40].Record.Name);
+        Assert.Equal("named.dll", handed[40].Name);
         Assert.Equal(12_000, handed[50].Record.Size?.Logical);
     }
 
@@ -126,7 +126,7 @@ public sealed class MftRecordStreamTests
         Assert.Equal(MftParseOutcome.Parsed, handed[20].Outcome);
         Assert.Equal(8000, handed[20].Record.Size?.Logical);
         Assert.Equal(MftParseOutcome.Parsed, handed[21].Outcome);
-        Assert.Equal("claims.tgz", handed[21].Record.Name);
+        Assert.Equal("claims.tgz", handed[21].Name);
         Assert.Null(handed[21].Record.Size);
     }
 
@@ -272,20 +272,20 @@ public sealed class MftRecordStreamTests
             .AddFileWithDataInAnExtensionRecord(20, MftRecord.RootRecordNumber, "fragmented.tgz", allocated: 8192, logical: 8000, extension: 21)
             .Build();
 
-        Assert.True(MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _) => true, onProgress: null, default));
+        Assert.True(MftRecordStream.TryReadAll(source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _, _) => true, onProgress: null, default));
     }
 
-    /// <summary>Every record the stream handed on, by number, and whether it read the table whole.</summary>
-    private static Dictionary<long, (MftParseOutcome Outcome, MftRecord Record)> ReadAll(
+    /// <summary>Every record the stream handed on, by number, with its name, and whether it read the table whole.</summary>
+    private static Dictionary<long, (MftParseOutcome Outcome, MftRecord Record, string Name)> ReadAll(
         IMftSource source, TableTuning tuning, out bool wholeTable)
     {
-        var handed = new Dictionary<long, (MftParseOutcome Outcome, MftRecord Record)>();
+        var handed = new Dictionary<long, (MftParseOutcome Outcome, MftRecord Record, string Name)>();
 
-        wholeTable = MftRecordStream.TryReadAll(source, (int)source.RecordCount, tuning, (number, outcome, in record) =>
+        wholeTable = MftRecordStream.TryReadAll(source, (int)source.RecordCount, tuning, (number, outcome, in record, name) =>
         {
             lock (handed)
             {
-                handed[number] = (outcome, record);
+                handed[number] = (outcome, record, name.ToString());
             }
 
             return true;

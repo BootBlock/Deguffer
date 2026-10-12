@@ -59,7 +59,7 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
             return MftHandOn.Done;
         }
 
-        var outcome = MftRecordParser.Parse(record, number, out var parsed, out var continued, out var extension);
+        var outcome = MftRecordParser.Parse(record, number, out var parsed, out var name, out var continued, out var extension);
 
         // Most extension records hold only what the scan never asks for: the later pieces of a
         // fragmented stream, or a directory's index. Every want asks for something, so one of those,
@@ -89,6 +89,6 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
             return MftHandOn.Done;
         }
 
-        return onRecord(number, outcome, in parsed) ? MftHandOn.Done : MftHandOn.Abandoned;
+        return onRecord(number, outcome, in parsed, name) ? MftHandOn.Done : MftHandOn.Abandoned;
     }
 }

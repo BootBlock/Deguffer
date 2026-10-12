@@ -14,7 +14,12 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </param>
 /// <param name="record">Meaningful only where <paramref name="outcome"/> is
 /// <see cref="MftParseOutcome.Parsed"/>.</param>
-internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in MftRecord record);
+/// <param name="name">
+/// The record's name, on the same terms. It can point into the buffer the record was read into, which
+/// is read into again once the handler returns, so a handler that keeps the name copies it, and
+/// one that does not keep it pays for no string.
+/// </param>
+internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in MftRecord record, ReadOnlySpan<char> name);
 
 /// <summary>
 /// Reads a table from end to end, parsing each record in use and handing it on.
@@ -90,9 +95,9 @@ internal static class MftRecordStream
 
         foreach (var held in first.Deferred)
         {
-            var outcome = held.Finish(out var record);
+            var outcome = held.Finish(out var record, out var name);
 
-            if (!onRecord(held.Self.Record, outcome, in record))
+            if (!onRecord(held.Self.Record, outcome, in record, name))
             {
                 return false;
             }

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Deguffer.Core.Scanning.Mft;
@@ -35,6 +36,11 @@ internal static class MftRecordParser
     /// The record's position in the table. The record's own <c>$ATTRIBUTE_LIST</c> names the
     /// records its attributes went to by number, the base record among them.
     /// </param>
+    /// <param name="name">
+    /// Where the outcome is <see cref="MftParseOutcome.Parsed"/>, the record's name; otherwise empty.
+    /// It can point into <paramref name="record"/>, so it is good only while the caller holds that
+    /// buffer, and a caller that keeps the name copies it.
+    /// </param>
     /// <param name="deferred">
     /// Where the outcome is <see cref="MftParseOutcome.Continued"/>, what has to be read from other
     /// records before this one can be answered; otherwise null.
@@ -48,10 +54,12 @@ internal static class MftRecordParser
         Span<byte> record,
         long number,
         out MftRecord result,
+        out ReadOnlySpan<char> name,
         out MftDeferredRecord? deferred,
         out MftExtensionRecord? extension)
     {
         result = default;
+        name = default;
         deferred = null;
         extension = null;
 
@@ -80,10 +88,10 @@ internal static class MftRecordParser
 
         if (listAt is not { } list)
         {
-            return draft.Finish(header.IsDirectory, list: null, out result);
+            return draft.Finish(header.IsDirectory, list: null, used, out result, out name);
         }
 
-        var pending = new MftDeferredRecord(number, header.Sequence, header.IsDirectory, draft);
+        var pending = new MftDeferredRecord(number, header.Sequence, header.IsDirectory, draft, used);
         var attribute = used.Slice(list.Offset, list.Length);
 
         if (attribute[0x08] == 0)
@@ -103,7 +111,7 @@ internal static class MftRecordParser
 
         if (pending.IsComplete)
         {
-            return pending.Finish(out result);
+            return pending.Finish(out result, out name);
         }
 
         deferred = pending;
@@ -272,7 +280,7 @@ internal static class MftRecordParser
     /// </summary>
     internal static bool IsWofStreamName(ReadOnlySpan<byte> name) =>
         name.Length == WofStreamName.Length * 2
-        && System.Runtime.InteropServices.MemoryMarshal.Cast<byte, char>(name).SequenceEqual(WofStreamName);
+        && MemoryMarshal.Cast<byte, char>(name).SequenceEqual(WofStreamName);
 
     /// <summary>
     /// The sizes an unnamed <c>$DATA</c> declares, or null where this attribute does not declare
@@ -309,9 +317,20 @@ internal static class MftRecordParser
             : new ScanSize(header.OccupiedSize, header.DataSize);
     }
 
+    /// <summary>
+    /// Where a <c>$FILE_NAME</c> places the file, and where its name sits, without decoding it.
+    ///
+    /// <para>A record carries several names, an 8.3 alias beside almost every long one, and only the
+    /// best of them is ever wanted, so the losers are ranked here and never turned into strings. The
+    /// winner is read as it sits, by <see cref="NameAt"/>.</para>
+    /// </summary>
+    /// <param name="result">
+    /// <c>NameOffset</c> is in bytes from the start of <paramref name="attribute"/>, and
+    /// <c>NameLength</c> is in UTF-16 code units.
+    /// </param>
     internal static bool TryReadFileName(
         ReadOnlySpan<byte> attribute,
-        out (uint Parent, string Name, FileNameNamespace Namespace) result)
+        out (uint Parent, int NameOffset, int NameLength, FileNameNamespace Namespace) result)
     {
         result = default;
 
@@ -333,19 +352,29 @@ internal static class MftRecordParser
 
         var parent = (uint)reference;
 
-        int nameLength = value[0x40] * 2;
-        if (0x42 + nameLength > value.Length)
+        int nameLength = value[0x40];
+        if (0x42 + (nameLength * 2) > value.Length)
         {
             return false;
         }
 
-        result = (
-            parent,
-            Encoding.Unicode.GetString(value.Slice(0x42, nameLength)),
-            (FileNameNamespace)value[0x41]);
+        // The value's offset was bounded against the attribute by TryReadResidentValue.
+        var valueOffset = BinaryPrimitives.ReadUInt16LittleEndian(attribute[0x14..]);
 
+        result = (parent, valueOffset + 0x42, nameLength, (FileNameNamespace)value[0x41]);
         return true;
     }
+
+    /// <summary>
+    /// The name <paramref name="length"/> code units long at <paramref name="offset"/> in
+    /// <paramref name="record"/>, as it sits there.
+    ///
+    /// <para>Exactly the UTF-16 NTFS stored, which is what a directory listing returns. NTFS does not
+    /// require a name to be valid UTF-16, and decoding one through <see cref="Encoding.Unicode"/>
+    /// would replace an unpaired surrogate, leaving a path that names nothing on the disk.</para>
+    /// </summary>
+    internal static ReadOnlySpan<char> NameAt(ReadOnlySpan<byte> record, int offset, int length) =>
+        MemoryMarshal.Cast<byte, char>(record.Slice(offset, length * 2));
 
     /// <summary>
     /// Preference between the several names one record can carry, best first. The on-disk byte is

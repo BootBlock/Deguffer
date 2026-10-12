@@ -111,7 +111,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 4, 2),
-            (number, _, in _) =>
+            (number, _, in _, _) =>
             {
                 handed.Add(number);
                 return true;
@@ -137,7 +137,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 8, 4),
-            (number, outcome, in _) =>
+            (number, outcome, in _, _) =>
             {
                 if (outcome == MftParseOutcome.Parsed)
                 {
@@ -195,7 +195,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(64 * 1024, ReadsInFlight, 2),
-            (number, _, in _) =>
+            (number, _, in _, _) =>
             {
                 handed.Add(number);
                 return true;
@@ -320,7 +320,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 8, 4),
-            (number, _, in _) => number == 1_202 ? throw new InvalidOperationException() : true,
+            (number, _, in _, _) => number == 1_202 ? throw new InvalidOperationException() : true,
             onProgress: null,
             default));
     }
@@ -336,7 +336,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 2, 1),
-            (number, _, in _) =>
+            (number, _, in _, _) =>
             {
                 Interlocked.Increment(ref handed);
                 return number != 100;
@@ -373,7 +373,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(64 * 1024, 4, 1),
-            (number, _, in _) =>
+            (number, _, in _, _) =>
             {
                 if (number != 20)
                 {
@@ -410,7 +410,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, TableTuning.MaximumReadsInFlight, TableTuning.MaximumParseThreads),
-            static (_, _, in _) => true,
+            static (_, _, in _, _) => true,
             done =>
             {
                 overlapped |= Interlocked.Increment(ref reporting) > 1;
@@ -494,7 +494,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(64 * 1024, 4, 2),
-            static (_, _, in _) => true,
+            static (_, _, in _, _) => true,
             done =>
             {
                 if (done > 0)
@@ -528,7 +528,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 8, parseThreads),
-            (_, _, in _) =>
+            (_, _, in _, _) =>
             {
                 threads.TryAdd(Environment.CurrentManagedThreadId, true);
 
@@ -581,30 +581,30 @@ public sealed class MftReadPassTests
     private static (long Allocated, long Logical) Sizes(ScanSize? size) =>
         (size!.Value.Allocated, size.Value.Logical);
 
-    private static SortedDictionary<long, (MftParseOutcome Outcome, MftRecord Record)> Handed(MftFixture fixture, TableTuning tuning)
+    private static SortedDictionary<long, (MftParseOutcome Outcome, MftRecord Record, string? Name)> Handed(MftFixture fixture, TableTuning tuning)
     {
         using var source = fixture.Build();
         return Handed(source, tuning);
     }
 
-    private static SortedDictionary<long, (MftParseOutcome Outcome, MftRecord Record)> Handed(
+    private static SortedDictionary<long, (MftParseOutcome Outcome, MftRecord Record, string? Name)> Handed(
         IMftSource source, TableTuning tuning, CancellationToken ct = default)
     {
-        var handed = new ConcurrentDictionary<long, (MftParseOutcome, MftRecord)>();
+        var handed = new ConcurrentDictionary<long, (MftParseOutcome, MftRecord, string?)>();
 
         MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
             tuning,
-            (number, outcome, in record) =>
+            (number, outcome, in record, name) =>
             {
-                Assert.True(handed.TryAdd(number, (outcome, outcome == MftParseOutcome.Parsed ? record : default)), $"record {number} was handed on twice");
+                Assert.True(handed.TryAdd(number, outcome == MftParseOutcome.Parsed ? (outcome, record, name.ToString()) : (outcome, default, null)), $"record {number} was handed on twice");
                 return true;
             },
             onProgress: null,
             ct);
 
-        return new SortedDictionary<long, (MftParseOutcome, MftRecord)>(handed);
+        return new SortedDictionary<long, (MftParseOutcome, MftRecord, string?)>(handed);
     }
 
     /// <summary>A fixture table whose overlapped reads are made by <paramref name="read"/>.</summary>

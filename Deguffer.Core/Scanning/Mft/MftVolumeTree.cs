@@ -96,7 +96,8 @@ public sealed class MftVolumeTree(int count)
     /// </summary>
     public bool[] Present { get; } = new bool[count];
 
-    public void Set(long number, MftRecord record)
+    /// <param name="name">The record's name, copied only where it is kept.</param>
+    public void Set(long number, in MftRecord record, ReadOnlySpan<char> name)
     {
         Parent[number] = record.ParentRecordNumber;
         Allocated[number] = record.Size?.Allocated ?? 0;
@@ -109,12 +110,12 @@ public sealed class MftVolumeTree(int count)
 
         if (record.IsDirectory)
         {
-            Names[number] = record.Name;
+            Names[number] = name.ToString();
         }
-        else if (MailStore.Is(record.Name))
+        else if (MailStore.Is(name))
         {
             IsMailStore[number] = true;
-            _mailStoreNames[(uint)number] = record.Name;
+            _mailStoreNames[(uint)number] = name.ToString();
         }
     }
 
