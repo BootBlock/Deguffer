@@ -171,8 +171,8 @@ public sealed class ExploreTree : Layout.ITrackedTree
     public int NodeCount => _nameNumbers.Length;
 
     /// <summary>
-    /// This node's name, made as a string for each call. For what is shown, one node at a time; a
-    /// pass over many nodes reads <see cref="NameSpanOf"/>, which makes nothing.
+    /// This node's name, made as a string for each call: for a name that is shown or kept. A pass
+    /// that only compares or inspects names reads <see cref="NameSpanOf"/>, which makes nothing.
     /// </summary>
     public string NameOf(int node) => new(NameSpanOf(node));
 

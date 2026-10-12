@@ -18,8 +18,7 @@ internal sealed class ExploreCounterparts(ExploreTree earlier, ExploreTree later
 {
     private readonly Dictionary<int, int?> _found = new() { [earlier.RootNode] = later.RootNode };
 
-    // Read by span, so a lookup makes no string of the name it asks about.
-    private readonly Dictionary<int, Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>>> _names = [];
+    private readonly Dictionary<int, ChildrenByName> _names = [];
 
     public int? Find(int node)
     {
@@ -54,20 +53,19 @@ internal sealed class ExploreCounterparts(ExploreTree earlier, ExploreTree later
 
         if (!_names.TryGetValue(folder, out var children))
         {
-            children = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-                .GetAlternateLookup<ReadOnlySpan<char>>();
+            children = new ChildrenByName(later);
 
             // The first of two names that differ only in case keeps it, as a directory with case
             // sensitivity turned on can hold both; the order is the tree's own, so it is the same
             // answer every time.
             foreach (var child in later.ChildrenOf(folder))
             {
-                children.TryAdd(later.NameSpanOf(child), child);
+                children.Add(child);
             }
 
             _names[folder] = children;
         }
 
-        return children.TryGetValue(name, out var match) ? match : null;
+        return children.Find(name);
     }
 }
