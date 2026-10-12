@@ -48,12 +48,19 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
     /// </summary>
     private readonly ICloudFiles _cloud;
 
+    private readonly ScanTuner _tuning;
+
+    /// <param name="tuning">
+    /// How many folders of a sync root are read at once, as the drive that holds it is walked.
+    /// <see cref="ScanTuner.Shipped"/> where none is given.
+    /// </param>
     public CloudLocalCopiesProvider(
         ICloudFiles cloud,
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ScanTuner? tuning = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -62,6 +69,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             cloud: cloud)
     {
         _cloud = cloud;
+        _tuning = tuning ?? ScanTuner.Shipped;
     }
 
     public override string Id => "cloud-local-copies";
@@ -157,7 +165,8 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
                 continue;
             }
 
-            var selection = await Task.Run(() => PlaceholderWalk.Of(_cloud, root.Path, keep, ct), ct)
+            var selection = await Task.Run(
+                    () => PlaceholderWalk.Of(_cloud, root.Path, keep, _tuning.For(root.Path).Walk.Threads, ct), ct)
                 .ConfigureAwait(false);
 
             notes.AddRange(NotesFor(selection, app, name));

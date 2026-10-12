@@ -140,14 +140,7 @@ public sealed class SourceDirectoryDiscovery
             return memo;
         }
 
-        var names = Names();
-
-        if (names.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "No directory names have been registered. Every provider sharing a discovery calls " +
-                "Include before planning.");
-        }
+        var search = Search();
 
         var candidates = new List<string>();
         var unreadable = new List<string>();
@@ -182,7 +175,7 @@ public sealed class SourceDirectoryDiscovery
                     continue;
             }
 
-            var searched = await SearchAsync(names, root.Path, ct).ConfigureAwait(false);
+            var searched = await SearchAsync(search, root.Path, ct).ConfigureAwait(false);
 
             candidates.AddRange(searched.Candidates);
             unreadable.AddRange(searched.Unreadable);
@@ -242,9 +235,9 @@ public sealed class SourceDirectoryDiscovery
     {
         ArgumentNullException.ThrowIfNull(candidates);
 
-        var names = Names();
+        var search = Search();
 
-        return [.. candidates.Where(candidate => SourceTreeBoundary.IsInsideTheSearch(candidate, root, names))];
+        return [.. candidates.Where(candidate => SourceTreeBoundary.IsInsideTheSearch(candidate, root, search))];
     }
 
     /// <summary>
@@ -290,13 +283,27 @@ public sealed class SourceDirectoryDiscovery
         }
     }
 
-    /// <summary>Every name registered so far. Internal for the benchmark, which walks with the set a scan uses.</summary>
-    internal FrozenSet<string> Names()
+    /// <summary>
+    /// The search for every name registered so far. Internal for the benchmark, which walks with the
+    /// search a scan uses.
+    /// </summary>
+    internal DirectorySearch Search()
     {
+        FrozenSet<string> names;
+
         lock (_gate)
         {
-            return _names.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+            names = _names.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
         }
+
+        if (names.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No directory names have been registered. Every provider sharing a discovery calls " +
+                "Include before planning.");
+        }
+
+        return SourceTreeBoundary.Searching(names);
     }
 
     private void Remember(IReadOnlyList<SourceRoot> roots, SourceDiscovery result)
@@ -320,55 +327,40 @@ public sealed class SourceDirectoryDiscovery
     /// scanner says. Racing, a walk that could not list the root has found nothing the index cannot
     /// find, so the index is waited for.
     /// </summary>
-    private async Task<RootSearch> SearchAsync(FrozenSet<string> names, string root, CancellationToken ct)
+    private async Task<RootSearch> SearchAsync(DirectorySearch search, string root, CancellationToken ct)
     {
         if (!_scanner.RacesTheWalk)
         {
-            return await FromIndexAsync(names, root, ct).ConfigureAwait(false)
-                ?? Walk(names, root, ct) with { FellBack = true };
+            return await FromIndexAsync(search, root, ct).ConfigureAwait(false)
+                ?? Walk(search, root, ct) with { FellBack = true };
         }
 
         var raced = await RouteRace.FirstAsync(
-            stop => FromIndexAsync(names, root, stop),
-            stop => Task.Run(() => Walk(names, root, stop), stop),
+            stop => FromIndexAsync(search, root, stop),
+            stop => Task.Run(() => Walk(search, root, stop), stop),
             walked => walked.RootListed,
             ct).ConfigureAwait(false);
 
         return raced.Outcome is RaceOutcome.TableDeclined ? raced.Answer with { FellBack = true } : raced.Answer;
     }
 
-    /// <summary>The index's answer for every name in <paramref name="root"/>, or null where it has none.</summary>
-    private async Task<RootSearch?> FromIndexAsync(FrozenSet<string> names, string root, CancellationToken ct)
-    {
-        var candidates = new List<string>();
-
-        foreach (var name in names)
-        {
-            var indexed = await _scanner.TryFindDirectoriesNamedAsync(name, root, ct).ConfigureAwait(false);
-
-            if (indexed is null)
-            {
-                // One walk answers for every name at once, so the remaining names need no search of
-                // their own.
-                return null;
-            }
-
-            // The index answers with every directory of that name on the volume, narrowed to
-            // this root. Narrowing is not the whole of the boundary, and the difference is not
-            // cosmetic: without this an elevated run offers directories inside .git and
-            // node_modules, and nested ones already covered by their own parent. What the
-            // filter cannot restore is the walk's reach, which is a property of the token —
-            // SourceTreeBoundary says why, and says why that is reach rather than licence.
-            candidates.AddRange(indexed.Where(path => SourceTreeBoundary.IsInsideTheSearch(path, root, names)));
-        }
-
-        return new RootSearch(candidates, [], RootListed: true);
-    }
+    /// <summary>
+    /// The index's answer for every name in <paramref name="root"/>, or null where it has none.
+    ///
+    /// <para>One question for the whole set, answered by one pass over the root's own subtree that
+    /// stops where the walk stops. What the index cannot share with the walk is its reach, which is
+    /// a property of the token: <see cref="SourceTreeBoundary"/> says why, and says why that is
+    /// reach rather than licence.</para>
+    /// </summary>
+    private async Task<RootSearch?> FromIndexAsync(DirectorySearch search, string root, CancellationToken ct) =>
+        await _scanner.TryFindDirectoriesAsync(search, root, ct).ConfigureAwait(false) is { } indexed
+            ? new RootSearch(indexed, [], RootListed: true)
+            : null;
 
     /// <summary>The guaranteed route: enumerate the root ourselves.</summary>
-    private RootSearch Walk(FrozenSet<string> names, string root, CancellationToken ct)
+    private RootSearch Walk(DirectorySearch search, string root, CancellationToken ct)
     {
-        var walked = SourceTreeWalk.Under(root, names, _tuning.For(root).Walk, ct);
+        var walked = SourceTreeWalk.Under(root, search, _tuning.For(root).Walk, ct);
 
         return new RootSearch(walked.Candidates, walked.Unreadable, walked.RootListed);
     }

@@ -3,9 +3,20 @@ using System.Collections.Concurrent;
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
-/// One run of <see cref="BoundedFileWalk"/>: a queue of directories, and up to
-/// <see cref="WalkTuning.Threads"/> workers that each take a directory, list it, queue the
-/// subdirectories its caller chose and take the next.
+/// What one worker does with each directory it takes, built once for that worker so whatever it reuses
+/// lasts for every directory the worker reads.
+/// </summary>
+/// <param name="descend">How the worker queues a child: its path, and the value carried down to it.</param>
+internal delegate Action<string, TState> NewDirectoryReader<TState>(Action<string, TState> descend);
+
+/// <summary>
+/// One run of a bounded walk: a queue of directories, and up to a bound of workers that each take a
+/// directory, read it, queue the children its reader chose and take the next.
+///
+/// <para><b>Scheduling only.</b> How a directory is listed, and which of its children are entered, is
+/// the reader's. <see cref="BoundedFileWalk"/> lists the disk and never enters a reparse point, and
+/// <see cref="Cloud.PlaceholderWalk"/> lists a sync root through the Cloud Files API, which tells a
+/// placeholder folder from a link.</para>
 ///
 /// <para><b>No worker waits for another.</b> The walk once listed a whole level and waited for all of
 /// it before starting the next, so one large or slow directory kept every other worker idle, and a
@@ -40,9 +51,7 @@ internal sealed class WalkWorkers<TState>
 
     private readonly WorkerCrew _crew;
     private readonly Func<bool> _readyToLook;
-    private readonly ListingBuffer _buffer;
-    private readonly ListDirectory _list;
-    private readonly Action<TState, DirectoryContents, Action<WalkEntry, TState>> _onDirectory;
+    private readonly NewDirectoryReader<TState> _newReader;
     private readonly Action<bool> _onProgress;
     private readonly TimeProvider _clock;
     private readonly long _progressTicks;
@@ -51,19 +60,17 @@ internal sealed class WalkWorkers<TState>
     private int _outstanding;
     private long _nextReport;
 
+    /// <param name="threads">How many directories are read at once, the calling thread included.</param>
     public WalkWorkers(
-        WalkTuning tuning,
-        ListDirectory list,
-        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        int threads,
+        NewDirectoryReader<TState> newReader,
         Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct)
     {
-        _crew = new WorkerCrew(tuning.Threads, NewHelper, () => !Stopping && !_pending.IsEmpty);
+        _crew = new WorkerCrew(threads, NewHelper, () => !Stopping && !_pending.IsEmpty);
         _readyToLook = () => !_pending.IsEmpty || Stopping || Volatile.Read(ref _outstanding) == 0;
-        _buffer = new ListingBuffer(tuning.ListingBufferBytes);
-        _list = list;
-        _onDirectory = onDirectory;
+        _newReader = newReader;
         _onProgress = onProgress;
         _clock = clock;
         _progressTicks = (long)(BoundedFileWalk.ProgressInterval.TotalSeconds * clock.TimestampFrequency);
@@ -72,7 +79,6 @@ internal sealed class WalkWorkers<TState>
 
     private bool Stopping => _crew.Failed || _ct.IsCancellationRequested;
 
-    /// <param name="root">In the extended form (§6.3).</param>
     public void Run(string root, TState rootState)
     {
         using var wake = _crew.WakeOn(_ct);
@@ -170,27 +176,25 @@ internal sealed class WalkWorkers<TState>
     }
 
     /// <summary>
-    /// What one worker reuses for every directory it reads: its listing, and the children its caller
+    /// What one worker reuses for every directory it reads: its reader, and the children that reader
     /// chose, held until the directory's report has been made.
     /// </summary>
     private sealed class Worker
     {
         private readonly WalkWorkers<TState> _walk;
-        private readonly WalkListing _listing;
         private readonly List<(string Path, TState State)> _chosen = [];
-        private readonly Action<WalkEntry, TState> _descend;
+        private readonly Action<string, TState> _read;
 
         public Worker(WalkWorkers<TState> walk)
         {
             _walk = walk;
-            _listing = new WalkListing(walk._buffer, walk._list);
-            _descend = Descend;
+            _read = walk._newReader((path, state) => _chosen.Add((path, state)));
         }
 
         public void Read((string Path, TState State) next)
         {
             _chosen.Clear();
-            _walk._onDirectory(next.State, _listing.Read(next.Path), _descend);
+            _read(next.Path, next.State);
 
             _walk.ReportIfDue();
 
@@ -204,19 +208,6 @@ internal sealed class WalkWorkers<TState>
             if (Interlocked.Decrement(ref _walk._outstanding) == 0)
             {
                 _walk._crew.Signal();
-            }
-        }
-
-        private void Descend(WalkEntry directory, TState state)
-        {
-            // The walk holds this rule rather than trusting the caller to, because the caller is the
-            // half that changes. A junction's target keeps its own place on the volume, so descending
-            // through one both counts it twice and describes a tree nothing classified — and a link is
-            // handed back rather than dropped, so a caller iterating the wrong list is a mistake that
-            // can be made.
-            if (!directory.IsReparsePoint)
-            {
-                _chosen.Add((directory.FullName, state));
             }
         }
     }

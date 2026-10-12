@@ -258,8 +258,8 @@ public class MftExploreReaderTests
         using var again = fixture.Build();
         Assert.True(MftVolumeIndexBuilder.TryBuild(again, TableTuning.Default, out var index));
 
-        Assert.NotEmpty(index.FindDirectoriesNamed("content-v2"));
-        Assert.Empty(index.FindDirectoriesNamed("a.tgz"));
+        Assert.NotEmpty(index.TryFindDirectories([], DirectorySearches.For("content-v2"))!);
+        Assert.Empty(index.TryFindDirectories([], DirectorySearches.For("a.tgz"))!);
     }
 
     /// <summary>

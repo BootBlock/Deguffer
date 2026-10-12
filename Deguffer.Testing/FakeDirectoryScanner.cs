@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -7,7 +8,7 @@ namespace Deguffer.Testing;
 /// <summary>
 /// A scanner whose volume index can be present or absent on demand.
 ///
-/// The real one answers <see cref="IDirectoryScanner.TryFindDirectoriesNamedAsync"/> only when
+/// The real one answers <see cref="IDirectoryScanner.TryFindDirectoriesAsync"/> only when
 /// Deguffer is elevated, so without this the fallback path would be tested on an unelevated machine
 /// and the indexed path on an elevated one — the two would never both be covered in a single run,
 /// and which one a test exercised would depend on how the test host happened to be launched.
@@ -49,11 +50,12 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
 
     /// <summary>
     /// Null when this fake has no index, matching the contract the real scanner uses to tell the
-    /// caller to walk instead. Results are narrowed to <paramref name="root"/> exactly as the real
-    /// one narrows them, because that narrowing is the consent model rather than an optimisation.
+    /// caller to walk instead. Otherwise the indexed paths <paramref name="search"/> finds below
+    /// <paramref name="root"/>, judged as the real one judges them: narrowed to the root, because
+    /// that is the consent model rather than an optimisation, and stopped where the search stops.
     /// </summary>
-    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesNamedAsync(
-        string name,
+    public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+        DirectorySearch search,
         string root,
         CancellationToken ct = default)
     {
@@ -67,9 +69,10 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         var prefix = root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
         return new((IReadOnlyList<string>?)indexed
-            .Where(p => Path.GetFileName(p.TrimEnd(Path.DirectorySeparatorChar))
-                    .Equals(name, StringComparison.OrdinalIgnoreCase)
-                && p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Where(p => SourceTreeBoundary.IsInsideTheSearch(p, root, search)
+                && search.Meet(Path.GetFileName(p.TrimEnd(Path.DirectorySeparatorChar))) is SearchStep.Found)
+            .Order(StringComparer.Ordinal)
             .ToList());
     }
 

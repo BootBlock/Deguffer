@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.Frozen;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -31,11 +30,13 @@ internal sealed record WalkedSourceTree(
 internal static class SourceTreeWalk
 {
     /// <param name="root">An approved source root, in either form.</param>
-    /// <param name="names">Every name the discovery looks for. See <see cref="SourceDirectoryDiscovery.Include"/>.</param>
+    /// <param name="search">
+    /// The search for every name the discovery looks for. See <see cref="SourceDirectoryDiscovery.Include"/>.
+    /// </param>
     /// <param name="tuning">What the walk runs with, resolved for the drive that holds <paramref name="root"/>.</param>
     public static WalkedSourceTree Under(
         string root,
-        FrozenSet<string> names,
+        DirectorySearch search,
         WalkTuning tuning,
         CancellationToken ct)
     {
@@ -77,16 +78,18 @@ internal static class SourceTreeWalk
                         continue;
                     }
 
-                    if (names.Contains(child.Name))
+                    switch (search.Meet(child.Name))
                     {
                         // Not descended into: anything below a candidate belongs to that candidate,
                         // and an obj nested inside an obj is part of the output already being
                         // considered.
-                        candidates.Add(LongPath.Display(child.FullName));
-                    }
-                    else if (!SourceTreeBoundary.IsNeverEntered(child.Name))
-                    {
-                        descend(child, child.FullName);
+                        case SearchStep.Found:
+                            candidates.Add(LongPath.Display(child.FullName));
+                            break;
+
+                        case SearchStep.Entered:
+                            descend(child, child.FullName);
+                            break;
                     }
                 }
             },

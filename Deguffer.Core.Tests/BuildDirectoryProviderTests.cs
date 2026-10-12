@@ -882,9 +882,9 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The same agreement on the indexed route. The volume index has no traversal to stop, so it
-    /// applies the rule as a filter — and if the two disagreed, whether a directory was offered
-    /// would depend on whether the user happened to run Deguffer as administrator.
+    /// The same agreement on the indexed route, which stops its own descent at a candidate — and if
+    /// the two disagreed, whether a directory was offered would depend on whether the user happened
+    /// to run Deguffer as administrator.
     /// </summary>
     [Fact]
     public async Task TheIndexedRouteAgreesAboutACandidateNestedInsideAnother()

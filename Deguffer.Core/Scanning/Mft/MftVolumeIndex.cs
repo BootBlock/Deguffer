@@ -84,41 +84,93 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         TryMeasure(relativePath, MinimumAge.Off, out _);
 
     /// <summary>
-    /// Every directory on the volume called <paramref name="name"/>, as components below the volume
-    /// root.
+    /// Every directory <paramref name="search"/> finds below the directory at
+    /// <paramref name="root"/>, as components below that root, in no particular order. Null when
+    /// the root is not in the index, or is reached through a link: either way the caller has to walk
+    /// it, and an empty list would tell it there is nothing there.
     ///
-    /// A linear pass rather than a lookup, and deliberately so. <see cref="TryFindChild"/> argues
-    /// against keeping an index keyed by name, and that argument still holds: this walks the array
-    /// once per query, costs nothing to build, and is asked for a single name once per planning
-    /// pass. Building a volume-wide name index to serve that would cost more than it saves.
+    /// <para>One depth-first pass over the root's own subtree, through the child links, for every
+    /// name at once. The pass stops where the walk stops: at a directory it finds, at one it never
+    /// enters, and at a link, which the walk does not list as a directory at all. A path is built
+    /// only for a directory that is found, from the names the pass already holds, so nothing outside
+    /// the root is read and no path is rebuilt from a parent chain.</para>
     ///
-    /// Only directories are considered, which needs no filtering — <see cref="MftVolumeTree.Names"/>
-    /// is populated for directories alone.
+    /// <para>Only directories are considered, which needs no filtering: <see cref="MftVolumeTree.Names"/>
+    /// is populated for directories alone.</para>
     /// </summary>
-    public IReadOnlyList<IReadOnlyList<string>> FindDirectoriesNamed(string name, CancellationToken ct = default)
+    public IReadOnlyList<IReadOnlyList<string>>? TryFindDirectories(
+        IReadOnlyList<string> root,
+        DirectorySearch search,
+        CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(search);
 
-        var matches = new List<IReadOnlyList<string>>();
-
-        for (uint record = 0; record < tree.Count; record++)
+        if (TryResolve(root) is not { } start)
         {
-            // The table runs to millions of records, so the cancellation check is amortised rather
-            // than paid per entry.
-            if ((record & 0xFFFF) == 0)
+            return null;
+        }
+
+        var found = new List<IReadOnlyList<string>>();
+
+        // Each directory entered records its name and the position of the one holding it, which is
+        // how a found directory's path is read back without recursion or a parent walk.
+        var entered = new List<(int Holder, string Name)>();
+        var stack = new Stack<(uint Node, int Holder)>();
+        var visited = 0;
+
+        Push(start, -1);
+
+        while (stack.TryPop(out var item))
+        {
+            // A source folder can hold millions of entries, so the cancellation check is amortised
+            // rather than paid per entry.
+            if ((++visited & 0xFFFF) == 0)
             {
                 ct.ThrowIfCancellationRequested();
             }
 
-            if (tree.Names[record] is { } candidate
-                && candidate.Equals(name, StringComparison.OrdinalIgnoreCase)
-                && TryBuildPath(record) is { } components)
+            var node = item.Node;
+
+            if (tree.IsReparsePoint[node] || tree.Names[node] is not { } name)
             {
-                matches.Add(components);
+                continue;
+            }
+
+            switch (search.Meet(name))
+            {
+                case SearchStep.Found:
+                    found.Add(PathBelowRoot(item.Holder, name));
+                    break;
+
+                case SearchStep.Entered:
+                    entered.Add((item.Holder, name));
+                    Push(node, entered.Count - 1);
+                    break;
             }
         }
 
-        return matches;
+        return found;
+
+        void Push(uint directory, int holder)
+        {
+            for (var i = links.Start[directory]; i < links.Start[directory + 1]; i++)
+            {
+                stack.Push((links.Children[i], holder));
+            }
+        }
+
+        IReadOnlyList<string> PathBelowRoot(int holder, string name)
+        {
+            var components = new List<string> { name };
+
+            for (var position = holder; position >= 0; position = entered[position].Holder)
+            {
+                components.Add(entered[position].Name);
+            }
+
+            components.Reverse();
+            return components;
+        }
     }
 
     /// <summary>

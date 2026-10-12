@@ -158,6 +158,31 @@ public sealed class SourceDirectoryDiscoveryTests : IDisposable
         Assert.Equal(1, volumes.InvalidateCount);
     }
 
+    /// <summary>
+    /// One question to the index per approved root, for every name at once. Asking once per name
+    /// made the index pass over the whole volume for each, and a pass registers several names.
+    /// </summary>
+    [Fact]
+    public async Task AsksTheIndexOnceForEveryNameInARoot()
+    {
+        var root = Project();
+        var obj = Path.Combine(root, "Example", "obj");
+        var target = _temp.CreateDirectory("src", "crate", "target");
+        var scanner = new FakeDirectoryScanner([obj, target]);
+
+        var discovery = new SourceDirectoryDiscovery(
+            scanner, new FakeVolumeInventory().With(Path.GetPathRoot(_temp.Path)!, features: LocalDisk));
+
+        discovery.Include(["obj", "bin"]);
+        discovery.Include(["target"]);
+
+        var found = await discovery.FindAsync([new SourceRoot(root)]);
+
+        Assert.Equal(1, scanner.FindCalls);
+        Assert.False(found.FellBack);
+        Assert.Equal([obj, target], found.Candidates);
+    }
+
     /// <summary>A folder holding one project with an <c>obj</c> in it, which is what the pass looks for.</summary>
     private string Project(string name = "src")
     {

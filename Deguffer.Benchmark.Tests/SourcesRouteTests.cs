@@ -19,9 +19,9 @@ public sealed class SourcesRouteTests : IDisposable
     /// </summary>
     [Fact]
     public void SearchesForTheNamesTheSourceFolderRowsRegister() =>
-        Assert.Superset(
-            new HashSet<string>(["obj", "node_modules", "target", "Library", ".venv", "venv"], StringComparer.OrdinalIgnoreCase),
-            SourcesRoute.Names.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        Assert.All(
+            ["obj", "node_modules", "target", "Library", ".venv", "venv"],
+            name => Assert.Equal(SearchStep.Found, SourcesRoute.Search.Meet(name)));
 
     /// <summary>
     /// Each build output counts once, and nothing below one is found again: an <c>obj</c> inside an

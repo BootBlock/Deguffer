@@ -185,6 +185,36 @@ internal static class BoundedFileWalk
         TimeProvider clock,
         CancellationToken ct)
     {
-        new WalkWorkers<TState>(tuning, list, onDirectory, onProgress, clock, ct).Run(LongPath.Extended(root), rootState);
+        var buffer = new ListingBuffer(tuning.ListingBufferBytes);
+
+        new WalkWorkers<TState>(
+                tuning.Threads,
+                descend => DiskReader(new WalkListing(buffer, list), onDirectory, descend),
+                onProgress,
+                clock,
+                ct)
+            .Run(LongPath.Extended(root), rootState);
+    }
+
+    /// <summary>One worker's reading of a directory: its own listing, handed to the caller's callback.</summary>
+    private static Action<string, TState> DiskReader<TState>(
+        WalkListing listing,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action<string, TState> descend)
+    {
+        Action<WalkEntry, TState> descendUnlessLink = (directory, state) =>
+        {
+            // The walk holds this rule rather than trusting the caller to, because the caller is the
+            // half that changes. A junction's target keeps its own place on the volume, so descending
+            // through one both counts it twice and describes a tree nothing classified — and a link is
+            // handed back rather than dropped, so a caller iterating the wrong list is a mistake that
+            // can be made.
+            if (!directory.IsReparsePoint)
+            {
+                descend(directory.FullName, state);
+            }
+        };
+
+        return (path, state) => onDirectory(state, listing.Read(path), descendUnlessLink);
     }
 }
