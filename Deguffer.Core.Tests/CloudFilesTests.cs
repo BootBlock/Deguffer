@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -309,7 +310,7 @@ public sealed class CloudFilesTests : IDisposable
 
         Assert.Equal(PinState.Unspecified, _cloud.Read(_root.At("Kept", "inside.bin")).Placeholder!.Pin);
 
-        var selection = PlaceholderWalk.Of(_cloud, _root.Path, MinimumAge.Off, CancellationToken.None);
+        var selection = PlaceholderWalk.Of(_cloud, _root.Path, MinimumAge.Off, WalkTuning.Default.Threads, CancellationToken.None);
 
         Assert.Equal([goes], selection.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         Assert.Equal(1, selection.HeldFor(HeldBack.Pinned).Files);

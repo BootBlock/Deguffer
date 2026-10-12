@@ -270,7 +270,7 @@ public sealed class CleanupPlanner
             claudeSnapshots,
             new RecycleBinProvider(ShellRecycleBinEmptier.Default, environment, preferences: preferences, scanner: scanner),
             new FileHistoryProvider(environment, preferences: preferences, scanner: scanner),
-            new CloudLocalCopiesProvider(CloudFiles.Default, environment, scanner: scanner),
+            new CloudLocalCopiesProvider(CloudFiles.Default, environment, scanner: scanner, tuning: tuning),
             new TempDirectoryProvider(
                 environment,
                 liveTrees: liveTrees,

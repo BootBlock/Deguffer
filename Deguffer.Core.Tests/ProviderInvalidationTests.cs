@@ -234,6 +234,9 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)
         : parameter == typeof(TimeProvider) ? new ManualTimeProvider()
 
+        // The shipped values, which open none of the machine's devices to learn what they are.
+        : parameter == typeof(ScanTuner) ? ScanTuner.Shipped
+
         // Never the real one: it would empty the Recycle Bin of whoever ran the suite.
         : parameter == typeof(IRecycleBinEmptier) ? new FakeRecycleBinEmptier()
 
