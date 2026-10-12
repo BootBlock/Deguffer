@@ -97,11 +97,23 @@ public sealed class RefusedAtAndBelowTests : IDisposable
         var watch = _policy.WatchBelow(_tree.Top);
         var profile = _tree.Environment.UserProfile;
 
-        Assert.True(watch.MayRefuse(_tree.Top, parentIsRoot: true, "Anything"));
-        Assert.True(watch.MayRefuse(_tree.Users, parentIsRoot: false, "other"));
-        Assert.True(watch.MayRefuse(Path.Combine(profile, "AppData", "Local"), parentIsRoot: false, "Microsoft"));
-        Assert.True(watch.MayRefuse(Path.Combine(profile, "Documents"), parentIsRoot: false, "Outlook Files"));
-        Assert.False(watch.MayRefuse(Path.Combine(profile, "Documents"), parentIsRoot: false, "Letters"));
-        Assert.False(watch.MayRefuse(Path.Combine(_tree.Top, "Data"), parentIsRoot: false, "Photos"));
+        Assert.True(watch.MayRefuseAnyChildOf(_tree.Top, parentIsRoot: true));
+        Assert.True(watch.MayRefuseAnyChildOf(_tree.Users, parentIsRoot: false));
+        Assert.True(watch.MayRefuseAnyChildOf(Path.Combine(profile, "AppData", "Local"), parentIsRoot: false));
+        Assert.False(watch.MayRefuseAnyChildOf(Path.Combine(profile, "Documents"), parentIsRoot: false));
+        Assert.False(watch.MayRefuseAnyChildOf(Path.Combine(_tree.Top, "Data"), parentIsRoot: false));
+    }
+
+    /// <summary>
+    /// Outlook's folders are refused by name wherever they are, so a child with one of their names is
+    /// asked about in a folder whose other children are not.
+    /// </summary>
+    [Fact]
+    public void TheWatchAsksAboutOutlooksFoldersByNameWhereverTheyAre()
+    {
+        Assert.True(RefusalWatch.MayRefuseByName("Outlook Files"));
+        Assert.True(RefusalWatch.MayRefuseByName("archive.pst"));
+        Assert.False(RefusalWatch.MayRefuseByName("Letters"));
+        Assert.False(RefusalWatch.MayRefuseByName("Photos"));
     }
 }
