@@ -97,7 +97,7 @@ internal sealed class PassedOverPlaces
         /// Whether the child named <paramref name="childName"/> may be passed over, so is to be asked
         /// <see cref="WhyPassedOver"/>. Where not, it is searched as its folder was.
         /// </summary>
-        public bool MayPassOver(string childName) =>
+        public bool MayPassOver(ReadOnlySpan<char> childName) =>
             _mayRefuseAny || _holdsProgramPlace || RefusalWatch.MayRefuseByName(childName);
 
         /// <summary>
@@ -105,7 +105,7 @@ internal sealed class PassedOverPlaces
         /// with everything in it, or null where it is searched as its folder was.
         /// </summary>
         /// <param name="child">The child's own path, in display form.</param>
-        public string? WhyPassedOver(string child, string childName)
+        public string? WhyPassedOver(string child, ReadOnlySpan<char> childName)
         {
             if ((_mayRefuseAny || RefusalWatch.MayRefuseByName(childName)) && _places._policy.RefusedAtAndBelow(child) is { } refused)
             {

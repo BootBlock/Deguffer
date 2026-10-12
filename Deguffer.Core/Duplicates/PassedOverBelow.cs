@@ -43,7 +43,7 @@ internal sealed class PassedOverBelow(UnresolvedReferences unresolved, PassedOve
         /// Whether the child named <paramref name="childName"/> may be passed over, so is to be asked
         /// <see cref="WhyPassedOver"/>. Where not, it is searched as its folder was.
         /// </summary>
-        public bool MayPassOver(string childName) =>
+        public bool MayPassOver(ReadOnlySpan<char> childName) =>
             _unresolved is not null || _below?.MayPassOver(childName) == true;
 
         /// <summary>
@@ -51,7 +51,7 @@ internal sealed class PassedOverBelow(UnresolvedReferences unresolved, PassedOve
         /// with everything in it, or null where it is searched as its folder was.
         /// </summary>
         /// <param name="child">The entry's own path, in display form.</param>
-        public string? WhyPassedOver(string child, string childName) =>
+        public string? WhyPassedOver(string child, ReadOnlySpan<char> childName) =>
             _unresolved?.WhyPassedOver(child) ?? _below?.WhyPassedOver(child, childName);
 
         /// <summary>Whether the child named <paramref name="childName"/> is passed over, building its path only where that is needed.</summary>

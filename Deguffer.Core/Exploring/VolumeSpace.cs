@@ -176,7 +176,7 @@ public readonly record struct VolumeSpace(
         foreach (var child in tree.ChildrenOf(tree.RootNode))
         {
             if (tree.IsDirectory(child)
-                && string.Equals(tree.NameOf(child), SystemVolumeInformation, StringComparison.OrdinalIgnoreCase))
+                && tree.NameSpanOf(child).Equals(SystemVolumeInformation, StringComparison.OrdinalIgnoreCase))
             {
                 return tree.SizeOf(child) > 0 || !tree.HasUnknownSizeBelow(child);
             }

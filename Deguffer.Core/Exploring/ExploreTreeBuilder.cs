@@ -57,6 +57,10 @@ public sealed class ExploreTreeBuilder
     // without the lock (see Capture), which a List cannot allow, because it moves its array to grow.
     private readonly AppendOnlyChunks<Node> _nodes = new();
 
+    // Every name recorded, each distinct one once, written under the lock like the nodes that number
+    // them.
+    private readonly NamePool _names = new();
+
     // Marks made on a node after it was added, kept apart from it so that what a capture reads is
     // never written again. A refusal is rare against the nodes, so copying these under the lock
     // costs next to nothing.
@@ -91,7 +95,7 @@ public sealed class ExploreTreeBuilder
         // ExploreTree.Create from making the tree cyclic.
         _nodes.Add() = new Node
         {
-            Name = rootPath,
+            Name = _names.Intern(rootPath),
             Parent = RootNode,
             IsDirectory = true,
             Created = created,
@@ -149,7 +153,7 @@ public sealed class ExploreTreeBuilder
                 {
                     _nodes.Add() = new Node
                     {
-                        Name = child.Name,
+                        Name = _names.Intern(child.Name),
                         Parent = parent,
                         Size = child.Size,
                         Length = child.Length ?? child.Size,
@@ -243,7 +247,7 @@ public sealed class ExploreTreeBuilder
         lock (_gate)
         {
             return new ExploreTreeCapture(
-                _rootPath, _nodes.Freeze(), [.. _sizeUnknown], [.. _listingRefused], [.. _listedTwice]);
+                _rootPath, _nodes.Freeze(), _names.Freeze(), [.. _sizeUnknown], [.. _listingRefused], [.. _listedTwice]);
         }
     }
 
@@ -254,7 +258,8 @@ public sealed class ExploreTreeBuilder
     /// </summary>
     internal struct Node
     {
-        public string Name;
+        /// <summary>The node's name, as numbered in the builder's <see cref="NamePool"/>.</summary>
+        public int Name;
         public int Parent;
 
         /// <summary>Where the node falls by name among the children recorded with it.</summary>

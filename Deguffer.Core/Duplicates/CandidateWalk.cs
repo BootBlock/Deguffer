@@ -103,7 +103,7 @@ internal sealed class CandidateWalk
 
             foreach (var child in tree.ChildrenOf(folder.Node))
             {
-                var name = tree.NameOf(child);
+                var name = tree.NameSpanOf(child);
                 var path = passing.MayPassOver(name) ? Path.Join(folder.Path, name) : null;
 
                 if (path is not null && passing.WhyPassedOver(path, name) is { } why)
@@ -127,7 +127,7 @@ internal sealed class CandidateWalk
         }
     }
 
-    private void Consider(ExploreTree tree, int file, string name, LocationRole role, IdentityRoute route, LocalVolume volume)
+    private void Consider(ExploreTree tree, int file, ReadOnlySpan<char> name, LocationRole role, IdentityRoute route, LocalVolume volume)
     {
         var length = tree.LengthOf(file);
 

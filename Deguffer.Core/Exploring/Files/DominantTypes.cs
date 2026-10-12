@@ -49,7 +49,7 @@ public sealed class DominantTypes
             return measured.Of(node);
         }
 
-        return tree.IsDirectory(node) ? null : FileCategories.Of(tree.NameOf(node));
+        return tree.IsDirectory(node) ? null : FileCategories.Of(tree.NameSpanOf(node));
     }
 
     /// <summary>Measure every node the root of <paramref name="tree"/> reaches, in one pass.</summary>
@@ -87,7 +87,7 @@ public sealed class DominantTypes
                 continue;
             }
 
-            var category = FileCategories.Of(tree.NameOf(child));
+            var category = FileCategories.Of(tree.NameSpanOf(child));
 
             types[child] = (byte)category;
             walk.Totals[(int)category] += tree.SizeOf(child);

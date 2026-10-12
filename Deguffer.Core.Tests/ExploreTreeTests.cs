@@ -227,10 +227,14 @@ public class ExploreTreeTests
     {
         // 3 and 4 are each other's parent: present, sized, and reachable from nothing. 5 is a slot
         // no reader filled, which is what a free record looks like.
+        var names = new NamePool();
+        int[] nameNumbers = [.. new[] { "testuser", "cache", "a.tgz", "orphan", "orphan-parent", "" }.Select(name => names.Intern(name))];
+
         var tree = ExploreTree.Create(
             Root,
             rootNode: 0,
-            names: ["testuser", "cache", "a.tgz", "orphan", "orphan-parent", ""],
+            nameNumbers,
+            names.Freeze(),
             parents: [0, 0, 1, 4, 3, 0],
             sizes: [0, 0, 100, 500, 700, 900],
             lengths: [0, 0, 150, 500, 700, 900],

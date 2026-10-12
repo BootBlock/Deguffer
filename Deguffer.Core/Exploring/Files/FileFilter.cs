@@ -66,7 +66,7 @@ public sealed record FileFilter(
             return false;
         }
 
-        var name = tree.NameOf(node);
+        var name = tree.NameSpanOf(node);
 
         return (Category is not { } category || FileCategories.Of(name) == category)
             && (Name is not { } pattern || NameMatches(pattern, name));
@@ -117,7 +117,7 @@ public sealed record FileFilter(
     /// A wildcard where the text holds one, matched against the whole name as Explorer's search box
     /// matches it, and otherwise text the name has to contain.
     /// </summary>
-    private bool NameMatches(string pattern, string name) =>
+    private bool NameMatches(string pattern, ReadOnlySpan<char> name) =>
         _isWildcard
             ? FileSystemName.MatchesSimpleExpression(pattern, name, ignoreCase: true)
             : name.Contains(pattern, StringComparison.OrdinalIgnoreCase);

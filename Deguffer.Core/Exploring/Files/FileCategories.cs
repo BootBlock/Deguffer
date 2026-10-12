@@ -44,15 +44,13 @@ public static class FileCategories
     /// The category <paramref name="name"/> falls in. A name with no extension, and one with an
     /// extension this does not know, is <see cref="FileCategory.Other"/>. Case does not matter.
     /// </summary>
-    public static FileCategory Of(string name)
+    public static FileCategory Of(ReadOnlySpan<char> name)
     {
-        ArgumentNullException.ThrowIfNull(name);
-
         var dot = name.LastIndexOf('.');
 
         // A leading dot is a hidden name on other systems and an extension on this one, which is how
         // Path.GetExtension reads ".gitignore". Either way it is not in the table.
-        if (dot < 0 || !BySpan.TryGetValue(name.AsSpan(dot), out var category))
+        if (dot < 0 || !BySpan.TryGetValue(name[dot..], out var category))
         {
             return IsInstallerProgram(name, dot) ? FileCategory.Installers : FileCategory.Other;
         }
@@ -80,16 +78,16 @@ public static class FileCategories
     /// A loop rather than a predicate over <see cref="InstallerWords"/>. A lambda capturing the name
     /// would be allocated on every call, and this is asked of most names in a pass over a volume.
     /// </summary>
-    private static bool IsInstallerProgram(string name, int dot)
+    private static bool IsInstallerProgram(ReadOnlySpan<char> name, int dot)
     {
-        if (dot < 0 || !name.AsSpan(dot).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        if (dot < 0 || !name[dot..].Equals(".exe", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
         foreach (var word in InstallerWords)
         {
-            if (name.AsSpan(0, dot).Contains(word, StringComparison.OrdinalIgnoreCase))
+            if (name[..dot].Contains(word, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

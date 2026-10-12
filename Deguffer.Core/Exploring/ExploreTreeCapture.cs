@@ -19,6 +19,7 @@ internal sealed class ExploreTreeCapture
 
     private readonly string _rootPath;
     private readonly AppendOnlyChunks<ExploreTreeBuilder.Node>.Prefix _nodes;
+    private readonly NamePool.Frozen _names;
     private readonly int[] _sizeUnknown;
     private readonly int[] _listingRefused;
     private readonly int[] _listedTwice;
@@ -32,12 +33,14 @@ internal sealed class ExploreTreeCapture
     public ExploreTreeCapture(
         string rootPath,
         AppendOnlyChunks<ExploreTreeBuilder.Node>.Prefix nodes,
+        NamePool.Frozen names,
         int[] sizeUnknown,
         int[] listingRefused,
         int[] listedTwice)
     {
         _rootPath = rootPath;
         _nodes = nodes;
+        _names = names;
         _sizeUnknown = sizeUnknown;
         _listingRefused = listingRefused;
         _listedTwice = listedTwice;
@@ -59,7 +62,7 @@ internal sealed class ExploreTreeCapture
     {
         var count = _nodes.Count;
 
-        var names = new string[count];
+        var nameNumbers = new int[count];
         var parents = new int[count];
         var nameRanks = new int[count];
         var sizes = new long[count];
@@ -83,7 +86,7 @@ internal sealed class ExploreTreeCapture
             // writing, is never read.
             ref readonly var node = ref _nodes[i];
 
-            names[i] = node.Name;
+            nameNumbers[i] = node.Name;
             parents[i] = node.Parent;
             nameRanks[i] = node.NameRank;
             sizes[i] = node.Size;
@@ -104,7 +107,7 @@ internal sealed class ExploreTreeCapture
 
         if (_listedTwice.Length > 0)
         {
-            RankAcrossCalls(_listedTwice, parents, names, nameRanks);
+            RankAcrossCalls(_listedTwice, parents, nameNumbers, _names, nameRanks);
         }
 
         var present = new bool[count];
@@ -113,7 +116,8 @@ internal sealed class ExploreTreeCapture
         return ExploreTree.Create(
             _rootPath,
             ExploreTreeBuilder.RootNode,
-            names,
+            nameNumbers,
+            _names,
             parents,
             sizes,
             lengths,
@@ -136,7 +140,8 @@ internal sealed class ExploreTreeCapture
     /// siblings, not only those recorded in the same call. Two calls' ranks for one parent both
     /// start at zero, and placed as they are, one child would take another's place in the tree.
     /// </summary>
-    private static void RankAcrossCalls(int[] listedTwice, int[] parents, string[] names, int[] nameRanks)
+    private static void RankAcrossCalls(
+        int[] listedTwice, int[] parents, int[] nameNumbers, NamePool.Frozen names, int[] nameRanks)
     {
         var siblings = listedTwice.ToDictionary(parent => parent, _ => new List<int>());
 
@@ -152,7 +157,7 @@ internal sealed class ExploreTreeCapture
         foreach (var children in siblings.Values)
         {
             var ordered = CollectionsMarshal.AsSpan(children);
-            ordered.Sort((left, right) => ExploreTree.CompareByName(names[left], left, names[right], right));
+            ordered.Sort((left, right) => ExploreTree.CompareByName(nameNumbers, names, left, right));
 
             for (var rank = 0; rank < ordered.Length; rank++)
             {

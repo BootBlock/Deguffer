@@ -23,7 +23,8 @@ namespace Deguffer.Core.Exploring;
 /// </summary>
 public sealed class ExploreTree : Layout.ITrackedTree
 {
-    private readonly string[] _names;
+    private readonly int[] _nameNumbers;
+    private readonly NamePool.Frozen _names;
     private readonly int[] _parents;
     private readonly long[] _sizes;
     private readonly long[] _lengths;
@@ -45,7 +46,8 @@ public sealed class ExploreTree : Layout.ITrackedTree
     private ExploreTree(
         string rootPath,
         int rootNode,
-        string[] names,
+        int[] nameNumbers,
+        NamePool.Frozen names,
         int[] parents,
         long[] sizes,
         long[] lengths,
@@ -65,6 +67,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         RootPath = rootPath;
         RootNode = rootNode;
         ChildOrder = childOrder;
+        _nameNumbers = nameNumbers;
         _names = names;
         _parents = parents;
         _sizes = sizes;
@@ -92,6 +95,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         RootPath = scanned.RootPath;
         RootNode = scanned.RootNode;
         ChildOrder = scanned.ChildOrder;
+        _nameNumbers = scanned._nameNumbers;
         _names = scanned._names;
         _parents = scanned._parents;
         _sizes = scanned._sizes;
@@ -164,9 +168,16 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// </summary>
     public bool HasUnknownSizes => _sizeUnknown[RootNode];
 
-    public int NodeCount => _names.Length;
+    public int NodeCount => _nameNumbers.Length;
 
-    public string NameOf(int node) => _names[node];
+    /// <summary>
+    /// This node's name, made as a string for each call. For what is shown, one node at a time; a
+    /// pass over many nodes reads <see cref="NameSpanOf"/>, which makes nothing.
+    /// </summary>
+    public string NameOf(int node) => new(NameSpanOf(node));
+
+    /// <summary>This node's name, read where the tree holds it. See <see cref="NamePool"/>.</summary>
+    public ReadOnlySpan<char> NameSpanOf(int node) => _names[_nameNumbers[node]];
 
     /// <summary>
     /// Find each node in <paramref name="later"/> by its path, where that is a scan of the same place
@@ -364,7 +375,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         // is placed, and the chain of them ends at the root by the definition of reachability.
         for (var current = node; current != RootNode; current = _parents[current])
         {
-            components.Add(_names[current]);
+            components.Add(NameOf(current));
         }
 
         components.Reverse();
@@ -409,7 +420,8 @@ public sealed class ExploreTree : Layout.ITrackedTree
     internal static ExploreTree Create(
         string rootPath,
         int rootNode,
-        string[] names,
+        int[] nameNumbers,
+        NamePool.Frozen names,
         int[] parents,
         long[] sizes,
         long[] lengths,
@@ -442,12 +454,12 @@ public sealed class ExploreTree : Layout.ITrackedTree
 
         if (childOrder is ExploreChildOrder.BySize)
         {
-            SortChildren(childStart, children, sizes, names);
+            SortChildren(childStart, children, sizes, nameNumbers, names);
         }
 
         return new ExploreTree(
-            rootPath, rootNode, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-            created, modified, visibility, childStart, children, Placed(order, names.Length), childOrder,
+            rootPath, rootNode, nameNumbers, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
+            created, modified, visibility, childStart, children, Placed(order, nameNumbers.Length), childOrder,
             listingRefused is { Count: > 0 } ? listingRefused.ToFrozenSet() : FrozenSet<int>.Empty);
     }
 
@@ -605,11 +617,12 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// order belongs here rather than in each consumer. Name order needs no sort: see
     /// <see cref="Create"/>.
     /// </summary>
-    private static void SortChildren(int[] childStart, int[] children, long[] sizes, string[] names)
+    private static void SortChildren(
+        int[] childStart, int[] children, long[] sizes, int[] nameNumbers, NamePool.Frozen names)
     {
         // One delegate each for the whole tree rather than one per directory. A volume has hundreds
         // of thousands of directories (G5).
-        var byName = ByName(names);
+        var byName = ByName(nameNumbers, names);
         Func<int, long> sizeOf = node => sizes[node];
 
         for (var node = 0; node + 1 < childStart.Length; node++)
@@ -674,21 +687,28 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// sensitivity enabled holds <c>Cache</c> and <c>cache</c> at once — and the size path three
     /// lines below says why an unspecified order among equals is not good enough here.</para>
     /// </summary>
-    private static Comparison<int> ByName(string[] names) => (left, right) => CompareByName(names, left, right);
+    private static Comparison<int> ByName(int[] nameNumbers, NamePool.Frozen names) =>
+        (left, right) => CompareByName(nameNumbers, names, left, right);
 
     /// <summary>Two siblings of this tree in name order. See <see cref="ByName"/>.</summary>
-    internal int CompareByName(int left, int right) => CompareByName(_names, left, right);
+    internal int CompareByName(int left, int right) => CompareByName(_nameNumbers, _names, left, right);
 
-    private static int CompareByName(string[] names, int left, int right) =>
-        CompareByName(names[left], left, names[right], right);
+    /// <summary>
+    /// Two nodes in name order, for a caller holding the arrays a tree is made from. One number is one
+    /// name, so two siblings sharing a number are ordered by node without reading it.
+    /// </summary>
+    internal static int CompareByName(int[] nameNumbers, NamePool.Frozen names, int left, int right) =>
+        nameNumbers[left] == nameNumbers[right]
+            ? left.CompareTo(right)
+            : CompareByName(names[nameNumbers[left]], left, names[nameNumbers[right]], right);
 
     /// <summary>
     /// Two siblings in name order, by name and node number, for a caller that has the names before
     /// there is a tree to hold them. See <see cref="ByName"/>.
     /// </summary>
-    internal static int CompareByName(string leftName, int left, string rightName, int right)
+    internal static int CompareByName(ReadOnlySpan<char> leftName, int left, ReadOnlySpan<char> rightName, int right)
     {
-        var byName = string.Compare(leftName, rightName, StringComparison.OrdinalIgnoreCase);
+        var byName = leftName.CompareTo(rightName, StringComparison.OrdinalIgnoreCase);
         return byName != 0 ? byName : left.CompareTo(right);
     }
 }

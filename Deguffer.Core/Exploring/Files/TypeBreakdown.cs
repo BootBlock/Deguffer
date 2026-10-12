@@ -97,7 +97,7 @@ public sealed class TypeBreakdown
                 continue;
             }
 
-            var name = tree.NameOf(node);
+            var name = tree.NameSpanOf(node);
             var category = (int)FileCategories.Of(name);
 
             bytes[category] += tree.SizeOf(node);
@@ -147,10 +147,10 @@ public sealed class TypeBreakdown
     /// whose extension has been seen allocates nothing, and a pass over a volume sees each extension
     /// many thousands of times (G5).
     /// </summary>
-    private static ref Tally Tallied(Dictionary<string, Tally> table, string name)
+    private static ref Tally Tallied(Dictionary<string, Tally> table, ReadOnlySpan<char> name)
     {
         var dot = name.LastIndexOf('.');
-        var extension = dot >= 0 && dot < name.Length - 1 ? name.AsSpan(dot) : [];
+        var extension = dot >= 0 && dot < name.Length - 1 ? name[dot..] : [];
 
         return ref CollectionsMarshal.GetValueRefOrAddDefault(
             table.GetAlternateLookup<ReadOnlySpan<char>>(), extension, out _);

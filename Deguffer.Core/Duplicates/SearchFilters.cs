@@ -59,11 +59,16 @@ public sealed record ExtensionFilter
 
     private readonly HashSet<string> _extensions = new(StringComparer.OrdinalIgnoreCase);
 
+    // Read by span, so asking about a file makes no string of its extension: a search asks it of every
+    // file it walks.
+    private readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> _extensionsBySpan;
+
     public ExtensionFilter(ExtensionFilterMode mode, IEnumerable<string> extensions)
     {
         ArgumentNullException.ThrowIfNull(extensions);
 
         Mode = mode;
+        _extensionsBySpan = _extensions.GetAlternateLookup<ReadOnlySpan<char>>();
         string? notAnExtension = null;
 
         foreach (var entry in extensions.Where(entry => !string.IsNullOrWhiteSpace(entry)))
@@ -118,10 +123,10 @@ public sealed record ExtensionFilter
     public string? WhyRefused { get; }
 
     /// <summary>Whether a file named <paramref name="name"/> is searched.</summary>
-    public bool Admits(string name) => Mode switch
+    public bool Admits(ReadOnlySpan<char> name) => Mode switch
     {
-        ExtensionFilterMode.OnlyThese => _extensions.Contains(Path.GetExtension(name)),
-        ExtensionFilterMode.SkipThese => !_extensions.Contains(Path.GetExtension(name)),
+        ExtensionFilterMode.OnlyThese => _extensionsBySpan.Contains(Path.GetExtension(name)),
+        ExtensionFilterMode.SkipThese => !_extensionsBySpan.Contains(Path.GetExtension(name)),
         _ => true,
     };
 
