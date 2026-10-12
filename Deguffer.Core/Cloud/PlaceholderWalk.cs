@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Cloud;
 
@@ -13,23 +15,75 @@ namespace Deguffer.Core.Cloud;
 /// <para><b>Links are neither entered nor offered.</b> A junction or symbolic link inside a sync root
 /// leads somewhere the sync app does not own, for the reason <see cref="Execution.DirectoryRemover"/>
 /// does not follow one.</para>
+///
+/// <para><b>Folders are read in parallel, and the answer does not depend on it.</b> Describing a
+/// placeholder costs an open, a describe and a close, so a root of a hundred thousand files read one
+/// after another is several hundred thousand calls in a row. The folders go to the bounded workers of
+/// <see cref="WalkWorkers{TState}"/>, each worker keeps its own tally, and the tallies are merged once
+/// the walk is over: the counts are sums, and the files are put in order of path.</para>
 /// </summary>
 public static class PlaceholderWalk
 {
-    public static ReleaseSelection Of(ICloudFiles cloud, string syncRoot, MinimumAge keep, CancellationToken ct)
+    /// <param name="threads">How many folders are read at once, the calling thread included.</param>
+    public static ReleaseSelection Of(ICloudFiles cloud, string syncRoot, MinimumAge keep, int threads, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(cloud);
+        ArgumentOutOfRangeException.ThrowIfLessThan(threads, 1);
 
+        var tallies = new ConcurrentBag<Tally>();
+
+        new WalkWorkers<PinState>(
+                threads,
+                descend =>
+                {
+                    var tally = new Tally(cloud, keep, descend, ct);
+                    tallies.Add(tally);
+                    return tally.Read;
+                },
+                onProgress: static _ => { },
+                TimeProvider.System,
+                ct)
+            .Run(syncRoot, InheritedPins.Own(cloud, syncRoot, PinState.Unspecified));
+
+        return Merged(tallies);
+    }
+
+    private static ReleaseSelection Merged(IEnumerable<Tally> tallies)
+    {
         var files = new List<ReleasableFile>();
         var held = new Dictionary<HeldBack, HeldTally>();
         var unreadable = 0;
 
-        var pending = new Stack<(string Directory, PinState Inherited)>();
-        pending.Push((syncRoot, InheritedPins.Own(cloud, syncRoot, PinState.Unspecified)));
-
-        while (pending.TryPop(out var folder))
+        foreach (var tally in tallies)
         {
-            foreach (var entry in cloud.List(folder.Directory, ct))
+            files.AddRange(tally.Files);
+            unreadable += tally.Unreadable;
+
+            foreach (var (reason, found) in tally.Held)
+            {
+                held[reason] = held.GetValueOrDefault(reason) + found;
+            }
+        }
+
+        // Ordinal, so two names a case-sensitive folder tells apart keep one order between runs.
+        files.Sort(static (a, b) => string.CompareOrdinal(a.Path, b.Path));
+
+        return new ReleaseSelection(files, held, unreadable);
+    }
+
+    /// <summary>What one worker found in the folders it read, kept apart from the others' until the walk ends.</summary>
+    private sealed class Tally(ICloudFiles cloud, MinimumAge keep, Action<string, PinState> descend, CancellationToken ct)
+    {
+        public List<ReleasableFile> Files { get; } = [];
+
+        public Dictionary<HeldBack, HeldTally> Held { get; } = [];
+
+        public int Unreadable { get; private set; }
+
+        /// <param name="inherited">The pin the folder's own files inherit from it.</param>
+        public void Read(string directory, PinState inherited)
+        {
+            foreach (var entry in cloud.List(directory, ct))
             {
                 if (entry.IsOtherLink || !entry.IsPlaceholder)
                 {
@@ -37,7 +91,7 @@ public static class PlaceholderWalk
                     // keep placeholders below one. A link is the one thing never entered.
                     if (entry.IsDirectory && !entry.IsOtherLink)
                     {
-                        pending.Push((entry.Path, folder.Inherited));
+                        descend(entry.Path, inherited);
                     }
 
                     continue;
@@ -47,33 +101,31 @@ public static class PlaceholderWalk
 
                 if (reading.Placeholder is not { } placeholder)
                 {
-                    unreadable += reading.Presence is PathPresence.Refused ? 1 : 0;
+                    Unreadable += reading.Presence is PathPresence.Refused ? 1 : 0;
                     continue;
                 }
 
                 if (entry.IsDirectory)
                 {
-                    pending.Push((entry.Path, ReleaseRules.PassedOn(placeholder.Pin, folder.Inherited)));
+                    descend(entry.Path, ReleaseRules.PassedOn(placeholder.Pin, inherited));
                     continue;
                 }
 
-                switch (ReleaseRules.Hold(placeholder, folder.Inherited, keep))
+                switch (ReleaseRules.Hold(placeholder, inherited, keep))
                 {
                     case null:
-                        files.Add(new ReleasableFile(entry.Path, placeholder.OnDiskBytes));
+                        Files.Add(new ReleasableFile(entry.Path, placeholder.OnDiskBytes));
                         break;
 
                     case HeldBack.NothingOnDisk:
                         break;
 
                     case { } reason:
-                        held[reason] = held.GetValueOrDefault(reason) + placeholder.OnDiskBytes;
+                        Held[reason] = Held.GetValueOrDefault(reason) + placeholder.OnDiskBytes;
                         break;
                 }
             }
         }
-
-        return new ReleaseSelection(files, held, unreadable);
     }
 }
 
@@ -84,6 +136,8 @@ public sealed record ReleasableFile(string Path, long OnDiskBytes);
 public readonly record struct HeldTally(int Files, long Bytes)
 {
     public static HeldTally operator +(HeldTally tally, long bytes) => new(tally.Files + 1, tally.Bytes + bytes);
+
+    public static HeldTally operator +(HeldTally tally, HeldTally other) => new(tally.Files + other.Files, tally.Bytes + other.Bytes);
 }
 
 /// <summary>What <see cref="PlaceholderWalk"/> found in one sync root.</summary>
