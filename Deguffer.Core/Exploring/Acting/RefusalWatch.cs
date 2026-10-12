@@ -61,7 +61,7 @@ public sealed class RefusalWatch
     /// Whether a child named <paramref name="childName"/> has to be asked about wherever it is:
     /// Outlook's mail stores and the folder it saves them in, which are refused by name.
     /// </summary>
-    public static bool MayRefuseByName(string childName) =>
+    public static bool MayRefuseByName(ReadOnlySpan<char> childName) =>
         childName.Equals(OutlookDataFiles.SavedDataFilesFolder, StringComparison.OrdinalIgnoreCase)
         || MailStore.Is(childName);
 }

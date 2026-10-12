@@ -241,6 +241,25 @@ public sealed class GrowthReplay
     /// <summary>A node's name, or null for a block of what was not recorded.</summary>
     internal string? NameOf(int node) => node < TodayCount ? Today.NameOf(node) : _extraNames[node - TodayCount];
 
+    /// <summary>
+    /// Two nodes by name, without regard to case. A block of what was not recorded has no name, and
+    /// sorts before its namesakes. Read by span, because a sort asks this of every pair it compares.
+    /// </summary>
+    internal int CompareByName(int left, int right)
+    {
+        var leftNamed = IsNamed(left);
+        var rightNamed = IsNamed(right);
+
+        return leftNamed && rightNamed
+            ? NameSpanOf(left).CompareTo(NameSpanOf(right), StringComparison.OrdinalIgnoreCase)
+            : leftNamed.CompareTo(rightNamed);
+    }
+
+    private bool IsNamed(int node) => node < TodayCount || _extraNames[node - TodayCount] is not null;
+
+    private ReadOnlySpan<char> NameSpanOf(int node) =>
+        node < TodayCount ? Today.NameSpanOf(node) : _extraNames[node - TodayCount];
+
     /// <summary><paramref name="before"/> moved <paramref name="step"/> steps of <see cref="Steps"/> towards <paramref name="after"/>.</summary>
     internal static long Between(long before, long after, int step) =>
         before + (long)Math.Round((double)(after - before) * step / Steps);

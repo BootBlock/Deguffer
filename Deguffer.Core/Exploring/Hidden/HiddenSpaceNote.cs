@@ -49,7 +49,7 @@ public static class HiddenSpaceNote
             && volume.Hidden.ShadowCopies is { Statement: Statement.Stated, AllocatedBytes: > 0 } storage
             && tree.ParentOf(node) == tree.RootNode
             && node != tree.RootNode
-            && string.Equals(tree.NameOf(node), VolumeSpace.SystemVolumeInformation, StringComparison.OrdinalIgnoreCase)
+            && tree.NameSpanOf(node).Equals(VolumeSpace.SystemVolumeInformation, StringComparison.OrdinalIgnoreCase)
                 ? $"Windows states that {FreeSpace.Format(storage.AllocatedBytes)} of this is set aside for "
                   + "restore points and shadow copies. "
                   + Holding(storage)

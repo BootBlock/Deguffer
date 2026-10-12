@@ -37,7 +37,7 @@ internal static class CandidateGrouping
         var bySize = criteria.GroupsBySize();
         var byName = criteria.GroupsByName();
         var byTime = criteria.GroupsByTime();
-        var groups = new Dictionary<(long Length, string Name, long Time), List<FoundFile>>(KeyComparer.Instance);
+        var groups = new Dictionary<GroupKey, List<FoundFile>>(KeyComparer.Instance);
 
         foreach (var file in found)
         {
@@ -53,7 +53,7 @@ internal static class CandidateGrouping
                 time = minute;
             }
 
-            Add(groups, (bySize ? file.Tree.LengthOf(file.Node) : 0, byName ? file.Tree.NameOf(file.Node) : string.Empty, time), file);
+            Add(groups, new GroupKey(bySize ? file.Tree.LengthOf(file.Node) : 0, byName ? file : null, time), file);
         }
 
         return [.. groups.Values.Where(group => group.Count > 1)];
@@ -79,15 +79,15 @@ internal static class CandidateGrouping
         var bySize = criteria.GroupsBySize();
         var byName = criteria.GroupsByName();
         var byTime = criteria.GroupsByTime();
-        var groups = new Dictionary<(long Length, string Name, long Time), List<IdentifiedFile>>(KeyComparer.Instance);
+        var groups = new Dictionary<GroupKey, List<IdentifiedFile>>(KeyComparer.Instance);
 
         foreach (var file in files)
         {
             var description = file.Description;
 
-            Add(groups, (
+            Add(groups, new GroupKey(
                 bySize ? description.Length : 0,
-                byName ? file.Found.Tree.NameOf(file.Found.Node) : string.Empty,
+                byName ? file.Found : null,
                 byTime ? description.Modified.Ticks : 0), file);
         }
 
@@ -101,7 +101,7 @@ internal static class CandidateGrouping
             {
                 found.Add(new CandidateGroup(
                     bySize ? key.Length : null,
-                    byName ? key.Name : null,
+                    key.Named is { } named ? named.Tree.NameOf(named.Node) : null,
                     byTime ? new DateTime(key.Time, DateTimeKind.Utc) : null,
                     [.. distinct.Select(paths => Candidate([.. paths], namesOf))]));
             }
@@ -151,7 +151,7 @@ internal static class CandidateGrouping
         return now is FileStorage.CloudOnly || scanned is FileStorage.CloudOnly ? now : scanned;
     }
 
-    private static void Add<T>(Dictionary<(long Length, string Name, long Time), List<T>> groups, (long Length, string Name, long Time) key, T member)
+    private static void Add<T>(Dictionary<GroupKey, List<T>> groups, GroupKey key, T member)
     {
         if (!groups.TryGetValue(key, out var members))
         {
@@ -161,15 +161,26 @@ internal static class CandidateGrouping
         members.Add(member);
     }
 
+    /// <summary>
+    /// What a group is keyed by: the length and the time, and where the name is compared, the file
+    /// whose name it is. The name is read where the tree holds it rather than made into a string for
+    /// every file found, which a search grouping by name would otherwise do for each file on the
+    /// volume (#345).
+    /// </summary>
+    private readonly record struct GroupKey(long Length, FoundFile? Named, long Time)
+    {
+        public ReadOnlySpan<char> Name => Named is { } file ? file.Tree.NameSpanOf(file.Node) : [];
+    }
+
     /// <summary>The length and the time exactly, and the name ordinally without regard to case (§7.4).</summary>
-    private sealed class KeyComparer : IEqualityComparer<(long Length, string Name, long Time)>
+    private sealed class KeyComparer : IEqualityComparer<GroupKey>
     {
         public static readonly KeyComparer Instance = new();
 
-        public bool Equals((long Length, string Name, long Time) x, (long Length, string Name, long Time) y) =>
-            x.Length == y.Length && x.Time == y.Time && StringComparer.OrdinalIgnoreCase.Equals(x.Name, y.Name);
+        public bool Equals(GroupKey x, GroupKey y) =>
+            x.Length == y.Length && x.Time == y.Time && x.Name.Equals(y.Name, StringComparison.OrdinalIgnoreCase);
 
-        public int GetHashCode((long Length, string Name, long Time) key) =>
-            HashCode.Combine(key.Length, key.Time, StringComparer.OrdinalIgnoreCase.GetHashCode(key.Name));
+        public int GetHashCode(GroupKey key) =>
+            HashCode.Combine(key.Length, key.Time, string.GetHashCode(key.Name, StringComparison.OrdinalIgnoreCase));
     }
 }

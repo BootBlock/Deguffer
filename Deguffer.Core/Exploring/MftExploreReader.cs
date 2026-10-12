@@ -87,7 +87,11 @@ internal static class MftExploreReader
         // past the real count are simply absent, and an absent slot contributes nothing.
         var count = Math.Max(records, (int)MftRecord.ReservedRecordCount);
 
-        var names = new string[count];
+        // A number per record into one pool of names, rather than a string per record. See NamePool.
+        // A slot no record fills keeps zero, which is the empty name.
+        var nameNumbers = new int[count];
+        var names = new NamePool();
+        var namesGate = new Lock();
         var parents = new int[count];
         var sizes = new long[count];
 
@@ -112,8 +116,6 @@ internal static class MftExploreReader
         var visibility = new FileVisibility[count];
 
         var present = new bool[count];
-
-        Array.Fill(names, string.Empty);
 
         // Written from several parse threads at once, and only ever to true, so no write can undo
         // another. The stream has finished with every thread before it returns, which is when this
@@ -164,7 +166,13 @@ internal static class MftExploreReader
                     return true;
                 }
 
-                names[number] = record.Name;
+                // The pool is shared by every parse thread. What the lock covers is a lookup and, for
+                // a name not met before, a copy, against a record parsed outside it.
+                lock (namesGate)
+                {
+                    nameNumbers[number] = names.Intern(record.Name);
+                }
+
                 parents[number] = (int)record.ParentRecordNumber;
                 sizes[number] = record.Size?.Allocated ?? 0;
                 lengths[number] = record.Size?.Logical ?? 0;
@@ -190,7 +198,7 @@ internal static class MftExploreReader
         isDirectory[volumeRoot] = true;
         present[volumeRoot] = true;
 
-        var resolved = Resolve(components, names, parents, isDirectory, isLink, present, count);
+        var resolved = Resolve(components, nameNumbers, names.Freeze(), parents, isDirectory, isLink, present, count);
         if (resolved.Node is not { } root)
         {
             return new MftExploreRead(
@@ -205,7 +213,7 @@ internal static class MftExploreReader
         // carries them like any other, and where it did not parse there is nothing to put here but
         // the unknown the array already holds — a date for a folder nothing could read is not one
         // to invent.
-        names[root] = rootPath;
+        nameNumbers[root] = names.Intern(rootPath);
         parents[root] = root;
 
         // A record the pass could not place might have been anywhere, this folder included, so the
@@ -218,7 +226,7 @@ internal static class MftExploreReader
         // size could rearrange.
         return new MftExploreRead(
             ExploreTree.Create(
-                rootPath, root, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
+                rootPath, root, nameNumbers, names.Freeze(), parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
                 created, modified, visibility, present, ExploreChildOrder.BySize),
             FallbackReason.None,
             !couldNotReadWholeTable,
@@ -238,7 +246,8 @@ internal static class MftExploreReader
     /// </summary>
     private static (int? Node, FallbackReason Reason) Resolve(
         IReadOnlyList<string> components,
-        string[] names,
+        int[] nameNumbers,
+        NamePool.Frozen names,
         int[] parents,
         bool[] isDirectory,
         bool[] isLink,
@@ -249,7 +258,7 @@ internal static class MftExploreReader
             (int)MftRecord.RootRecordNumber,
             node => isLink[node],
             node => isDirectory[node],
-            (directory, name) => FindChild(directory, name, names, parents, present, count));
+            (directory, name) => FindChild(directory, name, nameNumbers, names, parents, present, count));
 
     /// <summary>
     /// The node of <paramref name="tree"/>, a tree rooted at its volume's top, that holds the folder
@@ -278,7 +287,7 @@ internal static class MftExploreReader
     {
         foreach (var child in tree.ChildrenOf(directory))
         {
-            if (tree.NameOf(child).Equals(name, StringComparison.Ordinal))
+            if (tree.NameSpanOf(child).SequenceEqual(name))
             {
                 return child;
             }
@@ -351,7 +360,7 @@ internal static class MftExploreReader
     /// a node the tree then declines to link.</para>
     /// </summary>
     private static int? FindChild(
-        int directory, string name, string[] names, int[] parents, bool[] present, int count)
+        int directory, string name, int[] nameNumbers, NamePool.Frozen names, int[] parents, bool[] present, int count)
     {
         int? differingInCase = null;
 
@@ -362,12 +371,14 @@ internal static class MftExploreReader
                 continue;
             }
 
-            if (names[i].Equals(name, StringComparison.Ordinal))
+            var held = names[nameNumbers[i]];
+
+            if (held.SequenceEqual(name))
             {
                 return i;
             }
 
-            if (differingInCase is null && names[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (differingInCase is null && held.Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 differingInCase = i;
             }

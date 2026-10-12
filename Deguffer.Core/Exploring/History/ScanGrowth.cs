@@ -305,7 +305,7 @@ public sealed class ScanGrowth
 
         var byNode = new Dictionary<int, FolderChange>();
         var removed = new List<FolderChange>();
-        var children = new Dictionary<int, Dictionary<string, int>>();
+        var children = new Dictionary<int, ChildrenByName>();
         var folders = earlier.Folders;
 
         // Where each recorded folder is in this tree, or -1 where it is not. Parents come first in a
@@ -408,23 +408,23 @@ public sealed class ScanGrowth
     /// first one the tree lists answers.</para>
     /// </summary>
     private static int FolderNamed(
-        ExploreTree tree, int parent, string name, Dictionary<int, Dictionary<string, int>> children)
+        ExploreTree tree, int parent, string name, Dictionary<int, ChildrenByName> children)
     {
         if (!children.TryGetValue(parent, out var named))
         {
-            named = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            named = new ChildrenByName(tree);
 
             foreach (var child in tree.ChildrenOf(parent))
             {
                 if (tree.IsDirectory(child) && !tree.IsLink(child))
                 {
-                    named.TryAdd(tree.NameOf(child), child);
+                    named.Add(child);
                 }
             }
 
             children[parent] = named;
         }
 
-        return named.TryGetValue(name, out var node) ? node : -1;
+        return named.Find(name) ?? -1;
     }
 }

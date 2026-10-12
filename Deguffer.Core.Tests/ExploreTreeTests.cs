@@ -227,10 +227,14 @@ public class ExploreTreeTests
     {
         // 3 and 4 are each other's parent: present, sized, and reachable from nothing. 5 is a slot
         // no reader filled, which is what a free record looks like.
+        var names = new NamePool();
+        int[] nameNumbers = [.. new[] { "testuser", "cache", "a.tgz", "orphan", "orphan-parent", "" }.Select(name => names.Intern(name))];
+
         var tree = ExploreTree.Create(
             Root,
             rootNode: 0,
-            names: ["testuser", "cache", "a.tgz", "orphan", "orphan-parent", ""],
+            nameNumbers,
+            names.Freeze(),
             parents: [0, 0, 1, 4, 3, 0],
             sizes: [0, 0, 100, 500, 700, 900],
             lengths: [0, 0, 150, 500, 700, 900],
@@ -491,7 +495,8 @@ public class ExploreTreeTests
     /// </summary>
     private sealed class FoldersOfFiles
     {
-        private readonly string[] _names;
+        private readonly int[] _nameNumbers;
+        private readonly NamePool.Frozen _names;
         private readonly int[] _parents;
         private readonly int[] _nameRanks;
         private readonly long[] _sizes;
@@ -508,7 +513,7 @@ public class ExploreTreeTests
         public FoldersOfFiles(int folders, int filesInEach)
         {
             var count = 1 + folders + (folders * filesInEach);
-            _names = new string[count];
+            _nameNumbers = new int[count];
             _parents = new int[count];
             _nameRanks = new int[count];
             _sizes = new long[count];
@@ -523,7 +528,10 @@ public class ExploreTreeTests
             _visibility = new FileVisibility[count];
 
             Array.Fill(_present, true);
-            Array.Fill(_names, "f");
+
+            var names = new NamePool();
+            Array.Fill(_nameNumbers, names.Intern("f"));
+            _names = names.Freeze();
 
             for (var folder = 0; folder < folders; folder++)
             {
@@ -544,7 +552,7 @@ public class ExploreTreeTests
         /// <summary>Once only: assembling totals each subtree into the arrays.</summary>
         public ExploreTree Assemble(ExploreChildOrder order) =>
             ExploreTree.Create(
-                Root, 0, _names, _parents, _sizes, _lengths, _storage, _isDirectory, _isLink, _sizeUnknown,
+                Root, 0, _nameNumbers, _names, _parents, _sizes, _lengths, _storage, _isDirectory, _isLink, _sizeUnknown,
                 _created, _modified, _visibility, _present, order,
                 nameRanks: order is ExploreChildOrder.ByName ? _nameRanks : null);
     }

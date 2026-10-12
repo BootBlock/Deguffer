@@ -27,9 +27,7 @@ public sealed class GrowthReplayFrame : ITrackedTree
         Step = step;
         _sizeOf = SizeOf;
 
-        // A block of what was not recorded has no name, and sorts before its namesakes.
-        _byName = (left, right) =>
-            string.Compare(replay.NameOf(left), replay.NameOf(right), StringComparison.OrdinalIgnoreCase);
+        _byName = replay.CompareByName;
     }
 
     public GrowthReplay Replay { get; }
