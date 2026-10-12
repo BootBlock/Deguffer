@@ -491,7 +491,6 @@ public class ExploreTreeTests
     /// </summary>
     private sealed class FoldersOfFiles
     {
-        private readonly int _count;
         private readonly string[] _names;
         private readonly int[] _parents;
         private readonly int[] _nameRanks;
@@ -508,20 +507,20 @@ public class ExploreTreeTests
 
         public FoldersOfFiles(int folders, int filesInEach)
         {
-            _count = 1 + folders + (folders * filesInEach);
-            _names = new string[_count];
-            _parents = new int[_count];
-            _nameRanks = new int[_count];
-            _sizes = new long[_count];
-            _isDirectory = new bool[_count];
-            _present = new bool[_count];
-            _lengths = new long[_count];
-            _storage = new FileStorage[_count];
-            _isLink = new bool[_count];
-            _sizeUnknown = new bool[_count];
-            _created = new ExploreTimestamp[_count];
-            _modified = new ExploreTimestamp[_count];
-            _visibility = new FileVisibility[_count];
+            var count = 1 + folders + (folders * filesInEach);
+            _names = new string[count];
+            _parents = new int[count];
+            _nameRanks = new int[count];
+            _sizes = new long[count];
+            _isDirectory = new bool[count];
+            _present = new bool[count];
+            _lengths = new long[count];
+            _storage = new FileStorage[count];
+            _isLink = new bool[count];
+            _sizeUnknown = new bool[count];
+            _created = new ExploreTimestamp[count];
+            _modified = new ExploreTimestamp[count];
+            _visibility = new FileVisibility[count];
 
             Array.Fill(_present, true);
             Array.Fill(_names, "f");
