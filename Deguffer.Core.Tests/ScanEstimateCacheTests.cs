@@ -187,4 +187,30 @@ public class ScanEstimateCacheTests
 
         Assert.Equal(6000, whole.Reports[0].Logical);
     }
+
+    /// <summary>
+    /// A folder's contents and the folder whole are remembered apart. The two differ by the folder's own
+    /// entry, so either run opened on the other's figure would show a count that is one out — and both
+    /// are remembered, so a folder emptied in place still opens instantly.
+    /// </summary>
+    [Fact]
+    public async Task RemembersAFoldersContentsApartFromTheFolderWhole()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var bin = temp.CreateDirectory("bin");
+        temp.CreateFile(1000, "bin", "a.tmp");
+
+        await Reopen(environment).MeasureAsync(bin);
+        await Reopen(environment).MeasureAsync(bin, MinimumAge.Off, ScanBounds.Contents);
+
+        var whole = new ProgressRecorder<ScanSize>();
+        await Reopen(environment).MeasureAsync(bin, MinimumAge.Off, progress: whole);
+
+        var contents = new ProgressRecorder<ScanSize>();
+        await Reopen(environment).MeasureAsync(bin, MinimumAge.Off, ScanBounds.Contents, contents);
+
+        Assert.Equal(2, whole.Reports[0].Entries);
+        Assert.Equal(1, contents.Reports[0].Entries);
+    }
 }

@@ -12,7 +12,7 @@ namespace Deguffer.Core.Scanning;
 /// that listing's entries, so no entry's full path is built to be compared (G4).</para>
 ///
 /// <para><b>Each path is placed below the root by the place it names, then spelled the way the walk
-/// spells it.</b> Both sides are put in <see cref="LongPath.Unaliased"/> form first, so a root reached
+/// spells it.</b> Both sides are put in <see cref="ReachedFolder.Comparable"/> form first, so a root reached
 /// through <c>C:\Users\LONGPR~1</c> and an entry a program reported under the long name are still one
 /// place. The keys are then built from the root exactly as the walk lists it, with
 /// <see cref="Path.Join(string?, string?)"/> as <see cref="WalkEntry.FullName"/> joins, and compared
@@ -43,7 +43,7 @@ internal sealed class LeftOutEntries
             return null;
         }
 
-        var place = Place(root);
+        var place = ReachedFolder.Comparable(root);
         var prefix = place.EndsWith(Path.DirectorySeparatorChar) ? place.Length : place.Length + 1;
         var walked = LongPath.Extended(root);
         var byFolder = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -51,7 +51,7 @@ internal sealed class LeftOutEntries
 
         foreach (var path in bounds.LeftOut!)
         {
-            var entry = Place(path);
+            var entry = ReachedFolder.Comparable(path);
 
             if (entry.Length <= prefix || !LongPath.Contains(place, entry))
             {
@@ -90,6 +90,4 @@ internal sealed class LeftOutEntries
         : contents.Links.Count > 0 ? contents.Links[0].Directory
         : contents.ReparseFiles.Count > 0 ? contents.ReparseFiles[0].Directory
         : null;
-
-    private static string Place(string path) => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(LongPath.Display(path)));
 }

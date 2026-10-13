@@ -48,9 +48,13 @@ public sealed class ScanEstimateCache
     private sealed record Entry(long Allocated, long Logical, bool IsApproximate, DateTimeOffset MeasuredAt, long Entries = 0);
 
     /// <summary>The last known size of <paramref name="path"/>, if it is recent enough to show.</summary>
-    public ScanSize? TryGet(string path)
+    /// <param name="keepsRoot">
+    /// Whether the figure is of the folder's contents alone, with the folder itself kept standing. See
+    /// <see cref="ScanBounds.KeepRoot"/>.
+    /// </param>
+    public ScanSize? TryGet(string path, bool keepsRoot = false)
     {
-        var key = Key(path);
+        var key = Key(path, keepsRoot);
 
         lock (_gate)
         {
@@ -71,9 +75,10 @@ public sealed class ScanEstimateCache
         }
     }
 
-    public void Set(string path, ScanSize size)
+    /// <param name="keepsRoot">As <see cref="TryGet"/> takes it.</param>
+    public void Set(string path, ScanSize size, bool keepsRoot = false)
     {
-        var key = Key(path);
+        var key = Key(path, keepsRoot);
 
         lock (_gate)
         {
@@ -106,6 +111,15 @@ public sealed class ScanEstimateCache
     /// </summary>
     private static string Key(string path) => LongPath.Entry(path) ?? path;
 
+    /// <summary>
+    /// The key for a figure of the path whole, or of its contents alone. The two differ by the folder's
+    /// own entry wherever nothing inside it stays, so one shown in place of the other would open on a
+    /// count that is one out. The marker cannot be part of a Windows path, so it names nothing on disk.
+    /// </summary>
+    private static string Key(string path, bool keepsRoot) => keepsRoot ? Key(path) + ContentsMarker : Key(path);
+
+    private const string ContentsMarker = "|contents";
+
     private static bool IsStale(Entry entry) => DateTimeOffset.UtcNow - entry.MeasuredAt > MaximumAge;
 
     private void Load()
@@ -131,7 +145,9 @@ public sealed class ScanEstimateCache
                 // accumulate every path the machine has ever had.
                 if (!IsStale(entry))
                 {
-                    _entries[Key(path)] = entry;
+                    var contents = path.EndsWith(ContentsMarker, StringComparison.Ordinal);
+
+                    _entries[Key(contents ? path[..^ContentsMarker.Length] : path, contents)] = entry;
                 }
             }
         }

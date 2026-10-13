@@ -70,7 +70,12 @@ public interface IDirectoryScanner
     /// Neither option is free; this one is wrong in the direction of being slow rather than in the
     /// direction of reporting a number nobody can check.</para>
     /// </summary>
-    ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default);
+    /// <param name="bounds">
+    /// What to leave standing, on the terms the reading it is subtracted from was taken on: an emptied
+    /// Recycle Bin's folder is measured with its root kept, as its estimate was. See
+    /// <see cref="ScanBounds"/>.
+    /// </param>
+    ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default);
 
     /// <summary>
     /// Every directory <paramref name="search"/> finds below <paramref name="root"/>, as full paths

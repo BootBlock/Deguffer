@@ -43,10 +43,10 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     }
 
     /// <summary>This fake keeps no snapshot, so the two routes are the same walk.</summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default)
+    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
     {
         _measured.Enqueue(path);
-        return ParallelEnumerationScanner.Default.MeasureAsync(path, MinimumAge.Off, progress: null, ct: ct);
+        return ParallelEnumerationScanner.Default.MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct);
     }
 
     /// <summary>

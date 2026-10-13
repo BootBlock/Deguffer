@@ -39,7 +39,7 @@ internal static class DiskCleanupRun
         // From the disk rather than the volume snapshot, for the reason a command step's second
         // reading is: nothing invalidates that snapshot between planning and executing, so it would
         // hand back the figure it is about to be subtracted from.
-        var after = await PlanExecutor.MeasureFromDiskAsync(scanner, step.Destroys, ct).ConfigureAwait(false);
+        var after = await PlanExecutor.MeasureFromDiskAsync(scanner, step.Destroys, default, ct).ConfigureAwait(false);
 
         // The handler reports its own progress to a sink that passes nothing on, so there is only the
         // end of it to report.

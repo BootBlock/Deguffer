@@ -5,12 +5,10 @@ namespace Deguffer.Core.Scanning;
 /// root where the removal empties it in place, and the entries below it the removal neither takes nor
 /// enters. <see cref="Execution.RemovalBounds"/> is the removal's half of the same answer.
 ///
-/// <para><b>The figure has to be taken on the removal's terms, not corrected afterwards.</b> A
-/// temporary folder used to be measured whole and then had each entry another row owns, and each
-/// entry a running program holds, measured again and subtracted. Every such entry was walked twice by
-/// this row and once more by the row that owns it, and the subtraction was a walk per entry, run one
-/// after another. Left out here, each is met once, as a name in its parent's listing, and never
-/// entered.</para>
+/// <para><b>The figure is taken on the removal's terms rather than corrected afterwards.</b> An
+/// entry left out is met once, as a name in its parent's listing, and never entered. Measuring it
+/// again to subtract it would walk it a second time, one walk an entry, and a temporary folder can
+/// hold thousands of entries another row owns, each of which that row walks as well.</para>
 ///
 /// <para><c>default</c> is the whole tree, root included, which is what every caller that says
 /// nothing has always measured.</para>

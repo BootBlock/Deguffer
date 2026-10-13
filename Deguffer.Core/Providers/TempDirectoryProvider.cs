@@ -409,12 +409,11 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// <summary>
     /// Hand each folder the entries its clean must leave alone, which its measurement then leaves out.
     ///
-    /// <para>Left out of the measurement, not measured and taken off afterwards. A step that named its
-    /// spared entries but still counted them would promise bytes the clean has already undertaken not
-    /// to take — §5.4's "prune, see no change, lose trust" arriving from the other direction, and
-    /// arriving on precisely the folders a busy machine has most of. Measuring each one again to
-    /// subtract it walked every such entry twice more than the clean needs, once a walk an entry, and
-    /// thousands of leaked browser profiles make that the larger part of the folder. See
+    /// <para>The figure must leave them out. A step that named its spared entries but still counted
+    /// them would promise bytes the clean has already undertaken not to take — §5.4's "prune, see no
+    /// change, lose trust" arriving from the other direction, and arriving on precisely the folders a
+    /// busy machine has most of. The measurement is told which they are, so it never enters them:
+    /// thousands of leaked browser profiles can be the larger part of the folder. See
     /// <see cref="Scanning.ScanBounds"/>.</para>
     ///
     /// <para><b>An entry another row owns is left out here too, and it is not a survivor.</b> It is

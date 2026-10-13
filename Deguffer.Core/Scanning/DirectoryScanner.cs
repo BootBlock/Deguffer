@@ -69,7 +69,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // out of it is short in the same way, so it is neither read nor written either.
         var remember = !keep.IsOn && !bounds.LeavesEntriesOut;
 
-        if (remember && _estimates?.TryGet(path) is { } remembered)
+        if (remember && _estimates?.TryGet(path, bounds.KeepRoot) is { } remembered)
         {
             progress?.Report(remembered);
         }
@@ -78,7 +78,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         if (remember)
         {
-            Remember(path, result);
+            Remember(path, bounds, result);
         }
 
         return result;
@@ -86,18 +86,23 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     /// <summary>
     /// Straight to the walk, whatever the index holds. The remembered estimate is still updated,
-    /// because this is the freshest figure Deguffer has for the path.
+    /// because this is the freshest figure Deguffer has for the path, unless entries were left out of
+    /// it, as <see cref="MeasureAsync"/> says.
     /// </summary>
-    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default)
+    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var result = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
-            .MeasureAsync(path, MinimumAge.Off, progress: null, ct: ct)
+            .MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct)
             .ConfigureAwait(false);
 
-        Remember(path, result);
+        if (!bounds.LeavesEntriesOut)
+        {
+            Remember(path, bounds, result);
+        }
+
         return result;
     }
 
@@ -107,11 +112,11 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// empty", and the figure it replaces is still the last one anybody read. See
     /// <see cref="RootReach"/>.
     /// </summary>
-    private void Remember(string path, ScanResult result)
+    private void Remember(string path, ScanBounds bounds, ScanResult result)
     {
         if (result.WasReached)
         {
-            _estimates?.Set(path, result.Size);
+            _estimates?.Set(path, result.Size, bounds.KeepRoot);
         }
     }
 

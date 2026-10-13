@@ -626,7 +626,7 @@ public sealed class BoundedFileWalkTests : IDisposable
         var seen = new ConcurrentBag<string>();
 
         BoundedFileWalk.Visit(
-            root, WalkTuning.Default, file => seen.Add(file.FullName), _ => { }, () => { }, TimeProvider.System, default);
+            root, WalkTuning.Default, file => seen.Add(file.FullName), _ => { }, leftOut: null, () => { }, TimeProvider.System, default);
 
         Assert.Equal(2, seen.Count);
         return [.. seen];
