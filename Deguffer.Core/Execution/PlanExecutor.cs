@@ -427,7 +427,7 @@ public sealed class PlanExecutor(
         }
         else
         {
-            var reading = await MeasureFromDiskAsync(scanner, step.MeasuredPaths, ct).ConfigureAwait(false);
+            var reading = await MeasureFromDiskAsync(scanner, step.MeasuredPaths, default, ct).ConfigureAwait(false);
 
             if (reading.Unreached is not null)
             {
@@ -585,7 +585,7 @@ public sealed class PlanExecutor(
 
         var outcome = await Task.Run(() => _emptier!.Empty(step.VolumeRoot), ct).ConfigureAwait(false);
 
-        var after = await MeasureFromDiskAsync(scanner, [step.Path], ct).ConfigureAwait(false);
+        var after = await MeasureFromDiskAsync(scanner, [step.Path], ScanBounds.Contents, ct).ConfigureAwait(false);
 
         // Nothing to report along the way — the shell offers no progress of its own, and its
         // progress window is one of the three things the flags suppress.
@@ -606,9 +606,9 @@ public sealed class PlanExecutor(
         var remaining = after.Size.Reclaimable;
         var reclaimed = step.EstimatedBytes - remaining;
 
-        // The entries by the same subtraction. The bin's own folder stays standing and was never in
-        // the estimate's count, so it comes out of the reading afterwards as well.
-        var entriesRemoved = Math.Max(0, step.Estimated.Entries - Math.Max(0, after.Size.Entries - 1));
+        // The entries by the same subtraction. The bin's own folder stays standing and is in neither
+        // count, because both readings keep it.
+        var entriesRemoved = Math.Max(0, step.Estimated.Entries - after.Size.Entries);
 
         // The disk is the evidence and the HRESULT is only the explanation, which is the whole
         // reason the measurement above is taken: SHEmptyRecycleBin reports S_OK and no figures, so
@@ -911,9 +911,11 @@ public sealed class PlanExecutor(
     /// nothing invalidates that snapshot between planning and executing, so an ordinary measurement
     /// here would hand back the figure it is about to be subtracted from.
     /// </summary>
+    /// <param name="bounds">What each reading leaves standing. See <see cref="ScanBounds"/>.</param>
     internal static async Task<DiskReading> MeasureFromDiskAsync(
         IDirectoryScanner scanner,
         IReadOnlyList<string> paths,
+        ScanBounds bounds,
         CancellationToken ct)
     {
         var total = ScanSize.Zero;
@@ -921,7 +923,7 @@ public sealed class PlanExecutor(
 
         foreach (var path in paths)
         {
-            var measured = await scanner.MeasureFromDiskAsync(path, ct).ConfigureAwait(false);
+            var measured = await scanner.MeasureFromDiskAsync(path, bounds, ct).ConfigureAwait(false);
             total += measured.Size;
 
             if (!measured.WasReached)

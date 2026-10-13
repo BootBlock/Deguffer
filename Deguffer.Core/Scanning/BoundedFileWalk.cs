@@ -41,13 +41,17 @@ internal static class BoundedFileWalk
     /// Called, concurrently, for each file carrying a reparse point, which <paramref name="onFile"/>
     /// never sees. See <see cref="DirectoryContents.ReparseFiles"/>.
     /// </param>
+    /// <param name="leftOut">
+    /// Entries passed over, neither handed to either callback nor entered. Null for none. See
+    /// <see cref="ScanBounds.LeftOut"/>.
+    /// </param>
     /// <returns>
     /// Whether <paramref name="root"/> itself was listed. A folder refused below it is skipped as
     /// §5.3 says, and only the root's refusal is returned, because only that one leaves the caller
     /// with nothing measured. See <see cref="RootReach"/>.
     /// </returns>
     /// <summary>
-    /// <see cref="Visit(string, WalkTuning, Action{WalkEntry}, Action{WalkEntry}, Action, TimeProvider, CancellationToken)"/>
+    /// <see cref="Visit(string, WalkTuning, Action{WalkEntry}, Action{WalkEntry}, LeftOutEntries?, Action, TimeProvider, CancellationToken)"/>
     /// with the values <paramref name="tuning"/> resolves for the drive that holds
     /// <paramref name="root"/>. Every scan walks through here, so the values the user set are resolved
     /// in one place and no caller can ask for them and walk with others.
@@ -57,10 +61,11 @@ internal static class BoundedFileWalk
         ScanTuner tuning,
         Action<WalkEntry> onFile,
         Action<WalkEntry> onReparseFile,
+        LeftOutEntries? leftOut,
         Action onProgress,
         TimeProvider clock,
         CancellationToken ct) =>
-        Visit(root, tuning.For(root).Walk, onFile, onReparseFile, onProgress, clock, ct);
+        Visit(root, tuning.For(root).Walk, onFile, onReparseFile, leftOut, onProgress, clock, ct);
 
     /// <summary>
     /// <see cref="Visit{TState}(string, TState, WalkTuning, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>
@@ -82,6 +87,7 @@ internal static class BoundedFileWalk
         WalkTuning tuning,
         Action<WalkEntry> onFile,
         Action<WalkEntry> onReparseFile,
+        LeftOutEntries? leftOut,
         Action onProgress,
         TimeProvider clock,
         CancellationToken ct)
@@ -100,8 +106,16 @@ internal static class BoundedFileWalk
                     rootListed = false;
                 }
 
+                // Asked once a listing, and of each entry only in a listing that holds one.
+                var left = leftOut?.NamesIn(contents);
+
                 foreach (var entry in contents.Entries)
                 {
+                    if (left?.Contains(entry.Name) == true)
+                    {
+                        continue;
+                    }
+
                     if (entry.IsDirectory)
                     {
                         descend(entry, false);
@@ -114,7 +128,10 @@ internal static class BoundedFileWalk
 
                 foreach (var marked in contents.ReparseFiles)
                 {
-                    onReparseFile(marked);
+                    if (left?.Contains(marked.Name) != true)
+                    {
+                        onReparseFile(marked);
+                    }
                 }
             },
             onProgress,

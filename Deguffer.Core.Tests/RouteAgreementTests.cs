@@ -56,6 +56,87 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// A measurement told to leave entries out, on both routes. The table places a folder by its name
+    /// and leaves it out, keeps the root out of the count, and agrees with the walk on both numbers.
+    /// </summary>
+    [Fact]
+    public async Task TheTwoRoutesAgreeAboutWhatABoundLeavesOut()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "scratch",
+            new TreeFile("abandoned.tmp", 4096),
+            new TreeDirectory("live-session", new TreeFile("working.txt", 8000)),
+            new TreeDirectory("Adobe", new TreeFile("beside.tmp", 1234), new TreeDirectory("Disk Cache", new TreeFile("frame.bin", 5000)))));
+
+        var bounds = new ScanBounds(
+            KeepRoot: true,
+            [Path.Combine(path, "live-session"), Path.Combine(path, "Adobe", "Disk Cache")]);
+
+        var walked = await Walking().MeasureAsync(path, MinimumAge.Off, bounds);
+        var indexed = await Indexing(path, fixture).MeasureAsync(path, MinimumAge.Off, bounds);
+
+        Assert.Equal(ScanStrategy.ParallelEnumeration, walked.Strategy);
+        Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
+
+        Assert.Equal(4096 + 1234, walked.Size.Logical);
+        Assert.Equal(walked.Size.Logical, indexed.Size.Logical);
+
+        // abandoned.tmp and beside.tmp: scratch is kept, and Adobe holds what stays.
+        Assert.Equal(2, walked.Size.Entries);
+        Assert.Equal(walked.Size.Entries, indexed.Size.Entries);
+    }
+
+    /// <summary>
+    /// A folder emptied in place is kept out of its own count on both routes, with nothing inside it
+    /// held back: the one case where it would otherwise be counted.
+    /// </summary>
+    [Fact]
+    public async Task TheTwoRoutesAgreeAboutAFolderEmptiedInPlace()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "bin",
+            new TreeFile("a.tmp", 4096),
+            new TreeDirectory("folder", new TreeFile("b.tmp", 1234))));
+
+        var walked = await Walking().MeasureAsync(path, MinimumAge.Off, ScanBounds.Contents);
+        var indexed = await Indexing(path, fixture).MeasureAsync(path, MinimumAge.Off, ScanBounds.Contents);
+
+        Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
+
+        // a.tmp, b.tmp and folder, and not bin.
+        Assert.Equal(3, walked.Size.Entries);
+        Assert.Equal(walked.Size.Entries, indexed.Size.Entries);
+    }
+
+    /// <summary>
+    /// A file left out is placed by its number, which a table that was not read from this disk does
+    /// not hold. The table cannot say which record to leave out, so the walk answers, and the file is
+    /// still left out of the figure.
+    /// </summary>
+    [Fact]
+    public async Task AFileTheTableCannotPlaceSendsTheMeasurementToTheWalk()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "scratch",
+            new TreeFile("abandoned.tmp", 4096),
+            new TreeFile("installer.msi", 8000)));
+
+        var indexed = await Indexing(path, fixture).MeasureAsync(
+            path,
+            MinimumAge.Off,
+            new ScanBounds(KeepRoot: true, [Path.Combine(path, "installer.msi")]));
+
+        Assert.Equal(ScanStrategy.ParallelEnumeration, indexed.Strategy);
+        Assert.Equal(4096, indexed.Size.Logical);
+    }
+
+    /// <summary>
     /// §9 on both routes at once. An elevated run and an unelevated one have to leave the same store
     /// out of the same total and name it by the same path, or a row's figure and the protection
     /// proven after its clean would depend on how the app was started.

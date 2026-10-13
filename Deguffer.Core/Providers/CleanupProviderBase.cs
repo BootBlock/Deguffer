@@ -418,29 +418,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <see cref="MeasureAgedAsync"/>, which is not the user's guard.</para>
     /// </summary>
     protected Task<ScanBatch> MeasureAllAsync(IReadOnlyList<string> paths, CancellationToken ct) =>
-        MeasureAllAsync(paths, MinimumAge.Off, ct);
-
-    /// <summary>
-    /// Measure paths a plan has undertaken <em>not</em> to delete, under the guard that plan is
-    /// running with, so a figure can have them taken out of it.
-    ///
-    /// <para>The second guarded measurement in this class, and the reason it is a separate member
-    /// rather than an argument on <see cref="MeasureAllAsync(IReadOnlyList{string}, CancellationToken)"/>
-    /// is the paragraph there: that one is a §5.1 command step's probe and must never be guarded,
-    /// because the tool decides for itself what it removes. This one is the opposite case. Its
-    /// subject is a path Deguffer <em>would</em> have deleted and has chosen to spare — §5.3's
-    /// entry that something is running out of — and the figure it produces is subtracted from a
-    /// guarded estimate, so it has to be measured on the same basis or the subtraction is between
-    /// two different quantities.</para>
-    ///
-    /// <para>Naming the two apart is what keeps a later reader from "simplifying" them into one
-    /// method with a defaulted argument, which would make the dangerous call site the easy one.</para>
-    /// </summary>
-    protected Task<ScanBatch> MeasureSparedAsync(
-        IReadOnlyList<string> paths,
-        MinimumAge keep,
-        CancellationToken ct) =>
-        MeasureAllAsync(paths, keep, ct);
+        MeasureAllAsync(Whole(paths), MinimumAge.Off, ct);
 
     /// <summary>
     /// A command step's probe measured twice: the whole of what those paths hold, and the part of it
@@ -470,25 +448,29 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MinimumAge age,
         CancellationToken ct) =>
     (
-        await MeasureAllAsync(paths, MinimumAge.Off, ct).ConfigureAwait(false),
-        await MeasureAllAsync(paths, age, ct).ConfigureAwait(false)
+        await MeasureAllAsync(Whole(paths), MinimumAge.Off, ct).ConfigureAwait(false),
+        await MeasureAllAsync(Whole(paths), age, ct).ConfigureAwait(false)
     );
 
+    /// <summary>Each path as a question about its whole tree, root included.</summary>
+    private static IReadOnlyList<(string Path, ScanBounds Bounds)> Whole(IReadOnlyList<string> paths) =>
+        [.. paths.Select(path => (path, default(ScanBounds)))];
+
     private async Task<ScanBatch> MeasureAllAsync(
-        IReadOnlyList<string> paths,
+        IReadOnlyList<(string Path, ScanBounds Bounds)> asked,
         MinimumAge keep,
         CancellationToken ct)
     {
-        var sizes = new List<ScanSize>(paths.Count);
-        var withheld = new List<bool>(paths.Count);
-        var stores = new List<IReadOnlyList<string>>(paths.Count);
+        var sizes = new List<ScanSize>(asked.Count);
+        var withheld = new List<bool>(asked.Count);
+        var stores = new List<IReadOnlyList<string>>(asked.Count);
         var fallback = FallbackReason.None;
 
-        foreach (var path in paths)
+        foreach (var (path, bounds) in asked)
         {
             ct.ThrowIfCancellationRequested();
 
-            var measured = await Scanner.MeasureAsync(path, keep, progress: null, ct).ConfigureAwait(false);
+            var measured = await Scanner.MeasureAsync(path, keep, bounds, progress: null, ct).ConfigureAwait(false);
             sizes.Add(measured.Size);
             withheld.Add(measured.WithheldRecent);
             stores.Add(measured.MailStores);
@@ -528,9 +510,18 @@ public abstract class CleanupProviderBase : ICleanupProvider
             throw new ArgumentException($"Only a directory removed outright can carry an index: {unindexable}.", nameof(targets));
         }
 
-        // An index is removed with the directory it indexes, so it is measured with it.
+        if (targets.FirstOrDefault(t => (t.Spared is { Count: > 0 } || t.OwnedElsewhere is { Count: > 0 }) && t.Kind != TargetKind.DirectoryContents) is { Path: { } unbounded })
+        {
+            throw new ArgumentException($"Only a folder emptied in place can leave entries standing: {unbounded}.", nameof(targets));
+        }
+
+        // An index is removed with the directory it indexes, so it is measured with it. A folder
+        // emptied in place is measured on the terms its removal empties it on, so the figure is
+        // already without whatever the removal leaves standing and nothing is measured to be taken off.
         var (each, measured) = await MeasureGroupsAsync(
-            [.. targets.Select(t => (IReadOnlyList<string>)[t.Path, .. t.IndexedBy ?? []])], keep, ct).ConfigureAwait(false);
+            [.. targets.Select(t => (IReadOnlyList<(string, ScanBounds)>)[(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
+            keep,
+            ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
 
@@ -540,15 +531,17 @@ public abstract class CleanupProviderBase : ICleanupProvider
             {
                 TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
                 TargetKind.RecycleBin => new EmptyRecycleBinStep(target.Path, target.Reason),
-                TargetKind.DirectoryContents => new ClearDirectoryStep(target.Path, target.Reason),
+                TargetKind.DirectoryContents => new ClearDirectoryStep(target.Path, target.Reason)
+                {
+                    Spared = target.Spared ?? [],
+                    OwnedElsewhere = target.OwnedElsewhere ?? [],
+                },
                 _ => new DeleteDirectoryStep(target.Path, target.Reason) { IndexedBy = target.IndexedBy ?? [] },
             };
 
             steps.Add(step with
             {
-                Estimated = target.Kind is TargetKind.DirectoryContents or TargetKind.RecycleBin
-                    ? WithoutItsOwnEntry(group.Size)
-                    : group.Size,
+                Estimated = group.Size,
                 LastWritten = target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = group.WithheldRecent,
@@ -584,7 +577,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CancellationToken ct)
     {
         var (each, measured) = await MeasureGroupsAsync(
-            [.. targets.Select(t => (IReadOnlyList<string>)[t.Path, .. t.AlsoClears])], keep, ct).ConfigureAwait(false);
+            [.. targets.Select(t => Whole([t.Path, .. t.AlsoClears]))], keep, ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
 
@@ -614,7 +607,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// to another, so every step that is the sum of several paths comes through here.</para>
     /// </summary>
     private async Task<(IReadOnlyList<GroupMeasure> Each, ScanBatch Measured)> MeasureGroupsAsync(
-        IReadOnlyList<IReadOnlyList<string>> groups,
+        IReadOnlyList<IReadOnlyList<(string Path, ScanBounds Bounds)>> groups,
         MinimumAge keep,
         CancellationToken ct)
     {
@@ -641,15 +634,18 @@ public abstract class CleanupProviderBase : ICleanupProvider
     private readonly record struct GroupMeasure(ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores);
 
     /// <summary>
-    /// A measurement of a folder emptied in place, which stays standing, so its own entry is not
-    /// among what the step takes.
-    ///
-    /// <para>The measurement counted that entry only where nothing inside the folder stays. Where
-    /// something does, this counts one short — the direction a count deciding whether anything is
-    /// offered may be wrong in.</para>
+    /// What the removal of <paramref name="target"/> leaves standing, for its measurement to leave
+    /// out: the folder itself where it is emptied in place, as a Recycle Bin's folder is, and the
+    /// entries a folder emptied in place is told to leave. See <see cref="ScanBounds"/>.
     /// </summary>
-    private static ScanSize WithoutItsOwnEntry(ScanSize size) =>
-        size with { Entries = Math.Max(0, size.Entries - 1) };
+    private static ScanBounds BoundsOf(DeletionTarget target) => target.Kind switch
+    {
+        TargetKind.DirectoryContents => new ScanBounds(
+            KeepRoot: true,
+            [.. target.Spared ?? [], .. target.OwnedElsewhere ?? []]),
+        TargetKind.RecycleBin => ScanBounds.Contents,
+        _ => default,
+    };
 
     /// <summary>
     /// The guard applied to a finished plan: carried onto it, said out loud, and — for a step whose

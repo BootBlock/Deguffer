@@ -52,6 +52,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
     public async ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
+        ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default)
     {
@@ -64,19 +65,20 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // The remembered figure is for the whole path, so a run with the guard on neither reads it
         // nor writes it. Reading it would flash a total this run is not going to reclaim, and
         // writing it would leave the next run — where the user may have turned the guard off —
-        // opening on a number that is short by however much was held back.
-        var remember = !keep.IsOn;
+        // opening on a number that is short by however much was held back. A figure with entries left
+        // out of it is short in the same way, so it is neither read nor written either.
+        var remember = !keep.IsOn && !bounds.LeavesEntriesOut;
 
-        if (remember && _estimates?.TryGet(path) is { } remembered)
+        if (remember && _estimates?.TryGet(path, bounds.KeepRoot) is { } remembered)
         {
             progress?.Report(remembered);
         }
 
-        var result = await MeasureFreshAsync(path, keep, progress, ct).ConfigureAwait(false);
+        var result = await MeasureFreshAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
 
         if (remember)
         {
-            Remember(path, result);
+            Remember(path, bounds, result);
         }
 
         return result;
@@ -84,18 +86,23 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     /// <summary>
     /// Straight to the walk, whatever the index holds. The remembered estimate is still updated,
-    /// because this is the freshest figure Deguffer has for the path.
+    /// because this is the freshest figure Deguffer has for the path, unless entries were left out of
+    /// it, as <see cref="MeasureAsync"/> says.
     /// </summary>
-    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default)
+    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var result = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
-            .MeasureAsync(path, MinimumAge.Off, progress: null, ct)
+            .MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct)
             .ConfigureAwait(false);
 
-        Remember(path, result);
+        if (!bounds.LeavesEntriesOut)
+        {
+            Remember(path, bounds, result);
+        }
+
         return result;
     }
 
@@ -105,11 +112,11 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// empty", and the figure it replaces is still the last one anybody read. See
     /// <see cref="RootReach"/>.
     /// </summary>
-    private void Remember(string path, ScanResult result)
+    private void Remember(string path, ScanBounds bounds, ScanResult result)
     {
         if (result.WasReached)
         {
-            _estimates?.Set(path, result.Size);
+            _estimates?.Set(path, result.Size, bounds.KeepRoot);
         }
     }
 
@@ -172,6 +179,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
     private async ValueTask<ScanResult> MeasureFreshAsync(
         string path,
         MinimumAge keep,
+        ScanBounds bounds,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
@@ -179,14 +187,16 @@ public sealed class DirectoryScanner : IDirectoryScanner
         {
             return await _fallback
                 .Because(FallbackReason.VolumeNotAddressable)
-                .MeasureAsync(path, keep, progress, ct)
+                .MeasureAsync(path, keep, bounds, progress, ct)
                 .ConfigureAwait(false);
         }
 
         if (_tuner.WalkOnly)
         {
-            return await _fallback.Because(FallbackReason.WalkChosen).MeasureAsync(path, keep, progress, ct).ConfigureAwait(false);
+            return await _fallback.Because(FallbackReason.WalkChosen).MeasureAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
         }
+
+        var asked = new Asked(path, volumePath, keep, bounds);
 
         var building = _volumes.Get(volumePath.DriveLetter);
 
@@ -195,7 +205,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // be read has a reason the walk has to carry, which a race would let a quick walk hide.
         if (!building.IsCompleted && _tuner.Route is ScanRoute.Auto)
         {
-            return await RaceAsync(path, volumePath, building, keep, progress, ct).ConfigureAwait(false);
+            return await RaceAsync(asked, building, progress, ct).ConfigureAwait(false);
         }
 
         var built = await building.WaitAsync(ct).ConfigureAwait(false);
@@ -204,30 +214,34 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // under the index, or the path runs through a link, or something below it does not
         // establish its own size — so ask the slow path rather than reporting zero, which would
         // render as "this cache is already clear" and quietly hide gigabytes.
-        if (FromIndex(built.Index, volumePath, keep) is { } indexed)
+        if (FromIndex(built.Index, asked) is { } indexed)
         {
             progress?.Report(indexed.Size);
             return indexed;
         }
 
-        return await _fallback.Because(Declined(built)).MeasureAsync(path, keep, progress, ct).ConfigureAwait(false);
+        return await _fallback.Because(Declined(built)).MeasureAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
     }
+
+    /// <summary>One measurement's question, as each route is asked it.</summary>
+    private readonly record struct Asked(string Path, VolumePath Volume, MinimumAge Keep, ScanBounds Bounds);
 
     /// <summary>
     /// Walk <paramref name="path"/> while the table is read, and take whichever answers first. See
     /// <see cref="ScanRoute.Auto"/>.
     /// </summary>
     private async ValueTask<ScanResult> RaceAsync(
-        string path,
-        VolumePath volumePath,
+        Asked asked,
         Task<MftVolumeIndexCache.Built> building,
-        MinimumAge keep,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
         var raced = await RouteRace.FirstAsync(
-            async stop => FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, volumePath, keep),
-            stop => _fallback.Because(FallbackReason.WalkAnsweredFirst).MeasureAsync(path, keep, progress, stop).AsTask(),
+            async stop => FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, asked),
+            stop => _fallback
+                .Because(FallbackReason.WalkAnsweredFirst)
+                .MeasureAsync(asked.Path, asked.Keep, asked.Bounds, progress, stop)
+                .AsTask(),
             walked => walked.WasReached,
             ct).ConfigureAwait(false);
 
@@ -249,21 +263,44 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// What the index says about <paramref name="volumePath"/>, or null where there is no index or it
-    /// cannot answer for the path.
+    /// What the index says about the path <paramref name="asked"/> names, or null where there is no
+    /// index, or it cannot answer for the path or place an entry the bounds leave out.
     /// </summary>
-    private static ScanResult? FromIndex(MftVolumeIndex? index, VolumePath volumePath, MinimumAge keep)
+    private static ScanResult? FromIndex(MftVolumeIndex? index, Asked asked)
     {
-        if (index is null || index.TryMeasure(volumePath.Components, keep, out var withheldRecent, out var stores) is not { } size)
+        var volume = asked.Volume;
+
+        if (index is null || LeftOutRecords(index, asked) is not { } leftOut)
+        {
+            return null;
+        }
+
+        if (index.TryMeasure(volume.Components, asked.Keep, asked.Bounds.KeepRoot, leftOut, out var withheldRecent, out var stores) is not { } size)
         {
             return null;
         }
 
         return ScanResult.Fast(size, withheldRecent) with
         {
-            MailStores = [.. stores.Select(s => PathOf(volumePath.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
+            MailStores = [.. stores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
         };
     }
+
+    /// <summary>
+    /// The records of the entries the bounds leave out below the path, none where they leave nothing
+    /// out, or null where the index cannot place one.
+    /// </summary>
+    private static IReadOnlySet<uint>? LeftOutRecords(MftVolumeIndex index, Asked asked) =>
+        LeftOutEntries.Of(asked.Path, asked.Bounds) is { } entries
+            ? index.TryPlace(asked.Volume.Components, entries.Below, components => DescribeEntry(asked.Volume.DriveLetter, components))
+            : MftVolumeIndex.NothingLeftOut;
+
+    /// <summary>
+    /// The entry at a path below the volume root, read from the disk for its file number, for an entry
+    /// the table holds no name for. See <see cref="MftVolumeIndex.TryPlace"/>.
+    /// </summary>
+    private static FileReading DescribeEntry(char driveLetter, IReadOnlyList<string> components) =>
+        FileInformation.Default.Describe(PathOf(driveLetter, components), IdentityRoute.Legacy);
 
     /// <summary>Why the walk answered a path the table did not.</summary>
     private static FallbackReason Declined(MftVolumeIndexCache.Built built) =>

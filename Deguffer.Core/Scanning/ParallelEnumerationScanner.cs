@@ -76,12 +76,13 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     public ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
+        ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
         new(Task.Run(
             () => TryMeasureFile(path, keep) is { } file
                 ? ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores }
-                : Slow(Measure(path, keep, _tuner, progress, ct)),
+                : Slow(Measure(path, keep, bounds, _tuner, progress, ct)),
             ct));
 
     /// <summary>
@@ -92,8 +93,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// removes — a total that excluded recent files would then be subtracted from one the command
     /// did not respect.
     /// </summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
-        MeasureAsync(path, MinimumAge.Off, progress: null, ct);
+    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default) =>
+        MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct);
 
     /// <summary>
     /// Always null: this scanner holds no index, so it has nothing to search. Answering by walking
@@ -124,6 +125,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     private static Walked Measure(
         string path,
         MinimumAge keep,
+        ScanBounds bounds,
         ScanTuner tuning,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
@@ -152,6 +154,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
 
         var folders = new ConcurrentBag<VisitedFolder>();
         var stores = new ConcurrentBag<string>();
+        var leftOut = LeftOutEntries.Of(path, bounds);
 
         BoundedFileWalk.Visit<VisitedFolder?>(
             LongPath.Extended(path),
@@ -161,6 +164,12 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
             {
                 var folder = new VisitedFolder(holder);
                 folders.Add(folder);
+
+                // A folder emptied in place is never among what its removal takes.
+                if (holder is null && bounds.KeepRoot)
+                {
+                    folder.Stays();
+                }
 
                 // A folder the walk was refused may hold anything, so the removal cannot empty it.
                 if (contents.WasRefused)
@@ -173,9 +182,17 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     }
                 }
 
+                // Asked once a listing, and of each entry only in a listing that holds one.
+                var left = leftOut?.NamesIn(contents);
+
                 foreach (var entry in contents.Entries)
                 {
-                    if (entry.IsDirectory)
+                    // Neither counted nor entered, and its folder stays, as the removal leaves it.
+                    if (left?.Contains(entry.Name) == true)
+                    {
+                        folder.Stays();
+                    }
+                    else if (entry.IsDirectory)
                     {
                         descend(entry, folder);
                     }
@@ -207,7 +224,11 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 // applies to it exactly as the removal applies it, by the link's own timestamp.
                 foreach (var link in contents.Links)
                 {
-                    if (keep.Protects(link.NewestFileTime))
+                    if (left?.Contains(link.Name) == true)
+                    {
+                        folder.Stays();
+                    }
+                    else if (keep.Protects(link.NewestFileTime))
                     {
                         Interlocked.Exchange(ref withheld, 1);
                         folder.Stays();
@@ -224,7 +245,11 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 // file carry the mark too.
                 foreach (var marked in contents.ReparseFiles)
                 {
-                    if (MailStore.Is(marked.Name))
+                    if (left?.Contains(marked.Name) == true)
+                    {
+                        folder.Stays();
+                    }
+                    else if (MailStore.Is(marked.Name))
                     {
                         stores.Add(LongPath.Display(marked.FullName));
                         folder.Stays();

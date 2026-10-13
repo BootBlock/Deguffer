@@ -15,6 +15,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 {
+    /// <summary>No record left out, for a measurement of the whole tree.</summary>
+    internal static readonly IReadOnlySet<uint> NothingLeftOut = new HashSet<uint>();
+
     /// <summary>
     /// Total the subtree rooted at <paramref name="relativePath"/>, given as components below the
     /// volume root. Returns null when the path is not in the index, which the caller must treat as
@@ -50,6 +53,24 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         IReadOnlyList<string> relativePath,
         MinimumAge keep,
         out bool withheldRecent,
+        out IReadOnlyList<IReadOnlyList<string>> mailStores) =>
+        TryMeasure(relativePath, keep, keepRoot: false, NothingLeftOut, out withheldRecent, out mailStores);
+
+    /// <inheritdoc cref="TryMeasure(IReadOnlyList{string}, MinimumAge, out bool, out IReadOnlyList{IReadOnlyList{string}})"/>
+    /// <param name="keepRoot">
+    /// Whether the directory measured stays standing, so its own entry is never counted. See
+    /// <see cref="ScanBounds.KeepRoot"/>.
+    /// </param>
+    /// <param name="leftOut">
+    /// Records below the path that are neither counted nor entered, and keep every folder above them
+    /// standing, as <see cref="TryPlace"/> found them. See <see cref="ScanBounds.LeftOut"/>.
+    /// </param>
+    public ScanSize? TryMeasure(
+        IReadOnlyList<string> relativePath,
+        MinimumAge keep,
+        bool keepRoot,
+        IReadOnlySet<uint> leftOut,
+        out bool withheldRecent,
         out IReadOnlyList<IReadOnlyList<string>> mailStores)
     {
         withheldRecent = false;
@@ -62,7 +83,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
         if (tree.IsDirectory[record])
         {
-            return SumSubtree(record, keep, out withheldRecent, out mailStores);
+            return SumSubtree(record, keep, keepRoot, leftOut, out withheldRecent, out mailStores);
         }
 
         if (tree.SizeUnknown[record])
@@ -83,6 +104,20 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     public ScanSize? TryMeasure(IReadOnlyList<string> relativePath) =>
         TryMeasure(relativePath, MinimumAge.Off, out _);
 
+    /// <summary>
+    /// The record of each entry of <paramref name="leftOut"/>, given as components below
+    /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, MinimumAge, bool, IReadOnlySet{uint}, out bool, out IReadOnlyList{IReadOnlyList{string}})"/>
+    /// to leave out, or null where one cannot be placed. See <see cref="MftLeftOutPlacement"/>.
+    /// </summary>
+    /// <param name="describe">
+    /// How the entry at a path, given as components below the volume root, is described from the
+    /// disk.
+    /// </param>
+    public IReadOnlySet<uint>? TryPlace(
+        IReadOnlyList<string> root,
+        IReadOnlyList<IReadOnlyList<string>> leftOut,
+        Func<IReadOnlyList<string>, FileReading> describe) =>
+        new MftLeftOutPlacement(tree, links, TryResolve).TryPlace(root, leftOut, describe);
     /// <summary>
     /// Every directory <paramref name="search"/> finds below the directory at
     /// <paramref name="root"/>, as components below that root, in no particular order. Null when
@@ -336,6 +371,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     private ScanSize? SumSubtree(
         uint root,
         MinimumAge keep,
+        bool keepRoot,
+        IReadOnlySet<uint> leftOut,
         out bool withheldRecent,
         out IReadOnlyList<IReadOnlyList<string>> mailStores)
     {
@@ -355,7 +392,15 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         {
             var node = item.Node;
 
-            // Before everything else, as the removal asks it: the store stays whatever its age and
+            // First, as the removal asks whether an entry is spared first: neither counted nor
+            // entered, and every folder above it stays.
+            if (leftOut.Contains(node))
+            {
+                Stay(item.Holder);
+                continue;
+            }
+
+            // Next, as the removal asks it: the store stays whatever its age and
             // whatever reparse point it carries. The removal does not read which kind of mark a file
             // has, so a store the table calls a link is still left, and is named here to agree.
             if (tree.IsMailStore[node])
@@ -398,8 +443,10 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // inside it does.
             if (tree.IsDirectory[node])
             {
+                // A folder emptied in place is never among what its removal takes, so it starts out
+                // standing, and nothing above it needs marking.
                 var position = folders.Count;
-                folders.Add((item.Holder, false));
+                folders.Add((item.Holder, keepRoot && item.Holder < 0));
 
                 for (var i = links.Start[node]; i < links.Start[node + 1]; i++)
                 {

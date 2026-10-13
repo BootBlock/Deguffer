@@ -3,6 +3,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -40,11 +41,13 @@ public sealed class TempDirectoryProviderTests : IDisposable
     private TempDirectoryProvider CreateProvider(
         ILiveTreeInspector? liveTrees = null,
         AppPreferences? preferences = null,
+        IDirectoryScanner? scanner = null,
         params ITemporaryFolderTenant[] tenants) =>
         new(
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
+            scanner: scanner,
             system: _system,
             liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
             preferences: new FakePreferences(preferences ?? AppPreferences.Default),
@@ -305,6 +308,36 @@ public sealed class TempDirectoryProviderTests : IDisposable
 
         Assert.Equal([Path.Combine(UserTemp, "Adobe")], step.Spared);
         Assert.Equal(1024, step.EstimatedBytes);
+    }
+
+    /// <summary>
+    /// Each folder is measured once, on the terms the clean empties it on, and no entry this row
+    /// leaves standing is measured again to be taken off. Measured to be subtracted, each such entry
+    /// was walked twice more than the clean needs, once a walk an entry, and a machine with thousands
+    /// of leaked browser profiles in its temporary folder paid that thousands of times.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresEachFolderOnceAndNoEntryItLeavesStanding()
+    {
+        var busy = _temp.CreateDirectory("temp", "live-session");
+        Abandoned(8192, "temp", "live-session", "working.txt");
+        var owned = _temp.CreateDirectory("temp", "tool-cache");
+        Abandoned(4096, "temp", "tool-cache", "compiled.bin");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var scanner = new FakeDirectoryScanner();
+        var plan = await CreateProvider(
+            new FakeLiveTreeInspector(busy),
+            scanner: scanner,
+            tenants: [new FakeTemporaryFolderTenant("Tool cache", "tool-cache")]).PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        Assert.Equal([busy], step.Spared);
+        Assert.Equal([owned], step.OwnedElsewhere);
+        Assert.Equal(1024, step.EstimatedBytes);
+        Assert.Equal(1, step.Estimated.Entries);
+        Assert.Equal([UserTemp], scanner.Measured.Where(path => LongPath.Contains(UserTemp, path)));
     }
 
     /// <summary>

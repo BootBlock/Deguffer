@@ -48,7 +48,7 @@ internal static class LinksRoute
             });
 
         var result = new HardLinkAwareScanner(ScanTuner.Shipped, information)
-            .MeasureAsync(folder, MinimumAge.Off, progress: null, ct)
+            .MeasureAsync(folder, MinimumAge.Off, progress: null, ct: ct)
             .AsTask()
             .GetAwaiter()
             .GetResult();

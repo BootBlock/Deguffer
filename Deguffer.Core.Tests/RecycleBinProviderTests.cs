@@ -988,6 +988,32 @@ public sealed class RecycleBinProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A bin Windows empties only partly. The entries removed are what the two readings differ by,
+    /// and both are taken with the bin's own folder kept, so it is in neither and nothing is taken
+    /// off either reading to make them agree.
+    /// </summary>
+    [Fact]
+    public async Task CountsOnlyTheEntriesThatLeftAPartlyEmptiedBin()
+    {
+        var volume = CreateVolume("D");
+        var mine = CreateBin(volume, Sid, bytes: 8192);
+
+        var provider = CreateProvider(emptier: new FakeRecycleBinEmptier(_ =>
+        {
+            File.Delete(Path.Combine(mine, "$RA1B2C3.txt"));
+            return new RecycleBinEmptyOutcome(Emptied: true);
+        }));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, Assert.Single(plan.Steps).Estimated.Entries);
+
+        var step = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+
+        Assert.True(File.Exists(Path.Combine(mine, "$IA1B2C3.txt")));
+        Assert.Equal(1, step.EntriesRemoved);
+    }
+
+    /// <summary>
     /// Windows reporting success is not evidence that anything left the disk, and this is the case
     /// where the two disagree: <c>SHEmptyRecycleBin</c> returns <c>S_OK</c> and the bin is exactly
     /// as full as it was.

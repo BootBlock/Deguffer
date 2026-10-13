@@ -166,7 +166,7 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         });
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await HardLinkAwareScanner.Default.MeasureAsync(Path.Combine(_temp.Path, "store"), MinimumAge.Off, progress, cancel.Token));
+            await HardLinkAwareScanner.Default.MeasureAsync(Path.Combine(_temp.Path, "store"), MinimumAge.Off, progress: progress, ct: cancel.Token));
 
         Assert.Equal(1, levels);
     }

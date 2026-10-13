@@ -323,11 +323,11 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         // The live entries above are the preview's. Each folder carries the same question to the
         // clean, which spares whatever a program has taken up since, and whether this answer was whole.
         var stillUnused = new LiveChildrenCheck(_liveTrees, live.Complete);
-        var (planned, measured) = await PlanDeletionsAsync(
-            [.. scan.Targets.Select(target => target with { UseCheck = stillUnused })],
+        var (targets, spared) = Spare(scan.Targets, live, owned);
+        var (steps, measured) = await PlanDeletionsAsync(
+            [.. targets.Select(target => target with { UseCheck = stillUnused })],
             effective,
             ct).ConfigureAwait(false);
-        var (steps, spared) = await SpareAsync(planned, live, owned, effective, ct).ConfigureAwait(false);
 
         if (OwnedElsewhereNote(owned) is { } elsewhere)
         {
@@ -407,75 +407,51 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Hand each folder's step the entries it must leave alone, and take their bytes back out of
-    /// its estimate.
+    /// Hand each folder the entries its clean must leave alone, which its measurement then leaves out.
     ///
-    /// <para>The subtraction is the half that is easy to leave out and would not look wrong. A step
-    /// that named its spared entries but still counted them would promise bytes the clean has
-    /// already undertaken not to take — §5.4's "prune, see no change, lose trust" arriving from the
-    /// other direction, and arriving on precisely the folders a busy machine has most of.</para>
-    ///
-    /// <para>Both figures are measured under the same guard, which is what makes the subtraction
-    /// between two of the same quantity rather than between a guarded figure and an unguarded one.
-    /// See <see cref="CleanupProviderBase.MeasureSparedAsync"/>.</para>
+    /// <para>The figure must leave them out. A step that named its spared entries but still counted
+    /// them would promise bytes the clean has already undertaken not to take — §5.4's "prune, see no
+    /// change, lose trust" arriving from the other direction, and arriving on precisely the folders a
+    /// busy machine has most of. The measurement is told which they are, so it never enters them:
+    /// thousands of leaked browser profiles can be the larger part of the folder. See
+    /// <see cref="Scanning.ScanBounds"/>.</para>
     ///
     /// <para><b>An entry another row owns is left out here too, and it is not a survivor.</b> It is
     /// that row's to take, so this plan neither counts it nor asserts it is still standing: a run
     /// with both rows ticked removes it legitimately. Where it is also in use it is still the other
     /// row's, and that row's own plan is what protects it and says so.</para>
     /// </summary>
-    private async Task<(IReadOnlyList<CleanupStep> Steps, IReadOnlyList<(string Path, string Reason)> Spared)>
-        SpareAsync(
-            IReadOnlyList<CleanupStep> planned,
-            LiveTreeFindings live,
-            OwnedEntries owned,
-            MinimumAge keep,
-            CancellationToken ct)
+    private static (IReadOnlyList<DeletionTarget> Targets, IReadOnlyList<(string Path, string Reason)> Spared) Spare(
+        IReadOnlyList<DeletionTarget> targets,
+        LiveTreeFindings live,
+        OwnedEntries owned)
     {
-        var steps = new List<CleanupStep>(planned.Count);
+        var bounded = new List<DeletionTarget>(targets.Count);
         var spared = new List<(string Path, string Reason)>();
 
-        foreach (var step in planned)
+        foreach (var target in targets)
         {
-            ct.ThrowIfCancellationRequested();
-
-            if (step is not ClearDirectoryStep clear)
+            if (target.Kind is not TargetKind.DirectoryContents)
             {
-                steps.Add(step);
+                bounded.Add(target);
                 continue;
             }
 
-            var others = owned.Paths.Where(p => LongPath.Contains(clear.Path, p)).ToList();
             var held = live.Live
-                .Where(l => LongPath.Contains(clear.Path, l.Directory) && !owned.Contains(l.Directory))
+                .Where(l => LongPath.Contains(target.Path, l.Directory) && !owned.Contains(l.Directory))
                 .ToList();
 
-            if (held.Count == 0 && others.Count == 0)
+            bounded.Add(target with
             {
-                steps.Add(clear);
-                continue;
-            }
-
-            var paths = held.Select(h => h.Directory).ToList();
-
-            // A claim can sit inside a held entry, whose measurement already counts it.
-            var measured = await MeasureSparedAsync(
-                [.. paths, .. others.Where(other => !paths.Any(path => LongPath.Contains(path, other)))],
-                keep,
-                ct).ConfigureAwait(false);
-
-            steps.Add(clear with
-            {
-                Spared = paths,
-                OwnedElsewhere = others,
-                Estimated = clear.Estimated - measured.Total,
+                Spared = [.. held.Select(h => h.Directory)],
+                OwnedElsewhere = [.. owned.Paths.Where(p => LongPath.Contains(target.Path, p))],
             });
 
             spared.AddRange(held.Select(h =>
                 (h.Directory, $"Left alone because {string.Join("; ", h.Holders)}.")));
         }
 
-        return (steps, spared);
+        return (bounded, spared);
     }
 
     /// <summary>

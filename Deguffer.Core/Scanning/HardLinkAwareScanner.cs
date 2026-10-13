@@ -62,9 +62,10 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     public ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
+        ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(() => MeasureNow(path, keep, progress, ct), ct));
+        new(Task.Run(() => MeasureNow(path, keep, bounds, progress, ct), ct));
 
     /// <summary>
     /// The directory is asked about first, and the file only where no directory is there, so each
@@ -75,6 +76,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     private ScanResult MeasureNow(
         string path,
         MinimumAge keep,
+        ScanBounds bounds,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
@@ -82,7 +84,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var walked = Measure(path, keep, _tuner, _files, progress, ct);
+            var walked = Measure(path, keep, LeftOutEntries.Of(path, bounds), _tuner, _files, progress, ct);
 
             return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
             {
@@ -116,18 +118,24 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         CancellationToken ct = default) => new((IReadOnlyList<string>?)null);
 
     /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
-        MeasureAsync(path, MinimumAge.Off, progress: null, ct);
+    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default) =>
+        MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct);
 
     /// <summary>Nothing is retained between calls, so there is nothing to drop.</summary>
     public void Invalidate()
     {
     }
 
-    /// <summary>The walk of a directory Windows describes. See <see cref="MeasureNow"/>.</summary>
+    /// <summary>
+    /// The walk of a directory Windows describes. See <see cref="MeasureNow"/>.
+    ///
+    /// <para>An entry <paramref name="leftOut"/> names is passed over, neither read nor entered, as the
+    /// other walk passes it. A kept root needs nothing here, because this figure counts no entries.</para>
+    /// </summary>
     private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root) Measure(
         string path,
         MinimumAge keep,
+        LeftOutEntries? leftOut,
         ScanTuner tuning,
         FileInformation files,
         IProgress<ScanSize>? progress,
@@ -180,6 +188,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                     stores.Add(LongPath.Display(marked.FullName));
                 }
             },
+            leftOut,
             // §5.5: stream partial results, at the walk's interval rather than per file.
             () => progress?.Report(Approximate(
                 Interlocked.Read(ref allocated), Interlocked.Read(ref logical))),
