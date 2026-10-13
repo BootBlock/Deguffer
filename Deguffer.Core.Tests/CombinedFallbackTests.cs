@@ -58,6 +58,7 @@ public sealed class CombinedFallbackTests : IDisposable
         public ValueTask<ScanResult> MeasureAsync(
             string path,
             MinimumAge keep = default,
+            ScanBounds bounds = default,
             IProgress<ScanSize>? progress = null,
             CancellationToken ct = default) =>
             new(ScanResult.Slow(ScanSize.Zero, reasons[path]));

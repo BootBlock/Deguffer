@@ -130,7 +130,7 @@ public class ScannerRootReachTests
         }
 
         var progress = new ProgressRecorder<ScanSize>();
-        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress);
+        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress: progress);
 
         Assert.Equal(1000, progress.Reports[0].Logical);
     }

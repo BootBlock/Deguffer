@@ -280,7 +280,7 @@ public sealed class EntryCountTests : IDisposable
         await Reopen().MeasureAsync(cache);
 
         var progress = new ProgressRecorder<ScanSize>();
-        await Reopen().MeasureAsync(cache, MinimumAge.Off, progress);
+        await Reopen().MeasureAsync(cache, MinimumAge.Off, progress: progress);
 
         Assert.Equal(2, progress.Reports[0].Entries);
     }

@@ -29,9 +29,15 @@ public interface IDirectoryScanner
     /// <para><see cref="MinimumAge.Off"/> by default, which is the shipped preference, so a caller
     /// that says nothing measures the whole tree exactly as before.</para>
     /// </param>
+    /// <param name="bounds">
+    /// What the removal of <paramref name="path"/> leaves standing beyond what <paramref name="keep"/>
+    /// keeps: the root, and entries it neither takes nor enters. Every route honours it, so a caller
+    /// never measures an entry only to subtract it. The whole tree by default.
+    /// </param>
     ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
+        ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default);
 

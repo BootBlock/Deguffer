@@ -429,7 +429,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                     // to account for the space. Measured unguarded: nothing is being deleted, so
                     // withholding recent files would describe a deletion that is not happening.
                     var size = await Scanner
-                        .MeasureAsync(path, MinimumAge.Off, progress: null, ct)
+                        .MeasureAsync(path, MinimumAge.Off, progress: null, ct: ct)
                         .ConfigureAwait(false);
 
                     // A folder Windows would not let the walk into measures zero, and "keeps 0 bytes" is a

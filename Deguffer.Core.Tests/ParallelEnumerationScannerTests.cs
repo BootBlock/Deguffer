@@ -137,7 +137,7 @@ public class ParallelEnumerationScannerTests
 
         var progress = new ProgressRecorder<ScanSize>();
 
-        var result = await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress);
+        var result = await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress: progress);
 
         // §5.5: partial totals reach the caller as the walk descends, as well as one number at the
         // end. The first is reported once the first folder has been read.
@@ -171,7 +171,7 @@ public class ParallelEnumerationScannerTests
         });
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress, cancel.Token));
+            async () => await Scanner.MeasureAsync(Path.Combine(temp.Path, "cache"), MinimumAge.Off, progress: progress, ct: cancel.Token));
 
         Assert.Equal(1, reports);
     }

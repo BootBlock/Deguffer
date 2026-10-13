@@ -62,9 +62,10 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     public ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
+        ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(() => MeasureNow(path, keep, progress, ct), ct));
+        new(Task.Run(() => MeasureNow(path, keep, bounds, progress, ct), ct));
 
     /// <summary>
     /// The directory is asked about first, and the file only where no directory is there, so each
@@ -75,6 +76,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     private ScanResult MeasureNow(
         string path,
         MinimumAge keep,
+        ScanBounds bounds,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
@@ -82,7 +84,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var walked = Measure(path, keep, _tuner, _files, progress, ct);
+            var walked = Measure(path, keep, LeftOutEntries.Of(path, bounds), _tuner, _files, progress, ct);
 
             return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
             {
@@ -117,17 +119,23 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
     /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
     public ValueTask<ScanResult> MeasureFromDiskAsync(string path, CancellationToken ct = default) =>
-        MeasureAsync(path, MinimumAge.Off, progress: null, ct);
+        MeasureAsync(path, MinimumAge.Off, progress: null, ct: ct);
 
     /// <summary>Nothing is retained between calls, so there is nothing to drop.</summary>
     public void Invalidate()
     {
     }
 
-    /// <summary>The walk of a directory Windows describes. See <see cref="MeasureNow"/>.</summary>
+    /// <summary>
+    /// The walk of a directory Windows describes. See <see cref="MeasureNow"/>.
+    ///
+    /// <para>An entry <paramref name="leftOut"/> names is passed over, neither read nor entered, as the
+    /// other walk passes it. A kept root needs nothing here, because this figure counts no entries.</para>
+    /// </summary>
     private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root) Measure(
         string path,
         MinimumAge keep,
+        LeftOutEntries? leftOut,
         ScanTuner tuning,
         FileInformation files,
         IProgress<ScanSize>? progress,
@@ -143,41 +151,45 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         var stores = new ConcurrentBag<string>();
         var route = new ByNameRoute();
 
-        var listed = BoundedFileWalk.Visit(
+        // Written by the root's own listing alone, before anything below it is queued.
+        var listed = true;
+
+        BoundedFileWalk.Visit(
             LongPath.Extended(path),
+            rootState: true,
             tuning,
-            file =>
+            (isRoot, contents, descend) =>
             {
-                // §9, named rather than only left out: a store inside a tool's own folder is what
-                // withholds that tool's command, and the plan can only say which store by its path.
-                if (MailStore.Is(file.Name))
+                if (isRoot && contents.WasRefused)
                 {
-                    stores.Add(LongPath.Display(file.FullName));
-                    return;
+                    listed = false;
                 }
 
-                // Asked before the file is read, because the guard is the cheaper question and the
-                // answer is the same either way: a file it keeps is one this store's eviction
-                // will not take, so its sole-linked bytes are not reclaimable here.
-                if (keep.Protects(file.NewestFileTime))
+                var left = leftOut?.NamesIn(contents);
+
+                foreach (var entry in contents.Entries)
                 {
-                    Interlocked.Exchange(ref withheld, 1);
-                    return;
+                    if (left?.Contains(entry.Name) == true)
+                    {
+                        continue;
+                    }
+
+                    if (entry.IsDirectory)
+                    {
+                        descend(entry, false);
+                    }
+                    else
+                    {
+                        OnFile(entry);
+                    }
                 }
 
-                if (files.Standard(file.FullName, route) is { NumberOfLinks: 1 } sole)
+                foreach (var marked in contents.ReparseFiles)
                 {
-                    Interlocked.Add(ref allocated, sole.AllocationSize);
-                    Interlocked.Add(ref logical, sole.EndOfFile);
-                }
-            },
-            // A file carrying a reparse point holds none of this tree's sole-linked bytes, and one named
-            // like a store is still named: the removal does not read which kind of mark a file carries.
-            marked =>
-            {
-                if (MailStore.Is(marked.Name))
-                {
-                    stores.Add(LongPath.Display(marked.FullName));
+                    if (left?.Contains(marked.Name) != true)
+                    {
+                        OnMarked(marked);
+                    }
                 }
             },
             // §5.5: stream partial results, at the walk's interval rather than per file.
@@ -196,6 +208,42 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
             Volatile.Read(ref withheld) == 1,
             [.. stores.Order(StringComparer.OrdinalIgnoreCase)],
             RootReach.Reached);
+
+        void OnFile(WalkEntry file)
+        {
+            // §9, named rather than only left out: a store inside a tool's own folder is what
+            // withholds that tool's command, and the plan can only say which store by its path.
+            if (MailStore.Is(file.Name))
+            {
+                stores.Add(LongPath.Display(file.FullName));
+                return;
+            }
+
+            // Asked before the file is read, because the guard is the cheaper question and the
+            // answer is the same either way: a file it keeps is one this store's eviction
+            // will not take, so its sole-linked bytes are not reclaimable here.
+            if (keep.Protects(file.NewestFileTime))
+            {
+                Interlocked.Exchange(ref withheld, 1);
+                return;
+            }
+
+            if (files.Standard(file.FullName, route) is { NumberOfLinks: 1 } sole)
+            {
+                Interlocked.Add(ref allocated, sole.AllocationSize);
+                Interlocked.Add(ref logical, sole.EndOfFile);
+            }
+        }
+
+        // A file carrying a reparse point holds none of this tree's sole-linked bytes, and one named
+        // like a store is still named: the removal does not read which kind of mark a file carries.
+        void OnMarked(WalkEntry marked)
+        {
+            if (MailStore.Is(marked.Name))
+            {
+                stores.Add(LongPath.Display(marked.FullName));
+            }
+        }
     }
 
     /// <summary>

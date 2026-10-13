@@ -29,7 +29,7 @@ public class ScanEstimateCacheTests
         await Reopen(environment).MeasureAsync(cache);
 
         var progress = new ProgressRecorder<ScanSize>();
-        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress);
+        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress: progress);
 
         // The first thing the second run reports is last run's number, before any walking.
         Assert.Equal(1000, progress.Reports[0].Logical);
@@ -53,7 +53,7 @@ public class ScanEstimateCacheTests
         File.WriteAllBytes(Path.Combine(cache, "b.bin"), new byte[5000]);
 
         var progress = new ProgressRecorder<ScanSize>();
-        var result = await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress);
+        var result = await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress: progress);
 
         Assert.Equal(6000, result.Size.Logical);
         Assert.Equal(1000, progress.Reports[0].Logical);
@@ -78,7 +78,7 @@ public class ScanEstimateCacheTests
         scanner.Invalidate();
 
         var progress = new ProgressRecorder<ScanSize>();
-        await scanner.MeasureAsync(cache, MinimumAge.Off, progress);
+        await scanner.MeasureAsync(cache, MinimumAge.Off, progress: progress);
 
         Assert.Equal(2048, progress.Reports[0].Logical);
     }
@@ -92,7 +92,7 @@ public class ScanEstimateCacheTests
         File.WriteAllBytes(Path.Combine(cache, "a.bin"), new byte[512]);
 
         var progress = new ProgressRecorder<ScanSize>();
-        var result = await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress);
+        var result = await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress: progress);
 
         Assert.Equal(512, result.Size.Logical);
         Assert.Equal(512, progress.Reports[0].Logical);
@@ -144,15 +144,47 @@ public class ScanEstimateCacheTests
 
         var guarded = new ProgressRecorder<ScanSize>();
         var result = await Reopen(environment)
-            .MeasureAsync(cache, MinimumAge.WithinHours(8, DateTime.UtcNow), guarded);
+            .MeasureAsync(cache, MinimumAge.WithinHours(8, DateTime.UtcNow), progress: guarded);
 
         Assert.Equal(1000, result.Size.Logical);
         Assert.DoesNotContain(guarded.Reports, r => r.Logical == 6000);
 
         // And the run after it still opens on the full measurement rather than on the guarded one.
         var unguarded = new ProgressRecorder<ScanSize>();
-        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, unguarded);
+        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress: unguarded);
 
         Assert.Equal(6000, unguarded.Reports[0].Logical);
+    }
+
+    /// <summary>
+    /// A figure with entries left out of it is short of the folder by those entries, as a guarded one
+    /// is short by what the guard held back, so it is neither shown nor stored either. The next
+    /// ordinary run still opens on the folder whole.
+    /// </summary>
+    [Fact]
+    public async Task NeitherShowsNorStoresARememberedSizeWithEntriesLeftOut()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var cache = temp.CreateDirectory("temp");
+        temp.CreateFile(1000, "temp", "abandoned.tmp");
+        temp.CreateFile(5000, "temp", "live-session", "working.txt");
+
+        await Reopen(environment).MeasureAsync(cache);
+
+        var bounded = new ProgressRecorder<ScanSize>();
+        var result = await Reopen(environment).MeasureAsync(
+            cache,
+            MinimumAge.Off,
+            new ScanBounds(KeepRoot: true, [Path.Combine(cache, "live-session")]),
+            bounded);
+
+        Assert.Equal(1000, result.Size.Logical);
+        Assert.DoesNotContain(bounded.Reports, r => r.Logical == 6000);
+
+        var whole = new ProgressRecorder<ScanSize>();
+        await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress: whole);
+
+        Assert.Equal(6000, whole.Reports[0].Logical);
     }
 }

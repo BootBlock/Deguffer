@@ -61,6 +61,14 @@ public enum TargetKind
 /// The directories holding this directory's index, which are measured and removed with it. Null for
 /// none. See <see cref="Execution.DeleteDirectoryStep.IndexedBy"/>.
 /// </param>
+/// <param name="Spared">
+/// Entries of a folder emptied in place that something is using, which its removal leaves standing
+/// and its measurement leaves out. Null for none. See <see cref="Execution.ClearDirectoryStep.Spared"/>.
+/// </param>
+/// <param name="OwnedElsewhere">
+/// Entries of a folder emptied in place that another row offers, left standing and left out on the
+/// same terms. Null for none. See <see cref="Execution.ClearDirectoryStep.OwnedElsewhere"/>.
+/// </param>
 public readonly record struct DeletionTarget(
     string Path,
     string Reason,
@@ -72,4 +80,6 @@ public readonly record struct DeletionTarget(
     IReadOnlyList<Execution.ItemFacet>? Facets = null,
     string? Group = null,
     Execution.IUseCheck? UseCheck = null,
-    IReadOnlyList<string>? IndexedBy = null);
+    IReadOnlyList<string>? IndexedBy = null,
+    IReadOnlyList<string>? Spared = null,
+    IReadOnlyList<string>? OwnedElsewhere = null);
