@@ -1,0 +1,547 @@
+{
+  "schema": 1,
+  "entries": [
+    {
+      "id": "75ea04",
+      "kind": "changed",
+      "text": "The Temporary files row is much quicker to work out when your temporary folder holds things other rows offer, such as leftover test browser profiles, and the size it shows is unchanged.",
+      "date": "2026-10-13",
+      "commit": "97703ae3",
+      "agent": "claude"
+    },
+    {
+      "id": "522810",
+      "kind": "changed",
+      "text": "When Deguffer runs as administrator, reading a drive's file table now creates about 40% less short-lived memory, for both the cleanup scan and Explore.",
+      "date": "2026-10-12",
+      "commit": "1b346116",
+      "agent": "claude"
+    },
+    {
+      "id": "9da563",
+      "kind": "changed",
+      "text": "Explore uses less memory while it builds the map of a drive, both for a whole volume and while a folder is still being scanned, and drawing a whole system drive now peaks at about a third less memory than before.",
+      "date": "2026-10-12",
+      "commit": "ea84c88d",
+      "agent": "claude"
+    },
+    {
+      "id": "2691f6",
+      "kind": "changed",
+      "text": "Measuring the local copies of your OneDrive files is several times faster on a large OneDrive folder, because Deguffer now reads many of its folders at once.",
+      "date": "2026-10-12",
+      "commit": "97a36ab9",
+      "agent": "claude"
+    },
+    {
+      "id": "271253",
+      "kind": "fixed",
+      "text": "When run as administrator, Deguffer finds build output in a source folder that is a junction to another drive. Before, it reported that folder as empty. Searching your approved source folders for build output is also quicker on large drives.",
+      "date": "2026-10-12",
+      "commit": "ff52c56e",
+      "agent": "claude"
+    },
+    {
+      "id": "5c5823",
+      "kind": "changed",
+      "text": "A duplicate search over a large drive uses much less memory while it works out which folders to skip.",
+      "date": "2026-10-12",
+      "commit": "d62f7e33",
+      "agent": "claude"
+    },
+    {
+      "id": "405982",
+      "kind": "changed",
+      "text": "Measuring a hard-linked store, such as the pnpm store or the driver store, is faster, because Deguffer reads each file's link count without opening the file.",
+      "date": "2026-10-12",
+      "commit": "b28463d4",
+      "agent": "claude"
+    },
+    {
+      "id": "60d72e",
+      "kind": "fixed",
+      "text": "Screen readers and other accessibility tools no longer freeze the Explore window on a large folder. Each folder on the map is now an item you can expand or collapse, as in a tree view.",
+      "date": "2026-10-12",
+      "commit": "8abb3080",
+      "agent": "claude"
+    },
+    {
+      "id": "423a28",
+      "kind": "changed",
+      "text": "Cleaning a large cache folder now prepares faster and uses less memory, and read-only files in package caches are removed without a failed first attempt.",
+      "date": "2026-10-12",
+      "commit": "2ead7590",
+      "agent": "claude"
+    },
+    {
+      "id": "3765f9",
+      "kind": "fixed",
+      "text": "A scan that walks folders now works at its full thread count from the start. On machines with fewer than 16 processors, it no longer runs slower for its first few seconds.",
+      "date": "2026-10-11",
+      "commit": "af2a5c78",
+      "agent": "claude"
+    },
+    {
+      "id": "5afd2c",
+      "kind": "fixed",
+      "text": "Explore scans of large folders without administrator rights keep moving while the map is redrawn part way through, and cancelling one no longer waits for the map to finish.",
+      "date": "2026-10-11",
+      "commit": "a6e3d297",
+      "agent": "claude"
+    },
+    {
+      "id": "6daa39",
+      "kind": "changed",
+      "text": "Without administrator rights, finding build outputs in your source folders now uses several threads instead of one, so a preview of a large source folder finishes several times faster.",
+      "date": "2026-10-11",
+      "commit": "5dead502",
+      "agent": "claude"
+    },
+    {
+      "id": "9ae22f",
+      "kind": "changed",
+      "text": "An elevated scan reads a drive's file table faster: on a large system drive the table read takes about 1.5 to 2 seconds less.",
+      "date": "2026-10-11",
+      "commit": "6471fc60",
+      "agent": "claude"
+    },
+    {
+      "id": "f03a0a",
+      "kind": "changed",
+      "text": "Cleaning a large cache such as a node_modules folder finishes sooner, because Deguffer now removes its emptied folders several at a time instead of one by one.",
+      "date": "2026-10-11",
+      "commit": "3027f482",
+      "agent": "claude"
+    },
+    {
+      "id": "91b6b4",
+      "kind": "added",
+      "text": "In a Windows high contrast theme, the Explore map is drawn in the theme's own colours: flat shapes with clear edges and names, and no shading.",
+      "date": "2026-10-11",
+      "commit": "aaf06e5e",
+      "agent": "claude"
+    },
+    {
+      "id": "ec13ba",
+      "kind": "added",
+      "text": "The Explore map can be used from the keyboard. The arrow keys move between the shapes and pick the one they reach. Enter opens a folder, Backspace goes up, and the menu key opens a shape's menu. The map follows the keys to a shape off screen or too small to see, and screen readers can now read each shape's name, size and share of its folder.",
+      "date": "2026-10-11",
+      "commit": "aaf06e5e",
+      "agent": "claude"
+    },
+    {
+      "id": "9c5923",
+      "kind": "changed",
+      "text": "The size bars on the Explore and Memory lists now grow in as their rows appear, and slide smoothly to a new size instead of jumping, as the Storage page's bars already did.",
+      "date": "2026-10-11",
+      "images": [
+        "images/share-bars-305.png"
+      ],
+      "commit": "ba53f430",
+      "agent": "claude"
+    },
+    {
+      "id": "41eb16",
+      "kind": "added",
+      "text": "Switching the map's View between Treemap, Icicle and Sunburst now morphs. The largest shapes travel from their rectangle to their bar or wedge in their own colour, so you can see which shape is which. With Windows animation effects off, the views swap at once.",
+      "date": "2026-10-11",
+      "images": [
+        "images/view-morph.jpg"
+      ],
+      "commit": "d5b96c22",
+      "agent": "claude"
+    },
+    {
+      "id": "84ed97",
+      "kind": "added",
+      "text": "Explore's What grew card can now replay the change between the earlier scan and now: press Play, or drag the slider from Then to Now, and the map's shapes grow, shrink and move from the earlier picture to today's. Nothing on the map can be picked while it shows an earlier step.",
+      "date": "2026-10-11",
+      "images": [
+        "images/replay-controls-285.png"
+      ],
+      "commit": "acad0587",
+      "agent": "claude"
+    },
+    {
+      "id": "9dd524",
+      "kind": "fixed",
+      "text": "While a scan is running or the Memory page updates, the line under the map keeps naming what the pointer is over instead of going blank each time a new picture is on its way, and a click there picks it.",
+      "date": "2026-10-11",
+      "images": [
+        "images/pointer-readout.png"
+      ],
+      "commit": "e58028d",
+      "agent": "claude"
+    },
+    {
+      "id": "a5eccf",
+      "kind": "changed",
+      "text": "After you remove something in Explore, the map closes up: what you removed shrinks away, the shapes beside it grow into the space, and every size on the page leaves it out.",
+      "date": "2026-10-11",
+      "images": [
+        "images/map-after-removal.png"
+      ],
+      "commit": "ba96a85",
+      "agent": "claude"
+    },
+    {
+      "id": "88b22a",
+      "kind": "added",
+      "text": "You can zoom and pan the Memory page's map as you do on Explore, and it stays on the program you zoomed into as each new reading moves things round it.",
+      "date": "2026-10-11",
+      "commit": "ba96a85",
+      "agent": "claude"
+    },
+    {
+      "id": "70ec99",
+      "kind": "changed",
+      "text": "On the Memory page, programs that grow, shrink, start or exit now move smoothly to their new places at each reading instead of the map jumping, and the committed-memory bar glides to its new figure.",
+      "date": "2026-10-11",
+      "commit": "ba96a85",
+      "agent": "claude"
+    },
+    {
+      "id": "80d65e",
+      "kind": "added",
+      "text": "The Explore treemap now lights up softly around the pointer, so the shapes under it stand out by their relief. It appears only where the map is drawn by the graphics card, and never in high contrast.",
+      "date": "2026-10-11",
+      "images": [
+        "images/pointer-light.png"
+      ],
+      "commit": "c3c1cd3",
+      "agent": "claude"
+    },
+    {
+      "id": "62ceab",
+      "kind": "changed",
+      "text": "The Explore map now draws its treemap on the graphics card where the computer has one that is fast enough, so a large folder appears whole in a few milliseconds instead of filling in piece by piece, and the processor stays free while the map moves.",
+      "date": "2026-10-11",
+      "commit": "ccbcc5e",
+      "agent": "claude"
+    },
+    {
+      "id": "2c3b41",
+      "kind": "changed",
+      "text": "The Explore map stays sharp while you zoom or pan, instead of blurring until the move stops.",
+      "date": "2026-10-11",
+      "images": [
+        "images/zoom-tiles-mid-move.png"
+      ],
+      "commit": "ccbcc5e",
+      "agent": "claude"
+    },
+    {
+      "id": "18ff45",
+      "kind": "added",
+      "text": "While a scan runs, the map now grows smoothly from one snapshot to the next, with each large shape travelling to its new place instead of the picture jumping. With animation effects off, the new picture fades in place.",
+      "date": "2026-10-11",
+      "images": [
+        "images/change-310-scan.png"
+      ],
+      "commit": "a2ff8e8",
+      "agent": "claude"
+    },
+    {
+      "id": "1fd3d1",
+      "kind": "fixed",
+      "text": "Files and folders of exactly the same size now sit in name order on the map, the same way on every scan, rather than trading places from one scan to the next.",
+      "date": "2026-10-11",
+      "commit": "c4a2ad0",
+      "agent": "claude"
+    },
+    {
+      "id": "d2bc6a",
+      "kind": "added",
+      "text": "Moving between two folders on the treemap where neither is inside the other, such as two rows of What grew opened one after the other, now flies out to the folder that holds both and on into the other, in place of a sudden change of picture. Back and Forward fly the same way.",
+      "date": "2026-10-10",
+      "images": [
+        "images/change-308-through.png"
+      ],
+      "commit": "6305eb4",
+      "agent": "claude"
+    },
+    {
+      "id": "cdab8e",
+      "kind": "added",
+      "text": "Explore's map shows a small overview of the whole picture in a top corner while you are zoomed in, with the part on the screen marked: drag the mark to move around, or click anywhere in the overview to go there. It moves out of the way of what you are pointing at, and a button on it hides it until you bring it back.",
+      "date": "2026-10-10",
+      "images": [
+        "images/overview-280.png"
+      ],
+      "commit": "23f57a5",
+      "agent": "claude"
+    },
+    {
+      "id": "d5ef59",
+      "kind": "added",
+      "text": "On Explore, pointing at a row of What kind of files or What grew lights its shapes on the map and dims the rest, pointing at a shape on the map marks its row in the card, and the cards' bars grow to their figures.",
+      "date": "2026-10-10",
+      "images": [
+        "images/c286-video-lit.png"
+      ],
+      "commit": "8d6f768",
+      "agent": "claude"
+    },
+    {
+      "id": "7a62f2",
+      "kind": "changed",
+      "text": "Going into or out of a folder on the Explore treemap is now one smooth camera move: opening a folder flies into it, and going back up pulls back out so you can see where the folder sits in its parent, even several levels up at once.",
+      "date": "2026-10-10",
+      "images": [
+        "images/folder-flight.png"
+      ],
+      "commit": "198c5c4",
+      "agent": "claude"
+    },
+    {
+      "id": "2fd32c",
+      "kind": "changed",
+      "text": "The Explore treemap now zooms past 64× wherever there is still detail to show, so a folder of tiny files opens into the files one by one, each with its name, and the zoom stops once everything in view is drawn and named.",
+      "date": "2026-10-10",
+      "images": [
+        "images/fx306-named.png"
+      ],
+      "commit": "64413d8",
+      "agent": "claude"
+    },
+    {
+      "id": "b254de",
+      "kind": "added",
+      "text": "The Explore map now pans and zooms with every input: pinch and two-finger pan on a touchpad or touch screen, the mouse wheel (Ctrl+wheel glides with inertia, Shift+wheel pans), a drag with the left or middle button that flings on release and springs back at the edges, and the keyboard (+, −, the arrows and Home) after a click on the map.",
+      "date": "2026-10-10",
+      "images": [
+        "images/map-camera-276.png"
+      ],
+      "commit": "793afd4",
+      "agent": "claude"
+    },
+    {
+      "id": "da2750",
+      "kind": "added",
+      "text": "The About page now has a starfield behind it, which you fly through in the style of an old demo, and the Deguffer logo flies out of the stars into the page title on your first visit. The stars stand still if you turn off Windows' animation effects, and they do not appear at all in a high contrast theme.",
+      "date": "2026-10-10",
+      "images": [
+        "images/about-starfield.png"
+      ],
+      "commit": "681996c",
+      "agent": "claude"
+    },
+    {
+      "id": "c69412",
+      "kind": "added",
+      "text": "A small preview map now sits beside the treemap spacing in Settings and at the top of the map appearance window. A change of colours fades into view on it, and a change of spacing moves its shapes to their new places.",
+      "date": "2026-10-10",
+      "images": [
+        "images/settings-preview.png",
+        "images/change-310-shift.png"
+      ],
+      "commit": "a2ff8e8",
+      "agent": "claude"
+    },
+    {
+      "id": "494ac5",
+      "kind": "changed",
+      "text": "When a clean finishes, its figures and its check of what survived fade in together, and a row the clean emptied slides out of the list as the rows below close up.",
+      "date": "2026-10-10",
+      "images": [
+        "images/rec-outcome.png"
+      ],
+      "commit": "fc5b78b",
+      "agent": "claude"
+    },
+    {
+      "id": "24eb76",
+      "kind": "added",
+      "text": "While a clean runs, the Storage page counts the space removed so far beside the free space, and the disk bar moves as the space comes back.",
+      "date": "2026-10-10",
+      "images": [
+        "images/rec-removed-so-far.png"
+      ],
+      "commit": "fc5b78b",
+      "agent": "claude"
+    },
+    {
+      "id": "037a48",
+      "kind": "changed",
+      "text": "On the Storage page, each row's size bar now grows in as the row appears during a scan, and eases to its new length when a larger row arrives.",
+      "date": "2026-10-10",
+      "images": [
+        "images/rec-sharebars.png"
+      ],
+      "commit": "fc5b78b",
+      "agent": "claude"
+    },
+    {
+      "id": "de85a9",
+      "kind": "added",
+      "text": "Lists now show what changed, including those on the Settings page and the lists of checks shown after a clean or a close: a new row fades in, a row that goes fades out while the rows below slide up into its place, and a row that moves in the sort slides to its new place. The row under your pointer, or the one whose button you are on, stays where it is.",
+      "date": "2026-10-10",
+      "images": [
+        "images/list-motion.png",
+        "images/list-motion-arrive-2.png"
+      ],
+      "commit": "0898e427",
+      "agent": "claude"
+    },
+    {
+      "id": "f28489",
+      "kind": "fixed",
+      "text": "A file or folder whose name ends in a dot or a space, such as \"report.\", is now removed under its own name, and the \"report\" beside it is left alone. The Recycle Bin cannot take such an item, so Deguffer says why and leaves it where it is, and Delete permanently removes it.",
+      "date": "2026-10-10",
+      "images": [
+        "images/clip-refused.png",
+        "images/clip-deleted.png"
+      ],
+      "commit": "16c099e",
+      "agent": "claude"
+    },
+    {
+      "id": "3def4e",
+      "kind": "added",
+      "text": "While Deguffer asks whether to remove what you picked on the Explore map, and until the removal ends, the shapes that will go are hatched on the map. Anything Deguffer will not remove stays unhatched.",
+      "date": "2026-10-10",
+      "images": [
+        "images/281-removing.png"
+      ],
+      "commit": "9c49448",
+      "agent": "claude"
+    },
+    {
+      "id": "be958e",
+      "kind": "added",
+      "text": "On the Explore map, the rest of the picture dims round what you select, and the shape under the pointer lifts out with a soft shadow, so both read at a glance on a busy map.",
+      "date": "2026-10-10",
+      "images": [
+        "images/281-selected-hover.png"
+      ],
+      "commit": "9c49448",
+      "agent": "claude"
+    },
+    {
+      "id": "f3bf3d",
+      "kind": "changed",
+      "text": "The names on the Explore map now stay on screen while you zoom, drag or open a folder, moving with their shapes at a steady size, and they fade out as a shape gets too small to hold its name.",
+      "date": "2026-10-10",
+      "images": [
+        "images/279-map-mid-zoom.png"
+      ],
+      "commit": "ad6f4f2",
+      "agent": "claude"
+    },
+    {
+      "id": "dc395d",
+      "kind": "changed",
+      "text": "Pages now slide gently into place when you move between them, and changing the theme or turning the translucent background on or off fades smoothly instead of flashing. With the translucent background off, the window now uses the theme's solid background colour instead of black.",
+      "date": "2026-10-10",
+      "commit": "cbbbaec",
+      "agent": "claude"
+    },
+    {
+      "id": "3337ab",
+      "kind": "changed",
+      "text": "The Explore map is now drawn by the graphics card, so zooming and dragging it has shorter hitches and uses less memory at 4K, and it looks and behaves as before.",
+      "date": "2026-10-10",
+      "commit": "bcba588",
+      "agent": "claude"
+    },
+    {
+      "id": "8cfdf7",
+      "kind": "changed",
+      "text": "After a removal on Explore or Duplicates, any check on what should have survived that did not pass is now listed under the result, with the folder or file it was about and what was found, instead of only being counted.",
+      "date": "2026-10-09",
+      "images": [
+        "images/explore-301.png",
+        "images/dupes-301.png"
+      ],
+      "commit": "fa77aa4",
+      "agent": "claude"
+    },
+    {
+      "id": "5e261e",
+      "kind": "fixed",
+      "text": "Moving duplicates or Explore items to the Recycle Bin can no longer delete them permanently by mistake. An item stays where it is, and Deguffer says why, if its path is very long, if it is larger than its drive's Recycle Bin can hold, or if its drive's bin keeps nothing or cannot be read (a USB stick has none). The bin is asked before you are. On the Duplicates page such a copy is listed apart, with its reason, and if nothing else is marked you are not asked at all. In Explore such an item is not offered for the bin, and if nothing else is selected the reason shows at once, with no question first.",
+      "date": "2026-10-09",
+      "images": [
+        "images/usb-staying-row-2.png",
+        "images/explore-bin-refusal-2.png"
+      ],
+      "commit": "8446169a",
+      "agent": "claude"
+    },
+    {
+      "id": "fee62a",
+      "kind": "fixed",
+      "text": "A duplicates search of a large drive no longer freezes the window for minutes while its results arrive; a drive of about 7,000 files now finishes in under ten seconds.",
+      "date": "2026-10-09",
+      "commit": "0698f23",
+      "agent": "claude"
+    },
+    {
+      "id": "7694f7",
+      "kind": "added",
+      "text": "Searching the same drives and folders for duplicates a second time is much quicker: a file that has not changed since an earlier search is not read again.",
+      "date": "2026-10-09",
+      "commit": "97a699e",
+      "agent": "claude"
+    },
+    {
+      "id": "9cc971",
+      "kind": "added",
+      "text": "The Duplicates page can save its results as a CSV file wherever you choose, one row for each copy with its group, path, size, last-modified time and checksum.",
+      "date": "2026-10-09",
+      "images": [
+        "images/duplicates-save-results.png"
+      ],
+      "commit": "97a699e",
+      "agent": "claude"
+    },
+    {
+      "id": "0a501d",
+      "kind": "added",
+      "text": "A new Duplicates page finds files that are stored more than once: choose the drives and folders to search and what two files must share to match, and each group shows how much space its extra copies take up, with the part of each path that differs picked out.",
+      "date": "2026-10-09",
+      "images": [
+        "images/duplicates-page.png"
+      ],
+      "commit": "4fb1633",
+      "agent": "claude"
+    },
+    {
+      "id": "72ecc6",
+      "kind": "fixed",
+      "text": "After a removal on the Explore page, the check that nothing else went now notices when a file whose name differs only in capitals from the removed one disappears from a case-sensitive folder.",
+      "date": "2026-10-09",
+      "commit": "4fb1633",
+      "agent": "claude"
+    },
+    {
+      "id": "1481b7",
+      "kind": "added",
+      "text": "On the Duplicates page you can now mark copies for removal, one at a time or with a rule such as \"keep the newest copy\", and remove them after a confirmation that lists every copy that goes: to the Recycle Bin by default, or permanently from its own button. Every group always keeps a copy, and a copy that cannot be marked says why.  Each copy then says what became of it.  If you change the folders to search, or make one a reference, after a search, nothing can be marked or removed until you search again.",
+      "date": "2026-10-09",
+      "images": [
+        "images/crop-dialog.png",
+        "images/crop-removed.png",
+        "images/crop-stale.png"
+      ],
+      "imagePlaces": [
+        334,
+        374,
+        509
+      ],
+      "commit": "f86d195",
+      "agent": "claude"
+    },
+    {
+      "id": "39102c",
+      "kind": "added",
+      "text": "Explore now has Back and Forward, as a web browser does: the mouse's Back and Forward buttons, Backspace, Alt+Left and Alt+Right, or the new buttons beside Up, take you back to where you were before you opened a folder or zoomed into a block on the treemap, and forward again.",
+      "date": "2026-10-08",
+      "images": [
+        "images/explore-back-forward.png"
+      ],
+      "commit": "cb31a2c",
+      "agent": "claude"
+    }
+  ]
+}
