@@ -126,7 +126,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     ///
     /// <para>One depth-first pass over the root's own subtree, through the child links, for every
     /// name at once. The pass stops where the walk stops: at a directory it finds, at one it never
-    /// enters, and at a link, which the walk does not list as a directory at all. A path is built
+    /// enters, at one <see cref="DirectorySearch.HandedOff"/> names, and at a link, which the walk
+    /// does not list as a directory at all. A path is built
     /// only for a directory that is found, from the names the pass already holds, so nothing outside
     /// the root is read and no path is rebuilt from a parent chain.</para>
     ///
@@ -144,6 +145,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         {
             return null;
         }
+
+        // Resolved as the search of its own resolves its root, so the record handed off is the record
+        // that search starts from. One reached through a link resolves to nothing, and this pass
+        // never descends through a link to reach it anyway.
+        var handedOff = search.HandedOff
+            .Select(belowRoot => TryResolve([.. root, .. belowRoot]))
+            .OfType<uint>()
+            .ToHashSet();
 
         var found = new List<IReadOnlyList<string>>();
 
@@ -177,7 +186,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                     found.Add(PathBelowRoot(item.Holder, name));
                     break;
 
-                case SearchStep.Entered:
+                case SearchStep.Entered when !handedOff.Contains(node):
                     entered.Add((item.Holder, name));
                     Push(node, entered.Count - 1);
                     break;

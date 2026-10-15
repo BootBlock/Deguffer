@@ -65,6 +65,28 @@ public sealed class SourceTreeWalkTests : IDisposable
     }
 
     /// <summary>
+    /// A nested approved root is searched on its own, so the walk of the folder around it stops
+    /// there rather than listing its subtree a second time. One that carries a sought name is still
+    /// an answer: only the descent is handed off.
+    /// </summary>
+    [Fact]
+    public void StopsAtADirectoryItHandsOff()
+    {
+        var root = _temp.CreateDirectory("root");
+        var kept = _temp.CreateDirectory("root", "kept", "obj");
+        var named = _temp.CreateDirectory("root", "named", "obj");
+        _temp.CreateDirectory("root", "nested", "app", "obj");
+        _temp.CreateDirectory("root", "named", "obj", "inner", "obj");
+
+        var search = Sought.HandingOff([["nested"], ["named", "obj"]]);
+
+        var walked = SourceTreeWalk.Under(root, search, WalkTuning.Default, CancellationToken.None);
+
+        Assert.Equal(new[] { kept, named }.Order(StringComparer.Ordinal), walked.Candidates);
+        Assert.Empty(walked.Unreadable);
+    }
+
+    /// <summary>
     /// A folder that is not there holds nothing, and that is a complete answer. Reporting it as
     /// unreadable would put a sentence about permissions against a build output removed while the walk
     /// ran, and a root reported unlisted would make a race wait for the index over nothing.

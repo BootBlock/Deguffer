@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -44,6 +45,11 @@ internal static class SourceTreeWalk
         var unreadable = new ConcurrentBag<string>();
         var top = LongPath.Extended(root);
 
+        // Spelled as the walk spells a child, so a handed-off directory is recognised by one lookup.
+        var handedOff = search.HandedOff
+            .Select(belowRoot => Path.Join(top, string.Join(Path.DirectorySeparatorChar, belowRoot)))
+            .ToFrozenSet(StringComparer.Ordinal);
+
         // Written by the root's own listing alone, before anything below it is queued.
         var rootListed = true;
 
@@ -87,7 +93,7 @@ internal static class SourceTreeWalk
                             candidates.Add(LongPath.Display(child.FullName));
                             break;
 
-                        case SearchStep.Entered:
+                        case SearchStep.Entered when !handedOff.Contains(child.FullName):
                             descend(child, child.FullName);
                             break;
                     }
