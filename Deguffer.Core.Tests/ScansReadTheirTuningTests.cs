@@ -134,6 +134,7 @@ public sealed class ScansReadTheirTuningTests : IDisposable
             root,
             rootState: 0,
             tuner,
+            FileNames.All,
             (_, contents, descend) =>
             {
                 listing.TryAdd(Environment.CurrentManagedThreadId, true);

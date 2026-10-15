@@ -67,10 +67,12 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         // entire Windows installations and the deepest trees on a developer's disk. A command's measured
         // paths can nest, and the walk lists a path inside another once, where the outer walk meets it.
         // One the outer walk never meets, behind a link or a folder Windows would not list, it walks on
-        // its own, because the removal acts on that path as well.
+        // its own, because the removal acts on that path as well. A file is named only where it is a
+        // store, which is all of a name this asks.
         RootSetWalk.Visit<string>(
             [.. paths.Select(path => WalkRoot.Of(path, default))],
             tuning,
+            FileNames.Stores,
             fs.ListEntries,
             (_, _, contents, _) =>
             {
@@ -130,7 +132,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
 
             // Whatever mark it carries: a OneDrive placeholder and a deduplicated file carry the mark
             // Windows puts on a link, and every removal this look stands in front of would take one.
-            if (!entry.IsDirectory && MailStore.Is(entry.Name))
+            if (entry.IsMailStore)
             {
                 stores.Enqueue(LongPath.Display(entry.FullName));
             }

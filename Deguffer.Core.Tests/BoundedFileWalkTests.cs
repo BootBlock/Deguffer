@@ -341,6 +341,7 @@ public sealed class BoundedFileWalkTests : IDisposable
             root,
             0,
             new WalkTuning(WalkTuning.MaximumThreads, WalkTuning.MinimumListingBuffer),
+            FileNames.All,
             (_, contents, descend) =>
             {
                 // Every worker finds a report due, so every one of them reaches for the lock.
@@ -393,6 +394,7 @@ public sealed class BoundedFileWalkTests : IDisposable
             root,
             "cache",
             WalkTuning.Default,
+            FileNames.All,
             (state, contents, descend) =>
             {
                 read.Add(state);
@@ -439,6 +441,7 @@ public sealed class BoundedFileWalkTests : IDisposable
             root,
             "cache",
             new WalkTuning(4, WalkTuning.MinimumListingBuffer),
+            FileNames.All,
             (state, contents, descend) =>
             {
                 if (state == "child")
@@ -546,6 +549,7 @@ public sealed class BoundedFileWalkTests : IDisposable
             root,
             LongPath.Extended(root),
             tuning,
+            FileNames.All,
             (path, contents, descend) =>
             {
                 var described = new List<string> { contents.WasRefused ? "refused" : "listed" };
@@ -579,6 +583,7 @@ public sealed class BoundedFileWalkTests : IDisposable
             root,
             0,
             new WalkTuning(1, WalkTuning.MinimumListingBuffer),
+            FileNames.All,
             (_, contents, descend) =>
             {
                 foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
@@ -649,5 +654,5 @@ public sealed class BoundedFileWalkTests : IDisposable
         TState rootState,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         WalkTuning? tuning = null) =>
-        BoundedFileWalk.Visit(root, rootState, tuning ?? WalkTuning.Default, onDirectory, static () => { }, TimeProvider.System, default);
+        BoundedFileWalk.Visit(root, rootState, tuning ?? WalkTuning.Default, FileNames.All, onDirectory, static () => { }, TimeProvider.System, default);
 }

@@ -224,9 +224,11 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         // folder for all of them.
         var everyTally = (1 << keeps.Length) - 1;
 
+        // A file's name is read only to ask whether it is a store, so no other file is named.
         RootSetWalk.Visit<VisitedFolder>(
             [.. asked.Select(question => WalkRoot.Of(question.Path, question.Bounds))],
             tuning,
+            FileNames.Stores,
             (root, holder, contents, left) =>
             {
                 var measured = holder?.Root ?? roots[root];
@@ -269,7 +271,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
 
                     // §9, and before the guard for the reason the removal asks it first: the store is
                     // left whatever its age, so it is out of the total and its folders stay.
-                    if (MailStore.Is(entry.Name))
+                    if (entry.IsMailStore)
                     {
                         measured.Stores.Add(LongPath.Display(entry.FullName));
                         folder.Stays(everyTally);
@@ -310,7 +312,7 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     {
                         folder.Stays(everyTally);
                     }
-                    else if (MailStore.Is(marked.Name))
+                    else if (marked.IsMailStore)
                     {
                         measured.Stores.Add(LongPath.Display(marked.FullName));
                         folder.Stays(everyTally);

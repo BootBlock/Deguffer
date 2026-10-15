@@ -19,14 +19,14 @@ internal sealed class ListingsInFlight(ListDirectory inner)
     /// <summary>The most listings that were in flight at once.</summary>
     public int Peak => Volatile.Read(ref _peak);
 
-    public ListingEnd List(string directory, EnumerationOptions options, List<WalkEntry> into)
+    public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
     {
         var now = Interlocked.Increment(ref _inFlight);
         RaisePeak(now);
 
         try
         {
-            return inner(directory, options, into);
+            return inner(directory, options, files, into);
         }
         finally
         {

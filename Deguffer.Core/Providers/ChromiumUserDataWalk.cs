@@ -87,37 +87,38 @@ public static class ChromiumUserDataWalk
             return new ChromiumFolderWalk([], RootUnreadable: false);
         }
 
-        var excluded = Excluded(notEntered);
+        var excluded = NotEntered(notEntered);
         var found = new ConcurrentBag<ChromiumFolder>();
         var rootUnreadable = false;
 
-        BoundedFileWalk.Visit<(string Path, int Depth)>(
+        // Each directory carries its depth, and reads its path from its listing. The only file named
+        // is the marker, which is the only one asked about.
+        BoundedFileWalk.Visit(
             LongPath.Extended(root),
-            (root, 0),
+            rootState: 0,
             tuning,
-            (directory, contents, descend) =>
+            FileNames.StoresAnd(ChromiumLayout.Browser.IdentifyingFile),
+            (depth, contents, descend) =>
             {
-                if (directory.Depth == 0)
+                var path = LongPath.Display(contents.Directory);
+
+                if (depth == 0)
                 {
                     rootUnreadable = contents.WasRefused;
                 }
-                else if (!Enters(directory.Path, directory.Depth, Marked(directory.Path, contents), found))
+                else if (!Enters(path, depth, Marked(path, contents), found))
                 {
                     return;
                 }
 
+                // Asked once a listing, and of each child only where this folder holds one never entered.
+                excluded.TryGetValue(Path.TrimEndingDirectorySeparator(path), out var notHere);
+
                 foreach (var child in contents.Entries)
                 {
-                    if (!child.IsDirectory)
+                    if (child.IsDirectory && notHere?.Contains(child.Name) != true)
                     {
-                        continue;
-                    }
-
-                    var path = LongPath.Display(child.FullName);
-
-                    if (!excluded.Contains(Path.TrimEndingDirectorySeparator(path)))
-                    {
-                        descend(child, (path, directory.Depth + 1));
+                        descend(child, depth + 1);
                     }
                 }
             },
@@ -150,7 +151,7 @@ public static class ChromiumUserDataWalk
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var excluded = Excluded(notEntered);
+        var excluded = NotEntered(notEntered);
         var found = new ConcurrentBag<ChromiumFolder>();
         var pending = new Stack<(int Node, string Path, int Depth)>();
 
@@ -166,6 +167,8 @@ public static class ChromiumUserDataWalk
                 continue;
             }
 
+            excluded.TryGetValue(Path.TrimEndingDirectorySeparator(directory.Path), out var notHere);
+
             foreach (var child in tree.ChildrenOf(directory.Node))
             {
                 // A link is not entered, as the walk declines to descend through one.
@@ -174,11 +177,11 @@ public static class ChromiumUserDataWalk
                     continue;
                 }
 
-                var path = Path.Combine(directory.Path, tree.NameOf(child));
+                var name = tree.NameOf(child);
 
-                if (!excluded.Contains(path))
+                if (notHere?.Contains(name) != true)
                 {
-                    pending.Push((child, path, directory.Depth + 1));
+                    pending.Push((child, Path.Combine(directory.Path, name), directory.Depth + 1));
                 }
             }
         }
@@ -214,14 +217,36 @@ public static class ChromiumUserDataWalk
     }
 
     /// <summary>
-    /// The folders never entered, compared without a trailing separator. The short form is what
-    /// Windows puts in TEMP on a profile with a long folder name, and a listing reports long names,
-    /// so both sides are compared unaliased.
+    /// The folders never entered, as the names never entered in each folder holding one, so both walks
+    /// ask one lookup of a folder and build no child's path to ask it. A folder is keyed in display
+    /// form without a trailing separator. The short form is what Windows puts in TEMP on a profile
+    /// with a long folder name, and a listing reports long names, so both sides are compared
+    /// unaliased.
     /// </summary>
-    private static HashSet<string> Excluded(IReadOnlyList<string> notEntered) =>
-        notEntered
-            .Select(path => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(path)))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private static Dictionary<string, HashSet<string>> NotEntered(IReadOnlyList<string> notEntered)
+    {
+        var byParent = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in notEntered.Select(path => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(path))))
+        {
+            // A volume's root has no parent, so no walk meets it as a child.
+            if (Path.GetDirectoryName(path) is not { } parent)
+            {
+                continue;
+            }
+
+            var key = Path.TrimEndingDirectorySeparator(parent);
+
+            if (!byParent.TryGetValue(key, out var names))
+            {
+                byParent[key] = names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            names.Add(Path.GetFileName(path));
+        }
+
+        return byParent;
+    }
 
     /// <summary>
     /// <see cref="Marked(string, DirectoryContents)"/>, read from the scan's tree: any file the scan
@@ -270,6 +295,7 @@ public static class ChromiumUserDataWalk
             ? PathPresence.Present
             : PathPresence.Absent;
 
+    // A file listed without a name is not the marker: the walk names the marker wherever it lists it.
     private static bool IsMarker(WalkEntry file) =>
-        file.Name.Equals(ChromiumLayout.Browser.IdentifyingFile, StringComparison.OrdinalIgnoreCase);
+        file.HasName && file.Name.Equals(ChromiumLayout.Browser.IdentifyingFile, StringComparison.OrdinalIgnoreCase);
 }

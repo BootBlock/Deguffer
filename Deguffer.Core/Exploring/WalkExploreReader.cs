@@ -96,6 +96,7 @@ internal static class WalkExploreReader
                 LongPath.Extended(root),
                 ExploreTreeBuilder.RootNode,
                 tuning,
+                FileNames.All,
                 (parent, contents, descend) =>
                 {
                     if (contents.WasRefused)

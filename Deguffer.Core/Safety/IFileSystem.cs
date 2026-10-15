@@ -51,7 +51,8 @@ public interface IFileSystem
     /// walk every scan takes.</para>
     /// </summary>
     /// <param name="directory">In the extended form (§6.3), so every entry carries the prefix too.</param>
-    ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into);
+    /// <param name="files">What the listing keeps of each file.</param>
+    ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into);
 
     /// <summary>
     /// The length of the file at <paramref name="path"/>, or null when no file is there.
@@ -142,8 +143,8 @@ public sealed class WindowsFileSystem : IFileSystem
 
     public bool IsReparsePoint(string path) => LongPath.IsReparsePoint(path);
 
-    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
-        WalkListing.FromDisk(directory, options, into);
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into) =>
+        WalkListing.FromDisk(directory, options, files, into);
 
     public long? TryGetFileLength(string path)
     {

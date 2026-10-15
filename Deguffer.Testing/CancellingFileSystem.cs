@@ -23,14 +23,14 @@ public sealed class CancellingFileSystem(
 
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into)
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
     {
         if (whileListing)
         {
             cancel.Cancel();
         }
 
-        return inner.ListEntries(directory, options, into);
+        return inner.ListEntries(directory, options, files, into);
     }
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);

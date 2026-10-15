@@ -17,22 +17,22 @@ public sealed class ListingsInFlightTests
     {
         using var bothIn = new CountdownEvent(2);
         using var released = new ManualResetEventSlim();
-        var listings = new ListingsInFlight((_, _, _) =>
+        var listings = new ListingsInFlight((_, _, _, _) =>
         {
             bothIn.Signal();
             released.Wait(Patience);
             return new ListingEnd(PathPresence.Present, Denied: false);
         });
 
-        var first = Task.Run(() => listings.List("a", new EnumerationOptions(), []));
-        var second = Task.Run(() => listings.List("b", new EnumerationOptions(), []));
+        var first = Task.Run(() => listings.List("a", new EnumerationOptions(), FileNames.All, []));
+        var second = Task.Run(() => listings.List("b", new EnumerationOptions(), FileNames.All, []));
         Assert.True(bothIn.Wait(Patience));
         released.Set();
         await Task.WhenAll(first, second);
 
-        var alone = new ListingsInFlight(static (_, _, _) => new ListingEnd(PathPresence.Present, Denied: false));
-        alone.List("c", new EnumerationOptions(), []);
-        alone.List("d", new EnumerationOptions(), []);
+        var alone = new ListingsInFlight(static (_, _, _, _) => new ListingEnd(PathPresence.Present, Denied: false));
+        alone.List("c", new EnumerationOptions(), FileNames.All, []);
+        alone.List("d", new EnumerationOptions(), FileNames.All, []);
 
         Assert.Equal(2, listings.Peak);
         Assert.Equal(1, alone.Peak);
@@ -43,12 +43,12 @@ public sealed class ListingsInFlightTests
     public void AListingThatThrowsIsCountedOut()
     {
         var calls = 0;
-        var listings = new ListingsInFlight((_, _, _) => ++calls == 1
+        var listings = new ListingsInFlight((_, _, _, _) => ++calls == 1
             ? throw new IOException("The listing failed.")
             : new ListingEnd(PathPresence.Present, Denied: false));
 
-        Assert.Throws<IOException>(() => listings.List("a", new EnumerationOptions(), []));
-        listings.List("b", new EnumerationOptions(), []);
+        Assert.Throws<IOException>(() => listings.List("a", new EnumerationOptions(), FileNames.All, []));
+        listings.List("b", new EnumerationOptions(), FileNames.All, []);
 
         Assert.Equal(1, listings.Peak);
     }

@@ -58,6 +58,10 @@ internal static class RootSetWalk
     /// entered for it, and a link never is.</para>
     /// </summary>
     /// <param name="roots">Directories, each in the form <see cref="WalkRoot.Of"/> builds.</param>
+    /// <param name="files">
+    /// What each listing keeps of its files. A folder holding an entry some root leaves out is listed
+    /// with every name whatever this asks, because the names left out are compared with its files'.
+    /// </param>
     /// <param name="onProgress">
     /// Called as <see cref="BoundedFileWalk"/>'s progress is, and once more at the end of each further
     /// walk a nested root needs.
@@ -65,12 +69,13 @@ internal static class RootSetWalk
     public static void Visit<TFolder>(
         IReadOnlyList<WalkRoot> roots,
         WalkTuning tuning,
+        FileNames files,
         Func<int, TFolder?, DirectoryContents, IReadOnlySet<string>?, TFolder> onDirectory,
         Action onProgress,
         TimeProvider clock,
         CancellationToken ct)
         where TFolder : class =>
-        Visit(roots, tuning, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
+        Visit(roots, tuning, files, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// The walk above, listing each directory through <paramref name="list"/>: the seam a test lists a
@@ -79,6 +84,7 @@ internal static class RootSetWalk
     public static void Visit<TFolder>(
         IReadOnlyList<WalkRoot> roots,
         WalkTuning tuning,
+        FileNames files,
         ListDirectory list,
         Func<int, TFolder?, DirectoryContents, IReadOnlySet<string>?, TFolder> onDirectory,
         Action onProgress,
@@ -87,6 +93,7 @@ internal static class RootSetWalk
         where TFolder : class
     {
         IReadOnlyList<int> waiting = [.. Enumerable.Range(0, roots.Count)];
+        list = NamingLeftOut(roots, list);
 
         while (waiting.Count > 0)
         {
@@ -95,6 +102,7 @@ internal static class RootSetWalk
             BoundedFileWalk.Visit(
                 round.Seeds,
                 tuning,
+                files,
                 list,
                 (Frame<TFolder>[] frames, DirectoryContents contents, Action<WalkEntry, Frame<TFolder>[]> descend) =>
                     Read(roots, round, frames, contents, descend, onDirectory),
@@ -105,6 +113,23 @@ internal static class RootSetWalk
             // Every round reaches at least its seeds, so this ends.
             waiting = [.. waiting.Where(root => !round.WasReached(root))];
         }
+    }
+
+    /// <summary>
+    /// <paramref name="list"/>, listing every folder that holds an entry a root leaves out with all its
+    /// names. One lookup a listing, and only where some root leaves something out.
+    /// </summary>
+    private static ListDirectory NamingLeftOut(IReadOnlyList<WalkRoot> roots, ListDirectory list)
+    {
+        // Compared as LeftOutEntries keys its folders, so every folder it answers for is listed named.
+        var folders = roots
+            .SelectMany(root => root.LeftOut?.Folders ?? [])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return folders.Count == 0
+            ? list
+            : (directory, options, files, into) =>
+                list(directory, options, folders.Contains(directory) ? FileNames.All : files, into);
     }
 
     /// <summary>One directory, for every root it lies in, and the roots each of its children lies in.</summary>

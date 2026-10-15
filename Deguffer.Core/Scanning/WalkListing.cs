@@ -10,9 +10,14 @@ public readonly record struct ListingEnd(PathPresence Presence, bool Denied);
 
 /// <summary>
 /// List <paramref name="directory"/> into <paramref name="into"/> with <paramref name="options"/>,
-/// returning how the listing ended. Entries listed before a failure stay in the list.
+/// keeping of each file what <paramref name="files"/> asks, and return how the listing ended. Entries
+/// listed before a failure stay in the list.
 /// </summary>
-internal delegate ListingEnd ListDirectory(string directory, EnumerationOptions options, List<WalkEntry> into);
+internal delegate ListingEnd ListDirectory(
+    string directory,
+    EnumerationOptions options,
+    FileNames files,
+    List<WalkEntry> into);
 
 /// <summary>
 /// One worker's listing of one directory at a time, sorted into what <see cref="DirectoryContents"/>
@@ -28,7 +33,7 @@ internal delegate ListingEnd ListDirectory(string directory, EnumerationOptions 
 /// <para>The lists are reused for every directory the worker reads, because a walk reads hundreds of
 /// thousands of them and the lists are what a listing would otherwise allocate (G4).</para>
 /// </summary>
-internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
+internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, FileNames files)
 {
     private readonly List<WalkEntry> _entries = [];
     private readonly List<WalkEntry> _links = [];
@@ -42,7 +47,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         _reparseFiles.Clear();
 
         var options = buffer.Options;
-        var end = list(directory, options, _entries);
+        var end = list(directory, options, files, _entries);
 
         if (buffer.RetryAfter(options, end) is { } smaller)
         {
@@ -50,7 +55,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
             // what the first attempt read would hand those entries back twice.
             _entries.Clear();
 
-            var retried = list(directory, smaller, _entries);
+            var retried = list(directory, smaller, files, _entries);
             if (retried.Presence is PathPresence.Present)
             {
                 buffer.Rejected();
@@ -86,12 +91,13 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
     }
 
     /// <summary>The listing every walk takes outside a test: the directory as the volume holds it.</summary>
-    public static ListingEnd FromDisk(string directory, EnumerationOptions options, List<WalkEntry> into)
+    public static ListingEnd FromDisk(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
     {
         using var listing = new DirectoryListing<WalkEntry>(
             directory,
-            (ref System.IO.Enumeration.FileSystemEntry entry) => WalkEntry.Of(directory, ref entry),
-            options: options);
+            (ref System.IO.Enumeration.FileSystemEntry entry) => WalkEntry.Of(directory, files, ref entry),
+            files.KeepsFiles ? null : static (ref System.IO.Enumeration.FileSystemEntry entry) => entry.IsDirectory,
+            options);
 
         while (listing.MoveNext())
         {

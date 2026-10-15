@@ -31,6 +31,9 @@ internal sealed class LeftOutEntries
     /// <summary>Each entry left out, as its components below the root.</summary>
     public IReadOnlyList<IReadOnlyList<string>> Below { get; }
 
+    /// <summary>Every folder holding an entry left out, spelled as the walk lists it.</summary>
+    public IEnumerable<string> Folders => _byFolder.Keys;
+
     /// <summary>
     /// The entries of <paramref name="bounds"/> below <paramref name="root"/>, or null where none is,
     /// so a measurement with nothing to leave out pays nothing for the question.

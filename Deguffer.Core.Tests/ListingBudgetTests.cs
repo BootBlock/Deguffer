@@ -76,6 +76,7 @@ public sealed class ListingBudgetTests
                 () => BoundedFileWalk.Visit<byte>(
                     [(@"Q:\outer", 0)],
                     tuning,
+                    FileNames.All,
                     budget,
                     EmptyListing,
                     (_, _, _) =>
@@ -83,6 +84,7 @@ public sealed class ListingBudgetTests
                         BoundedFileWalk.Visit<byte>(
                             [(@"Q:\inner", 0)],
                             tuning,
+                            FileNames.All,
                             budget,
                             EmptyListing,
                             static (_, _, _) => { },
@@ -106,12 +108,12 @@ public sealed class ListingBudgetTests
     public async Task AListingThatThrowsGivesItsSlotBack()
     {
         var budget = new ListingBudget();
-        var failing = budget.Around((_, _, _) => throw new IOException("The device is not ready."), limit: 1);
+        var failing = budget.Around((_, _, _, _) => throw new IOException("The device is not ready."), limit: 1);
         var listing = budget.Around(EmptyListing, limit: 1);
 
-        Assert.Throws<IOException>(() => failing(@"\\?\Q:\gone", DirectoryListing.EveryEntryWithBuffer(WalkTuning.MinimumListingBuffer), []));
+        Assert.Throws<IOException>(() => failing(@"\\?\Q:\gone", DirectoryListing.EveryEntryWithBuffer(WalkTuning.MinimumListingBuffer), FileNames.All, []));
 
-        var end = await Task.Run(() => listing(@"\\?\Q:\next", DirectoryListing.EveryEntryWithBuffer(WalkTuning.MinimumListingBuffer), []))
+        var end = await Task.Run(() => listing(@"\\?\Q:\next", DirectoryListing.EveryEntryWithBuffer(WalkTuning.MinimumListingBuffer), FileNames.All, []))
             .WaitAsync(Deadline);
 
         Assert.Equal(PathPresence.Present, end.Presence);
@@ -123,6 +125,7 @@ public sealed class ListingBudgetTests
             () => BoundedFileWalk.Visit<byte>(
                 [(root, 0)],
                 new WalkTuning(threads, WalkTuning.MinimumListingBuffer),
+                FileNames.All,
                 budget,
                 tree.List,
                 static (_, contents, descend) =>
@@ -137,7 +140,7 @@ public sealed class ListingBudgetTests
                 CancellationToken.None),
             TaskCreationOptions.LongRunning);
 
-    private static ListingEnd EmptyListing(string directory, EnumerationOptions options, List<WalkEntry> into) =>
+    private static ListingEnd EmptyListing(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into) =>
         new(PathPresence.Present, Denied: false);
 
     /// <summary>
@@ -154,7 +157,7 @@ public sealed class ListingBudgetTests
 
         public int Peak => Volatile.Read(ref _peak);
 
-        public ListingEnd List(string directory, EnumerationOptions options, List<WalkEntry> into)
+        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
         {
             var now = Interlocked.Increment(ref _inFlight);
             InterlockedMax(ref _peak, now);

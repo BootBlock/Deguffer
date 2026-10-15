@@ -34,6 +34,7 @@ public sealed class WalkThreadCountTests
                 Root,
                 rootState: 0,
                 new WalkTuning(WalkTuning.MaximumThreads, WalkTuning.MinimumListingBuffer),
+                FileNames.All,
                 tree.List,
                 static (_, contents, descend) =>
                 {
@@ -77,7 +78,7 @@ public sealed class WalkThreadCountTests
 
         public int Listed => Volatile.Read(ref _listed);
 
-        public ListingEnd List(string directory, EnumerationOptions options, List<WalkEntry> into)
+        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
         {
             Interlocked.Increment(ref _listed);
 

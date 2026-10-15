@@ -47,8 +47,8 @@ public sealed class WatchedDirectoryRemovals(
 
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
-        inner.ListEntries(directory, options, into);
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into) =>
+        inner.ListEntries(directory, options, files, into);
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 
@@ -65,7 +65,7 @@ public sealed class WatchedDirectoryRemovals(
         // A child still there when its parent is tried was not finished first, whether nobody had
         // tried it yet or its removal was still under way.
         var entries = new List<WalkEntry>();
-        inner.ListEntries(path, DirectoryListing.EveryEntry, entries);
+        inner.ListEntries(path, DirectoryListing.EveryEntry, FileNames.None, entries);
 
         if (entries.Any(entry => entry.IsDirectory))
         {
