@@ -58,6 +58,32 @@ public sealed class DirectoryScanner : IDirectoryScanner
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        return (await MeasureEachAsync(path, [keep], bounds, progress, ct).ConfigureAwait(false))[0];
+    }
+
+    /// <summary>
+    /// Both readings from whichever route takes the question: one built table, summed in memory once
+    /// for each reading, or one walk. The whole is remembered as <see cref="MeasureAsync"/> remembers an unguarded figure,
+    /// because it is one.
+    /// </summary>
+    public async ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        return AgedScan.Of(await MeasureEachAsync(path, AgedScan.Keeps(age), bounds: default, progress: null, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// <paramref name="path"/> measured once for each of <paramref name="keeps"/>, in their order, by
+    /// one route. <paramref name="progress"/> follows the first, and only the first can be remembered.
+    /// </summary>
+    private async ValueTask<ScanResult[]> MeasureEachAsync(
+        string path,
+        MinimumAge[] keeps,
+        ScanBounds bounds,
+        IProgress<ScanSize>? progress,
+        CancellationToken ct)
+    {
         // §5.5's "re-opening the tool is instant": show last run's figure straight away, then
         // correct it. Only ever reported through progress — the returned result is always freshly
         // measured, because callers subtract it to report reclaimed space.
@@ -67,21 +93,21 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // writing it would leave the next run — where the user may have turned the guard off —
         // opening on a number that is short by however much was held back. A figure with entries left
         // out of it is short in the same way, so it is neither read nor written either.
-        var remember = !keep.IsOn && !bounds.LeavesEntriesOut;
+        var remember = !keeps[0].IsOn && !bounds.LeavesEntriesOut;
 
         if (remember && _estimates?.TryGet(path, bounds.KeepRoot) is { } remembered)
         {
             progress?.Report(remembered);
         }
 
-        var result = await MeasureFreshAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
+        var results = await MeasureFreshAsync(path, keeps, bounds, progress, ct).ConfigureAwait(false);
 
         if (remember)
         {
-            Remember(path, bounds, result);
+            Remember(path, bounds, results[0]);
         }
 
-        return result;
+        return results;
     }
 
     /// <summary>
@@ -176,9 +202,9 @@ public sealed class DirectoryScanner : IDirectoryScanner
         return [.. found.Select(components => prefix + string.Join(Path.DirectorySeparatorChar, components)).Order(StringComparer.Ordinal)];
     }
 
-    private async ValueTask<ScanResult> MeasureFreshAsync(
+    private async ValueTask<ScanResult[]> MeasureFreshAsync(
         string path,
-        MinimumAge keep,
+        MinimumAge[] keeps,
         ScanBounds bounds,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
@@ -187,16 +213,16 @@ public sealed class DirectoryScanner : IDirectoryScanner
         {
             return await _fallback
                 .Because(FallbackReason.VolumeNotAddressable)
-                .MeasureAsync(path, keep, bounds, progress, ct)
+                .MeasureEachAsync(path, keeps, bounds, progress, ct)
                 .ConfigureAwait(false);
         }
 
         if (_tuner.WalkOnly)
         {
-            return await _fallback.Because(FallbackReason.WalkChosen).MeasureAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
+            return await _fallback.Because(FallbackReason.WalkChosen).MeasureEachAsync(path, keeps, bounds, progress, ct).ConfigureAwait(false);
         }
 
-        var asked = new Asked(path, volumePath, keep, bounds);
+        var asked = new Asked(path, volumePath, keeps, bounds);
 
         var building = _volumes.Get(volumePath.DriveLetter);
 
@@ -216,46 +242,49 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // render as "this cache is already clear" and quietly hide gigabytes.
         if (FromIndex(built.Index, asked) is { } indexed)
         {
-            progress?.Report(indexed.Size);
+            progress?.Report(indexed[0].Size);
             return indexed;
         }
 
-        return await _fallback.Because(Declined(built)).MeasureAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
+        return await _fallback.Because(Declined(built)).MeasureEachAsync(path, keeps, bounds, progress, ct).ConfigureAwait(false);
     }
 
-    /// <summary>One measurement's question, as each route is asked it.</summary>
-    private readonly record struct Asked(string Path, VolumePath Volume, MinimumAge Keep, ScanBounds Bounds);
+    /// <summary>
+    /// One measurement's question, as each route is asked it: one path, read once for each guard in
+    /// <see cref="Keeps"/>.
+    /// </summary>
+    private readonly record struct Asked(string Path, VolumePath Volume, MinimumAge[] Keeps, ScanBounds Bounds);
 
     /// <summary>
     /// Walk <paramref name="path"/> while the table is read, and take whichever answers first. See
     /// <see cref="ScanRoute.Auto"/>.
     /// </summary>
-    private async ValueTask<ScanResult> RaceAsync(
+    private async ValueTask<ScanResult[]> RaceAsync(
         Asked asked,
         Task<MftVolumeIndexCache.Built> building,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
+        // Every reading shares one walk's reach, so the first speaks for all of them.
         var raced = await RouteRace.FirstAsync(
             async stop => FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, asked),
             stop => _fallback
                 .Because(FallbackReason.WalkAnsweredFirst)
-                .MeasureAsync(asked.Path, asked.Keep, asked.Bounds, progress, stop)
-                .AsTask(),
-            walked => walked.WasReached,
+                .MeasureEachAsync(asked.Path, asked.Keeps, asked.Bounds, progress, stop),
+            walked => walked[0].WasReached,
             ct).ConfigureAwait(false);
 
         switch (raced.Outcome)
         {
             case RaceOutcome.TableAnswered:
                 // After the walk has stopped, so the last figure the caller is shown is this one.
-                progress?.Report(raced.Answer.Size);
+                progress?.Report(raced.Answer[0].Size);
                 return raced.Answer;
 
             // The walk was stamped as the quicker route before anyone knew the table would decline.
             // A file is a direct read, which carries no reason on either route.
-            case RaceOutcome.TableDeclined when raced.Answer.Strategy is ScanStrategy.ParallelEnumeration:
-                return raced.Answer with { Fallback = Declined(building.Result) };
+            case RaceOutcome.TableDeclined when raced.Answer[0].Strategy is ScanStrategy.ParallelEnumeration:
+                return [.. raced.Answer.Select(walked => walked with { Fallback = Declined(building.Result) })];
 
             default:
                 return raced.Answer;
@@ -263,10 +292,14 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// What the index says about the path <paramref name="asked"/> names, or null where there is no
-    /// index, or it cannot answer for the path or place an entry the bounds leave out.
+    /// What the index says about the path <paramref name="asked"/> names, one reading for each of its
+    /// guards, or null where there is no index, or it cannot answer for the path or place an entry the
+    /// bounds leave out.
+    ///
+    /// <para>All or nothing: one reading the table declines sends every reading to the walk, which
+    /// answers them all in the one pass it would have made for the first.</para>
     /// </summary>
-    private static ScanResult? FromIndex(MftVolumeIndex? index, Asked asked)
+    private static ScanResult[]? FromIndex(MftVolumeIndex? index, Asked asked)
     {
         var volume = asked.Volume;
 
@@ -275,15 +308,22 @@ public sealed class DirectoryScanner : IDirectoryScanner
             return null;
         }
 
-        if (index.TryMeasure(volume.Components, asked.Keep, asked.Bounds.KeepRoot, leftOut, out var withheldRecent, out var stores) is not { } size)
+        var readings = new ScanResult[asked.Keeps.Length];
+
+        for (var i = 0; i < readings.Length; i++)
         {
-            return null;
+            if (index.TryMeasure(volume.Components, asked.Keeps[i], asked.Bounds.KeepRoot, leftOut, out var withheldRecent, out var stores) is not { } size)
+            {
+                return null;
+            }
+
+            readings[i] = ScanResult.Fast(size, withheldRecent) with
+            {
+                MailStores = [.. stores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
+            };
         }
 
-        return ScanResult.Fast(size, withheldRecent) with
-        {
-            MailStores = [.. stores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
-        };
+        return readings;
     }
 
     /// <summary>

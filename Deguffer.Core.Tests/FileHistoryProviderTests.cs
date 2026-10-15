@@ -39,11 +39,11 @@ public sealed class FileHistoryProviderTests : IDisposable
     /// <summary>Where the fake environment puts Windows' File History command.</summary>
     private string Manager => _environment.FindExecutable("FhManagew")!;
 
-    private FileHistoryProvider CreateProvider(AppPreferences? preferences = null) => new(
+    private FileHistoryProvider CreateProvider(AppPreferences? preferences = null, FakeDirectoryScanner? scanner = null) => new(
         _environment,
         _runner,
         FakeProcessInspector.NothingRunning,
-        new FakeDirectoryScanner(),
+        scanner ?? new FakeDirectoryScanner(),
         new FakePreferences(preferences ?? AppPreferences.Default));
 
     /// <summary>A drive root under the scratch tree, standing in for a backup disk.</summary>
@@ -256,6 +256,23 @@ public sealed class FileHistoryProviderTests : IDisposable
 
         Assert.Equal(Manager, step.FileName);
         Assert.Equal(4096 + 8192, step.MeasuredBefore!.Value.Reclaimable);
+    }
+
+    /// <summary>
+    /// The before figure and the estimate come from one reading of the target. The target is a
+    /// backup disk or a network share, usually the slowest tree a preview reads, and measuring it
+    /// once for each figure would read it twice.
+    /// </summary>
+    [Fact]
+    public async Task ReadsTheTargetOnceForBothFigures()
+    {
+        var drive = CreateConfiguredDrive(oldBytes: 4096, recentBytes: 8192);
+        var scanner = new FakeDirectoryScanner();
+
+        var plan = await CreateProvider(scanner: scanner).PlanAsync();
+
+        Assert.Equal(4096, plan.EstimatedBytes);
+        Assert.Equal([Path.Combine(CreateHistory(drive), "Data")], scanner.Measured);
     }
 
     /// <summary>
