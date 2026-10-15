@@ -72,8 +72,6 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
     /// <summary>The chosen locations, in the order a full scan measures them.</summary>
     public IReadOnlyList<ICleanupProvider> Chosen => _choice.Of(_providers);
 
-    public bool CanScan => Chosen.Count > 0;
-
     public string ChosenSummary => $"{Chosen.Count} of {_providers.Count} locations chosen";
 
     /// <summary>
@@ -130,7 +128,6 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(Chosen));
-        OnPropertyChanged(nameof(CanScan));
         OnPropertyChanged(nameof(ChosenSummary));
         ChoiceChanged?.Invoke(this, EventArgs.Empty);
     }
