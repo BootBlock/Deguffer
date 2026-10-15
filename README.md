@@ -5,15 +5,15 @@
 Deguffer finds what is filling your Windows drive and helps you get the space back without losing
 anything you meant to keep. It recognises the caches, build output, downloads and leftovers that
 applications and Windows leave behind, tells you what each one is and what deleting it would cost
-you, and leaves the decision with you. It can also map a whole drive, find duplicate files, tidy
-the installed programs list, and show where your memory is going.
+you, and leaves the decision with you. It can also map a whole drive, find duplicate files, tidy the
+installed programs list, and show where your memory is going.
 
-*Guff* is British slang for rubbish, the stuff that piles up and serves no purpose. Deguffer
-removes it.
+*Guff* is British slang for rubbish, the stuff that piles up and serves no purpose, which is what
+Deguffer clears away.
 
 Deguffer runs on Windows 10 (version 1809 or later) and Windows 11, and it is free and open source
-under the MIT licence. It is at version 0.70.0. There is no published release yet, so for now you
-will need to [build it from source](#building).
+under the MIT licence. It is at version 0.70.0 and has no published release yet, so for now you will
+need to [build it from source](#building).
 
 ## What it does
 
@@ -27,28 +27,29 @@ will need to [build it from source](#building).
 - **Duplicates** finds files stored more than once, matched by name, size, date or content. Before
   it removes a copy you marked, it compares that copy byte for byte with the one you are keeping.
 - **Installed apps** finds entries in Windows' installed programs list for programs that are
-  provably gone, backs each entry up before removing it, and runs a program's own uninstaller when
-  you ask it to.
-- **Memory** shows where physical memory goes, by application, by service and to Windows itself,
-  and can ask one program you choose to close.
+  provably gone, by default backs each entry up before removing it, and runs a program's own
+  uninstaller when you ask it to.
+- **Memory** shows where physical memory goes, by application, by service and to Windows itself, and
+  can ask one program you choose to close.
 
-Deguffer starts without administrator rights. On the pages that can use them, a *Reopen as
-administrator* button lets it read a drive's file table directly, which makes a scan much faster,
-and run the Windows cleanup steps that need those rights.
+Deguffer starts without administrator rights. Storage, Explore and Duplicates can restart it as
+administrator, so that it reads a drive's file table directly, which makes a scan much faster, and
+so that Storage can run the Windows cleanup steps that need those rights. Installed apps can do the
+same to remove entries that belong to every account.
 
 ## Why it exists
 
-Windows' Disk Cleanup and Storage Sense know about Windows' own caches and little else. On a
-working machine most of the waste is in application and package caches, downloaded toolchains and
-runtimes, editor state, container images and search indexes, and each of those needs its own
-knowledge to clear safely.
+Windows' Disk Cleanup and Storage Sense know about Windows' own caches and little else. On a working
+machine most of the waste is in application and package caches, downloaded toolchains and runtimes,
+editor state, container images and search indexes, and each of those needs its own knowledge to
+clear safely.
 
 Deguffer began as an audit of a Windows 11 workstation that was down to 5.6 GB free on a 330 GB
 system drive. Clearing three package-manager caches in the way each tool intends recovered 22.9 GB
 in a few minutes, without touching any user data. The same audit nearly deleted 11 GB of VS Code
 `workspaceStorage`, which looks like a cache but mostly holds AI chat history. Nothing in its path,
-size or name gives that away, and a cleaner that ranks folders by size would have recommended
-deleting it. That near miss is why Deguffer classifies everything before it offers it.
+size or name gives that away. A cleaner that ranks folders by size would have recommended deleting
+it, and that near miss is why Deguffer classifies everything before it offers it.
 
 ## Safety tiers
 
@@ -68,9 +69,8 @@ because they can be saved anywhere, and Deguffer will never remove one by any ro
 - Where a tool has its own command for clearing its cache, Deguffer uses it.
   `dotnet nuget locals all --clear` cleared four locations, two of them outside `.nuget`, and a
   cleaner working from paths would have missed about 3 GB.
-- It never deletes a tool's root folder, only the children it recognises. `.gradle` keeps
-  disposable `caches` and `wrapper` folders next to `gradle.properties`, which can hold signing
-  keys.
+- It never deletes a tool's root folder, only the children it recognises. `.gradle` keeps disposable
+  `caches` and `wrapper` folders next to `gradle.properties`, which can hold signing keys.
 - Nothing is deleted until a scan has shown you what it is, and you can read the exact steps for
   each row before you agree to them.
 - After each clean it checks that the tool's root folder, anything it did not recognise, and
@@ -84,19 +84,18 @@ because they can be saved anywhere, and Deguffer will never remove one by any ro
   by default, and they will keep an item where it is, and tell you why, if the bin cannot take it
   and Windows would delete it permanently instead.
 - A clean can be set to close Deguffer, or to lock, log off, sleep, hibernate, restart or shut down
-  the PC, when it finishes. Deguffer waits
-  30 seconds first so that you can cancel, does nothing if the clean's checks failed, and never
-  forces a program to close.
-- The Memory page is not a RAM cleaner. It never trims a program's memory or flushes Windows'
-  memory lists, never calls a process idle or safe to close, and never touches a service.
+  the PC, when it finishes. Deguffer waits 30 seconds first so that you can cancel, does nothing if
+  the clean's checks failed, and never forces a program to close.
+- The Memory page is not a RAM cleaner. It never trims a program's memory or flushes Windows' memory
+  lists, never calls a process idle or safe to close, and never touches a service.
 
 ## What Storage cleans
 
-Each of the 82 sources has its own provider, which knows what that location is and what sits
-beside it. A provider for a tool you do not have will say it is not installed. Build output such as
-`node_modules`, `obj` and Rust's `target` folders is searched for only in the source folders you add
-in Settings. [What Deguffer cleans, and what it costs you](docs/cache-locations.md) explains most of
-these sources in detail.
+Each of the 82 sources has its own provider, which knows what that location is and what sits beside
+it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
+output such as `node_modules`, `obj` and Rust's `target` folders is searched for only in the source
+folders you add in Settings. [What Deguffer cleans, and what it costs you](docs/cache-locations.md)
+explains most of these sources in detail.
 
 <details>
 <summary><b>Tier 1: regenerable caches</b></summary>
@@ -203,25 +202,26 @@ these sources in detail.
 
 ## Explore
 
-Explore reads the drive's file table when Deguffer runs as administrator, and walks the folders
-when it does not. You can view a whole drive or one folder as a treemap, an icicle, a sunburst or a
-list, and colour it by folder, by growth or by file type. The Files view lists the largest files at
-any depth, filtered by name or wildcard, type, size, and how long it has been since each file was
+Explore reads the drive's file table when Deguffer runs as administrator, and walks the folders when
+it does not. You can view a whole drive or one folder as a treemap, an icicle, a sunburst or a list,
+and colour it by folder, by age, by growth or by file type. The Files view lists the largest files
+at any depth, filtered by name or wildcard, type, size, and how long it has been since each file was
 written.
 
-Two cards sit beside the map. *What grew* ranks folders by how much they grew since an earlier
-scan, and it can replay the change on the map from then to now. *What kind of files* breaks the
-folder down by type. If you point at a row in either card, its shapes will light up on the map.
+Two cards sit beside the map. *What grew* ranks folders by how much they grew since an earlier scan,
+and it can replay the change on the map from then to now. *What kind of files* breaks the folder
+down by type. If you point at a row in either card, its shapes will light up on the map.
 
 The map pans and zooms with the mouse, a touchpad, a touch screen or the keyboard. It has Back and
 Forward buttons like a web browser, and a small overview of the whole picture while you are zoomed
 in. It follows Windows' animation and high contrast settings, and screen readers can read each
 shape's name, size and share of its folder.
 
-Explore will not remove the Windows and Program Files folders, other accounts' profiles, your own
-profile and AppData folders themselves, a tool's root folder, or any folder that contains one of
-these. When it refuses, it gives the reason on the item instead of greying out a button. After a
-removal it checks that everything beside the removed item is still there.
+Explore will not remove anything inside the Windows, Program Files or ProgramData folders, or other
+accounts' profiles. It will not remove your own profile, AppData or temporary folders themselves, a
+tool's root folder or anything in it that Deguffer does not recognise, or any folder that contains
+one of these. When it refuses, it gives the reason on the item instead of greying out a button.
+After a removal it checks that everything beside the removed item is still there.
 
 ## Duplicates
 
@@ -232,10 +232,12 @@ files that changed. A location can be set as a reference, so its files are match
 for removal.
 
 Nothing is marked when a search finishes. You mark copies yourself or with a named rule, and every
-group always keeps at least one copy on an internal drive, outside temporary and cloud folders. A
-link is never followed, an empty file is never matched, and a file that is only in the cloud is
-never read, so a search will not make Windows download anything. The results can be saved as a CSV
-file.
+group always keeps at least one copy it can count on. That copy is on an internal drive, outside
+temporary and cloud folders and anywhere a Storage clean deletes, unless it is in a location you set
+as a reference. A link is never followed, an empty file is never matched, and a file that is only in
+the cloud is never read, so a search will not make Windows download anything. After a removal,
+Deguffer checks that every kept and reference copy, and everything beside a removed copy, is still
+there. The results can be saved as a CSV file.
 
 ## Installed apps
 
@@ -243,8 +245,8 @@ Over time Windows' list of installed programs collects entries for programs that
 there. Deguffer removes an entry only when the machine proves the program is gone, for example
 because Windows Installer says the product is not installed or its uninstaller file is missing. By
 default it backs the entry up with `reg.exe` first. It removes only the registry key, never any
-files, and a backup can be restored from the same page. For programs that are still installed, it runs each one's own
-uninstaller, one at a time.
+files, and a backup can be restored from the same page. For programs that are still installed, it
+runs each one's own uninstaller, one at a time.
 
 ## Memory
 
@@ -252,16 +254,18 @@ Low free memory on Windows is normally a sign that Windows is working well. It f
 nothing else needs with cache and hands it back as soon as something asks. The problems you do
 notice come from committed memory reaching its limit, when programs can no longer allocate, and from
 constant hard faults, which show as disk activity rather than in any memory figure. The Memory page
-leads with committed memory, because one figure states it.
+leads with committed memory, because a single figure shows how close the machine is to that limit.
 
 The page draws memory with the same treemap, icicle and sunburst as Explore, in three parts:
-applications by process tree, services by the process that hosts them, and Windows itself,
-including the memory no figure accounts for. Every size is a lower bound, and the page says where a
-figure is missing instead of drawing it as zero.
+applications by process tree, services by the process that hosts them, and Windows itself, including
+the memory no figure accounts for. Every size is a lower bound, and the page says where a figure is
+missing instead of drawing it as zero.
 
 Its one action is to ask a program you pick to close, in the same way as its own close button, so
-any question about unsaved work comes from the program itself. Deguffer never ends a process,
-closes a service host, or touches a program running under another account.
+any question about unsaved work comes from the program itself. Deguffer asks you to confirm each
+close, naming the program and how many of its windows will be asked. It never ends a process, closes
+a service host, touches a program in another session or under another account, or asks for more
+rights to reach one.
 
 ## Building
 
@@ -292,12 +296,15 @@ Deguffer.Benchmark.Tests/
 
 ## Roadmap
 
-Still to come are VS Code workspace storage, with each workspace's age, and the Android SDK.
+Whether to offer VS Code's workspace storage, which mostly holds AI chat history, is still
+undecided.
 
 Some things are left out on purpose. Deguffer will never delete files from `WinSxS`,
-`Windows\Installer` or installers' package caches, because the ways that can go wrong are severe.
-The component store is reduced only through DISM's own cleanup. The Memory page will not gain a
-second action, and Duplicates will not replace copies with links.
+`Windows\Installer` or installers' package caches, because the ways that can go wrong are severe,
+and it reduces the component store only through DISM's own cleanup. The Android SDK is left alone
+too, because its only real cache is a few megabytes sitting beside your debug signing key and
+emulator images. The Memory page will not gain a second action, and Duplicates will not replace
+copies with links.
 
 ## Documentation
 
