@@ -15,7 +15,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class UvCacheProvider : CleanupProviderBase
 {
-    private string? _resolvedCacheDirectory;
+    private readonly PassMemo<Task<string>> _resolvedCacheDirectory = new();
 
     public UvCacheProvider(
         IUserEnvironment? environment = null,
@@ -114,7 +114,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _resolvedCacheDirectory = null;
+        _resolvedCacheDirectory.Forget();
         base.InvalidateCaches();
     }
 
@@ -187,13 +187,11 @@ public sealed class UvCacheProvider : CleanupProviderBase
         (Path.Combine(StateRoot, "tools"), "CLI tools installed with 'uv tool install'."),
         (Path.Combine(StateRoot, "python"), "Python interpreters uv downloaded and manages."));
 
-    private async Task<string> ResolveCacheDirectoryAsync(string uv, CancellationToken ct)
-    {
-        if (_resolvedCacheDirectory is not null)
-        {
-            return _resolvedCacheDirectory;
-        }
+    private Task<string> ResolveCacheDirectoryAsync(string uv, CancellationToken ct) =>
+        _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(uv, ct));
 
+    private async Task<string> AskCacheDirectoryAsync(string uv, CancellationToken ct)
+    {
         // --color never because uv colourises this path when it thinks it is writing to a terminal,
         // and the escape sequences would land inside the parsed path.
         var outcome = await Runner.RunAsync(uv, "cache dir --color never", ct).ConfigureAwait(false);
@@ -204,6 +202,6 @@ public sealed class UvCacheProvider : CleanupProviderBase
                 .LastOrDefault(Path.IsPathRooted)
             : null;
 
-        return _resolvedCacheDirectory = reported ?? DefaultCacheDirectory;
+        return reported ?? DefaultCacheDirectory;
     }
 }

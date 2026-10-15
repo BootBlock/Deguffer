@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// The Storage page's scan: rows built one provider at a time inside progress callbacks, placed and
+/// The Storage page's scan: rows built as their providers finish, inside progress callbacks, placed and
 /// filtered as they land, and the page's figures following them, including through a scan that
 /// fails or is cancelled part of the way.
 /// </summary>
@@ -32,7 +32,11 @@ public class CleanViewModelScanTests
         Assert.True(page.ViewModel.CanClean);
     }
 
-    /// <summary>§7 sorts by size, and each row is placed as it lands rather than the list being sorted at the end.</summary>
+    /// <summary>
+    /// §7 sorts by size, and each row is placed as it lands rather than the list being sorted at the
+    /// end. The providers are made to finish small, then large, then medium, so each row lands
+    /// somewhere a plain append would not put it.
+    /// </summary>
     [Fact]
     public void RowsArePlacedLargestFirstAsTheyArrive()
     {
@@ -41,6 +45,8 @@ public class CleanViewModelScanTests
         small.Steps = [Rows.Folder("s", 10)];
         large.Steps = [Rows.Folder("l", 900)];
         medium.Steps = [Rows.Folder("m", 450)];
+        large.WhilePlanning = () => Thread.Sleep(60);
+        medium.WhilePlanning = () => Thread.Sleep(120);
         var placed = new List<int>();
         page.ViewModel.Findings.CollectionChanged += (_, e) =>
         {
@@ -55,6 +61,23 @@ public class CleanViewModelScanTests
         Assert.Equal(["large", "medium", "small"], page.ViewModel.Findings.Select(row => row.Finding.Provider.Id));
         Assert.Equal([0, 0, 1], placed);
         Assert.Equal([100.0, 50.0], page.ViewModel.Findings.Take(2).Select(row => row.SharePercent));
+    }
+
+    /// <summary>
+    /// Rows of equal size stand in the providers' order, not in the order they finished, so the list is
+    /// the same after every scan. Here the last provider finishes first and the first last.
+    /// </summary>
+    [Fact]
+    public void RowsOfEqualSizeStandInTheProvidersOrderWhicheverFinishesFirst()
+    {
+        FakeCleanupProvider first = new("first"), second = new("second"), third = new("third");
+        using var page = new StoragePage([first, second, third]);
+        first.WhilePlanning = () => Thread.Sleep(120);
+        second.WhilePlanning = () => Thread.Sleep(60);
+
+        page.Scan();
+
+        Assert.Equal(["first", "second", "third"], page.ViewModel.Findings.Select(row => row.Finding.Provider.Id));
     }
 
     /// <summary>

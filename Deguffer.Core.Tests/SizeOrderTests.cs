@@ -2,25 +2,33 @@ using Deguffer.Core.Viewing;
 
 namespace Deguffer.Core.Tests;
 
-/// <summary>§7 sorts the preview by size, and rows join it one provider at a time.</summary>
+/// <summary>§7 sorts the preview by size, and rows join it as their providers finish.</summary>
 public sealed class SizeOrderTests
 {
     [Fact]
     public void ALargerRowGoesAboveASmallerOne() =>
-        Assert.Equal(1, SizeOrder.IndexFor([900, 100], 500));
+        Assert.Equal(1, SizeOrder.IndexFor([(900, 5), (100, 6)], 500, place: 0));
 
     [Fact]
     public void TheLargestRowLeadsAndTheSmallestTrails()
     {
-        Assert.Equal(0, SizeOrder.IndexFor([900, 100], 1_000));
-        Assert.Equal(2, SizeOrder.IndexFor([900, 100], 50));
-        Assert.Equal(0, SizeOrder.IndexFor([], 50));
+        Assert.Equal(0, SizeOrder.IndexFor([(900, 0), (100, 1)], 1_000, place: 9));
+        Assert.Equal(2, SizeOrder.IndexFor([(900, 8), (100, 9)], 50, place: 0));
+        Assert.Equal(0, SizeOrder.IndexFor([], 50, place: 0));
     }
 
-    /// <summary>A row goes below every row of its own size, so rows that tie keep the order they arrived in.</summary>
+    /// <summary>
+    /// Rows of one size stand in their providers' order, whichever finished first. Providers are
+    /// planned several at once, so a tie broken by arrival would list the rows that found nothing in a
+    /// different order after every scan.
+    /// </summary>
     [Fact]
-    public void ARowOfEqualSizeGoesBelowTheOnesAlreadyThere() =>
-        Assert.Equal(3, SizeOrder.IndexFor([900, 500, 500, 100], 500));
+    public void ARowOfEqualSizeGoesByItsProvidersPlaceNotByWhenItArrived()
+    {
+        Assert.Equal(3, SizeOrder.IndexFor([(900, 0), (500, 1), (500, 2), (100, 3)], 500, place: 7));
+        Assert.Equal(1, SizeOrder.IndexFor([(900, 0), (500, 4), (500, 6), (100, 3)], 500, place: 2));
+        Assert.Equal(2, SizeOrder.IndexFor([(900, 0), (500, 4), (500, 6), (100, 3)], 500, place: 5));
+    }
 
     /// <summary>
     /// A row shrunk by keeping an item stays where it is, so the list can be out of order. A newcomer
@@ -29,5 +37,5 @@ public sealed class SizeOrderTests
     /// </summary>
     [Fact]
     public void ANewcomerGoesBeforeTheFirstSmallerRowInAListOutOfOrder() =>
-        Assert.Equal(1, SizeOrder.IndexFor([900, 10, 800], 500));
+        Assert.Equal(1, SizeOrder.IndexFor([(900, 0), (10, 1), (800, 2)], 500, place: 3));
 }

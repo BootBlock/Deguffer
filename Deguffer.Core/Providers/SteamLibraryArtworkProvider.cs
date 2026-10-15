@@ -72,7 +72,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
     ];
 
     private readonly SteamDiscovery _discovery;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     public SteamLibraryArtworkProvider(
         IUserEnvironment? environment = null,
@@ -128,14 +128,14 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
     /// it is: <c>440</c> is a game's artwork as a folder and unrecognised as a file,
     /// <c>440_header.jpg</c> the reverse, and a game's folder that is a link is never offered.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??=
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(() =>
         _discovery.Install.Root is { } install
             ? [new ToolRoot(
                 Path.Combine(install, LibraryCacheDirectory),
                 "This is the folder Steam keeps every game's library artwork in, with its index of that "
                 + "artwork. Deguffer removes what belongs to single games inside it and nothing else.",
                 IsOffered)]
-            : [];
+            : []);
 
     /// <summary>
     /// Steam's artwork folder beside the program wherever Windows records Steam as installed. Each
@@ -152,7 +152,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();
-        _toolRoots = null;
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

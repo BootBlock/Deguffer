@@ -95,7 +95,7 @@ public sealed class ClaudeCodeProjectsDiscovery
     private readonly ISystemDirectories _system;
     private readonly IVolumeInventory _volumes;
 
-    private ClaudeCodeProjects? _projects;
+    private readonly PassMemo<ClaudeCodeProjects> _projects = new();
 
     /// <param name="system">
     /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
@@ -115,10 +115,10 @@ public sealed class ClaudeCodeProjectsDiscovery
     /// The walk, memoised for the life of a planning pass (G4). Presence, planning and the §5.2
     /// declaration all ask it, and it lists a folder holding thousands of entries.
     /// </summary>
-    public ClaudeCodeProjects Look(CancellationToken ct = default) => _projects ??= Walk(ct);
+    public ClaudeCodeProjects Look(CancellationToken ct = default) => _projects.Get(() => Walk(ct));
 
     /// <summary>Drop the memoised walk, so a session written while the app was open is seen.</summary>
-    public void Invalidate() => _projects = null;
+    public void Invalidate() => _projects.Forget();
 
     private ClaudeCodeProjects Walk(CancellationToken ct)
     {

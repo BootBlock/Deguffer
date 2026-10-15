@@ -39,7 +39,7 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
         + "alone. Close Resolve, and check it is not still running in the background, then scan again.";
 
     private readonly RunningProcessCheck _stillClosed;
-    private ResolveCacheExamination? _examination;
+    private readonly PassMemo<ResolveCacheExamination> _examination = new();
 
     public ResolveRenderCacheProvider(
         IUserEnvironment? environment = null,
@@ -89,11 +89,11 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
     /// that is cancelled throws before it is kept, so the next caller looks again.
     /// </summary>
     private ResolveCacheExamination Examine(CancellationToken ct) =>
-        _examination ??= ResolveCacheExamination.Of(ResolveCacheLayout.CandidateFolders(Volumes, Environment), ct);
+        _examination.Get(() => ResolveCacheExamination.Of(ResolveCacheLayout.CandidateFolders(Volumes, Environment), ct));
 
     public override void InvalidateCaches()
     {
-        _examination = null;
+        _examination.Forget();
         Volumes.Invalidate();
         base.InvalidateCaches();
     }

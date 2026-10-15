@@ -28,7 +28,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     private readonly SourceRootStore _roots;
     private readonly SourceDirectoryDiscovery _discovery;
 
-    private IReadOnlyList<SourceRoot>? _approved;
+    private readonly PassMemo<IReadOnlyList<SourceRoot>> _approved = new();
 
     /// <param name="kind">
     /// Supplied rather than read from an overridable member, because the discovery this constructor
@@ -89,7 +89,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     private ILiveTreeInspector LiveTrees { get; }
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
-    public IReadOnlyList<SourceRoot> ApprovedRoots => _approved ??= _roots.Load();
+    public IReadOnlyList<SourceRoot> ApprovedRoots => _approved.Get(() => _roots.Load());
 
     public override void InvalidateCaches()
     {
@@ -99,7 +99,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         _discovery.Invalidate();
 
         // Re-read on the next pass, so a root added in Settings is picked up without a restart.
-        _approved = null;
+        _approved.Forget();
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Deguffer.Core.Cloud;
@@ -43,6 +44,10 @@ public sealed class ProviderInvalidationTests : IDisposable
     /// location resolved by asking the tool. Anything the provider must keep across a rescan belongs
     /// in a readonly field set at construction, so "mutable" is a sound stand-in for "memoised", and
     /// a future field that genuinely has to survive should have to argue for itself here.
+    ///
+    /// <para>A <see cref="PassMemo{T}"/> is memoised state in a readonly field, because the memo lives
+    /// as long as the provider and only its answer is per pass. So it is found by its type, handed an
+    /// answer, and asked afterwards whether it still holds one.</para>
     /// </summary>
     [Fact]
     public void EveryProviderClearsItsMemoisedStateOnInvalidation()
@@ -51,13 +56,27 @@ public sealed class ProviderInvalidationTests : IDisposable
         {
             var provider = Construct(type);
             var fields = MemoisedFields(type);
+            var memos = MemoFields(type);
 
             foreach (var field in fields)
             {
-                field.SetValue(provider, Sentinel(field));
+                field.SetValue(provider, Sentinel(field.FieldType, field));
+            }
+
+            foreach (var field in memos)
+            {
+                Remember(field, provider);
             }
 
             provider.InvalidateCaches();
+
+            foreach (var field in memos)
+            {
+                Assert.False(
+                    IsRemembered(field, provider),
+                    $"{type.Name}.{field.Name} still held its answer after InvalidateCaches, so a rescan " +
+                    "would reuse what the last pass found. Forget it in an InvalidateCaches override.");
+            }
 
             foreach (var field in fields)
             {
@@ -104,18 +123,63 @@ public sealed class ProviderInvalidationTests : IDisposable
     }
 
     /// <summary>
+    /// Every <see cref="PassMemo{T}"/> below <see cref="CleanupProviderBase"/>, for the reason
+    /// <see cref="MemoisedFields"/> walks the bases.
+    /// </summary>
+    private static IReadOnlyList<FieldInfo> MemoFields(Type type)
+    {
+        var fields = new List<FieldInfo>();
+
+        for (var level = type; level is not null && level != typeof(CleanupProviderBase); level = level.BaseType)
+        {
+            fields.AddRange(level
+                .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                .Where(f => f.FieldType.IsGenericType && f.FieldType.GetGenericTypeDefinition() == typeof(PassMemo<>)));
+        }
+
+        return fields;
+    }
+
+    /// <summary>
+    /// Hand the memo a sentinel answer through its own <c>Get</c>, and check it took it: a sentinel the
+    /// memo declined, such as a null, would let the check after invalidation pass whatever the provider
+    /// did.
+    /// </summary>
+    private static void Remember(FieldInfo field, object provider)
+    {
+        var memo = field.GetValue(provider)!;
+        var answer = field.FieldType.GetGenericArguments()[0];
+        var work = Expression.Lambda(
+                typeof(Func<>).MakeGenericType(answer),
+                Expression.Constant(Sentinel(answer, field), answer))
+            .Compile();
+
+        field.FieldType.GetMethod(nameof(PassMemo<object>.Get))!.Invoke(memo, [work]);
+
+        Assert.True(
+            IsRemembered(field, provider),
+            $"{field.DeclaringType?.Name}.{field.Name} would not take a sentinel answer, so its invalidation went unchecked.");
+    }
+
+    private static bool IsRemembered(FieldInfo field, object provider) =>
+        (bool)field.FieldType
+            .GetProperty(nameof(PassMemo<object>.IsRemembered), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
+            .GetValue(field.GetValue(provider))!;
+
+    /// <summary>
     /// Stands in for an answer the provider resolved by asking the tool. The value is never read,
     /// only observed to have been discarded, so any non-null of the right type will do.
     /// </summary>
-    private static object Sentinel(FieldInfo field) =>
-        field.FieldType == typeof(string) ? "sentinel"
-        : field.FieldType.IsAssignableFrom(typeof(string[])) ? new[] { "sentinel" }
-        : EmptyOfElementType(field.FieldType)
-        ?? Completed(field.FieldType)
-        ?? Constructed(field.FieldType)
-        ?? Uninitialised(field.FieldType)
+    private static object Sentinel(Type type, FieldInfo field) =>
+        type == typeof(string) ? "sentinel"
+        : type.IsAssignableFrom(typeof(string[])) ? new[] { "sentinel" }
+        : EmptyOfElementType(type)
+        ?? Completed(type)
+        ?? Constructed(type)
+        ?? Uninitialised(type)
+        ?? (type.IsValueType ? Activator.CreateInstance(type) : null)
         ?? throw new XunitException(
-            $"{field.DeclaringType?.Name}.{field.Name} is a {field.FieldType.Name}, which this test " +
+            $"{field.DeclaringType?.Name}.{field.Name} holds a {type.Name}, which this test " +
             "cannot fabricate a value for. Extend Sentinel so the field is still covered.");
 
     /// <summary>

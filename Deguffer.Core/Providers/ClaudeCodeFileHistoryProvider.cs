@@ -68,8 +68,8 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     private readonly ClaudeCodeSessionRegistry _sessions;
     private readonly ISystemDirectories _system;
 
-    private Survey? _survey;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<Survey?> _survey = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="sessions">
     /// Claude Code's list of running sessions, shared with <see cref="ClaudeCodeDerivedStateProvider"/> so
@@ -151,13 +151,13 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     /// §5.2 as §7.1 needs it read from outside: Claude Code's folder, recognising nothing at its own level,
     /// and the snapshot folder, recognising exactly the sessions this pass would offer.
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
     public override void InvalidateCaches()
     {
         _sessions.Invalidate();
-        _survey = null;
-        _toolRoots = null;
+        _survey.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 
@@ -289,7 +289,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     /// One look at the snapshot folder and the list of running sessions, memoised for the life of a planning
     /// pass (G4). Presence, planning and the declaration all read it.
     /// </summary>
-    private Survey? Look(CancellationToken ct = default) => _survey ??= Examine(ct);
+    private Survey? Look(CancellationToken ct = default) => _survey.Get(() => Examine(ct));
 
     private Survey? Examine(CancellationToken ct)
     {

@@ -93,7 +93,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     private readonly SquirrelDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
 
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     public SquirrelStagingProvider(
         IUserEnvironment? environment = null,
@@ -160,7 +160,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     /// an index. Explore therefore refuses the whole folder — which is narrower than what the
     /// Storage page offers, and narrow is the direction §5.2 requires.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
     /// <summary>
     /// Each staging directory an application is installing or updating through right now, as a root
@@ -241,7 +241,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     {
         _discovery.Invalidate();
         _liveTrees.Invalidate();
-        _toolRoots = null;
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

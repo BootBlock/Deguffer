@@ -107,16 +107,18 @@ public sealed class VsCodeUserDataDiscovery(IUserEnvironment environment)
     {
         var found = new List<VsCodeUserData>();
 
-        UnreadableRoots = [];
-
         var scan = ChildDirectories.Under(environment.RoamingAppData);
+
+        // Set once, from this listing, and never emptied first: a row's declaration and its plan may
+        // ask from two threads at once, and an emptied list read between the two writes would say the
+        // folder had been read.
+        UnreadableRoots = scan.Unreadable ? [environment.RoamingAppData] : [];
 
         if (scan.Unreadable)
         {
             // An application-data root that will not be listed leaves this walk with nothing to
             // report and nothing to say, which a provider would otherwise render as "no editor on
             // this machine keeps a cache here". It never looked.
-            UnreadableRoots = [environment.RoamingAppData];
             return found;
         }
 

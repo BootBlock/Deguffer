@@ -39,8 +39,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     private readonly ISystemDirectories _systemDirectories;
 
-    private string? _conda;
-    private CondaInstallation? _installation;
+    private readonly PassMemo<string?> _conda = new();
+    private readonly PassMemo<Task<CondaInstallation?>> _installation = new();
 
     public CondaCacheProvider(
         IUserEnvironment? environment = null,
@@ -184,8 +184,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _conda = null;
-        _installation = null;
+        _conda.Forget();
+        _installation.Forget();
         base.InvalidateCaches();
     }
 
@@ -347,16 +347,13 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     /// row and told the plan conda is not installed. Running it then fails, and the plan says conda
     /// did not describe its caches.</para>
     /// </summary>
-    private string? FindConda()
-    {
-        if (_conda is not null)
-        {
-            return _conda;
-        }
+    private string? FindConda() => _conda.Get(LookForConda);
 
+    private string? LookForConda()
+    {
         var configured = LongPath.Configured(Environment.GetEnvironmentVariable("CONDA_EXE"));
 
-        return _conda = Environment.FindExecutable("conda")
+        return Environment.FindExecutable("conda")
             ?? (configured is not null && LongPath.FileMayExistInDescribedDirectory(configured) ? configured : null)
             ?? DefaultInstallations().FirstOrDefault(LongPath.FileMayExistInDescribedDirectory);
     }
@@ -375,14 +372,17 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     private async Task<CondaInstallation?> ResolveInstallationAsync(string conda, CancellationToken ct)
     {
-        if (_installation is not null)
-        {
-            return _installation;
-        }
+        var installation = await _installation.Get(() => AskInstallationAsync(conda, ct)).ConfigureAwait(false);
 
+
+        return installation;
+    }
+
+    private async Task<CondaInstallation?> AskInstallationAsync(string conda, CancellationToken ct)
+    {
         var outcome = await Runner.RunAsync(conda, "info --json", ct).ConfigureAwait(false);
 
-        return _installation = outcome.Succeeded
+        return outcome.Succeeded
             ? CondaReport.TryReadInstallation(outcome.StandardOutput)
             : null;
     }

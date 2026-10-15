@@ -93,7 +93,7 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
     /// </summary>
     private const string ConfigurationPattern = "Config*.xml";
 
-    private FileHistoryLocation? _located;
+    private readonly PassMemo<FileHistoryLocation> _located = new();
 
     /// <summary>
     /// Where the configuration lives, under this account's own profile. Its existence is what
@@ -111,10 +111,10 @@ public sealed class FileHistoryDiscovery(IUserEnvironment environment)
     /// costs an XML parse and a handful of existence checks, and the provider asks for it while
     /// deciding presence and again while building a plan.
     /// </summary>
-    public FileHistoryLocation Locate() => _located ??= Find();
+    public FileHistoryLocation Locate() => _located.Get(Find);
 
     /// <summary>Forget the answer, so a drive plugged in while the app was open is seen.</summary>
-    public void Invalidate() => _located = null;
+    public void Invalidate() => _located.Forget();
 
     private FileHistoryLocation Find()
     {

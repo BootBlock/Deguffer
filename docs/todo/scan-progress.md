@@ -176,6 +176,13 @@ the knowledge, and it is worth driving before any decision here is called finish
 
 ## 4. Measured: where a preview's time actually goes
 
+> **Since this was written:** a preview plans up to `CleanupPlanner.ProvidersAtOnce` providers at
+> once (#376), and `ListingBudget` holds every walk on a volume to the listings one walk is tuned
+> for. Findings now arrive in the order providers finish, so the elapsed time between consecutive
+> findings below no longer measures one provider. A warm, unelevated preview of 82 providers went
+> from 22.8-27.2 s to 8.2-10.2 s at the shipped bound of eight on the developer's machine. The figures below describe the pass as
+> it was when it planned one provider at a time.
+
 Twenty-four providers, run unelevated through `CleanupPlanner.CreateDefault()`, three consecutive
 passes in one process on the developer's machine. Elapsed milliseconds between consecutive findings,
 and the bytes each provider reported.

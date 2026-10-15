@@ -69,7 +69,22 @@ public sealed class SourceDirectoryDiscovery
     private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
 
-    private (IReadOnlyList<SourceRoot> Roots, SourceDiscovery Result)? _memo;
+    /// <summary>
+    /// The search this pass made, or is making, and the roots it was asked about.
+    ///
+    /// Every provider sharing this instance asks the same question with the same roots in the same
+    /// planning pass, and the answer costs a walk of the developer's whole disk. The providers are
+    /// planned together, so the search is kept from the moment it starts: a provider that asks while
+    /// it runs waits for it rather than walking the disk beside it. Keyed on the roots rather than
+    /// assumed constant: two callers with different roots must never be handed each other's answer,
+    /// and that mistake would show up as a plan targeting a folder nobody approved.
+    ///
+    /// <para>Compared by value, which for a <see cref="SourceRoot"/> is the folder and the answer the
+    /// user gave about its volume together. A comparison that ignored the second would hand a caller
+    /// that has the approval the answer built for one that has not — an empty result where the plan
+    /// should hold every project in the folder, or the reverse.</para>
+    /// </summary>
+    private (IReadOnlyList<SourceRoot> Roots, Task<SourceDiscovery> Search)? _memo;
 
     /// <param name="volumes">
     /// The machine's volumes, so that <see cref="Searches"/> can tell a root on a local disk from one
@@ -131,15 +146,35 @@ public sealed class SourceDirectoryDiscovery
     }
 
     /// <summary>Every directory of a sought name inside <paramref name="roots"/>.</summary>
-    public async Task<SourceDiscovery> FindAsync(IReadOnlyList<SourceRoot> roots, CancellationToken ct = default)
+    public Task<SourceDiscovery> FindAsync(IReadOnlyList<SourceRoot> roots, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(roots);
 
-        if (Remembered(roots) is { } memo)
+        Task<Task<SourceDiscovery>> starting;
+        Task<SourceDiscovery> started;
+
+        lock (_gate)
         {
-            return memo;
+            // A search that failed or was stopped is not an answer, and the next caller asks again.
+            if (_memo is { Search: { IsFaulted: false, IsCanceled: false } search } memo && memo.Roots.SequenceEqual(roots))
+            {
+                return search;
+            }
+
+            starting = new Task<Task<SourceDiscovery>>(() => SearchAllAsync(roots, ct));
+            started = starting.Unwrap();
+            _memo = ([.. roots], started);
         }
 
+        // Started outside the lock, on the caller's thread: a walk
+        // under the lock would hold every other caller on a thread rather than on the task.
+        starting.RunSynchronously();
+
+        return started;
+    }
+
+    private async Task<SourceDiscovery> SearchAllAsync(IReadOnlyList<SourceRoot> roots, CancellationToken ct)
+    {
         var search = Search();
 
         var candidates = new List<string>();
@@ -208,8 +243,6 @@ public sealed class SourceDirectoryDiscovery
             UnreachedRoots = [.. unreached.Distinct(StringComparer.OrdinalIgnoreCase)],
         };
 
-        Remember(roots, result);
-
         return result;
     }
 
@@ -276,29 +309,6 @@ public sealed class SourceDirectoryDiscovery
     }
 
     /// <summary>
-    /// The result of the pass this one repeats, if it does.
-    ///
-    /// Every provider sharing this instance asks the same question with the same roots in the same
-    /// planning pass, and the answer costs a walk of the developer's whole disk. Keyed on the roots
-    /// rather than assumed constant: two callers with different roots must never be handed each
-    /// other's answer, and that mistake would show up as a plan targeting a folder nobody approved.
-    ///
-    /// <para>Compared by value, which for a <see cref="SourceRoot"/> is the folder and the answer the
-    /// user gave about its volume together. A comparison that ignored the second would hand a caller
-    /// that has the approval the answer built for one that has not — an empty result where the plan
-    /// should hold every project in the folder, or the reverse.</para>
-    /// </summary>
-    private SourceDiscovery? Remembered(IReadOnlyList<SourceRoot> roots)
-    {
-        lock (_gate)
-        {
-            return _memo is { } memo && memo.Roots.SequenceEqual(roots)
-                ? memo.Result
-                : null;
-        }
-    }
-
-    /// <summary>
     /// Each of <paramref name="searchable"/> strictly inside <paramref name="root"/>, as components
     /// below it, for the search of <paramref name="root"/> to stop at.
     ///
@@ -354,14 +364,6 @@ public sealed class SourceDirectoryDiscovery
         }
 
         return SourceTreeBoundary.Searching(names);
-    }
-
-    private void Remember(IReadOnlyList<SourceRoot> roots, SourceDiscovery result)
-    {
-        lock (_gate)
-        {
-            _memo = ([.. roots], result);
-        }
     }
 
     /// <summary>What a search of one root found, and how.</summary>
