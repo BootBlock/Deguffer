@@ -65,17 +65,24 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(() => MeasureNow(path, keep, bounds, progress, ct), ct));
+        new(Task.Run(() => MeasureNow(path, [keep], bounds, progress, ct)[0], ct));
+
+    /// <summary>One walk, tallied twice. See <see cref="IDirectoryScanner.MeasureAgedAsync"/>.</summary>
+    public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
+        new(Task.Run(() => AgedScan.Of(MeasureNow(path, AgedScan.Keeps(age), bounds: default, progress: null, ct)), ct));
 
     /// <summary>
     /// The directory is asked about first, and the file only where no directory is there, so each
     /// path costs one attribute read in the ordinary case and a refusal is met once. The read fails
     /// the same way whichever kind is asked for, so a refused file is answered here as a refused
     /// directory would be.
+    ///
+    /// <para>One reading for each of <paramref name="keeps"/>, in their order, from one reading of the
+    /// path. <paramref name="progress"/> follows the first.</para>
     /// </summary>
-    private ScanResult MeasureNow(
+    private ScanResult[] MeasureNow(
         string path,
-        MinimumAge keep,
+        MinimumAge[] keeps,
         ScanBounds bounds,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
@@ -84,13 +91,12 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var walked = Measure(path, keep, LeftOutEntries.Of(path, bounds), _tuner, _files, progress, ct);
-
-            return ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
-            {
-                MailStores = walked.MailStores,
-                Root = walked.Root,
-            };
+            return [.. Measure(path, keeps, LeftOutEntries.Of(path, bounds), _tuner, _files, progress, ct)
+                .Select(walked => ScanResult.ByChoice(walked.Size, walked.WithheldRecent) with
+                {
+                    MailStores = walked.MailStores,
+                    Root = walked.Root,
+                })];
         }
 
         if (presence is PathPresence.Absent)
@@ -100,15 +106,16 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
         if (presence is PathPresence.Present)
         {
-            var file = MeasureFile(path, keep, _files);
-
-            return ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores };
+            return [.. MeasureFile(path, keeps, _files)
+                .Select(file => ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores })];
         }
 
-        return ScanResult.ByChoice(Approximate(0, 0)) with
+        var nothing = ScanResult.ByChoice(Approximate(0, 0)) with
         {
             Root = presence is PathPresence.Refused ? RootReach.NotDescribed : RootReach.Reached,
         };
+
+        return [.. keeps.Select(_ => nothing)];
     }
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
@@ -131,22 +138,20 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     ///
     /// <para>An entry <paramref name="leftOut"/> names is passed over, neither read nor entered, as the
     /// other walk passes it. A kept root needs nothing here, because this figure counts no entries.</para>
+    ///
+    /// <para>Tallied once for each of <paramref name="keeps"/>, from one listing, and each file is read
+    /// at most once whichever tallies count it.</para>
     /// </summary>
-    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root) Measure(
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root)[] Measure(
         string path,
-        MinimumAge keep,
+        MinimumAge[] keeps,
         LeftOutEntries? leftOut,
         ScanTuner tuning,
         FileInformation files,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        long allocated = 0;
-        long logical = 0;
-
-        // See ParallelEnumerationScanner for why this is an int: the walk sets it from several
-        // threads, and Interlocked has no bool overload.
-        var withheld = 0;
+        var tallies = keeps.Select(keep => new Tally(keep)).ToArray();
 
         var stores = new ConcurrentBag<string>();
         var route = new ByNameRoute();
@@ -164,19 +169,30 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                     return;
                 }
 
-                // Asked before the file is read, because the guard is the cheaper question and the
-                // answer is the same either way: a file it keeps is one this store's eviction
-                // will not take, so its sole-linked bytes are not reclaimable here.
-                if (keep.Protects(file.NewestFileTime))
-                {
-                    Interlocked.Exchange(ref withheld, 1);
-                    return;
-                }
+                // Each guard is asked before the file is read, because the guard is the cheaper
+                // question and the answer is the same either way: a file it keeps is one this store's
+                // eviction will not take, so its sole-linked bytes are not reclaimable here. The file is
+                // read once, for whichever tallies count it, and not at all where every guard keeps it.
+                var read = false;
+                FileInformation.FileStandardInfo? info = null;
 
-                if (files.Standard(file.FullName, route) is { NumberOfLinks: 1 } sole)
+                foreach (var tally in tallies)
                 {
-                    Interlocked.Add(ref allocated, sole.AllocationSize);
-                    Interlocked.Add(ref logical, sole.EndOfFile);
+                    if (tally.Keeps(file.NewestFileTime))
+                    {
+                        continue;
+                    }
+
+                    if (!read)
+                    {
+                        info = files.Standard(file.FullName, route);
+                        read = true;
+                    }
+
+                    if (info is { NumberOfLinks: 1 } sole)
+                    {
+                        tally.Add(sole.AllocationSize, sole.EndOfFile);
+                    }
                 }
             },
             // A file carrying a reparse point holds none of this tree's sole-linked bytes, and one named
@@ -190,21 +206,54 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
             },
             leftOut,
             // §5.5: stream partial results, at the walk's interval rather than per file.
-            () => progress?.Report(Approximate(
-                Interlocked.Read(ref allocated), Interlocked.Read(ref logical))),
+            () => progress?.Report(tallies[0].Size),
             TimeProvider.System,
             ct);
 
         if (!listed)
         {
-            return (Approximate(0, 0), false, [], RootReach.NotListed);
+            return [.. keeps.Select(_ => (Approximate(0, 0), false, (IReadOnlyList<string>)[], RootReach.NotListed))];
         }
 
-        return (
-            Approximate(Interlocked.Read(ref allocated), Interlocked.Read(ref logical)),
-            Volatile.Read(ref withheld) == 1,
-            [.. stores.Order(StringComparer.OrdinalIgnoreCase)],
-            RootReach.Reached);
+        IReadOnlyList<string> found = [.. stores.Order(StringComparer.OrdinalIgnoreCase)];
+
+        return [.. tallies.Select(tally => (tally.Size, tally.WithheldRecent, found, RootReach.Reached))];
+    }
+
+    /// <summary>
+    /// The sole-linked bytes one guard's eviction would take from the files a walk lists. Counted from
+    /// several threads at once, so every field moves through <see cref="Interlocked"/>.
+    /// </summary>
+    private sealed class Tally(MinimumAge keep)
+    {
+        private long _allocated;
+        private long _logical;
+
+        // See ParallelEnumerationScanner for why this is an int: the walk sets it from several
+        // threads, and Interlocked has no bool overload.
+        private int _withheld;
+
+        public ScanSize Size => Approximate(Interlocked.Read(ref _allocated), Interlocked.Read(ref _logical));
+
+        public bool WithheldRecent => Volatile.Read(ref _withheld) == 1;
+
+        /// <summary>Whether the guard keeps a file of this age, which it then records it has withheld.</summary>
+        public bool Keeps(long newestFileTime)
+        {
+            if (!keep.Protects(newestFileTime))
+            {
+                return false;
+            }
+
+            Interlocked.Exchange(ref _withheld, 1);
+            return true;
+        }
+
+        public void Add(long allocated, long logical)
+        {
+            Interlocked.Add(ref _allocated, allocated);
+            Interlocked.Add(ref _logical, logical);
+        }
     }
 
     /// <summary>
@@ -225,29 +274,27 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     /// The sole-link size of the file at <paramref name="path"/>, mirroring
     /// <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate subject, and
     /// answering zero for one would make its step unofferable.
+    ///
+    /// <para>One reading for each of <paramref name="keeps"/>, with the file read at most once.</para>
     /// </summary>
-    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores) MeasureFile(
+    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores)[] MeasureFile(
         string path,
-        MinimumAge keep,
+        MinimumAge[] keeps,
         FileInformation files)
     {
         if (MailStore.Is(path))
         {
-            return (Approximate(0, 0), false, [LongPath.Display(path)]);
+            return [.. keeps.Select(_ => (Approximate(0, 0), false, (IReadOnlyList<string>)[LongPath.Display(path)]))];
         }
 
-        if (keep.ProtectsFile(path))
-        {
-            return (Approximate(0, 0), true, []);
-        }
+        var sole = new Lazy<ScanSize>(() => files.Standard(LongPath.Extended(path), new ByNameRoute()) is { } info
+            ? Approximate(
+                info.NumberOfLinks == 1 ? info.AllocationSize : 0,
+                info.NumberOfLinks == 1 ? info.EndOfFile : 0)
+            : Approximate(0, 0));
 
-        return (
-            files.Standard(LongPath.Extended(path), new ByNameRoute()) is { } info
-                ? Approximate(
-                    info.NumberOfLinks == 1 ? info.AllocationSize : 0,
-                    info.NumberOfLinks == 1 ? info.EndOfFile : 0)
-                : Approximate(0, 0),
-            false,
-            []);
+        return [.. keeps.Select(keep => keep.ProtectsFile(path)
+            ? (Approximate(0, 0), true, (IReadOnlyList<string>)[])
+            : (sole.Value, false, []))];
     }
 }
