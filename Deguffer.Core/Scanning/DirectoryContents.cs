@@ -10,9 +10,9 @@ namespace Deguffer.Core.Scanning;
 /// </para>
 /// </summary>
 /// <param name="Directory">
-/// The directory listed, in the extended form §6.3 requires: the one string every entry's
-/// <see cref="WalkEntry.Directory"/> is, so a caller that needs the path of the directory it is handed
-/// reads it here rather than carrying a copy of its own down the tree.
+/// The directory listed, as the walk spelled it, in the extended form §6.3 requires. The same string
+/// every entry of the listing carries, so a caller can name a directory it could not list, which
+/// holds no entry to ask, and needs no copy of the path of its own carried down the tree.
 /// </param>
 /// <param name="Entries">
 /// The ordinary children — files and directories, in the order they were listed. Files are here only

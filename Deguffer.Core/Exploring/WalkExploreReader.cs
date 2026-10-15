@@ -145,7 +145,7 @@ internal static class WalkExploreReader
                     Interlocked.Add(ref items, count);
                     Interlocked.Add(ref bytes, size);
 
-                    // What is left unlisted in a directory is asked of it once.
+                    // What is left unlisted in a listing is asked of its directory once.
                     LeavesFolderUnlisted? leaves = null;
 
                     for (var i = 0; i < contents.Entries.Count; i++)
