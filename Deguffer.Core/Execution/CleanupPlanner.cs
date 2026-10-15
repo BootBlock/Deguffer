@@ -81,11 +81,16 @@ public sealed class CleanupPlanner
     /// measurement runs with. Without it every provider shares <see cref="DirectoryScanner.Default"/>
     /// at the shipped values, as a test or the Explore page's provider list wants.
     /// </param>
+    /// <param name="scope">
+    /// What the providers' declarations will be asked about, for a discovery that need not look
+    /// everywhere (<see cref="ProtectionScope"/>). Everything by default, as Storage plans.
+    /// </param>
     public static CleanupPlanner CreateDefault(
         ICurrentPreferences? preferences = null,
         ILiveTreeInspector? liveTrees = null,
         IUserEnvironment? environment = null,
-        ScanTuner? tuning = null)
+        ScanTuner? tuning = null,
+        ProtectionScope? scope = null)
     {
         environment ??= UserEnvironment.Current;
         var roots = new SourceRootStore(environment);
@@ -144,7 +149,8 @@ public sealed class CleanupPlanner
                 declarations,
                 scanner,
                 hardLinks,
-                tuning ?? ScanTuner.Shipped),
+                tuning ?? ScanTuner.Shipped,
+                scope ?? ProtectionScope.Everything),
         ],
         declarations);
     }
@@ -182,7 +188,8 @@ public sealed class CleanupPlanner
         RowDeclarations declarations,
         IDirectoryScanner scanner,
         IDirectoryScanner hardLinks,
-        ScanTuner tuning)
+        ScanTuner tuning,
+        ProtectionScope scope)
     {
         // Every row that offers an entry of a temporary folder under the name of the tool that wrote
         // it, built first so the "Temporary files" row can leave those entries to them.
@@ -207,7 +214,7 @@ public sealed class CleanupPlanner
         // One walk for the two rows inside every Chromium user-data folder, on the same reasoning: each
         // lists every directory below both application-data roots to find the folders, and the folders
         // are the same for both.
-        var chromium = new ChromiumUserDataDiscovery(environment, tuning);
+        var chromium = new ChromiumUserDataDiscovery(environment, tuning, scope);
 
         return
         [

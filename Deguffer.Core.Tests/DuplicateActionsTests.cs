@@ -26,8 +26,17 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         return marks;
     }
 
-    private DuplicateActions Actions(IDuplicateConfirmationPrompt prompt, IRecycleBin? bin = null) =>
-        new(_ => Protections(), _ => null, () => prompt, Remover(bin), _running);
+    private DuplicateActions Actions(IDuplicateConfirmationPrompt prompt, IRecycleBin? bin = null, List<ProtectionScope>? scopes = null) =>
+        new(
+            (scope, _) =>
+            {
+                scopes?.Add(scope);
+                return Protections();
+            },
+            _ => null,
+            () => prompt,
+            Remover(bin),
+            _running);
 
     /// <summary>
     /// A rule and a judgement, which every confirmation and removal begins with, refuse to read the
@@ -67,6 +76,29 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
 
         Assert.Throws<InvalidOperationException>(() => marks.Add(result.Groups[1]));
         Assert.Single(marks.Groups);
+    }
+
+    /// <summary>
+    /// The confirmation and the removal each judge the marks against protections built for the folders
+    /// the search read, which every copy is in, so neither looks where no copy can be.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalIsJudgedWithinTheFoldersTheSearchRead()
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        List<ProtectionScope> scopes = [];
+
+        var answer = await Actions(new FakeDuplicateConfirmation(true), scopes: scopes)
+            .RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null);
+
+        Assert.NotNull(answer.Report);
+        Assert.Equal(2, scopes.Count);
+        Assert.All(scopes, scope => Assert.Same(marks.Searched, scope));
+        Assert.Equal(FolderReach.Reached, (await marks.Searched.ReachAsync(Downloads)).Reach);
+        Assert.Equal(FolderReach.Outside, (await marks.Searched.ReachAsync(_tree.Folder("Elsewhere"))).Reach);
     }
 
     /// <summary>

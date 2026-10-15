@@ -222,7 +222,7 @@ public sealed class ExploreFilesTests : IDisposable
     public void ARowFromAnotherTreeIsGoneBeforeTheSearchAnswers() => UiThread.Run(async () =>
     {
         var files = new ExploreFiles(
-            new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, _explore.Running),
+            new ExploreActions(_explore.Building, () => _explore.Prompt, _explore.Faults, _explore.Running),
             _explore.Time)
         {
             IsActive = true,

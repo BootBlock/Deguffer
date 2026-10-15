@@ -742,8 +742,11 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         // Started with the scan and never awaited here. Part of §7.1's refusal set says what is
         // running right now, so it goes stale while the page is open, and a scan is the moment the
-        // rest of the page is being re-measured anyway. It finishes long before a scan does.
-        Selection.Reconsider();
+        // rest of the page is being re-measured anyway. It finishes once the scan does, reading what
+        // the scan listed rather than listing it again beside it, so it is given the scan, or null
+        // where the scan ends without one.
+        var scanned = new TaskCompletionSource<ExploreScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Selection.Reconsider(ProtectionScope.Scanned(target, scanned.Task, _volumes));
 
         // Back to what is known before anything is measured. The previous scan's fallback reason is
         // about to be replaced, and a cancelled or failed scan never reaches the offer below.
@@ -754,6 +757,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         try
         {
             var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
+            scanned.TrySetResult(scan);
 
             // Read afresh and handed to Show, which is what draws the map, because the space figures
             // the drive picker holds are from whenever it last opened.
@@ -812,6 +816,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         }
         finally
         {
+            scanned.TrySetResult(null);
             IsBusy = false;
             Progress = null;
         }
