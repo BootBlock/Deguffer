@@ -63,6 +63,24 @@ public interface IDirectoryScanner
         CancellationToken ct = default);
 
     /// <summary>
+    /// Measure <paramref name="path"/>'s whole tree, and the part of it older than
+    /// <paramref name="age"/>, from one reading of the tree.
+    ///
+    /// <para>For a command that takes an age itself, such as File History's: the estimate has to be
+    /// the aged part, which is all the command will consider, and the figure the executor subtracts
+    /// its after-measure from has to be the whole, because that after-measure is unguarded. Asking
+    /// <see cref="MeasureAsync"/> twice walks the tree twice, and the tree is usually a backup disk
+    /// or a network share, where a second walk costs as much as the first. Every listing already
+    /// carries each file's timestamps, so one walk answers both.</para>
+    ///
+    /// <para>Each reading is exactly what <see cref="MeasureAsync"/> would return for it, entry
+    /// count included, because the folders an age keeps standing are counted apart from the ones the
+    /// whole tree's removal takes. A remembered figure is never shown, because nothing reports
+    /// progress here.</para>
+    /// </summary>
+    ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default);
+
+    /// <summary>
     /// Measure <paramref name="path"/> without consulting anything remembered from before now.
     ///
     /// <para><see cref="MeasureAsync"/> is free to answer from a volume snapshot, and that is the
