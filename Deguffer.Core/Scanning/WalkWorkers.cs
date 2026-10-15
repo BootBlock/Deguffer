@@ -27,6 +27,11 @@ internal delegate Action<string, TState> NewDirectoryReader<TState>(Action<strin
 /// volume, each waiting long enough for the rest of its level to be promoted out of the young
 /// generations. Depth-first, what waits is one level's siblings for each level of a branch.</para>
 ///
+/// <para>Measured on one 32-thread machine's system volume (#375), medians of five cold walks: the
+/// peak working set fell from 175 to 124 MiB and the time from 8.1 to 5.9 seconds. One shared stack
+/// is as small, at 113 MiB, but took 6.5 seconds, and keeps every worker reading beside the others
+/// rather than in a subtree of its own.</para>
+///
 /// <para>No caller depends on the order: each merges what its workers found in a way that ignores
 /// it. Explore's mid-walk pictures do show it, as a branch filling in to its full size while the
 /// folders beside it are still empty. They are drawn in name order, so each fills where it already
