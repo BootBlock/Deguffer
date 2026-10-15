@@ -732,9 +732,10 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     private async Task LoadPreviewAsync(ScanScope scope, CancellationToken ct)
     {
-        var providers = scope == ScanScope.Chosen ? ScanChoice.Chosen : _planner.Providers;
+        // Read once, so the figure the sentence states is the list the planner was handed.
+        IReadOnlyList<ICleanupProvider>? chosen = scope == ScanScope.Chosen ? ScanChoice.Chosen : null;
         _lastScope = scope;
-        _coverage = new ScanCoverage(providers.Count, _planner.Providers.Count);
+        _coverage = new ScanCoverage(chosen?.Count ?? _planner.Providers.Count, _planner.Providers.Count);
 
         // An item list belongs to a row that is about to be thrown away, and a tick in it would change
         // a row no run can reach.
@@ -769,7 +770,11 @@ public sealed partial class CleanViewModel : ObservableObject
         // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
 
-        await Task.Run(() => _planner.PlanAsync(providers, keep, progress, found, ct), ct);
+        await Task.Run(
+            () => chosen is null
+                ? _planner.PlanAllAsync(keep, progress, found, ct)
+                : _planner.PlanAsync(chosen, keep, progress, found, ct),
+            ct);
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));

@@ -133,6 +133,12 @@ public class CleanViewModelChosenScanTests
         // Both rows are back under the heading, one ticked, so the heading is mixed.
         Assert.Equal(2, games.Count);
         Assert.Null(games.State);
+
+        // A click on a mixed heading clears it, as a click on any heading that is not clear does.
+        games.ToggleCommand.Execute(null);
+
+        Assert.Empty(choice.Chosen);
+        Assert.False(games.State);
     }
 
     /// <summary>
