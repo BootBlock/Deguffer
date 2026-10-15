@@ -183,6 +183,113 @@ public sealed class SourceDirectoryDiscoveryTests : IDisposable
         Assert.Equal([obj, target], found.Candidates);
     }
 
+    /// <summary>
+    /// A folder approved inside another approved folder is searched once. The search of the outer
+    /// folder stops at it, and the answer is the one both searches gave together: every candidate in
+    /// each, and nothing twice.
+    /// </summary>
+    [Fact]
+    public async Task SearchesANestedApprovedFolderOnce()
+    {
+        var parent = Project("parent");
+        var child = _temp.CreateDirectory("parent", "work");
+        var inner = _temp.CreateDirectory("parent", "work", "App", "obj");
+        var outer = Path.Combine(parent, "Example", "obj");
+        var scanner = new FakeDirectoryScanner([outer, inner]);
+
+        var discovery = new SourceDirectoryDiscovery(
+            scanner, new FakeVolumeInventory().With(Path.GetPathRoot(_temp.Path)!, features: LocalDisk));
+
+        discovery.Include(["obj"]);
+
+        var found = await discovery.FindAsync([new SourceRoot(child), new SourceRoot(parent + Path.DirectorySeparatorChar)]);
+
+        Assert.Equal([inner, outer], found.Candidates);
+        Assert.Equal([child, parent + Path.DirectorySeparatorChar], scanner.Asked.Select(asked => asked.Root));
+
+        var handedOff = scanner.Asked.Single(asked => asked.Root != child).Search.HandedOff;
+
+        Assert.Equal(["work"], Assert.Single(handedOff));
+        Assert.Empty(scanner.Asked.Single(asked => asked.Root == child).Search.HandedOff);
+    }
+
+    /// <summary>
+    /// The same answer by the walk, which is the route an unelevated run takes. Every candidate in
+    /// both folders is offered, once, and nothing below a candidate or outside the two is.
+    /// </summary>
+    [Fact]
+    public async Task FindsTheSameCandidatesInANestedApprovedFolderByTheWalk()
+    {
+        var parent = Project("parent");
+        var child = _temp.CreateDirectory("parent", "work");
+        var inner = _temp.CreateDirectory("parent", "work", "App", "obj");
+        _temp.CreateDirectory("parent", "work", "App", "obj", "Debug", "obj");
+        _temp.CreateDirectory("outside", "obj");
+
+        var found = await Discovery().FindAsync([new SourceRoot(parent), new SourceRoot(child)]);
+
+        Assert.Equal([Path.Combine(parent, "Example", "obj"), inner], found.Candidates);
+        Assert.Empty(found.UnreadableDirectories);
+    }
+
+    /// <summary>
+    /// A nested folder the outer search cannot reach, here because it is behind a junction the walk
+    /// never enters, is still searched: handing it off gives up nothing the outer search would have
+    /// found.
+    /// </summary>
+    [Fact]
+    public async Task SearchesANestedApprovedFolderBehindALink()
+    {
+        var parent = Project("parent");
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        _temp.CreateDirectory("elsewhere", "App", "obj");
+        Junction.ToDirectory(Path.Combine(parent, "linked"), elsewhere);
+        var child = Path.Combine(parent, "linked");
+
+        var found = await Discovery().FindAsync([new SourceRoot(parent), new SourceRoot(child)]);
+
+        Assert.Equal([Path.Combine(parent, "Example", "obj"), Path.Combine(child, "App", "obj")], found.Candidates);
+    }
+
+    /// <summary>A folder approved twice is searched once.</summary>
+    [Fact]
+    public async Task SearchesARepeatedApprovedFolderOnce()
+    {
+        var root = Project();
+        var obj = Path.Combine(root, "Example", "obj");
+        var scanner = new FakeDirectoryScanner([obj]);
+
+        var discovery = new SourceDirectoryDiscovery(
+            scanner, new FakeVolumeInventory().With(Path.GetPathRoot(_temp.Path)!, features: LocalDisk));
+
+        discovery.Include(["obj"]);
+
+        var found = await discovery.FindAsync([new SourceRoot(root), new SourceRoot(root + Path.DirectorySeparatorChar)]);
+
+        Assert.Equal(1, scanner.FindCalls);
+        Assert.Equal([obj], found.Candidates);
+    }
+
+    /// <summary>
+    /// A nested folder no pass will search, here because it is not there, is not handed off: the
+    /// outer search still goes in, as it did before anything was handed off.
+    /// </summary>
+    [Fact]
+    public async Task HandsOffOnlyANestedFolderThatIsSearched()
+    {
+        var parent = Project("parent");
+        var scanner = new FakeDirectoryScanner([Path.Combine(parent, "Example", "obj")]);
+
+        var discovery = new SourceDirectoryDiscovery(
+            scanner, new FakeVolumeInventory().With(Path.GetPathRoot(_temp.Path)!, features: LocalDisk));
+
+        discovery.Include(["obj"]);
+
+        await discovery.FindAsync([new SourceRoot(parent), new SourceRoot(Path.Combine(parent, "gone"))]);
+
+        Assert.Empty(Assert.Single(scanner.Asked).Search.HandedOff);
+    }
+
     /// <summary>A folder holding one project with an <c>obj</c> in it, which is what the pass looks for.</summary>
     private string Project(string name = "src")
     {

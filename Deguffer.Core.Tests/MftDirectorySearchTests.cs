@@ -193,6 +193,21 @@ public class MftDirectorySearchTests
         Assert.Equal(3, found.Count);
     }
 
+    /// <summary>
+    /// A nested approved root is searched on its own, so the search of the folder around it stops
+    /// there rather than reading its subtree a second time. One that carries a sought name is still
+    /// an answer: only the descent is handed off.
+    /// </summary>
+    [Fact]
+    public void StopsAtADirectoryItHandsOff()
+    {
+        var index = Build(Tree().AddDirectory(30, AssetObj, "obj"));
+
+        var search = DirectorySearches.For("obj").HandingOff([["Example"], ["Assets", "obj"]]);
+
+        Assert.Equal([@"Assets\obj", @"Example.Tests\obj"], Joined(index.TryFindDirectories(["Source"], search)));
+    }
+
     /// <summary>An empty list rather than null: the index answered, and there are none.</summary>
     [Fact]
     public void FindsNothingWhenNoDirectoryCarriesTheName()

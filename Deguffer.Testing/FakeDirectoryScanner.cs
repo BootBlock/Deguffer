@@ -19,9 +19,13 @@ namespace Deguffer.Testing;
 public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) : IDirectoryScanner
 {
     private readonly ConcurrentQueue<string> _measured = new();
+    private readonly ConcurrentQueue<(string Root, DirectorySearch Search)> _asked = new();
 
     /// <summary>How many times discovery asked the index. Zero proves a test drove the walk.</summary>
-    public int FindCalls { get; private set; }
+    public int FindCalls => _asked.Count;
+
+    /// <summary>Every root the index was asked about, with the search it was asked to run there.</summary>
+    public IReadOnlyCollection<(string Root, DirectorySearch Search)> Asked => _asked;
 
     public int InvalidateCount { get; private set; }
 
@@ -78,7 +82,7 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         string root,
         CancellationToken ct = default)
     {
-        FindCalls++;
+        _asked.Enqueue((root, search));
 
         if (indexed is null)
         {

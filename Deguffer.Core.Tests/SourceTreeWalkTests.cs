@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
@@ -62,6 +63,49 @@ public sealed class SourceTreeWalkTests : IDisposable
         Assert.Equal(expected.Order(StringComparer.Ordinal), walked.Candidates);
         Assert.Equal([refused], walked.Unreadable);
         Assert.True(walked.RootListed);
+    }
+
+    /// <summary>
+    /// A nested approved root is searched on its own, so the walk of the folder around it stops
+    /// there rather than listing its subtree a second time. One that carries a sought name is still
+    /// an answer: only the descent is handed off.
+    /// </summary>
+    [Fact]
+    public void StopsAtADirectoryItHandsOff()
+    {
+        var root = _temp.CreateDirectory("root");
+        var kept = _temp.CreateDirectory("root", "kept", "obj");
+        var named = _temp.CreateDirectory("root", "named", "obj");
+        _temp.CreateDirectory("root", "nested", "app", "obj");
+        _temp.CreateDirectory("root", "named", "obj", "inner", "obj");
+
+        var search = Sought.HandingOff([["nested"], ["named", "obj"]]);
+
+        var walked = SourceTreeWalk.Under(root, search, WalkTuning.Default, CancellationToken.None);
+
+        Assert.Equal(new[] { kept, named }.Order(StringComparer.Ordinal), walked.Candidates);
+        Assert.Empty(walked.Unreadable);
+    }
+
+    /// <summary>
+    /// The nested roots discovery hands off, spelled as the user's approval spelled them, are the
+    /// directories the walk stops at. Here the outer root keeps a trailing separator and the nested
+    /// one is in <c>\\?\</c> form, and the walk lists in <c>\\?\</c> form whatever it is given.
+    /// </summary>
+    [Fact]
+    public void StopsAtANestedRootHoweverDiscoverySpellsIt()
+    {
+        var root = _temp.CreateDirectory("root") + Path.DirectorySeparatorChar;
+        var kept = _temp.CreateDirectory("root", "kept", "obj");
+        var nested = LongPath.Extended(_temp.CreateDirectory("root", "nested"));
+        _temp.CreateDirectory("root", "nested", "app", "obj");
+
+        var handedOff = SourceDirectoryDiscovery.Nested(root, [root, nested]);
+
+        var walked = SourceTreeWalk.Under(root, Sought.HandingOff(handedOff), WalkTuning.Default, CancellationToken.None);
+
+        Assert.StartsWith(@"\\?\", nested, StringComparison.Ordinal);
+        Assert.Equal([kept], walked.Candidates);
     }
 
     /// <summary>
