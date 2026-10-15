@@ -5,8 +5,8 @@ namespace Deguffer.Core.Choosing;
 /// <summary>
 /// What the search box above a list of items asks: which of them to show.
 ///
-/// <para>Every word typed has to appear somewhere in the item, in any order and regardless of case,
-/// so "api 2024" narrows to an item whose project is named for the one and whose path holds the other.
+/// <para>Every word typed has to appear somewhere in the item, in any order and regardless of case
+/// (<see cref="SearchWords"/>), so "api 2024" narrows to an item whose project is named for the one and whose path holds the other.
 /// It asks what the reader can see: the description, which carries the path, each facet's value, and
 /// the heading the item is listed under. A facet's label is not searched, because every item carries
 /// the same labels and a word from one would match them all.</para>
@@ -17,27 +17,17 @@ namespace Deguffer.Core.Choosing;
 /// </summary>
 public sealed class ItemFilter
 {
-    private readonly string[] _words;
+    private readonly SearchWords _words;
 
-    public ItemFilter(string? query) =>
-        _words = query?.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries) ?? [];
+    public ItemFilter(string? query) => _words = new SearchWords(query);
 
     /// <summary>Whether nothing was typed, so every item shows.</summary>
-    public bool IsEmpty => _words.Length == 0;
+    public bool IsEmpty => _words.IsEmpty;
 
     public bool Matches(CleanupStep step)
     {
         ArgumentNullException.ThrowIfNull(step);
-
-        foreach (var word in _words)
-        {
-            if (!Mentions(step, word))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return _words.AllMentioned(word => Mentions(step, word));
     }
 
     /// <summary>
@@ -94,14 +84,11 @@ public sealed class ItemFilter
     }
     private static bool Mentions(CleanupStep step, string word)
     {
-        if (Contains(step.Description, word))
+        if (SearchWords.Contains(step.Description, word))
         {
             return true;
         }
 
-        return Contains(step.Group, word) || step.Facets.Any(facet => Contains(facet.Value, word));
+        return SearchWords.Contains(step.Group, word) || step.Facets.Any(facet => SearchWords.Contains(facet.Value, word));
     }
-
-    private static bool Contains(string? text, string word) =>
-        text is not null && text.Contains(word, StringComparison.OrdinalIgnoreCase);
 }

@@ -10,6 +10,7 @@ using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.ApplicationModel.DataTransfer;
@@ -35,21 +36,28 @@ public sealed partial class CleanPage : Page
     {
         // Assigned before InitializeComponent so no x:Bind can ever evaluate against a null
         // view-model, whatever the framework's initialisation order does next.
+        var planner = CleanupPlanner.CreateDefault(App.Preferences, tuning: App.ScanTuning);
         ViewModel = new CleanViewModel(
-            CleanupPlanner.CreateDefault(App.Preferences, tuning: App.ScanTuning),
+            planner,
             UserEnvironment.Current,
             VolumeInventory.Current,
             ElevatedRelaunch.IsElevated,
+            ElevatedRelaunch.TryRelaunch,
             App.Selections,
             App.Keeps,
             App.Running,
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme),
             AppVersion.Current,
-            new WhenCompleteViewModel(App.Preferences, WindowsSession.Current));
+            new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
+            new ScanChoiceViewModel(planner.Providers, App.Preferences));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         ViewModel.WhenComplete.ConfirmAsync = CountDownAsync;
         ViewModel.WhenComplete.ExitRequested += (_, _) => App.CloseWhenIdle();
         InitializeComponent();
+
+        var scanChoiceGroups = (CollectionViewSource)Resources["ScanChoiceGroups"];
+        scanChoiceGroups.Source = ViewModel.ScanChoice.Shown;
+        ScanChoiceList.ItemsSource = scanChoiceGroups.View;
 
         // Read once, here, and never again. Re-reading it whenever the page came back on screen
         // undid a choice whose write to disk had failed: PreferenceService leaves Current at the
@@ -445,11 +453,22 @@ public sealed partial class CleanPage : Page
         await ModalDialog.ShowAsync(dialog);
     }
 
+    /// <summary>The scan has started from the drop-down, and the page under it is where it reports.</summary>
+    private void OnScanChosenClicked(object sender, RoutedEventArgs e) => ScanChoiceFlyout.Hide();
+
     private void StartRequestedRescan(object sender, RoutedEventArgs e)
     {
         Loaded -= StartRequestedRescan;
 
-        if (ViewModel.PreviewCommand.CanExecute(null))
+        // The scan the replaced window last ran: the locations it measured alone, or every location.
+        if (ElevatedRelaunch.Requested is PreviewRequest { Chosen: { } chosen })
+        {
+            if (ViewModel.PreviewChosenCommand.CanExecute(chosen))
+            {
+                ViewModel.PreviewChosenCommand.Execute(chosen);
+            }
+        }
+        else if (ViewModel.PreviewCommand.CanExecute(null))
         {
             ViewModel.PreviewCommand.Execute(null);
         }

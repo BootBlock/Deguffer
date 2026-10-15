@@ -73,6 +73,7 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "DaVinci Resolve, the video editor",
         Publisher = "Blackmagic Design",
         Purpose = "Resolve renders graded and effected parts of a timeline ahead of time and keeps them, "

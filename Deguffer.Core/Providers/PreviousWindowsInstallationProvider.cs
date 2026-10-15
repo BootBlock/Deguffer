@@ -112,6 +112,7 @@ public sealed class PreviousWindowsInstallationProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows Setup",
         Publisher = "Microsoft",
         Purpose = "Upgrading Windows moves the previous installation aside into Windows.old, so the "

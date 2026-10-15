@@ -86,6 +86,7 @@ public sealed partial class GraphicsDriverInstallerProvider : InstallerPayloadPr
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.InstallersAndUpdates,
         Application = "the NVIDIA and AMD graphics driver installers, and GeForce Experience",
         Publisher = "NVIDIA and AMD",
         Purpose = "A driver installer unpacks the whole driver package before installing it, and "

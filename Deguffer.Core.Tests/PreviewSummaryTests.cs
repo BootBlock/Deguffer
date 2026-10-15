@@ -20,8 +20,11 @@ public sealed class PreviewSummaryTests
 
     private static readonly ScanSize Selected = ScanSize.FromLengths(1536L * 1024 * 1024);
 
+    /// <summary>A full scan: every location Deguffer recognises was measured.</summary>
+    private static readonly ScanCoverage Full = new(Measured: 80, Recognised: 80);
+
     private static string For(params FindingStatus[] statuses) =>
-        PreviewSummary.For(statuses, Selectable, Selected, Elevate);
+        PreviewSummary.For(statuses, Selectable, Selected, Elevate, Full);
 
     /// <summary>
     /// The eight states that measure zero and are not clear. None of them may draw the claim that
@@ -110,7 +113,7 @@ public sealed class PreviewSummaryTests
     public void DoesNotSayNothingCanBeReclaimedWhileRowsAreReadyToClean()
     {
         var summary = PreviewSummary.For(
-            [FindingStatus.ReadyToClean], Selectable, ScanSize.Zero, Elevate);
+            [FindingStatus.ReadyToClean], Selectable, ScanSize.Zero, Elevate, Full);
 
         Assert.Equal(
             "4.0 GB can be reclaimed, 0 B selected. Tick the rows you want, then Clean.",
@@ -130,7 +133,8 @@ public sealed class PreviewSummaryTests
             [FindingStatus.ReadyToClean],
             ScanSize.Approximate(4L * 1024 * 1024 * 1024),
             ScanSize.Approximate(1536L * 1024 * 1024),
-            Elevate);
+            Elevate,
+            Full);
 
         Assert.Equal(
             "about 4.0 GB can be reclaimed, about 1.5 GB selected. Review the rows, then Clean.",
@@ -149,7 +153,29 @@ public sealed class PreviewSummaryTests
 
         Assert.Equal(
             "428 items can be reclaimed, 428 items selected. Review the rows, then Clean.",
-            PreviewSummary.For([FindingStatus.ReadyToClean], leftovers, leftovers, Elevate));
+            PreviewSummary.For([FindingStatus.ReadyToClean], leftovers, leftovers, Elevate, Full));
+    }
+
+    /// <summary>
+    /// A scan of the locations the user chose says how few it measured before anything else, because
+    /// every figure after it is about those alone. Without it, "already clear" over two rows reads as a
+    /// verdict on the whole machine.
+    /// </summary>
+    [Fact]
+    public void SaysHowManyLocationsAChosenScanMeasured()
+    {
+        Assert.Equal(
+            "Scanned 2 of 80 locations. Nothing to reclaim — these caches are already clear.",
+            PreviewSummary.For([FindingStatus.AlreadyClear], ScanSize.Zero, ScanSize.Zero, Elevate, new ScanCoverage(2, 80)));
+    }
+
+    /// <summary>A full scan has nothing to qualify, so the sentence is the verdict alone.</summary>
+    [Fact]
+    public void SaysNothingAboutCoverageAfterAFullScan()
+    {
+        Assert.Equal(
+            "Nothing to reclaim — these caches are already clear.",
+            PreviewSummary.For([FindingStatus.AlreadyClear], ScanSize.Zero, ScanSize.Zero, Elevate, Full));
     }
 
     /// <summary>

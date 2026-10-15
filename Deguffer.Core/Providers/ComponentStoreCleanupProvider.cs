@@ -40,6 +40,7 @@ public sealed class ComponentStoreCleanupProvider(
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows' component store (WinSxS)",
         Publisher = "Microsoft",
         Purpose = "Windows keeps every version of every system component it has installed in its component "

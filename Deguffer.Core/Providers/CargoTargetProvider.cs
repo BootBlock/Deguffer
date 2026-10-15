@@ -76,6 +76,7 @@ public sealed class CargoTargetProvider : BuildDirectoryProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.ProjectBuildOutput,
         Application = "Cargo, the build tool and package manager for Rust",
         Publisher = "the Rust project",
         Purpose = "Each Rust project keeps everything cargo build produced in a target directory "

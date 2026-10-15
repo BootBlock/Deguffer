@@ -87,6 +87,7 @@ public sealed class ChromiumServiceWorkerStorageProvider : ChromiumUserDataProvi
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Browsers,
         Application = "Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and "
             + "the desktop applications that embed the same engine: chat clients, editors and "
             + "other Electron apps, the applications that show web content through Microsoft's "

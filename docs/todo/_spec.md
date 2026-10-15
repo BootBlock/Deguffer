@@ -417,6 +417,12 @@ Deliberate points, and the traps that come with them:
   pre-selected. **No preference reaches Tier 4**, which stays excluded however the settings are left.
 - **Dry run is the default action.** The primary button scans and removes nothing; deleting is the
   second step.
+- **A scan can be narrowed to the locations the user chooses.** Scan is a split button: the button
+  measures every location, and its drop-down lists them grouped by category, each provider declaring
+  its own, with the ones to scan on their own ticked. The ticks are stored. A chosen scan replaces
+  the list as a full one does, so nothing on screen was measured by an older scan, and its sentence
+  says how many locations it measured. A location the last scan found not installed is marked in the
+  list and can still be ticked. Elevating repeats whichever of the two scans was last run.
 - **Show free space before and after**, prominently. It is the only number the user came for.
 - **What follows a clean is the user's choice, and it can always be stopped.** Beside Clean, a
   "When complete" box offers to exit Deguffer, lock the PC, log off, sleep, hibernate, restart or

@@ -124,6 +124,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows Update, component servicing, the system file checker, Reset this PC, "
             + "and the WMI service",
         Publisher = "Microsoft",

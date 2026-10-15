@@ -93,6 +93,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "the Unreal Editor",
         Publisher = "Epic Games",
         Purpose = "Unreal keeps the compiled shaders and prepared forms of every project's assets "

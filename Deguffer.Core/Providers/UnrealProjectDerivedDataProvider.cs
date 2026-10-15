@@ -51,6 +51,7 @@ public sealed class UnrealProjectDerivedDataProvider : BuildDirectoryProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.ProjectBuildOutput,
         Application = "the Unreal Editor",
         Publisher = "Epic Games",
         Purpose = "Unreal keeps the compiled shaders and prepared forms of a project's assets in a "

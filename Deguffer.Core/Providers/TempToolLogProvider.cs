@@ -109,6 +109,7 @@ public sealed partial class TempToolLogProvider : TempMarkerProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.TemporaryFiles,
         Application = "the Remote Desktop client, the Windows App, Visual Studio and VS Code",
         Publisher = "Microsoft",
         Purpose = "These write diagnostic logs into your temporary folder and do not limit how much "

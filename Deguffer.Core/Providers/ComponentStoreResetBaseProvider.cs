@@ -40,6 +40,7 @@ public sealed class ComponentStoreResetBaseProvider(
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows' component store (WinSxS)",
         Publisher = "Microsoft",
         Purpose = "Besides the older versions its ordinary cleanup removes, Windows keeps what it needs to "

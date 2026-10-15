@@ -100,6 +100,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "Gradle, the build tool behind Android and many Java and Kotlin projects",
         Publisher = "Gradle Inc.",
         Purpose = "Gradle keeps the dependencies it downloads, the Gradle distributions each "

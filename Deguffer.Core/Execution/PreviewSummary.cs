@@ -43,7 +43,26 @@ public static class PreviewSummary
     /// What the relaunch button on the same page says — <see cref="ElevationOffer.Label"/>, so the
     /// sentence and the button it names cannot come to disagree.
     /// </param>
+    /// <param name="coverage">
+    /// How many of the locations Deguffer recognises the scan measured. A scan of the user's chosen
+    /// locations says so first, because every figure after it is about those alone, and "already
+    /// clear" over three rows means something else than over every location on the machine.
+    /// </param>
     public static string For(
+        IEnumerable<FindingStatus> statuses,
+        ScanSize selectable,
+        ScanSize selected,
+        string elevateLabel,
+        ScanCoverage coverage)
+    {
+        var verdict = VerdictFor(statuses, selectable, selected, elevateLabel);
+
+        return coverage.Measured < coverage.Recognised
+            ? $"Scanned {coverage.Measured} of {coverage.Recognised} locations. {verdict}"
+            : verdict;
+    }
+
+    private static string VerdictFor(
         IEnumerable<FindingStatus> statuses,
         ScanSize selectable,
         ScanSize selected,

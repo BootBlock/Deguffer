@@ -71,6 +71,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "System Restore",
         Publisher = "Microsoft",
         Purpose = "Windows saves a restore point before updates, driver installations and some program "

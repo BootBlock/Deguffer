@@ -92,6 +92,7 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Epic Games launcher",
         Publisher = "Epic Games",
         Purpose = "The launcher saves every piece of storefront artwork it has ever drawn — the "

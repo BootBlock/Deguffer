@@ -53,6 +53,7 @@ public sealed class UnrealIntermediateProvider : BuildDirectoryProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.ProjectBuildOutput,
         Application = "the Unreal Editor and Unreal Build Tool",
         Publisher = "Epic Games",
         Purpose = "Unreal keeps what it produces on the way to a build in a project's Intermediate "
