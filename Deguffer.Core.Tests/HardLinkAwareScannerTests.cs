@@ -294,4 +294,51 @@ public sealed class HardLinkAwareScannerTests : IDisposable
 
         Assert.Equal([link], result.MailStores);
     }
+    /// <summary>
+    /// A list measured in one walk answers each path as measuring it alone does, here for the link-aware
+    /// figure: a path inside another, a path whose entries are left out, a linked-out file, a single
+    /// file and an absent path. A file's links read for the wrong root, or a left-out entry read for
+    /// a root that does not leave it out, moves a figure.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresEachOfManyPathsAsItMeasuresThatPathAlone()
+    {
+        var store = _temp.CreateDirectory("store");
+        _temp.CreateFile(4096, "store", "sole.bin");
+        _temp.CreateFile(8192, "store", "files", "ab", "deep.bin");
+        var shared = _temp.CreateFile(65536, "store", "files", "shared.bin");
+        LinkOut(shared, "project", "node_modules", "linked.bin");
+        var single = _temp.CreateFile(2048, "single.bin");
+
+        var files = Path.Combine(store, "files");
+
+        ScanRequest[] asked =
+        [
+            new(files),
+            new(store),
+            new(store, new ScanBounds(KeepRoot: false, LeftOut: [Path.Combine(files, "ab")])),
+            new(single),
+            new(Path.Combine(_temp.Path, "never-created")),
+        ];
+
+        var many = await HardLinkAwareScanner.Default.MeasureManyAsync(asked);
+
+        Assert.Equal(asked.Length, many.Count);
+
+        for (var i = 0; i < asked.Length; i++)
+        {
+            var alone = await HardLinkAwareScanner.Default.MeasureAsync(asked[i].Path, bounds: asked[i].Bounds);
+
+            Assert.Equal(alone.Size, many[i].Size);
+            Assert.Equal(alone.Root, many[i].Root);
+            Assert.Equal(alone.Strategy, many[i].Strategy);
+            Assert.Equal(alone.Fallback, many[i].Fallback);
+        }
+
+        // The fixture holds what it says it does: the shared file counts nowhere, the inner tree counts
+        // towards both, and the left-out folder is out.
+        Assert.Equal(8192, many[0].Size.Logical);
+        Assert.Equal(4096 + 8192, many[1].Size.Logical);
+        Assert.Equal(4096, many[2].Size.Logical);
+    }
 }

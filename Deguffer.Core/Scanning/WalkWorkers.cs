@@ -79,12 +79,28 @@ internal sealed class WalkWorkers<TState>
 
     private bool Stopping => _crew.Failed || _ct.IsCancellationRequested;
 
-    public void Run(string root, TState rootState)
+    public void Run(string root, TState rootState) => Run([(root, rootState)]);
+
+    /// <summary>
+    /// Walk every one of <paramref name="roots"/> in the one run, so a list of small trees fills the
+    /// threads that one of them alone would leave idle.
+    ///
+    /// <para>Helpers are started for the roots as for a directory's children, because a root holding
+    /// no directory queues nothing, and a list of those would otherwise run on the calling thread
+    /// alone.</para>
+    /// </summary>
+    public void Run(IReadOnlyList<(string Path, TState State)> roots)
     {
         using var wake = _crew.WakeOn(_ct);
 
         _nextReport = _clock.GetTimestamp();
-        Enqueue(root, rootState);
+
+        foreach (var (path, state) in roots)
+        {
+            Enqueue(path, state);
+        }
+
+        StartHelpers(roots.Count - 1);
 
         try
         {

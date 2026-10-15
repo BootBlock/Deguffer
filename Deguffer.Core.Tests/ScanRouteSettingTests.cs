@@ -281,4 +281,30 @@ public sealed class ScanRouteSettingTests : IDisposable
 
         return (preferences, new ScanTuner(preferences, new VolumeMediaCache(new FakeStorageQueries()), new FakeVolumeInventory()));
     }
+    /// <summary>
+    /// A list raced while the table is read: the walk cannot read the first path, so it has not
+    /// answered for the list and the table is waited for. The table answers the first path and knows
+    /// nothing of the second, which is then walked, with the reason the table gave.
+    /// </summary>
+    [Fact]
+    public async Task AutoWalksThePathsOfAListTheTableDoesNotKnowOnceItAnswersTheRest()
+    {
+        var (path, fixture) = SmallTree();
+        using var denied = new DeniedDirectory(path);
+        var unknown = _temp.CreateDirectory("unknown");
+        File.WriteAllBytes(Path.Combine(unknown, "b.bin"), new byte[3000]);
+        var sources = Held(path, fixture);
+        var scanner = new DirectoryScanner(sources, tuning: Tuner(ScanRoute.Auto).Tuner);
+
+        var measuring = scanner.MeasureManyAsync([new ScanRequest(path), new ScanRequest(unknown)]).AsTask();
+        await Task.Delay(TimeSpan.FromMilliseconds(250));
+        sources.Release();
+        var results = await measuring.WaitAsync(Bound);
+
+        Assert.Equal(ScanStrategy.MasterFileTable, results[0].Strategy);
+        Assert.Equal(4096, results[0].Size.Logical);
+        Assert.Equal(ScanStrategy.ParallelEnumeration, results[1].Strategy);
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, results[1].Fallback);
+        Assert.Equal(3000, results[1].Size.Logical);
+    }
 }

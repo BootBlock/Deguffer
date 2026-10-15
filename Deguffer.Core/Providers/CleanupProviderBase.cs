@@ -421,8 +421,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MeasureAllAsync(Whole(paths), MinimumAge.Off, ct);
 
     /// <summary>
-    /// A command step's probe measured twice: the whole of what those paths hold, and the part of it
-    /// older than <paramref name="age"/>.
+    /// A command step's probe measured twice: the whole of what <paramref name="path"/> holds, and the
+    /// part of it older than <paramref name="age"/>.
     ///
     /// <para><b>For the command that takes an age as a parameter.</b>
     /// <c>FhManagew.exe -cleanup &lt;days&gt;</c> is the one, and the age here is the number handed
@@ -432,7 +432,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <see cref="PlanExecutor"/> subtracts an unguarded after-measure from it and the two sides
     /// must be measured on one basis.</para>
     ///
-    /// <para><b>Two quantities, and one reading of each path.</b> They differ, so neither can be
+    /// <para><b>Two quantities, and one reading of the path.</b> They differ, so neither can be
     /// derived from the other, but they come from the same files: the scanner tallies both from one
     /// walk, or one volume index where the table can be read
     /// (<see cref="IDirectoryScanner.MeasureAgedAsync"/>). Such a target is usually a backup disk or
@@ -442,47 +442,35 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// through this class.</para>
     /// </summary>
     protected async Task<(ScanBatch Whole, ScanBatch Aged)> MeasureAgedAsync(
-        IReadOnlyList<string> paths,
+        string path,
         MinimumAge age,
         CancellationToken ct)
     {
-        var whole = new List<ScanResult>(paths.Count);
-        var aged = new List<ScanResult>(paths.Count);
+        var measured = await Scanner.MeasureAgedAsync(path, age, ct).ConfigureAwait(false);
 
-        foreach (var path in paths)
-        {
-            ct.ThrowIfCancellationRequested();
+        // One listing produced both readings, so the stores it met and whether it reached the path
+        // are recorded once.
+        Record(path, measured.Whole);
 
-            var measured = await Scanner.MeasureAgedAsync(path, age, ct).ConfigureAwait(false);
-
-            // One listing produced both readings, so the stores it met and whether it reached the
-            // path are recorded once.
-            Record(path, measured.Whole);
-            whole.Add(measured.Whole);
-            aged.Add(measured.Aged);
-        }
-
-        return (Batch(whole), Batch(aged));
+        return (Batch([measured.Whole]), Batch([measured.Aged]));
     }
 
     /// <summary>Each path as a question about its whole tree, root included.</summary>
-    private static IReadOnlyList<(string Path, ScanBounds Bounds)> Whole(IReadOnlyList<string> paths) =>
-        [.. paths.Select(path => (path, default(ScanBounds)))];
+    private static IReadOnlyList<ScanRequest> Whole(IReadOnlyList<string> paths) =>
+        [.. paths.Select(path => new ScanRequest(path))];
 
     private async Task<ScanBatch> MeasureAllAsync(
-        IReadOnlyList<(string Path, ScanBounds Bounds)> asked,
+        IReadOnlyList<ScanRequest> asked,
         MinimumAge keep,
         CancellationToken ct)
     {
-        var results = new List<ScanResult>(asked.Count);
+        // One call for the whole list, so a walking scanner reads every path in one walk rather than
+        // one walk a path. See IDirectoryScanner.MeasureManyAsync.
+        var results = await Scanner.MeasureManyAsync(asked, keep, ct).ConfigureAwait(false);
 
-        foreach (var (path, bounds) in asked)
+        foreach (var (question, measured) in asked.Zip(results))
         {
-            ct.ThrowIfCancellationRequested();
-
-            var measured = await Scanner.MeasureAsync(path, keep, bounds, progress: null, ct).ConfigureAwait(false);
-            Record(path, measured);
-            results.Add(measured);
+            Record(question.Path, measured);
         }
 
         return Batch(results);
@@ -540,7 +528,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // emptied in place is measured on the terms its removal empties it on, so the figure is
         // already without whatever the removal leaves standing and nothing is measured to be taken off.
         var (each, measured) = await MeasureGroupsAsync(
-            [.. targets.Select(t => (IReadOnlyList<(string, ScanBounds)>)[(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
+            [.. targets.Select(t => (IReadOnlyList<ScanRequest>)[new ScanRequest(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
             keep,
             ct).ConfigureAwait(false);
 
@@ -628,7 +616,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// to another, so every step that is the sum of several paths comes through here.</para>
     /// </summary>
     private async Task<(IReadOnlyList<GroupMeasure> Each, ScanBatch Measured)> MeasureGroupsAsync(
-        IReadOnlyList<IReadOnlyList<(string Path, ScanBounds Bounds)>> groups,
+        IReadOnlyList<IReadOnlyList<ScanRequest>> groups,
         MinimumAge keep,
         CancellationToken ct)
     {

@@ -46,6 +46,26 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         return ParallelEnumerationScanner.Default.MeasureAsync(path, keep, bounds, progress, ct);
     }
 
+    /// <summary>How many lists were measured, each in one call.</summary>
+    public int MeasureManyCalls => Volatile.Read(ref _measureManyCalls);
+
+    private int _measureManyCalls;
+
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep = default,
+        CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _measureManyCalls);
+
+        foreach (var question in asked)
+        {
+            _measured.Enqueue(question.Path);
+        }
+
+        return ParallelEnumerationScanner.Default.MeasureManyAsync(asked, keep, ct);
+    }
+
     /// <summary>One walk, recorded once, as the real scanner makes it.</summary>
     public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default)
     {

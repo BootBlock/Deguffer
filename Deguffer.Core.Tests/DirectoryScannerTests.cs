@@ -210,4 +210,32 @@ public class DirectoryScannerTests
         Assert.Equal(ScanStrategy.MasterFileTable, result.Strategy);
         Assert.Equal(8192, result.Size.Allocated);
     }
+    /// <summary>
+    /// A list is answered path by path: from the table where it knows the path, and by the walk, with
+    /// the table's reason, where it does not, in the order the paths were asked.
+    /// </summary>
+    [Fact]
+    public async Task AnswersEachPathOfAListByTheRouteThatCanAnswerIt()
+    {
+        using var temp = new TempDirectory();
+        var first = temp.CreateDirectory("first");
+        File.WriteAllBytes(Path.Combine(first, "a.bin"), new byte[7000]);
+        var second = temp.CreateDirectory("second");
+        File.WriteAllBytes(Path.Combine(second, "b.bin"), new byte[3000]);
+
+        // The fixture serves the volume the temp directory is on, and knows only its own cache.
+        var drive = Path.GetFullPath(temp.Path)[0];
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(drive, Volume()), tuning: RouteTuners.Table);
+
+        var results = await scanner.MeasureManyAsync(
+            [new ScanRequest(first), new ScanRequest($@"{drive}:\Users\testuser\.npm-cache"), new ScanRequest(second)]);
+
+        Assert.Equal(
+            [
+                (ScanStrategy.ParallelEnumeration, FallbackReason.MasterFileTableIncomplete, 7000L),
+                (ScanStrategy.MasterFileTable, FallbackReason.None, 8000L),
+                (ScanStrategy.ParallelEnumeration, FallbackReason.MasterFileTableIncomplete, 3000L),
+            ],
+            results.Select(result => (result.Strategy, result.Fallback, result.Size.Logical)));
+    }
 }

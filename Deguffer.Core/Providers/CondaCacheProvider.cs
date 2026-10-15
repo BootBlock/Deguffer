@@ -229,13 +229,14 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         // Deguffer's own probe of the same directories, for the after-run delta. It is a far
         // larger number than the estimate, because it counts everything the environments link,
         // and that is exactly why the step carries both — see RunCommandStep.MeasuredBefore.
-        var probed = await MeasureAllAsync(packageCaches, ct).ConfigureAwait(false);
-
+        //
+        // The index caches are measured in the same call, because each sits inside the package cache
+        // that holds it, and a walk of the package cache reads its index cache's figure on the way.
         var indexCaches = ReachedDirectories.Of(packageCaches.Select(directory => Path.Combine(directory, "cache")));
-        var indexMeasured = await MeasureAllAsync(indexCaches.Present, ct).ConfigureAwait(false);
+        var probed = await MeasureAllAsync([.. packageCaches, .. indexCaches.Present], ct).ConfigureAwait(false);
 
         var estimated = ScanSize.Approximate(preview.TarballBytes + preview.PackageBytes)
-            + indexMeasured.Total;
+            + probed.TotalOf(packageCaches.Count..);
 
         // Named even beside conda's own report, because conda runs as this account too: a cache
         // Windows would not describe to Deguffer is one conda's dry run may not have read either.
@@ -286,7 +287,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
                 {
                     Estimated = estimated,
                     MeasuredPaths = packageCaches,
-                    MeasuredBefore = probed.Total,
+                    MeasuredBefore = probed.TotalOf(..packageCaches.Count),
                 },
             ],
             ProtectedPaths = BuildProtectedPaths(installation, packageCaches),
