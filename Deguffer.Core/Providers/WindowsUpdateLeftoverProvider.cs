@@ -85,6 +85,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows Update and the recovery environment",
         Publisher = "Microsoft",
         Purpose = "When an update services the recovery environment, Windows stages a new recovery "

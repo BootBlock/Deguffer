@@ -122,6 +122,7 @@ public sealed class ZigCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "Zig, a programming language and C/C++ toolchain",
         Publisher = "the Zig Software Foundation",
         Purpose = "Every Zig build on the machine shares one cache of what it compiled: the language "

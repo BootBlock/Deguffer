@@ -17,6 +17,9 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed record ProviderDescription
 {
+    /// <summary>What kind of thing the location belongs to, which a choice of what to scan is grouped by.</summary>
+    public required ProviderCategory Category { get; init; }
+
     /// <summary>
     /// The application or toolchain that wrote these files, named as its own users would name it,
     /// with a few words saying what it is. "npm" alone identifies nothing to a reader who does not

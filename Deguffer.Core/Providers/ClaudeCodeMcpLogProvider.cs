@@ -82,6 +82,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Claude Code, Anthropic's coding agent, and the MCP servers it runs",
         Publisher = "Anthropic writes the logs; each MCP server is published by its own author",
         Purpose = "Every time Claude Code starts an MCP server it writes what that server reported to a new "

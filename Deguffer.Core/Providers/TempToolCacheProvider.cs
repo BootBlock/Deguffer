@@ -167,6 +167,7 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.TemporaryFiles,
         Application = "Node.js, Flutter, Dart, Firefox and Roslyn, the compiler behind C# and Visual Basic",
         Publisher = "the OpenJS Foundation, Google, Mozilla and Microsoft",
         Purpose = "Each of these writes a cache or a working folder into your temporary folder. Node "

@@ -114,6 +114,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Claude Code, Anthropic's coding agent",
         Publisher = "Anthropic",
         Purpose = "Before Claude Code edits a file it saves a copy, so that a session can be rewound to how the "

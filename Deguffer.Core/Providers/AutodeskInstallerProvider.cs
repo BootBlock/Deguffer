@@ -68,6 +68,7 @@ public sealed class AutodeskInstallerProvider : InstallerPayloadProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.InstallersAndUpdates,
         Application = "the Autodesk product and update installers",
         Publisher = "Autodesk",
         Purpose = "An Autodesk installer extracts the whole product into C:\\Autodesk before it "

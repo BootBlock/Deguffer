@@ -73,6 +73,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "Puppeteer, a browser automation library for Node.js",
         Publisher = "Google",
         Purpose = "Puppeteer downloads its own builds of Chrome and Firefox rather than using the "

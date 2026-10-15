@@ -151,6 +151,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "your graphics driver, and Direct3D itself",
         Publisher = "NVIDIA, AMD or Intel, and Microsoft",
         Purpose = "Compiling a shader is slow, so the driver keeps the compiled result keyed by "

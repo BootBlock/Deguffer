@@ -170,6 +170,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Browsers,
         Application = "Mozilla Firefox",
         Publisher = "Mozilla",
         Purpose = "Firefox keeps a profile in two places. Your bookmarks, history, saved passwords "

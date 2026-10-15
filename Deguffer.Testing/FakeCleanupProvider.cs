@@ -29,8 +29,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
 
     public string WhatHappensOnNextUse => "Rebuilt on next use.";
 
-    public ProviderDescription Description { get; } = new()
+    /// <summary>The kind of location it stands in for, which the list of what to scan groups by.</summary>
+    public ProviderCategory Category { get; init; } = ProviderCategory.TemporaryFiles;
+
+    public ProviderDescription Description => field ??= new()
     {
+        Category = Category,
         Application = "A fake, standing in for a real toolchain.",
         Publisher = "Nobody.",
         Purpose = "Nothing. This provider exists only for tests.",

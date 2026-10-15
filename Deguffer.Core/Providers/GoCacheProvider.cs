@@ -69,6 +69,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "the Go toolchain",
         Publisher = "Google, and the Go project",
         Purpose = "Go keeps two caches shared by every project on the machine: the module cache, "

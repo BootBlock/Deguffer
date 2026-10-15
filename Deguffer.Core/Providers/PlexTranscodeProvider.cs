@@ -36,6 +36,7 @@ public sealed class PlexTranscodeProvider : MediaServerTranscodeProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "Plex Media Server",
         Publisher = "Plex",
         Purpose = "When a player cannot play a file as it is, Plex converts it as it streams and writes "

@@ -41,11 +41,17 @@ internal sealed class StoragePage : IDisposable
         Selections = new SelectionService(new SelectionStore(Environment));
         Preferences = new PreferenceService(new PreferenceStore(Environment));
 
+        var planner = new CleanupPlanner(providers);
         ViewModel = new CleanViewModel(
-            new CleanupPlanner(providers),
+            planner,
             Environment,
             Volumes,
             isElevated,
+            request =>
+            {
+                Relaunches.Add(request);
+                return true;
+            },
             Selections,
             Keeps,
             Running,
@@ -55,7 +61,8 @@ internal sealed class StoragePage : IDisposable
                 return Prompt;
             },
             appVersion: "0.0.0-test",
-            new WhenCompleteViewModel(Preferences, Session));
+            new WhenCompleteViewModel(Preferences, Session),
+            new ScanChoiceViewModel(planner.Providers, Preferences));
     }
 
     public CleanViewModel ViewModel { get; }
@@ -108,6 +115,12 @@ internal sealed class StoragePage : IDisposable
         Volumes.Without(VolumeRoot).With(VolumeRoot, totalBytes: Capacity, freeBytes: freeBytes);
 
     public void Scan() => UiThread.Run(() => ViewModel.PreviewCommand.ExecuteAsync(null));
+
+    /// <summary>Scan only the locations chosen in the Scan button's drop-down.</summary>
+    public void ScanChosen() => UiThread.Run(() => ViewModel.PreviewChosenCommand.ExecuteAsync(null));
+
+    /// <summary>Every elevated relaunch the page asked for, in order. Each reports that it started.</summary>
+    public List<ElevationRequest> Relaunches { get; } = [];
 
     public void Clean() => UiThread.Run(() => ViewModel.CleanCommand.ExecuteAsync(null));
 

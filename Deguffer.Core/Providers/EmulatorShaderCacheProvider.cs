@@ -80,6 +80,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "Cemu, RPCS3, Dolphin and PCSX2, the console emulators",
         Publisher = "each emulator's open-source project",
         Purpose = "An emulator translates each game's shaders for your graphics card as the game draws, "

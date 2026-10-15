@@ -899,6 +899,7 @@ public sealed class CleanupPlannerTests
 
         public ProviderDescription Description { get; } = new()
         {
+            Category = ProviderCategory.TemporaryFiles,
             Application = "A stub, standing in for a real toolchain.",
             Publisher = "Nobody.",
             Purpose = "Nothing. This provider exists only for this test.",

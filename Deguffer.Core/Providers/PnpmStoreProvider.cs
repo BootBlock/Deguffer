@@ -59,6 +59,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "pnpm, an alternative package manager for Node.js",
         Publisher = "the open-source pnpm project",
         Purpose = "pnpm keeps one copy of each package version in a global store and links it "
