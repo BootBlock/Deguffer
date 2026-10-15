@@ -2,12 +2,17 @@ namespace Deguffer.Benchmark;
 
 /// <summary>One timed run.</summary>
 /// <param name="AllocatedBytes">Bytes allocated on every thread while the run was timed.</param>
+/// <param name="FullCollections">
+/// How many full (generation 2) collections the run started. Each traces everything still alive, which
+/// for a route that builds a tree is the tree so far.
+/// </param>
 /// <param name="PeakWorkingSet">
 /// The process's peak working set when the run ended. Windows keeps one peak for the life of the
 /// process, so after the first run this is the highest any run has reached rather than this run's
 /// own.
 /// </param>
-internal readonly record struct RunSample(TimeSpan Elapsed, RunTally Tally, long AllocatedBytes, long PeakWorkingSet)
+internal readonly record struct RunSample(
+    TimeSpan Elapsed, RunTally Tally, long AllocatedBytes, int FullCollections, long PeakWorkingSet)
 {
     public double ItemsPerSecond => Tally.Items / Seconds;
 

@@ -18,15 +18,17 @@ internal static class Timing
         // Precise, and process-wide: both routes allocate on several threads, and the imprecise
         // figure leaves out what each thread has not yet handed back.
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+        var fullBefore = GC.CollectionCount(2);
         var clock = Stopwatch.StartNew();
 
         var tally = run(ct);
 
         clock.Stop();
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
+        var full = GC.CollectionCount(2) - fullBefore;
 
         using var self = Process.GetCurrentProcess();
 
-        return new RunSample(clock.Elapsed, tally, allocated, self.PeakWorkingSet64);
+        return new RunSample(clock.Elapsed, tally, allocated, full, self.PeakWorkingSet64);
     }
 }

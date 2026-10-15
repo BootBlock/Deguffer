@@ -117,25 +117,27 @@ public sealed class ExploreTreeBuilder
     /// than in every snapshot. A directory's children arrive together and never change, so their
     /// order is known as soon as they are, and a snapshot places each one where its rank says
     /// without sorting anything.</para>
+    ///
+    /// <para>A span, so the walk can hand over a buffer it reuses rather than a list per directory.
+    /// What it holds is copied before this returns, so the caller may reuse it straight away.</para>
     /// </summary>
-    public int AddChildren(int parent, IReadOnlyList<ExploreChild> children)
+    public int AddChildren(int parent, ReadOnlySpan<ExploreChild> children)
     {
-        ArgumentNullException.ThrowIfNull(children);
-
-        var rented = ArrayPool<int>.Shared.Rent(children.Count);
+        var rented = ArrayPool<NameKey>.Shared.Rent(children.Length);
+        var byName = rented.AsSpan(0, children.Length);
 
         try
         {
-            var byName = rented.AsSpan(0, children.Count);
             for (var i = 0; i < byName.Length; i++)
             {
-                byName[i] = i;
+                byName[i] = new NameKey(children[i].Name, i);
             }
 
-            // Ties go by index within the batch, which is the tree's own tie-break: a batch is
-            // numbered consecutively, so index order is node-number order.
-            byName.Sort((left, right) =>
-                ExploreTree.CompareByName(children[left].Name, left, children[right].Name, right));
+            // The keys carry their names, so the comparison captures nothing and the sort allocates
+            // nothing. Ties go by index within the batch, which is the tree's own tie-break: a batch
+            // is numbered consecutively, so index order is node-number order.
+            byName.Sort(static (left, right) =>
+                ExploreTree.CompareByName(left.Name, left.Index, right.Name, right.Index));
 
             lock (_gate)
             {
@@ -149,7 +151,7 @@ public sealed class ExploreTreeBuilder
 
                 listed.HasChildren = true;
 
-                foreach (var child in children)
+                foreach (ref readonly var child in children)
                 {
                     _nodes.Add() = new Node
                     {
@@ -169,7 +171,7 @@ public sealed class ExploreTreeBuilder
 
                 for (var rank = 0; rank < byName.Length; rank++)
                 {
-                    _nodes[first + byName[rank]].NameRank = rank;
+                    _nodes[first + byName[rank].Index].NameRank = rank;
                 }
 
                 return first;
@@ -177,9 +179,14 @@ public sealed class ExploreTreeBuilder
         }
         finally
         {
-            ArrayPool<int>.Shared.Return(rented);
+            // Cleared, because a key holds its name and the pool would otherwise keep it alive.
+            byName.Clear();
+            ArrayPool<NameKey>.Shared.Return(rented);
         }
     }
+
+    /// <summary>One child's name and its index in the batch, which is what the name sort compares.</summary>
+    private readonly record struct NameKey(string Name, int Index);
 
     /// <summary>
     /// Say that this node's size cannot be established, so every total above it is a lower bound.

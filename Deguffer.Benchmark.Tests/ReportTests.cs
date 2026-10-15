@@ -130,7 +130,7 @@ public sealed class ReportTests
     private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, Place, Machine, runs);
 
     private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0) =>
-        new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, PeakWorkingSet: 64 << 20);
+        new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, FullCollections: 0, PeakWorkingSet: 64 << 20);
 
     private static string Line(string text, string label) =>
         text.Split('\n').Single(line => line.StartsWith(label + " ", StringComparison.Ordinal));
