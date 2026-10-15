@@ -122,7 +122,7 @@ public sealed class ExploreSelectionTests : IDisposable
     /// <summary>
     /// The refusal is the one thing on the page whose answer arrives late. A selection made while
     /// the policy was still being built is told what it turned out to be, rather than being left
-    /// holding "in a moment" — and told on the thread that owns it, because the note is bound.
+    /// holding the answer that it is still being worked out — and told on the thread that owns it, because the note is bound.
     /// </summary>
     [Fact]
     public void TheNoteIsRestatedWhenThePolicyLands() => UiThread.Run(async () =>
@@ -357,7 +357,7 @@ public sealed class ExploreSelectionTests : IDisposable
     private ExploreSelection Selection(ExploreTree tree)
     {
         var selection = new ExploreSelection(
-            new ExploreActions(_explore.Build, () => _explore.Prompt, _explore.Faults, _explore.Running, new FakeRecycleBin()));
+            new ExploreActions(_explore.Building, () => _explore.Prompt, _explore.Faults, _explore.Running, new FakeRecycleBin()));
 
         selection.Show(tree);
 

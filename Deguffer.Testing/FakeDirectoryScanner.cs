@@ -46,11 +46,49 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         return ParallelEnumerationScanner.Default.MeasureAsync(path, keep, bounds, progress, ct);
     }
 
-    /// <summary>This fake keeps no snapshot, so the two routes are the same walk.</summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
+    /// <summary>How many lists were measured, each in one call.</summary>
+    public int MeasureManyCalls => Volatile.Read(ref _measureManyCalls);
+
+    private int _measureManyCalls;
+
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep = default,
+        CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _measureManyCalls);
+
+        foreach (var question in asked)
+        {
+            _measured.Enqueue(question.Path);
+        }
+
+        return ParallelEnumerationScanner.Default.MeasureManyAsync(asked, keep, ct);
+    }
+
+    /// <summary>One walk, recorded once, as the real scanner makes it.</summary>
+    public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default)
     {
         _measured.Enqueue(path);
-        return ParallelEnumerationScanner.Default.MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct);
+        return ParallelEnumerationScanner.Default.MeasureAgedAsync(path, age, ct);
+    }
+
+    /// <summary>How many lists were read from the disk, each in one call.</summary>
+    public int MeasureFromDiskCalls => Volatile.Read(ref _measureFromDiskCalls);
+
+    private int _measureFromDiskCalls;
+
+    /// <summary>This fake keeps no snapshot, so the two routes are the same walk.</summary>
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _measureFromDiskCalls);
+
+        foreach (var question in asked)
+        {
+            _measured.Enqueue(question.Path);
+        }
+
+        return ParallelEnumerationScanner.Default.MeasureFromDiskAsync(asked, ct);
     }
 
     /// <summary>

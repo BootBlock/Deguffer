@@ -475,7 +475,11 @@ not the shell asked.
   scan starts, including whether each tool can be found on the `PATH` — which is re-read from the
   machine and user environment keys at that moment, because Windows never pushes an installer's
   change into a running process — so between scans it answers from the machine as it was at the last
-  of those.
+  of those. What a scan reads is scoped to the scan: an application-data root the scan listed is
+  searched in the scan's own listing rather than walked again, so the answer is complete once the scan
+  has ended, and a root the scan cannot reach is not searched and is refused whole until a scan that
+  reaches it. A scan that ends without a listing searches everywhere, because the page may still show
+  any drive.
   `%LOCALAPPDATA%`, `%APPDATA%`, `LocalLow` and `%TEMP%` are refused as folders
   and are ordinary inside, as the profile is. So is `%SystemDrive%\inetpub`, whose existence and
   permissions are part of a Windows Update security fix. **A folder holding any refused path is refused too**,

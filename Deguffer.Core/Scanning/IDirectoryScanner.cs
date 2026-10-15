@@ -42,7 +42,47 @@ public interface IDirectoryScanner
         CancellationToken ct = default);
 
     /// <summary>
-    /// Measure <paramref name="path"/> without consulting anything remembered from before now.
+    /// Measure each of <paramref name="asked"/> as <see cref="MeasureAsync"/> measures it, all in one
+    /// go, and answer in the order asked.
+    ///
+    /// <para>One go rather than one call a path, because a walk of one small tree leaves most of its
+    /// threads idle, and a provider with hundreds of targets paid that once a target. A walking scanner
+    /// seeds one walk with every directory, and keeps a figure for each. A path inside another asked
+    /// about here is read off the outer path's walk where that walk meets it, so it is not walked twice.
+    /// The volume index answers each path in a lookup of its own.</para>
+    ///
+    /// <para>Each answer is the whole of what <see cref="MeasureAsync"/> would have said of its path:
+    /// its own <see cref="ScanResult.Root"/>, mail stores, fallback reason and
+    /// <see cref="ScanResult.WithheldRecent"/>. No progress is reported, because no caller of a list has
+    /// one figure to show.</para>
+    /// </summary>
+    /// <param name="keep">The guard every path is measured under, as <see cref="MeasureAsync"/> applies it.</param>
+    ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep = default,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Measure <paramref name="path"/>'s whole tree, and the part of it older than
+    /// <paramref name="age"/>, from one reading of the tree.
+    ///
+    /// <para>For a command that takes an age itself, such as File History's: the estimate has to be
+    /// the aged part, which is all the command will consider, and the figure the executor subtracts
+    /// its after-measure from has to be the whole, because that after-measure is unguarded. Asking
+    /// <see cref="MeasureAsync"/> twice walks the tree twice, and the tree is usually a backup disk
+    /// or a network share, where a second walk costs as much as the first. Every listing already
+    /// carries each file's timestamps, so one walk answers both.</para>
+    ///
+    /// <para>Each reading is exactly what <see cref="MeasureAsync"/> would return for it, entry
+    /// count included, because the folders an age keeps standing are counted apart from the ones the
+    /// whole tree's removal takes. A remembered figure is never shown, because nothing reports
+    /// progress here.</para>
+    /// </summary>
+    ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default);
+
+    /// <summary>
+    /// Measure each of <paramref name="asked"/> without consulting anything remembered from before now,
+    /// and answer in the order asked.
     ///
     /// <para><see cref="MeasureAsync"/> is free to answer from a volume snapshot, and that is the
     /// whole of §5.5's speed. A snapshot is only ever fresh relative to when it was taken, though,
@@ -56,7 +96,7 @@ public interface IDirectoryScanner
     /// not a tuning option: a figure subtracted from an earlier one has to come from the disk, and
     /// that is a property of the question rather than of the caller's patience. The two scanners
     /// that hold nothing between calls answer this exactly as they answer
-    /// <see cref="MeasureAsync"/>.</para>
+    /// <see cref="MeasureManyAsync"/> with the guard off.</para>
     ///
     /// <para><b>The cost is a walk, and it is not always the cheap one.</b> After a successful
     /// eviction the tree is nearly empty and the walk is nearly free, which is the ordinary case for
@@ -69,13 +109,17 @@ public interface IDirectoryScanner
     /// which drops every volume and costs seconds apiece, repeated once per command step in a run.
     /// Neither option is free; this one is wrong in the direction of being slow rather than in the
     /// direction of reporting a number nobody can check.</para>
+    ///
+    /// <para>A list rather than one path, because a command step reads several paths, and the walk
+    /// takes them together as <see cref="MeasureManyAsync"/> takes them, a path inside another included.
+    /// Each answer is the one this reading would give its path alone.</para>
     /// </summary>
-    /// <param name="bounds">
-    /// What to leave standing, on the terms the reading it is subtracted from was taken on: an emptied
-    /// Recycle Bin's folder is measured with its root kept, as its estimate was. See
+    /// <param name="asked">
+    /// Each path, with what to leave standing on the terms the reading it is subtracted from was taken
+    /// on: an emptied Recycle Bin's folder is measured with its root kept, as its estimate was. See
     /// <see cref="ScanBounds"/>.
     /// </param>
-    ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default);
+    ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default);
 
     /// <summary>
     /// Every directory <paramref name="search"/> finds below <paramref name="root"/>, as full paths

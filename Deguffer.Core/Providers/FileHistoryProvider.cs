@@ -236,7 +236,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
         // version copied onto the target counts from when it arrived rather than from whenever the
         // original was last edited — which is the age the command is judging, and errs towards
         // keeping a file rather than counting it.
-        var (probed, aged) = await MeasureAgedAsync([target.DataDirectory], RetentionAge(days), ct)
+        var (probed, aged) = await MeasureAgedAsync(target.DataDirectory, RetentionAge(days), ct)
             .ConfigureAwait(false);
 
         var survivors = ProtectedNeighboursOf(target, out var unreadable);

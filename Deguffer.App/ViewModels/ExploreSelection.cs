@@ -4,6 +4,7 @@ using Deguffer.App.Shell;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.ViewModels;
@@ -145,7 +146,8 @@ public sealed partial class ExploreSelection : ObservableObject
     /// installer had open when the page opened, an entry a program has started working in since.
     /// Called at the start of a scan, which is when everything else on the page is re-measured too.
     /// </summary>
-    public void Reconsider() => _actions.Reconsider();
+    /// <param name="scope">What the scan will find, which the policy is built for.</param>
+    public void Reconsider(ProtectionScope scope) => _actions.Reconsider(scope);
 
     /// <summary>
     /// Whether <paramref name="path"/> may be removed, and if not why: the answer a removal asks again
@@ -356,7 +358,7 @@ public sealed partial class ExploreSelection : ObservableObject
     /// derived from the tree, which is on screen before anything is selected; the refusal waits on
     /// the providers, and on a rebuild it waits on them again — so a selection made while
     /// <see cref="ExploreActions"/> was still asking is told what the answer turned out to be
-    /// rather than left holding "in a moment".</para>
+    /// rather than left holding the answer that it is still being worked out.</para>
     /// </summary>
     private void Restate()
     {

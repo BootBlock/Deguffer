@@ -29,23 +29,26 @@ public sealed class ExploreActions
     /// staging folder an installer is using. Answering "unclassified" in the meantime would allow
     /// exactly the paths this policy exists to refuse, for however long the probes take — and the
     /// user cannot tell a fast answer from a complete one.</para>
+    ///
+    /// <para>It says when, because a policy built for a scan finishes once the scan has
+    /// (<see cref="Reconsider"/>), and "in a moment" is untrue of a scan that takes ten.</para>
     /// </summary>
     private static readonly ExploreVerdict Working = ExploreVerdict.Refuse(
-        "Deguffer is still working out what it has to protect on this machine. This will say what it "
-        + "is in a moment.");
+        "Deguffer is still working out what it has to protect on this machine, and finishes once any "
+        + "scan under way has ended. This will say what it is then.");
 
     /// <summary>
     /// What Explore says about every path once a build has failed, until one succeeds.
     ///
     /// <para>A refusal for the reason <see cref="Working"/> is one: without the probed half there is
-    /// no knowing what else would have been refused. It says what happened rather than "in a moment",
-    /// because nothing is on its way until the next scan asks again.</para>
+    /// no knowing what else would have been refused. It says what happened rather than that an answer
+    /// is on its way, because nothing is on its way until the next scan asks again.</para>
     /// </summary>
     private static readonly ExploreVerdict Failed = ExploreVerdict.Refuse(
         "Deguffer could not work out what it has to protect on this machine, so Explore removes "
         + "nothing for now. Scanning again tries once more.");
 
-    private readonly Func<CancellationToken, Task<ExploreActionPolicy>> _build;
+    private readonly Func<ProtectionScope, CancellationToken, Task<ExploreActionPolicy>> _build;
     private readonly Func<IExploreConfirmationPrompt> _prompt;
     private readonly CrashLog _faults;
     private readonly RunningActions _running;
@@ -54,9 +57,9 @@ public sealed class ExploreActions
     private Task<ExploreActionPolicy>? _policy;
 
     /// <param name="build">
-    /// How to assemble the policy for this machine. A factory rather than a built policy, because
-    /// <see cref="Reconsider"/> has to be able to ask for a fresh one: a declaration that a path is
-    /// in use is true of this minute and not of the next.
+    /// How to assemble the policy for this machine, for what it will be asked about. A factory rather
+    /// than a built policy, because <see cref="Reconsider"/> has to be able to ask for a fresh one: a
+    /// declaration that a path is in use is true of this minute and not of the next.
     /// </param>
     /// <param name="faults">
     /// Where a failed build is written down. Handed in rather than reached for, because the app's
@@ -69,7 +72,7 @@ public sealed class ExploreActions
     /// </param>
     /// <param name="recycleBin">Handed to <see cref="ExploreRemover"/>; the shell's own bin where null.</param>
     public ExploreActions(
-        Func<CancellationToken, Task<ExploreActionPolicy>> build,
+        Func<ProtectionScope, CancellationToken, Task<ExploreActionPolicy>> build,
         Func<IExploreConfirmationPrompt> prompt,
         CrashLog faults,
         RunningActions running,
@@ -107,7 +110,7 @@ public sealed class ExploreActions
     public static ExploreActions ForThisMachine(
         Func<IExploreConfirmationPrompt> prompt, CrashLog faults, RunningActions running) =>
         new(
-            async ct => (await MachineProtections.ForThisMachineAsync(ct).ConfigureAwait(false)).Policy,
+            async (scope, ct) => (await MachineProtections.ForThisMachineAsync(scope, ct).ConfigureAwait(false)).Policy,
             prompt,
             faults,
             running);
@@ -122,7 +125,7 @@ public sealed class ExploreActions
     {
         if (_policy is null or { IsFaulted: true } or { IsCanceled: true })
         {
-            Start();
+            Start(ProtectionScope.Everything);
         }
     }
 
@@ -135,8 +138,19 @@ public sealed class ExploreActions
     /// a scan is the natural moment to ask again — it is the point at which everything else on the
     /// page is being re-measured, and it takes long enough that the probes cost nothing beside
     /// it.</para>
+    ///
+    /// <para><b>Scoped to the scan</b>, whose tree is what the page will then show. What the scan
+    /// listed is read from its tree rather than listed again beside it, and what it cannot reach is
+    /// not looked in, so the policy is complete once the scan ends rather than before. Removal waits
+    /// for the scan anyway, so nothing that could be removed is answered later for it.</para>
     /// </summary>
-    public void Reconsider() => Start();
+    /// <param name="scope">What the scan will find, given once it ends (<see cref="ProtectionScope.Scanned"/>).</param>
+    public void Reconsider(ProtectionScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        Start(scope);
+    }
 
     /// <summary>
     /// Whether Explore will remove this, and what to say either way (§7.1): <see cref="Working"/>
@@ -186,7 +200,8 @@ public sealed class ExploreActions
             return null;
         }
 
-        var building = _policy is { IsFaulted: false, IsCanceled: false } current ? current : Start();
+        // Everything, where the last build failed: the selection may be from any tree the page showed.
+        var building = _policy is { IsFaulted: false, IsCanceled: false } current ? current : Start(ProtectionScope.Everything);
 
         // Waited for rather than awaited, so a build that fails reaches the user as a refusal of
         // what they picked rather than as an exception out of the command that deletes.
@@ -250,9 +265,9 @@ public sealed class ExploreActions
     /// happened to start it, and a build cancelled with the scan would answer every later question
     /// with <see cref="Failed"/>.</para>
     /// </summary>
-    private Task<ExploreActionPolicy> Start()
+    private Task<ExploreActionPolicy> Start(ProtectionScope scope)
     {
-        var building = BuildAsync();
+        var building = BuildAsync(scope);
 
         _policy = building;
         _ = AnnounceAsync(building);
@@ -265,8 +280,8 @@ public sealed class ExploreActions
     /// build. What it does before its first await, constructing every provider, would otherwise
     /// throw out of whichever caller started it, the page's own constructor among them.
     /// </summary>
-    private async Task<ExploreActionPolicy> BuildAsync() =>
-        await _build(CancellationToken.None).ConfigureAwait(false);
+    private async Task<ExploreActionPolicy> BuildAsync(ProtectionScope scope) =>
+        await _build(scope, CancellationToken.None).ConfigureAwait(false);
 
     /// <summary>
     /// Raise <see cref="Ready"/> once <paramref name="building"/> has finished, on the thread that

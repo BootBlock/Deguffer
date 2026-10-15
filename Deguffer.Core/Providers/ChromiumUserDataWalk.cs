@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -86,11 +87,7 @@ public static class ChromiumUserDataWalk
             return new ChromiumFolderWalk([], RootUnreadable: false);
         }
 
-        // The short form is what Windows puts in TEMP on a profile with a long folder name, and the
-        // listing reports long names, so both sides are compared unaliased.
-        var excluded = notEntered
-            .Select(path => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(path)))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var excluded = Excluded(notEntered);
         var found = new ConcurrentBag<ChromiumFolder>();
         var rootUnreadable = false;
 
@@ -104,7 +101,7 @@ public static class ChromiumUserDataWalk
                 {
                     rootUnreadable = contents.WasRefused;
                 }
-                else if (!Enters(directory.Path, directory.Depth, contents))
+                else if (!Enters(directory.Path, directory.Depth, Marked(directory.Path, contents), found))
                 {
                     return;
                 }
@@ -123,28 +120,6 @@ public static class ChromiumUserDataWalk
                         descend(child, (path, directory.Depth + 1));
                     }
                 }
-
-                bool Enters(string path, int depth, DirectoryContents listed)
-                {
-                    var webView2 = Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase);
-
-                    var marker = Marked(path, listed);
-
-                    if (marker is not PathPresence.Absent)
-                    {
-                        // Identified only on the file itself, since a refusal is no evidence of a
-                        // folder that holds it. Either way nothing below is entered.
-                        if ((depth == 1 || webView2) && marker is PathPresence.Present)
-                        {
-                            found.Add(new ChromiumFolder(path, webView2));
-                        }
-
-                        return false;
-                    }
-
-                    // An EBWebView without the marker has nothing inside that could be looked for.
-                    return !webView2 && depth < WebView2Depth;
-                }
             },
             static () => { },
             TimeProvider.System,
@@ -153,6 +128,134 @@ public static class ChromiumUserDataWalk
         return new ChromiumFolderWalk(
             rootUnreadable ? [] : [.. found.OrderBy(folder => folder.Path, StringComparer.OrdinalIgnoreCase)],
             rootUnreadable);
+    }
+
+    /// <summary>
+    /// <see cref="Under"/>, read from an Explore scan's tree rather than from the disk, where the
+    /// scan listed the whole root (<see cref="ProtectionScope"/>). The same folders are found by the
+    /// same rule, because the scan's tree holds every listing this walk would make: each directory's
+    /// files and folders, which of them are links, and which folders refused to be listed.
+    ///
+    /// <para>The tree is as the scan found the disk, which is the moment a walk started beside the
+    /// scan would have looked too. A folder created after the scan is found by the next one.</para>
+    /// </summary>
+    /// <param name="tree">The scan's tree.</param>
+    /// <param name="root">The node of <paramref name="tree"/> that is the application-data root, listed whole.</param>
+    /// <param name="notEntered">As <see cref="Under"/> takes it.</param>
+    public static ChromiumFolderWalk In(
+        ExploreTree tree,
+        int root,
+        IReadOnlyList<string> notEntered,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        var excluded = Excluded(notEntered);
+        var found = new ConcurrentBag<ChromiumFolder>();
+        var pending = new Stack<(int Node, string Path, int Depth)>();
+
+        pending.Push((root, LongPath.Display(tree.PathOf(root)), 0));
+
+        while (pending.TryPop(out var directory))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (directory.Depth > 0
+                && !Enters(directory.Path, directory.Depth, Marked(tree, directory.Node, directory.Path, directory.Depth), found))
+            {
+                continue;
+            }
+
+            foreach (var child in tree.ChildrenOf(directory.Node))
+            {
+                // A link is not entered, as the walk declines to descend through one.
+                if (!tree.IsDirectory(child) || tree.IsLink(child))
+                {
+                    continue;
+                }
+
+                var path = Path.Combine(directory.Path, tree.NameOf(child));
+
+                if (!excluded.Contains(path))
+                {
+                    pending.Push((child, path, directory.Depth + 1));
+                }
+            }
+        }
+
+        return new ChromiumFolderWalk(
+            [.. found.OrderBy(folder => folder.Path, StringComparer.OrdinalIgnoreCase)],
+            RootUnreadable: false);
+    }
+
+    /// <summary>
+    /// Whether a directory below the root is entered, adding it to <paramref name="found"/> where it
+    /// is a Chromium user-data folder. The one rule both walks follow.
+    /// </summary>
+    /// <param name="marker">Whether the directory holds <c>Local State</c>.</param>
+    private static bool Enters(string path, int depth, PathPresence marker, ConcurrentBag<ChromiumFolder> found)
+    {
+        var webView2 = Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase);
+
+        if (marker is not PathPresence.Absent)
+        {
+            // Identified only on the file itself, since a refusal is no evidence of a folder that
+            // holds it. Either way nothing below is entered.
+            if ((depth == 1 || webView2) && marker is PathPresence.Present)
+            {
+                found.Add(new ChromiumFolder(path, webView2));
+            }
+
+            return false;
+        }
+
+        // An EBWebView without the marker has nothing inside that could be looked for.
+        return !webView2 && depth < WebView2Depth;
+    }
+
+    /// <summary>
+    /// The folders never entered, compared without a trailing separator. The short form is what
+    /// Windows puts in TEMP on a profile with a long folder name, and a listing reports long names,
+    /// so both sides are compared unaliased.
+    /// </summary>
+    private static HashSet<string> Excluded(IReadOnlyList<string> notEntered) =>
+        notEntered
+            .Select(path => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(path)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <see cref="Marked(string, DirectoryContents)"/>, read from the scan's tree: any file the scan
+    /// listed, a link or not, and a probe by name where the folder refused its listing.
+    ///
+    /// <para><b>Where the folder could be identified, a marker the tree lacks is asked of the disk.</b>
+    /// The engine replaces <c>Local State</c> by writing a new file and renaming it over the old one.
+    /// A listing sees one name or the other throughout, but a file table is read record by record over
+    /// minutes, and can meet the new record under its temporary name and the old one once freed, so
+    /// the tree holds neither. Missing it there would leave the folder undeclared, and its sign-ins
+    /// open to removal. The probe costs one file per folder beside the root and per
+    /// <c>EBWebView</c>, against the listing of every directory it replaces.</para>
+    /// </summary>
+    private static PathPresence Marked(ExploreTree tree, int directory, string path, int depth)
+    {
+        var marker = Path.Combine(path, ChromiumLayout.Browser.IdentifyingFile);
+
+        if (tree.ListingWasRefused(directory))
+        {
+            return LongPath.ProbeFile(marker);
+        }
+
+        foreach (var child in tree.ChildrenOf(directory))
+        {
+            if (!tree.IsDirectory(child)
+                && tree.NameSpanOf(child).Equals(ChromiumLayout.Browser.IdentifyingFile, StringComparison.OrdinalIgnoreCase))
+            {
+                return PathPresence.Present;
+            }
+        }
+
+        return depth == 1 || Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase)
+            ? LongPath.ProbeFile(marker)
+            : PathPresence.Absent;
     }
 
     /// <summary>

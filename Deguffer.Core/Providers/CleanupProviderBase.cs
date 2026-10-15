@@ -421,8 +421,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MeasureAllAsync(Whole(paths), MinimumAge.Off, ct);
 
     /// <summary>
-    /// A command step's probe measured twice: the whole of what those paths hold, and the part of it
-    /// older than <paramref name="age"/>.
+    /// A command step's probe measured twice: the whole of what <paramref name="path"/> holds, and the
+    /// part of it older than <paramref name="age"/>.
     ///
     /// <para><b>For the command that takes an age as a parameter.</b>
     /// <c>FhManagew.exe -cleanup &lt;days&gt;</c> is the one, and the age here is the number handed
@@ -432,66 +432,75 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <see cref="PlanExecutor"/> subtracts an unguarded after-measure from it and the two sides
     /// must be measured on one basis.</para>
     ///
-    /// <para><b>It is two passes over one tree, and there is no third figure to carry forward.</b>
-    /// G4's rule against re-measuring assumes the second question has the same answer as the first.
-    /// These are different quantities, and <see cref="IDirectoryScanner"/> answers one filter at a
-    /// time — so the cost is real and stated here rather than hidden in a provider. §5.5's fast path
-    /// serves both readings from one volume index where the table can be read, which is what keeps
-    /// it affordable on the tens of gigabytes such a target holds.</para>
+    /// <para><b>Two quantities, and one reading of the path.</b> They differ, so neither can be
+    /// derived from the other, but they come from the same files: the scanner tallies both from one
+    /// walk, or one volume index where the table can be read
+    /// (<see cref="IDirectoryScanner.MeasureAgedAsync"/>). Such a target is usually a backup disk or
+    /// a network share, where a second walk would cost as much as the first.</para>
     ///
     /// <para>Here rather than in the provider so that every measurement a provider makes still goes
-    /// through this class, and so the exception to the paragraph above is stated where the rule is.
-    /// </para>
+    /// through this class.</para>
     /// </summary>
     protected async Task<(ScanBatch Whole, ScanBatch Aged)> MeasureAgedAsync(
-        IReadOnlyList<string> paths,
+        string path,
         MinimumAge age,
-        CancellationToken ct) =>
-    (
-        await MeasureAllAsync(Whole(paths), MinimumAge.Off, ct).ConfigureAwait(false),
-        await MeasureAllAsync(Whole(paths), age, ct).ConfigureAwait(false)
-    );
+        CancellationToken ct)
+    {
+        var measured = await Scanner.MeasureAgedAsync(path, age, ct).ConfigureAwait(false);
+
+        // One listing produced both readings, so the stores it met and whether it reached the path
+        // are recorded once.
+        Record(path, measured.Whole);
+
+        return (Batch([measured.Whole]), Batch([measured.Aged]));
+    }
 
     /// <summary>Each path as a question about its whole tree, root included.</summary>
-    private static IReadOnlyList<(string Path, ScanBounds Bounds)> Whole(IReadOnlyList<string> paths) =>
-        [.. paths.Select(path => (path, default(ScanBounds)))];
+    private static IReadOnlyList<ScanRequest> Whole(IReadOnlyList<string> paths) =>
+        [.. paths.Select(path => new ScanRequest(path))];
 
     private async Task<ScanBatch> MeasureAllAsync(
-        IReadOnlyList<(string Path, ScanBounds Bounds)> asked,
+        IReadOnlyList<ScanRequest> asked,
         MinimumAge keep,
         CancellationToken ct)
     {
-        var sizes = new List<ScanSize>(asked.Count);
-        var withheld = new List<bool>(asked.Count);
-        var stores = new List<IReadOnlyList<string>>(asked.Count);
-        var fallback = FallbackReason.None;
+        // One call for the whole list, so a walking scanner reads every path in one walk rather than
+        // one walk a path. See IDirectoryScanner.MeasureManyAsync.
+        var results = await Scanner.MeasureManyAsync(asked, keep, ct).ConfigureAwait(false);
 
-        foreach (var (path, bounds) in asked)
+        foreach (var (question, measured) in asked.Zip(results))
         {
-            ct.ThrowIfCancellationRequested();
-
-            var measured = await Scanner.MeasureAsync(path, keep, bounds, progress: null, ct).ConfigureAwait(false);
-            sizes.Add(measured.Size);
-            withheld.Add(measured.WithheldRecent);
-            stores.Add(measured.MailStores);
-
-            foreach (var store in measured.MailStores)
-            {
-                MeasuredMailStores.Value?.Add(store);
-            }
-
-            if (!measured.WasReached)
-            {
-                UnreachedMeasurements.Value?.Add((path, measured.Root));
-            }
-
-            // Paths in one plan can sit on different volumes and so take different routes; the
-            // first reason with something to say is the one the user is shown.
-            fallback = FallbackReasonText.Prevailing(fallback, measured.Fallback);
+            Record(question.Path, measured);
         }
 
-        return new ScanBatch(sizes, fallback, withheld, stores);
+        return Batch(results);
     }
+
+    /// <summary>
+    /// Note what measuring <paramref name="path"/> met that the plan answers for beyond its figure:
+    /// the mail stores it must protect, and whether the path was reached at all.
+    /// </summary>
+    private static void Record(string path, ScanResult measured)
+    {
+        foreach (var store in measured.MailStores)
+        {
+            MeasuredMailStores.Value?.Add(store);
+        }
+
+        if (!measured.WasReached)
+        {
+            UnreachedMeasurements.Value?.Add((path, measured.Root));
+        }
+    }
+
+    /// <summary>The measurements of a plan's paths, in their order, as one batch.</summary>
+    private static ScanBatch Batch(IReadOnlyList<ScanResult> results) => new(
+        [.. results.Select(r => r.Size)],
+        // Paths in one plan can sit on different volumes and so take different routes; the
+        // first reason with something to say is the one the user is shown.
+        results.Aggregate(FallbackReason.None, (fallback, r) => FallbackReasonText.Prevailing(fallback, r.Fallback)),
+        [.. results.Select(r => r.WithheldRecent)],
+        [.. results.Select(r => r.MailStores)]);
 
     /// <summary>
     /// Measure every target and turn it into the step that will delete it.
@@ -519,7 +528,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // emptied in place is measured on the terms its removal empties it on, so the figure is
         // already without whatever the removal leaves standing and nothing is measured to be taken off.
         var (each, measured) = await MeasureGroupsAsync(
-            [.. targets.Select(t => (IReadOnlyList<(string, ScanBounds)>)[(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
+            [.. targets.Select(t => (IReadOnlyList<ScanRequest>)[new ScanRequest(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
             keep,
             ct).ConfigureAwait(false);
 
@@ -607,7 +616,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// to another, so every step that is the sum of several paths comes through here.</para>
     /// </summary>
     private async Task<(IReadOnlyList<GroupMeasure> Each, ScanBatch Measured)> MeasureGroupsAsync(
-        IReadOnlyList<IReadOnlyList<(string Path, ScanBounds Bounds)>> groups,
+        IReadOnlyList<IReadOnlyList<ScanRequest>> groups,
         MinimumAge keep,
         CancellationToken ct)
     {

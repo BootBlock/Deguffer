@@ -102,7 +102,7 @@ public sealed class ExploreViewModelTests : IDisposable
     /// <summary>
     /// A removal policy that is already built when the page is made announces itself inside the
     /// selection's constructor, before the page has subscribed to anything. Nothing may be lost by
-    /// that: the first selection is still answered by the policy rather than by "in a moment", and
+    /// that: the first selection is still answered by the policy rather than by the answer that it is still being worked out, and
     /// the notes still come up to say so.
     /// </summary>
     [Fact]
@@ -424,6 +424,51 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Empty(page.Trail);
         Assert.Equal("Scan cancelled. Nothing was measured.", page.Status);
         Assert.False(page.IsBusy);
+    });
+
+    /// <summary>
+    /// A scan's removal policy is built from what the scan found, so the folders it listed are read
+    /// from its tree rather than listed again beside it, and the policy cannot finish before the scan.
+    /// </summary>
+    [Fact]
+    public void AScanBuildsItsPolicyFromTheTreeItFound() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Page();
+        var tree = Drive(ExploreFixture.Folder("Users"));
+
+        var running = page.ScanCommand.ExecuteAsync(null);
+        var reaching = _explore.Scopes[^1].ReachAsync(@"C:\Users");
+
+        Assert.False(reaching.IsCompleted);
+
+        _explore.Scanner.Current.Finish(ExploreScan.Fast(tree));
+        await running;
+
+        var reached = await reaching.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(FolderReach.Listed, reached.Reach);
+        Assert.Same(tree, reached.Listing);
+    });
+
+    /// <summary>
+    /// A scan that ends without a tree leaves the page with whatever it had, so the policy built for it
+    /// looks everywhere rather than only where the scan was going to look.
+    /// </summary>
+    [Fact]
+    public void ACancelledScanBuildsAPolicyThatLooksEverywhere() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\").With(@"D:\");
+        var page = _explore.Page();
+        page.SelectedDrive = page.Drives.Single(drive => drive.RootPath == @"D:\");
+
+        var running = page.ScanCommand.ExecuteAsync(null);
+        page.ScanCancelCommand.Execute(null);
+        await running;
+
+        // Bounded, so a scan that never hands its answer over fails here rather than hanging. The
+        // second scope is the scan's, after the one the page was opened with.
+        Assert.Equal(2, _explore.Scopes.Count);
+        Assert.Equal(FolderReach.Reached, (await _explore.Scopes[^1].ReachAsync(@"C:\Users").WaitAsync(TimeSpan.FromSeconds(10))).Reach);
     });
 
     /// <summary>A step into a folder starts with nothing picked, and a file leads nowhere.</summary>

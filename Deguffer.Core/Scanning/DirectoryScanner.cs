@@ -61,49 +61,107 @@ public sealed class DirectoryScanner : IDirectoryScanner
         // §5.5's "re-opening the tool is instant": show last run's figure straight away, then
         // correct it. Only ever reported through progress — the returned result is always freshly
         // measured, because callers subtract it to report reclaimed space.
-        //
-        // The remembered figure is for the whole path, so a run with the guard on neither reads it
-        // nor writes it. Reading it would flash a total this run is not going to reclaim, and
-        // writing it would leave the next run — where the user may have turned the guard off —
-        // opening on a number that is short by however much was held back. A figure with entries left
-        // out of it is short in the same way, so it is neither read nor written either.
-        var remember = !keep.IsOn && !bounds.LeavesEntriesOut;
-
-        if (remember && _estimates?.TryGet(path, bounds.KeepRoot) is { } remembered)
+        if (Remembers(keep, bounds) && _estimates?.TryGet(path, bounds.KeepRoot) is { } remembered)
         {
             progress?.Report(remembered);
         }
 
-        var result = await MeasureFreshAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
+        var asked = new ScanRequest(path, bounds);
+        var result = (await MeasureFreshAsync([asked], [keep], progress, ct).ConfigureAwait(false))[0][0];
 
-        if (remember)
-        {
-            Remember(path, bounds, result);
-        }
+        Remember(asked, keep, result);
 
         return result;
     }
 
     /// <summary>
-    /// Straight to the walk, whatever the index holds. The remembered estimate is still updated,
-    /// because this is the freshest figure Deguffer has for the path, unless entries were left out of
-    /// it, as <see cref="MeasureAsync"/> says.
+    /// Both readings from whichever route takes the question: one built table, summed in memory once
+    /// for each reading, or one walk. The whole is remembered as <see cref="MeasureAsync"/> remembers an
+    /// unguarded figure, because it is one.
     /// </summary>
-    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
+    public async ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var result = await _fallback
-            .Because(FallbackReason.FreshReadingRequired)
-            .MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct)
-            .ConfigureAwait(false);
+        var asked = new ScanRequest(path);
+        var keeps = AgedScan.Keeps(age);
+        var readings = (await MeasureFreshAsync([asked], keeps, progress: null, ct).ConfigureAwait(false))[0];
 
-        if (!bounds.LeavesEntriesOut)
+        Remember(asked, keeps[0], readings[0]);
+
+        return AgedScan.Of(readings);
+    }
+
+    /// <summary>
+    /// Every path from the table where it can answer, and every path it cannot in one walk for each
+    /// reason it could not. Each figure is remembered as <see cref="MeasureAsync"/> remembers it, and
+    /// none is shown first, because nothing shows a list's progress.
+    /// </summary>
+    public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep = default,
+        CancellationToken ct = default)
+    {
+        ThrowIfAnyPathIsBlank(asked);
+
+        var results = await MeasureFreshAsync(asked, [keep], progress: null, ct).ConfigureAwait(false);
+
+        for (var i = 0; i < asked.Count; i++)
         {
-            Remember(path, bounds, result);
+            Remember(asked[i], keep, results[i][0]);
         }
 
-        return result;
+        return [.. results.Select(readings => readings[0])];
+    }
+
+    /// <summary>
+    /// Whether a figure taken on these terms is the one the next run opens on. The remembered figure is
+    /// for the whole path, so a run with the guard on neither reads it nor writes it. Reading it would
+    /// flash a total this run is not going to reclaim, and writing it would leave the next run — where
+    /// the user may have turned the guard off — opening on a number that is short by however much was
+    /// held back. A figure with entries left out of it is short in the same way.
+    /// </summary>
+    private static bool Remembers(MinimumAge keep, ScanBounds bounds) => !keep.IsOn && !bounds.LeavesEntriesOut;
+
+    private void Remember(ScanRequest asked, MinimumAge keep, ScanResult result)
+    {
+        if (Remembers(keep, asked.Bounds))
+        {
+            Remember(asked.Path, asked.Bounds, result);
+        }
+    }
+
+    /// <summary>
+    /// Straight to the walk, whatever the index holds, every path in one go as
+    /// <see cref="MeasureManyAsync"/> walks the paths the table cannot answer. Each remembered estimate is
+    /// still updated, because this is the freshest figure Deguffer has for the path, unless entries
+    /// were left out of it, as <see cref="MeasureAsync"/> says.
+    /// </summary>
+    public async ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default)
+    {
+        ThrowIfAnyPathIsBlank(asked);
+
+        var results = await _fallback
+            .Because(FallbackReason.FreshReadingRequired)
+            .MeasureManyAsync(asked, MinimumAge.Off, ct)
+            .ConfigureAwait(false);
+
+        for (var i = 0; i < asked.Count; i++)
+        {
+            Remember(asked[i], MinimumAge.Off, results[i]);
+        }
+
+        return results;
+    }
+
+    private static void ThrowIfAnyPathIsBlank(IReadOnlyList<ScanRequest> asked)
+    {
+        ArgumentNullException.ThrowIfNull(asked);
+
+        foreach (var question in asked)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(question.Path, nameof(asked));
+        }
     }
 
     /// <summary>
@@ -176,97 +234,169 @@ public sealed class DirectoryScanner : IDirectoryScanner
         return [.. found.Select(components => prefix + string.Join(Path.DirectorySeparatorChar, components)).Order(StringComparer.Ordinal)];
     }
 
-    private async ValueTask<ScanResult> MeasureFreshAsync(
-        string path,
-        MinimumAge keep,
-        ScanBounds bounds,
+    /// <summary>
+    /// Each of <paramref name="asked"/> by the route that can answer it, in the order asked, read once
+    /// for each of <paramref name="keeps"/> in their order.
+    ///
+    /// <para>A path the index cannot answer for is not the same as an empty one. The tree changed under
+    /// the index, or the path runs through a link, or something below it does not establish its own
+    /// size — so it is walked rather than reported as zero, which would render as "this cache is
+    /// already clear" and quietly hide gigabytes. Every path walked for the same reason shares one walk.
+    /// </para>
+    /// </summary>
+    /// <param name="progress">
+    /// The running figure of a measurement of one path under one guard, which is the only one that
+    /// reports any.
+    /// </param>
+    private async ValueTask<ScanResult[][]> MeasureFreshAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge[] keeps,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        if (!VolumePath.TryParse(path, out var volumePath))
+        var results = new ScanResult[asked.Count][];
+        var walks = new Dictionary<FallbackReason, List<int>>();
+        var onVolumes = new Dictionary<char, List<(int Index, Asked Asked)>>();
+
+        void Walk(FallbackReason reason, int index)
         {
-            return await _fallback
-                .Because(FallbackReason.VolumeNotAddressable)
-                .MeasureAsync(path, keep, bounds, progress, ct)
+            if (!walks.TryGetValue(reason, out var indexes))
+            {
+                walks[reason] = indexes = [];
+            }
+
+            indexes.Add(index);
+        }
+
+        for (var i = 0; i < asked.Count; i++)
+        {
+            var (path, bounds) = asked[i];
+
+            if (!VolumePath.TryParse(path, out var volumePath))
+            {
+                Walk(FallbackReason.VolumeNotAddressable, i);
+            }
+            else if (_tuner.WalkOnly)
+            {
+                Walk(FallbackReason.WalkChosen, i);
+            }
+            else
+            {
+                if (!onVolumes.TryGetValue(volumePath.DriveLetter, out var questions))
+                {
+                    onVolumes[volumePath.DriveLetter] = questions = [];
+                }
+
+                questions.Add((i, new Asked(path, volumePath, keeps, bounds)));
+            }
+        }
+
+        foreach (var (driveLetter, questions) in onVolumes)
+        {
+            var building = _volumes.Get(driveLetter);
+
+            // Raced only while the table is still being read, and only where the user has not asked for
+            // the table to be waited for. A table already read answers in a lookup, and one that could not
+            // be read has a reason the walk has to carry, which a race would let a quick walk hide.
+            var answered = !building.IsCompleted && _tuner.Route is ScanRoute.Auto
+                ? await RaceAsync(asked, questions, keeps, building, progress, ct).ConfigureAwait(false)
+                : FromIndex((await building.WaitAsync(ct).ConfigureAwait(false)).Index, questions);
+
+            for (var j = 0; j < questions.Count; j++)
+            {
+                if (answered[j] is { } answer)
+                {
+                    progress?.Report(answer[0].Size);
+                    results[questions[j].Index] = answer;
+                }
+                else
+                {
+                    // Complete by now: the table either answered the other paths or was read without
+                    // answering this one.
+                    Walk(Declined(building.Result), questions[j].Index);
+                }
+            }
+        }
+
+        foreach (var (reason, indexes) in walks)
+        {
+            var walked = await _fallback
+                .Because(reason)
+                .MeasureEachAsync([.. indexes.Select(i => asked[i])], keeps, progress, ct)
                 .ConfigureAwait(false);
+
+            for (var j = 0; j < indexes.Count; j++)
+            {
+                results[indexes[j]] = walked[j];
+            }
         }
 
-        if (_tuner.WalkOnly)
-        {
-            return await _fallback.Because(FallbackReason.WalkChosen).MeasureAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
-        }
-
-        var asked = new Asked(path, volumePath, keep, bounds);
-
-        var building = _volumes.Get(volumePath.DriveLetter);
-
-        // Raced only while the table is still being read, and only where the user has not asked for
-        // the table to be waited for. A table already read answers in a lookup, and one that could not
-        // be read has a reason the walk has to carry, which a race would let a quick walk hide.
-        if (!building.IsCompleted && _tuner.Route is ScanRoute.Auto)
-        {
-            return await RaceAsync(asked, building, progress, ct).ConfigureAwait(false);
-        }
-
-        var built = await building.WaitAsync(ct).ConfigureAwait(false);
-
-        // A path the index cannot answer for is not the same as an empty one. The tree changed
-        // under the index, or the path runs through a link, or something below it does not
-        // establish its own size — so ask the slow path rather than reporting zero, which would
-        // render as "this cache is already clear" and quietly hide gigabytes.
-        if (FromIndex(built.Index, asked) is { } indexed)
-        {
-            progress?.Report(indexed.Size);
-            return indexed;
-        }
-
-        return await _fallback.Because(Declined(built)).MeasureAsync(path, keep, bounds, progress, ct).ConfigureAwait(false);
+        return results;
     }
 
-    /// <summary>One measurement's question, as each route is asked it.</summary>
-    private readonly record struct Asked(string Path, VolumePath Volume, MinimumAge Keep, ScanBounds Bounds);
+    /// <summary>
+    /// One measurement's question, as each route is asked it: one path, read once for each guard in
+    /// <see cref="Keeps"/>.
+    /// </summary>
+    private readonly record struct Asked(string Path, VolumePath Volume, MinimumAge[] Keeps, ScanBounds Bounds);
 
     /// <summary>
-    /// Walk <paramref name="path"/> while the table is read, and take whichever answers first. See
-    /// <see cref="ScanRoute.Auto"/>.
+    /// Walk the paths of one volume while its table is read, and take whichever answers first. See
+    /// <see cref="ScanRoute.Auto"/>. Null for each path left for the walk: one the table declined
+    /// where it answered others, which is walked again with the reason it declined.
+    ///
+    /// <para>The walk answers only where it reached every path. One it could not reach has said nothing
+    /// the table cannot say better, so the table is waited for, as <see cref="RouteRace"/> says. Every
+    /// reading of a path shares one walk's reach, so its first speaks for all of them.</para>
     /// </summary>
-    private async ValueTask<ScanResult> RaceAsync(
-        Asked asked,
+    private async ValueTask<IReadOnlyList<ScanResult[]?>> RaceAsync(
+        IReadOnlyList<ScanRequest> asked,
+        IReadOnlyList<(int Index, Asked Asked)> questions,
+        MinimumAge[] keeps,
         Task<MftVolumeIndexCache.Built> building,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        var raced = await RouteRace.FirstAsync(
-            async stop => FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, asked),
-            stop => _fallback
+        var raced = await RouteRace.FirstAsync<IReadOnlyList<ScanResult[]?>>(
+            async stop => Answered(FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, questions)),
+            async stop => await _fallback
                 .Because(FallbackReason.WalkAnsweredFirst)
-                .MeasureAsync(asked.Path, asked.Keep, asked.Bounds, progress, stop)
-                .AsTask(),
-            walked => walked.WasReached,
+                .MeasureEachAsync([.. questions.Select(question => asked[question.Index])], keeps, progress, stop)
+                .ConfigureAwait(false),
+            walked => walked.All(readings => readings![0].WasReached),
             ct).ConfigureAwait(false);
 
-        switch (raced.Outcome)
+        return raced.Outcome switch
         {
-            case RaceOutcome.TableAnswered:
-                // After the walk has stopped, so the last figure the caller is shown is this one.
-                progress?.Report(raced.Answer.Size);
-                return raced.Answer;
-
-            // The walk was stamped as the quicker route before anyone knew the table would decline.
-            // A file is a direct read, which carries no reason on either route.
-            case RaceOutcome.TableDeclined when raced.Answer.Strategy is ScanStrategy.ParallelEnumeration:
-                return raced.Answer with { Fallback = Declined(building.Result) };
-
-            default:
-                return raced.Answer;
-        }
+            // The walk was stamped as the quicker route before anyone knew the table would answer none
+            // of the paths. A file is a direct read, which carries no reason on either route.
+            RaceOutcome.TableDeclined => [.. raced.Answer.Select(readings => readings![0].Strategy is ScanStrategy.ParallelEnumeration
+                ? [.. readings.Select(walked => walked with { Fallback = Declined(building.Result) })]
+                : readings)],
+            _ => raced.Answer,
+        };
     }
 
     /// <summary>
-    /// What the index says about the path <paramref name="asked"/> names, or null where there is no
-    /// index, or it cannot answer for the path or place an entry the bounds leave out.
+    /// Null where the table answered none of the paths, so the race takes the walk's answers rather
+    /// than walking every path a second time.
     /// </summary>
-    private static ScanResult? FromIndex(MftVolumeIndex? index, Asked asked)
+    private static IReadOnlyList<ScanResult[]?>? Answered(IReadOnlyList<ScanResult[]?> fromTable) =>
+        fromTable.Any(answer => answer is not null) ? fromTable : null;
+
+    /// <summary>What the index says about each of <paramref name="questions"/>. See the overload below.</summary>
+    private static IReadOnlyList<ScanResult[]?> FromIndex(MftVolumeIndex? index, IReadOnlyList<(int Index, Asked Asked)> questions) =>
+        [.. questions.Select(question => FromIndex(index, question.Asked))];
+
+    /// <summary>
+    /// What the index says about the path <paramref name="asked"/> names, one reading for each of its
+    /// guards, or null where there is no index, or it cannot answer for the path or place an entry the
+    /// bounds leave out.
+    ///
+    /// <para>All or nothing: one reading the table declines sends every reading to the walk, which
+    /// answers them all in the one pass it would have made for the first.</para>
+    /// </summary>
+    private static ScanResult[]? FromIndex(MftVolumeIndex? index, Asked asked)
     {
         var volume = asked.Volume;
 
@@ -275,15 +405,22 @@ public sealed class DirectoryScanner : IDirectoryScanner
             return null;
         }
 
-        if (index.TryMeasure(volume.Components, asked.Keep, asked.Bounds.KeepRoot, leftOut, out var withheldRecent, out var stores) is not { } size)
+        var readings = new ScanResult[asked.Keeps.Length];
+
+        for (var i = 0; i < readings.Length; i++)
         {
-            return null;
+            if (index.TryMeasure(volume.Components, asked.Keeps[i], asked.Bounds.KeepRoot, leftOut, out var withheldRecent, out var stores) is not { } size)
+            {
+                return null;
+            }
+
+            readings[i] = ScanResult.Fast(size, withheldRecent) with
+            {
+                MailStores = [.. stores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
+            };
         }
 
-        return ScanResult.Fast(size, withheldRecent) with
-        {
-            MailStores = [.. stores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
-        };
+        return readings;
     }
 
     /// <summary>
