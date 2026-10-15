@@ -64,6 +64,7 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Windows Subsystem for Linux (WSL) and Docker Desktop",
         Publisher = "Microsoft and Docker",
         Purpose = "WSL keeps each Linux distribution's files in one virtual disk file, and Docker Desktop keeps "

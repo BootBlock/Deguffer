@@ -123,6 +123,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "Poetry, a dependency manager and packaging tool for Python",
         Publisher = "the Poetry project",
         Purpose = "Poetry keeps the archives it downloads, the wheels it builds from packages that "

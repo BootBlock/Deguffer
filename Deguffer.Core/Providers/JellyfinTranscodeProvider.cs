@@ -38,6 +38,7 @@ public sealed class JellyfinTranscodeProvider : MediaServerTranscodeProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "Jellyfin",
         Publisher = "the Jellyfin project",
         Purpose = "When a player cannot play a file as it is, Jellyfin converts it as it streams and "

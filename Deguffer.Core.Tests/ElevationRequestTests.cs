@@ -48,7 +48,20 @@ public sealed class ElevationRequestTests
     [Fact]
     public void APreviewComesBackAsOne()
     {
-        Assert.IsType<PreviewRequest>(ElevationRequest.From(ElevationRequest.Preview.ToArguments()));
+        Assert.Equal(ScanScope.Every, Assert.IsType<PreviewRequest>(ElevationRequest.From(ElevationRequest.Preview.ToArguments())).Scope);
+    }
+
+    /// <summary>
+    /// A scan of the chosen locations, elevated, has to come back as one. Read as a plain preview, the
+    /// elevated window would measure every location while the user asked for three.
+    /// </summary>
+    [Fact]
+    public void AChosenPreviewComesBackAsOne()
+    {
+        Assert.Equal(["--rescan-chosen"], ElevationRequest.PreviewChosen.ToArguments());
+        Assert.Equal(
+            ScanScope.Chosen,
+            Assert.IsType<PreviewRequest>(ElevationRequest.From(ElevationRequest.PreviewChosen.ToArguments())).Scope);
     }
 
     [Fact]

@@ -191,6 +191,25 @@ public class PreferenceStoreTests
 
         // Nothing. An upgraded machine must never start ending its session after a clean.
         Assert.Equal(CompletionAction.Nothing, loaded.WhenCleanComplete);
+
+        // None chosen, so a chosen scan has nothing to measure until the user picks something.
+        Assert.Empty(loaded.ChosenToScan.Ids);
+    }
+
+    /// <summary>
+    /// The locations chosen for a scan outlive the session, which is the point of storing them: the
+    /// user who always clears the temporary folders ticks them once.
+    /// </summary>
+    [Fact]
+    public void StoresTheLocationsChosenToScan()
+    {
+        using var temp = new TempDirectory();
+        var store = new PreferenceStore(new FakeUserEnvironment(temp.Path));
+        var chosen = new ProviderChoice { Ids = ["temp-directory", "steam-cache"] };
+
+        Assert.True(store.Save(AppPreferences.Default with { ChosenToScan = chosen }));
+
+        Assert.Equal(chosen, store.Load().ChosenToScan);
     }
 
     /// <summary>

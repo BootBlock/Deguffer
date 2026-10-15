@@ -77,6 +77,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "the Dart analysis server, behind Dart and Flutter support in every editor",
         Publisher = "Google",
         Purpose = "The analysis server stores a summary of every file it has analysed, so that "

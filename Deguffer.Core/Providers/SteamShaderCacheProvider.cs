@@ -98,6 +98,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Steam client",
         Publisher = "Valve",
         Purpose = "Compiling a game's shaders on your own machine makes it stutter the first time it "

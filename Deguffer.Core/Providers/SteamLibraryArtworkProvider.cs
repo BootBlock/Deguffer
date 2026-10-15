@@ -104,6 +104,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Steam client",
         Publisher = "Valve",
         Purpose = "Steam downloads the capsule, banner and logo it shows for every game in your "

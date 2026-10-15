@@ -158,6 +158,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Epic Games launcher",
         Publisher = "Epic Games",
         Purpose = "The launcher draws its store in a browser built into itself, and that browser "

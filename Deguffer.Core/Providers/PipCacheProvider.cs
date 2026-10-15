@@ -58,6 +58,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "pip, the package installer for Python",
         Publisher = "the Python Packaging Authority",
         Purpose = "pip keeps the archives PyPI served, and separately the wheels it built itself "

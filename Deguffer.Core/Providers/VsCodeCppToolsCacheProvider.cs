@@ -92,6 +92,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "the C/C++ extension for Visual Studio Code",
         Publisher = "Microsoft",
         Purpose = "The extension keeps a browse database and precompiled headers for every "

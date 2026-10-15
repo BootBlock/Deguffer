@@ -60,6 +60,7 @@ public sealed class NodeModulesProvider : BuildDirectoryProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.ProjectBuildOutput,
         Application = "npm, pnpm or yarn — whichever package manager installed the project",
         Publisher = "each package manager's own publisher; Node.js itself is stewarded by the "
             + "OpenJS Foundation",

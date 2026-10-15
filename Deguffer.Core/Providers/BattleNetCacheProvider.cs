@@ -66,6 +66,7 @@ public sealed class BattleNetCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Battle.net desktop launcher",
         Publisher = "Blizzard Entertainment",
         Purpose = "The launcher keeps a cache of data it has downloaded, in its own folder in your "

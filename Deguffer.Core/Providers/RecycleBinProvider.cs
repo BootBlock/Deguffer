@@ -140,6 +140,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows",
         Publisher = "Microsoft",
         Purpose = "Every volume keeps its own Recycle Bin, so deleting a file on D: fills D:'s "

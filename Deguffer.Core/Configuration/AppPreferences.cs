@@ -395,4 +395,11 @@ public sealed record AppPreferences(
     /// it existed reads with §7.4's defaults. See <see cref="DuplicatePreferences"/>.
     /// </summary>
     public DuplicatePreferences Duplicates { get; init; } = DuplicatePreferences.Default;
+
+    /// <summary>
+    /// The locations the Storage page's chosen scan measures. A property for the reason
+    /// <see cref="Scanning"/> is one, and a settings file written before it existed reads with none
+    /// chosen. See <see cref="ProviderChoice"/>.
+    /// </summary>
+    public ProviderChoice ChosenToScan { get; init; } = ProviderChoice.None;
 }

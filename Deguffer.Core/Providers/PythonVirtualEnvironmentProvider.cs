@@ -71,6 +71,7 @@ public sealed class PythonVirtualEnvironmentProvider : BuildDirectoryProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.ProjectBuildOutput,
         Application = "Python's venv, and the tools built on top of it",
         Publisher = "the Python Software Foundation",
         Purpose = "A virtual environment is a private copy of an interpreter and the packages one "

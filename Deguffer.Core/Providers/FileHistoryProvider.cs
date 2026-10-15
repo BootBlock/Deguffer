@@ -108,6 +108,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "File History, the versioned backup built into Windows",
         Publisher = "Microsoft",
         Purpose = "File History saves a copy of every file in your protected folders each time it "

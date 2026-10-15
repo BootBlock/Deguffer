@@ -95,6 +95,7 @@ public sealed class CombinedFallbackTests : IDisposable
 
         public override ProviderDescription Description { get; } = new()
         {
+            Category = ProviderCategory.TemporaryFiles,
             Application = "a test",
             Publisher = "the suite",
             Purpose = "Plans the targets it is handed.",
