@@ -32,7 +32,11 @@ public class CleanViewModelScanTests
         Assert.True(page.ViewModel.CanClean);
     }
 
-    /// <summary>§7 sorts by size, and each row is placed as it lands rather than the list being sorted at the end.</summary>
+    /// <summary>
+    /// §7 sorts by size, and each row is placed as it lands rather than the list being sorted at the
+    /// end. Providers finish in whatever order their work takes, so what holds whatever the order is
+    /// that the list is in size order after every row joins it, and that no row is moved.
+    /// </summary>
     [Fact]
     public void RowsArePlacedLargestFirstAsTheyArrive()
     {
@@ -41,20 +45,40 @@ public class CleanViewModelScanTests
         small.Steps = [Rows.Folder("s", 10)];
         large.Steps = [Rows.Folder("l", 900)];
         medium.Steps = [Rows.Folder("m", 450)];
-        var placed = new List<int>();
+        var changes = new List<NotifyCollectionChangedAction>();
+        var inOrderAfterEach = new List<bool>();
         page.ViewModel.Findings.CollectionChanged += (_, e) =>
         {
-            if (e.Action == NotifyCollectionChangedAction.Add)
-            {
-                placed.Add(e.NewStartingIndex);
-            }
+            changes.Add(e.Action);
+            var sizes = page.ViewModel.Findings.Select(row => row.Finding.EstimatedBytes).ToList();
+            inOrderAfterEach.Add(sizes.SequenceEqual(sizes.OrderDescending()));
         };
 
         page.Scan();
 
         Assert.Equal(["large", "medium", "small"], page.ViewModel.Findings.Select(row => row.Finding.Provider.Id));
-        Assert.Equal([0, 0, 1], placed);
+        Assert.Equal(
+            [NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Add],
+            changes.SkipWhile(action => action == NotifyCollectionChangedAction.Reset));
+        Assert.All(inOrderAfterEach.Skip(changes.Count - 3), Assert.True);
         Assert.Equal([100.0, 50.0], page.ViewModel.Findings.Take(2).Select(row => row.SharePercent));
+    }
+
+    /// <summary>
+    /// Rows of equal size stand in the providers' order, not in the order they finished, so the list is
+    /// the same after every scan. Here the last provider finishes first and the first last.
+    /// </summary>
+    [Fact]
+    public void RowsOfEqualSizeStandInTheProvidersOrderWhicheverFinishesFirst()
+    {
+        FakeCleanupProvider first = new("first"), second = new("second"), third = new("third");
+        using var page = new StoragePage([first, second, third]);
+        first.WhilePlanning = () => Thread.Sleep(120);
+        second.WhilePlanning = () => Thread.Sleep(60);
+
+        page.Scan();
+
+        Assert.Equal(["first", "second", "third"], page.ViewModel.Findings.Select(row => row.Finding.Provider.Id));
     }
 
     /// <summary>
