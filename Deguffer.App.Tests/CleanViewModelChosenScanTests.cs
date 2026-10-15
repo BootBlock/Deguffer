@@ -273,19 +273,34 @@ public class CleanViewModelChosenScanTests
         Assert.Equal("temp", Assert.Single(page.ViewModel.Findings).Finding.Provider.Id);
     }
 
-    /// <summary>Cancel stops a chosen scan as it stops a full one.</summary>
+    /// <summary>
+    /// Cancel stops a chosen scan as it stops a full one: the locations already being checked finish,
+    /// and none of the rest is started. Every other location waits until Cancel has been pressed, so
+    /// only the few a scan checks at once can have started, far fewer than are chosen.
+    /// </summary>
     [Fact]
     public void CancelStopsAChosenScan()
     {
+        using var cancelled = new ManualResetEventSlim();
         var temp = Provider("temp", ProviderCategory.TemporaryFiles, 10);
-        var steam = Provider("steam", ProviderCategory.Games, 20);
-        using var page = new StoragePage([temp, steam]);
-        page.ViewModel.ScanChoice.Choose([temp, steam], chosen: true);
-        temp.WhilePlanning = () => page.ViewModel.CancelCommand.Execute(null);
+        var games = Enumerable.Range(0, 40).Select(index => Provider($"game{index}", ProviderCategory.Games, 20)).ToList();
+        using var page = new StoragePage([temp, .. games]);
+        page.ViewModel.ScanChoice.Choose([temp, .. games], chosen: true);
+
+        temp.WhilePlanning = () =>
+        {
+            page.ViewModel.CancelCommand.Execute(null);
+            cancelled.Set();
+        };
+
+        foreach (var game in games)
+        {
+            game.WhilePlanning = () => cancelled.Wait(TimeSpan.FromSeconds(10));
+        }
 
         page.ScanChosen();
 
         Assert.Equal("Scan cancelled. Nothing was changed.", page.ViewModel.Status);
-        Assert.Equal(0, steam.PlanCount);
+        Assert.InRange(games.Sum(game => game.PlanCount), 0, games.Count / 2);
     }
 }
