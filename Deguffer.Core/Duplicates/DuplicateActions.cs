@@ -61,13 +61,17 @@ public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, Du
 /// </summary>
 public sealed class DuplicateActions
 {
-    private readonly Func<CancellationToken, Task<MachineProtections>> _protections;
+    private readonly Func<ProtectionScope, CancellationToken, Task<MachineProtections>> _protections;
     private readonly Func<LocalVolume, RecycleBinRoom?> _room;
     private readonly Func<IDuplicateConfirmationPrompt> _prompt;
     private readonly DuplicateRemover _remover;
     private readonly RunningActions _running;
 
-    /// <param name="protections">What this machine protects, built afresh at each call, as <see cref="MachineProtections.ForThisMachineAsync"/> does.</param>
+    /// <param name="protections">
+    /// What this machine protects within a scope, built afresh at each call, as
+    /// <see cref="MachineProtections.ForThisMachineAsync"/> does. Asked about the folders the search read
+    /// (<see cref="DuplicateMarks.Searched"/>), which every copy is in.
+    /// </param>
     /// <param name="room">The room in a volume's Recycle Bin, or null where Windows would not say.</param>
     /// <param name="prompt">
     /// The surface that asks. A factory, because the page's dialog needs the window it is shown over,
@@ -75,7 +79,7 @@ public sealed class DuplicateActions
     /// </param>
     /// <param name="running">What is changing the machine on every page.</param>
     public DuplicateActions(
-        Func<CancellationToken, Task<MachineProtections>> protections,
+        Func<ProtectionScope, CancellationToken, Task<MachineProtections>> protections,
         Func<LocalVolume, RecycleBinRoom?> room,
         Func<IDuplicateConfirmationPrompt> prompt,
         DuplicateRemover remover,
@@ -128,7 +132,7 @@ public sealed class DuplicateActions
         // Off the page's thread: the judgement reads the registry, every provider and each drive's disks.
         var confirmation = await Task.Run(
             async () => await RemovalConfirmation.ForAsync(
-                marks, await _protections(ct).ConfigureAwait(false), mode, _room, _remover.WhyTheBinCannotTake, ct).ConfigureAwait(false),
+                marks, await _protections(marks.Searched, ct).ConfigureAwait(false), mode, _room, _remover.WhyTheBinCannotTake, ct).ConfigureAwait(false),
             ct).ConfigureAwait(true);
 
         if (whyNotNow() is { } before)
@@ -152,7 +156,7 @@ public sealed class DuplicateActions
         // remover stops at the next copy when the token asks.
         var report = await Task.Run(
             async () => await _remover.RemoveAsync(
-                marks, confirmation, await _protections(CancellationToken.None).ConfigureAwait(false), ct).ConfigureAwait(false),
+                marks, confirmation, await _protections(marks.Searched, CancellationToken.None).ConfigureAwait(false), ct).ConfigureAwait(false),
             CancellationToken.None).ConfigureAwait(true);
 
         return new DuplicateRemovalAnswer(confirmation, report);

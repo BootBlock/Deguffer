@@ -182,6 +182,30 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                    level.Children),
         ];
 
+    /// <summary>
+    /// Each application-data root the discovery did not look in, refused whole: what is inside it was
+    /// never searched for a Chromium folder, so nothing says which of it is someone's sign-in.
+    ///
+    /// <para>Probed rather than declared, so no other row's root inside it can lift the refusal.
+    /// The scope that left the root out said nothing it covers is there, so this refuses nothing a
+    /// caller meant to ask about. It is what holds if one asks anyway: an Explore page still showing
+    /// another drive's tree, or a copy found where its search was not told it would look.</para>
+    ///
+    /// <para>Waits here, without holding a thread, for a scan's tree where the discovery reads one,
+    /// so <see cref="ToolRoots"/>, read once every probe is in, finds the answer ready.</para>
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+    [
+        .. from root in await _discovery.NotSearchedAsync(ct).ConfigureAwait(false)
+           select ToolRoot.Of(root, NotSearchedReason, new DisposableChildSet([])),
+    ];
+
+    /// <summary>Why a root the discovery did not look in is refused.</summary>
+    private const string NotSearchedReason =
+        "Deguffer did not look in here for the folders applications keep their sign-ins and saved "
+        + "passwords in, because nothing it was asked about was in here. Scan or search a folder that "
+        + "holds this one to act on what is inside.";
+
     public override void InvalidateCaches()
     {
         _applications = null;

@@ -5,6 +5,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -48,6 +49,16 @@ internal sealed class ExploreFixture : IDisposable
     /// <summary>How the removal policy is built. A finished policy that refuses nothing, unless a test says otherwise.</summary>
     public Func<CancellationToken, Task<ExploreActionPolicy>> Build { get; set; }
 
+    /// <summary>The scope of every policy build the page started, in order.</summary>
+    public List<ProtectionScope> Scopes { get; } = [];
+
+    /// <summary><see cref="Build"/>, as the actions call it, recording each scope in <see cref="Scopes"/>.</summary>
+    public Func<ProtectionScope, CancellationToken, Task<ExploreActionPolicy>> Building => (scope, ct) =>
+    {
+        Scopes.Add(scope);
+        return Build(ct);
+    };
+
     /// <summary>Every relaunch the page asked for, in order.</summary>
     public List<ExploreRequest> Relaunches { get; } = [];
 
@@ -63,7 +74,7 @@ internal sealed class ExploreFixture : IDisposable
             Volumes,
             Hidden,
             Time,
-            new ExploreActions(Build, () => Prompt, Faults, Running, Bin),
+            new ExploreActions(Building, () => Prompt, Faults, Running, Bin),
             Guide,
             isElevated,
             request =>

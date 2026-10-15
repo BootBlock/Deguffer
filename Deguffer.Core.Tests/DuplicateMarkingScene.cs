@@ -103,7 +103,9 @@ public abstract class DuplicateMarkingScene : IDisposable
                 _unsearchedReferences,
                 [],
                 [],
-                [],
+
+                // The profile, which every copy the scenes find is in, as the folder the search read.
+                [new ReadLocation(_tree.Environment.UserProfile, RouteNote: null)],
                 [],
                 _programs,
                 [],

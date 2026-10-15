@@ -63,11 +63,27 @@ public sealed record ChromiumUserData(
 /// the user-data folder it owns and nothing else has reason to create. A folder that merely contains a directory called
 /// <c>GPUCache</c> does not qualify, and an application that has somehow never written the file is
 /// invisible here — reclaiming nothing being the safe direction to be wrong in.</para>
+///
+/// <para><b>Only where the answer can matter.</b> An application-data root that nothing in
+/// <paramref name="scope"/> reaches is not looked in, and is named by <see cref="NotSearchedAsync"/>
+/// instead. One a scan listed whole is read from the scan's tree rather than listed again. Storage
+/// passes no scope, so every root is walked.</para>
 /// </summary>
 /// <param name="tuning">What each walk runs with. <see cref="ScanTuner.Shipped"/> where none is given.</param>
-public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environment, ScanTuner? tuning = null)
+/// <param name="scope">What the answer will be asked about. <see cref="ProtectionScope.Everything"/> where none is given.</param>
+public sealed partial class ChromiumUserDataDiscovery(
+    IUserEnvironment environment, ScanTuner? tuning = null, ProtectionScope? scope = null)
 {
     private readonly ScanTuner _tuning = tuning ?? ScanTuner.Shipped;
+    private readonly ProtectionScope _scope = scope ?? ProtectionScope.Everything;
+    private readonly Lock _gate = new();
+    private Task<IReadOnlyList<(string Root, ScopedFolder Scoped)>>? _reaches;
+
+    /// <summary>
+    /// Whether a scan's tree is too old to read. <see cref="Invalidate"/> asks for the folders as they
+    /// are now, which the tree does not say, so every root reached after it is walked.
+    /// </summary>
+    private bool _listingStale;
 
     /// <summary>
     /// A Chromium host's additional profiles. A known word <em>and</em> a number, on Playwright's
@@ -115,13 +131,59 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
     /// Drop the memoised answer, so an application installed, or a browser profile added, while the
     /// app was open is seen.
     /// </summary>
-    public void Invalidate() => _found = null;
+    public void Invalidate()
+    {
+        _found = null;
+        _listingStale = true;
+    }
+
+    /// <summary>
+    /// The application-data roots <see cref="Discover"/> does not look in, because nothing its scope
+    /// covers is in one, holds one or is one. Waits for a scan's tree where the scope is a scan's, so
+    /// a caller can wait here without holding a thread.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> NotSearchedAsync(CancellationToken ct = default) =>
+        [.. from reached in await ReachesAsync(ct).ConfigureAwait(false)
+            where reached.Scoped.Reach == FolderReach.Outside
+            select reached.Root];
+
+    /// <summary>How the scope reaches each application-data root, asked once for the life of this discovery.</summary>
+    private Task<IReadOnlyList<(string Root, ScopedFolder Scoped)>> ReachesAsync(CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            if (_reaches is null or { IsFaulted: true } or { IsCanceled: true })
+            {
+                _reaches = Reach(ct);
+            }
+
+            return _reaches;
+        }
+
+        async Task<IReadOnlyList<(string Root, ScopedFolder Scoped)>> Reach(CancellationToken token)
+        {
+            List<(string Root, ScopedFolder Scoped)> reaches = [];
+
+            foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
+            {
+                reaches.Add((root, await _scope.ReachAsync(root, token).ConfigureAwait(false)));
+            }
+
+            return reaches;
+        }
+    }
 
     private IReadOnlyList<ChromiumUserData>? _found;
 
+    /// <summary>
+    /// Blocks until the scope can say how it reaches each root, which for a scan's scope is when the
+    /// scan ends. A caller building protections waits in <see cref="NotSearchedAsync"/> first, so by
+    /// the time it gets here the answer is in.
+    /// </summary>
     private List<ChromiumUserData> Walk(CancellationToken ct)
     {
         var found = new List<ChromiumUserData>();
+        var reaches = ReachesAsync(ct).GetAwaiter().GetResult();
 
         UnreadableRoots = [];
         Obstructed = [];
@@ -133,9 +195,19 @@ public sealed partial class ChromiumUserDataDiscovery(IUserEnvironment environme
             .. ChromiumHost.Declared.Select(host => host.PathIn(environment)?.UserData).OfType<string>(),
         ];
 
-        foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
+        foreach (var (root, reach) in reaches)
         {
-            var walk = ChromiumUserDataWalk.Under(root, notEntered, _tuning, ct);
+            var walk = reach switch
+            {
+                { Reach: FolderReach.Outside } => null,
+                { Reach: FolderReach.Listed, Listing: { } tree } when !_listingStale => ChromiumUserDataWalk.In(tree, reach.Node, notEntered, ct),
+                _ => ChromiumUserDataWalk.Under(root, notEntered, _tuning, ct),
+            };
+
+            if (walk is null)
+            {
+                continue;
+            }
 
             if (walk.RootUnreadable)
             {

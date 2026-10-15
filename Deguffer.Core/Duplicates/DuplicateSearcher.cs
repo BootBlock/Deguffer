@@ -69,6 +69,9 @@ public sealed class DuplicateSearcher
         _remembered = remembered;
     }
 
+    /// <summary>Where each of <paramref name="search"/>'s locations really is (<see cref="CandidateFinder.Locate"/>).</summary>
+    public SearchLocations Locate(DuplicateSearch search) => _finder.Locate(search);
+
     /// <param name="policy">Explore's policy for this machine, whose refusals the search passes over.</param>
     /// <param name="found">Given each group as it is confirmed, one at a time, from any thread.</param>
     /// <param name="candidatesFound">
@@ -76,6 +79,7 @@ public sealed class DuplicateSearcher
     /// first group is confirmed, so a page can read what decides each group's place in its list (the
     /// space it could free, which needs the program folders finding read) before the first one arrives.
     /// </param>
+    /// <param name="located">What <see cref="Locate"/> answered for <paramref name="search"/>, or null to locate it here.</param>
     /// <exception cref="ArgumentException">The search compares content by a checksum this machine does not offer.</exception>
     /// <exception cref="OperationCanceledException">The search was stopped before its candidates were all found.</exception>
     public async Task<DuplicateSearchResult> SearchAsync(
@@ -84,7 +88,8 @@ public sealed class DuplicateSearcher
         IProgress<DuplicateGroup>? found = null,
         IProgress<DuplicateSearchProgress>? progress = null,
         Func<CandidateFinding, CancellationToken, Task>? candidatesFound = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        SearchLocations? located = null)
     {
         ArgumentNullException.ThrowIfNull(search);
 
@@ -95,7 +100,7 @@ public sealed class DuplicateSearcher
             throw new ArgumentException("Windows on this computer does not provide that checksum.", nameof(search));
         }
 
-        var finding = await _finder.FindAsync(search, policy, progress is null ? null : new FindingProgress(progress), ct)
+        var finding = await _finder.FindAsync(search, policy, progress is null ? null : new FindingProgress(progress), ct, located)
             .ConfigureAwait(false);
 
         if (candidatesFound is not null)

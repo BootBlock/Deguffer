@@ -83,10 +83,15 @@ public sealed class DuplicateMarks
     private volatile bool _removedFrom;
 
     private DuplicateMarks(
-        CandidateFinding finding, ExploreActionPolicy policy, IReadOnlyList<StorageClean> cleans, KeepingReader reader)
+        CandidateFinding finding,
+        ExploreActionPolicy policy,
+        IReadOnlyList<StorageClean> cleans,
+        KeepingReader reader,
+        ProtectionScope searched)
     {
         _finding = finding;
         _reader = reader;
+        Searched = searched;
         UnsearchedReferences = finding.UnsearchedReferences;
 
         // Every copy a group can hold is among the candidates, so each of their drives is asked here,
@@ -169,8 +174,19 @@ public sealed class DuplicateMarks
         ArgumentNullException.ThrowIfNull(cloud);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        return new DuplicateMarks(finding, policy, cleans, new KeepingReader(environment, cloud, volumes, searchedMedia, mediaNow, files));
+        return new DuplicateMarks(
+            finding,
+            policy,
+            cleans,
+            new KeepingReader(environment, cloud, volumes, searchedMedia, mediaNow, files),
+            ProtectionScope.Within(finding.Read.Select(read => read.Folder), volumes));
     }
+
+    /// <summary>
+    /// The folders the search read, which every copy is in, as the scope of the protections a
+    /// confirmation and a removal judge these marks against.
+    /// </summary>
+    public ProtectionScope Searched { get; }
 
     /// <summary>
     /// Add a group the search confirmed, placed after every group that could free more or the same,
