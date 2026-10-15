@@ -909,7 +909,8 @@ public sealed class PlanExecutor(
     /// <summary>
     /// What <paramref name="paths"/> hold now, read from the disk rather than the volume snapshot:
     /// nothing invalidates that snapshot between planning and executing, so an ordinary measurement
-    /// here would hand back the figure it is about to be subtracted from.
+    /// here would hand back the figure it is about to be subtracted from. All of them in one reading,
+    /// so a step naming several paths on one kind of drive pays for one walk rather than one a path.
     /// </summary>
     /// <param name="bounds">What each reading leaves standing. See <see cref="ScanBounds"/>.</param>
     internal static async Task<DiskReading> MeasureFromDiskAsync(
@@ -918,17 +919,20 @@ public sealed class PlanExecutor(
         ScanBounds bounds,
         CancellationToken ct)
     {
+        var measured = await scanner
+            .MeasureFromDiskAsync([.. paths.Select(path => new ScanRequest(path, bounds))], ct)
+            .ConfigureAwait(false);
+
         var total = ScanSize.Zero;
         string? unreached = null;
 
-        foreach (var path in paths)
+        for (var i = 0; i < paths.Count; i++)
         {
-            var measured = await scanner.MeasureFromDiskAsync(path, bounds, ct).ConfigureAwait(false);
-            total += measured.Size;
+            total += measured[i].Size;
 
-            if (!measured.WasReached)
+            if (!measured[i].WasReached)
             {
-                unreached ??= LongPath.Display(path);
+                unreached ??= LongPath.Display(paths[i]);
             }
         }
 

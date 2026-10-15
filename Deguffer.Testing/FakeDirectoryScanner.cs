@@ -73,11 +73,22 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         return ParallelEnumerationScanner.Default.MeasureAgedAsync(path, age, ct);
     }
 
+    /// <summary>How many lists were read from the disk, each in one call.</summary>
+    public int MeasureFromDiskCalls => Volatile.Read(ref _measureFromDiskCalls);
+
+    private int _measureFromDiskCalls;
+
     /// <summary>This fake keeps no snapshot, so the two routes are the same walk.</summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default)
     {
-        _measured.Enqueue(path);
-        return ParallelEnumerationScanner.Default.MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct);
+        Interlocked.Increment(ref _measureFromDiskCalls);
+
+        foreach (var question in asked)
+        {
+            _measured.Enqueue(question.Path);
+        }
+
+        return ParallelEnumerationScanner.Default.MeasureFromDiskAsync(asked, ct);
     }
 
     /// <summary>

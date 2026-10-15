@@ -158,8 +158,8 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         CancellationToken ct = default) => new((IReadOnlyList<string>?)null);
 
     /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default) =>
-        MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct);
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
+        MeasureManyAsync(asked, MinimumAge.Off, ct);
 
     /// <summary>Nothing is retained between calls, so there is nothing to drop.</summary>
     public void Invalidate()
