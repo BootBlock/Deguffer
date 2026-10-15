@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
@@ -132,7 +133,7 @@ public sealed class AgedScanTests : IDisposable
         await AssertBothReadingsMatchAsync(scanner, path);
     }
 
-    /// <summary>The link-aware walk, which reads each file at most once for both tallies.</summary>
+    /// <summary>The link-aware walk, whose figures are sole-linked bytes rather than lengths.</summary>
     [Fact]
     public async Task TheLinkAwareWalkTalliesBothReadingsAsTwoMeasurementsWould()
     {
@@ -147,7 +148,25 @@ public sealed class AgedScanTests : IDisposable
         await AssertBothReadingsMatchAsync(HardLinkAwareScanner.Default, tree);
     }
 
-    /// <summary>A single file is read once too, and the guard decides each reading of it.</summary>
+    /// <summary>
+    /// Reading a file's link count is the link-aware walk's whole per-file cost, so a file both tallies
+    /// count is read once, not once for each. The mail store is never read, as before.
+    /// </summary>
+    [Fact]
+    public async Task TheLinkAwareWalkReadsEachFileOnceForBothTallies()
+    {
+        var tree = CreateTree();
+        var reads = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var scanner = new HardLinkAwareScanner(ScanTuner.Shipped, Counting(reads));
+
+        await scanner.MeasureAgedAsync(tree, Retention);
+
+        Assert.Equal(5, reads.Count);
+        Assert.All(reads, read => Assert.Equal(1, read.Value));
+        Assert.DoesNotContain(reads.Keys, path => path.EndsWith(".pst", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A single file is measured for both readings, and the guard decides each of them.</summary>
     [Theory]
     [InlineData(800)]
     [InlineData(0)]
@@ -158,4 +177,27 @@ public sealed class AgedScanTests : IDisposable
         await AssertBothReadingsMatchAsync(ParallelEnumerationScanner.Default, file);
         await AssertBothReadingsMatchAsync(HardLinkAwareScanner.Default, file);
     }
+
+    /// <summary>A single file the link-aware scanner measures is read once for both readings.</summary>
+    [Fact]
+    public async Task TheLinkAwareScannerReadsASingleFileOnceForBothReadings()
+    {
+        var file = TempDirectory.Age(_temp.CreateFile(4096, "dumps", "MEMORY.DMP"), TimeSpan.FromDays(800));
+        var reads = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        var scanned = await new HardLinkAwareScanner(ScanTuner.Shipped, Counting(reads)).MeasureAgedAsync(file, Retention);
+
+        Assert.Equal(4096, scanned.Aged.Size.Logical);
+        Assert.Equal(1, Assert.Single(reads).Value);
+    }
+
+    /// <summary>The real reads, each one counted against the path it read.</summary>
+    private static FileInformation Counting(ConcurrentDictionary<string, int> reads) => new(
+        FileInformation.Open,
+        FileInformation.ReadIdentity,
+        readByName: (string path, out FileInformation.FileStandardInfo info) =>
+        {
+            reads.AddOrUpdate(path, 1, (_, count) => count + 1);
+            return StatByName.Read(path, out info);
+        });
 }

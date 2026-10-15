@@ -62,8 +62,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// Both readings from one answer of whichever route takes the question: one lookup in the table,
-    /// or one walk. The whole is remembered as <see cref="MeasureAsync"/> remembers an unguarded figure,
+    /// Both readings from whichever route takes the question: one built table, summed in memory once
+    /// for each reading, or one walk. The whole is remembered as <see cref="MeasureAsync"/> remembers an unguarded figure,
     /// because it is one.
     /// </summary>
     public async ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default)
