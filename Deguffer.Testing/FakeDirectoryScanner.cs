@@ -47,14 +47,16 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     }
 
     /// <summary>How many lists were measured, each in one call.</summary>
-    public int MeasureManyCalls { get; private set; }
+    public int MeasureManyCalls => Volatile.Read(ref _measureManyCalls);
+
+    private int _measureManyCalls;
 
     public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge keep = default,
         CancellationToken ct = default)
     {
-        MeasureManyCalls++;
+        Interlocked.Increment(ref _measureManyCalls);
 
         foreach (var question in asked)
         {
