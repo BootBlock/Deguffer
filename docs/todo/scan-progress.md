@@ -264,7 +264,8 @@ orders of magnitude in both directions.
 ## 5. What is countable today, and what is not
 
 > **Since this was written:** `BoundedFileWalk` no longer walks level by level (#250). Its workers
-> take folders from one queue with no barrier between levels, and progress is reported on a timer
+> take folders with no barrier between levels, each depth-first from a stack of its own since #375,
+> and progress is reported on a timer
 > (`BoundedFileWalk.ProgressInterval`) rather than once per level. The two walk rows below, and the
 > per-level width the denominator analysis starts from, describe the walk as it was when this was
 > measured.
