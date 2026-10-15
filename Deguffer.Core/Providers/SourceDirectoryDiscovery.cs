@@ -166,7 +166,7 @@ public sealed class SourceDirectoryDiscovery
             _memo = ([.. roots], started);
         }
 
-        // Started outside the lock, on this thread, as the search ran before it was kept: a walk
+        // Started outside the lock, on the caller's thread: a walk
         // under the lock would hold every other caller on a thread rather than on the task.
         starting.RunSynchronously();
 

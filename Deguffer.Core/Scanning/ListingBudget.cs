@@ -47,8 +47,6 @@ internal sealed class ListingBudget
     /// </param>
     public ListDirectory Around(ListDirectory list, int limit)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(limit, WalkTuning.MinimumThreads);
-
         return (directory, options, into) =>
         {
             var volume = VolumeOf(directory);

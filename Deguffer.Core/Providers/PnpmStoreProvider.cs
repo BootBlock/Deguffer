@@ -261,11 +261,6 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
     {
         var store = await _resolvedStore.Get(() => AskStoreAsync(pnpm, ct)).ConfigureAwait(false);
 
-        // No answer is asked for again, as it was before the question was shared.
-        if (store is null)
-        {
-            _resolvedStore.Forget();
-        }
 
         return store;
     }

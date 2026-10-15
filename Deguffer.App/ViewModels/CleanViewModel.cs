@@ -113,7 +113,7 @@ public sealed partial class CleanViewModel : ObservableObject
         TotalSpace = space?.Total;
         FreeSpaceNow = space?.Free;
 
-        // Rows arrive one provider at a time and are cleared wholesale between runs; subscribing
+        // Rows arrive as their providers finish and are cleared wholesale between runs; subscribing
         // covers both without every mutation site having to remember to bring the drawn rows along.
         Findings.CollectionChanged += (_, _) => ShowListed();
 

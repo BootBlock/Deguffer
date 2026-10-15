@@ -373,11 +373,6 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     {
         var installation = await _installation.Get(() => AskInstallationAsync(conda, ct)).ConfigureAwait(false);
 
-        // No answer is asked for again, as it was before the question was shared.
-        if (installation is null)
-        {
-            _installation.Forget();
-        }
 
         return installation;
     }

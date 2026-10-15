@@ -7,9 +7,9 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A preview plans several providers at once, so a provider waiting on its tool no longer holds up
-/// every provider after it, and what the caller sees of the pass stays as orderly as it was when they
-/// were planned one at a time.
+/// A preview plans several providers at once, so a provider waiting on its tool does not hold up the
+/// providers after it, and what the caller sees of the pass is still orderly: one report at a time,
+/// ties in the providers' order, and a status line that names only what is still running.
 /// </summary>
 public sealed class CleanupPlannerConcurrencyTests
 {
@@ -44,6 +44,11 @@ public sealed class CleanupPlannerConcurrencyTests
     /// A pass holds no more providers at once than its bound (G4), however many it has. More than one is
     /// the floor rather than the bound itself, because a machine with few threads to spare may not
     /// start all of them inside a provider's few milliseconds.
+    ///
+    /// <para>Only a machine with more logical processors than the bound can show the bound being
+    /// passed: with no bound given, <see cref="Parallel.ForEachAsync{TSource}(IEnumerable{TSource}, ParallelOptions, Func{TSource, CancellationToken, ValueTask})"/>
+    /// runs one body per processor. On a smaller machine this test still proves that providers ran
+    /// together.</para>
     /// </summary>
     [Fact]
     public async Task APassPlansNoMoreProvidersAtOnceThanItsBound()

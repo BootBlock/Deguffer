@@ -180,7 +180,7 @@ the knowledge, and it is worth driving before any decision here is called finish
 > once (#376), and `ListingBudget` holds every walk on a volume to the listings one walk is tuned
 > for. Findings now arrive in the order providers finish, so the elapsed time between consecutive
 > findings below no longer measures one provider. A warm, unelevated preview of 82 providers went
-> from 22.8-27.2 s to 7.8-10.8 s on the developer's machine. The figures below describe the pass as
+> from 22.8-27.2 s to 8.2-10.2 s at the shipped bound of eight on the developer's machine. The figures below describe the pass as
 > it was when it planned one provider at a time.
 
 Twenty-four providers, run unelevated through `CleanupPlanner.CreateDefault()`, three consecutive

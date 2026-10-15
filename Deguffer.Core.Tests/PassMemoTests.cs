@@ -49,7 +49,7 @@ public sealed class PassMemoTests
         Assert.NotSame(first, memo.Get(() => new object()));
     }
 
-    /// <summary>A null answer is not remembered, as the field this replaces did not remember one.</summary>
+    /// <summary>A null answer is not remembered, so a provider that found nothing yet looks again on the next ask.</summary>
     [Fact]
     public void ANullAnswerIsAskedAgain()
     {

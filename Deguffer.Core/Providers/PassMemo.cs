@@ -18,8 +18,9 @@ namespace Deguffer.Core.Providers;
 /// <see cref="Task"/> is remembered like any value: work that returns one holds the lock only until it
 /// first waits, and every caller awaits the one task.</para>
 ///
-/// <para><b>What is not remembered.</b> A null answer, so it is worked out again on the next ask, as
-/// the field it replaces did. And a task that failed or was stopped, which is no answer about the
+/// <para><b>What is not remembered.</b> A null answer, so it is worked out again on the next ask:
+/// a provider that found nothing yet looks again rather than settling on nothing. And a task that
+/// failed or was stopped, which is no answer about the
 /// machine: a tool that timed out once is asked again rather than reported as broken for the rest of
 /// the pass.</para>
 /// </summary>
@@ -51,6 +52,12 @@ internal sealed class PassMemo<T>
             return answer;
         }
     }
+
+    /// <summary>
+    /// Whether an answer is held, for the test that holds every provider to forgetting its answers
+    /// when a pass begins.
+    /// </summary>
+    internal bool IsRemembered => Volatile.Read(ref _remembered) is not null;
 
     /// <summary>Drop the answer, so the next ask works it out again.</summary>
     public void Forget()

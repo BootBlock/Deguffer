@@ -330,7 +330,8 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// Where <paramref name="provider"/> stands in <see cref="Providers"/>: the order findings of equal
-    /// size are listed in, since a pass no longer reports them in that order (<see cref="Viewing.SizeOrder"/>).
+    /// size are listed in, because a pass reports them in the order their providers finish
+    /// (<see cref="Viewing.SizeOrder"/>).
     /// </summary>
     public int PlaceOf(ICleanupProvider provider) => _places[provider];
 
@@ -420,8 +421,8 @@ public sealed class CleanupPlanner
 
             findings[index] = finding;
 
-            // One at a time, so a caller's progress handler never runs beside itself, as it never
-            // did while providers were planned one at a time.
+            // One at a time, so a caller's progress handler never runs beside itself: the preview's
+            // inserts each row into a list that is not safe to change from two threads at once.
             lock (reporting)
             {
                 found?.Report(finding);

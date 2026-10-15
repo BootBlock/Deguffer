@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// The Storage page's scan: rows built one provider at a time inside progress callbacks, placed and
+/// The Storage page's scan: rows built as their providers finish, inside progress callbacks, placed and
 /// filtered as they land, and the page's figures following them, including through a scan that
 /// fails or is cancelled part of the way.
 /// </summary>
@@ -34,8 +34,8 @@ public class CleanViewModelScanTests
 
     /// <summary>
     /// §7 sorts by size, and each row is placed as it lands rather than the list being sorted at the
-    /// end. Providers finish in whatever order their work takes, so what holds whatever the order is
-    /// that the list is in size order after every row joins it, and that no row is moved.
+    /// end. The providers are made to finish small, then large, then medium, so each row lands
+    /// somewhere a plain append would not put it.
     /// </summary>
     [Fact]
     public void RowsArePlacedLargestFirstAsTheyArrive()
@@ -45,22 +45,21 @@ public class CleanViewModelScanTests
         small.Steps = [Rows.Folder("s", 10)];
         large.Steps = [Rows.Folder("l", 900)];
         medium.Steps = [Rows.Folder("m", 450)];
-        var changes = new List<NotifyCollectionChangedAction>();
-        var inOrderAfterEach = new List<bool>();
+        large.WhilePlanning = () => Thread.Sleep(60);
+        medium.WhilePlanning = () => Thread.Sleep(120);
+        var placed = new List<int>();
         page.ViewModel.Findings.CollectionChanged += (_, e) =>
         {
-            changes.Add(e.Action);
-            var sizes = page.ViewModel.Findings.Select(row => row.Finding.EstimatedBytes).ToList();
-            inOrderAfterEach.Add(sizes.SequenceEqual(sizes.OrderDescending()));
+            if (e.Action == NotifyCollectionChangedAction.Add)
+            {
+                placed.Add(e.NewStartingIndex);
+            }
         };
 
         page.Scan();
 
         Assert.Equal(["large", "medium", "small"], page.ViewModel.Findings.Select(row => row.Finding.Provider.Id));
-        Assert.Equal(
-            [NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Add],
-            changes.SkipWhile(action => action == NotifyCollectionChangedAction.Reset));
-        Assert.All(inOrderAfterEach.Skip(changes.Count - 3), Assert.True);
+        Assert.Equal([0, 0, 1], placed);
         Assert.Equal([100.0, 50.0], page.ViewModel.Findings.Take(2).Select(row => row.SharePercent));
     }
 
