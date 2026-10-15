@@ -480,12 +480,22 @@ public sealed class WalkExploreReaderTests : IDisposable
         [.. entries.Where(e => e.IsReparsePoint)],
         PathPresence.Present);
 
+    /// <summary>
+    /// The listing as the walk records it. What <see cref="WalkExploreReader.Describe"/> adds up is
+    /// what the walk reports it has seen, so it has to agree with the tree it describes, reparse-point
+    /// files and measured files included.
+    /// </summary>
     private static ExploreTree Tree(DirectoryContents contents, IOccupancyProbe probe)
     {
         var builder = new ExploreTreeBuilder(@"C:\cache");
-        builder.AddChildren(ExploreTreeBuilder.RootNode, WalkExploreReader.Describe(contents, probe));
+        var children = new ExploreChild[contents.Count];
+        var bytes = WalkExploreReader.Describe(contents, probe, children);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, children);
 
-        return builder.Build(ExploreChildOrder.BySize);
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        Assert.Equal(tree.TotalBytes, bytes);
+
+        return tree;
     }
 
     private static int Named(ExploreTree tree, string name)

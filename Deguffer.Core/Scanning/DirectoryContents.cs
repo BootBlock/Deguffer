@@ -45,4 +45,7 @@ internal readonly record struct DirectoryContents(
     /// since its parent was listed counts too: its bytes were never read either.
     /// </summary>
     public bool WasRefused => Presence is not PathPresence.Present;
+
+    /// <summary>How many children the listing found, across all three lists.</summary>
+    public int Count => Entries.Count + Links.Count + ReparseFiles.Count;
 }

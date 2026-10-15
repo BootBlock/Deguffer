@@ -265,7 +265,7 @@ public sealed class CushionRendererTests : IDisposable
             children.Add(new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: (12 - i) * (12 - i) * 1000L));
         }
 
-        var first = builder.AddChildren(folder, children);
+        var first = builder.AddChildren(folder, [.. children]);
 
         for (var i = 0; i < folders; i++)
         {

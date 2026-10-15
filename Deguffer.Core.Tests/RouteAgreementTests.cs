@@ -606,7 +606,9 @@ public class RouteAgreementTests
             .Occupying("disk.vhdx", 8192);
 
         var builder = new ExploreTreeBuilder(@"C:\cache");
-        builder.AddChildren(ExploreTreeBuilder.RootNode, WalkExploreReader.Describe(listing, probe));
+        var children = new ExploreChild[listing.Count];
+        WalkExploreReader.Describe(listing, probe, children);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, children);
         var walked = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(65_536 + 131_072 + 8192 + 4096, indexed.TotalBytes);
