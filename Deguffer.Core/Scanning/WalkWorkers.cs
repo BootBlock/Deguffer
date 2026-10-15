@@ -6,7 +6,7 @@ namespace Deguffer.Core.Scanning;
 /// What one worker does with each directory it takes, built once for that worker so whatever it reuses
 /// lasts for every directory the worker reads.
 /// </summary>
-/// <param name="descend">How the worker queues a child: its path, and the value carried down to it.</param>
+/// <param name="descend">How the worker stacks a child: its path, and the value carried down to it.</param>
 internal delegate Action<string, TState> NewDirectoryReader<TState>(Action<string, TState> descend);
 
 /// <summary>

@@ -5,7 +5,7 @@ namespace Deguffer.Core.Scanning;
 /// has run out takes the oldest from the bottom.
 ///
 /// <para>The owner working from the top is what makes a walk depth-first: a directory's children
-/// are read before anything queued ahead of them, so each path is used soon after it is built, and
+/// are read before anything stacked ahead of them, so each path is used soon after it is built, and
 /// what waits is one level's siblings for each level of the current branch rather than a whole level
 /// of the tree. A thief working from the bottom takes the shallowest directory waiting, which holds
 /// the most below it, so a steal is rare and each one moves a large subtree to a worker of its

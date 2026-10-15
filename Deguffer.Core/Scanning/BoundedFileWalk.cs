@@ -3,7 +3,7 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
-/// §5.5's walk, once: a bounded set of workers, each listing a directory and queueing what is below
+/// §5.5's walk, once: a bounded set of workers, each listing a directory and stacking what is below
 /// it. <see cref="WalkWorkers{TState}"/> schedules them.
 ///
 /// <para>This exists because several callers need the same traversal and differ only in what they do
