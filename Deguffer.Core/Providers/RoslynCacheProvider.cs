@@ -69,6 +69,7 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Roslyn, the C# and Visual Basic engine inside Visual Studio and the C# extension "
             + "for VS Code",
         Publisher = "Microsoft",

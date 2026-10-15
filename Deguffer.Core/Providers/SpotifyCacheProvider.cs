@@ -88,6 +88,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "the Spotify desktop app",
         Publisher = "Spotify",
         Purpose = "Spotify keeps parts of the music and podcasts it streams on disk, so they can play "

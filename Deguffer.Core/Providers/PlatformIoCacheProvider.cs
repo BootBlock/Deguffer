@@ -88,6 +88,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "PlatformIO, a build system for embedded development",
         Publisher = "PlatformIO Labs",
         Purpose = "PlatformIO caches the package archives it downloads and the registry responses "

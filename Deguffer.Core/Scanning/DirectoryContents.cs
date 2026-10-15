@@ -9,6 +9,11 @@ namespace Deguffer.Core.Scanning;
 /// the same three lists for every directory it reads, so a caller that keeps an entry copies it out.
 /// </para>
 /// </summary>
+/// <param name="Directory">
+/// The directory listed, as the walk spelled it, in the extended form §6.3 requires. The same string
+/// every entry of the listing carries, so a caller can name a directory it could not list, which
+/// holds no entry to ask.
+/// </param>
 /// <param name="Entries">
 /// The ordinary children — files and directories, in the order they were listed. A link is not among
 /// them; see <paramref name="Links"/> for why they are separated rather than mixed.
@@ -33,6 +38,7 @@ namespace Deguffer.Core.Scanning;
 /// listing failed part-way is still in the three lists.
 /// </param>
 internal readonly record struct DirectoryContents(
+    string Directory,
     IReadOnlyList<WalkEntry> Entries,
     IReadOnlyList<WalkEntry> Links,
     IReadOnlyList<WalkEntry> ReparseFiles,
@@ -45,4 +51,7 @@ internal readonly record struct DirectoryContents(
     /// since its parent was listed counts too: its bytes were never read either.
     /// </summary>
     public bool WasRefused => Presence is not PathPresence.Present;
+
+    /// <summary>How many children the listing found, across all three lists.</summary>
+    public int Count => Entries.Count + Links.Count + ReparseFiles.Count;
 }

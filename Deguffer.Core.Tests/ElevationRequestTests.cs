@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 
@@ -48,7 +49,24 @@ public sealed class ElevationRequestTests
     [Fact]
     public void APreviewComesBackAsOne()
     {
-        Assert.IsType<PreviewRequest>(ElevationRequest.From(ElevationRequest.Preview.ToArguments()));
+        Assert.Null(Assert.IsType<PreviewRequest>(ElevationRequest.From(ElevationRequest.Preview.ToArguments())).Chosen);
+    }
+
+    /// <summary>
+    /// A scan of chosen locations, elevated, comes back as a scan of exactly those. Read as a plain
+    /// preview, the elevated window would measure every location while the user asked for two; read
+    /// from the stored ticks, it would measure whatever was ticked since. The preview switch still
+    /// leads, so an instance that does not know the ids scans every location rather than nothing.
+    /// </summary>
+    [Fact]
+    public void AChosenPreviewComesBackWithItsLocations()
+    {
+        var request = new PreviewRequest(new ProviderChoice { Ids = ["temp-directories", "steam"] });
+
+        Assert.Equal(
+            ["--rescan", "--rescan-location=steam", "--rescan-location=temp-directories"],
+            request.ToArguments());
+        Assert.Equal(request, ElevationRequest.From(request.ToArguments()));
     }
 
     [Fact]

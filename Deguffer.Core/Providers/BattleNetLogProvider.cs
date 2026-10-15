@@ -59,6 +59,7 @@ public sealed class BattleNetLogProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Battle.net desktop launcher",
         Publisher = "Blizzard Entertainment",
         Purpose = "The launcher writes a log, and its built-in browser another, every time it starts. "

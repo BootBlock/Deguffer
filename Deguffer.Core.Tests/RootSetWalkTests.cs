@@ -149,7 +149,7 @@ public sealed class RootSetWalkTests
             tree.List,
             (root, holder, contents, _) =>
             {
-                var folder = LongPath.Display(contents.Entries[0].Directory);
+                var folder = LongPath.Display(contents.Directory);
                 visits.Add((root, folder, holder is null));
                 return folder;
             },

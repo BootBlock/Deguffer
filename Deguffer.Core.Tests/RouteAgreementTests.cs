@@ -588,6 +588,7 @@ public class RouteAgreementTests
         var when = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
 
         var listing = new DirectoryContents(
+            Listed,
             [
                 new WalkEntry(Listed, "film.mkv", FileAttributes.Archive | Recall, 5_000_000, when, when),
                 new WalkEntry(Listed, "partly.zip", FileAttributes.Archive | Recall, 900_000, when, when),
@@ -606,7 +607,9 @@ public class RouteAgreementTests
             .Occupying("disk.vhdx", 8192);
 
         var builder = new ExploreTreeBuilder(@"C:\cache");
-        builder.AddChildren(ExploreTreeBuilder.RootNode, WalkExploreReader.Describe(listing, probe));
+        var children = new ExploreChild[listing.Count];
+        WalkExploreReader.Describe(listing, probe, children);
+        builder.AddChildren(ExploreTreeBuilder.RootNode, children);
         var walked = builder.Build(ExploreChildOrder.BySize);
 
         Assert.Equal(65_536 + 131_072 + 8192 + 4096, indexed.TotalBytes);

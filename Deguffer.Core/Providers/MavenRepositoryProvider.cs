@@ -107,6 +107,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "Apache Maven, a build tool for Java",
         Publisher = "the Apache Software Foundation",
         Purpose = "Maven downloads every dependency into one local repository in your profile, "

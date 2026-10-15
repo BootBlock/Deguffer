@@ -163,6 +163,7 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.TemporaryFiles,
         Application = "VS Code, Docker Desktop, the Visual Studio Installer and Blender",
         Publisher = "Microsoft, Docker and the Blender Foundation",
         Purpose = "These applications download their updates into your temporary folder and keep "

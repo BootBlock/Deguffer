@@ -93,6 +93,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows' driver store",
         Publisher = "Microsoft",
         Purpose = "Windows keeps a copy of every driver package it installs in its driver store, so it "

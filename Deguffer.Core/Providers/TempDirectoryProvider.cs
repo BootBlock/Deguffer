@@ -159,6 +159,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// </summary>
     public override ProviderDescription Description => new()
     {
+        Category = ProviderCategory.TemporaryFiles,
         Application = "Windows, and every program on the machine that writes scratch files",
         Publisher = "Microsoft, and whichever program left each file behind",
         Purpose = "Installers, compilers, browsers and test runners unpack and scratch in a "

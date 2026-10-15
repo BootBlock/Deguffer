@@ -69,6 +69,7 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "RetroArch, the libretro frontend",
         Publisher = "the libretro project",
         Purpose = "RetroArch's online updater downloads its shader sets and its game databases into "

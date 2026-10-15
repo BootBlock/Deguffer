@@ -69,6 +69,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "conda, a package and environment manager for Python and other languages",
         Publisher = "Anaconda, Inc., with the conda community",
         Purpose = "conda keeps the package archives it downloads, the unpacked copies it builds "

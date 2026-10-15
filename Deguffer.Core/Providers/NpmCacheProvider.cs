@@ -41,6 +41,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "npm, the package manager bundled with Node.js",
         Publisher = "npm, Inc., part of GitHub",
         Purpose = "npm keeps a copy of every package archive it downloads in one cache shared by "

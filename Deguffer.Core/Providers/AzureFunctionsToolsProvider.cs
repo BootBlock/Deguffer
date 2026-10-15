@@ -105,6 +105,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "the Azure Functions Core Tools, as Visual Studio downloads them",
         Publisher = "Microsoft",
         Purpose = "Visual Studio and the Azure Functions extension fetch their own copy of the "

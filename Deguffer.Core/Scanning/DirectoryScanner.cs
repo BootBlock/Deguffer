@@ -102,12 +102,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
         MinimumAge keep = default,
         CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(asked);
-
-        foreach (var question in asked)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(question.Path, nameof(asked));
-        }
+        ThrowIfAnyPathIsBlank(asked);
 
         var results = await MeasureFreshAsync(asked, [keep], progress: null, ct).ConfigureAwait(false);
 
@@ -137,25 +132,36 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// Straight to the walk, whatever the index holds. The remembered estimate is still updated,
-    /// because this is the freshest figure Deguffer has for the path, unless entries were left out of
-    /// it, as <see cref="MeasureAsync"/> says.
+    /// Straight to the walk, whatever the index holds, every path in one go as
+    /// <see cref="MeasureManyAsync"/> walks the paths the table cannot answer. Each remembered estimate is
+    /// still updated, because this is the freshest figure Deguffer has for the path, unless entries
+    /// were left out of it, as <see cref="MeasureAsync"/> says.
     /// </summary>
-    public async ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
+    public async ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ThrowIfAnyPathIsBlank(asked);
 
-        var result = await _fallback
+        var results = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
-            .MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct)
+            .MeasureManyAsync(asked, MinimumAge.Off, ct)
             .ConfigureAwait(false);
 
-        if (!bounds.LeavesEntriesOut)
+        for (var i = 0; i < asked.Count; i++)
         {
-            Remember(path, bounds, result);
+            Remember(asked[i], MinimumAge.Off, results[i]);
         }
 
-        return result;
+        return results;
+    }
+
+    private static void ThrowIfAnyPathIsBlank(IReadOnlyList<ScanRequest> asked)
+    {
+        ArgumentNullException.ThrowIfNull(asked);
+
+        foreach (var question in asked)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(question.Path, nameof(asked));
+        }
     }
 
     /// <summary>

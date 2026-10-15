@@ -44,6 +44,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "uv, a Python package and project manager",
         Publisher = "Astral",
         Purpose = "uv caches the archives it downloads and the unpacked wheels it builds "

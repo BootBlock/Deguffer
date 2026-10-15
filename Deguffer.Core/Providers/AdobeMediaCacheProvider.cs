@@ -78,6 +78,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "Premiere Pro, After Effects, Audition and Media Encoder",
         Publisher = "Adobe",
         Purpose = "Adobe's video and audio applications convert the audio of every clip you import and "

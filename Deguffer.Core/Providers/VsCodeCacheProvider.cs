@@ -155,6 +155,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Visual Studio Code, and the editors built on the same Code - OSS base — "
             + "VS Code Insiders, VSCodium, Cursor and the rest",
         Publisher = "Microsoft publishes Visual Studio Code; each derivative is published by its "

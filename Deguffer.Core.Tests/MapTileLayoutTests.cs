@@ -354,7 +354,7 @@ public sealed class MapTileLayoutTests
                     new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: (long)(1_000_000 * Math.Pow(0.9, i) * (1 + random.NextDouble())))))
                 .ToList();
 
-            var first = builder.AddChildren(parent, children);
+            var first = builder.AddChildren(parent, [.. children]);
 
             for (var i = 0; i < folders; i++)
             {

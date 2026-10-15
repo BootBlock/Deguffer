@@ -119,6 +119,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.TemporaryFiles,
         Application = "Playwright and Puppeteer, browser automation and testing libraries",
         Publisher = "Microsoft (Playwright) and Google (Puppeteer)",
         Purpose = "Each time a test starts a browser, the library makes a fresh profile for it in "

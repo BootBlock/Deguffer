@@ -137,18 +137,73 @@ public sealed class WholeTreeLookTests : IDisposable
 
     /// <summary>
     /// A command's measured paths can nest, and a folder walked twice would name its store twice, so
-    /// a run would say it held back two files where there is one.
+    /// a run would say it held back two files where there is one. The folder inside is listed once,
+    /// where the walk of the outer one meets it, whichever order the paths come in.
     /// </summary>
     [Fact]
-    public void NamesAStoreOnceWhenThePathsAskedAboutNest()
+    public void NamesAStoreOnceAndListsAFolderOnceWhenThePathsAskedAboutNest()
     {
         var root = _temp.CreateDirectory("cache");
         var nested = _temp.CreateDirectory("cache", "a");
         var store = _temp.CreateFile(16, "cache", "a", "archive.pst");
+        var recorder = new RecordingFileSystem(WindowsFileSystem.Default);
 
-        var look = WholeTreeLook.Take([root, nested], MinimumAge.Off, WindowsFileSystem.Default, default);
+        var look = WholeTreeLook.Take([nested, root], MinimumAge.Off, recorder, default);
 
         Assert.Equal([store], look.Stores);
+        Assert.Single(recorder.Paths, path => path.Equals(LongPath.Extended(nested), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A path inside another that the walk of the outer one never enters, because it is reached through
+    /// a link, is still looked inside: the removal acts on that path too, and follows it to whatever it
+    /// points at.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void LooksInsideANestedPathTheOuterWalkDoesNotEnter(DirectoryLinkKind kind)
+    {
+        var root = _temp.CreateDirectory("cache");
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        _temp.CreateFile(16, "elsewhere", "archive.pst");
+        var linked = Path.Combine(root, "linked");
+
+        DirectoryLink.Create(kind, linked, elsewhere);
+
+        var look = WholeTreeLook.Take([root, linked], MinimumAge.Off, WindowsFileSystem.Default, default);
+
+        Assert.Equal([Path.Combine(linked, "archive.pst")], look.Stores);
+    }
+
+    /// <summary>
+    /// §9 in a case-sensitive folder, where <c>Mail</c> and <c>mail</c> are two folders: each is looked
+    /// inside and each store named, rather than one taken for the other and its store never seen.
+    /// </summary>
+    [Fact]
+    public void LooksInsideFoldersWhoseNamesDifferOnlyInCase()
+    {
+        var root = CaseSensitiveFolder.Create(Path.Combine(_temp.Path, "cache"));
+        var upper = _temp.CreateFile(16, "cache", "Mail", "archive.pst");
+        var lower = _temp.CreateFile(16, "cache", "mail", "backup.pst");
+
+        Assert.Equal([upper, lower], Stores(root));
+    }
+
+    /// <summary>
+    /// A path inside another, spelled in a case other than the one the disk lists it in, is walked
+    /// again on its own, because the walk matches it as spelled. The store below it is one file, and
+    /// a run reports how many it held back, so it is named once.
+    /// </summary>
+    [Fact]
+    public void NamesAStoreOnceWhenANestedPathIsSpelledInAnotherCase()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateDirectory("cache", "npm");
+        var store = _temp.CreateFile(16, "cache", "npm", "archive.pst");
+
+        var look = WholeTreeLook.Take([root, Path.Combine(root, "NPM")], MinimumAge.Off, WindowsFileSystem.Default, default);
+
+        Assert.Equal(store, Assert.Single(look.Stores), ignoreCase: true);
     }
 
     /// <summary>

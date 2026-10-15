@@ -62,7 +62,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list)
         SetReparsePointsApart();
 
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
-        return new DirectoryContents(_entries, _links, _reparseFiles, end.Presence);
+        return new DirectoryContents(directory, _entries, _links, _reparseFiles, end.Presence);
     }
 
     private void SetReparsePointsApart()

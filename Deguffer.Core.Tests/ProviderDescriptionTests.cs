@@ -34,6 +34,19 @@ public class ProviderDescriptionTests
     }
 
     /// <summary>
+    /// A category no shipped provider declares is a heading the list of what to scan can never draw,
+    /// which is a category left behind when its providers moved. One a provider declares outside the
+    /// enumeration has no heading at all.
+    /// </summary>
+    [Fact]
+    public void EveryCategoryHoldsAShippedProviderAndNoneOther()
+    {
+        var used = Shipped.Select(provider => provider.Description.Category).ToHashSet();
+
+        Assert.Equal(Enum.GetValues<ProviderCategory>().ToHashSet(), used);
+    }
+
+    /// <summary>
     /// The failure this guards is a copy-and-paste, which is how twenty-nine hand-written
     /// explanations go wrong: a provider inherits the paragraph belonging to the one above it and
     /// then describes somebody else's directory. Publishers repeat legitimately — Microsoft owns

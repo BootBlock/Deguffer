@@ -126,7 +126,7 @@ public class ScannerRootReachTests
         using (DeniedDirectory.WithUnreadableAttributes(cache))
         {
             Assert.False((await Reopen(environment).MeasureAsync(cache)).WasReached);
-            Assert.False((await Reopen(environment).MeasureFromDiskAsync(cache)).WasReached);
+            Assert.False((await Reopen(environment).MeasureFromDiskAsync([new ScanRequest(cache)]))[0].WasReached);
         }
 
         var progress = new ProgressRecorder<ScanSize>();

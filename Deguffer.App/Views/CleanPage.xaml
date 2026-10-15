@@ -26,6 +26,10 @@
         <Thickness x:Key="ExpanderContentPadding">0,4,0,4</Thickness>
         <x:Double x:Key="ExpanderMinHeight">32</x:Double>
 
+        <!-- The Scan drop-down's locations under their category headings. Handed its source from
+             code-behind, as ItemListView's grouped list is. -->
+        <CollectionViewSource x:Key="ScanChoiceGroups" IsSourceGrouped="True" />
+
         <!--
             The compact row: the four things the user is choosing between, on one line — is it
             ticked, what is it, what class of thing is it, and how big is it.
@@ -617,9 +621,165 @@
                           ToolTipService.ToolTip="{x:Bind ViewModel.WhenComplete.Explanation}" />
                 <Button Content="Clean"
                         Command="{x:Bind ViewModel.CleanCommand}" />
-                <Button Content="Scan"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Command="{x:Bind ViewModel.PreviewCommand}" />
+                <!-- The primary action (§7), so it keeps the accent a plain Scan button had. The button
+                     scans every location, and the drop-down scans only the ones ticked in it, for a
+                     user who knows what they came to clear and need not measure every cache to clear
+                     it. WinUI ships no accent style for a split button, so its brushes are pointed at
+                     the accent button's own. The empty HighContrast dictionary leaves that theme the
+                     SDK's values, as the Explore page's notes do. -->
+                <SplitButton Content="Scan"
+                             Command="{x:Bind ViewModel.PreviewCommand}"
+                             AutomationProperties.HelpText="Scan every location Deguffer recognises. Open the drop-down to choose the locations to scan on their own.">
+                    <SplitButton.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Default">
+                                    <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
+                                    <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
+                                    <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
+                                    <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
+                                    <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
+                                    <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
+                                    <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                    <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
+                                    <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
+                                    <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                    <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
+                                </ResourceDictionary>
+
+                                <ResourceDictionary x:Key="Light">
+                                    <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
+                                    <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
+                                    <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
+                                    <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
+                                    <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
+                                    <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
+                                    <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                    <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
+                                    <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
+                                    <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                    <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
+                                    <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
+                                </ResourceDictionary>
+
+                                <ResourceDictionary x:Key="HighContrast" />
+                            </ResourceDictionary.ThemeDictionaries>
+                        </ResourceDictionary>
+                    </SplitButton.Resources>
+
+                    <SplitButton.Flyout>
+                        <Flyout x:Name="ScanChoiceFlyout" Placement="TopEdgeAlignedRight">
+                            <Grid Width="380" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                                <TextBlock Text="Choose what to scan" Style="{StaticResource SectionHeading}" />
+
+                                <TextBox Grid.Row="1"
+                                         PlaceholderText="Search locations"
+                                         AutomationProperties.Name="Search locations"
+                                         Text="{x:Bind ViewModel.ScanChoice.Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <Grid Grid.Row="2">
+                                    <!-- Virtualizing, with a fixed height to fill: given unbounded
+                                         height, a list realises every row. -->
+                                    <ListView x:Name="ScanChoiceList"
+                                              Height="360"
+                                              SelectionMode="None"
+                                              IsItemClickEnabled="False"
+                                              AutomationProperties.Name="Locations to scan">
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="MinHeight" Value="0" />
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ScanChoiceRow">
+                                                <!-- The mark sits beside the tick rather than taking it away: a
+                                                     tool installed since that scan is what a fresh scan finds. -->
+                                                <Grid ColumnSpacing="8" ColumnDefinitions="*,Auto">
+                                                    <CheckBox MinWidth="0"
+                                                              IsChecked="{x:Bind IsChosen, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}">
+                                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
+                                                    </CheckBox>
+
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="Not found last scan"
+                                                               Style="{StaticResource SecondaryText}"
+                                                               FontSize="12"
+                                                               VerticalAlignment="Center"
+                                                               Visibility="{x:Bind WasMissing, Mode=OneWay}"
+                                                               AutomationProperties.AccessibilityView="Raw" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+
+                                        <ListView.GroupStyle>
+                                            <GroupStyle HidesIfEmpty="True">
+                                                <GroupStyle.HeaderContainerStyle>
+                                                    <Style TargetType="ListViewHeaderItem">
+                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                        <Setter Property="Padding" Value="12,8,12,0" />
+                                                        <Setter Property="MinHeight" Value="0" />
+                                                    </Style>
+                                                </GroupStyle.HeaderContainerStyle>
+
+                                                <GroupStyle.HeaderTemplate>
+                                                    <DataTemplate x:DataType="vm:ScanChoiceGroup">
+                                                        <!-- The heading's tick covers the rows the search shows under
+                                                             it, and a click on a mixed one clears them. See
+                                                             ItemSelection.ValueForClick. -->
+                                                        <CheckBox MinWidth="0"
+                                                                  IsChecked="{x:Bind State, Mode=OneWay}"
+                                                                  Command="{x:Bind ToggleCommand}"
+                                                                  AutomationProperties.Name="{x:Bind ToggleName}">
+                                                            <!-- Sized here, because a list header's own style sets a
+                                                                 heading-sized font that every text inside it inherits. -->
+                                                            <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" />
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </GroupStyle.HeaderTemplate>
+                                            </GroupStyle>
+                                        </ListView.GroupStyle>
+                                    </ListView>
+
+                                    <TextBlock Text="No location matches the search."
+                                               Visibility="{x:Bind ViewModel.ScanChoice.HasNoMatches, Mode=OneWay}"
+                                               Style="{StaticResource SecondaryText}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Top"
+                                               Margin="0,24,0,0" />
+                                </Grid>
+
+                                <TextBlock Grid.Row="3"
+                                           Text="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable."
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                           TextWrapping="Wrap"
+                                           Visibility="{x:Bind ViewModel.ScanChoice.SaveFailed, Mode=OneWay}" />
+
+                                <Grid Grid.Row="4" ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                                    <TextBlock Text="{x:Bind ViewModel.ScanChoice.ChosenSummary, Mode=OneWay}"
+                                               Style="{StaticResource SecondaryText}"
+                                               VerticalAlignment="Center" />
+
+                                    <Button Grid.Column="1"
+                                            Content="Scan"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Command="{x:Bind ViewModel.PreviewChosenCommand}"
+                                            Click="OnScanChosenClicked"
+                                            AutomationProperties.Name="Scan the chosen locations" />
+                                </Grid>
+                            </Grid>
+                        </Flyout>
+                    </SplitButton.Flyout>
+                </SplitButton>
             </StackPanel>
         </Grid>
     </Grid>

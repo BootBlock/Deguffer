@@ -1,3 +1,4 @@
+using System.Reflection;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
 
@@ -162,8 +163,9 @@ public class ExploreTreeBuilderTests
     /// held for the whole of the assembling, which on a large walk stopped every worker for as long
     /// as each snapshot took.
     ///
-    /// <para>A worker is held inside the lock, part way through recording a folder, while the
-    /// capture is assembled on another thread. The lock is the same either way round, so an
+    /// <para>The lock is held on another thread, as a worker part way through recording a folder
+    /// holds it, while the capture is assembled. A folder's children are copied in from a span, so
+    /// nothing a caller hands the builder runs inside the lock, and the test takes it directly. An
     /// assembling that needed it would wait here until the wait gives up.</para>
     /// </summary>
     [Fact]
@@ -176,15 +178,33 @@ public class ExploreTreeBuilderTests
 
         var capture = builder.Capture();
 
-        using var held = new HeldListing(new ExploreChild("b.tgz", IsDirectory: false, IsLink: false, Size: 8192));
-        var recording = Task.Run(() => builder.AddChildren(ExploreTreeBuilder.RootNode, held));
-        Assert.True(held.Entered.Wait(TimeSpan.FromSeconds(30)), "The worker never reached the lock.");
+        using var entered = new ManualResetEventSlim();
+        using var released = new ManualResetEventSlim();
+        var gate = GateOf(builder);
+
+        // A thread of its own, because a Lock is released by the thread that took it.
+        var holding = Task.Factory.StartNew(
+            () =>
+            {
+                using (gate.EnterScope())
+                {
+                    entered.Set();
+                    released.Wait();
+                }
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30)), "The lock was never taken.");
 
         var assembling = Task.Run(() => capture.Build(ExploreChildOrder.ByName));
         var first = await Task.WhenAny(assembling, Task.Delay(TimeSpan.FromSeconds(30)));
 
-        held.Release();
-        await recording;
+        released.Set();
+        await holding;
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("b.tgz", IsDirectory: false, IsLink: false, Size: 8192),
+        ]);
 
         Assert.Same(assembling, first);
 
@@ -311,34 +331,10 @@ public class ExploreTreeBuilderTests
     }
 
     /// <summary>
-    /// One folder's children whose enumeration waits to be released, which holds a worker inside the
-    /// builder's lock: the children are named before the lock is taken and enumerated inside it.
+    /// The lock every walk worker takes to record a folder, found by its type so a rename does not
+    /// silently leave the test holding nothing.
     /// </summary>
-    private sealed class HeldListing(ExploreChild child) : IReadOnlyList<ExploreChild>, IDisposable
-    {
-        private readonly ManualResetEventSlim _released = new();
-
-        public ManualResetEventSlim Entered { get; } = new();
-
-        public int Count => 1;
-
-        public ExploreChild this[int index] => index == 0 ? child : throw new ArgumentOutOfRangeException(nameof(index));
-
-        public void Release() => _released.Set();
-
-        public IEnumerator<ExploreChild> GetEnumerator()
-        {
-            Entered.Set();
-            _released.Wait();
-            yield return child;
-        }
-
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-
-        public void Dispose()
-        {
-            _released.Dispose();
-            Entered.Dispose();
-        }
-    }
+    private static Lock GateOf(ExploreTreeBuilder builder) => (Lock)Assert.Single(
+        typeof(ExploreTreeBuilder).GetFields(BindingFlags.Instance | BindingFlags.NonPublic),
+        field => field.FieldType == typeof(Lock)).GetValue(builder)!;
 }

@@ -78,6 +78,7 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "Adobe After Effects, the motion graphics and compositing program",
         Publisher = "Adobe",
         Purpose = "After Effects keeps the frames it renders for previews on disk, so a composition it "

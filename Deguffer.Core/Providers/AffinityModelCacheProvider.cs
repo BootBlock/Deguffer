@@ -156,6 +156,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "Affinity Photo, Designer and Publisher, a suite of image editing and design "
             + "applications",
         Publisher = "Serif, now part of Canva",

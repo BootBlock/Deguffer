@@ -117,6 +117,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "vcpkg, a package manager for C and C++ libraries",
         Publisher = "Microsoft",
         Purpose = "vcpkg builds every library from source. The binary cache keeps the result so "

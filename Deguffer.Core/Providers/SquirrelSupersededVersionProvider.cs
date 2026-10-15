@@ -86,6 +86,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.InstallersAndUpdates,
         Application = "applications that update themselves through Squirrel, a Windows updater a "
             + "large family of desktop applications is built on",
         Publisher = "the Squirrel project, and whoever publishes each application using it",

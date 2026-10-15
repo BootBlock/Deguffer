@@ -126,6 +126,7 @@ public sealed partial class ClaudeCodeCommandSnapshotProvider : TempMarkerProvid
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Claude Code, Anthropic's coding agent",
         Publisher = "Anthropic",
         Purpose = "Claude Code keeps a snapshot of each project it runs shell commands in, in your temporary "

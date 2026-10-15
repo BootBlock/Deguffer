@@ -77,6 +77,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "Playwright, a browser automation and testing library",
         Publisher = "Microsoft",
         Purpose = "Playwright downloads its own builds of Chromium, Firefox and WebKit rather "

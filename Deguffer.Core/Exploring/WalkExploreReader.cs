@@ -1,3 +1,4 @@
+using System.Buffers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -112,19 +113,38 @@ internal static class WalkExploreReader
                         builder.MarkListingRefused(parent);
                     }
 
-                    var children = Describe(contents, probe);
-                    if (children.Count == 0)
+                    var count = contents.Count;
+                    if (count == 0)
                     {
                         return;
                     }
 
-                    var first = builder.AddChildren(parent, children);
+                    // Rented rather than allocated for each directory: a volume holds hundreds of
+                    // thousands of them, and one of a few thousand entries would put its array on the
+                    // large object heap, where allocating can start a full collection that traces the
+                    // whole tree built so far (G4). The builder copies it before it returns.
+                    var rented = ArrayPool<ExploreChild>.Shared.Rent(count);
+                    var children = rented.AsSpan(0, count);
+                    int first;
+                    long size;
 
-                    Interlocked.Add(ref items, children.Count);
-                    Interlocked.Add(ref bytes, children.Sum(c => c.Size));
+                    try
+                    {
+                        size = Describe(contents, probe, children);
+                        first = builder.AddChildren(parent, children);
+                    }
+                    finally
+                    {
+                        // Cleared, because each child holds its name and the pool would otherwise keep
+                        // it alive.
+                        children.Clear();
+                        ArrayPool<ExploreChild>.Shared.Return(rented);
+                    }
 
-                    // Every entry of one listing shares its directory, so what is left unlisted in it
-                    // is asked of the directory once.
+                    Interlocked.Add(ref items, count);
+                    Interlocked.Add(ref bytes, size);
+
+                    // What is left unlisted in a listing is asked of its directory once.
                     LeavesFolderUnlisted? leaves = null;
 
                     for (var i = 0; i < contents.Entries.Count; i++)
@@ -138,7 +158,7 @@ internal static class WalkExploreReader
 
                         if (unlisted is not null)
                         {
-                            leaves ??= unlisted(LongPath.Display(entry.Directory), parent == ExploreTreeBuilder.RootNode);
+                            leaves ??= unlisted(LongPath.Display(contents.Directory), parent == ExploreTreeBuilder.RootNode);
 
                             if (leaves(entry.Name))
                             {
@@ -167,8 +187,9 @@ internal static class WalkExploreReader
     }
 
     /// <summary>
-    /// One directory's entries in the order the tree will hold them: the ordinary children first,
-    /// then the links, then the files carrying a reparse point.
+    /// Write one directory's entries into <paramref name="into"/> in the order the tree will hold
+    /// them: the ordinary children first, then the links, then the files carrying a reparse point.
+    /// Returns the bytes they occupy, added up while they are written rather than in a second pass.
     ///
     /// <para>The order is load-bearing rather than cosmetic. <see cref="ExploreTreeBuilder.AddChildren"/>
     /// numbers what it is given consecutively, so an entry's index in
@@ -176,22 +197,34 @@ internal static class WalkExploreReader
     /// what lets the caller descend into a child directory without this having to hand back a map.
     /// Putting anything first would silently shift every one of those numbers.</para>
     /// </summary>
-    internal static List<ExploreChild> Describe(DirectoryContents contents, IOccupancyProbe probe)
+    /// <param name="into">Exactly <see cref="DirectoryContents.Count"/> long.</param>
+    internal static long Describe(DirectoryContents contents, IOccupancyProbe probe, Span<ExploreChild> into)
     {
-        var children = new List<ExploreChild>(
-            contents.Entries.Count + contents.Links.Count + contents.ReparseFiles.Count);
+        var next = 0;
+        long bytes = 0;
 
-        foreach (var entry in contents.Entries)
+        // Indexed rather than enumerated, because an enumerator taken through the interface is boxed.
+        for (var i = 0; i < contents.Entries.Count; i++)
         {
-            children.Add(entry.IsDirectory
-                ? new ExploreChild(
+            var entry = contents.Entries[i];
+            if (entry.IsDirectory)
+            {
+                into[next++] = new ExploreChild(
                     entry.Name, IsDirectory: true, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
-                    Visibility: VisibilityOf(entry))
-                : File(entry, probe));
+                    Visibility: VisibilityOf(entry));
+            }
+            else
+            {
+                var file = File(entry, probe);
+                into[next++] = file;
+                bytes += file.Size;
+            }
         }
 
-        foreach (var link in contents.Links)
+        for (var i = 0; i < contents.Links.Count; i++)
         {
+            var link = contents.Links[i];
+
             // Shown, and empty. Its target holds its own place in this tree, so counting anything
             // here would count those bytes twice — and hiding it altogether makes a directory the
             // user can plainly see in Explorer vanish from the picture.
@@ -199,19 +232,21 @@ internal static class WalkExploreReader
             // Dated, though. The dates are the link's own rather than its target's, which is the
             // right answer for the same reason the size is zero: the target is somewhere else in
             // this tree, carrying its own.
-            children.Add(new ExploreChild(
+            into[next++] = new ExploreChild(
                 link.Name, IsDirectory: true, IsLink: true, Size: 0, CreatedOf(link), WrittenOf(link),
-                Visibility: VisibilityOf(link)));
+                Visibility: VisibilityOf(link));
         }
 
         // Drawn like any other file, as the file table draws them. Leaving them out drew nothing for
         // a deduplicated file that holds its content, and only a symbolic link among them is a link.
-        foreach (var file in contents.ReparseFiles)
+        for (var i = 0; i < contents.ReparseFiles.Count; i++)
         {
-            children.Add(File(file, probe));
+            var file = File(contents.ReparseFiles[i], probe);
+            into[next++] = file;
+            bytes += file.Size;
         }
 
-        return children;
+        return bytes;
     }
 
     /// <summary>

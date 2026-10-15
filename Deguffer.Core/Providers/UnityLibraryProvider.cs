@@ -73,6 +73,7 @@ public sealed class UnityLibraryProvider : BuildDirectoryProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.ProjectBuildOutput,
         Application = "the Unity Editor",
         Publisher = "Unity Technologies",
         Purpose = "Unity imports everything under a project's Assets into an internal form and "

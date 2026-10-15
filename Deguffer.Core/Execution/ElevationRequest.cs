@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 
 namespace Deguffer.Core.Execution;
@@ -21,10 +22,10 @@ namespace Deguffer.Core.Execution;
 public abstract record ElevationRequest
 {
     /// <summary>
-    /// Open on the Storage page and preview again. Stateless, so one instance serves every caller
-    /// (G5).
+    /// Open on the Storage page and preview every location again. Stateless, so one instance serves
+    /// every caller (G5).
     /// </summary>
-    public static ElevationRequest Preview { get; } = new PreviewRequest();
+    public static ElevationRequest Preview { get; } = new PreviewRequest(Chosen: null);
 
     /// <summary>Open on the Installed apps page and read the entries again. Stateless, as <see cref="Preview"/> is.</summary>
     public static ElevationRequest InstalledApps { get; } = new InstalledAppsRequest();
@@ -44,6 +45,7 @@ public abstract record ElevationRequest
     {
         var explore = false;
         var preview = false;
+        List<string> chosen = [];
         var installedApps = false;
         var duplicates = false;
         List<SearchLocation> locations = [];
@@ -59,6 +61,15 @@ public abstract record ElevationRequest
             else if (argument.Equals(PreviewSwitch, StringComparison.OrdinalIgnoreCase))
             {
                 preview = true;
+            }
+            else if (argument.StartsWith(PreviewLocationPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                preview = true;
+
+                if (ValueOf(argument, PreviewLocationPrefix) is { } id)
+                {
+                    chosen.Add(id);
+                }
             }
             else if (argument.Equals(InstalledAppsSwitch, StringComparison.OrdinalIgnoreCase))
             {
@@ -92,7 +103,7 @@ public abstract record ElevationRequest
         return explore ? new ExploreRequest(drive, folder)
             : duplicates ? new DuplicatesRequest(locations)
             : installedApps ? InstalledApps
-            : preview ? Preview
+            : preview ? chosen.Count > 0 ? new PreviewRequest(new ProviderChoice { Ids = chosen }) : Preview
             : null;
 
         void AddLocation(string? path, LocationRole role)
@@ -112,6 +123,8 @@ public abstract record ElevationRequest
     private protected const string ExploreSwitch = "--explore";
 
     private protected const string PreviewSwitch = "--rescan";
+
+    private protected const string PreviewLocationPrefix = "--rescan-location=";
 
     private protected const string InstalledAppsSwitch = "--installed-apps";
 
@@ -178,10 +191,19 @@ public sealed record DuplicatesRequest : ElevationRequest
     public override int GetHashCode() => Locations.Count;
 }
 
-/// <summary>Open on the Storage page and preview again. See <see cref="ElevationRequest.Preview"/>.</summary>
-public sealed record PreviewRequest : ElevationRequest
+/// <summary>
+/// Open on the Storage page and preview again: every location, or only <paramref name="Chosen"/>
+/// where the scan being replaced measured only those. See <see cref="ElevationRequest.Preview"/>.
+///
+/// <para>The locations travel, one id to an argument, rather than being read from the stored choice
+/// on the other side. The ticks may have changed since that scan ran, or failed to save, and the
+/// elevated window is asked to repeat the scan the user was looking at. The preview switch travels
+/// with them, so an instance that does not know the ids still scans.</para>
+/// </summary>
+public sealed record PreviewRequest(ProviderChoice? Chosen) : ElevationRequest
 {
-    public override IReadOnlyList<string> ToArguments() => [PreviewSwitch];
+    public override IReadOnlyList<string> ToArguments() =>
+        Chosen is null ? [PreviewSwitch] : [PreviewSwitch, .. Chosen.Ids.Select(id => PreviewLocationPrefix + id)];
 }
 
 /// <summary>

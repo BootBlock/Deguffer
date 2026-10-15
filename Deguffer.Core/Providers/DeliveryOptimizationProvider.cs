@@ -75,6 +75,7 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Delivery Optimization, the download service behind Windows Update and the "
             + "Microsoft Store",
         Publisher = "Microsoft",

@@ -77,6 +77,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "Capture One, the photo editor",
         Publisher = "Capture One A/S",
         Purpose = "Capture One keeps a thumbnail and a preview of every image, inside each catalog and "

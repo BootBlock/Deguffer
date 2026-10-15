@@ -87,6 +87,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "OneDrive, through Windows' own support for files kept in the cloud",
         Publisher = "Microsoft",
         Purpose = "Every file you have opened from OneDrive stays downloaded on this PC as well as in the "

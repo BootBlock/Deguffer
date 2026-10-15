@@ -65,6 +65,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Epic Games launcher",
         Publisher = "Epic Games",
         Purpose = "The launcher writes a log every time it or its updater runs, and gathers a full "

@@ -98,6 +98,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "the Steam client",
         Publisher = "Valve",
         Purpose = "The Steam client keeps an HTTP cache of its own beside the program, in the "

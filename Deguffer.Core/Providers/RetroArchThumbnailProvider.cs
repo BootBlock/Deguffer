@@ -65,6 +65,7 @@ public sealed class RetroArchThumbnailProvider : RetroArchProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Games,
         Application = "RetroArch, the libretro frontend",
         Publisher = "the libretro project",
         Purpose = "RetroArch keeps a picture of each game in its playlists: box art, a title screen, a "

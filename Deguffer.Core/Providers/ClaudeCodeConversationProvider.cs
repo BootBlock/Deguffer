@@ -110,6 +110,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Claude Code, Anthropic's coding agent",
         Publisher = "Anthropic",
         Purpose = "Claude Code saves every conversation in its own folder, so that you can resume it, and "

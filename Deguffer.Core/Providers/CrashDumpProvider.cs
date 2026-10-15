@@ -87,6 +87,7 @@ public sealed class CrashDumpProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.Windows,
         Application = "Windows Error Reporting, and the kernel's own crash dump writer",
         Publisher = "Microsoft",
         Purpose = "When an application or Windows itself fails, what memory held at that moment "

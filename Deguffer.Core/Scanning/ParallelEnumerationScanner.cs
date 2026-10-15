@@ -118,8 +118,8 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// removes — a total that excluded recent files would then be subtracted from one the command
     /// did not respect.
     /// </summary>
-    public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default) =>
-        MeasureAsync(path, MinimumAge.Off, bounds, progress: null, ct);
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
+        MeasureManyAsync(asked, MinimumAge.Off, ct);
 
     /// <summary>
     /// Always null: this scanner holds no index, so it has nothing to search. Answering by walking

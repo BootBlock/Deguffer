@@ -79,6 +79,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "LM Studio, an app for running language models on your own computer",
         Publisher = "Element Labs",
         Purpose = "LM Studio runs models with llama.cpp, and downloads a build of it for each kind of "

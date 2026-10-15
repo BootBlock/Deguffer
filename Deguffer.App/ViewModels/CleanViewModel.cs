@@ -33,6 +33,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly IUserEnvironment _environment;
     private readonly IVolumeInventory _volumes;
     private readonly bool _isElevated;
+    private readonly Func<ElevationRequest, bool> _relaunch;
     private readonly SelectionService _selections;
     private readonly KeepService _keeps;
     private readonly RunningActions _running;
@@ -56,12 +57,23 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>Stops the re-plan after a clean. See <see cref="ReplanRunChangesAsync"/>.</summary>
     private CancellationTokenSource? _replanCancellation;
 
+    /// <summary>
+    /// The locations the last scan measured, or null where it measured every one. The elevated
+    /// relaunch measures them again: a user who scanned three chosen locations and asked to elevate
+    /// asked for those three, not for every location, nor for whatever is ticked by then.
+    /// </summary>
+    private ProviderChoice? _lastChosen;
+
+    /// <summary>How much of what Deguffer recognises the rows on screen were measured from. See <see cref="ScanCoverage"/>.</summary>
+    private ScanCoverage _coverage;
+
     /// <param name="volumes">Where the profile's volume is asked how full it is, before and after a run.</param>
     /// <param name="isElevated">
     /// Whether this process holds administrator rights. Read once by the page and handed down, so
     /// every row, step and offer on it is decided by the rights it was given rather than by
     /// whichever process's token a static read would find.
     /// </param>
+    /// <param name="relaunch">Starts an elevated replacement, returning false where the user declined.</param>
     /// <param name="selections">
     /// What the rows were left ticked as last time, and where a change to that is written back.
     /// A scan re-plans from scratch, so without this every preview hands the user the same list of
@@ -81,27 +93,36 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </param>
     /// <param name="appVersion">Deguffer's own version, which a run's diagnostic report names.</param>
     /// <param name="whenComplete">What follows a finished clean, chosen beside the Clean button.</param>
+    /// <param name="scanChoice">
+    /// The locations the Scan button's drop-down scans on their own. Built over this page's planner,
+    /// so its rows are the planner's own providers.
+    /// </param>
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,
         IVolumeInventory volumes,
         bool isElevated,
+        Func<ElevationRequest, bool> relaunch,
         SelectionService selections,
         KeepService keeps,
         RunningActions running,
         Func<IConfirmationPrompt> prompt,
         string appVersion,
-        WhenCompleteViewModel whenComplete)
+        WhenCompleteViewModel whenComplete,
+        ScanChoiceViewModel scanChoice)
     {
         _planner = planner;
         _environment = environment;
         _volumes = volumes;
         _isElevated = isElevated;
+        _relaunch = relaunch;
         _selections = selections;
         _keeps = keeps;
         _running = running;
         _prompt = prompt;
         WhenComplete = whenComplete;
+        ScanChoice = scanChoice;
+        _coverage = new ScanCoverage(planner.Providers.Count, planner.Providers.Count);
         _origin = new ReportOrigin(
             appVersion,
             $"{RuntimeInformation.OSDescription} ({RuntimeInformation.ProcessArchitecture})",
@@ -124,6 +145,8 @@ public sealed partial class CleanViewModel : ObservableObject
         // A clean or a removal on another page ends with this process as surely as one on this
         // page, so the button follows every page's actions and not only this one's busy flag.
         _running.Changed += (_, _) => ElevateAndRescanCommand.NotifyCanExecuteChanged();
+
+        ScanChoice.ChoiceChanged += (_, _) => PreviewChosenCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -195,6 +218,8 @@ public sealed partial class CleanViewModel : ObservableObject
 
     public WhenCompleteViewModel WhenComplete { get; }
 
+    public ScanChoiceViewModel ScanChoice { get; }
+
     /// <summary>
     /// The row whose items are listed in place of the rows, or null while the rows are shown.
     ///
@@ -254,6 +279,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PreviewCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PreviewChosenCommand))]
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
     public partial bool IsBusy { get; set; }
@@ -487,7 +513,25 @@ public sealed partial class CleanViewModel : ObservableObject
     public bool CanClean => HasPreview && !IsBusy && Findings.Any(f => f.IsSelected);
 
     [RelayCommand(CanExecute = nameof(CanRun), IncludeCancelCommand = true)]
-    private async Task PreviewAsync(CancellationToken ct)
+    private Task PreviewAsync(CancellationToken ct) => ScanAsync(chosen: null, ct);
+
+    /// <summary>
+    /// Scan only the locations chosen in the Scan button's drop-down. The list is replaced as a full
+    /// scan replaces it, so every row on screen was measured by this scan.
+    /// </summary>
+    /// <param name="choice">
+    /// The locations to scan, or null for the ones ticked now. An elevated relaunch passes the ones
+    /// the replaced window last scanned.
+    /// </param>
+    [RelayCommand(CanExecute = nameof(CanScanChosen), IncludeCancelCommand = true)]
+    private Task PreviewChosenAsync(ProviderChoice? choice, CancellationToken ct) =>
+        ScanAsync(choice ?? ScanChoice.Choice, ct);
+
+    private bool CanScanChosen(ProviderChoice? choice) =>
+        CanRun() && (choice ?? ScanChoice.Choice).Of(_planner.Providers).Count > 0;
+
+    /// <param name="chosen">The locations to scan, or null for every one.</param>
+    private async Task ScanAsync(ProviderChoice? chosen, CancellationToken ct)
     {
         IsBusy = true;
 
@@ -496,7 +540,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         try
         {
-            await LoadPreviewAsync(ct);
+            await LoadPreviewAsync(chosen, ct);
 
             ReportPreviewSummary();
         }
@@ -694,8 +738,13 @@ public sealed partial class CleanViewModel : ObservableObject
     /// arrive here on the UI thread; the dispatcher runs them in the order they were posted, which
     /// is what lets the rows be built here and the totals in the continuation below.
     /// </summary>
-    private async Task LoadPreviewAsync(CancellationToken ct)
+    private async Task LoadPreviewAsync(ProviderChoice? chosen, CancellationToken ct)
     {
+        // Read once, so the figure the sentence states is the list the planner was handed.
+        var measured = chosen?.Of(_planner.Providers);
+        _lastChosen = chosen;
+        _coverage = new ScanCoverage(measured?.Count ?? _planner.Providers.Count, _planner.Providers.Count);
+
         // An item list belongs to a row that is about to be thrown away, and a tick in it would change
         // a row no run can reach.
         CloseItems();
@@ -729,7 +778,11 @@ public sealed partial class CleanViewModel : ObservableObject
         // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
 
-        await Task.Run(() => _planner.PlanAllAsync(keep, progress, found, ct), ct);
+        await Task.Run(
+            () => measured is null
+                ? _planner.PlanAllAsync(keep, progress, found, ct)
+                : _planner.PlanAsync(measured, keep, progress, found, ct),
+            ct);
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
@@ -827,6 +880,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         row.Replan(finding, _selections.Memory, _keeps.Current);
         row.IsListed = IsListed(row);
+        ScanChoice.Missing.Record(finding.Provider, row.Status);
 
         // The row's steps are new, and a re-plan runs while the keep list is not to be changed.
         AllowKeepListChanges(row, !IsBusy);
@@ -853,7 +907,7 @@ public sealed partial class CleanViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanElevateNow))]
     private void ElevateAndRescan()
     {
-        if (!ElevatedRelaunch.TryRelaunch(ElevationRequest.Preview))
+        if (!_relaunch(_lastChosen is null ? ElevationRequest.Preview : new PreviewRequest(_lastChosen)))
         {
             Report(
                 "Deguffer is still running without administrator rights, so scans measure by walking "
@@ -877,6 +931,10 @@ public sealed partial class CleanViewModel : ObservableObject
         // Rows arrive as their providers finish, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
         row.IsListed = IsListed(row);
+
+        // As each row lands rather than once at the end, so a scan that is cancelled part-way still
+        // marks the locations it did find missing.
+        ScanChoice.Missing.Record(finding.Provider, row.Status);
 
         // One event for both directions: the row's own checkbox and any step within it. Subscribing
         // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays
@@ -1046,6 +1104,11 @@ public sealed partial class CleanViewModel : ObservableObject
             PreviewCancelCommand.Execute(null);
         }
 
+        if (PreviewChosenCommand.IsRunning)
+        {
+            PreviewChosenCancelCommand.Execute(null);
+        }
+
         if (CleanCommand.IsRunning)
         {
             CleanCancelCommand.Execute(null);
@@ -1209,7 +1272,8 @@ public sealed partial class CleanViewModel : ObservableObject
             Findings.Select(f => f.Status),
             SelectableTotal,
             SelectedTotal,
-            ElevateLabel));
+            ElevateLabel,
+            _coverage));
 
         // After Report, which clears it.
         _barShowsPreviewSummary = true;

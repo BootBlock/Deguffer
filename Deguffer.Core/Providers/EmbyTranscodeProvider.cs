@@ -34,6 +34,7 @@ public sealed class EmbyTranscodeProvider : MediaServerTranscodeProvider
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.MediaAndCreative,
         Application = "Emby Server",
         Publisher = "Emby",
         Purpose = "When a player cannot play a file as it is, Emby converts it as it streams and writes "

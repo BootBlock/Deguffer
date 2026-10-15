@@ -197,6 +197,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.DeveloperTools,
         Application = "Claude Code, Anthropic's coding agent, and the editor extensions that run it",
         Publisher = "Anthropic",
         Purpose = "Claude Code keeps each session's working state in one folder in your profile, beside your "

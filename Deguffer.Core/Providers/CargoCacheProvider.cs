@@ -167,6 +167,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "Cargo, the build tool and package manager for Rust",
         Publisher = "the Rust project",
         Purpose = "Every Rust project on the machine shares one Cargo home. It holds the crate "

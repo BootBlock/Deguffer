@@ -45,6 +45,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.PackageCaches,
         Application = "NuGet, the package manager for .NET",
         Publisher = "Microsoft and the .NET Foundation",
         Purpose = "NuGet keeps several caches in your profile: the downloaded package archives, "

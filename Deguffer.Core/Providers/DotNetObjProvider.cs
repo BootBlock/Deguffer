@@ -81,6 +81,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
 
     public override ProviderDescription Description { get; } = new()
     {
+        Category = ProviderCategory.ProjectBuildOutput,
         Application = "the .NET SDK and MSBuild",
         Publisher = "Microsoft",
         Purpose = "Every .NET project keeps an obj directory beside it, holding what a build "

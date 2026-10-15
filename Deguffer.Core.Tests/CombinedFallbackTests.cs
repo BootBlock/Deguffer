@@ -72,8 +72,8 @@ public sealed class CombinedFallbackTests : IDisposable
         public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
             new(new AgedScan(ScanResult.Slow(ScanSize.Zero, reasons[path]), ScanResult.Slow(ScanSize.Zero, reasons[path])));
 
-        public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default) =>
-            MeasureAsync(path, ct: ct);
+        public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
+            MeasureManyAsync(asked, ct: ct);
 
         public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
             DirectorySearch search,
@@ -104,6 +104,7 @@ public sealed class CombinedFallbackTests : IDisposable
 
         public override ProviderDescription Description { get; } = new()
         {
+            Category = ProviderCategory.TemporaryFiles,
             Application = "a test",
             Publisher = "the suite",
             Purpose = "Plans the targets it is handed.",
