@@ -2,109 +2,103 @@
 
 # Deguffer
 
-A Windows utility that finds and reclaims wasted disk space, with a safety model good enough to
-trust. It knows what specific locations on your disk actually are, and tells you what each one
-costs to lose, so you decide what goes. It also shows you where your memory goes, with the same
-refusal to guess on your behalf, and without claiming to free a byte of it.
+Deguffer finds what is filling your Windows drive and helps you get the space back without losing
+anything you meant to keep. It recognises the caches, build output, downloads and leftovers that
+applications and Windows leave behind, tells you what each one is and what deleting it would cost
+you, and leaves the decision with you. It can also map a whole drive, find duplicate files, tidy the
+installed programs list, and show where your memory is going.
 
-**Guff** is British for nonsense, waffle, rubbish — the stuff that accumulates and serves no
-purpose. **De-** removes it.
+*Guff* is British slang for rubbish, the stuff that piles up and serves no purpose, which is what
+Deguffer clears away.
 
-> **Status:** Version 0.70.0. Eighty-one sources across the tiers, a file-table-backed Explore view
-> of the whole drive, a Duplicates view of the files that are on the disk more than once, and a
-> Memory view of where physical memory goes that can ask one program you pick to close itself. See
-> [Roadmap](#roadmap).
+Deguffer runs on Windows 10 (version 1809 or later) and Windows 11, and it is free and open source
+under the MIT licence. It is at version 0.70.0 and has no published release yet, so for now you will
+need to [build it from source](#building).
 
-## Why
+## What it does
 
-Windows' own Disk Cleanup and Storage Sense understand Windows' caches, and stop there. Everything
-else that quietly fills a drive — application and package caches, downloaded toolchains and
-runtimes, per-workspace editor state, container images, search and index databases — is invisible
-to them. Those are the bulk of the waste, and each one needs its own knowledge to clear safely.
+- **Storage** checks 82 sources of waste, from package-manager and browser caches to `Windows.old`
+  and old restore points, and sorts each one into a [safety tier](#safety-tiers). You tick what
+  goes, and after the clean Deguffer checks that everything it promised to leave alone is still
+  there.
+- **Explore** draws a drive or a folder as a treemap, an icicle or a sunburst, or as a list of the
+  largest files at any depth. It shows what grew since an earlier scan and what kinds of file take
+  the space, and it can send what you pick to the Recycle Bin.
+- **Duplicates** finds files stored more than once, matched by name, size, date or content. Before
+  it removes a copy you marked, it compares that copy byte for byte with the one you are keeping.
+- **Installed apps** finds entries in Windows' installed programs list for programs that are
+  provably gone, by default backs each entry up before removing it, and runs a program's own
+  uninstaller when you ask it to.
+- **Memory** shows where physical memory goes, by application, by service and to Windows itself, and
+  can ask one program you choose to close.
 
-Size alone cannot tell you which is which, so Deguffer does not rank folders by size and let you
-guess. It recognises specific locations, says what each holds and what losing it costs, and leaves
-the decision with you.
+Deguffer starts without administrator rights. Storage, Explore and Duplicates can restart it as
+administrator, so that it reads a drive's file table directly, which makes a scan much faster, and
+so that Storage can run the Windows cleanup steps that need those rights. Installed apps can do the
+same to remove entries that belong to every account.
 
-On the workstation this tool was designed against — Windows 11, a ~330 GB system drive, down to
-**5.6 GB free** — targeted cleanup of three package-manager caches recovered **22.9 GB** in a few
-minutes without touching a single piece of user data. That audit is what the safety model was built
-from.
+## Why it exists
 
-Scanning that same drive today, version 0.70.0 recognises 34 locations and finds 29 of them
-present. It offers **10.3 GB** of Tier 1 cache pre-selected and **1.4 GB** of Tier 2 beside it, and
-reports **6.4 GB** of Tier 3 user data separately with nothing pre-selected. The Recycle Bin and the
-crash dumps are real space, and they are still yours to decide about.
+Windows' Disk Cleanup and Storage Sense know about Windows' own caches and little else. On a working
+machine most of the waste is in application and package caches, downloaded toolchains and runtimes,
+editor state, container images and search indexes, and each of those needs its own knowledge to
+clear safely.
 
-Memory is the other thing a Windows machine runs short of, and finding out where yours went should
-not mean leaving for a second program. The subject holds the same trap in a different form. Low free
-memory is Windows working as designed: it fills memory nothing else needs with cache, and hands
-those pages back the moment something asks for them. The two failures you do feel are commit charge
-reaching the commit limit, when allocations start to fail, and sustained hard faulting, which shows
-in disk activity rather than in any memory figure. So Deguffer draws where physical memory goes,
-leads with the one of the two that a single figure states, and frees nothing.
+Deguffer began as an audit of a Windows 11 workstation that was down to 5.6 GB free on a 330 GB
+system drive. Clearing three package-manager caches in the way each tool intends recovered 22.9 GB
+in a few minutes, without touching any user data. The same audit nearly deleted 11 GB of VS Code
+`workspaceStorage`, which looks like a cache but mostly holds AI chat history. Nothing in its path,
+size or name gives that away. A cleaner that ranks folders by size would have recommended deleting
+it, and that near miss is why Deguffer classifies everything before it offers it.
 
-## The idea: safety tiers
+## Safety tiers
 
-Sizes are easy to compute. The classification is the part that takes knowledge, and it is the
-product.
-
-| Tier | Meaning | Deleting it costs | Default |
+| Tier | What it is | Deleting it costs | Default |
 | --- | --- | --- | --- |
-| **1 — Regenerable cache** | Whatever made it re-creates it on demand | A slower next use | Offered, pre-selected |
-| **2 — Regenerable, with cost** | Re-created by re-downloading gigabytes | Time and bandwidth | Offered, not pre-selected |
-| **3 — User data** | Logs, histories, saved sessions. *Looks* like cache | **Gone permanently** | Never pre-selected |
-| **4 — Do not touch** | Config, credentials, live state | Breakage | Not shown at all |
+| **1. Regenerable cache** | Whatever made it re-creates it when needed | A slower next use | Offered and pre-selected |
+| **2. Regenerable, with cost** | Re-created by downloading or rebuilding gigabytes | Time and bandwidth | Offered, not pre-selected |
+| **3. User data** | Logs, histories, saved sessions. It *looks* like cache | It is gone for good | Offered, never pre-selected |
+| **4. Do not touch** | Settings, credentials, live state | Breakage | Never shown |
 
-### The mistake this exists to prevent
+Anything Deguffer does not positively recognise is Tier 4, so it is left alone by default rather
+than because someone remembered to exclude it. Outlook's `.ost` and `.pst` files are also named,
+because they can be saved anywhere, and Deguffer will never remove one by any route.
 
-During the original audit, ~11 GB of VS Code `workspaceStorage` was initially classified as cache.
-It is mostly **AI chat session history** — a permanent record of past conversations, sitting in a
-directory whose name and location strongly suggest "cache".
+## The rules it follows
 
-Nothing about its path, size or shape distinguishes it from genuinely disposable state. Only
-knowing what the subfolder *contains* does. A size-ranked directory list would have recommended
-deleting it, and the user would have silently lost months of history. Tier 3 exists because that
-class of error is invisible until it is irreversible.
+- Where a tool has its own command for clearing its cache, Deguffer uses it.
+  `dotnet nuget locals all --clear` cleared four locations, two of them outside `.nuget`, and a
+  cleaner working from paths would have missed about 3 GB.
+- It never deletes a tool's root folder, only the children it recognises. `.gradle` keeps disposable
+  `caches` and `wrapper` folders next to `gradle.properties`, which can hold signing keys.
+- Nothing is deleted until a scan has shown you what it is, and you can read the exact steps for
+  each row before you agree to them.
+- After each clean it checks that the tool's root folder, anything it did not recognise, and
+  anything in Tier 4 are still there, and it names any check that failed.
+- A file that Windows has locked is skipped, never forced.
+- Every path is handled in Windows' long form. NuGet and Node trees often run past the 260-character
+  limit, and a path cut short there would mean a partial deletion that nobody notices.
+- Something you put on the keep list, such as a Playwright browser build or an older version of an
+  application, is left out of every clean until you release it in Settings.
+- A Storage clean deletes outright and cannot be undone. Explore and Duplicates use the Recycle Bin
+  by default, and they will keep an item where it is, and tell you why, if the bin cannot take it
+  and Windows would delete it permanently instead.
+- A clean can be set to close Deguffer, or to lock, log off, sleep, hibernate, restart or shut down
+  the PC, when it finishes. Deguffer waits 30 seconds first so that you can cancel, does nothing if
+  the clean's checks failed, and never forces a program to close.
+- The Memory page is not a RAM cleaner. It never trims a program's memory or flushes Windows' memory
+  lists, never calls a process idle or safe to close, and never touches a service.
 
-## Rules the design is built on
+## What Storage cleans
 
-- **Prefer a tool's own eviction command over deleting paths.** `dotnet nuget locals all --clear`
-  cleared four locations, two of which were not under `.nuget` at all. A path-based cleaner would
-  have missed ~3 GB.
-- **Never delete a tool's root directory.** `~\.gradle` holds `caches` and `wrapper` (disposable)
-  next to `gradle.properties`, which may contain signing keys. Only recognised children are ever
-  targeted; anything unrecognised is Tier 4 by construction.
-- **Nothing is deleted until you have seen what it is.** Scanning is the primary action; cleaning
-  is a separate, explicit step.
-- **What follows a clean can always be stopped.** A clean can be set to exit Deguffer, lock the PC,
-  log off, sleep, hibernate, restart or shut down once it has finished. Each one waits behind a
-  30-second countdown you can cancel, never follows a clean whose verification failed, and never
-  forces a program closed.
-- **Verify the negative.** After acting, assert that the things that should have survived did —
-  config files, protected directories — and report it. This turns "I think it worked" into
-  evidence, and catches an over-broad rule on the first run rather than the hundredth.
-- **What you keep stays kept.** An item Deguffer can recognise wherever it is stored (a Playwright
-  browser build, an Azure Functions Core Tools release, a superseded application version) can be put
-  on a keep list from its row's list of items. A kept item is left out of every clean, checked by
-  every clean to be still there, and listed on the Settings page until you release it. The list is
-  stored apart from the remembered selection, because a lost entry only offers something again,
-  where a misread tick would pre-select it.
-- **A locked file is the OS protecting live state.** Access-denied is skipped, not escalated.
-- **Not a RAM cleaner, in any form.** The Memory view never trims a working set, and never purges or
-  flushes the standby list or any other memory list. Those are the tricks that make a free-memory
-  figure rise, and the pages they push out come back as page faults, read from the disk a second
-  time. It never says that a process, a service or a part of Windows is idle or safe to close, and
-  it never starts, stops, pauses or reconfigures a service.
-- **Long paths are mandatory.** NuGet and Node trees routinely exceed `MAX_PATH`, and truncating
-  there is the likeliest cause of a silent partial deletion.
+Each of the 82 sources has its own provider, which knows what that location is and what sits beside
+it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
+output such as `node_modules`, `obj` and Rust's `target` folders is searched for only in the source
+folders you add in Settings. [What Deguffer cleans, and what it costs you](docs/cache-locations.md)
+explains most of these sources in detail.
 
-## What it handles today
-
-Eighty-one providers, each holding its own knowledge of one location. A provider reports "not
-installed" cleanly on a machine without that toolchain.
-
-**Tier 1 — regenerable cache.** Whatever wrote it re-creates it on demand.
+<details>
+<summary><b>Tier 1: regenerable caches</b></summary>
 
 | Source | Notes |
 | --- | --- |
@@ -140,8 +134,10 @@ installed" cleanly on a machine without that toolchain.
 | Claude Code command snapshots | The project snapshots Claude Code fails to remove when it exits; only those made before every running session started, or that Claude Code began to remove |
 | Test browser profiles | The profiles Playwright and Puppeteer leave in a temporary folder when a test run is stopped; never one Deguffer can see a running browser using |
 | Delivery Optimization cache | Windows' own command clears it, sized by Windows' own figure; never a file Windows was told to keep, and never Windows Update's own folder |
+</details>
 
-**Tier 2 — regenerable, with cost.** Re-created by re-downloading or rebuilding.
+<details>
+<summary><b>Tier 2: regenerable, with cost</b></summary>
 
 | Source | Notes |
 | --- | --- |
@@ -180,9 +176,10 @@ installed" cleanly on a machine without that toolchain.
 | Superseded driver packages | Older versions of drivers in Windows' driver store, removed by Windows' own Disk Cleanup handler; never the newest version of a driver, one a device is using, or one that is part of Windows |
 | Superseded Windows components | The component store (`WinSxS`), reclaimed by `DISM /StartComponentCleanup` as administrator and sized by DISM's own analysis, which counts what the store shares with Windows once; nothing is ever deleted from the store |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
+</details>
 
-**Tier 3 — user data, and anything else whose loss is permanent.** Never pre-selected, and shown
-with what losing it costs.
+<details>
+<summary><b>Tier 3: user data, and anything else you cannot get back</b></summary>
 
 | Source | Notes |
 | --- | --- |
@@ -201,134 +198,120 @@ with what losing it costs.
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's are never offered |
 | WSL and Docker virtual disks | Reported, never acted on: each disk's size on the drive, whether it is sparse, what Docker says is reclaimable inside when Docker Desktop is already running, and the vendor's commands in the order to use them. Nothing is pruned, compacted or deleted |
 | Claude Code conversations | One item per session, by its title and project, for when you want one gone before Claude Code deletes it itself after 30 days; never one running, one in a project Claude Code is running in, or one used this week |
+</details>
 
-**Tier 4** is not a list of sources. It is everything a provider does not recognise, which is
-excluded by construction rather than by enumeration. Outlook's mailbox and data files are named as
-well, because they can be saved anywhere: Deguffer never removes an `.ost` or a `.pst`, by any route,
-wherever it finds one.
+## Explore
 
-## Where the memory goes
+Explore reads the drive's file table when Deguffer runs as administrator, and walks the folders when
+it does not. You can view a whole drive or one folder as a treemap, an icicle, a sunburst or a list,
+and colour it by folder, by age, by growth or by file type. The Files view lists the largest files
+at any depth, filtered by name or wildcard, type, size, and how long it has been since each file was
+written.
 
-The Memory view draws physical memory through the same treemap, icicle and sunburst Explore uses,
-with a plain list beside them. The headline is committed memory against the commit limit, and
-available memory sits next to it rather than above it: a headline led by memory "in use" would
-present a cache as a problem.
+Two cards sit beside the map. *What grew* ranks folders by how much they grew since an earlier scan,
+and it can replay the change on the map from then to now. *What kind of files* breaks the folder
+down by type. If you point at a row in either card, its shapes will light up on the map.
 
-The picture has three parts. **Applications** follows the process tree, and a parent link counts
-only where the creation times allow it, because Windows reuses process identifiers. **Services** is
-grouped by host process, and a host carries the name of its service where it holds one and a count
-where it holds several, because memory in a shared host cannot be divided between them. **Windows**
-holds the compression store, the non-paged pool, the memory lists, and the memory no figure
-attributes — drawn and labelled rather than hidden, because a reader takes a missing remainder for
-a leak. Nothing is drawn twice: the paged pool sits inside the system working set, so it is not a
-part of its own, and the page says where its pages are counted.
+The map pans and zooms with the mouse, a touchpad, a touch screen or the keyboard. It has Back and
+Forward buttons like a web browser, and a small overview of the whole picture while you are zoomed
+in. It follows Windows' animation and high contrast settings, and screen readers can read each
+shape's name, size and share of its folder.
 
-Every size is a lower bound, and the page says so in its own words. The private working set is the
-closest single figure to what closing a program would return, and compressed pages, shared pages and
-the memory the kernel holds on a process's behalf are not in it. Where a figure cannot be trusted or
-a table cannot be read to its end, the view says which one and what is missing, rather than drawing
-a zero.
+Explore will not remove anything inside the Windows, Program Files or ProgramData folders, or other
+accounts' profiles. It will not remove your own profile, AppData or temporary folders themselves, a
+tool's root folder or anything in it that Deguffer does not recognise, or any folder that contains
+one of these. When it refuses, it gives the reason on the item instead of greying out a button.
+After a removal it checks that everything beside the removed item is still there.
 
-The view has one action, and it will not grow a second. Pick a program and Deguffer will ask it to
-close, the way its own close button does: it posts one close to each of that program's own windows
-and does nothing else, so unsaved work stays the program's own question, asked in the program's own
-words. It never terminates anything, never closes a service host, never touches a program in another
-session or under another account, and never asks for more rights in order to reach one. Whatever it
-will not do, it says why on the row rather than greying a button out, and it confirms every close
-before sending it, naming the program and how many windows will be asked. Afterwards it reports what
-it sent and where, what it expected to exit, and what exited that it sent nothing to — and it never
-claims that nothing else stopped, because processes exit on their own and it cannot know that.
+## Duplicates
 
-## Files that are there twice
+You choose the drives and folders to search and what two files must share to count as copies: the
+name, the size, the last-modified time, the content, or any mix of these. Content is compared by a
+checksum you choose, XXH128 by default. Checksums are remembered, so a second search only reads the
+files that changed. A location can be set as a reference, so its files are matched but never marked
+for removal.
 
-The Duplicates view finds files that are on the disk more than once, across whole drives and
-folders, matched on the name, size, last-modified time or content you choose. Content is compared by
-a checksum you pick (XXH128 by default, SHA-256, SHA-512, SHA-1, MD5, CRC-32, or SHA3-256 where
-Windows offers it), first over each file's first and last blocks and then in full, and a checksum is
-remembered under the file's volume, number, length and times, never its path, so a second search
-reads only what changed. A location can be a reference, whose copies are matched and never marked.
+Nothing is marked when a search finishes. You mark copies yourself or with a named rule, and every
+group always keeps at least one copy it can count on. That copy is on an internal drive, outside
+temporary and cloud folders and anywhere a Storage clean deletes, unless it is in a location you set
+as a reference. A link is never followed, an empty file is never matched, and a file that is only in
+the cloud is never read, so a search will not make Windows download anything. After a removal,
+Deguffer checks that every kept and reference copy, and everything beside a removed copy, is still
+there. The results can be saved as a CSV file.
 
-A file is one file however many names it has, a link is never followed and never matched, an empty
-file is never matched, and a file that is online-only is never read, so a search never makes
-Windows download anything. The places Explore refuses, and the folders programs are installed in,
-are passed over by default and named, so a search that skipped a place never reads as one that found
-nothing there.
+## Installed apps
 
-Nothing is marked when a search finishes. You mark copies by hand, or run a named rule that marks
-them, and every group always keeps a copy that can be kept: one on an internal drive, outside the
-temporary folder, a cloud folder and anything a Storage clean deletes. Removal goes to the Recycle
-Bin by default, and before each copy goes it is held open beside the copy kept and compared with it
-byte for byte, named streams included. A copy the Recycle Bin cannot take, because its path is too
-long, it is larger than the bin can hold, or Windows will not say what its drive's bin can hold,
-stays where it is, since Windows would otherwise delete it outright. Afterwards every kept and reference copy is checked to be still there, by its file
-number, and everything beside a removed copy by its exact name.
+Over time Windows' list of installed programs collects entries for programs that are no longer
+there. Deguffer removes an entry only when the machine proves the program is gone, for example
+because Windows Installer says the product is not installed or its uninstaller file is missing. By
+default it backs the entry up with `reg.exe` first. It removes only the registry key, never any
+files, and a backup can be restored from the same page. For programs that are still installed, it
+runs each one's own uninstaller, one at a time.
+
+## Memory
+
+Low free memory on Windows is normally a sign that Windows is working well. It fills memory that
+nothing else needs with cache and hands it back as soon as something asks. The problems you do
+notice come from committed memory reaching its limit, when programs can no longer allocate, and from
+constant hard faults, which show as disk activity rather than in any memory figure. The Memory page
+leads with committed memory, because a single figure shows how close the machine is to that limit.
+
+The page draws memory with the same treemap, icicle and sunburst as Explore, in three parts:
+applications by process tree, services by the process that hosts them, and Windows itself, including
+the memory no figure accounts for. Every size is a lower bound, and the page says where a figure is
+missing instead of drawing it as zero.
+
+Its one action is to ask a program you pick to close, in the same way as its own close button, so
+any question about unsaved work comes from the program itself. Deguffer asks you to confirm each
+close, naming the program and how many of its windows will be asked. It never ends a process, closes
+a service host, touches a program in another session or under another account, or asks for more
+rights to reach one.
 
 ## Building
 
-Requires the **.NET 10 SDK**. `Deguffer.App` additionally needs the Windows App SDK workload.
+You will need Windows and the .NET 10 SDK. The Windows App SDK and Win2D come from NuGet.
 
 ```
 dotnet build Deguffer.sln
 dotnet test  Deguffer.sln
 ```
 
-`Deguffer.Core` carries no UI dependency and is testable as an ordinary class library, and that is
-where a rule goes. `Deguffer.App.Tests` covers how the view-models hold those rules together. The app is
-WinUI 3, unpackaged, shipped self-contained — a disk-cleanup tool is exactly what someone reaches
-for on a machine too full to install a runtime.
+The app is written to `!Distribution\Deguffer.App.exe`. It is a WinUI 3 app that runs without
+installation and includes its own .NET runtime, because a disk-cleanup tool is often needed on a
+machine too full to install one.
 
-## Architecture
+`Deguffer.Core` holds every safety rule and has no UI dependency, so it is tested as an ordinary
+class library. Adding a cache source means one new `ICleanupProvider` and its tests, and the safety
+model then applies to it like every other source.
 
 ```
-Deguffer.Core/
-  Safety/        tier classification, disposable-child rules, long paths, machine seams
-  Scanning/      size aggregation, free space
-  Execution/     plan model, planner, executor, post-run verification
-  Choosing/      per-item selection: groups, columns, the search filter, each step's choice
-  Providers/     one class per known cache
-  Cloud/         cloud-file placeholders: reading them and releasing local copies
-  SystemProtection/ restore points and shadow copy storage, through Windows' own interfaces
-  VirtualDisks/  WSL and Docker Desktop virtual disks: where they are, and the vendor's route to shrink each
-  Exploring/     whole-drive view: file-table reads, tree building, what each location is
-  Duplicates/    the files there twice: locations, identity, checksums, marks, the guarded removal
-  Memory/        where memory goes: process and service tables, checked figures, the memory tree
-  InstalledApps/ Windows' installed programs list: stale entries, reg.exe backups, uninstallers
-  Configuration/ user preferences
-  Diagnostics/   run logging
-  Viewing/       the live list and size ordering the views share
+Deguffer.Core/        safety model, providers, planner and executor, Explore, Duplicates, Memory
 Deguffer.Core.Tests/
-Deguffer.Testing/  the fakes and fixtures the test projects use
-Deguffer.App/  WinUI 3 shell, MVVM over Core
+Deguffer.Testing/     the fakes and fixtures the test projects share
+Deguffer.App/         the WinUI 3 shell
 Deguffer.App.Tests/
-Deguffer.Benchmark/  times the file-table read and the walk, run by hand (see CONTRIBUTING.md)
+Deguffer.Benchmark/   times how a scan reads the disk, run by hand (see CONTRIBUTING.md)
 Deguffer.Benchmark.Tests/
 ```
 
-Adding a cache source is one `ICleanupProvider` plus tests; the safety model then applies to it
-uniformly. Providers hold knowledge and no orchestration; the planner holds orchestration and no
-knowledge.
-
 ## Roadmap
 
-File-table-backed full-drive scanning has landed: Explore reads the volume's MFT when the app runs
-elevated, and walks whatever the table cannot account for. The Memory view has landed as well, with
-the one action it will ever have: asking a program you pick to close itself, and nothing stronger.
-So has the Duplicates view, built to [its plan](docs/todo/done/duplicates.md); it matches no folders as
-units and replaces no copy with a link, by design.
-Still to come: VS Code workspace storage with per-workspace
-ages, Docker (reporting reclaim *inside* the VHDX separately from host space), and Android SDK.
+Whether to offer VS Code's workspace storage, which mostly holds AI chat history, is still
+undecided.
 
-Deliberately out of scope: deleting anything from `WinSxS`, `Windows\Installer`, or the installer
-package caches. They are large and tempting, but the failure modes are severe. The component store
-is reclaimed only through `DISM`'s own cleanup, and the rest not at all.
+Some things are left out on purpose. Deguffer will never delete files from `WinSxS`,
+`Windows\Installer` or installers' package caches, because the ways that can go wrong are severe,
+and it reduces the component store only through DISM's own cleanup. The Android SDK is left alone
+too, because its only real cache is a few megabytes sitting beside your debug signing key and
+emulator images. The Memory page will not gain a second action, and Duplicates will not replace
+copies with links.
 
 ## Documentation
 
-- [Specification](docs/todo/_spec.md) — the safety model, the audit evidence behind it, and the
-  decided toolchain
-- [CLAUDE.md](CLAUDE.md) — engineering gates for contributors and agents
-- [CONTRIBUTING.md](CONTRIBUTING.md) — how to ask for a change, and why pull requests are not
-  accepted
+- [What Deguffer cleans, and what it costs you](docs/cache-locations.md): each location in detail
+- [Specification](docs/todo/_spec.md): the safety model and the evidence behind it
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to ask for a change. Pull requests are not accepted.
+- [SECURITY.md](SECURITY.md): how to report a vulnerability privately
 
 ## Licence
 
