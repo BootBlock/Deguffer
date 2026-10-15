@@ -148,6 +148,11 @@ public sealed class SourceDirectoryDiscovery
         var refused = new List<string>();
         var fellBack = false;
 
+        // Each folder a pass will search, as the user spelled it the first time it appears. Gathered
+        // before any search starts, because an outer root can hand a nested one off only if it knows
+        // the nested one will be searched.
+        var searchable = new List<string>();
+
         foreach (var root in roots)
         {
             ct.ThrowIfCancellationRequested();
@@ -175,15 +180,25 @@ public sealed class SourceDirectoryDiscovery
                     continue;
             }
 
-            var searched = await SearchAsync(search, root.Path, ct).ConfigureAwait(false);
+            if (!searchable.Exists(other => SameFolder(other, root.Path)))
+            {
+                searchable.Add(root.Path);
+            }
+        }
+
+        foreach (var root in searchable)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var searched = await SearchAsync(search.HandingOff(Nested(root, searchable)), root, ct).ConfigureAwait(false);
 
             candidates.AddRange(searched.Candidates);
             unreadable.AddRange(searched.Unreadable);
             fellBack |= searched.FellBack;
         }
 
-        // Approved roots may nest or repeat, and the same directory reached twice would become two
-        // steps deleting one path.
+        // A root repeated in another case is still searched twice, and the same directory reached
+        // twice would become two steps deleting one path.
         var result = new SourceDiscovery(
             [.. candidates.Distinct(StringComparer.OrdinalIgnoreCase)],
             fellBack,
@@ -282,6 +297,41 @@ public sealed class SourceDirectoryDiscovery
                 : null;
         }
     }
+
+    /// <summary>
+    /// Each of <paramref name="searchable"/> strictly inside <paramref name="root"/>, as components
+    /// below it, for the search of <paramref name="root"/> to stop at.
+    ///
+    /// <para>Every one of them is searched on its own, so a search that also entered it listed every
+    /// directory in it twice, which is up to half of discovery when the nested folder holds most of
+    /// the outer one. Stopping at it gives the same answer, because each route judges a directory by
+    /// its name and its own descent alone, never by the path above it. A nested root the outer search
+    /// could never have reached, behind a link or below a directory it does not enter, loses
+    /// nothing.</para>
+    ///
+    /// <para>Compared as spelled. A nested root spelled in another case from its parent is not found
+    /// here, which costs a second listing of it rather than a folder nobody searched.</para>
+    ///
+    /// <para>Internal for the test that hands its answer to the walk, which is where a spelling
+    /// the two disagreed on would show.</para>
+    /// </summary>
+    internal static IReadOnlyList<IReadOnlyList<string>> Nested(string root, IReadOnlyList<string> searchable) =>
+    [
+        .. searchable
+            .Where(other => !SameFolder(other, root)
+                && LongPath.Contains(Spelled(root), Spelled(other), StringComparison.Ordinal))
+            .Select(other => LongPath.Relative(Spelled(root), Spelled(other)).Split(Path.DirectorySeparatorChar)),
+    ];
+
+    /// <summary>
+    /// Whether two approved roots name one folder as spelled, so the second is not searched again.
+    /// </summary>
+    private static bool SameFolder(string first, string second) =>
+        Spelled(first).Equals(Spelled(second), StringComparison.Ordinal);
+
+    /// <summary>A root in display form, without the separator a picker or a hand may leave on it.</summary>
+    private static string Spelled(string root) =>
+        Path.TrimEndingDirectorySeparator(LongPath.Display(root));
 
     /// <summary>
     /// The search for every name registered so far. Internal for the benchmark, which walks with the
