@@ -30,7 +30,6 @@ public sealed class ProviderListingTests
             [ProviderCategory.TemporaryFiles, ProviderCategory.Games, ProviderCategory.PackageCaches],
             groups.Select(group => group.Category));
         Assert.Equal([Epic, Steam], groups[1].Providers);
-        Assert.Equal("Games", groups[1].Title);
     }
 
     [Fact]
@@ -40,6 +39,18 @@ public sealed class ProviderListingTests
 
         Assert.Equal([ProviderCategory.Games, ProviderCategory.PackageCaches], groups.Select(group => group.Category));
         Assert.Equal([Steam], groups[0].Providers);
+    }
+
+    /// <summary>
+    /// Each word may be anywhere, in any order, as in every other search box: "cache steam" finds
+    /// "Steam HTTP cache", which never holds the phrase.
+    /// </summary>
+    [Fact]
+    public void EveryWordMayBeAnywhereInAnyOrder()
+    {
+        var groups = ProviderListing.Group(Providers, "cache steam");
+
+        Assert.Equal([Steam], Assert.Single(groups).Providers);
     }
 
     /// <summary>Typing the heading brings up everything under it, not just the rows that say the word.</summary>
@@ -63,7 +74,7 @@ public sealed class ProviderListingTests
 
     /// <summary>
     /// Every shipped provider is listed exactly once, so nothing Deguffer can scan is missing from the
-    /// list of what to scan, and every category has a heading.
+    /// list of what to scan.
     /// </summary>
     [Fact]
     public void ListsEveryShippedProviderOnce()

@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Testing;
@@ -81,9 +82,40 @@ public class CleanViewModelChosenScanTests
         Assert.True(command.CanExecute(null));
         Assert.True(raised > 0);
 
+        bool? offeredWhileScanning = null;
+        temp.WhilePlanning = () => offeredWhileScanning = command.CanExecute(null);
+        page.ScanChosen();
+        Assert.False(offeredWhileScanning);
+        Assert.True(command.CanExecute(null));
+
         page.ViewModel.ScanChoice.Choose([temp], chosen: false);
 
         Assert.False(command.CanExecute(null));
+    }
+
+    /// <summary>
+    /// A tick that cannot be stored is not applied, as a setting is not: the box goes back, and a
+    /// chosen scan measures what the list shows ticked rather than a choice that exists nowhere else.
+    /// </summary>
+    [Fact]
+    public void ATickThatCannotBeStoredIsNotAppliedAndTheBoxGoesBack()
+    {
+        var temp = Provider("temp", ProviderCategory.TemporaryFiles, 10);
+        using var page = new StoragePage([temp]);
+        var choice = page.ViewModel.ScanChoice;
+        var row = choice.Shown.SelectMany(group => group).Single();
+        var raised = new List<string?>();
+        row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        // A folder where the file goes, so the write is refused as a locked profile refuses it.
+        Directory.CreateDirectory(Path.Combine(page.Environment.LocalAppData, "Deguffer", "preferences.json"));
+
+        row.IsChosen = true;
+
+        Assert.True(choice.SaveFailed);
+        Assert.False(row.IsChosen);
+        Assert.Contains(nameof(row.IsChosen), raised);
+        Assert.False(page.ViewModel.PreviewChosenCommand.CanExecute(null));
     }
 
     /// <summary>
@@ -194,27 +226,51 @@ public class CleanViewModelChosenScanTests
     }
 
     /// <summary>
-    /// Elevating measures again what the last scan measured. A user who scanned two chosen locations
-    /// and asked for administrator rights asked for those two, not for every location on the machine.
+    /// Elevating measures again what the last scan measured. A user who scanned a chosen location and
+    /// asked for administrator rights asked for that one: not for every location, and not for one
+    /// ticked after the scan ran.
     /// </summary>
     [Fact]
-    public void ElevatingAfterAChosenScanAsksForTheChosenScanAgain()
+    public void ElevatingAfterAChosenScanAsksForThatScanAgain()
     {
         var temp = Provider("temp", ProviderCategory.TemporaryFiles, 10);
-        using var page = new StoragePage([temp]);
+        var steam = Provider("steam", ProviderCategory.Games, 20);
+        using var page = new StoragePage([temp, steam]);
 
         page.ViewModel.ElevateAndRescanCommand.Execute(null);
 
         page.ViewModel.ScanChoice.Choose([temp], chosen: true);
         page.ScanChosen();
+        page.ViewModel.ScanChoice.Choose([steam], chosen: true);
         page.ViewModel.ElevateAndRescanCommand.Execute(null);
 
         page.Scan();
         page.ViewModel.ElevateAndRescanCommand.Execute(null);
 
         Assert.Equal(
-            [ScanScope.Every, ScanScope.Chosen, ScanScope.Every],
-            page.Relaunches.Select(request => Assert.IsType<PreviewRequest>(request).Scope));
+            ["every", "temp", "every"],
+            page.Relaunches.Select(request => Assert.IsType<PreviewRequest>(request).Chosen is { } chosen
+                ? string.Join(",", chosen.Ids)
+                : "every"));
+    }
+
+    /// <summary>
+    /// The elevated window scans the locations the replaced one scanned, whatever is ticked in its own
+    /// list, so the scan it repeats is the one the user was looking at.
+    /// </summary>
+    [Fact]
+    public void AChosenScanHandedOverScansThoseLocationsWhateverIsTicked()
+    {
+        var temp = Provider("temp", ProviderCategory.TemporaryFiles, 10);
+        var steam = Provider("steam", ProviderCategory.Games, 20);
+        using var page = new StoragePage([temp, steam]);
+        page.ViewModel.ScanChoice.Choose([steam], chosen: true);
+
+        UiThread.Run(() => page.ViewModel.PreviewChosenCommand.ExecuteAsync(new ProviderChoice { Ids = ["temp"] }));
+
+        Assert.Equal(1, temp.PlanCount);
+        Assert.Equal(0, steam.PlanCount);
+        Assert.Equal("temp", Assert.Single(page.ViewModel.Findings).Finding.Provider.Id);
     }
 
     /// <summary>Cancel stops a chosen scan as it stops a full one.</summary>

@@ -58,10 +58,11 @@ public sealed partial class CleanViewModel : ObservableObject
     private CancellationTokenSource? _replanCancellation;
 
     /// <summary>
-    /// What the last scan measured, which the elevated relaunch measures again: a user who scanned
-    /// three chosen locations and asked to elevate asked for those three, not for every location.
+    /// The locations the last scan measured, or null where it measured every one. The elevated
+    /// relaunch measures them again: a user who scanned three chosen locations and asked to elevate
+    /// asked for those three, not for every location, nor for whatever is ticked by then.
     /// </summary>
-    private ScanScope _lastScope = ScanScope.Every;
+    private ProviderChoice? _lastChosen;
 
     /// <summary>How much of what Deguffer recognises the rows on screen were measured from. See <see cref="ScanCoverage"/>.</summary>
     private ScanCoverage _coverage;
@@ -512,18 +513,25 @@ public sealed partial class CleanViewModel : ObservableObject
     public bool CanClean => HasPreview && !IsBusy && Findings.Any(f => f.IsSelected);
 
     [RelayCommand(CanExecute = nameof(CanRun), IncludeCancelCommand = true)]
-    private Task PreviewAsync(CancellationToken ct) => ScanAsync(ScanScope.Every, ct);
+    private Task PreviewAsync(CancellationToken ct) => ScanAsync(chosen: null, ct);
 
     /// <summary>
     /// Scan only the locations chosen in the Scan button's drop-down. The list is replaced as a full
-    /// scan replaces it, so every row on screen was measured by this scan. See <see cref="ScanScope"/>.
+    /// scan replaces it, so every row on screen was measured by this scan.
     /// </summary>
+    /// <param name="choice">
+    /// The locations to scan, or null for the ones ticked now. An elevated relaunch passes the ones
+    /// the replaced window last scanned.
+    /// </param>
     [RelayCommand(CanExecute = nameof(CanScanChosen), IncludeCancelCommand = true)]
-    private Task PreviewChosenAsync(CancellationToken ct) => ScanAsync(ScanScope.Chosen, ct);
+    private Task PreviewChosenAsync(ProviderChoice? choice, CancellationToken ct) =>
+        ScanAsync(choice ?? ScanChoice.Choice, ct);
 
-    private bool CanScanChosen() => CanRun() && ScanChoice.CanScan;
+    private bool CanScanChosen(ProviderChoice? choice) =>
+        CanRun() && (choice ?? ScanChoice.Choice).Of(_planner.Providers).Count > 0;
 
-    private async Task ScanAsync(ScanScope scope, CancellationToken ct)
+    /// <param name="chosen">The locations to scan, or null for every one.</param>
+    private async Task ScanAsync(ProviderChoice? chosen, CancellationToken ct)
     {
         IsBusy = true;
 
@@ -532,7 +540,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         try
         {
-            await LoadPreviewAsync(scope, ct);
+            await LoadPreviewAsync(chosen, ct);
 
             ReportPreviewSummary();
         }
@@ -730,12 +738,12 @@ public sealed partial class CleanViewModel : ObservableObject
     /// arrive here on the UI thread; the dispatcher runs them in the order they were posted, which
     /// is what lets the rows be built here and the totals in the continuation below.
     /// </summary>
-    private async Task LoadPreviewAsync(ScanScope scope, CancellationToken ct)
+    private async Task LoadPreviewAsync(ProviderChoice? chosen, CancellationToken ct)
     {
         // Read once, so the figure the sentence states is the list the planner was handed.
-        IReadOnlyList<ICleanupProvider>? chosen = scope == ScanScope.Chosen ? ScanChoice.Chosen : null;
-        _lastScope = scope;
-        _coverage = new ScanCoverage(chosen?.Count ?? _planner.Providers.Count, _planner.Providers.Count);
+        var measured = chosen?.Of(_planner.Providers);
+        _lastChosen = chosen;
+        _coverage = new ScanCoverage(measured?.Count ?? _planner.Providers.Count, _planner.Providers.Count);
 
         // An item list belongs to a row that is about to be thrown away, and a tick in it would change
         // a row no run can reach.
@@ -771,9 +779,9 @@ public sealed partial class CleanViewModel : ObservableObject
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
 
         await Task.Run(
-            () => chosen is null
+            () => measured is null
                 ? _planner.PlanAllAsync(keep, progress, found, ct)
-                : _planner.PlanAsync(chosen, keep, progress, found, ct),
+                : _planner.PlanAsync(measured, keep, progress, found, ct),
             ct);
 
         HasPreview = true;
@@ -899,7 +907,7 @@ public sealed partial class CleanViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanElevateNow))]
     private void ElevateAndRescan()
     {
-        if (!_relaunch(_lastScope == ScanScope.Chosen ? ElevationRequest.PreviewChosen : ElevationRequest.Preview))
+        if (!_relaunch(_lastChosen is null ? ElevationRequest.Preview : new PreviewRequest(_lastChosen)))
         {
             Report(
                 "Deguffer is still running without administrator rights, so scans measure by walking "

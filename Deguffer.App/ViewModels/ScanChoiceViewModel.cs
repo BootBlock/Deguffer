@@ -41,7 +41,7 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
             _groups[category] = new ScanChoiceGroup(this, category);
         }
 
-        Missing.Changed += (_, provider) => _rows.GetValueOrDefault(provider)?.Refresh();
+        Missing.Changed += (_, provider) => _rows[provider].Refresh();
 
         foreach (var row in _rows.Values)
         {
@@ -66,6 +66,9 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
     /// <summary>Whether the search hides every location, so the list can say so rather than stand empty.</summary>
     public bool HasNoMatches => Shown.Count == 0;
 
+    /// <summary>The stored choice, which a chosen scan measures.</summary>
+    public ProviderChoice Choice => _choice;
+
     /// <summary>The chosen locations, in the order a full scan measures them.</summary>
     public IReadOnlyList<ICleanupProvider> Chosen => _choice.Of(_providers);
 
@@ -74,8 +77,9 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
     public string ChosenSummary => $"{Chosen.Count} of {_providers.Count} locations chosen";
 
     /// <summary>
-    /// Whether the last change could not be written to disk. The choice still applies until Deguffer
-    /// closes, and the list says that it will not be remembered.
+    /// Whether the last change could not be written to disk. It is then not applied either, as a
+    /// setting is not (<see cref="PreferenceService.Update"/>): the ticks on screen are always the
+    /// stored ones, so a chosen scan measures exactly what the list shows ticked.
     /// </summary>
     [ObservableProperty]
     public partial bool SaveFailed { get; private set; }
@@ -94,8 +98,26 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
             return;
         }
 
-        _choice = changed;
         SaveFailed = !_preferences.Update(current => current with { ChosenToScan = changed });
+
+        if (SaveFailed)
+        {
+            // The box that was clicked has already changed itself, so every tick is read back from
+            // the choice that still holds, not only the ones the choice moved.
+            foreach (var row in _rows.Values)
+            {
+                row.Republish();
+            }
+
+            foreach (var group in Shown)
+            {
+                group.Republish();
+            }
+
+            return;
+        }
+
+        _choice = changed;
 
         foreach (var row in _rows.Values)
         {

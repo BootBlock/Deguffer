@@ -627,8 +627,7 @@
                      it. WinUI ships no accent style for a split button, so its brushes are pointed at
                      the accent button's own. The empty HighContrast dictionary leaves that theme the
                      SDK's values, as the Explore page's notes do. -->
-                <SplitButton x:Name="ScanButton"
-                             Content="Scan"
+                <SplitButton Content="Scan"
                              Command="{x:Bind ViewModel.PreviewCommand}"
                              AutomationProperties.HelpText="Scan every location Deguffer recognises. Open the drop-down to choose the locations to scan on their own.">
                     <SplitButton.Resources>
@@ -760,7 +759,7 @@
                                 </Grid>
 
                                 <TextBlock Grid.Row="3"
-                                           Text="Your choices could not be saved, so they will not be remembered next time."
+                                           Text="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable."
                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                            TextWrapping="Wrap"
                                            Visibility="{x:Bind ViewModel.ScanChoice.SaveFailed, Mode=OneWay}" />

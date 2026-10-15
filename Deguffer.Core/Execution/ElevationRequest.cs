@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 
 namespace Deguffer.Core.Execution;
@@ -24,14 +25,7 @@ public abstract record ElevationRequest
     /// Open on the Storage page and preview every location again. Stateless, so one instance serves
     /// every caller (G5).
     /// </summary>
-    public static ElevationRequest Preview { get; } = new PreviewRequest(ScanScope.Every);
-
-    /// <summary>
-    /// Open on the Storage page and preview again only the locations the user chose, as the scan
-    /// being replaced did. The choice itself is not carried: it is stored, and the replacement reads
-    /// the same file.
-    /// </summary>
-    public static ElevationRequest PreviewChosen { get; } = new PreviewRequest(ScanScope.Chosen);
+    public static ElevationRequest Preview { get; } = new PreviewRequest(Chosen: null);
 
     /// <summary>Open on the Installed apps page and read the entries again. Stateless, as <see cref="Preview"/> is.</summary>
     public static ElevationRequest InstalledApps { get; } = new InstalledAppsRequest();
@@ -51,7 +45,7 @@ public abstract record ElevationRequest
     {
         var explore = false;
         var preview = false;
-        var chosen = false;
+        List<string> chosen = [];
         var installedApps = false;
         var duplicates = false;
         List<SearchLocation> locations = [];
@@ -68,10 +62,14 @@ public abstract record ElevationRequest
             {
                 preview = true;
             }
-            else if (argument.Equals(PreviewChosenSwitch, StringComparison.OrdinalIgnoreCase))
+            else if (argument.StartsWith(PreviewLocationPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 preview = true;
-                chosen = true;
+
+                if (ValueOf(argument, PreviewLocationPrefix) is { } id)
+                {
+                    chosen.Add(id);
+                }
             }
             else if (argument.Equals(InstalledAppsSwitch, StringComparison.OrdinalIgnoreCase))
             {
@@ -105,7 +103,7 @@ public abstract record ElevationRequest
         return explore ? new ExploreRequest(drive, folder)
             : duplicates ? new DuplicatesRequest(locations)
             : installedApps ? InstalledApps
-            : preview ? chosen ? PreviewChosen : Preview
+            : preview ? chosen.Count > 0 ? new PreviewRequest(new ProviderChoice { Ids = chosen }) : Preview
             : null;
 
         void AddLocation(string? path, LocationRole role)
@@ -126,7 +124,7 @@ public abstract record ElevationRequest
 
     private protected const string PreviewSwitch = "--rescan";
 
-    private protected const string PreviewChosenSwitch = "--rescan-chosen";
+    private protected const string PreviewLocationPrefix = "--rescan-location=";
 
     private protected const string InstalledAppsSwitch = "--installed-apps";
 
@@ -194,13 +192,18 @@ public sealed record DuplicatesRequest : ElevationRequest
 }
 
 /// <summary>
-/// Open on the Storage page and preview again, over <paramref name="Scope"/>. See
-/// <see cref="ElevationRequest.Preview"/> and <see cref="ElevationRequest.PreviewChosen"/>.
+/// Open on the Storage page and preview again: every location, or only <paramref name="Chosen"/>
+/// where the scan being replaced measured only those. See <see cref="ElevationRequest.Preview"/>.
+///
+/// <para>The locations travel, one id to an argument, rather than being read from the stored choice
+/// on the other side. The ticks may have changed since that scan ran, or failed to save, and the
+/// elevated window is asked to repeat the scan the user was looking at. The preview switch travels
+/// with them, so an instance that does not know the ids still scans.</para>
 /// </summary>
-public sealed record PreviewRequest(ScanScope Scope) : ElevationRequest
+public sealed record PreviewRequest(ProviderChoice? Chosen) : ElevationRequest
 {
     public override IReadOnlyList<string> ToArguments() =>
-        [Scope == ScanScope.Chosen ? PreviewChosenSwitch : PreviewSwitch];
+        Chosen is null ? [PreviewSwitch] : [PreviewSwitch, .. Chosen.Ids.Select(id => PreviewLocationPrefix + id)];
 }
 
 /// <summary>

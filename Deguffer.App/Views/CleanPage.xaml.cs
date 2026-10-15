@@ -460,14 +460,17 @@ public sealed partial class CleanPage : Page
     {
         Loaded -= StartRequestedRescan;
 
-        // The scan the replaced window last ran: its chosen locations alone, or every location.
-        var scan = ElevatedRelaunch.Requested is PreviewRequest { Scope: ScanScope.Chosen }
-            ? ViewModel.PreviewChosenCommand
-            : ViewModel.PreviewCommand;
-
-        if (scan.CanExecute(null))
+        // The scan the replaced window last ran: the locations it measured alone, or every location.
+        if (ElevatedRelaunch.Requested is PreviewRequest { Chosen: { } chosen })
         {
-            scan.Execute(null);
+            if (ViewModel.PreviewChosenCommand.CanExecute(chosen))
+            {
+                ViewModel.PreviewChosenCommand.Execute(chosen);
+            }
+        }
+        else if (ViewModel.PreviewCommand.CanExecute(null))
+        {
+            ViewModel.PreviewCommand.Execute(null);
         }
     }
 }

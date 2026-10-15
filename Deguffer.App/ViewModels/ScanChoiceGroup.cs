@@ -49,6 +49,9 @@ public sealed partial class ScanChoiceGroup : ObservableCollection<ScanChoiceRow
         Refresh();
     }
 
+    /// <summary>Say the heading's tick has changed even where it has not. See <see cref="ScanChoiceRow.Republish"/>.</summary>
+    internal void Republish() => OnPropertyChanged(new PropertyChangedEventArgs(nameof(State)));
+
     internal void Refresh() =>
         State = ItemSelection.StateOf(this.Select(row => (row.IsChosen, CanBeSelected: true)));
 

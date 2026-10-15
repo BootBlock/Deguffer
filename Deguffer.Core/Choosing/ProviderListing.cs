@@ -2,8 +2,8 @@ using Deguffer.Core.Providers;
 
 namespace Deguffer.Core.Choosing;
 
-/// <summary>One category's providers, as the list of what to scan draws them under a heading.</summary>
-public sealed record ProviderGroup(ProviderCategory Category, string Title, IReadOnlyList<ICleanupProvider> Providers);
+/// <summary>One category's providers, as the list of what to scan draws them under its heading.</summary>
+public sealed record ProviderGroup(ProviderCategory Category, IReadOnlyList<ICleanupProvider> Providers);
 
 /// <summary>
 /// Which providers the list of what to scan shows, and under which heading.
@@ -33,33 +33,31 @@ public static class ProviderListing
     /// <paramref name="providers"/> grouped, keeping only those <paramref name="search"/> matches.
     /// </summary>
     /// <param name="search">
-    /// Words to look for in a provider's name, in the application its description names, or in its
-    /// category's heading, ignoring case. Blank shows every provider. A heading matching shows every
-    /// provider under it, so typing "games" brings up the whole group rather than the rows that
-    /// happen to say "game".
+    /// Words to look for, each anywhere in a provider's name, in the application its description
+    /// names, or in its category's heading (<see cref="SearchWords"/>). Blank shows every provider.
+    /// A heading matching shows every provider under it, so typing "games" brings up the whole group
+    /// rather than the rows that happen to say "game".
     /// </param>
     public static IReadOnlyList<ProviderGroup> Group(IEnumerable<ICleanupProvider> providers, string? search)
     {
         ArgumentNullException.ThrowIfNull(providers);
 
-        var text = search?.Trim() ?? string.Empty;
+        var words = new SearchWords(search);
 
         return
         [
             .. providers
-                .Where(provider => Matches(provider, text))
+                .Where(provider => words.AllMentioned(word => Mentions(provider, word)))
                 .GroupBy(provider => provider.Description.Category)
                 .OrderBy(group => group.Key)
                 .Select(group => new ProviderGroup(
                     group.Key,
-                    Title(group.Key),
                     [.. group.OrderBy(provider => provider.Name, StringComparer.CurrentCultureIgnoreCase)])),
         ];
     }
 
-    private static bool Matches(ICleanupProvider provider, string text) =>
-        text.Length == 0
-        || provider.Name.Contains(text, StringComparison.CurrentCultureIgnoreCase)
-        || provider.Description.Application.Contains(text, StringComparison.CurrentCultureIgnoreCase)
-        || Title(provider.Description.Category).Contains(text, StringComparison.CurrentCultureIgnoreCase);
+    private static bool Mentions(ICleanupProvider provider, string word) =>
+        SearchWords.Contains(provider.Name, word)
+        || SearchWords.Contains(provider.Description.Application, word)
+        || SearchWords.Contains(Title(provider.Description.Category), word);
 }

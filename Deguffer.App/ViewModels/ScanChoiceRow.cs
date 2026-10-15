@@ -6,7 +6,8 @@ namespace Deguffer.App.ViewModels;
 /// <summary>
 /// One location in the list of what to scan: its tick, and whether the last scan that measured it
 /// found it not installed. The tick is written through <see cref="ScanChoiceViewModel"/>, which
-/// stores it, so the box shows what was stored rather than what was clicked.
+/// stores it and applies it only once it is stored, so the box shows what was stored rather than
+/// what was clicked.
 /// </summary>
 public sealed partial class ScanChoiceRow : ObservableObject
 {
@@ -56,4 +57,7 @@ public sealed partial class ScanChoiceRow : ObservableObject
 
         WasMissing = _owner.Missing.WasMissing(Provider);
     }
+
+    /// <summary>Say the tick has changed even where it has not, so a box clicked into a state that did not hold reads it back.</summary>
+    internal void Republish() => OnPropertyChanged(nameof(IsChosen));
 }
