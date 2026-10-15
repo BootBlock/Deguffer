@@ -144,8 +144,7 @@ internal static class WalkExploreReader
                     Interlocked.Add(ref items, count);
                     Interlocked.Add(ref bytes, size);
 
-                    // Every entry of one listing shares its directory, so what is left unlisted in it
-                    // is asked of the directory once.
+                    // What is left unlisted in a listing is asked of its directory once.
                     LeavesFolderUnlisted? leaves = null;
 
                     for (var i = 0; i < contents.Entries.Count; i++)
@@ -159,7 +158,7 @@ internal static class WalkExploreReader
 
                         if (unlisted is not null)
                         {
-                            leaves ??= unlisted(LongPath.Display(entry.Directory), parent == ExploreTreeBuilder.RootNode);
+                            leaves ??= unlisted(LongPath.Display(contents.Directory), parent == ExploreTreeBuilder.RootNode);
 
                             if (leaves(entry.Name))
                             {
