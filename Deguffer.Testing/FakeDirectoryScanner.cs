@@ -42,6 +42,24 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         return ParallelEnumerationScanner.Default.MeasureAsync(path, keep, bounds, progress, ct);
     }
 
+    /// <summary>How many lists were measured, each in one call.</summary>
+    public int MeasureManyCalls { get; private set; }
+
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep = default,
+        CancellationToken ct = default)
+    {
+        MeasureManyCalls++;
+
+        foreach (var question in asked)
+        {
+            _measured.Enqueue(question.Path);
+        }
+
+        return ParallelEnumerationScanner.Default.MeasureManyAsync(asked, keep, ct);
+    }
+
     /// <summary>This fake keeps no snapshot, so the two routes are the same walk.</summary>
     public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default)
     {

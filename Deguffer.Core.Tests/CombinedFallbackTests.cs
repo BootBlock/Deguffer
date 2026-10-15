@@ -63,6 +63,12 @@ public sealed class CombinedFallbackTests : IDisposable
             CancellationToken ct = default) =>
             new(ScanResult.Slow(ScanSize.Zero, reasons[path]));
 
+        public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+            IReadOnlyList<ScanRequest> asked,
+            MinimumAge keep = default,
+            CancellationToken ct = default) =>
+            new([.. asked.Select(question => ScanResult.Slow(ScanSize.Zero, reasons[question.Path]))]);
+
         public ValueTask<ScanResult> MeasureFromDiskAsync(string path, ScanBounds bounds = default, CancellationToken ct = default) =>
             MeasureAsync(path, ct: ct);
 
@@ -118,5 +124,26 @@ public sealed class CombinedFallbackTests : IDisposable
                 Fallback = measured.Fallback,
             };
         }
+    }
+    /// <summary>
+    /// A plan's targets are measured in one call, so a walking scanner reads them all in one walk, and
+    /// each step still carries its own target's figure rather than a neighbour's.
+    /// </summary>
+    [Fact]
+    public async Task APlanMeasuresEveryTargetInOneCallAndPairsEachWithItsOwnFigure()
+    {
+        string[] targets = [.. new[] { 1000, 2000, 3000 }.Select(bytes => Path.GetDirectoryName(_temp.CreateFile(bytes, $"t{bytes}", "a.bin"))!)];
+        var scanner = new FakeDirectoryScanner();
+
+        var plan = await new TargetsProvider(
+            new FakeUserEnvironment(_temp.CreateDirectory("profile")),
+            scanner,
+            [.. targets.Select(target => new DeletionTarget(target, "Measured"))]).PlanAsync();
+
+        Assert.Equal(1, scanner.MeasureManyCalls);
+        Assert.Equal(targets.Length, scanner.Measured.Count);
+        Assert.Equal(
+            [(targets[0], 1000L), (targets[1], 2000L), (targets[2], 3000L)],
+            plan.Steps.OfType<DeleteDirectoryStep>().Select(step => (step.Path, step.Estimated.Logical)));
     }
 }

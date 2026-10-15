@@ -79,11 +79,28 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
         ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(
-            () => TryMeasureFile(path, keep) is { } file
-                ? ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores }
-                : Slow(Measure(path, keep, bounds, _tuner, progress, ct)),
-            ct));
+        new(Task.Run(() => MeasureNow([new ScanRequest(path, bounds)], keep, progress, ct)[0], ct));
+
+    /// <summary>
+    /// Every directory among <paramref name="asked"/> in one walk, as <see cref="RootSetWalk"/> walks
+    /// them, and every file in a read of its own, as <see cref="MeasureAsync"/> reads one.
+    /// </summary>
+    public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep = default,
+        CancellationToken ct = default) =>
+        MeasureManyAsync(asked, keep, progress: null, ct);
+
+    /// <summary>
+    /// The same, reporting the running total of the first path to <paramref name="progress"/>. For
+    /// <see cref="DirectoryScanner"/>, which measures one path through here as it measures many.
+    /// </summary>
+    internal ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep,
+        IProgress<ScanSize>? progress,
+        CancellationToken ct) =>
+        new(Task.Run(() => MeasureNow(asked, keep, progress, ct), ct));
 
     /// <summary>
     /// Nothing is remembered here, so every reading is already taken from the disk.
@@ -111,6 +128,68 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     {
     }
 
+    /// <summary>
+    /// Each path asked about, in the order asked: a file read directly, and every directory walked with
+    /// the others on drives of its kind.
+    ///
+    /// <para>The directory is asked about first, as <see cref="HardLinkAwareScanner"/> asks, so a
+    /// directory costs one attribute read before its walk. A file is asked about only where no
+    /// directory is there, and a refusal is met once: the read fails the same way whichever kind is
+    /// asked for, so a refused file is answered as a refused directory is.</para>
+    /// </summary>
+    /// <param name="progress">
+    /// The running total of the first path, for <see cref="MeasureAsync"/>, which asks about one.
+    /// </param>
+    private IReadOnlyList<ScanResult> MeasureNow(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep,
+        IProgress<ScanSize>? progress,
+        CancellationToken ct)
+    {
+        var results = new ScanResult[asked.Count];
+        var directories = new List<int>(asked.Count);
+
+        for (var i = 0; i < asked.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var path = asked[i].Path;
+
+            switch (LongPath.ProbeDirectory(path))
+            {
+                case PathPresence.Present:
+                    directories.Add(i);
+                    break;
+
+                case PathPresence.Refused:
+                    results[i] = ScanResult.Slow(ScanSize.Zero, _reason) with { Root = RootReach.NotDescribed };
+                    break;
+
+                // An absent path measures zero, and that is a complete answer.
+                default:
+                    results[i] = TryMeasureFile(path, keep) is { } file
+                        ? ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores }
+                        : ScanResult.Slow(ScanSize.Zero, _reason);
+                    break;
+            }
+        }
+
+        // One walk for each set of values rather than one a path: the values differ by the kind of
+        // drive, and every path on drives of one kind can share the walk.
+        foreach (var walk in directories.GroupBy(i => _tuner.For(asked[i].Path).Walk))
+        {
+            var each = walk.ToList();
+            var walked = Measure([.. each.Select(i => asked[i])], keep, walk.Key, progress, ct);
+
+            for (var j = 0; j < each.Count; j++)
+            {
+                results[each[j]] = Slow(walked[j]);
+            }
+        }
+
+        return results;
+    }
+
     private ScanResult Slow(Walked measured) =>
         ScanResult.Slow(measured.Size, _reason, measured.WithheldRecent) with
         {
@@ -122,51 +201,27 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     private readonly record struct Walked(
         ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root);
 
-    private static Walked Measure(
-        string path,
+    /// <summary>Walk every directory in <paramref name="asked"/> at once, each to a figure of its own.</summary>
+    private static IReadOnlyList<Walked> Measure(
+        IReadOnlyList<ScanRequest> asked,
         MinimumAge keep,
-        ScanBounds bounds,
-        ScanTuner tuning,
+        WalkTuning tuning,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        switch (LongPath.ProbeDirectory(path))
-        {
-            case PathPresence.Absent:
-                return new Walked(ScanSize.Zero, false, [], RootReach.Reached);
+        var tallies = asked.Select(question => new RootTally(question.Bounds.KeepRoot)).ToArray();
 
-            // A refused file arrives here too, because TryMeasureFile reads a refusal as "not a
-            // file", and the attribute read fails the same way whichever kind is asked for.
-            case PathPresence.Refused:
-                return new Walked(ScanSize.Zero, false, [], RootReach.NotDescribed);
-        }
-
-        long total = 0;
-        long entries = 0;
-
-        // An int rather than a bool because the walk sets it from several threads at once, and
-        // Interlocked has no bool overload. Only ever moved to 1, so no ordering question arises.
-        var withheld = 0;
-
-        // Set by the root's own listing alone, which no other thread is reading at the time. See
-        // RootReach for why a folder refused below the root does not set it.
-        var rootRefused = false;
-
-        var folders = new ConcurrentBag<VisitedFolder>();
-        var stores = new ConcurrentBag<string>();
-        var leftOut = LeftOutEntries.Of(path, bounds);
-
-        BoundedFileWalk.Visit<VisitedFolder?>(
-            LongPath.Extended(path),
-            rootState: null,
+        RootSetWalk.Visit<VisitedFolder>(
+            [.. asked.Select(question => WalkRoot.Of(question.Path, question.Bounds))],
             tuning,
-            (holder, contents, descend) =>
+            (root, holder, contents, left) =>
             {
-                var folder = new VisitedFolder(holder);
-                folders.Add(folder);
+                var tally = holder?.Tally ?? tallies[root];
+                var folder = new VisitedFolder(holder, tally);
+                tally.Folders.Add(folder);
 
                 // A folder emptied in place is never among what its removal takes.
-                if (holder is null && bounds.KeepRoot)
+                if (holder is null && tally.KeepRoot)
                 {
                     folder.Stays();
                 }
@@ -176,14 +231,13 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                 {
                     folder.Stays();
 
+                    // Set by the root's own listing alone, which no other thread writes. See RootReach
+                    // for why a folder refused below the root does not set it.
                     if (holder is null)
                     {
-                        rootRefused = true;
+                        tally.RootRefused = true;
                     }
                 }
-
-                // Asked once a listing, and of each entry only in a listing that holds one.
-                var left = leftOut?.NamesIn(contents);
 
                 foreach (var entry in contents.Entries)
                 {
@@ -191,17 +245,20 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     if (left?.Contains(entry.Name) == true)
                     {
                         folder.Stays();
+                        continue;
                     }
-                    else if (entry.IsDirectory)
+
+                    // The walk enters it, for every root that does not leave it out.
+                    if (entry.IsDirectory)
                     {
-                        descend(entry, folder);
+                        continue;
                     }
 
                     // §9, and before the guard for the reason the removal asks it first: the store is
                     // left whatever its age, so it is out of the total and its folders stay.
-                    else if (MailStore.Is(entry.Name))
+                    if (MailStore.Is(entry.Name))
                     {
-                        stores.Add(LongPath.Display(entry.FullName));
+                        tally.Stores.Add(LongPath.Display(entry.FullName));
                         folder.Stays();
                     }
 
@@ -210,13 +267,13 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     // the removal will not take it.
                     else if (keep.Protects(entry.NewestFileTime))
                     {
-                        Interlocked.Exchange(ref withheld, 1);
+                        Interlocked.Exchange(ref tally.Withheld, 1);
                         folder.Stays();
                     }
                     else
                     {
-                        Interlocked.Add(ref total, entry.Length);
-                        Interlocked.Increment(ref entries);
+                        Interlocked.Add(ref tally.Bytes, entry.Length);
+                        Interlocked.Increment(ref tally.Entries);
                     }
                 }
 
@@ -230,12 +287,12 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     }
                     else if (keep.Protects(link.NewestFileTime))
                     {
-                        Interlocked.Exchange(ref withheld, 1);
+                        Interlocked.Exchange(ref tally.Withheld, 1);
                         folder.Stays();
                     }
                     else
                     {
-                        Interlocked.Increment(ref entries);
+                        Interlocked.Increment(ref tally.Entries);
                     }
                 }
 
@@ -251,28 +308,57 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
                     }
                     else if (MailStore.Is(marked.Name))
                     {
-                        stores.Add(LongPath.Display(marked.FullName));
+                        tally.Stores.Add(LongPath.Display(marked.FullName));
                         folder.Stays();
                     }
                 }
+
+                return folder;
             },
             // §5.5: stream partial results, at the walk's interval rather than per file.
-            () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref total))),
+            () => progress?.Report(ScanSize.FromLengths(Interlocked.Read(ref tallies[0].Bytes))),
             TimeProvider.System,
             ct);
 
-        if (rootRefused)
+        return [.. tallies.Select(tally => tally.Walked())];
+    }
+
+    /// <summary>One root's figure, added to from every thread the walk runs on.</summary>
+    private sealed class RootTally(bool keepRoot)
+    {
+        public readonly bool KeepRoot = keepRoot;
+
+        public readonly ConcurrentBag<VisitedFolder> Folders = [];
+
+        public readonly ConcurrentBag<string> Stores = [];
+
+        public long Bytes;
+
+        public long Entries;
+
+        // An int rather than a bool because the walk sets it from several threads at once, and
+        // Interlocked has no bool overload. Only ever moved to 1, so no ordering question arises.
+        public int Withheld;
+
+        public bool RootRefused;
+
+        /// <summary>The figure, read once the walk has ended.</summary>
+        public Walked Walked()
         {
-            return new Walked(ScanSize.Zero, false, [], RootReach.NotListed);
+            if (RootRefused)
+            {
+                return new Walked(ScanSize.Zero, false, [], RootReach.NotListed);
+            }
+
+            var bytes = Interlocked.Read(ref Bytes);
+            var removed = Interlocked.Read(ref Entries) + Folders.Count(folder => !folder.HoldsSomethingThatStays);
+
+            return new Walked(
+                new ScanSize(bytes, bytes, Entries: removed),
+                Volatile.Read(ref Withheld) == 1,
+                [.. Stores.Order(StringComparer.OrdinalIgnoreCase)],
+                RootReach.Reached);
         }
-
-        var removed = Interlocked.Read(ref entries) + folders.Count(folder => !folder.HoldsSomethingThatStays);
-
-        return new Walked(
-            new ScanSize(Interlocked.Read(ref total), Interlocked.Read(ref total), Entries: removed),
-            Volatile.Read(ref withheld) == 1,
-            [.. stores.Order(StringComparer.OrdinalIgnoreCase)],
-            RootReach.Reached);
     }
 
     /// <summary>
@@ -283,9 +369,12 @@ public sealed class ParallelEnumerationScanner : IDirectoryScanner
     /// reached; each folder instead holds the one above it, and a kept entry walks the
     /// chain upward.</para>
     /// </summary>
-    private sealed class VisitedFolder(VisitedFolder? holder)
+    private sealed class VisitedFolder(VisitedFolder? holder, RootTally tally)
     {
         private readonly VisitedFolder? _holder = holder;
+
+        /// <summary>The figure of the root this folder was reached in.</summary>
+        public RootTally Tally { get; } = tally;
 
         private int _stays;
 

@@ -42,6 +42,27 @@ public interface IDirectoryScanner
         CancellationToken ct = default);
 
     /// <summary>
+    /// Measure each of <paramref name="asked"/> as <see cref="MeasureAsync"/> measures it, all in one
+    /// go, and answer in the order asked.
+    ///
+    /// <para>One go rather than one call a path, because a walk of one small tree leaves most of its
+    /// threads idle, and a provider with hundreds of targets paid that once a target. A walking scanner
+    /// seeds one walk with every directory, and keeps a figure for each. A path inside another asked
+    /// about here is read off the outer path's walk where that walk meets it, so it is not walked twice.
+    /// The volume index answers each path in a lookup of its own.</para>
+    ///
+    /// <para>Each answer is the whole of what <see cref="MeasureAsync"/> would have said of its path:
+    /// its own <see cref="ScanResult.Root"/>, mail stores, fallback reason and
+    /// <see cref="ScanResult.WithheldRecent"/>. No progress is reported, because no caller of a list has
+    /// one figure to show.</para>
+    /// </summary>
+    /// <param name="keep">The guard every path is measured under, as <see cref="MeasureAsync"/> applies it.</param>
+    ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge keep = default,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Measure <paramref name="path"/> without consulting anything remembered from before now.
     ///
     /// <para><see cref="MeasureAsync"/> is free to answer from a volume snapshot, and that is the

@@ -453,11 +453,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
     );
 
     /// <summary>Each path as a question about its whole tree, root included.</summary>
-    private static IReadOnlyList<(string Path, ScanBounds Bounds)> Whole(IReadOnlyList<string> paths) =>
-        [.. paths.Select(path => (path, default(ScanBounds)))];
+    private static IReadOnlyList<ScanRequest> Whole(IReadOnlyList<string> paths) =>
+        [.. paths.Select(path => new ScanRequest(path))];
 
     private async Task<ScanBatch> MeasureAllAsync(
-        IReadOnlyList<(string Path, ScanBounds Bounds)> asked,
+        IReadOnlyList<ScanRequest> asked,
         MinimumAge keep,
         CancellationToken ct)
     {
@@ -466,11 +466,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
         var stores = new List<IReadOnlyList<string>>(asked.Count);
         var fallback = FallbackReason.None;
 
-        foreach (var (path, bounds) in asked)
-        {
-            ct.ThrowIfCancellationRequested();
+        // One call for the whole list, so a walking scanner reads every path in one walk rather than
+        // one walk a path. See IDirectoryScanner.MeasureManyAsync.
+        var answers = await Scanner
+            .MeasureManyAsync(asked, keep, ct)
+            .ConfigureAwait(false);
 
-            var measured = await Scanner.MeasureAsync(path, keep, bounds, progress: null, ct).ConfigureAwait(false);
+        foreach (var ((path, _), measured) in asked.Zip(answers))
+        {
             sizes.Add(measured.Size);
             withheld.Add(measured.WithheldRecent);
             stores.Add(measured.MailStores);
@@ -519,7 +522,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // emptied in place is measured on the terms its removal empties it on, so the figure is
         // already without whatever the removal leaves standing and nothing is measured to be taken off.
         var (each, measured) = await MeasureGroupsAsync(
-            [.. targets.Select(t => (IReadOnlyList<(string, ScanBounds)>)[(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
+            [.. targets.Select(t => (IReadOnlyList<ScanRequest>)[new ScanRequest(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
             keep,
             ct).ConfigureAwait(false);
 
@@ -607,7 +610,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// to another, so every step that is the sum of several paths comes through here.</para>
     /// </summary>
     private async Task<(IReadOnlyList<GroupMeasure> Each, ScanBatch Measured)> MeasureGroupsAsync(
-        IReadOnlyList<IReadOnlyList<(string Path, ScanBounds Bounds)>> groups,
+        IReadOnlyList<IReadOnlyList<ScanRequest>> groups,
         MinimumAge keep,
         CancellationToken ct)
     {

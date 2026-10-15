@@ -320,4 +320,98 @@ public class ParallelEnumerationScannerTests
         Assert.Equal(0, result.Size.Reclaimable);
         Assert.Equal([link], result.MailStores);
     }
+
+    /// <summary>
+    /// A list measured in one walk answers each path exactly as measuring it alone does: its figure,
+    /// its entries, its stores, its guard and its route. The list holds a path inside another, the same
+    /// path on different terms, an emptied-in-place root, entries left out, a file and an absent path,
+    /// so a figure attributed to the wrong root, or a rule applied to one root's tree but not another's,
+    /// moves at least one of them.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresEachOfManyPathsAsItMeasuresThatPathAlone()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(1000, "cache", "a.bin");
+        temp.CreateFile(2000, "cache", "inner", "b.bin");
+        temp.CreateFile(3000, "cache", "inner", "deep", "c.bin");
+        temp.CreateFile(500, "cache", "mail.pst");
+        TempDirectory.Age(temp.CreateFile(4000, "cache", "inner", "old.bin"), TimeSpan.FromDays(30));
+        temp.CreateFile(6000, "other", "d.bin");
+        var single = temp.CreateFile(700, "single.bin");
+
+        var cache = Path.Combine(temp.Path, "cache");
+        var inner = Path.Combine(cache, "inner");
+        var guard = MinimumAge.WithinHours(8, DateTime.UtcNow);
+
+        ScanRequest[] asked =
+        [
+            new(inner, ScanBounds.Contents),
+            new(cache),
+            new(Path.Combine(temp.Path, "other")),
+            new(single),
+            new(Path.Combine(temp.Path, "never-created")),
+            new(inner),
+            new(cache, new ScanBounds(KeepRoot: false, LeftOut: [Path.Combine(inner, "deep")])),
+            new(Path.Combine(inner, "deep") + Path.DirectorySeparatorChar),
+        ];
+
+        foreach (var (keep, guarded) in new[] { (MinimumAge.Off, false), (guard, true) })
+        {
+            var many = await Scanner.MeasureManyAsync(asked, keep);
+
+            Assert.Equal(asked.Length, many.Count);
+
+            for (var i = 0; i < asked.Length; i++)
+            {
+                var alone = await Scanner.MeasureAsync(asked[i].Path, keep, asked[i].Bounds);
+
+                Assert.Equal(alone.Size, many[i].Size);
+                Assert.Equal(alone.Root, many[i].Root);
+                Assert.Equal(alone.MailStores, many[i].MailStores);
+                Assert.Equal(alone.WithheldRecent, many[i].WithheldRecent);
+                Assert.Equal(alone.Strategy, many[i].Strategy);
+                Assert.Equal(alone.Fallback, many[i].Fallback);
+            }
+
+            // The fixture holds what it says it does: the inner tree counts towards both, the kept root
+            // is the only difference between two readings of one folder, the left-out folder is out,
+            // the store is named, and the guard holds back the files written just now.
+            Assert.Equal(ScanStrategy.DirectRead, many[3].Strategy);
+            Assert.Single(many[1].MailStores);
+            Assert.Equal(guarded, many[5].WithheldRecent);
+
+            if (!guarded)
+            {
+                Assert.Equal(1000 + many[5].Size.Logical, many[1].Size.Logical);
+                Assert.Equal(many[5].Size.Entries - 1, many[0].Size.Entries);
+                Assert.Equal(many[1].Size.Logical - many[7].Size.Logical, many[6].Size.Logical);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A path inside an entry the outer path leaves out is never met by the outer walk, which does not
+    /// enter that entry. It is still measured, whole, on its own.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresAPathInsideAnEntryAnotherPathLeavesOut()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(1000, "cache", "a.bin");
+        temp.CreateFile(2000, "cache", "spared", "inner", "b.bin");
+
+        var cache = Path.Combine(temp.Path, "cache");
+        var inner = Path.Combine(cache, "spared", "inner");
+
+        var many = await Scanner.MeasureManyAsync(
+        [
+            new ScanRequest(cache, new ScanBounds(KeepRoot: false, LeftOut: [Path.Combine(cache, "spared")])),
+            new ScanRequest(inner),
+        ]);
+
+        Assert.Equal(1000, many[0].Size.Logical);
+        Assert.Equal(2000, many[1].Size.Logical);
+        Assert.True(many[1].WasReached);
+    }
 }

@@ -23,54 +23,10 @@ internal static class BoundedFileWalk
     public static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>
-    /// Visit every file at or below <paramref name="root"/>, minus the two things this walk
-    /// deliberately never reaches: anything under a directory it was refused (§5.3), and anything
-    /// under a reparse point.
-    ///
-    /// <paramref name="onFile"/> is called concurrently from several threads, so what it does must
-    /// be safe to do that way. <paramref name="onProgress"/> is called once the first directory has
-    /// been read, then at most once per <see cref="ProgressInterval"/> of <paramref name="clock"/>
-    /// while the walk runs, and once at the end. It is never called beside itself, and never after
-    /// this returns.
-    /// </summary>
-    /// <param name="root">
-    /// The directory to walk. Every directory is listed in the extended-length form §6.3 requires,
-    /// so every path handed to <paramref name="onFile"/> carries the prefix.
-    /// </param>
-    /// <param name="onReparseFile">
-    /// Called, concurrently, for each file carrying a reparse point, which <paramref name="onFile"/>
-    /// never sees. See <see cref="DirectoryContents.ReparseFiles"/>.
-    /// </param>
-    /// <param name="leftOut">
-    /// Entries passed over, neither handed to either callback nor entered. Null for none. See
-    /// <see cref="ScanBounds.LeftOut"/>.
-    /// </param>
-    /// <returns>
-    /// Whether <paramref name="root"/> itself was listed. A folder refused below it is skipped as
-    /// §5.3 says, and only the root's refusal is returned, because only that one leaves the caller
-    /// with nothing measured. See <see cref="RootReach"/>.
-    /// </returns>
-    /// <summary>
-    /// <see cref="Visit(string, WalkTuning, Action{WalkEntry}, Action{WalkEntry}, LeftOutEntries?, Action, TimeProvider, CancellationToken)"/>
-    /// with the values <paramref name="tuning"/> resolves for the drive that holds
-    /// <paramref name="root"/>. Every scan walks through here, so the values the user set are resolved
-    /// in one place and no caller can ask for them and walk with others.
-    /// </summary>
-    public static bool Visit(
-        string root,
-        ScanTuner tuning,
-        Action<WalkEntry> onFile,
-        Action<WalkEntry> onReparseFile,
-        LeftOutEntries? leftOut,
-        Action onProgress,
-        TimeProvider clock,
-        CancellationToken ct) =>
-        Visit(root, tuning.For(root).Walk, onFile, onReparseFile, leftOut, onProgress, clock, ct);
-
-    /// <summary>
     /// <see cref="Visit{TState}(string, TState, WalkTuning, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>
     /// with the values <paramref name="tuning"/> resolves for the drive that holds
-    /// <paramref name="root"/>, on the terms the overload above states.
+    /// <paramref name="root"/>. A scan of one root walks through here, so the values the user set are
+    /// resolved in one place and no caller can ask for them and walk with others.
     /// </summary>
     public static void Visit<TState>(
         string root,
@@ -82,68 +38,10 @@ internal static class BoundedFileWalk
         CancellationToken ct) =>
         Visit(root, rootState, tuning.For(root).Walk, onDirectory, onProgress, clock, ct);
 
-    public static bool Visit(
-        string root,
-        WalkTuning tuning,
-        Action<WalkEntry> onFile,
-        Action<WalkEntry> onReparseFile,
-        LeftOutEntries? leftOut,
-        Action onProgress,
-        TimeProvider clock,
-        CancellationToken ct)
-    {
-        // Written by the root's own listing alone, before anything below it is queued.
-        var rootListed = true;
-
-        Visit(
-            root,
-            rootState: true,
-            tuning,
-            (isRoot, contents, descend) =>
-            {
-                if (isRoot && contents.WasRefused)
-                {
-                    rootListed = false;
-                }
-
-                // Asked once a listing, and of each entry only in a listing that holds one.
-                var left = leftOut?.NamesIn(contents);
-
-                foreach (var entry in contents.Entries)
-                {
-                    if (left?.Contains(entry.Name) == true)
-                    {
-                        continue;
-                    }
-
-                    if (entry.IsDirectory)
-                    {
-                        descend(entry, false);
-                    }
-                    else
-                    {
-                        onFile(entry);
-                    }
-                }
-
-                foreach (var marked in contents.ReparseFiles)
-                {
-                    if (left?.Contains(marked.Name) != true)
-                    {
-                        onReparseFile(marked);
-                    }
-                }
-            },
-            onProgress,
-            clock,
-            ct);
-
-        return rootListed;
-    }
-
     /// <summary>
     /// Visit every directory at or below <paramref name="root"/>, carrying a caller-chosen value
-    /// down the tree with each one.
+    /// down the tree with each one. The walk never reaches anything under a directory it was refused
+    /// (§5.3), or anything under a reparse point.
     ///
     /// <para>The value is how a caller building a structure keeps its place: it hands each child
     /// directory whatever identifies the parent it just recorded, and gets it back when that child
@@ -154,7 +52,12 @@ internal static class BoundedFileWalk
     /// <paramref name="onDirectory"/> is called concurrently, and the contents it is handed are valid
     /// only while it runs. Nothing is descended into unless it asks: the third argument is how it says
     /// so, and a link is never a legitimate argument to it — the walk holds that rule, not the caller.
-    /// <paramref name="onProgress"/> is called as the other overload calls it.
+    /// Every directory is listed in the extended-length form §6.3 requires, so every entry it is
+    /// handed carries the prefix.
+    ///
+    /// <para><paramref name="onProgress"/> is called once the first directory has been read, then at
+    /// most once per <see cref="ProgressInterval"/> of <paramref name="clock"/> while the walk runs, and
+    /// once at the end. It is never called beside itself, and never after this returns.</para>
     /// </summary>
     public static void Visit<TState>(
         string root,
@@ -200,6 +103,21 @@ internal static class BoundedFileWalk
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action<bool> onProgress,
         TimeProvider clock,
+        CancellationToken ct) =>
+        Visit([(root, rootState)], tuning, list, onDirectory, onProgress, clock, ct);
+
+    /// <summary>
+    /// The walk above over several roots at once, each with its own value, sharing one set of
+    /// workers. For a caller with many small trees to read, each of which alone would leave most of
+    /// the threads idle. See <see cref="RootSetWalk"/>.
+    /// </summary>
+    public static void Visit<TState>(
+        IReadOnlyList<(string Root, TState State)> roots,
+        WalkTuning tuning,
+        ListDirectory list,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action<bool> onProgress,
+        TimeProvider clock,
         CancellationToken ct)
     {
         var buffer = new ListingBuffer(tuning.ListingBufferBytes);
@@ -210,7 +128,7 @@ internal static class BoundedFileWalk
                 onProgress,
                 clock,
                 ct)
-            .Run(LongPath.Extended(root), rootState);
+            .Run([.. roots.Select(root => (LongPath.Extended(root.Root), root.State))]);
     }
 
     /// <summary>One worker's reading of a directory: its own listing, handed to the caller's callback.</summary>

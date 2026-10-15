@@ -32,7 +32,13 @@ public sealed record ScanBatch(
     IReadOnlyList<bool> WithheldRecent,
     IReadOnlyList<IReadOnlyList<string>> MailStores)
 {
-    public ScanSize Total => Sizes.Aggregate(ScanSize.Zero, (sum, size) => sum + size);
+    public ScanSize Total => TotalOf(..);
+
+    /// <summary>
+    /// What the paths in <paramref name="paths"/> hold together, for a provider that measures two lists
+    /// in one call so that a path inside another is read off the same walk.
+    /// </summary>
+    public ScanSize TotalOf(Range paths) => Sizes.Take(paths).Aggregate(ScanSize.Zero, (sum, size) => sum + size);
 
     /// <summary>The scan-route note, or null when the fast path served every path.</summary>
     public PlanNote? Note => FallbackReasonText.Describe(Fallback) is { } text

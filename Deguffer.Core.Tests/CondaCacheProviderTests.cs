@@ -676,4 +676,25 @@ public sealed class CondaCacheProviderTests : IDisposable
             plan.Notes,
             n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(refused, StringComparison.Ordinal));
     }
+    /// <summary>
+    /// The index cache sits inside its package cache, so the package caches and the index caches are
+    /// measured in one call, and the walk of each package cache reads its index cache's figure on the
+    /// way rather than walking it again. The probe the executor subtracts from is the package caches
+    /// alone, which already hold the index cache: adding the index cache to it would count it twice.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresTheIndexCacheInTheSameCallAndCountsItOnceInTheProbe()
+    {
+        Populate(PackageCache, bytes: 65536);
+        Populate(Path.Combine(PackageCache, "cache"), bytes: 4096);
+        var scanner = new FakeDirectoryScanner();
+
+        var plan = await new CondaCacheProvider(
+            _environment, Reporting(), FakeProcessInspector.NothingRunning, scanner, _system).PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal(1, scanner.MeasureManyCalls);
+        Assert.Equal(65536 + 4096, step.MeasuredBefore?.Reclaimable);
+        Assert.Equal(10_000 + 4096, step.Estimated.Logical);
+    }
 }
