@@ -35,8 +35,10 @@ public sealed class WorkStealingStackTests
     }
 
     /// <summary>
-    /// Steals move the bottom round the ring, so a push that then outgrows it has to copy from the
-    /// middle of the array, wrapping, and keep the order. Sixteen is the ring's first size.
+    /// Steals move the bottom round the ring, so later pushes wrap past the end of the array, and a
+    /// push that then outgrows it has to copy across that wrap and keep the order. Sixteen is the
+    /// ring's first size: the bottom is left at slot 10, the next ten pushes fill slots 12 to 15 and
+    /// 0 to 5, and the last push grows it.
     /// </summary>
     [Fact]
     public void KeepsItsOrderWhenItGrowsAfterTheBottomHasWrapped()
@@ -50,21 +52,26 @@ public sealed class WorkStealingStackTests
             Assert.Equal(i, stolen);
         }
 
-        stack.PushAll([.. Enumerable.Range(100, 30)]);
+        stack.PushAll([.. Enumerable.Range(100, 10)]);
+        stack.PushAll([.. Enumerable.Range(200, 10)]);
 
-        Assert.Equal([.. Enumerable.Range(100, 30), 0, 1], PopAll(stack));
+        Assert.Equal([.. Enumerable.Range(200, 10), .. Enumerable.Range(100, 10), 0, 1], PopAll(stack));
     }
 
     /// <summary>
     /// A taken path is not kept alive by the stack. The point of walking depth-first is that a path
     /// dies soon after it is used, and one left in the array would live as long as the walk.
+    ///
+    /// <para>A stack each, so that nothing pushed later overwrites the slot a taken item was in and
+    /// frees it whether or not the take cleared it.</para>
     /// </summary>
     [Fact]
     public void LetsATakenItemBeCollected()
     {
-        var stack = new WorkStealingStack<object>();
-        var popped = PushAndTake(stack, steal: false);
-        var stolen = PushAndTake(stack, steal: true);
+        var popping = new WorkStealingStack<object>();
+        var stealing = new WorkStealingStack<object>();
+        var popped = PushAndTake(popping, steal: false);
+        var stolen = PushAndTake(stealing, steal: true);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -72,7 +79,8 @@ public sealed class WorkStealingStackTests
 
         Assert.False(popped.IsAlive, "A popped item is still held by the stack.");
         Assert.False(stolen.IsAlive, "A stolen item is still held by the stack.");
-        GC.KeepAlive(stack);
+        GC.KeepAlive(popping);
+        GC.KeepAlive(stealing);
     }
 
     /// <summary>

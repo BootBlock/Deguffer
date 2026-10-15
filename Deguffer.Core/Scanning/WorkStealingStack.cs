@@ -8,13 +8,11 @@ namespace Deguffer.Core.Scanning;
 /// are read before anything stacked ahead of them, so each path is used soon after it is built, and
 /// what waits is one level's siblings for each level of the current branch rather than a whole level
 /// of the tree. A thief working from the bottom takes the shallowest directory waiting, which holds
-/// the most below it, so a steal is rare and each one moves a large subtree to a worker of its
-/// own.</para>
+/// the most below it, so each steal tends to move a large subtree to a worker of its own.</para>
 ///
 /// <para>A lock rather than a lock-free deque. The owner is the only one that pushes, a thief only
 /// arrives once its own stack is empty, and each take is followed by a directory listing that costs
-/// far more than an uncontended lock, so the lock is almost never contended and never what the walk
-/// waits for.</para>
+/// far more than an uncontended lock, so contention on it should be rare.</para>
 /// </summary>
 internal sealed class WorkStealingStack<T>
 {

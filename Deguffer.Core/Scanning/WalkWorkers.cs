@@ -23,14 +23,18 @@ internal delegate Action<string, TState> NewDirectoryReader<TState>(Action<strin
 /// ahead of them, the first child listed first. One that has run out steals the oldest directory
 /// from the bottom of another's, the shallowest waiting, so workers spread across the top of the tree
 /// and each then descends a branch of its own. One shared first-in, first-out queue made the walk
-/// breadth-first: it grew to the widest level of the tree, about 145 thousand paths on a whole system
-/// volume, each waiting long enough for the rest of its level to be promoted out of the young
-/// generations. Depth-first, what waits is one level's siblings for each level of a branch.</para>
+/// breadth-first: it grew to the widest level of the tree, which a single-threaded simulation of a
+/// whole system volume put at about 145 thousand paths, each waiting for the rest of its level to be
+/// read. Depth-first, what waits is one level's siblings for each level of a branch.</para>
 ///
-/// <para>Measured on one 32-thread machine's system volume (#375), medians of five cold walks: the
-/// peak working set fell from 175 to 124 MiB and the time from 8.1 to 5.9 seconds. One shared stack
-/// is as small, at 113 MiB, but took 6.5 seconds, and keeps every worker reading beside the others
-/// rather than in a subtree of its own.</para>
+/// <para>Measured on one 32-thread machine's system volume with 16 workers (#375), as medians of
+/// five runs. The walk's peak working set fell from 175 MiB to 124, its cold time from 8.1 seconds to
+/// 5.9 and its warm time from 6.7 to 5.5. Explore's walk took 8.4 seconds cold against 9.9, and 6.2
+/// warm against 7.3. One shared stack was the smallest, at 113 MiB. Its walk took 6.5 seconds cold
+/// and 5.6 warm, and Explore's 8.2 and 6.9, so it was slightly quicker than a stack for each worker
+/// only for Explore's cold walk. A stack for each worker is kept because it was the quicker walk both
+/// cold and warm, and because only it keeps each worker in a subtree of its own. There it may wait
+/// less on the file system's locks for one parent, which no measurement here isolated.</para>
 ///
 /// <para>No caller depends on the order: each merges what its workers found in a way that ignores
 /// it. Explore's mid-walk pictures do show it, as a branch filling in to its full size while the

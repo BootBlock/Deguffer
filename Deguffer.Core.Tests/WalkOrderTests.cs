@@ -6,8 +6,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The walk's order. A walk that took directories from one first-in, first-out queue went
-/// breadth-first, and on a whole system volume held about 145 thousand paths waiting at once, long
-/// enough for full collections to be the only ones that freed them.
+/// breadth-first, and held each level of the tree waiting at once: on a whole system volume its peak
+/// working set was about 50 MiB above the depth-first walk's.
 /// </summary>
 public sealed class WalkOrderTests : IDisposable
 {
