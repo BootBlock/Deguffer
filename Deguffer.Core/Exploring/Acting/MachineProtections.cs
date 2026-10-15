@@ -51,10 +51,16 @@ public sealed class MachineProtections
     public ExploreActionPolicy Policy { get; }
 
     /// <summary>Asks this machine afresh, as each Explore scan and each duplicate search does.</summary>
-    public static Task<MachineProtections> ForThisMachineAsync(CancellationToken ct = default)
+    /// <param name="scope">
+    /// What the protections will be asked about, so a discovery looks only where an answer can matter,
+    /// and reads what a scan already listed rather than listing it again.
+    /// </param>
+    public static Task<MachineProtections> ForThisMachineAsync(ProtectionScope scope, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(scope);
+
         var environment = new UserEnvironment();
-        var providers = CleanupPlanner.CreateDefault(liveTrees: new LiveTreeInspector(), environment: environment).Providers;
+        var providers = CleanupPlanner.CreateDefault(liveTrees: new LiveTreeInspector(), environment: environment, scope: scope).Providers;
 
         return ForAsync(SystemDirectories.Current, environment, VolumeInventory.Current, WindowsUninstallRegistry.Default, providers, ct);
     }

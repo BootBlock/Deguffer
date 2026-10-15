@@ -32,10 +32,16 @@ public sealed record ExploreProgress(long Done, long? Total, long BytesSeen, Exp
 /// A finished scan, and how it was obtained. §5.5 requires the fallback to be observable, so the
 /// route is part of the result rather than something a caller infers from the elapsed time.
 /// </summary>
-public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, FallbackReason Fallback)
+/// <param name="FromIncompleteTable">
+/// Whether the tree was drawn from a file table that was not read whole, or that held a record the
+/// read could not place, as <see cref="ScannedFolder.FromIncompleteTable"/> says of one folder. Such
+/// a record might have been anywhere, so no folder in the tree can be taken to hold all it holds,
+/// and nothing that decides a deletion may read the tree in place of the disk.
+/// </param>
+public sealed record ExploreScan(ExploreTree Tree, ScanStrategy Strategy, FallbackReason Fallback, bool FromIncompleteTable = false)
 {
-    public static ExploreScan Fast(ExploreTree tree) =>
-        new(tree, ScanStrategy.MasterFileTable, FallbackReason.None);
+    public static ExploreScan Fast(ExploreTree tree, bool fromIncompleteTable = false) =>
+        new(tree, ScanStrategy.MasterFileTable, FallbackReason.None, fromIncompleteTable);
 
     public static ExploreScan Walked(ExploreTree tree, FallbackReason reason) =>
         new(tree, ScanStrategy.ParallelEnumeration, reason);

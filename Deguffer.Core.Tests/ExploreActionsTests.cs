@@ -43,7 +43,7 @@ public sealed class ExploreActionsTests : IDisposable
     }
 
     /// <summary>
-    /// A failed build says so rather than "in a moment", and still refuses: without the probed half
+    /// A failed build says so rather than that an answer is on its way, and still refuses: without the probed half
     /// of §5.2 there is no knowing what else would have been refused.
     /// </summary>
     [Fact]
@@ -146,7 +146,7 @@ public sealed class ExploreActionsTests : IDisposable
 
         actions.Ready += (_, _) => announced++;
         actions.Prepare();
-        actions.Reconsider();
+        actions.Reconsider(ProtectionScope.Everything);
 
         first.SetResult(Policy());
 
@@ -515,7 +515,7 @@ public sealed class ExploreActionsTests : IDisposable
 
     private ExploreActions Actions(
         Func<CancellationToken, Task<ExploreActionPolicy>> build, FakeExploreConfirmation? prompt = null) =>
-        new(build, () => prompt ?? new FakeExploreConfirmation(answer: false), _faults, _running, _recycleBin);
+        new((_, ct) => build(ct), () => prompt ?? new FakeExploreConfirmation(answer: false), _faults, _running, _recycleBin);
 
     private static ExploreActionPolicy Policy(string? refusing = null) =>
         new(

@@ -55,6 +55,23 @@ public class ExploreScannerTests
         Assert.Null(scan.RouteNote);
         Assert.Equal(9000, scan.Tree.TotalLength);
         Assert.Equal($@"{letter}:\Users\testuser\.npm-cache\a.tgz", scan.Tree.PathOf(20));
+        Assert.False(scan.FromIncompleteTable);
+    }
+
+    /// <summary>
+    /// A table that holds a record the read could not place still draws a picture, and the scan says
+    /// the picture may lack anything, so nothing that decides a deletion reads it in place of the disk.
+    /// </summary>
+    [Fact]
+    public async Task AScanOfATableWithARecordItCouldNotReadSaysItIsIncomplete()
+    {
+        var letter = UnusedDriveLetter();
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume().CorruptSectorStamp(21)));
+
+        var scan = await scanner.ScanAsync($@"{letter}:\");
+
+        Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
+        Assert.True(scan.FromIncompleteTable);
     }
 
     /// <summary>

@@ -112,20 +112,37 @@ public sealed class CandidateFinder
         _files = files;
     }
 
+    /// <summary>
+    /// Where each of <paramref name="search"/>'s locations really is, for a caller that needs it
+    /// before the search, as the protections a search is judged by do. Opens each location, so never
+    /// call it on the UI thread.
+    /// </summary>
+    public SearchLocations Locate(DuplicateSearch search)
+    {
+        ArgumentNullException.ThrowIfNull(search);
+
+        return SearchLocations.Resolve(search.Locations, _volumes, _files);
+    }
+
     /// <param name="policy">
     /// Explore's policy, built for this machine by <see cref="ExploreActionPolicy.ForAsync"/>, whose
     /// refusals at and below a place are what the search passes over.
+    /// </param>
+    /// <param name="located">
+    /// What <see cref="Locate"/> answered for <paramref name="search"/>, so the locations are opened
+    /// once per search; located here where null.
     /// </param>
     public async Task<CandidateFinding> FindAsync(
         DuplicateSearch search,
         ExploreActionPolicy policy,
         IProgress<ExploreProgress>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        SearchLocations? located = null)
     {
         ArgumentNullException.ThrowIfNull(search);
         ArgumentNullException.ThrowIfNull(policy);
 
-        var locations = SearchLocations.Resolve(search.Locations, _volumes, _files);
+        var locations = located ?? Locate(search);
         var walk = new CandidateWalk(search);
 
         // Read whether or not the search passes over them, because a copy in one is refused either way.

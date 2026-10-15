@@ -240,7 +240,7 @@ public sealed class ExploreScanner(
 
                 if (read.Tree is { } tree)
                 {
-                    return ExploreScan.Fast(tree);
+                    return ExploreScan.Fast(tree, fromIncompleteTable: !read.EveryRecordRead);
                 }
 
                 // The table read and could not root a tree where the scan was pointed. Whether that

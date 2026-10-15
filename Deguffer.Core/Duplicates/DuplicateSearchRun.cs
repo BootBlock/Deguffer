@@ -22,19 +22,21 @@ namespace Deguffer.Core.Duplicates;
 public sealed class DuplicateSearchRun
 {
     private readonly DuplicateSearcher _searcher;
-    private readonly Func<CancellationToken, Task<MachineProtections>> _protections;
+    private readonly Func<ProtectionScope, CancellationToken, Task<MachineProtections>> _protections;
     private readonly IUserEnvironment _environment;
     private readonly ICloudFiles _cloud;
     private readonly IVolumeInventory _volumes;
     private readonly VolumeMediaCache _media;
 
     /// <param name="protections">
-    /// What this machine protects, built afresh for each search, as <see cref="MachineProtections.ForThisMachineAsync"/> does.
+    /// What this machine protects within a scope, built afresh for each search, as
+    /// <see cref="MachineProtections.ForThisMachineAsync"/> does. Asked about the search's locations,
+    /// as chosen and as each resolves, since a copy is named by the folder its location resolves to.
     /// </param>
     /// <param name="media">The cache the searcher reads the drives through, whose answers the marks take.</param>
     public DuplicateSearchRun(
         DuplicateSearcher searcher,
-        Func<CancellationToken, Task<MachineProtections>> protections,
+        Func<ProtectionScope, CancellationToken, Task<MachineProtections>> protections,
         IUserEnvironment environment,
         ICloudFiles cloud,
         IVolumeInventory volumes,
@@ -71,7 +73,14 @@ public sealed class DuplicateSearchRun
         ArgumentNullException.ThrowIfNull(search);
         ArgumentNullException.ThrowIfNull(marksMade);
 
-        var protections = await _protections(ct).ConfigureAwait(false);
+        // Located once, off the calling thread, since each location is opened to learn where it is,
+        // and handed to the search so it is not opened again there.
+        var located = await Task.Run(() => _searcher.Locate(search), ct).ConfigureAwait(false);
+        var scope = ProtectionScope.Within(
+            [.. search.Locations.Select(location => location.Path), .. located.Locations.Select(location => location.Folder)],
+            _volumes);
+
+        var protections = await _protections(scope, ct).ConfigureAwait(false);
 
         // Started now, while the candidates are found, and kept by the protections for the marks to
         // read then: asking every provider where its clean deletes runs the tools that report their
@@ -89,6 +98,7 @@ public sealed class DuplicateSearchRun
                     .ConfigureAwait(false));
                 finding?.Report(candidates);
             },
-            ct).ConfigureAwait(false);
+            ct,
+            located).ConfigureAwait(false);
     }
 }
