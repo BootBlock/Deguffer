@@ -40,9 +40,11 @@ internal readonly record struct WalkRoot(string Path, LeftOutEntries? LeftOut)
 /// above it, it is walked on its own afterwards, as it would have been alone. A root reached through a
 /// link is then followed exactly as a measurement of that path alone follows it.</para>
 ///
-/// <para>Paths are compared as spelled, ignoring case, so a root named through an 8.3 alias of a folder
-/// the outer walk lists by its long name is not recognised below it. It is then walked on its own as
-/// well, which costs a second reading and changes no figure.</para>
+/// <para><b>Paths are compared exactly as spelled, case included.</b> A folder can be made case-sensitive,
+/// and there <c>Foo</c> and <c>foo</c> are two folders, so a match that ignored case would add both
+/// trees to a root that names one. A root spelled differently from how the outer walk lists it, in case
+/// or through an 8.3 alias, is then not recognised below it, and is walked on its own as well, which
+/// costs a second reading and changes no figure.</para>
 /// </summary>
 internal static class RootSetWalk
 {
@@ -229,9 +231,9 @@ internal static class RootSetWalk
         public static Round<TFolder> Of(IReadOnlyList<WalkRoot> roots, IReadOnlyList<int> waiting)
         {
             var places = waiting
-                .GroupBy(root => roots[root].Path, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(root => roots[root].Path, StringComparer.Ordinal)
                 .Select(same => (Path: same.Key, Below: Below(same.Key), Roots: same.ToArray()))
-                .OrderBy(place => place.Below, StringComparer.OrdinalIgnoreCase);
+                .OrderBy(place => place.Below, StringComparer.Ordinal);
 
             var reached = new int[roots.Count];
             var seeds = new List<(string, Frame<TFolder>[])>();
@@ -240,9 +242,9 @@ internal static class RootSetWalk
 
             foreach (var (path, below, asking) in places)
             {
-                if (outer is not null && below.StartsWith(outer, StringComparison.OrdinalIgnoreCase))
+                if (outer is not null && below.StartsWith(outer, StringComparison.Ordinal))
                 {
-                    (nested ??= new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase))[path] = asking;
+                    (nested ??= new Dictionary<string, int[]>(StringComparer.Ordinal))[path] = asking;
                     continue;
                 }
 

@@ -338,7 +338,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         return raced.Outcome switch
         {
-            // The walk was stamped as the quicker route before anyone knew the table could not be read.
+            // The walk was stamped as the quicker route before anyone knew the table would answer none of the paths.
             // A file is a direct read, which carries no reason on either route.
             RaceOutcome.TableDeclined => [.. raced.Answer.Select(walked => walked!.Strategy is ScanStrategy.ParallelEnumeration
                 ? walked with { Fallback = Declined(building.Result) }

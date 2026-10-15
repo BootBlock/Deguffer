@@ -89,10 +89,34 @@ public sealed class RootSetWalkTests
         var tree = new FakeTree()
             .Folder(@"Z:\a", ("one.bin", FileAttributes.Normal));
 
-        var visits = Walk(tree, @"Z:\a", @"z:\A\");
+        var visits = Walk(tree, @"Z:\a", @"Z:\a\");
 
         Assert.Equal([(0, @"Z:\a", true), (1, @"Z:\a", true)], visits);
         Assert.Equal(1, tree.Listings[LongPath.Extended(@"Z:\a")]);
+    }
+
+    /// <summary>
+    /// In a case-sensitive folder, <c>Foo</c> and <c>foo</c> are two folders. A root naming one starts
+    /// at that one alone, as it would measured on its own, rather than taking in its neighbour's tree.
+    /// </summary>
+    [Fact]
+    public void ARootInsideACaseSensitiveFolderStartsOnlyAtTheFolderItNames()
+    {
+        var tree = new FakeTree()
+            .Folder(@"Z:\x", ("Foo", FileAttributes.Directory), ("foo", FileAttributes.Directory))
+            .Folder(@"Z:\x\Foo", ("one.bin", FileAttributes.Normal))
+            .Folder(@"Z:\x\foo", ("two.bin", FileAttributes.Normal));
+
+        var visits = Walk(tree, @"Z:\x", @"Z:\x\foo");
+
+        Assert.Equal(
+            [
+                (0, @"Z:\x", true),
+                (0, @"Z:\x\Foo", false),
+                (0, @"Z:\x\foo", false),
+                (1, @"Z:\x\foo", true),
+            ],
+            visits);
     }
 
     /// <summary>
@@ -133,15 +157,15 @@ public sealed class RootSetWalkTests
             TimeProvider.System,
             CancellationToken.None);
 
-        return [.. visits.Order()];
+        return [.. visits.OrderBy(visit => visit.Item1).ThenBy(visit => visit.Item2, StringComparer.Ordinal)];
     }
 
     /// <summary>A tree no volume holds, counting how often each folder is listed.</summary>
     private sealed class FakeTree
     {
-        private readonly Dictionary<string, (string Name, FileAttributes Attributes)[]> _folders = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, (string Name, FileAttributes Attributes)[]> _folders = new(StringComparer.Ordinal);
 
-        public ConcurrentDictionary<string, int> Listings { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public ConcurrentDictionary<string, int> Listings { get; } = new(StringComparer.Ordinal);
 
         public FakeTree Folder(string path, params (string Name, FileAttributes Attributes)[] children)
         {

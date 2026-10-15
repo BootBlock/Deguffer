@@ -25,8 +25,7 @@ internal static class BoundedFileWalk
     /// <summary>
     /// <see cref="Visit{TState}(string, TState, WalkTuning, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>
     /// with the values <paramref name="tuning"/> resolves for the drive that holds
-    /// <paramref name="root"/>. A scan of one root walks through here, so the values the user set are
-    /// resolved in one place and no caller can ask for them and walk with others.
+    /// <paramref name="root"/>, for a caller walking one root that has no tuning of its own to hand.
     /// </summary>
     public static void Visit<TState>(
         string root,
