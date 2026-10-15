@@ -87,7 +87,7 @@ public static class ChromiumUserDataWalk
             return new ChromiumFolderWalk([], RootUnreadable: false);
         }
 
-        var excluded = ByParent(Excluded(notEntered));
+        var excluded = NotEntered(notEntered);
         var found = new ConcurrentBag<ChromiumFolder>();
         var rootUnreadable = false;
 
@@ -151,7 +151,7 @@ public static class ChromiumUserDataWalk
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var excluded = Excluded(notEntered);
+        var excluded = NotEntered(notEntered);
         var found = new ConcurrentBag<ChromiumFolder>();
         var pending = new Stack<(int Node, string Path, int Depth)>();
 
@@ -167,6 +167,8 @@ public static class ChromiumUserDataWalk
                 continue;
             }
 
+            excluded.TryGetValue(Path.TrimEndingDirectorySeparator(directory.Path), out var notHere);
+
             foreach (var child in tree.ChildrenOf(directory.Node))
             {
                 // A link is not entered, as the walk declines to descend through one.
@@ -175,11 +177,11 @@ public static class ChromiumUserDataWalk
                     continue;
                 }
 
-                var path = Path.Combine(directory.Path, tree.NameOf(child));
+                var name = tree.NameOf(child);
 
-                if (!excluded.Contains(path))
+                if (notHere?.Contains(name) != true)
                 {
-                    pending.Push((child, path, directory.Depth + 1));
+                    pending.Push((child, Path.Combine(directory.Path, name), directory.Depth + 1));
                 }
             }
         }
@@ -215,25 +217,17 @@ public static class ChromiumUserDataWalk
     }
 
     /// <summary>
-    /// The folders never entered, compared without a trailing separator. The short form is what
-    /// Windows puts in TEMP on a profile with a long folder name, and a listing reports long names,
-    /// so both sides are compared unaliased.
+    /// The folders never entered, as the names never entered in each folder holding one, so both walks
+    /// ask one lookup of a folder and build no child's path to ask it. A folder is keyed in display
+    /// form without a trailing separator. The short form is what Windows puts in TEMP on a profile
+    /// with a long folder name, and a listing reports long names, so both sides are compared
+    /// unaliased.
     /// </summary>
-    private static HashSet<string> Excluded(IReadOnlyList<string> notEntered) =>
-        notEntered
-            .Select(path => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(path)))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// <paramref name="excluded"/> as the names never entered in each folder, keyed as
-    /// <see cref="Excluded"/> spells a folder, so the walk asks one lookup of a listing and builds no
-    /// child's path to ask it.
-    /// </summary>
-    private static Dictionary<string, HashSet<string>> ByParent(HashSet<string> excluded)
+    private static Dictionary<string, HashSet<string>> NotEntered(IReadOnlyList<string> notEntered)
     {
         var byParent = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var path in excluded)
+        foreach (var path in notEntered.Select(path => Path.TrimEndingDirectorySeparator(LongPath.Unaliased(path))))
         {
             // A volume's root has no parent, so no walk meets it as a child.
             if (Path.GetDirectoryName(path) is not { } parent)

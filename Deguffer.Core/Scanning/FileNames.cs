@@ -8,8 +8,8 @@ namespace Deguffer.Core.Scanning;
 ///
 /// <para><b>Why a listing is told.</b> A name is a string for every file, and most walks never read
 /// one: a walk that totals sizes reads a file's length and timestamps, and a search for folders does
-/// not look at files at all. Across a tree of millions of files the names were most of what the walk
-/// allocated. A walk that keeps a file names it, or lists it without a name; one that keeps none
+/// not look at files at all. Across a tree of millions of files, each of those strings is built and
+/// thrown away. A walk that keeps a file names it, or lists it without a name; one that keeps none
 /// leaves files out of the listing.</para>
 ///
 /// <para><b>§9 is the one name every kept file is asked for.</b> Every choice here that keeps files

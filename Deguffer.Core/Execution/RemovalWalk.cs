@@ -191,7 +191,7 @@ internal static class RemovalWalk
             // the guard, because the rule is unconditional and the guard is a preference, so a store both
             // would keep is reported as the store it is. Its folders stay standing by the rule every kept
             // file relies on — a folder still holding something cannot be removed.
-            if (!entry.IsDirectory && MailStore.Is(entry.Name))
+            if (entry.IsMailStore)
             {
                 (_mailStores ??= []).Add(path ?? entry.FullName);
                 return;

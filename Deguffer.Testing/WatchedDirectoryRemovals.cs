@@ -65,7 +65,7 @@ public sealed class WatchedDirectoryRemovals(
         // A child still there when its parent is tried was not finished first, whether nobody had
         // tried it yet or its removal was still under way.
         var entries = new List<WalkEntry>();
-        inner.ListEntries(path, DirectoryListing.EveryEntry, FileNames.Stores, entries);
+        inner.ListEntries(path, DirectoryListing.EveryEntry, FileNames.None, entries);
 
         if (entries.Any(entry => entry.IsDirectory))
         {

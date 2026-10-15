@@ -111,7 +111,7 @@ internal static class DirectoryDeletion
         var entries = new List<WalkEntry>();
 
         // Unreadable or already gone: neither is a directory to go on clearing attributes on.
-        // Counted, never named, so no file's name is built.
+        // Counted, so no file is named but a store.
         return fs.ListEntries(extendedPath, DirectoryListing.EveryEntry, FileNames.Stores, entries) is { Presence: PathPresence.Present }
             && entries.Count == 0;
     }
