@@ -588,6 +588,7 @@ public class RouteAgreementTests
         var when = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
 
         var listing = new DirectoryContents(
+            Listed,
             [
                 new WalkEntry(Listed, "film.mkv", FileAttributes.Archive | Recall, 5_000_000, when, when),
                 new WalkEntry(Listed, "partly.zip", FileAttributes.Archive | Recall, 900_000, when, when),

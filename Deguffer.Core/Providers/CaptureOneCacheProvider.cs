@@ -43,7 +43,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     private const string OwnerFacet = "Catalog or session";
 
     private readonly ILiveTreeInspector _liveTrees;
-    private CaptureOneDocumentList? _documents;
+    private readonly PassMemo<CaptureOneDocumentList> _documents = new();
 
     public CaptureOneCacheProvider(
         IUserEnvironment? environment = null,
@@ -95,11 +95,11 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// </summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => CaptureOneLayout.ProcessNames;
 
-    private CaptureOneDocumentList Documents => _documents ??= CaptureOneDocuments.Read(Environment.LocalAppData);
+    private CaptureOneDocumentList Documents => _documents.Get(() => CaptureOneDocuments.Read(Environment.LocalAppData));
 
     public override void InvalidateCaches()
     {
-        _documents = null;
+        _documents.Forget();
         _liveTrees.Invalidate();
         base.InvalidateCaches();
     }

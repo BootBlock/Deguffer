@@ -25,25 +25,35 @@ public sealed class CleanupPlannerTests
 
     /// <summary>
     /// §5.5: never block on a complete scan. Each finding reaches the caller as it is produced, so
-    /// the preview fills in rather than staying blank until the slowest provider finishes.
+    /// the preview fills in rather than staying blank until the slowest provider finishes. The slow
+    /// provider here finishes only once the quick one's finding has reached the caller, which a pass
+    /// that reported at its end would never do.
     /// </summary>
     [Fact]
     public async Task ReportsEachFindingAsItIsProducedRatherThanOnlyAtTheEnd()
     {
-        var journal = new List<string>();
-        var planner = new CleanupPlanner(
-        [
-            new StubProvider("first", bytes: 1_000, journal: journal),
-            new StubProvider("second", bytes: 9_000, journal: journal),
-        ]);
+        using var quickReported = new ManualResetEventSlim();
+        var slowSawIt = false;
+
+        var slow = new FakeCleanupProvider("slow")
+        {
+            WhilePlanning = () => slowSawIt = quickReported.Wait(TimeSpan.FromSeconds(10)),
+        };
 
         var found = new ProgressRecorder<Finding>();
+        var reporting = new RecordThen<Finding>(found, finding =>
+        {
+            if (finding.Provider.Id == "quick")
+            {
+                quickReported.Set();
+            }
+        });
 
-        var findings = await planner.PlanAllAsync(MinimumAge.Off, status: null, found, CancellationToken.None);
+        await new CleanupPlanner([slow, new FakeCleanupProvider("quick")])
+            .PlanAllAsync(MinimumAge.Off, status: null, reporting, CancellationToken.None);
 
-        // Reported in the order they were planned, not the order they are finally sorted into.
-        Assert.Equal(["first", "second"], found.Reports.Select(f => f.Provider.Id));
-        Assert.Equal(["second", "first"], findings.Select(f => f.Provider.Id));
+        Assert.True(slowSawIt, "The quick provider's finding was not reported until the slow one had finished.");
+        Assert.Equal(["quick", "slow"], found.Reports.Select(f => f.Provider.Id));
     }
 
     /// <summary>
@@ -63,8 +73,10 @@ public sealed class CleanupPlannerTests
 
         var findings = await planner.PlanAsync([third, first], MinimumAge.Off, status: null, found, CancellationToken.None);
 
-        Assert.Equal(["invalidate:third", "invalidate:first", "plan:third", "plan:first"], journal);
-        Assert.Equal(["third", "first"], found.Reports.Select(f => f.Provider.Id));
+        // Planned together, so in no fixed order, but each only once its cache had gone.
+        Assert.Equal(["invalidate:third", "invalidate:first"], journal.Take(2));
+        Assert.Equal(["plan:first", "plan:third"], journal.Skip(2).Order());
+        Assert.Equal(["first", "third"], found.Reports.Select(f => f.Provider.Id).Order());
         Assert.Equal(["third", "first"], findings.Select(f => f.Provider.Id));
     }
 
@@ -498,7 +510,8 @@ public sealed class CleanupPlannerTests
 
         await planner.PlanAllAsync();
 
-        Assert.Equal(["invalidate:a", "invalidate:b", "plan:a", "plan:b"], journal);
+        Assert.Equal(["invalidate:a", "invalidate:b"], journal.Take(2));
+        Assert.Equal(["plan:a", "plan:b"], journal.Skip(2).Order());
     }
 
     /// <summary>
@@ -852,6 +865,16 @@ public sealed class CleanupPlannerTests
         Assert.Equal(VerificationOutcome.Entered, check.Outcome);
     }
 
+    /// <summary>Records each report, then acts on it, as a caller's handler would.</summary>
+    private sealed class RecordThen<T>(ProgressRecorder<T> recorder, Action<T> then) : IProgress<T>
+    {
+        public void Report(T value)
+        {
+            recorder.Report(value);
+            then(value);
+        }
+    }
+
     private sealed class StubProvider(
         string id,
         long bytes,
@@ -885,7 +908,7 @@ public sealed class CleanupPlannerTests
         /// <summary>The record of what the run's removals left standing, as the planner handed it over.</summary>
         public RunResidue? ResidueHandedOver { get; private set; }
 
-        public void InvalidateCaches() => journal?.Add($"invalidate:{id}");
+        public void InvalidateCaches() => Note($"invalidate:{id}");
 
         public string Id => id;
 
@@ -908,9 +931,23 @@ public sealed class CleanupPlannerTests
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(present);
 
+        /// <summary>Locked, because a pass plans several providers at once and they share one journal.</summary>
+        private void Note(string entry)
+        {
+            if (journal is null)
+            {
+                return;
+            }
+
+            lock (journal)
+            {
+                journal.Add(entry);
+            }
+        }
+
         public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
         {
-            journal?.Add($"plan:{id}");
+            Note($"plan:{id}");
             return Task.FromResult(NewPlan());
         }
 
@@ -954,7 +991,7 @@ public sealed class CleanupPlannerTests
             WasExecuted = true;
             ReachHandedOver = runReach;
             ResidueHandedOver = residue;
-            journal?.Add($"execute:{id}");
+            Note($"execute:{id}");
 
             // Stands in for what a plan's own removal does to the disk, for a test of what a later plan
             // in the run finds.

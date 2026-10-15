@@ -15,7 +15,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTenant
 {
-    private IReadOnlyList<string>? _resolvedLocals;
+    private readonly PassMemo<Task<IReadOnlyList<string>>> _resolvedLocals = new();
 
     public NuGetCacheProvider(
         IUserEnvironment? environment = null,
@@ -137,7 +137,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// </summary>
     public override void InvalidateCaches()
     {
-        _resolvedLocals = null;
+        _resolvedLocals.Forget();
         base.InvalidateCaches();
     }
 
@@ -303,17 +303,15 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             .Select(child => (child.Path, child.Reason));
     }
 
+    private Task<IReadOnlyList<string>> ResolveLocalsAsync(string dotnet, CancellationToken ct) =>
+        _resolvedLocals.Get(() => ListLocalsAsync(dotnet, ct));
+
     /// <summary>
     /// Ask NuGet where its caches are. Output lines look like
     /// <c>global-packages: C:\Users\me\.nuget\packages\</c>.
     /// </summary>
-    private async Task<IReadOnlyList<string>> ResolveLocalsAsync(string dotnet, CancellationToken ct)
+    private async Task<IReadOnlyList<string>> ListLocalsAsync(string dotnet, CancellationToken ct)
     {
-        if (_resolvedLocals is not null)
-        {
-            return _resolvedLocals;
-        }
-
         var outcome = await Runner.RunAsync(dotnet, "nuget locals all --list", ct).ConfigureAwait(false);
 
         var parsed = new List<string>();
@@ -335,7 +333,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             }
         }
 
-        return _resolvedLocals = parsed.Count > 0 ? parsed : DefaultLocals();
+        return parsed.Count > 0 ? parsed : DefaultLocals();
     }
 
     /// <summary>Documented defaults, used only when NuGet declines to tell us.</summary>

@@ -38,7 +38,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// </summary>
     private static readonly string[] QueriedVariables = ["GOCACHE", "GOMODCACHE", "GOPATH"];
 
-    private GoLocations? _locations;
+    private readonly PassMemo<Task<GoLocations>> _locations = new();
 
     public GoCacheProvider(
         IUserEnvironment? environment = null,
@@ -203,7 +203,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _locations = null;
+        _locations.Forget();
         base.InvalidateCaches();
     }
 
@@ -315,19 +315,17 @@ public sealed class GoCacheProvider : CleanupProviderBase
         }),
     ]);
 
+    private Task<GoLocations> ResolveLocationsAsync(string go, CancellationToken ct) =>
+        _locations.Get(() => AskLocationsAsync(go, ct));
+
     /// <summary>
     /// Ask Go where it keeps things. <c>go env</c> given several names prints one value per line in
     /// the order it was asked, so the answers are read positionally — and a line that is not a
     /// rooted path is treated as no answer at all, which is what an unset or disabled value looks
     /// like.
     /// </summary>
-    private async Task<GoLocations> ResolveLocationsAsync(string go, CancellationToken ct)
+    private async Task<GoLocations> AskLocationsAsync(string go, CancellationToken ct)
     {
-        if (_locations is not null)
-        {
-            return _locations;
-        }
-
         var outcome = await Runner
             .RunAsync(go, "env " + string.Join(' ', QueriedVariables), ct)
             .ConfigureAwait(false);
@@ -340,7 +338,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
         var moduleCache = Reported(reported, 1);
         var workspaces = Workspaces(reported);
 
-        return _locations = new GoLocations(
+        return new GoLocations(
             buildCache ?? DefaultBuildCache,
 
             // Go's own default for a list: the module cache is pkg\mod in the first workspace.

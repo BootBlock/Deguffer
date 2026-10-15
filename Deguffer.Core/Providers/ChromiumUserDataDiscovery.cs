@@ -124,8 +124,12 @@ public sealed partial class ChromiumUserDataDiscovery(
     /// <para>Memoised until <see cref="Invalidate"/> (G4). Two rows look inside the same folders,
     /// and presence, planning and the §5.2 declarations of each ask this same question of the same
     /// disk.</para>
+    ///
+    /// <para>Walked once however many rows ask at once, because the walk also fills
+    /// <see cref="UnreadableRoots"/> and <see cref="Obstructed"/>: a second walk beside the first would
+    /// empty them while a row that had already asked read them.</para>
     /// </summary>
-    public IReadOnlyList<ChromiumUserData> Discover(CancellationToken ct = default) => _found ??= Walk(ct);
+    public IReadOnlyList<ChromiumUserData> Discover(CancellationToken ct = default) => _found.Get(() => Walk(ct));
 
     /// <summary>
     /// Drop the memoised answer, so an application installed, or a browser profile added, while the
@@ -133,7 +137,7 @@ public sealed partial class ChromiumUserDataDiscovery(
     /// </summary>
     public void Invalidate()
     {
-        _found = null;
+        _found.Forget();
         _listingStale = true;
     }
 
@@ -173,7 +177,7 @@ public sealed partial class ChromiumUserDataDiscovery(
         }
     }
 
-    private IReadOnlyList<ChromiumUserData>? _found;
+    private readonly PassMemo<IReadOnlyList<ChromiumUserData>> _found = new();
 
     /// <summary>
     /// Blocks until the scope can say how it reaches each root, which for a scan's scope is when the

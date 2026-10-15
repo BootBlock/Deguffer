@@ -13,7 +13,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class NpmCacheProvider : CleanupProviderBase
 {
-    private string? _resolvedCacheDirectory;
+    private readonly PassMemo<Task<string>> _resolvedCacheDirectory = new();
 
     public NpmCacheProvider(
         IUserEnvironment? environment = null,
@@ -113,7 +113,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _resolvedCacheDirectory = null;
+        _resolvedCacheDirectory.Forget();
         base.InvalidateCaches();
     }
 
@@ -179,13 +179,11 @@ public sealed class NpmCacheProvider : CleanupProviderBase
         (Path.Combine(Environment.UserProfile, ".npmrc"), "User npm configuration, which may hold registry auth tokens."),
         (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."));
 
-    private async Task<string> ResolveCacheDirectoryAsync(string npm, CancellationToken ct)
-    {
-        if (_resolvedCacheDirectory is not null)
-        {
-            return _resolvedCacheDirectory;
-        }
+    private Task<string> ResolveCacheDirectoryAsync(string npm, CancellationToken ct) =>
+        _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(npm, ct));
 
+    private async Task<string> AskCacheDirectoryAsync(string npm, CancellationToken ct)
+    {
         var outcome = await Runner.RunAsync(npm, "config get cache", ct).ConfigureAwait(false);
 
         var reported = outcome.Succeeded
@@ -194,6 +192,6 @@ public sealed class NpmCacheProvider : CleanupProviderBase
                 .LastOrDefault(line => Path.IsPathRooted(line))
             : null;
 
-        return _resolvedCacheDirectory = reported ?? DefaultCacheDirectory;
+        return reported ?? DefaultCacheDirectory;
     }
 }

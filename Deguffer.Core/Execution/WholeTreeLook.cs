@@ -63,66 +63,63 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         var unlisted = new ConcurrentQueue<string>();
         var recent = 0;
 
-        // A command's measured paths can nest, and a folder walked twice would name its stores twice.
-        var visited = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
-
         // On the walk every scan takes, which lists with several workers and never recurses: these are
-        // entire Windows installations and the deepest trees on a developer's disk.
-        foreach (var path in paths)
-        {
-            var root = LongPath.Extended(path);
-
-            BoundedFileWalk.Visit(
-                root,
-                root,
-                tuning,
-                fs.ListEntries,
-                (directory, contents, descend) =>
+        // entire Windows installations and the deepest trees on a developer's disk. A command's measured
+        // paths can nest, and the walk lists a path inside another once, where the outer walk meets it.
+        // One the outer walk never meets, behind a link or a folder Windows would not list, it walks on
+        // its own, because the removal acts on that path as well.
+        RootSetWalk.Visit<string>(
+            [.. paths.Select(path => WalkRoot.Of(path, default))],
+            tuning,
+            fs.ListEntries,
+            (_, _, contents, _) =>
+            {
+                // Gone since the plan was made, or never there: nothing inside it can be lost. A refusal
+                // part-way still looks at what was listed, since every finding stops the removal and the
+                // folder is named as unlisted either way.
+                if (contents.Presence is PathPresence.Refused)
                 {
-                    if (!visited.TryAdd(directory, 0))
-                    {
-                        return;
-                    }
+                    unlisted.Enqueue(LongPath.Display(contents.Directory));
+                }
 
-                    // Gone since the plan was made, or never there: nothing inside it can be lost. A
-                    // refusal part-way still looks at what was listed, since every finding stops the
-                    // removal and the folder is named as unlisted either way.
-                    if (contents.Presence is PathPresence.Refused)
-                    {
-                        unlisted.Enqueue(LongPath.Display(directory));
-                    }
+                // The walk enters every directory listed here itself, and never a link: what is on a
+                // link's far side belongs to wherever it points. A link is still asked about for its
+                // own timestamps.
+                foreach (var entry in contents.Entries)
+                {
+                    Notice(entry);
+                }
 
-                    foreach (var entry in contents.Entries)
-                    {
-                        Notice(entry);
+                foreach (var link in contents.Links)
+                {
+                    Notice(link);
+                }
 
-                        if (entry.IsDirectory)
-                        {
-                            descend(entry, entry.FullName);
-                        }
-                    }
+                foreach (var marked in contents.ReparseFiles)
+                {
+                    Notice(marked);
+                }
 
-                    // A link is listed for its own timestamps and never followed: what is on its far
-                    // side belongs to wherever it points.
-                    foreach (var link in contents.Links)
-                    {
-                        Notice(link);
-                    }
+                // Nothing is carried down: what a directory holds is the same whichever path asked.
+                return contents.Directory;
+            },
+            static () => { },
+            TimeProvider.System,
+            ct);
 
-                    foreach (var marked in contents.ReparseFiles)
-                    {
-                        Notice(marked);
-                    }
-                },
-                static _ => { },
-                TimeProvider.System,
-                ct);
-        }
-
+        // A directory inside two of the paths is handed over once for each, so the same name arrives
+        // twice, and in another case where a path names a folder in a case other than the disk's: the
+        // walk matches a nested path as spelled, so it walks that one again on its own. A run reports
+        // how many stores it held back, so one file counts once. Two stores whose names differ only in
+        // case inside a case-sensitive folder are then named as one, and the removal stops all the same.
         return new WholeTreeLook(
-            [.. stores.Order(StringComparer.OrdinalIgnoreCase)],
+            InOneOrder(stores),
             Volatile.Read(ref recent) == 1,
-            [.. unlisted.Order(StringComparer.OrdinalIgnoreCase)]);
+            InOneOrder(unlisted));
+
+        // Ordered before the duplicates go, so the spelling kept is the same however the work interleaved.
+        static IReadOnlyList<string> InOneOrder(IEnumerable<string> paths) =>
+            [.. paths.Order(StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal).Distinct(StringComparer.OrdinalIgnoreCase)];
 
         void Notice(WalkEntry entry)
         {

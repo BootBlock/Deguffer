@@ -24,16 +24,16 @@ public sealed class ComponentStoreAnalysis(ISystemDirectories system, IProcessRu
     /// <summary>DISM's exit code where the account is not an administrator.</summary>
     public const int ElevationRequired = 740;
 
-    private Task<ComponentStoreReading>? _reading;
+    private readonly PassMemo<Task<ComponentStoreReading>> _reading = new();
 
     /// <summary>DISM, as Windows ships it for this machine's architecture.</summary>
     public string Dism { get; } = NativeSystemTool.In(system, "Dism.exe");
 
     /// <summary>What the store held when this planning pass first asked, asked once per pass.</summary>
-    public Task<ComponentStoreReading> ReadingAsync(CancellationToken ct) => _reading ??= ReadAsync(ct);
+    public Task<ComponentStoreReading> ReadingAsync(CancellationToken ct) => _reading.Get(() => ReadAsync(ct));
 
     /// <summary>Forgets the last pass's reading, for a planning pass that starts afresh.</summary>
-    public void Invalidate() => _reading = null;
+    public void Invalidate() => _reading.Forget();
 
     /// <summary>The store's actual size now, from a fresh analysis, or null where DISM did not give one.</summary>
     public async Task<long?> MeasureAsync(CancellationToken ct) =>

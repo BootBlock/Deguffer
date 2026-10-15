@@ -42,8 +42,8 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
         + "are in it, and only the media cache folders in it may be removed.";
 
     private readonly RunningProcessCheck _stillClosed;
-    private AdobeMediaCacheLayout? _layout;
-    private DeclaredLocationScan? _scan;
+    private readonly PassMemo<AdobeMediaCacheLayout> _layout = new();
+    private readonly PassMemo<DeclaredLocationScan> _scan = new();
 
     public AdobeMediaCacheProvider(
         IUserEnvironment? environment = null,
@@ -93,15 +93,15 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
     /// Where Adobe keeps its cache, read once per planning pass (G4). Presence, planning and Explore's
     /// refusals all ask the same question of the same settings.
     /// </summary>
-    private AdobeMediaCacheLayout Layout => _layout ??= AdobeMediaCacheLayout.Find(Environment, Volumes);
+    private AdobeMediaCacheLayout Layout => _layout.Get(() => AdobeMediaCacheLayout.Find(Environment, Volumes));
 
     /// <summary>The one look at the disk presence and the plan both read, kept for a planning pass.</summary>
-    private DeclaredLocationScan Scan(CancellationToken ct) => _scan ??= DeclaredLocations.Examine(Layout.Roots, ct);
+    private DeclaredLocationScan Scan(CancellationToken ct) => _scan.Get(() => DeclaredLocations.Examine(Layout.Roots, ct));
 
     public override void InvalidateCaches()
     {
-        _layout = null;
-        _scan = null;
+        _layout.Forget();
+        _scan.Forget();
         Volumes.Invalidate();
         base.InvalidateCaches();
     }

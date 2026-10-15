@@ -58,8 +58,8 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     private readonly ClaudeCodeSessionRegistry _sessions;
     private readonly ISystemDirectories _system;
 
-    private Survey? _survey;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<Survey?> _survey = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="sessions">
     /// Claude Code's list of running sessions, shared with the other providers over Claude Code's folder so
@@ -138,14 +138,14 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 
     private IReadOnlyList<string> Homes() => ClaudeCodeHome.EveryHome(Environment, _system, Volumes);
 
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
     public override void InvalidateCaches()
     {
         _projects.Invalidate();
         _sessions.Invalidate();
-        _survey = null;
-        _toolRoots = null;
+        _survey.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 
@@ -324,7 +324,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     }
 
     /// <summary>One look, memoised for the life of a planning pass (G4). The plan and the declaration read it.</summary>
-    private Survey? Look(CancellationToken ct = default) => _survey ??= Examine(ct);
+    private Survey? Look(CancellationToken ct = default) => _survey.Get(() => Examine(ct));
 
     private Survey? Examine(CancellationToken ct)
     {

@@ -123,8 +123,8 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     ];
 
     private readonly RowDeclarations _declarations;
-    private WebCacheScan? _scan;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<WebCacheScan> _scan = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="declarations">
     /// What every row in the planner offers, so a child another row removes from a folder this row
@@ -182,7 +182,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     /// planning and <see cref="ToolRoots"/> all ask the same question of the same directory, and
     /// this is the one enumeration behind all three.
     /// </summary>
-    private WebCacheScan Look(CancellationToken ct = default) => _scan ??= Examine(ct);
+    private WebCacheScan Look(CancellationToken ct = default) => _scan.Get(() => Examine(ct));
 
     /// <summary>
     /// The web cache folders on disk, which is what most callers want from a look. Exposed so tests
@@ -204,7 +204,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
     /// the declaration that matters most.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots ??=
+        _toolRoots.Get(() =>
         [
             EpicLauncherSaved.Root(Environment),
             .. from cache in WebCaches()
@@ -215,7 +215,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                    + "Deguffer removes the caches inside it from the Storage page, where it knows "
                    + "which of them are caches — your sign-in cookies sit beside them.",
                    level.Children),
-        ];
+        ]);
 
     /// <summary>
     /// Each cache this row recognises, at each of its levels, in every one of the store's browser
@@ -234,8 +234,8 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _scan = null;
-        _toolRoots = null;
+        _scan.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

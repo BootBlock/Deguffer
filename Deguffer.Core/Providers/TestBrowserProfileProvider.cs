@@ -77,8 +77,8 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     private readonly ILiveTreeInspector _liveTrees;
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
-    private TempRootSet? _roots;
-    private IReadOnlyList<FolderScan>? _scans;
+    private readonly PassMemo<TempRootSet> _roots = new();
+    private readonly PassMemo<IReadOnlyList<FolderScan>> _scans = new();
 
     public TestBrowserProfileProvider(
         IUserEnvironment? environment = null,
@@ -140,8 +140,8 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     public override void InvalidateCaches()
     {
         _liveTrees.Invalidate();
-        _roots = null;
-        _scans = null;
+        _roots.Forget();
+        _scans.Forget();
         base.InvalidateCaches();
     }
 
@@ -333,7 +333,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
         Task.FromResult<IReadOnlyList<CleanedPlace>>([.. Roots.Folders.Select(CleanedPlace.Whole)]);
 
     /// <summary>The temporary files row's own folders, resolved once per planning pass.</summary>
-    private TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system, Volumes);
+    private TempRootSet Roots => _roots.Get(() => TempRoots.Resolve(Environment, _system, Volumes));
 
     /// <summary>
     /// The temporary folders and every child named for either tool, listed once per planning pass
@@ -348,7 +348,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     /// Deguffer declines to treat as a temporary folder is declined here as well, and that row says
     /// why.</para>
     /// </summary>
-    private IReadOnlyList<FolderScan> Scans => _scans ??=
+    private IReadOnlyList<FolderScan> Scans => _scans.Get(() =>
     [
         .. from root in Roots.Roots
            from location in root.Locations
@@ -359,7 +359,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
                ChildDirectories.Under(folder, static name =>
                    name.StartsWith("playwright_", StringComparison.OrdinalIgnoreCase)
                    || name.StartsWith("puppeteer_", StringComparison.OrdinalIgnoreCase))),
-    ];
+    ]);
 
     /// <summary>
     /// Every child of <paramref name="folders"/> named as a profile, a link among them included, in

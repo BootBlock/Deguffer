@@ -39,7 +39,7 @@ public sealed class RetroArchDiscovery
     private readonly ISystemDirectories _system;
     private readonly IVolumeInventory _volumes;
     private readonly List<RetroArchProviderBase> _rows = [];
-    private RetroArchFinding? _finding;
+    private readonly PassMemo<RetroArchFinding> _finding = new();
 
     public RetroArchDiscovery(
         IUserEnvironment environment,
@@ -73,7 +73,7 @@ public sealed class RetroArchDiscovery
     /// </summary>
     public void Invalidate()
     {
-        _finding = null;
+        _finding.Forget();
         _steam.Invalidate();
     }
 
@@ -81,7 +81,7 @@ public sealed class RetroArchDiscovery
     /// Every copy, memoised for a planning pass (G4): both rows, their presence and Explore's refusals
     /// all ask it. A pass that is cancelled throws before it is kept, so the next caller looks again.
     /// </summary>
-    internal RetroArchFinding Find(CancellationToken ct) => _finding ??= Search(ct);
+    internal RetroArchFinding Find(CancellationToken ct) => _finding.Get(() => Search(ct));
 
     /// <summary>
     /// Why <paramref name="folder"/> must not be treated as RetroArch's, as the end of a sentence, or
