@@ -118,6 +118,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         IReadOnlyList<IReadOnlyList<string>> leftOut,
         Func<IReadOnlyList<string>, FileReading> describe) =>
         new MftLeftOutPlacement(tree, links, TryResolve).TryPlace(root, leftOut, describe);
+
     /// <summary>
     /// Every directory <paramref name="search"/> finds below the directory at
     /// <paramref name="root"/>, as components below that root, in no particular order. Null when
@@ -137,85 +138,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     public IReadOnlyList<IReadOnlyList<string>>? TryFindDirectories(
         IReadOnlyList<string> root,
         DirectorySearch search,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(search);
-
-        if (TryResolve(root) is not { } start)
-        {
-            return null;
-        }
-
-        // Resolved as the search of its own resolves its root, so the record handed off is the record
-        // that search starts from. One reached through a link resolves to nothing, and this pass
-        // never descends through a link to reach it anyway.
-        var handedOff = search.HandedOff
-            .Select(belowRoot => TryResolve([.. root, .. belowRoot]))
-            .OfType<uint>()
-            .ToHashSet();
-
-        var found = new List<IReadOnlyList<string>>();
-
-        // Each directory entered records its name and the position of the one holding it, which is
-        // how a found directory's path is read back without recursion or a parent walk.
-        var entered = new List<(int Holder, string Name)>();
-        var stack = new Stack<(uint Node, int Holder)>();
-        var visited = 0;
-
-        Push(start, -1);
-
-        while (stack.TryPop(out var item))
-        {
-            // A source folder can hold millions of entries, so the cancellation check is amortised
-            // rather than paid per entry.
-            if ((++visited & 0xFFFF) == 0)
-            {
-                ct.ThrowIfCancellationRequested();
-            }
-
-            var node = item.Node;
-
-            if (tree.IsReparsePoint[node] || tree.Names[node] is not { } name)
-            {
-                continue;
-            }
-
-            switch (search.Meet(name))
-            {
-                case SearchStep.Found:
-                    found.Add(PathBelowRoot(item.Holder, name));
-                    break;
-
-                case SearchStep.Entered when !handedOff.Contains(node):
-                    entered.Add((item.Holder, name));
-                    Push(node, entered.Count - 1);
-                    break;
-            }
-        }
-
-        return found;
-
-        void Push(uint directory, int holder)
-        {
-            for (var i = links.Start[directory]; i < links.Start[directory + 1]; i++)
-            {
-                stack.Push((links.Children[i], holder));
-            }
-        }
-
-        IReadOnlyList<string> PathBelowRoot(int holder, string name)
-        {
-            var components = new List<string> { name };
-
-            for (var position = holder; position >= 0; position = entered[position].Holder)
-            {
-                components.Add(entered[position].Name);
-            }
-
-            components.Reverse();
-            return components;
-        }
-    }
+        CancellationToken ct = default) =>
+        new MftDirectoryFinder(tree, links, TryResolve).TryFind(root, search, ct);
 
     /// <summary>
     /// Rebuild one record's path by walking <see cref="MftVolumeTree.Parent"/> up to the root.

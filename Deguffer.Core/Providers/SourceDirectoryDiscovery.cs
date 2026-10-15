@@ -303,15 +303,19 @@ public sealed class SourceDirectoryDiscovery
     /// below it, for the search of <paramref name="root"/> to stop at.
     ///
     /// <para>Every one of them is searched on its own, so a search that also entered it listed every
-    /// directory in it twice: half of discovery, for a user who approved a folder and one inside it.
-    /// Stopping at it gives the same answer, because each route judges a directory by its name and
-    /// its own descent alone, never by the path above it. A nested root the outer search could never
-    /// have reached, behind a link or below a directory it does not enter, loses nothing.</para>
+    /// directory in it twice, which is up to half of discovery when the nested folder holds most of
+    /// the outer one. Stopping at it gives the same answer, because each route judges a directory by
+    /// its name and its own descent alone, never by the path above it. A nested root the outer search
+    /// could never have reached, behind a link or below a directory it does not enter, loses
+    /// nothing.</para>
     ///
     /// <para>Compared as spelled. A nested root spelled in another case from its parent is not found
     /// here, which costs a second listing of it rather than a folder nobody searched.</para>
+    ///
+    /// <para>Internal for the test that hands its answer to the walk, which is where a spelling
+    /// the two disagreed on would show.</para>
     /// </summary>
-    private static IReadOnlyList<IReadOnlyList<string>> Nested(string root, IReadOnlyList<string> searchable) =>
+    internal static IReadOnlyList<IReadOnlyList<string>> Nested(string root, IReadOnlyList<string> searchable) =>
     [
         .. searchable
             .Where(other => !SameFolder(other, root)

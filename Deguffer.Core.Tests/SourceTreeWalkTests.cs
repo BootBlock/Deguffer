@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
@@ -84,6 +85,27 @@ public sealed class SourceTreeWalkTests : IDisposable
 
         Assert.Equal(new[] { kept, named }.Order(StringComparer.Ordinal), walked.Candidates);
         Assert.Empty(walked.Unreadable);
+    }
+
+    /// <summary>
+    /// The nested roots discovery hands off, spelled as the user's approval spelled them, are the
+    /// directories the walk stops at. Here the outer root keeps a trailing separator and the nested
+    /// one is in <c>\\?\</c> form, and the walk lists in <c>\\?\</c> form whatever it is given.
+    /// </summary>
+    [Fact]
+    public void StopsAtANestedRootHoweverDiscoverySpellsIt()
+    {
+        var root = _temp.CreateDirectory("root") + Path.DirectorySeparatorChar;
+        var kept = _temp.CreateDirectory("root", "kept", "obj");
+        var nested = LongPath.Extended(_temp.CreateDirectory("root", "nested"));
+        _temp.CreateDirectory("root", "nested", "app", "obj");
+
+        var handedOff = SourceDirectoryDiscovery.Nested(root, [root, nested]);
+
+        var walked = SourceTreeWalk.Under(root, Sought.HandingOff(handedOff), WalkTuning.Default, CancellationToken.None);
+
+        Assert.StartsWith(@"\\?\", nested, StringComparison.Ordinal);
+        Assert.Equal([kept], walked.Candidates);
     }
 
     /// <summary>

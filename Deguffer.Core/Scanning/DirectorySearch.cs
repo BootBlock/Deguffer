@@ -38,8 +38,10 @@ public sealed class DirectorySearch(FrozenSet<string> sought, FrozenSet<string> 
     ///
     /// <para>Each is still met by name, so one that carries a sought name is still an answer: only
     /// the descent is handed off, and the search of its own lists everything below it by the same
-    /// rules. Matched as the routes spell the path, so one spelled in another case is entered as
-    /// before, which costs a second listing rather than a folder nobody searched.</para>
+    /// rules. The walk matches one as spelled, so there one spelled in another case is entered as
+    /// before, which costs a second listing rather than a folder nobody searched. The volume index
+    /// matches the record the path resolves to, as the search of its own resolves its root, so the
+    /// two cannot name different folders.</para>
     /// </summary>
     public IReadOnlyList<IReadOnlyList<string>> HandedOff { get; private init; } = [];
 
