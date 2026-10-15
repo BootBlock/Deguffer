@@ -41,8 +41,8 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
     public bool IsReparsePoint(string path) =>
         IsRefused(path) || inner.IsReparsePoint(path);
 
-    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
-        inner.ListEntries(directory, options, into);
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into) =>
+        inner.ListEntries(directory, options, files, into);
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 

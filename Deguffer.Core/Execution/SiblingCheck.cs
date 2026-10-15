@@ -147,7 +147,7 @@ public sealed class SiblingCheck
 
         // Nothing rather than a partial view, on ChildDirectories.Under's reasoning: half a listing
         // would let a missing sibling read as one that was never there.
-        return fs.ListEntries(LongPath.Extended(directory), DirectoryListing.EveryEntry, entries) is { Presence: PathPresence.Present }
+        return fs.ListEntries(LongPath.Extended(directory), DirectoryListing.EveryEntry, FileNames.All, entries) is { Presence: PathPresence.Present }
             ? [.. entries.Select(entry => entry.Name)]
             : null;
     }

@@ -43,10 +43,10 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
         return inner.IsReparsePoint(path);
     }
 
-    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into)
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
     {
         _paths.Enqueue(directory);
-        return inner.ListEntries(directory, options, into);
+        return inner.ListEntries(directory, options, files, into);
     }
 
     public long? TryGetNewestFileTime(string path)

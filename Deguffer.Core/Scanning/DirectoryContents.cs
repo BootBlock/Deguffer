@@ -9,8 +9,14 @@ namespace Deguffer.Core.Scanning;
 /// the same three lists for every directory it reads, so a caller that keeps an entry copies it out.
 /// </para>
 /// </summary>
+/// <param name="Directory">
+/// The directory listed, in the extended form §6.3 requires: the one string every entry's
+/// <see cref="WalkEntry.Directory"/> is, so a caller that needs the path of the directory it is handed
+/// reads it here rather than carrying a copy of its own down the tree.
+/// </param>
 /// <param name="Entries">
-/// The ordinary children — files and directories, in the order they were listed. A link is not among
+/// The ordinary children — files and directories, in the order they were listed. Files are here only
+/// where the walk kept them, and named only where it asked: see <see cref="FileNames"/>. A link is not among
 /// them; see <paramref name="Links"/> for why they are separated rather than mixed.
 /// </param>
 /// <param name="Links">
@@ -33,6 +39,7 @@ namespace Deguffer.Core.Scanning;
 /// listing failed part-way is still in the three lists.
 /// </param>
 internal readonly record struct DirectoryContents(
+    string Directory,
     IReadOnlyList<WalkEntry> Entries,
     IReadOnlyList<WalkEntry> Links,
     IReadOnlyList<WalkEntry> ReparseFiles,

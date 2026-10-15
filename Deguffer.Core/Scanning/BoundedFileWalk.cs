@@ -23,7 +23,7 @@ internal static class BoundedFileWalk
     public static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>
-    /// <see cref="Visit{TState}(string, TState, WalkTuning, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>
+    /// <see cref="Visit{TState}(string, TState, WalkTuning, FileNames, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>
     /// with the values <paramref name="tuning"/> resolves for the drive that holds
     /// <paramref name="root"/>, for a caller walking one root that has no tuning of its own to hand.
     /// </summary>
@@ -31,11 +31,12 @@ internal static class BoundedFileWalk
         string root,
         TState rootState,
         ScanTuner tuning,
+        FileNames files,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action onProgress,
         TimeProvider clock,
         CancellationToken ct) =>
-        Visit(root, rootState, tuning.For(root).Walk, onDirectory, onProgress, clock, ct);
+        Visit(root, rootState, tuning.For(root).Walk, files, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// Visit every directory at or below <paramref name="root"/>, carrying a caller-chosen value
@@ -52,7 +53,7 @@ internal static class BoundedFileWalk
     /// only while it runs. Nothing is descended into unless it asks: the third argument is how it says
     /// so, and a link is never a legitimate argument to it — the walk holds that rule, not the caller.
     /// Every directory is listed in the extended-length form §6.3 requires, so every entry it is
-    /// handed carries the prefix.
+    /// handed carries the prefix. Each listing keeps of its files what <paramref name="files"/> asks.
     ///
     /// <para><paramref name="onProgress"/> is called once the first directory has been read, then at
     /// most once per <see cref="ProgressInterval"/> of <paramref name="clock"/> while the walk runs, and
@@ -62,14 +63,15 @@ internal static class BoundedFileWalk
         string root,
         TState rootState,
         WalkTuning tuning,
+        FileNames files,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action onProgress,
         TimeProvider clock,
         CancellationToken ct) =>
-        Visit(root, rootState, tuning, onDirectory, _ => onProgress(), clock, ct);
+        Visit(root, rootState, tuning, files, onDirectory, _ => onProgress(), clock, ct);
 
     /// <summary>
-    /// <see cref="Visit{TState}(string, TState, WalkTuning, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>,
+    /// <see cref="Visit{TState}(string, TState, WalkTuning, FileNames, Action{TState, DirectoryContents, Action{WalkEntry, TState}}, Action, TimeProvider, CancellationToken)"/>,
     /// telling <paramref name="onProgress"/> whether the walk has finished: true only for the report
     /// made once at the end.
     ///
@@ -80,12 +82,13 @@ internal static class BoundedFileWalk
         string root,
         TState rootState,
         WalkTuning tuning,
+        FileNames files,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct)
     {
-        Visit(root, rootState, tuning, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
+        Visit(root, rootState, tuning, files, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
     }
 
     /// <summary>
@@ -98,12 +101,13 @@ internal static class BoundedFileWalk
         string root,
         TState rootState,
         WalkTuning tuning,
+        FileNames files,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct) =>
-        Visit([(root, rootState)], tuning, list, onDirectory, onProgress, clock, ct);
+        Visit([(root, rootState)], tuning, files, list, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// The walk above over several roots at once, each with its own value, sharing one set of
@@ -113,6 +117,7 @@ internal static class BoundedFileWalk
     public static void Visit<TState>(
         IReadOnlyList<(string Root, TState State)> roots,
         WalkTuning tuning,
+        FileNames files,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action<bool> onProgress,
@@ -123,7 +128,7 @@ internal static class BoundedFileWalk
 
         new WalkWorkers<TState>(
                 tuning.Threads,
-                descend => DiskReader(new WalkListing(buffer, list), onDirectory, descend),
+                descend => DiskReader(new WalkListing(buffer, list, files), onDirectory, descend),
                 onProgress,
                 clock,
                 ct)

@@ -82,7 +82,7 @@ internal static class RemovalWalk
         WalkTuning tuning,
         CancellationToken ct)
     {
-        var root = new Folder(extendedRoot);
+        var root = new Folder();
 
         // Most removals hold nothing back, and only a bound needs an entry's full path before the
         // removal acts on it. Building one per file to look up in an empty set would be most of what
@@ -93,6 +93,7 @@ internal static class RemovalWalk
             extendedRoot,
             root,
             tuning,
+            FileNames.All,
             fs.ListEntries,
             (folder, contents, descend) => folder.Gather(contents, descend, keep, bounds, bounded),
             static _ => { },
@@ -105,9 +106,14 @@ internal static class RemovalWalk
     /// <summary>
     /// One directory the walk reached, and what the walk found directly inside it. Written only by the
     /// worker that listed the directory, so the workers share nothing and take no lock.
+    ///
+    /// <para>Its path is the listing's own, set when the directory is listed rather than when it is
+    /// found, so the folder and every file gathered from it share one string for the whole removal.
+    /// </para>
     /// </summary>
-    private sealed class Folder(string path)
+    private sealed class Folder
     {
+        private string? _path;
         private List<Folder>? _folders;
         private List<WalkEntry>? _files;
         private List<WalkEntry>? _links;
@@ -126,6 +132,8 @@ internal static class RemovalWalk
             RemovalBounds bounds,
             bool bounded)
         {
+            _path = contents.Directory;
+
             // Unreadable, or gone: nothing to gather, and §5.3 says skip rather than fail. What a
             // listing read before it failed is dropped too, so a removal acts only inside a folder it
             // read to the end, as it did when a failed listing threw.
@@ -212,7 +220,7 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
-                var folder = new Folder(path ?? entry.FullName);
+                var folder = new Folder();
                 (_folders ??= []).Add(folder);
                 descend(entry, folder);
             }
@@ -264,6 +272,8 @@ internal static class RemovalWalk
             return new RemovalInventory(directories, files, links, kept, spared, mailStores);
         }
 
-        private string Path { get; } = path;
+        // The walk lists every folder it is asked to descend into before it returns, so one never
+        // listed is a walk that broke that promise, and removing it by a guessed path is not an option.
+        private string Path => _path ?? throw new InvalidOperationException("A folder of the removal was never listed.");
     }
 }

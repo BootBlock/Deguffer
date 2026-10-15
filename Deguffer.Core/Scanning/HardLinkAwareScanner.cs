@@ -189,9 +189,11 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         var roots = asked.Select(_ => new RootTally(keeps)).ToArray();
         var route = new ByNameRoute();
 
+        // Every name, because each file counted is opened by its path to ask what else links it.
         RootSetWalk.Visit<RootTally>(
             [.. asked.Select(question => WalkRoot.Of(question.Path, question.Bounds))],
             tuning,
+            FileNames.All,
             (root, holder, contents, left) =>
             {
                 var measured = holder ?? roots[root];
@@ -211,7 +213,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
                     // §9, named rather than only left out: a store inside a tool's own folder is what
                     // withholds that tool's command, and the plan can only say which store by its path.
-                    if (MailStore.Is(file.Name))
+                    if (file.IsMailStore)
                     {
                         measured.Stores.Add(LongPath.Display(file.FullName));
                         continue;
@@ -248,7 +250,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                 // like a store is still named: the removal does not read which kind of mark a file carries.
                 foreach (var marked in contents.ReparseFiles)
                 {
-                    if (left?.Contains(marked.Name) != true && MailStore.Is(marked.Name))
+                    if (left?.Contains(marked.Name) != true && marked.IsMailStore)
                     {
                         measured.Stores.Add(LongPath.Display(marked.FullName));
                     }

@@ -62,6 +62,23 @@ public sealed class RemovalWalkTests : IDisposable
     }
 
     /// <summary>
+    /// A folder and every file gathered from it share one path, the listing's own. A removal holds its
+    /// inventory until the last file goes, so a second copy of each folder's path is held that long.
+    /// The bounds are set so the walk builds each entry's path to compare, as it does where a bound is.
+    /// </summary>
+    [Fact]
+    public void AFolderAndTheFilesGatheredFromItShareOnePath()
+    {
+        var root = BuildTree();
+        var bounds = new RemovalBounds(KeepRoot: false, [Path.Combine(root, "branch-0", "spared")]);
+
+        var inventory = Gather(root, MinimumAge.Off, bounds, new WalkTuning(1, WalkTuning.MinimumListingBuffer));
+
+        Assert.NotEmpty(inventory.Files);
+        Assert.All(inventory.Files, file => Assert.Contains(inventory.Directories, folder => ReferenceEquals(folder.Path, file.Directory)));
+    }
+
+    /// <summary>
     /// Every directory comes after the one it was found in, which is what lets the deletion pass try
     /// children before their parent by reading the list backwards.
     /// </summary>

@@ -87,37 +87,38 @@ public static class ChromiumUserDataWalk
             return new ChromiumFolderWalk([], RootUnreadable: false);
         }
 
-        var excluded = Excluded(notEntered);
+        var excluded = ByParent(Excluded(notEntered));
         var found = new ConcurrentBag<ChromiumFolder>();
         var rootUnreadable = false;
 
-        BoundedFileWalk.Visit<(string Path, int Depth)>(
+        // Each directory carries its depth, and reads its path from its listing. The only file named
+        // is the marker, which is the only one asked about.
+        BoundedFileWalk.Visit(
             LongPath.Extended(root),
-            (root, 0),
+            rootState: 0,
             tuning,
-            (directory, contents, descend) =>
+            FileNames.StoresAnd(ChromiumLayout.Browser.IdentifyingFile),
+            (depth, contents, descend) =>
             {
-                if (directory.Depth == 0)
+                var path = LongPath.Display(contents.Directory);
+
+                if (depth == 0)
                 {
                     rootUnreadable = contents.WasRefused;
                 }
-                else if (!Enters(directory.Path, directory.Depth, Marked(directory.Path, contents), found))
+                else if (!Enters(path, depth, Marked(path, contents), found))
                 {
                     return;
                 }
 
+                // Asked once a listing, and of each child only where this folder holds one never entered.
+                excluded.TryGetValue(Path.TrimEndingDirectorySeparator(path), out var notHere);
+
                 foreach (var child in contents.Entries)
                 {
-                    if (!child.IsDirectory)
+                    if (child.IsDirectory && notHere?.Contains(child.Name) != true)
                     {
-                        continue;
-                    }
-
-                    var path = LongPath.Display(child.FullName);
-
-                    if (!excluded.Contains(Path.TrimEndingDirectorySeparator(path)))
-                    {
-                        descend(child, (path, directory.Depth + 1));
+                        descend(child, depth + 1);
                     }
                 }
             },
@@ -224,6 +225,36 @@ public static class ChromiumUserDataWalk
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// <paramref name="excluded"/> as the names never entered in each folder, keyed as
+    /// <see cref="Excluded"/> spells a folder, so the walk asks one lookup of a listing and builds no
+    /// child's path to ask it.
+    /// </summary>
+    private static Dictionary<string, HashSet<string>> ByParent(HashSet<string> excluded)
+    {
+        var byParent = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in excluded)
+        {
+            // A volume's root has no parent, so no walk meets it as a child.
+            if (Path.GetDirectoryName(path) is not { } parent)
+            {
+                continue;
+            }
+
+            var key = Path.TrimEndingDirectorySeparator(parent);
+
+            if (!byParent.TryGetValue(key, out var names))
+            {
+                byParent[key] = names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            names.Add(Path.GetFileName(path));
+        }
+
+        return byParent;
+    }
+
+    /// <summary>
     /// <see cref="Marked(string, DirectoryContents)"/>, read from the scan's tree: any file the scan
     /// listed, a link or not, and a probe by name where the folder refused its listing.
     ///
@@ -270,6 +301,7 @@ public static class ChromiumUserDataWalk
             ? PathPresence.Present
             : PathPresence.Absent;
 
+    // A file listed without a name is not the marker: the walk names the marker wherever it lists it.
     private static bool IsMarker(WalkEntry file) =>
-        file.Name.Equals(ChromiumLayout.Browser.IdentifyingFile, StringComparison.OrdinalIgnoreCase);
+        file.HasName && file.Name.Equals(ChromiumLayout.Browser.IdentifyingFile, StringComparison.OrdinalIgnoreCase);
 }

@@ -23,10 +23,10 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IF
     /// Refused as Windows refuses a folder the account may not read: an answer, never an exception,
     /// and one no smaller listing buffer changes.
     /// </summary>
-    public ListingEnd ListEntries(string directory, EnumerationOptions options, List<WalkEntry> into) =>
+    public ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into) =>
         LongPath.Display(directory).Equals(refused, StringComparison.OrdinalIgnoreCase)
             ? new ListingEnd(PathPresence.Refused, Denied: true)
-            : inner.ListEntries(directory, options, into);
+            : inner.ListEntries(directory, options, files, into);
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 

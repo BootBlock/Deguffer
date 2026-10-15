@@ -9,6 +9,7 @@ namespace Deguffer.Benchmark;
 ///
 /// <para>What a scanner does with each entry costs little beside listing it, and differs between
 /// the scanners. Timing the bare walk keeps a change to the walk from being hidden by one of them.
+/// It keeps of each file what the walk that totals sizes keeps, so its allocations are that walk's.
 /// </para>
 /// </summary>
 internal static class WalkRoute
@@ -25,6 +26,7 @@ internal static class WalkRoute
             LongPath.Extended(folder),
             rootState: 0,
             tuning,
+            FileNames.Stores,
             listings.List,
             (_, contents, descend) =>
             {

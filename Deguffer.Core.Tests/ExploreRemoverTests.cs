@@ -977,14 +977,14 @@ public sealed class ExploreRemoverTests : IDisposable
 
         public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-        public ListingEnd ListEntries(string path, EnumerationOptions options, List<WalkEntry> into)
+        public ListingEnd ListEntries(string path, EnumerationOptions options, FileNames files, List<WalkEntry> into)
         {
             if (LongPath.Display(path).Equals(directory, StringComparison.OrdinalIgnoreCase))
             {
                 listed();
             }
 
-            return inner.ListEntries(path, options, into);
+            return inner.ListEntries(path, options, files, into);
         }
 
         public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);

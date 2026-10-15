@@ -19,7 +19,7 @@ public sealed class WalkListingTests
     public void ListsAFolderAgainWithTheSmallestBufferWhenTheLargerOneIsRejected()
     {
         var server = new FakeServer();
-        var listing = new WalkListing(new ListingBuffer(Large), server.List);
+        var listing = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All);
 
         var contents = listing.Read(Folder);
 
@@ -39,10 +39,10 @@ public sealed class WalkListingTests
         var server = new FakeServer();
         var buffer = new ListingBuffer(Large);
 
-        new WalkListing(buffer, server.List).Read(Folder);
+        new WalkListing(buffer, server.List, FileNames.All).Read(Folder);
         server.BuffersAskedFor.Clear();
 
-        new WalkListing(buffer, server.List).Read(Folder + @"\next");
+        new WalkListing(buffer, server.List, FileNames.All).Read(Folder + @"\next");
 
         Assert.Equal([WalkTuning.MinimumListingBuffer], server.BuffersAskedFor);
     }
@@ -56,7 +56,7 @@ public sealed class WalkListingTests
     {
         var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, Denied: true) };
 
-        var contents = new WalkListing(new ListingBuffer(Large), server.List).Read(Folder);
+        var contents = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All).Read(Folder);
 
         Assert.True(contents.WasRefused);
         Assert.Equal([Large], server.BuffersAskedFor);
@@ -72,7 +72,7 @@ public sealed class WalkListingTests
         var server = new FakeServer { FailsAtEverySize = true };
         var buffer = new ListingBuffer(Large);
 
-        var contents = new WalkListing(buffer, server.List).Read(Folder);
+        var contents = new WalkListing(buffer, server.List, FileNames.All).Read(Folder);
 
         Assert.True(contents.WasRefused);
         Assert.Equal([Large, WalkTuning.MinimumListingBuffer], server.BuffersAskedFor);
@@ -84,7 +84,7 @@ public sealed class WalkListingTests
     {
         var server = new FakeServer { FailsAtEverySize = true };
 
-        new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List).Read(Folder);
+        new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List, FileNames.All).Read(Folder);
 
         Assert.Equal([WalkTuning.MinimumListingBuffer], server.BuffersAskedFor);
     }
@@ -108,7 +108,7 @@ public sealed class WalkListingTests
             ],
         };
 
-        var contents = new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List).Read(Folder);
+        var contents = new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List, FileNames.All).Read(Folder);
 
         Assert.Equal(["first.bin", "folder", "last.bin"], contents.Entries.Select(e => e.Name));
         Assert.Equal(["link"], contents.Links.Select(e => e.Name));
@@ -138,7 +138,7 @@ public sealed class WalkListingTests
 
         public List<int> BuffersAskedFor { get; } = [];
 
-        public ListingEnd List(string directory, EnumerationOptions options, List<WalkEntry> into)
+        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
         {
             BuffersAskedFor.Add(options.BufferSize);
 

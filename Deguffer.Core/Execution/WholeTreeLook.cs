@@ -72,14 +72,16 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         {
             var root = LongPath.Extended(path);
 
-            BoundedFileWalk.Visit(
+            // A file is named only where it is a store, which is all of a name this asks.
+            BoundedFileWalk.Visit<byte>(
                 root,
-                root,
+                rootState: 0,
                 tuning,
+                FileNames.Stores,
                 fs.ListEntries,
-                (directory, contents, descend) =>
+                (_, contents, descend) =>
                 {
-                    if (!visited.TryAdd(directory, 0))
+                    if (!visited.TryAdd(contents.Directory, 0))
                     {
                         return;
                     }
@@ -89,7 +91,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
                     // removal and the folder is named as unlisted either way.
                     if (contents.Presence is PathPresence.Refused)
                     {
-                        unlisted.Enqueue(LongPath.Display(directory));
+                        unlisted.Enqueue(LongPath.Display(contents.Directory));
                     }
 
                     foreach (var entry in contents.Entries)
@@ -98,7 +100,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
 
                         if (entry.IsDirectory)
                         {
-                            descend(entry, entry.FullName);
+                            descend(entry, 0);
                         }
                     }
 
@@ -133,7 +135,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
 
             // Whatever mark it carries: a OneDrive placeholder and a deduplicated file carry the mark
             // Windows puts on a link, and every removal this look stands in front of would take one.
-            if (!entry.IsDirectory && MailStore.Is(entry.Name))
+            if (entry.IsMailStore)
             {
                 stores.Enqueue(LongPath.Display(entry.FullName));
             }

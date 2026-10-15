@@ -36,6 +36,7 @@ public sealed class RootSetWalkTests
             () => RootSetWalk.Visit<object>(
                 [.. leaves.Select(leaf => new WalkRoot(LongPath.Extended(leaf), LeftOut: null))],
                 new WalkTuning(Threads, WalkTuning.MinimumListingBuffer),
+                FileNames.All,
                 tree.List,
                 static (_, _, _, _) => new object(),
                 static () => { },
@@ -146,10 +147,11 @@ public sealed class RootSetWalkTests
         RootSetWalk.Visit<string>(
             [.. roots.Select(root => WalkRoot.Of(root, default))],
             new WalkTuning(Threads, WalkTuning.MinimumListingBuffer),
+            FileNames.All,
             tree.List,
             (root, holder, contents, _) =>
             {
-                var folder = LongPath.Display(contents.Entries[0].Directory);
+                var folder = LongPath.Display(contents.Directory);
                 visits.Add((root, folder, holder is null));
                 return folder;
             },
@@ -173,7 +175,7 @@ public sealed class RootSetWalkTests
             return this;
         }
 
-        public ListingEnd List(string directory, EnumerationOptions options, List<WalkEntry> into)
+        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
         {
             Listings.AddOrUpdate(directory, 1, (_, count) => count + 1);
 
@@ -207,7 +209,7 @@ public sealed class RootSetWalkTests
 
         public int Listed => Volatile.Read(ref _listed);
 
-        public ListingEnd List(string directory, EnumerationOptions options, List<WalkEntry> into)
+        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
         {
             Interlocked.Increment(ref _listed);
 

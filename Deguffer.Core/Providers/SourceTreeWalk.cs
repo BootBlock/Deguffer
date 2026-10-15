@@ -53,13 +53,14 @@ internal static class SourceTreeWalk
         // Written by the root's own listing alone, before anything below it is queued.
         var rootListed = true;
 
-        // Each directory carries its own path, because the walk hands a callback the listing and not
-        // the place it was read from.
+        // Each directory carries whether it is the root, the one thing its listing does not say. No
+        // file is listed, since only folders are sought.
         BoundedFileWalk.Visit(
             top,
-            rootState: top,
+            rootState: true,
             tuning,
-            (directory, contents, descend) =>
+            FileNames.None,
+            (isRoot, contents, descend) =>
             {
                 if (contents.WasRefused)
                 {
@@ -70,8 +71,8 @@ internal static class SourceTreeWalk
                     // or reported, never half of each.
                     if (contents.Presence is PathPresence.Refused)
                     {
-                        unreadable.Add(LongPath.Display(directory));
-                        rootListed &= !ReferenceEquals(directory, top);
+                        unreadable.Add(LongPath.Display(contents.Directory));
+                        rootListed &= !isRoot;
                     }
 
                     return;
@@ -79,6 +80,8 @@ internal static class SourceTreeWalk
 
                 foreach (var child in contents.Entries)
                 {
+                    // Asked although no file is listed: a candidate is a folder, whatever a listing
+                    // through another seam hands back.
                     if (!child.IsDirectory)
                     {
                         continue;
@@ -93,8 +96,10 @@ internal static class SourceTreeWalk
                             candidates.Add(LongPath.Display(child.FullName));
                             break;
 
-                        case SearchStep.Entered when !handedOff.Contains(child.FullName):
-                            descend(child, child.FullName);
+                        // The path is built to ask only where something is handed off, since the walk
+                        // builds it again to descend.
+                        case SearchStep.Entered when handedOff.Count == 0 || !handedOff.Contains(child.FullName):
+                            descend(child, false);
                             break;
                     }
                 }
