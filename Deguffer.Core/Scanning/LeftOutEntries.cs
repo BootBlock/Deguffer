@@ -77,17 +77,7 @@ internal sealed class LeftOutEntries
 
     /// <summary>
     /// The names left out of the listing <paramref name="contents"/> is, or null where it holds none.
-    /// An empty listing answers null, as it holds nothing to leave out.
     /// </summary>
     public IReadOnlySet<string>? NamesIn(in DirectoryContents contents) =>
-        FolderOf(contents) is { } folder && _byFolder.TryGetValue(folder, out var names) ? names : null;
-
-    /// <summary>
-    /// The folder a listing was read from, which every entry of it carries as the one shared string.
-    /// </summary>
-    private static string? FolderOf(in DirectoryContents contents) =>
-        contents.Entries.Count > 0 ? contents.Entries[0].Directory
-        : contents.Links.Count > 0 ? contents.Links[0].Directory
-        : contents.ReparseFiles.Count > 0 ? contents.ReparseFiles[0].Directory
-        : null;
+        _byFolder.TryGetValue(contents.Directory, out var names) ? names : null;
 }
