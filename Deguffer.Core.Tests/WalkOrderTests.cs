@@ -81,6 +81,7 @@ public sealed class WalkOrderTests : IDisposable
             root,
             "cache",
             tuning,
+            FileNames.All,
             (name, contents, descend) =>
             {
                 onRead(name, Environment.CurrentManagedThreadId);
