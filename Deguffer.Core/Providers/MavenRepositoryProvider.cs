@@ -68,7 +68,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
     private readonly ISystemDirectories _system;
 
-    private UserSettings? _settings;
+    private readonly PassMemo<UserSettings> _settings = new();
 
     private (string Repository, string? Why)? _vetted;
 
@@ -144,7 +144,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// What the user's <c>settings.xml</c> says, read once for the pass. Memoised whole, so a
     /// repository that cannot be resolved is not read again by every caller that asks.
     /// </summary>
-    private UserSettings Settings => _settings ??= ReadSettings();
+    private UserSettings Settings => _settings.Get(ReadSettings);
 
     /// <summary>What the user's <c>settings.xml</c> says about the local repository.</summary>
     /// <param name="LocalRepository">See <see cref="ResolveLocalRepository"/>.</param>
@@ -189,7 +189,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _settings = null;
+        _settings.Forget();
         _vetted = null;
         base.InvalidateCaches();
     }

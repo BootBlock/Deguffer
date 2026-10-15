@@ -35,7 +35,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
 
-    private EpicLauncherSaved.SavedFolder? _saved;
+    private readonly PassMemo<EpicLauncherSaved.SavedFolder> _saved = new();
 
     public EpicLauncherLogProvider(
         IUserEnvironment? environment = null,
@@ -110,7 +110,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _saved = null;
+        _saved.Forget();
         base.InvalidateCaches();
     }
 
@@ -119,7 +119,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
     /// Presence and planning ask the same question of the same directory, and this is the one
     /// enumeration behind both.
     /// </summary>
-    private EpicLauncherSaved.SavedFolder Look() => _saved ??= EpicLauncherSaved.Look(Environment);
+    private EpicLauncherSaved.SavedFolder Look() => _saved.Get(() => EpicLauncherSaved.Look(Environment));
 
     /// <summary>§5.2 as §7.1 needs it read from outside. The declaration is the shared one.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => [EpicLauncherSaved.Root(Environment)];

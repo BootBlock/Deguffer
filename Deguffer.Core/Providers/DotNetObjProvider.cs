@@ -32,7 +32,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     private readonly ILiveTreeInspector _liveTrees;
     private readonly TrackedFileCheck _tracked;
 
-    private IReadOnlyList<SourceRoot>? _approved;
+    private readonly PassMemo<IReadOnlyList<SourceRoot>> _approved = new();
 
     public DotNetObjProvider(
         SourceRootStore roots,
@@ -93,7 +93,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     };
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
-    public IReadOnlyList<SourceRoot> ApprovedRoots => _approved ??= _roots.Load();
+    public IReadOnlyList<SourceRoot> ApprovedRoots => _approved.Get(() => _roots.Load());
 
     public override void InvalidateCaches()
     {
@@ -103,7 +103,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         _discovery.Invalidate();
 
         // Re-read on the next pass, so a root added in Settings is picked up without a restart.
-        _approved = null;
+        _approved.Forget();
     }
 
     /// <summary>

@@ -874,7 +874,7 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         var row = new FindingViewModel(finding, _selections.Memory, _keeps.Current, _isElevated);
 
-        // Rows arrive one provider at a time, so each one is filtered as it lands rather than in a
+        // Rows arrive as their providers finish, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
         row.IsListed = IsListed(row);
 
@@ -889,7 +889,10 @@ public sealed partial class CleanViewModel : ObservableObject
         // The row's own figure rather than the finding's, so a kept item does not place a row by
         // space it will never offer.
         Findings.Insert(
-            SizeOrder.IndexFor(Findings.Select(listed => listed.Finding.EstimatedBytes), row.Finding.EstimatedBytes),
+            SizeOrder.IndexFor(
+                Findings.Select(listed => (listed.Finding.EstimatedBytes, _planner.PlaceOf(listed.Finding.Provider))),
+                row.Finding.EstimatedBytes,
+                _planner.PlaceOf(finding.Provider)),
             row);
         UpdateShares();
 

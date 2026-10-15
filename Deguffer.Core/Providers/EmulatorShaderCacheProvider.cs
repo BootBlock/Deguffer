@@ -42,7 +42,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     private readonly EmulatorFolderStore _folders;
     private readonly ISystemDirectories _system;
     private readonly IReadOnlyDictionary<EmulatorLayout, RunningProcessCheck> _stillClosed;
-    private EmulatorCacheExamination? _examination;
+    private readonly PassMemo<EmulatorCacheExamination> _examination = new();
 
     public EmulatorShaderCacheProvider(
         IUserEnvironment? environment = null,
@@ -92,7 +92,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _examination = null;
+        _examination.Forget();
         base.InvalidateCaches();
     }
 
@@ -101,7 +101,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     /// that is cancelled throws before it is kept, so the next caller looks again.
     /// </summary>
     private EmulatorCacheExamination Examine(CancellationToken ct) =>
-        _examination ??= EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, HoldsRetroArch, Reach, ct);
+        _examination.Get(() => EmulatorCacheExamination.Of(Layouts, _folders.Load(), Environment, WhyNotOwned, HoldsRetroArch, Reach, ct));
 
     /// <summary>
     /// Whether the RetroArch rows answer for <paramref name="folder"/>. A refusal counts, because those

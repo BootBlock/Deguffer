@@ -57,7 +57,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// <summary>How many packages the evidence note names before it summarises the rest.</summary>
     private const int PackagesNamed = 5;
 
-    private PlatformIoLocations? _locations;
+    private readonly PassMemo<Task<PlatformIoLocations>> _locations = new();
 
     public PlatformIoCacheProvider(
         IUserEnvironment? environment = null,
@@ -215,7 +215,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _locations = null;
+        _locations.Forget();
         base.InvalidateCaches();
     }
 
@@ -467,18 +467,16 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// <see cref="PlatformIoLocations"/>'s to read; this method's whole job is the subprocess and
     /// remembering what came back.
     /// </summary>
-    private async Task<PlatformIoLocations> ResolveLocationsAsync(string pio, CancellationToken ct)
-    {
-        if (_locations is not null)
-        {
-            return _locations;
-        }
+    private Task<PlatformIoLocations> ResolveLocationsAsync(string pio, CancellationToken ct) =>
+        _locations.Get(() => AskLocationsAsync(pio, ct));
 
+    private async Task<PlatformIoLocations> AskLocationsAsync(string pio, CancellationToken ct)
+    {
         var outcome = await Runner
             .RunAsync(pio, "system info --json-output", ct)
             .ConfigureAwait(false);
 
-        return _locations = PlatformIoLocations.Read(
+        return PlatformIoLocations.Read(
             outcome.Succeeded ? outcome.StandardOutput : string.Empty, CoreRoot);
     }
 

@@ -48,6 +48,46 @@ public sealed class RowDeclarationsTests : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// Rows planned together ask at the same moment, while the first question is still reading every
+    /// row's declaration. Each waits for that reading and is answered from it, rather than being taken
+    /// for a declaration asking about itself and failing the whole pass.
+    /// </summary>
+    [Fact]
+    public async Task RowsAskingTogetherWhileTheDeclarationsAreReadAreEachAnswered()
+    {
+        const int askers = 8;
+
+        // Enough declarations that reading them takes the others' arrival to finish.
+        var rows = Enumerable.Range(0, 40)
+            .Select(row => new FakeCleanupProvider($"row{row}")
+            {
+                ToolRoots =
+                [
+                    .. Enumerable.Range(0, 500).Select(root => ToolRoot.Folders(
+                        Path.Combine(_temp.Path, $"row{row}", $"root{root}"),
+                        "A tool's own folder.",
+                        name => name == "cache")),
+                ],
+            })
+            .ToList();
+
+        var declarations = new RowDeclarations();
+        declarations.Admit(rows);
+        using var together = new Barrier(askers);
+
+        var answers = await Task.WhenAll(Enumerable.Range(0, askers).Select(_ => Task.Factory.StartNew(
+                () =>
+                {
+                    together.SignalAndWait();
+                    return declarations.OfferedByARow(Path.Combine(_temp.Path, "row7", "root3", "cache"));
+                },
+                TaskCreationOptions.LongRunning)))
+            .WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.All(answers, Assert.True);
+    }
+
     /// <summary>The four rows that walk an editor's folder, as the default planner builds them.</summary>
     private CleanupPlanner EditorRows(RowDeclarations? declarations)
     {

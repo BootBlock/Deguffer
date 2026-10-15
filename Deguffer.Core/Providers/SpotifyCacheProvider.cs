@@ -54,9 +54,9 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         "Where Spotify's settings say it keeps its storage. Deguffer never measures or removes "
         + "anything in it, because the music and podcasts you downloaded may be there.";
 
-    private IReadOnlyList<DeclaredRoot>? _roots;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
-    private SpotifyStorage? _storage;
+    private readonly PassMemo<IReadOnlyList<DeclaredRoot>> _roots = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
+    private readonly PassMemo<SpotifyStorage> _storage = new();
 
     public SpotifyCacheProvider(
         IUserEnvironment? environment = null,
@@ -103,7 +103,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     /// What this provider names, edition by edition. Exposed so tests can assert that no Spotify
     /// folder is a target and that a withheld cache is not declared.
     /// </summary>
-    public IReadOnlyList<DeclaredRoot> Roots => _roots ??= Declare();
+    public IReadOnlyList<DeclaredRoot> Roots => _roots.Get(Declare);
 
     /// <summary>§5.3. The app holds its cache open while it plays.</summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => ["Spotify"];
@@ -120,19 +120,19 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     /// direction §5.2 requires, and the price falls only on a machine whose storage was pointed at a
     /// folder that general.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= DeclareToolRoots();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(DeclareToolRoots);
 
     /// <summary>
     /// The settings files are read once per planning pass (G4). Presence, planning and the §5.2
     /// declarations all ask the same question of them.
     /// </summary>
-    private SpotifyStorage Storage => _storage ??= SpotifyStorage.Find(Environment, Volumes);
+    private SpotifyStorage Storage => _storage.Get(() => SpotifyStorage.Find(Environment, Volumes));
 
     public override void InvalidateCaches()
     {
-        _storage = null;
-        _roots = null;
-        _toolRoots = null;
+        _storage.Forget();
+        _roots.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

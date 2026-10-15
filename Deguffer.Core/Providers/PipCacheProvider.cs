@@ -28,7 +28,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
     /// </summary>
     private static readonly string[] CommandNames = ["pip", "pip3"];
 
-    private string? _resolvedCacheDirectory;
+    private readonly PassMemo<Task<string>> _resolvedCacheDirectory = new();
 
     public PipCacheProvider(
         IUserEnvironment? environment = null,
@@ -127,7 +127,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _resolvedCacheDirectory = null;
+        _resolvedCacheDirectory.Forget();
         base.InvalidateCaches();
     }
 
@@ -218,13 +218,11 @@ public sealed class PipCacheProvider : CleanupProviderBase
         return null;
     }
 
-    private async Task<string> ResolveCacheDirectoryAsync(string pip, CancellationToken ct)
-    {
-        if (_resolvedCacheDirectory is not null)
-        {
-            return _resolvedCacheDirectory;
-        }
+    private Task<string> ResolveCacheDirectoryAsync(string pip, CancellationToken ct) =>
+        _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(pip, ct));
 
+    private async Task<string> AskCacheDirectoryAsync(string pip, CancellationToken ct)
+    {
         // --no-color because pip colourises output when it believes it is writing to a terminal,
         // and the escape sequences would land inside the parsed path.
         var outcome = await Runner.RunAsync(pip, "cache dir --no-color", ct).ConfigureAwait(false);
@@ -235,6 +233,6 @@ public sealed class PipCacheProvider : CleanupProviderBase
                 .LastOrDefault(Path.IsPathRooted)
             : null;
 
-        return _resolvedCacheDirectory = reported ?? DefaultCacheDirectory;
+        return reported ?? DefaultCacheDirectory;
     }
 }

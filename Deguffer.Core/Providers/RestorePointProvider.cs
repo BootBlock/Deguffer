@@ -38,7 +38,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
     private readonly ISystemProtection _protection;
 
     /// <summary>The listing presence and planning both read, taken once per planning pass (G4).</summary>
-    private Task<RestorePointListing>? _listing;
+    private readonly PassMemo<Task<RestorePointListing>> _listing = new();
 
     public RestorePointProvider(
         ISystemProtection protection,
@@ -84,7 +84,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _listing = null;
+        _listing.Forget();
         base.InvalidateCaches();
     }
 
@@ -254,5 +254,5 @@ public sealed class RestorePointProvider : CleanupProviderBase
         count == 1 ? $"1 {one}" : $"{count} {many ?? one + "s"}";
 
     private Task<RestorePointListing> ListingAsync(CancellationToken ct) =>
-        _listing ??= Task.Run(_protection.ListRestorePoints, ct);
+        _listing.Get(() => Task.Run(_protection.ListRestorePoints, ct));
 }

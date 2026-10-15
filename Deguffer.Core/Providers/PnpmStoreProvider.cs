@@ -30,7 +30,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class PnpmStoreProvider : CleanupProviderBase
 {
-    private string? _resolvedStore;
+    private readonly PassMemo<Task<string?>> _resolvedStore = new();
 
     public PnpmStoreProvider(
         IUserEnvironment? environment = null,
@@ -165,7 +165,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _resolvedStore = null;
+        _resolvedStore.Forget();
         base.InvalidateCaches();
     }
 
@@ -259,11 +259,19 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
     /// </summary>
     private async Task<string?> ResolveStoreAsync(string pnpm, CancellationToken ct)
     {
-        if (_resolvedStore is not null)
+        var store = await _resolvedStore.Get(() => AskStoreAsync(pnpm, ct)).ConfigureAwait(false);
+
+        // No answer is asked for again, as it was before the question was shared.
+        if (store is null)
         {
-            return _resolvedStore;
+            _resolvedStore.Forget();
         }
 
+        return store;
+    }
+
+    private async Task<string?> AskStoreAsync(string pnpm, CancellationToken ct)
+    {
         var outcome = await Runner.RunAsync(pnpm, "store path", ct).ConfigureAwait(false);
         if (!outcome.Succeeded)
         {
@@ -276,7 +284,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
 
         var store = LongPath.Configured(reported);
 
-        return _resolvedStore = store is not null && Path.GetDirectoryName(store) is not null
+        return store is not null && Path.GetDirectoryName(store) is not null
             ? store
             : null;
     }

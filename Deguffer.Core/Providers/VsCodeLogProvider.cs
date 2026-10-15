@@ -58,8 +58,8 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
 
     private readonly VsCodeUserDataDiscovery _discovery;
     private readonly RowDeclarations _declarations;
-    private IReadOnlyList<VsCodeUserData>? _editors;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<VsCodeUserData>> _editors = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="declarations">
     /// What every row in the planner offers, so a child another row removes from a folder this row
@@ -113,7 +113,7 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
     /// pass (G4). Presence and planning ask the same question of the same disk.
     /// </summary>
     private IReadOnlyList<VsCodeUserData> Editors(CancellationToken ct = default) =>
-        _editors ??= [.. _discovery.Discover(ct).Where(HasRecord)];
+        _editors.Get(() => [.. _discovery.Discover(ct).Where(HasRecord)]);
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. Declared from every folder discovered rather than
@@ -125,7 +125,7 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
     /// covering a path, so each provider states only the children it knows about.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots ??=
+        _toolRoots.Get(() =>
         [
             .. _discovery.Discover().Select(editor => ToolRoot.Of(
                 editor.Path,
@@ -133,7 +133,7 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
                 + "there from the Storage page, where it knows which of them are records — your "
                 + "settings, your workspace state and your local file history sit beside them.",
                 FolderChildren)),
-        ];
+        ]);
 
     /// <summary>
     /// The log and crash report folders of every editor the same discovery the plan reads finds
@@ -150,8 +150,8 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _editors = null;
-        _toolRoots = null;
+        _editors.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

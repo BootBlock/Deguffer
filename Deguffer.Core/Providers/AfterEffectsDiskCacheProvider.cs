@@ -42,8 +42,8 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
 
     private readonly ISystemDirectories _system;
     private readonly RunningProcessCheck _stillClosed;
-    private AfterEffectsCacheSettings? _settings;
-    private AfterEffectsDiskCacheExamination? _examination;
+    private readonly PassMemo<AfterEffectsCacheSettings> _settings = new();
+    private readonly PassMemo<AfterEffectsDiskCacheExamination> _examination = new();
 
     public AfterEffectsDiskCacheProvider(
         IUserEnvironment? environment = null,
@@ -88,24 +88,24 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
             + "versions left behind, but only in a folder After Effects' own preferences name.",
     };
 
-    private AfterEffectsCacheSettings Settings => _settings ??= AfterEffectsCacheSettingsReader.Read(Environment.RoamingAppData);
+    private AfterEffectsCacheSettings Settings => _settings.Get(() => AfterEffectsCacheSettingsReader.Read(Environment.RoamingAppData));
 
     /// <summary>
     /// The one pass the plan, Explore's refusals and the temporary-folder claim read, kept for a
     /// planning pass (G4). A pass that is cancelled throws before it is kept.
     /// </summary>
     private AfterEffectsDiskCacheExamination Examine(CancellationToken ct) =>
-        _examination ??= AfterEffectsDiskCacheExamination.Of(
+        _examination.Get(() => AfterEffectsDiskCacheExamination.Of(
             Settings.Folders,
             Environment.MachineName,
             TempRoots.Resolve(Environment, _system, Volumes).Folders,
             Volumes,
-            ct);
+            ct));
 
     public override void InvalidateCaches()
     {
-        _settings = null;
-        _examination = null;
+        _settings.Forget();
+        _examination.Forget();
         base.InvalidateCaches();
     }
 

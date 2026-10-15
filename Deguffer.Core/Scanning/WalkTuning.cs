@@ -48,7 +48,10 @@ public sealed record WalkTuning
         ListingBufferBytes = listingBufferBytes;
     }
 
-    /// <summary>How many directories are listed at once, the calling thread included.</summary>
+    /// <summary>
+    /// How many directories are listed at once, the calling thread included: by this walk, and on its
+    /// volume by every walk beside it, which <see cref="ListingBudget"/> holds them to.
+    /// </summary>
     public int Threads { get; }
 
     /// <summary>How many bytes of entries each call to list a directory asks for.</summary>

@@ -117,13 +117,32 @@ internal static class BoundedFileWalk
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action<bool> onProgress,
         TimeProvider clock,
+        CancellationToken ct) =>
+        Visit(roots, tuning, ListingBudget.Shared, list, onDirectory, onProgress, clock, ct);
+
+    /// <summary>
+    /// The walk above, its listings counted against <paramref name="budget"/> rather than the
+    /// process's: the seam a test runs walks beside each other through without sharing a count with
+    /// every other test's walks.
+    /// </summary>
+    internal static void Visit<TState>(
+        IReadOnlyList<(string Root, TState State)> roots,
+        WalkTuning tuning,
+        ListingBudget budget,
+        ListDirectory list,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action<bool> onProgress,
+        TimeProvider clock,
         CancellationToken ct)
     {
         var buffer = new ListingBuffer(tuning.ListingBufferBytes);
 
+        // Once for the walk, so every worker counts against the volume through the same limit.
+        var budgeted = budget.Around(list, tuning.Threads);
+
         new WalkWorkers<TState>(
                 tuning.Threads,
-                descend => DiskReader(new WalkListing(buffer, list), onDirectory, descend),
+                descend => DiskReader(new WalkListing(buffer, budgeted), onDirectory, descend),
                 onProgress,
                 clock,
                 ct)

@@ -16,6 +16,7 @@ namespace Deguffer.Core.Execution;
 public sealed class CleanupPlanner
 {
     private readonly IReadOnlyList<ICleanupProvider> _providers;
+    private readonly Dictionary<ICleanupProvider, int> _places;
     private readonly RowDeclarations? _declarations;
 
     /// <param name="declarations">
@@ -26,7 +27,14 @@ public sealed class CleanupPlanner
     public CleanupPlanner(IEnumerable<ICleanupProvider> providers, RowDeclarations? declarations = null)
     {
         _providers = [.. providers];
+        _places = new Dictionary<ICleanupProvider, int>(_providers.Count, ReferenceEqualityComparer.Instance);
         _declarations = declarations;
+
+        for (var place = 0; place < _providers.Count; place++)
+        {
+            _places.TryAdd(_providers[place], place);
+        }
+
         _declarations?.Admit(_providers);
     }
 
@@ -305,7 +313,18 @@ public sealed class CleanupPlanner
         ];
     }
 
+    /// <summary>
+    /// How many providers a pass plans at once. MEASURED_PLACEHOLDER
+    /// </summary>
+    internal const int ProvidersAtOnce = 8;
+
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
+
+    /// <summary>
+    /// Where <paramref name="provider"/> stands in <see cref="Providers"/>: the order findings of equal
+    /// size are listed in, since a pass no longer reports them in that order (<see cref="Viewing.SizeOrder"/>).
+    /// </summary>
+    public int PlaceOf(ICleanupProvider provider) => _places[provider];
 
     /// <summary>The declarations this planner admitted, so a test can hold every row that walks a folder to them.</summary>
     internal RowDeclarations? Declarations => _declarations;
@@ -313,9 +332,13 @@ public sealed class CleanupPlanner
     /// <summary>
     /// Preview every provider, largest first (§7: group by cause, sort by size).
     ///
-    /// Deliberately sequential. Each provider fans out internally to measure its tree, so running
-    /// providers concurrently as well would multiply into dozens of simultaneous enumerations
-    /// against one disk — slower, not faster, for the same reason execution is sequential.
+    /// <para><b>Several providers at once</b>, up to <see cref="ProvidersAtOnce"/>. Much of a pass is
+    /// providers waiting on a tool they asked (conda, PlatformIO, npm and pip each start one, and use
+    /// little disk while it answers), and much of the rest is small walks that run on one thread at
+    /// their start and end. Planned one at a time, every one of those waits was added to the pass. What
+    /// stops the walks multiplying into dozens of listings against one disk is
+    /// <see cref="ListingBudget"/>, which holds every walk on a volume to the number one walk is tuned
+    /// for, however many providers run.</para>
     ///
     /// <paramref name="found"/> receives each finding the moment it is ready, so the preview can
     /// fill in as it goes rather than staying blank until the slowest provider finishes (§5.5:
@@ -335,7 +358,7 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// Preview <paramref name="providers"/> alone, on the same terms <see cref="PlanAllAsync"/> previews
-    /// every one: their caches dropped first, one at a time, each reported as it lands, largest first.
+    /// every one: their caches dropped first, several at once, each reported as it lands, largest first.
     ///
     /// <para>For the re-plan after a clean, which only has to describe the locations the run changed.
     /// Every other provider's finding still describes the disk, and measuring it again costs a walk of
@@ -361,30 +384,50 @@ public sealed class CleanupPlanner
 
         _declarations?.Invalidate();
 
-        var findings = new List<Finding>(providers.Count);
+        // In the providers' order, whatever order they finish in, so the sort below breaks a tie the
+        // same way on every pass.
+        var findings = new Finding[providers.Count];
+        var checking = new PlanningStatus(status);
+        var reporting = new Lock();
 
-        foreach (var provider in providers)
+        var options = new ParallelOptions { MaxDegreeOfParallelism = ProvidersAtOnce, CancellationToken = ct };
+
+        await Parallel.ForEachAsync(Enumerable.Range(0, providers.Count), options, async (index, token) =>
         {
-            ct.ThrowIfCancellationRequested();
+            var provider = providers[index];
 
-            var finding = await PlanOneAsync(provider, keep, status, ct).ConfigureAwait(false);
+            Finding finding;
+            checking.Started(provider);
 
-            findings.Add(finding);
-            found?.Report(finding);
-        }
+            try
+            {
+                finding = await PlanOneAsync(provider, keep, token).ConfigureAwait(false);
+            }
+            finally
+            {
+                // A provider that failed or was stopped is no longer being checked, and the line
+                // must not go on naming it while the rest of the pass ends.
+                checking.Ended(provider);
+            }
 
-        findings.Sort((a, b) => b.EstimatedBytes.CompareTo(a.EstimatedBytes));
-        return findings;
+            findings[index] = finding;
+
+            // One at a time, so a caller's progress handler never runs beside itself, as it never
+            // did while providers were planned one at a time.
+            lock (reporting)
+            {
+                found?.Report(finding);
+            }
+        }).ConfigureAwait(false);
+
+        return [.. findings.OrderByDescending(finding => finding.EstimatedBytes)];
     }
 
     private static async Task<Finding> PlanOneAsync(
         ICleanupProvider provider,
         MinimumAge keep,
-        IProgress<string>? status,
         CancellationToken ct)
     {
-        status?.Report($"Checking {provider.Name}…");
-
         var present = await provider.IsPresentAsync(ct).ConfigureAwait(false);
         var awaitingFolders = provider.IsAwaitingSourceFolders;
 

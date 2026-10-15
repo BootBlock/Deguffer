@@ -44,13 +44,13 @@ public sealed partial class PoetryDiscovery(IProcessRunner runner)
     [GeneratedRegex(@"\A[A-Za-z0-9._-]+\z", RegexOptions.CultureInvariant)]
     private static partial Regex PlainCacheName();
 
-    private PoetryLocations? _located;
+    private readonly PassMemo<Task<PoetryLocations>> _located = new();
 
     /// <summary>
     /// Both settings are configuration, and <c>poetry config</c> is how either is changed, so a
     /// remembered pair would describe directories Poetry has stopped using.
     /// </summary>
-    public void Invalidate() => _located = null;
+    public void Invalidate() => _located.Forget();
 
     /// <summary>
     /// Poetry's two directories, asked once and remembered for the life of a planning pass.
@@ -66,21 +66,19 @@ public sealed partial class PoetryDiscovery(IProcessRunner runner)
     /// last resort rather than an assumption.
     /// </param>
     /// <param name="ct">Cancellation for the two subprocess calls.</param>
-    public async Task<PoetryLocations> DiscoverAsync(
+    public Task<PoetryLocations> DiscoverAsync(
         string poetry,
         string defaultCacheRoot,
-        CancellationToken ct)
-    {
-        if (_located is not null)
-        {
-            return _located;
-        }
+        CancellationToken ct) =>
+        _located.Get(() => AskBothAsync(poetry, defaultCacheRoot, ct));
 
+    private async Task<PoetryLocations> AskBothAsync(string poetry, string defaultCacheRoot, CancellationToken ct)
+    {
         var cacheRoot = await AskAsync(poetry, "cache-dir", ct).ConfigureAwait(false) ?? defaultCacheRoot;
         var environments = await AskAsync(poetry, "virtualenvs.path", ct).ConfigureAwait(false)
             ?? Path.Combine(cacheRoot, "virtualenvs");
 
-        return _located = new PoetryLocations(cacheRoot, environments);
+        return new PoetryLocations(cacheRoot, environments);
     }
 
     /// <summary>

@@ -67,7 +67,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     ];
 
     private readonly SteamDiscovery _discovery;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     public SteamShaderCacheProvider(
         IUserEnvironment? environment = null,
@@ -125,7 +125,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     /// would refuse everything on that drive in Explore. <c>steamapps</c> is Steam's own folder
     /// wherever the library is.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= DeclareToolRoots();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(DeclareToolRoots);
 
     /// <summary>
     /// The shader cache folder of every game library Steam's own list names, beside the program and
@@ -143,7 +143,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();
-        _toolRoots = null;
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

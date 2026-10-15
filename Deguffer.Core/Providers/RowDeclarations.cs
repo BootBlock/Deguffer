@@ -31,12 +31,16 @@ namespace Deguffer.Core.Providers;
 /// reads every row's <see cref="ICleanupProvider.ToolRoots"/>, and a row may build those from its own
 /// walk, so a question asked from inside either would ask a row for the declaration it is still
 /// building. <see cref="LevelWalk.Survivors"/> is the one place a walk's children meet it.</para>
+///
+/// <para><b>Asked from several plans at once.</b> A pass plans several rows together, and the first
+/// question reads every row's declaration, which takes seconds where a row builds its own from a
+/// walk. A row that asks meanwhile waits for that one reading rather than starting a second.</para>
 /// </summary>
 public sealed class RowDeclarations
 {
+    private readonly Lock _gate = new();
     private IReadOnlyList<ICleanupProvider> _rows = [];
     private Dictionary<string, List<ToolRoot>>? _byFolder;
-    private bool _building;
 
     /// <summary>
     /// The rows whose declarations are consulted. <see cref="Execution.CleanupPlanner"/> admits its
@@ -47,15 +51,24 @@ public sealed class RowDeclarations
     {
         ArgumentNullException.ThrowIfNull(rows);
 
-        _rows = rows;
-        _byFolder = null;
+        lock (_gate)
+        {
+            _rows = rows;
+            _byFolder = null;
+        }
     }
 
     /// <summary>
     /// Drop the index. The rows rebuild their declarations for each planning pass, so an index kept
     /// across passes would miss a folder that appeared between them.
     /// </summary>
-    public void Invalidate() => _byFolder = null;
+    public void Invalidate()
+    {
+        lock (_gate)
+        {
+            _byFolder = null;
+        }
+    }
 
     /// <summary>
     /// Whether some row declares <paramref name="folder"/>, a directory that is not a link, as one it
@@ -74,23 +87,27 @@ public sealed class RowDeclarations
     /// <summary>Built once per planning pass (G4), because a plan asks once per spared child.</summary>
     private Dictionary<string, List<ToolRoot>> ByFolder(CancellationToken ct)
     {
-        if (_byFolder is { } built)
+        if (Volatile.Read(ref _byFolder) is { } built)
         {
             return built;
         }
 
         // A row whose declaration asked this would recurse until the stack ran out, which ends the
-        // process with nothing to say why.
-        if (_building)
+        // process with nothing to say why. Held by this thread is that recursion, because a
+        // declaration is read on the thread that asked; held by another is a plan waiting its turn.
+        if (_gate.IsHeldByCurrentThread)
         {
             throw new InvalidOperationException(
                 "A row asked what other rows offer while its own declaration was being read.");
         }
 
-        _building = true;
-
-        try
+        lock (_gate)
         {
+            if (_byFolder is { } raced)
+            {
+                return raced;
+            }
+
             built = new Dictionary<string, List<ToolRoot>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var row in _rows)
@@ -113,11 +130,8 @@ public sealed class RowDeclarations
                 }
             }
 
-            return _byFolder = built;
-        }
-        finally
-        {
-            _building = false;
+            Volatile.Write(ref _byFolder, built);
+            return built;
         }
     }
 }

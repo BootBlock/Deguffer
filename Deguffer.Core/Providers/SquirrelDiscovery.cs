@@ -94,7 +94,7 @@ public sealed partial class SquirrelDiscovery
 
     private readonly IUserEnvironment _environment;
 
-    private SquirrelSweep? _sweep;
+    private readonly PassMemo<SquirrelSweep> _sweep = new();
 
     public SquirrelDiscovery(IUserEnvironment environment)
     {
@@ -141,10 +141,10 @@ public sealed partial class SquirrelDiscovery
     /// child listing of a root holding hundreds of directories, plus a listing per candidate below
     /// it, and G4 requires a scan the user can abandon.</para>
     /// </summary>
-    public SquirrelSweep Look(CancellationToken ct = default) => _sweep ??= Find(ct);
+    public SquirrelSweep Look(CancellationToken ct = default) => _sweep.Get(() => Find(ct));
 
     /// <summary>Drop the memoised answer, so an application installed while the app was open is seen.</summary>
-    public void Invalidate() => _sweep = null;
+    public void Invalidate() => _sweep.Forget();
 
     /// <summary>
     /// The sweep. One child-directory listing of <c>%LOCALAPPDATA%</c>, then one file-existence

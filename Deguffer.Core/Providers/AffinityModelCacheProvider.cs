@@ -121,7 +121,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
 
     private static readonly DisposableChildSet Shared = new(SharedChildren);
 
-    private IReadOnlyList<AffinityCommonTree>? _trees;
+    private readonly PassMemo<IReadOnlyList<AffinityCommonTree>> _trees = new();
 
     public AffinityModelCacheProvider(
         IUserEnvironment? environment = null,
@@ -185,7 +185,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         base.InvalidateCaches();
-        _trees = null;
+        _trees.Forget();
     }
 
     /// <summary>
@@ -193,7 +193,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
     /// planning ask the same question of the same disk.
     /// </summary>
     public IReadOnlyList<AffinityCommonTree> Trees(CancellationToken ct = default) =>
-        _trees ??= AffinityProfiles.Discover(Environment, ct);
+        _trees.Get(() => AffinityProfiles.Discover(Environment, ct));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside, and the levels are the whole safety argument. The

@@ -31,8 +31,8 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     private readonly ISystemDirectories _system;
     private readonly ILiveTreeInspector _liveTrees;
 
-    private TempRootSet? _roots;
-    private TempMarkerFindings? _findings;
+    private readonly PassMemo<TempRootSet> _roots = new();
+    private readonly PassMemo<TempMarkerFindings> _findings = new();
 
     protected TempMarkerProviderBase(
         IUserEnvironment? environment,
@@ -74,12 +74,12 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
 
     /// <summary>This account's own temporary folders, resolved once per planning pass.</summary>
     protected IReadOnlyList<string> AccountFolders =>
-        (_roots ??= TempRoots.Resolve(Environment, _system, Volumes)).AccountFolders;
+        _roots.Get(() => TempRoots.Resolve(Environment, _system, Volumes)).AccountFolders;
 
     public override void InvalidateCaches()
     {
-        _roots = null;
-        _findings = null;
+        _roots.Forget();
+        _findings.Forget();
         _liveTrees.Invalidate();
         base.InvalidateCaches();
     }
@@ -187,5 +187,5 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
 
     /// <summary>The examination for this planning pass, shared by the plan, the presence probe and the claim.</summary>
     private TempMarkerFindings Examine(CancellationToken ct) =>
-        _findings ??= TempMarkerSurvey.Examine(PlacesIn(AccountFolders), Inspector, _liveTrees, ct);
+        _findings.Get(() => TempMarkerSurvey.Examine(PlacesIn(AccountFolders), Inspector, _liveTrees, ct));
 }

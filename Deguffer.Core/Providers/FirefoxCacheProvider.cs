@@ -140,8 +140,8 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
         "A link rather than a directory, so what it points at was never classified.";
 
     private readonly MozillaProfileDiscovery _discovery;
-    private IReadOnlyList<MozillaProfile>? _profiles;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<MozillaProfile>> _profiles = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     public FirefoxCacheProvider(
         IUserEnvironment? environment = null,
@@ -191,7 +191,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     /// Exposed so tests can assert that no roaming profile is ever a target.
     /// </summary>
     public IReadOnlyList<MozillaProfile> Profiles(CancellationToken ct = default) =>
-        _profiles ??= _discovery.Discover(ct);
+        _profiles.Get(() => _discovery.Discover(ct));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: Firefox's own folder under each application-data
@@ -212,7 +212,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     /// directory that is not there refuses nothing.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots ??=
+        _toolRoots.Get(() =>
         [
             ToolRoot.Of(
                 _discovery.RoamingRoot,
@@ -241,7 +241,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                        NothingIsDisposable),
                }
                select root,
-        ];
+        ]);
 
     /// <summary>
     /// Each cache this row recognises, in the local half of every profile Firefox's register lists,
@@ -259,8 +259,8 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _profiles = null;
-        _toolRoots = null;
+        _profiles.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

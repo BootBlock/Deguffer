@@ -103,7 +103,7 @@ public sealed partial class ClaudeCodeSessionRegistry
     private readonly ISystemDirectories _system;
     private readonly IVolumeInventory _volumes;
 
-    private ClaudeCodeSessionList? _list;
+    private readonly PassMemo<ClaudeCodeSessionList> _list = new();
 
     /// <param name="system">
     /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
@@ -130,10 +130,10 @@ public sealed partial class ClaudeCodeSessionRegistry
     /// when the list is read, so a session that ends during the pass is still listed — the direction
     /// that leaves its files alone.
     /// </summary>
-    public ClaudeCodeSessionList Read(CancellationToken ct = default) => _list ??= ReadAfresh(ct);
+    public ClaudeCodeSessionList Read(CancellationToken ct = default) => _list.Get(() => ReadAfresh(ct));
 
     /// <summary>Drop the memoised list, so a session that started or ended is seen by the next pass.</summary>
-    public void Invalidate() => _list = null;
+    public void Invalidate() => _list.Forget();
 
     /// <summary>
     /// The list as it is now, read and asked about without touching the planning pass's copy. For the

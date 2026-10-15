@@ -80,7 +80,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     private readonly VcpkgDiscovery _discovery;
 
-    private VcpkgLocations? _located;
+    private readonly PassMemo<VcpkgLocations> _located = new();
 
     /// <param name="system">
     /// The directories Windows is built out of, which a folder a variable moves a cache to must not be or
@@ -142,7 +142,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     ///
     /// Exposed so tests can assert what is reached.
     /// </summary>
-    public VcpkgLocations Locate() => _located ??= _discovery.Discover();
+    public VcpkgLocations Locate() => _located.Get(() => _discovery.Discover());
 
     /// <summary>
     /// Every one of those answers is configuration — three environment variables, a file vcpkg
@@ -151,7 +151,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     /// </summary>
     public override void InvalidateCaches()
     {
-        _located = null;
+        _located.Forget();
         base.InvalidateCaches();
     }
 

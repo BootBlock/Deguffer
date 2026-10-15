@@ -61,7 +61,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
 
     private readonly RetroArchDiscovery _discovery;
     private readonly RunningProcessCheck _stillClosed;
-    private RetroArchReading? _reading;
+    private readonly PassMemo<RetroArchReading> _reading = new();
 
     private protected RetroArchProviderBase(
         IUserEnvironment? environment,
@@ -92,18 +92,15 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _reading = null;
+        _reading.Forget();
         _discovery.Invalidate();
         base.InvalidateCaches();
     }
 
-    private RetroArchReading Examine(CancellationToken ct)
-    {
-        if (_reading is { } kept)
-        {
-            return kept;
-        }
+    private RetroArchReading Examine(CancellationToken ct) => _reading.Get(() => ExamineInstalls(ct));
 
+    private RetroArchReading ExamineInstalls(CancellationToken ct)
+    {
         var finding = _discovery.Find(ct);
         var reading = RetroArchReading.From(finding.Found);
 
@@ -120,7 +117,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             Read(install, reading, ct);
         }
 
-        return _reading = reading;
+        return reading;
     }
 
     /// <summary>

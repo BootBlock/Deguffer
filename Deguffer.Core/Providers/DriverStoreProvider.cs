@@ -52,7 +52,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// The listing presence and planning both read, taken once per planning pass (G4): it is a
     /// subprocess and a SetupAPI call per package.
     /// </summary>
-    private Task<DriverStoreListing>? _listing;
+    private readonly PassMemo<Task<DriverStoreListing>> _listing = new();
 
     public DriverStoreProvider(
         IDiskCleanupHandlers handlers,
@@ -106,7 +106,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _listing = null;
+        _listing.Forget();
         base.InvalidateCaches();
     }
 
@@ -434,5 +434,5 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         return dates.Any(d => d is null) ? null : dates.Max();
     }
 
-    private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing ??= _store.ListAsync(ct);
+    private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() => _store.ListAsync(ct));
 }
