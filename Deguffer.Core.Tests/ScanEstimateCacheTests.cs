@@ -213,4 +213,44 @@ public class ScanEstimateCacheTests
         Assert.Equal(2, whole.Reports[0].Entries);
         Assert.Equal(1, contents.Reports[0].Entries);
     }
+
+    /// <summary>
+    /// A reading from the disk is the freshest figure there is for each path it reads, so the next run
+    /// opens on it, path by path, however many were read together. One with entries left out is short
+    /// of its folder, so it replaces nothing.
+    /// </summary>
+    [Fact]
+    public async Task OpensTheNextRunOnEachPathOfAReadingFromTheDisk()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var npm = temp.CreateDirectory("npm-cache");
+        var pip = temp.CreateDirectory("pip-cache");
+        var bounded = temp.CreateDirectory("temp");
+        var evicted = temp.CreateFile(1000, "npm-cache", "a.bin");
+        temp.CreateFile(300, "npm-cache", "b.bin");
+        temp.CreateFile(2000, "pip-cache", "c.bin");
+        temp.CreateFile(1000, "temp", "abandoned.tmp");
+        temp.CreateFile(5000, "temp", "live-session", "working.txt");
+
+        await Reopen(environment).MeasureManyAsync([new(npm), new(pip), new(bounded)]);
+
+        File.Delete(evicted);
+
+        var fresh = await Reopen(environment).MeasureFromDiskAsync(
+            [new(npm), new(pip), new(bounded, new ScanBounds(KeepRoot: false, [Path.Combine(bounded, "live-session")]))]);
+
+        Assert.Equal([300, 2000, 1000], fresh.Select(result => result.Size.Logical));
+
+        var opened = new List<long>();
+
+        foreach (var path in new[] { npm, pip, bounded })
+        {
+            var progress = new ProgressRecorder<ScanSize>();
+            await Reopen(environment).MeasureAsync(path, MinimumAge.Off, progress: progress);
+            opened.Add(progress.Reports[0].Logical);
+        }
+
+        Assert.Equal([300, 2000, 6000], opened);
+    }
 }

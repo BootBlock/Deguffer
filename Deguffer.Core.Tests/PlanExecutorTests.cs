@@ -627,7 +627,93 @@ public sealed class PlanExecutorTests : IDisposable
         // The ordinary route still answers from the snapshot, which is correct for planning and is
         // why the executor cannot use it here.
         Assert.Equal(4096, (await scanner.MeasureAsync(cache)).Size.Reclaimable);
-        Assert.Equal(0, (await scanner.MeasureFromDiskAsync(cache)).Size.Reclaimable);
+        Assert.Equal(0, (await scanner.MeasureFromDiskAsync([new ScanRequest(cache)]))[0].Size.Reclaimable);
+    }
+
+    /// <summary>
+    /// A command step names several paths, and what they hold afterwards is read in one go rather than
+    /// one walk a path. The total is still each path's own answer summed, a path inside another
+    /// included, so the reclaim is the estimate less exactly what each path holds now.
+    /// </summary>
+    [Fact]
+    public async Task ReadsEveryPathACommandStepNamesInOneReadingAfterItRuns()
+    {
+        var build = _temp.CreateDirectory("go-build");
+        var evicted = _temp.CreateFile(4096, "go-build", "a.bin");
+        var module = _temp.CreateDirectory("go-mod");
+        var kept = _temp.CreateFile(4096, "go-mod", "b.bin");
+        var download = _temp.CreateDirectory("go-mod", "cache", "download");
+        var nested = _temp.CreateFile(1024, "go-mod", "cache", "download", "c.bin");
+
+        var command = new RunCommandStep("go.exe", "clean -cache -modcache", "Clear the Go caches")
+        {
+            Estimated = new ScanSize(10240, 10240),
+            MeasuredPaths = [build, module, download],
+        };
+
+        var runner = new FakeProcessRunner().Replying(command.FileName, _ =>
+        {
+            File.Delete(evicted);
+            return null;
+        });
+
+        var scanner = new FakeDirectoryScanner();
+        var step = Assert.Single((await new PlanExecutor(runner, scanner, RefusalLog)
+            .ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, default)).Steps);
+
+        // What remains: nothing in the build cache, 5120 in the module cache, and the 1024 inside it
+        // again as a path of its own.
+        Assert.Equal(10240 - 6144, step.BytesReclaimed);
+        Assert.Equal(1, scanner.MeasureFromDiskCalls);
+        Assert.True(File.Exists(kept), "the executor removed what the command left");
+        Assert.True(File.Exists(nested), "the executor removed what the command left");
+    }
+
+    /// <summary>
+    /// Read in one go, the step still names the first path Windows would not let it read afterwards,
+    /// in the order the step lists them, and counts nothing.
+    /// </summary>
+    [Fact]
+    public async Task NamesTheFirstPathACommandStepCouldNotReadAfterItRan()
+    {
+        var reached = _temp.CreateDirectory("tools", "reached");
+        _temp.CreateFile(4096, "tools", "reached", "a.bin");
+        var first = _temp.CreateDirectory("tools", "first", "cache");
+        _temp.CreateFile(4096, "tools", "first", "cache", "b.bin");
+        var second = _temp.CreateDirectory("tools", "second", "cache");
+        _temp.CreateFile(4096, "tools", "second", "cache", "c.bin");
+
+        var command = new RunCommandStep("tool.exe", "clean", "Clear the tool's caches")
+        {
+            Estimated = new ScanSize(12288, 12288),
+            MeasuredPaths = [reached, first, second],
+        };
+
+        // Refused only once the command has run, because the look before it would refuse to run it.
+        var denied = new List<DeniedDirectory>();
+        var runner = new FakeProcessRunner().Replying(command.FileName, _ =>
+        {
+            denied.Add(DeniedDirectory.WithUnreadableAttributes(first));
+            denied.Add(DeniedDirectory.WithUnreadableAttributes(second));
+            return null;
+        });
+
+        StepOutcome step;
+
+        try
+        {
+            step = Assert.Single((await new PlanExecutor(runner, new FakeDirectoryScanner(), RefusalLog)
+                .ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, default)).Steps);
+        }
+        finally
+        {
+            denied.ForEach(entry => entry.Dispose());
+        }
+
+        Assert.Equal(2, denied.Count);
+        Assert.Equal(0, step.BytesReclaimed);
+        Assert.Contains($"read '{first}' afterwards", step.Message!, StringComparison.Ordinal);
+        Assert.DoesNotContain(second, step.Message!, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
