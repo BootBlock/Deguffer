@@ -3,24 +3,33 @@ namespace Deguffer.Core.Viewing;
 /// <summary>
 /// Where a row joins a list that §7 sorts by size, largest first, while the list is still filling.
 ///
-/// <para>Rows arrive one provider at a time (§5.5), so each is inserted where it belongs rather than
-/// the list being sorted once the last one lands, which would reshuffle it under the reader.</para>
+/// <para>Rows arrive as their providers finish (§5.5), so each is inserted where it belongs rather
+/// than the list being sorted once the last one lands, which would reshuffle it under the reader.</para>
 /// </summary>
 public static class SizeOrder
 {
     /// <summary>
-    /// The index a row of <paramref name="size"/> is inserted at: after every leading row at least as
-    /// large, so rows of equal size keep the order they arrived in.
+    /// The index a row of <paramref name="size"/> is inserted at: after every leading row larger than
+    /// it, and after every leading row of its size whose provider comes before its own.
+    ///
+    /// <para><b>A tie goes by the provider's place, not by when the row arrived.</b> Providers are
+    /// planned several at once and finish in whatever order their work takes, so rows of equal size,
+    /// most of all the many that found nothing, would otherwise stand in a different order after every
+    /// scan.</para>
     ///
     /// <para>The list is not always in order. A row shrunk by keeping an item stays where it stands,
     /// so the reader's list is not reshuffled for that, and a newcomer then goes before the first row
-    /// smaller than itself rather than being placed by a search that assumes an order.</para>
+    /// that should follow it rather than being placed by a search that assumes an order.</para>
     /// </summary>
-    /// <param name="sizes">The size of every row already listed, in the order they are listed.</param>
-    public static int IndexFor(IEnumerable<long> sizes, long size)
+    /// <param name="listed">
+    /// The size of every row already listed, and the place of its provider, in the order they are
+    /// listed.
+    /// </param>
+    /// <param name="place">The place of the row's provider, as <see cref="Execution.CleanupPlanner.PlaceOf"/> gives it.</param>
+    public static int IndexFor(IEnumerable<(long Size, int Place)> listed, long size, int place)
     {
-        ArgumentNullException.ThrowIfNull(sizes);
+        ArgumentNullException.ThrowIfNull(listed);
 
-        return sizes.TakeWhile(listed => listed >= size).Count();
+        return listed.TakeWhile(row => row.Size > size || (row.Size == size && row.Place < place)).Count();
     }
 }

@@ -139,8 +139,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     private readonly ISystemDirectories _system;
     private readonly RowDeclarations _declarations;
 
-    private Survey? _survey;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<Survey?> _survey = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="sessions">
     /// Claude Code's list of running sessions, shared with <see cref="ClaudeCodeFileHistoryProvider"/> and
@@ -247,14 +247,14 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// nothing, because the plan names them as paths that must survive and §7.1 has Explore refuse
     /// every such path.
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
     public override void InvalidateCaches()
     {
         _projects.Invalidate();
         _sessions.Invalidate();
-        _survey = null;
-        _toolRoots = null;
+        _survey.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 
@@ -455,7 +455,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// plan and the declaration both read this, so the walk and the process probes behind it are paid
     /// for once per pass and not at all where nothing asks.
     /// </summary>
-    private Survey? Look(CancellationToken ct = default) => _survey ??= Examine(ct);
+    private Survey? Look(CancellationToken ct = default) => _survey.Get(() => Examine(ct));
 
     private Survey? Examine(CancellationToken ct)
     {

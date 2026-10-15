@@ -88,8 +88,8 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     private readonly ChromiumUserDataDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
     private readonly RowDeclarations _declarations;
-    private IReadOnlyList<ChromiumUserData>? _applications;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<ChromiumUserData>> _applications = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="discovery">
     /// Shared between the rows that look inside the same folders, so one planning pass walks both
@@ -148,7 +148,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// Exposed so tests can assert that no user-data folder is ever a target.
     /// </summary>
     public IReadOnlyList<ChromiumUserData> Applications(CancellationToken ct = default) =>
-        _applications ??= [.. _discovery.Discover(ct).Where(app => HasRecognisedChild(app, ct))];
+        _applications.Get(() => [.. _discovery.Discover(ct).Where(app => HasRecognisedChild(app, ct))]);
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: one root per level of every profile of every
@@ -169,7 +169,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// declaration covering a path, so each row states only what it removes.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots ??=
+        _toolRoots.Get(() =>
         [
             .. from application in _discovery.Discover()
                from profile in application.Profiles
@@ -180,7 +180,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                    + "recognises in there from the Storage page — the sign-in cookies, saved "
                    + "passwords and payment cards sit beside it.",
                    level.Children),
-        ];
+        ]);
 
     /// <summary>
     /// Each application-data root the discovery did not look in, refused whole: what is inside it was
@@ -208,8 +208,8 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _applications = null;
-        _toolRoots = null;
+        _applications.Forget();
+        _toolRoots.Forget();
         _discovery.Invalidate();
         _liveTrees.Invalidate();
         base.InvalidateCaches();

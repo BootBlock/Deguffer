@@ -48,7 +48,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     private readonly SquirrelDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
 
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     public SquirrelSupersededVersionProvider(
         IUserEnvironment? environment = null,
@@ -109,7 +109,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     /// carefully leaving all three alone. Nothing else refuses it: an application folder under
     /// <c>%LOCALAPPDATA%</c> is an ordinary directory until a provider says whose it is.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??=
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(() =>
     [
         .. _discovery.Look().Installations.Select(installation =>
         {
@@ -127,7 +127,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                 + "Deguffer removes none of them.",
                 superseded.Contains);
         }),
-    ];
+    ]);
 
     /// <summary>
     /// The superseded builds of an application that is running, each as a root recognising no child.
@@ -179,7 +179,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     {
         _discovery.Invalidate();
         _liveTrees.Invalidate();
-        _toolRoots = null;
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

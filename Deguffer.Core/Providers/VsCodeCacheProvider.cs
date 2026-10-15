@@ -116,9 +116,9 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     private readonly VsCodeUserDataDiscovery _discovery;
     private readonly RowDeclarations _declarations;
-    private IReadOnlyList<Editor>? _installed;
-    private IReadOnlyList<Editor>? _withCaches;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<Editor>> _installed = new();
+    private readonly PassMemo<IReadOnlyList<Editor>> _withCaches = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="declarations">
     /// What every row in the planner offers, so a child another row removes from a folder this row
@@ -186,7 +186,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     /// for it.
     /// </summary>
     private IReadOnlyList<Editor> WithCaches(CancellationToken ct = default) =>
-        _withCaches ??= [.. Installed(ct).Where(HasRecognisedCache)];
+        _withCaches.Get(() => [.. Installed(ct).Where(HasRecognisedCache)]);
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside: the user-data folder, the <c>WebStorage</c>
@@ -210,12 +210,12 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     /// other's table.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots ??=
+        _toolRoots.Get(() =>
         [
             .. from editor in Installed()
                from root in RootsOf(editor)
                select root,
-        ];
+        ]);
 
     /// <summary>
     /// Each cache this row recognises in the folder of every editor the discovery finds, whether or not
@@ -237,9 +237,9 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _installed = null;
-        _withCaches = null;
-        _toolRoots = null;
+        _installed.Forget();
+        _withCaches.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 
@@ -386,7 +386,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
     /// re-reading <c>WebStorage</c> three times per editor would be three walks for one answer.
     /// </summary>
     private IReadOnlyList<Editor> Installed(CancellationToken ct = default) =>
-        _installed ??= [.. _discovery.Discover(ct).Select(u => new Editor(u, VsCodeWebStorage.Of(u.Path)))];
+        _installed.Get(() => [.. _discovery.Discover(ct).Select(u => new Editor(u, VsCodeWebStorage.Of(u.Path)))]);
 
     /// <summary>
     /// The levels this editor's caches sit in: the folder itself, then one per webview partition.

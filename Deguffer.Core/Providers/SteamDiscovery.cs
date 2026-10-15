@@ -68,8 +68,8 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
     /// </summary>
     public static readonly IReadOnlyList<string> ProcessNames = ["steam", "steamwebhelper"];
 
-    private SteamInstall? _install;
-    private SteamLibraries? _libraries;
+    private readonly PassMemo<SteamInstall> _install = new();
+    private readonly PassMemo<SteamLibraries> _libraries = new();
 
     /// <summary>Steam's folder in the profile. Known outright, and independent of the install.</summary>
     public string LocalRoot { get; } =
@@ -79,7 +79,7 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
     /// The install directory, memoised for the life of a planning pass (G4). Presence, planning and
     /// the §5.2 declarations all ask the same question of the same registry value.
     /// </summary>
-    public SteamInstall Install => _install ??= Find();
+    public SteamInstall Install => _install.Get(Find);
 
     /// <summary>
     /// Every game library the install's own list names, memoised with <see cref="Install"/>. Null
@@ -87,7 +87,7 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
     /// nothing to read it from.
     /// </summary>
     public SteamLibraries? Libraries =>
-        Install.Root is { } root ? _libraries ??= SteamLibraryFolders.Of(root) : null;
+        Install.Root is { } root ? _libraries.Get(() => SteamLibraryFolders.Of(root)) : null;
 
     /// <summary>
     /// Drop the memoised answers, so a Steam installed, or a library added, while the app was open is
@@ -95,8 +95,8 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
     /// </summary>
     public void Invalidate()
     {
-        _install = null;
-        _libraries = null;
+        _install.Forget();
+        _libraries.Forget();
     }
 
     /// <summary>

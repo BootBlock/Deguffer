@@ -95,7 +95,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     private readonly ISystemDirectories _system;
     private readonly ICurrentPreferences _preferences;
     private readonly IReadOnlyList<ITemporaryFolderTenant> _tenants;
-    private TempRootSet? _roots;
+    private readonly PassMemo<TempRootSet> _roots = new();
 
     /// <param name="tenants">
     /// The rows that offer an entry of a temporary folder under the name of the tool that wrote it.
@@ -204,7 +204,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// The folders this provider would reach into, and any that named themselves and were refused.
     /// Resolved once per planning pass, because both the presence probe and the plan ask for them.
     /// </summary>
-    private TempRootSet Roots => _roots ??= TempRoots.Resolve(Environment, _system, Volumes);
+    private TempRootSet Roots => _roots.Get(() => TempRoots.Resolve(Environment, _system, Volumes));
 
     /// <summary>
     /// Drops this row's answers and its tenants' with them.
@@ -217,7 +217,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _liveTrees.Invalidate();
-        _roots = null;
+        _roots.Forget();
 
         foreach (var tenant in _tenants)
         {

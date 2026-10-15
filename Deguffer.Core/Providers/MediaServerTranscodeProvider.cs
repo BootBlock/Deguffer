@@ -31,7 +31,7 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
     /// <summary>How long a file must have gone unwritten before it is offered.</summary>
     public const int QuietHours = 24;
 
-    private MediaServerLayout? _layout;
+    private readonly PassMemo<MediaServerLayout> _layout = new();
 
     protected MediaServerTranscodeProvider(
         IUserEnvironment environment,
@@ -51,7 +51,7 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
     /// Where this server keeps its files, read once per planning pass (G4). Presence, planning and the
     /// §5.2 declarations all ask the same question of the same settings.
     /// </summary>
-    private MediaServerLayout Layout => _layout ??= FindLayout();
+    private MediaServerLayout Layout => _layout.Get(FindLayout);
 
     public override IReadOnlyList<ToolRoot> ToolRoots => Layout.ToolRoots;
 
@@ -79,7 +79,7 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _layout = null;
+        _layout.Forget();
         base.InvalidateCaches();
     }
 

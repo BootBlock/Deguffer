@@ -67,8 +67,8 @@ public sealed class SteamCacheProvider : CleanupProviderBase
         + "Valve's servers as it needs to.";
 
     private readonly SteamDiscovery _discovery;
-    private IReadOnlyList<DeclaredRoot>? _roots;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<IReadOnlyList<DeclaredRoot>> _roots = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     public SteamCacheProvider(
         IUserEnvironment? environment = null,
@@ -114,7 +114,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     /// What this provider names. Exposed so tests can assert that the install directory is never a
     /// target and that the games are asserted rather than merely omitted.
     /// </summary>
-    public IReadOnlyList<DeclaredRoot> Roots => _roots ??= Declare();
+    public IReadOnlyList<DeclaredRoot> Roots => _roots.Get(Declare);
 
     /// <summary>§5.3. The client holds its cache open while Steam runs.</summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => SteamDiscovery.ProcessNames;
@@ -129,13 +129,13 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     /// Storage page was carefully leaving it alone. Windows' own Program Files is already refused
     /// there, but a Steam library is put on a second drive precisely so that it is not.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= DeclareToolRoots();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(DeclareToolRoots);
 
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();
-        _roots = null;
-        _toolRoots = null;
+        _roots.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 

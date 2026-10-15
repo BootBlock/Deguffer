@@ -32,7 +32,7 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
     private readonly DockerInsideFigure _docker;
 
     /// <summary>What the tools record, read once per planning pass and shared by presence and planning (G4).</summary>
-    private VirtualDiskInventory? _inventory;
+    private readonly PassMemo<VirtualDiskInventory> _inventory = new();
 
     public VirtualDiskProvider(
         ISystemDirectories? system = null,
@@ -78,7 +78,7 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _inventory = null;
+        _inventory.Forget();
         base.InvalidateCaches();
     }
 
@@ -137,5 +137,5 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
         };
     }
 
-    private VirtualDiskInventory Inventory() => _inventory ??= VirtualDiskInventory.Read(Environment, _system);
+    private VirtualDiskInventory Inventory() => _inventory.Get(() => VirtualDiskInventory.Read(Environment, _system));
 }

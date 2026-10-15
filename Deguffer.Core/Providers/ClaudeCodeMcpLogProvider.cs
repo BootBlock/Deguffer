@@ -51,8 +51,8 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     private const string ProjectFolderReason =
         "The folder Claude Code keeps one project's logs in. Only the MCP server logs inside it are removed.";
 
-    private Survey? _survey;
-    private IReadOnlyList<ToolRoot>? _toolRoots;
+    private readonly PassMemo<Survey?> _survey = new();
+    private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     public ClaudeCodeMcpLogProvider(
         IUserEnvironment? environment = null,
@@ -134,12 +134,12 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     /// project's folder under them. The plan names it, and recognising nothing refuses everything
     /// inside it.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots ??= Declare();
+    public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
     public override void InvalidateCaches()
     {
-        _survey = null;
-        _toolRoots = null;
+        _survey.Forget();
+        _toolRoots.Forget();
         base.InvalidateCaches();
     }
 
@@ -229,7 +229,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     /// One look at the cache folder and each project's folder in it, memoised for the life of a planning
     /// pass (G4). Presence, planning and the declaration all read it.
     /// </summary>
-    private Survey? Look(CancellationToken ct = default) => _survey ??= Examine(ct);
+    private Survey? Look(CancellationToken ct = default) => _survey.Get(() => Examine(ct));
 
     private Survey? Examine(CancellationToken ct)
     {
