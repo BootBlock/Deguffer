@@ -95,9 +95,12 @@ jobs:
   # The whole solution built and every test run against exactly the commit being released, on a
   # clean machine whose only state is the checkout. Release, because that is the configuration the
   # packages are built in.
+  #
+  # It needs nothing from the resolve job, and the packages need nothing from it, so all three run
+  # side by side. A run then takes about as long as its slowest job rather than the sum of them.
+  # Nothing is tagged or released until this has passed, because the release job needs it.
   gate:
     name: Build and test
-    needs: resolve
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -120,7 +123,7 @@ jobs:
   # Deguffer.App/Properties/PublishProfiles, so a release is built the way a local publish is.
   publish:
     name: Publish ${{ matrix.rid }}
-    needs: [resolve, gate]
+    needs: resolve
     runs-on: windows-latest
     strategy:
       # A release ships every processor or none, so one failure stops the others.
@@ -193,8 +196,8 @@ jobs:
           # Already compressed, so a second pass would cost time and save nothing.
           compression-level: 0
 
-  # Record and publish what was built. This runs only once every package exists, so a tag means the
-  # release was built, gated and packaged, not merely attempted.
+  # Record and publish what was built. This runs only once the gate has passed and every package
+  # exists, so a tag means the release was built, gated and packaged, not merely attempted.
   #
   # The Release is written as a draft, given its packages, and only then published. A Release that
   # failed while uploading would otherwise sit public with some of its packages missing. A re-run
@@ -202,7 +205,7 @@ jobs:
   # left alone, because a user may already hold its packages and the checksums it lists.
   release:
     name: Tag and publish the release
-    needs: [resolve, publish]
+    needs: [resolve, gate, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
