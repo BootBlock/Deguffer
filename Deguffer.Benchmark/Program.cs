@@ -38,6 +38,7 @@ else if (LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
 Func<CancellationToken, RunTally> run = request.Route switch
 {
     Route.Walk => ct => WalkRoute.Run(request.Path, request.Walk, ct),
+    Route.Measure => ct => MeasureRoute.Run(request.Path, request.Walk, ct),
     Route.ExploreWalk => ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct),
     Route.Sources => ct => SourcesRoute.Run(request.Path, request.Walk, ct),
     Route.Links => ct => LinksRoute.Run(request.Path, request.ReadBy, ct),

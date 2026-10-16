@@ -37,6 +37,8 @@ internal sealed record BenchmarkRequest(
           index <drive>     Build the file-table index the deletion path measures from. Elevated.
           explore <drive>   Build the Explore tree for the volume from its file table. Elevated.
           walk <folder>     Walk the folder as an unelevated scan does.
+          measure <folder>  Measure the folder as an unelevated scan does: the walk, and
+                            what the scan adds up for each entry.
           explorewalk <folder>
                             Build the Explore tree for the folder by walking it, as an
                             unelevated Explore does.
@@ -46,11 +48,11 @@ internal sealed record BenchmarkRequest(
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
-        --threads N            Walk, explorewalk and sources only. How many folders are listed
-                               at once, 1 to 64. The default is what a scan uses.
-        --listing-buffer KiB   Walk, explorewalk and sources only. How many KiB of entries each
-                               listing asks Windows for, 4 to 1024. The default is what a scan
-                               uses.
+        --threads N            Walk, measure, explorewalk and sources only. How many folders
+                               are listed at once, 1 to 64. The default is what a scan uses.
+        --listing-buffer KiB   Walk, measure, explorewalk and sources only. How many KiB of
+                               entries each listing asks Windows for, 4 to 1024. The default
+                               is what a scan uses.
         --read-by name|handle  Links only. Whether each file is read by name, as a scan does
                                where the file system answers that, or through a handle opened
                                on it. The default is name.
@@ -92,7 +94,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, walk, explorewalk, sources or links.";
+            error = "The route must be table, index, explore, walk, measure, explorewalk, sources or links.";
             return null;
         }
 
@@ -130,7 +132,7 @@ internal sealed record BenchmarkRequest(
             if (!accepted)
             {
                 error =
-                    $"--runs takes a number from 1 to {MaximumRuns}. For walk, explorewalk and sources, --threads takes a number from " +
+                    $"--runs takes a number from 1 to {MaximumRuns}. For walk, measure, explorewalk and sources, --threads takes a number from " +
                     $"{WalkTuning.MinimumThreads} to {WalkTuning.MaximumThreads} and --listing-buffer from " +
                     $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. " +
                     $"For the table routes, --read-size takes a number from " +

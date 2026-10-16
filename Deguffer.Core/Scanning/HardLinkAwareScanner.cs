@@ -198,6 +198,11 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
             {
                 var measured = holder ?? roots[root];
 
+                // Added up here and handed to the shared tallies once, so the walk's threads meet on
+                // them once a directory rather than once a file.
+                Span<Sole> sole = stackalloc Sole[measured.Tallies.Length];
+                var withheld = 0;
+
                 // See RootReach for why a folder refused below the root does not count.
                 if (holder is null && contents.WasRefused)
                 {
@@ -226,10 +231,11 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                     var read = false;
                     FileInformation.FileStandardInfo? info = null;
 
-                    foreach (var tally in measured.Tallies)
+                    for (var i = 0; i < measured.Tallies.Length; i++)
                     {
-                        if (tally.Keeps(file.NewestFileTime))
+                        if (measured.Tallies[i].Keep.Protects(file.NewestFileTime))
                         {
+                            withheld |= 1 << i;
                             continue;
                         }
 
@@ -239,11 +245,17 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                             read = true;
                         }
 
-                        if (info is { NumberOfLinks: 1 } sole)
+                        if (info is { NumberOfLinks: 1 } linkedOnce)
                         {
-                            tally.Add(sole.AllocationSize, sole.EndOfFile);
+                            sole[i].Allocated += linkedOnce.AllocationSize;
+                            sole[i].Logical += linkedOnce.EndOfFile;
                         }
                     }
+                }
+
+                for (var i = 0; i < sole.Length; i++)
+                {
+                    measured.Tallies[i].Add(sole[i], (withheld & (1 << i)) != 0);
                 }
 
                 // A file carrying a reparse point holds none of this tree's sole-linked bytes, and one named
@@ -290,8 +302,15 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         }
     }
 
+    /// <summary>The sole-linked bytes one directory's files add to one <see cref="Tally"/>.</summary>
+    private struct Sole
+    {
+        public long Allocated;
+        public long Logical;
+    }
+
     /// <summary>
-    /// The sole-linked bytes one guard's eviction would take from the files a walk lists. Counted from
+    /// The sole-linked bytes one guard's eviction would take from the files a walk lists. Added to from
     /// several threads at once, so every field moves through <see cref="Interlocked"/>.
     /// </summary>
     private sealed class Tally(MinimumAge keep)
@@ -303,26 +322,28 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         // threads, and Interlocked has no bool overload.
         private int _withheld;
 
+        public MinimumAge Keep { get; } = keep;
+
         public ScanSize Size => Approximate(Interlocked.Read(ref _allocated), Interlocked.Read(ref _logical));
 
         public bool WithheldRecent => Volatile.Read(ref _withheld) == 1;
 
-        /// <summary>Whether the guard keeps a file of this age, which it then records it has withheld.</summary>
-        public bool Keeps(long newestFileTime)
+        /// <summary>
+        /// One directory's files: their sole-linked bytes, and whether the guard kept any of them.
+        /// </summary>
+        public void Add(Sole sole, bool withheld)
         {
-            if (!keep.Protects(newestFileTime))
+            if (sole.Allocated != 0 || sole.Logical != 0)
             {
-                return false;
+                Interlocked.Add(ref _allocated, sole.Allocated);
+                Interlocked.Add(ref _logical, sole.Logical);
             }
 
-            Interlocked.Exchange(ref _withheld, 1);
-            return true;
-        }
-
-        public void Add(long allocated, long logical)
-        {
-            Interlocked.Add(ref _allocated, allocated);
-            Interlocked.Add(ref _logical, logical);
+            // Read before written, as ParallelEnumerationScanner's tally reads it.
+            if (withheld && Volatile.Read(ref _withheld) == 0)
+            {
+                Volatile.Write(ref _withheld, 1);
+            }
         }
     }
 
