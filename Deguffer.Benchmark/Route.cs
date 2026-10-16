@@ -25,6 +25,12 @@ internal enum Route
     Walk,
 
     /// <summary>
+    /// Measure one folder through <c>ParallelEnumerationScanner</c>: the walk above with the work an
+    /// unelevated scan does with each entry it lists.
+    /// </summary>
+    Measure,
+
+    /// <summary>
     /// Build the Explore tree for one folder by walking it: the route an unelevated Explore takes,
     /// assembling the pictures of the tree so far that it draws while it walks, unless told not to.
     /// </summary>
@@ -46,18 +52,18 @@ internal enum Route
 internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
-    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.ExploreWalk or Route.Sources or Route.Links);
+    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links);
 
     /// <summary>
     /// Whether the route walks with the values given on the command line. The links route walks with
     /// the values a scan ships with, because what it compares is the read of each file.
     /// </summary>
-    public static bool TakesWalkTuning(this Route route) => route is Route.Walk or Route.ExploreWalk or Route.Sources;
+    public static bool TakesWalkTuning(this Route route) => route is Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources;
 
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route switch
     {
-        Route.Walk or Route.ExploreWalk => "entries",
+        Route.Walk or Route.Measure or Route.ExploreWalk => "entries",
         Route.Sources => "candidates",
         Route.Links => "files",
         _ => "records",

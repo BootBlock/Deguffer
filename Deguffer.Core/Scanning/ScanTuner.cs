@@ -26,14 +26,18 @@ public sealed class ScanTuner
         _volumes = volumes;
     }
 
-    private ScanTuner() => _preferences = DefaultPreferences.Instance;
+    /// <summary>
+    /// <paramref name="preferences"/>, with every drive of unknown kind, so no device is opened to
+    /// learn what it is. The benchmark builds one to walk with the values it is given.
+    /// </summary>
+    internal ScanTuner(ICurrentPreferences preferences) => _preferences = preferences;
 
     /// <summary>
     /// The shipped settings, with every drive of unknown kind, so every scan runs with the values
     /// scans used before they could be set. For a scanner built outside the app, a test included,
     /// which must not open the machine's devices to learn what they are.
     /// </summary>
-    public static ScanTuner Shipped { get; } = new();
+    public static ScanTuner Shipped { get; } = new(DefaultPreferences.Instance);
 
     /// <summary>The route the user allows.</summary>
     public ScanRoute Route => _preferences.Current.Scanning.Route;
