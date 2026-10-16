@@ -10,8 +10,8 @@ name: Release
 # the binaries report, and nobody could then say which build a user is running.
 #
 # Deguffer deletes directories on other people's machines, so what this publishes has to be what
-# main tested. The run therefore refuses a commit that main does not contain, gates the commit
-# with the same build and tests CLAUDE.md requires locally, and only then publishes. Dispatching
+# main tested. The run therefore refuses a commit that main does not contain, builds the solution
+# and runs every test against that commit in Release, and only then publishes. Dispatching
 # main releases its head. Dispatching an existing v* tag re-runs that release, which finishes one
 # that failed part-way and changes nothing once it is complete.
 on:
@@ -92,9 +92,9 @@ jobs:
             echo "version=$version"
           } >> "$GITHUB_OUTPUT"
 
-  # The gate CLAUDE.md requires before any change lands, run again against exactly the commit being
-  # released. Main has already passed it on a developer's machine, and this proves it on a clean one
-  # whose only state is the checkout.
+  # The whole solution built and every test run against exactly the commit being released, on a
+  # clean machine whose only state is the checkout. Release, because that is the configuration the
+  # packages are built in.
   gate:
     name: Build and test
     needs: resolve
@@ -243,10 +243,17 @@ jobs:
           git push origin "refs/tags/$TAG"
           echo "Recorded $TAG at $(git rev-parse HEAD)."
 
+      # Runs in the checkout, because the git calls below need it, and so names the packages by path.
       - name: Publish the release
-        working-directory: ${{ runner.temp }}/packages
+        env:
+          GH_REPO: ${{ github.repository }}
+          PACKAGES: ${{ runner.temp }}/packages
         run: |
-          state="$(gh release view "$TAG" --json isDraft --jq 'if .isDraft then "draft" else "published" end' 2>/dev/null || echo none)"
+          # Listed rather than asked for by tag, so a release that does not exist yet reads as empty
+          # and any other failure, such as a refused token, stops the step instead of reading as
+          # "no release". The list includes drafts, because this job can write the repository.
+          state="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\") | if .draft then \"draft\" else \"published\" end")"
+          state="${state:-none}"
 
           if [ "$state" = published ]; then
             echo "$TAG is already published."
@@ -289,6 +296,6 @@ jobs:
 
           # A draft left by an earlier run may hold some of that run's packages, which were built
           # separately and do not match this run's checksums, so every file is replaced.
-          gh release upload "$TAG" --clobber -- *.zip SHA256SUMS.txt
+          gh release upload "$TAG" --clobber -- "$PACKAGES"/*.zip "$PACKAGES/SHA256SUMS.txt"
           gh release edit "$TAG" --draft=false
           echo "Published $TAG."
