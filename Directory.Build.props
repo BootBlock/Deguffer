@@ -6,9 +6,12 @@
 
         Only Version is stated: the SDK derives AssemblyVersion and FileVersion from it, and the
         build appends the commit SHA to the informational version, which AboutPage trims back off.
+
+        The -beta suffix is what marks a build as a beta. The About page shows it, and the release
+        workflow publishes any version with a suffix as a pre-release.
     -->
     <PropertyGroup>
-        <Version>0.70.0</Version>
+        <Version>0.70.0-beta</Version>
 
         <Product>Deguffer</Product>
         <Company>BootBlock</Company>

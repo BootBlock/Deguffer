@@ -275,6 +275,9 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" "${notes_args[@]}" --jq .body > "$RUNNER_TEMP/notes.md"
 
             {
+              echo "> [!WARNING]"
+              echo "> Deguffer deletes files and folders, and a removal may not be reversible. Read the [disclaimer](https://github.com/$GITHUB_REPOSITORY#readme) and back up anything you cannot afford to lose before you use it."
+              echo
               echo "Download the zip for your processor, extract it, and run \`Deguffer.App.exe\`. Deguffer needs no installation and includes its own .NET runtime. It runs on Windows 10 (version 1809 or later) and Windows 11."
               echo
               echo "Most Windows PCs need \`win-x64\`. Choose \`win-arm64\` for an ARM processor, and \`win-x86\` only for 32-bit Windows."
