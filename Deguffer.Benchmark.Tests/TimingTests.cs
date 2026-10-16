@@ -13,7 +13,7 @@ public sealed class TimingTests
     private const int Held = 32 << 20;
 
     // What else the heap figure moves by between two collections a moment apart: a few hundred
-    // bytes, measured, with room to spare and far below any size asserted here.
+    // bytes in these tests' runs, with room to spare and far below any size asserted here.
     private const int Noise = 64 << 10;
 
     // What one run leaves behind, as a shared pool would hold it.
@@ -35,16 +35,22 @@ public sealed class TimingTests
     [Fact]
     public void WhatTheRunLeavesBehindIsNotCountedAsKept()
     {
-        var sample = Timing.Measure(
-            _ =>
-            {
-                _leftBehind = new byte[Held];
-                return new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held / 4]));
-            },
-            CancellationToken.None);
+        try
+        {
+            var sample = Timing.Measure(
+                _ =>
+                {
+                    _leftBehind = new byte[Held];
+                    return new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held / 4]));
+                },
+                CancellationToken.None);
 
-        Assert.InRange(sample.KeptBytes, (Held / 4) - Noise, (Held / 4) + Noise);
-        GC.KeepAlive(_leftBehind);
+            Assert.InRange(sample.KeptBytes, (Held / 4) - Noise, (Held / 4) + Noise);
+        }
+        finally
+        {
+            _leftBehind = null;
+        }
     }
 
     [Fact]

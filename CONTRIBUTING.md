@@ -87,8 +87,8 @@ The first run is reported apart from the median of the rest, because they answer
 questions. The walk's first run lists folders from the drive, and later runs list them largely from
 the Windows file cache. The file table is read without the cache, so its later runs mostly measure
 the drive again. The peak working set for the later runs is the highest the process reached. The
-Explore routes also report what the finished tree keeps: the managed heap after a full collection
-with the tree still held, which the peak working set cannot show.
+Explore routes also report what the finished tree keeps: the managed heap with the tree held, less
+the heap once it is let go, which the peak working set cannot show.
 
 To report a result, open an issue and paste the output as it stands. It names the drive letter and
 the file system, and never a path, a volume label, a user or a machine. Add the kind of drive
