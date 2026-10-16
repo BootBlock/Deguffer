@@ -273,6 +273,25 @@ public sealed class WorkerThreadsTests
         Assert.NotEqual(pass, next);
     }
 
+    /// <summary>
+    /// A thread the system will not start faults the pass, as Task.Run would, rather than throwing at
+    /// the caller, which may hold a volume handle only the pass closes.
+    /// </summary>
+    [Fact]
+    public async Task AThreadTheSystemWillNotStartFaultsThePass()
+    {
+        var ran = false;
+
+        var pass = WorkerThreads.RunAsync(
+            static _ => throw new OutOfMemoryException("no thread"),
+            () => ran = true,
+            CancellationToken.None);
+
+        await Assert.ThrowsAsync<OutOfMemoryException>(() => pass);
+        Assert.True(pass.IsFaulted);
+        Assert.False(ran);
+    }
+
     private static T RunAndWait<T>(WorkerThreads set, Func<T> work)
     {
         var result = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);

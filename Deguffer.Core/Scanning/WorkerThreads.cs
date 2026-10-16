@@ -5,12 +5,13 @@ namespace Deguffer.Core.Scanning;
 /// process's own, each started when work finds none free, parked between runs, and ended once it has
 /// been parked for <see cref="IdleLifetime"/>.
 ///
-/// <para><b>The driving thread too</b> (<see cref="RunAsync{T}"/>). A crew's calling thread works and
+/// <para><b>The driving thread too</b> (<see cref="RunAsync{T}(Func{T}, CancellationToken)"/>). A crew's calling thread works and
 /// waits for the whole of its run, a walk or a pass over a file table, which is seconds to minutes.
-/// On the pool that is a thread held for all of it, and a preview measuring for eight providers at
-/// once, or building the index of more volumes than the machine has processors, holds more than the
-/// pool's minimum. Every run past it waits for the pool to grow before it starts, and so does every
-/// other piece of the process's pool work, the continuations of the app's async code included.</para>
+/// On the pool that is a thread held for all of it. A preview measures for up to eight providers at
+/// once and builds the index of every volume it asks about, so on a machine with fewer processors
+/// than that it holds more than the pool's minimum. Every run past it waits for the pool to grow
+/// before it starts, and so does every other piece of the process's pool work, the continuations of
+/// the app's async code included.</para>
 ///
 /// <para><b>Not the thread pool.</b> A walk's helper spends most of its life blocked in a directory
 /// listing. The pool starts threads past its minimum, one per processor, only once it finds itself
@@ -26,7 +27,8 @@ namespace Deguffer.Core.Scanning;
 /// helper a crew has counted waiting for a thread another run holds, and a crew returns only once
 /// every helper it counted has ended, so a run inside another run's callback could wait for itself.
 /// The bound is the crews' own: a thread starts only when none is parked, so the set holds about as
-/// many threads as helpers have run at once, and the ones a while's work no longer needs end.</para>
+/// many threads as helpers and driving threads have run at once, and the ones a while's work no
+/// longer needs end.</para>
 /// </summary>
 internal sealed class WorkerThreads
 {
@@ -37,7 +39,7 @@ internal sealed class WorkerThreads
     /// </summary>
     public static readonly TimeSpan IdleLifetime = TimeSpan.FromSeconds(20);
 
-    /// <summary>The set every crew runs its helpers on.</summary>
+    /// <summary>The set every crew runs on, its helpers and its driving thread.</summary>
     public static readonly WorkerThreads Shared = new(IdleLifetime);
 
     private readonly TimeSpan _idleLifetime;
@@ -110,8 +112,16 @@ internal sealed class WorkerThreads
     ///
     /// <para>The task's continuations run on the pool, never on this thread, which goes back to the set
     /// at once rather than running whatever the caller does next.</para>
+    ///
+    /// <para>A thread the system will not start faults the task rather than throwing here, as
+    /// <see cref="Task.Run{TResult}(Func{TResult}, CancellationToken)"/> never throws for want of a
+    /// thread. A caller that opened something for the work to close, or started a rival to cancel,
+    /// learns of the failure where it awaits, as it would of any other.</para>
     /// </summary>
-    public Task<T> RunAsync<T>(Func<T> work, CancellationToken ct)
+    public Task<T> RunAsync<T>(Func<T> work, CancellationToken ct) => RunAsync(Run, work, ct);
+
+    /// <summary><see cref="RunAsync{T}(Func{T}, CancellationToken)"/> on <paramref name="run"/>, the seam a test fails a thread start through.</summary>
+    internal static Task<T> RunAsync<T>(Action<Action> run, Func<T> work, CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
         {
@@ -139,7 +149,17 @@ internal sealed class WorkerThreads
             }
         }
 
-        Run(context is null ? Finish : () => ExecutionContext.Run(context, static finish => ((Action)finish!)(), (Action)Finish));
+        try
+        {
+            run(context is null ? Finish : () => ExecutionContext.Run(context, static finish => ((Action)finish!)(), (Action)Finish));
+        }
+        catch (Exception ex) when (ex is OutOfMemoryException or ThreadStartException)
+        {
+            // What starting a thread throws when the system will not create one, or when the thread
+            // fails before it can run any code, as WorkerCrew meets it for a helper.
+            done.SetException(ex);
+        }
+
         return done.Task;
     }
 

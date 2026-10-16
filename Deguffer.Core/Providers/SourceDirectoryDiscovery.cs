@@ -384,7 +384,7 @@ public sealed class SourceDirectoryDiscovery
         if (!_scanner.RacesTheWalk)
         {
             return await FromIndexAsync(search, root, ct).ConfigureAwait(false)
-                ?? Walk(search, root, ct) with { FellBack = true };
+                ?? (await WorkerThreads.Shared.RunAsync(() => Walk(search, root, ct), ct).ConfigureAwait(false)) with { FellBack = true };
         }
 
         var raced = await RouteRace.FirstAsync(

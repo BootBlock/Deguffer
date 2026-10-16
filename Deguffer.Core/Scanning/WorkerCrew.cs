@@ -5,7 +5,9 @@ namespace Deguffer.Core.Scanning;
 /// <summary>
 /// The threads of one parallel run: the calling thread, which works and is the only one that waits,
 /// and up to a bound of helpers on <see cref="WorkerThreads"/>, each started when there is work for
-/// it and ended when there is none.
+/// it and ended when there is none. Async code starts the run on
+/// <see cref="WorkerThreads.RunAsync{T}(Func{T}, CancellationToken)"/>, so the calling thread is not
+/// the pool's either.
 ///
 /// <para>The walk (<see cref="WalkWorkers{TState}"/>) and the read of the file table
 /// (<see cref="Mft.MftReadPass"/>) differ in what their work is and in when they are over. They agree
