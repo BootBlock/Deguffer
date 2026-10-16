@@ -311,22 +311,22 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
     /// <summary>
     /// The sole-linked bytes one guard's eviction would take from the files a walk lists. Added to from
-    /// several threads at once, so every field moves through <see cref="Interlocked"/>.
+    /// several threads at once, so every count moves through <see cref="Interlocked"/> and the flag
+    /// through <see cref="Volatile"/>.
     /// </summary>
     private sealed class Tally(MinimumAge keep)
     {
         private long _allocated;
         private long _logical;
 
-        // See ParallelEnumerationScanner for why this is an int: the walk sets it from several
-        // threads, and Interlocked has no bool overload.
-        private int _withheld;
+        // Only ever moved to true, so a write needs no exchange and no ordering question arises.
+        private bool _withheld;
 
         public MinimumAge Keep { get; } = keep;
 
         public ScanSize Size => Approximate(Interlocked.Read(ref _allocated), Interlocked.Read(ref _logical));
 
-        public bool WithheldRecent => Volatile.Read(ref _withheld) == 1;
+        public bool WithheldRecent => Volatile.Read(ref _withheld);
 
         /// <summary>
         /// One directory's files: their sole-linked bytes, and whether the guard kept any of them.
@@ -340,9 +340,9 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
             }
 
             // Read before written, as ParallelEnumerationScanner's tally reads it.
-            if (withheld && Volatile.Read(ref _withheld) == 0)
+            if (withheld && !Volatile.Read(ref _withheld))
             {
-                Volatile.Write(ref _withheld, 1);
+                Volatile.Write(ref _withheld, true);
             }
         }
     }
