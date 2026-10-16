@@ -47,14 +47,14 @@ internal sealed class ListingBudget
     /// </param>
     public ListDirectory Around(ListDirectory list, int limit)
     {
-        return (directory, options, files, into) =>
+        return (directory, request, into) =>
         {
             var volume = VolumeOf(directory);
             volume.Enter(limit);
 
             try
             {
-                return list(directory, options, files, into);
+                return list(directory, request, into);
             }
             finally
             {

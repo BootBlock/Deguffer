@@ -64,9 +64,6 @@ internal static unsafe partial class StatByName
     private const int StatusInvalidDeviceRequest = unchecked((int)0xC000_0010);
     private const int StatusNotSupported = unchecked((int)0xC000_00BB);
 
-    /// <summary>The longest name a <c>UNICODE_STRING</c> holds, in characters.</summary>
-    private const int LongestName = ushort.MaxValue / sizeof(char);
-
     /// <param name="extendedPath">The path in the extended form §6.3 requires.</param>
     public static ByNameReading Read(string extendedPath, out FileInformation.FileStandardInfo info)
     {
@@ -74,7 +71,7 @@ internal static unsafe partial class StatByName
 
         // A name too long for the native string cannot be given, so the file is asked through a
         // handle instead, as it was before this route existed.
-        if (LongPath.ObjectManagerForm(extendedPath) is not { Length: <= LongestName } name)
+        if (LongPath.ObjectManagerForm(extendedPath) is not { Length: <= UnicodeString.LongestName } name)
         {
             return ByNameReading.Refused;
         }

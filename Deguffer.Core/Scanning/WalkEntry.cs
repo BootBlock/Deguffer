@@ -83,18 +83,6 @@ public readonly record struct WalkEntry
     /// <summary>The one number <see cref="MinimumAge"/> judges, from the timestamps the listing read.</summary>
     public long NewestFileTime => MinimumAge.NewestFileTimeOf(CreationTimeUtc, LastWriteTimeUtc);
 
-    /// <summary>
-    /// The entry the listing is positioned on, named where <paramref name="files"/> asks. Everything
-    /// here was read by the call that listed the directory, so this costs no further I/O.
-    /// </summary>
-    internal static WalkEntry Of(string directory, FileNames files, ref System.IO.Enumeration.FileSystemEntry entry) => new(
-        directory,
-        entry.IsDirectory || files.Names(entry.FileName) ? entry.FileName.ToString() : null,
-        entry.Attributes,
-        entry.IsDirectory ? 0 : entry.Length,
-        entry.CreationTimeUtc.UtcDateTime,
-        entry.LastWriteTimeUtc.UtcDateTime);
-
     // Written by hand because the generated one reads every property, and Name throws for a nameless file.
     private bool PrintMembers(StringBuilder builder)
     {
