@@ -20,9 +20,11 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <see cref="Invalidate"/> ends every build, because the next scan starts from the machine as it is
 /// then.</para>
 /// </summary>
-/// <param name="tuning">What each build reads the table with, asked as the build starts.</param>
-public sealed class MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tuning)
+public sealed class MftVolumeIndexCache
 {
+    private readonly IMftSourceFactory _factory;
+    private readonly ScanTuner _tuning;
+    private readonly Action<Action> _run;
     private readonly Dictionary<char, Lazy<Task<Built>>> _byVolume = [];
     private readonly Lock _gate = new();
 
@@ -30,6 +32,20 @@ public sealed class MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tun
     // and disposing it under a build starting at that moment would throw from the link. It owns no
     // timer and no wait handle, so nothing is held by leaving it to the collector.
     private CancellationTokenSource _scan = new();
+
+    /// <param name="tuning">What each build reads the table with, asked as the build starts.</param>
+    public MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tuning)
+        : this(factory, tuning, WorkerThreads.Shared.Run)
+    {
+    }
+
+    /// <param name="run">Starts a build on a thread of its own: the seam a test fails a start through.</param>
+    internal MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tuning, Action<Action> run)
+    {
+        _factory = factory;
+        _tuning = tuning;
+        _run = run;
+    }
 
     /// <summary>The index for a volume, or null with the reason the fast path is unavailable for it.</summary>
     public readonly record struct Built(MftVolumeIndex? Index, FallbackReason Reason);
@@ -64,8 +80,8 @@ public sealed class MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tun
         // Asked before the open, so nothing between the open and the build can leave the handle
         // without an owner. The walk asks the same question of the same cache, so it costs nothing
         // where the open then fails.
-        var table = tuning.ForVolume(driveLetter).Table;
-        var source = factory.TryOpen(driveLetter, out var reason);
+        var table = _tuning.ForVolume(driveLetter).Table;
+        var source = _factory.TryOpen(driveLetter, out var reason);
 
         if (source is null)
         {
@@ -76,15 +92,28 @@ public sealed class MftVolumeIndexCache(IMftSourceFactory factory, ScanTuner tun
         // owns it. A build Invalidate ends stops at its next check of the token, with the handle in hand.
         // Not on the pool: the build holds its thread for the whole pass, and a preview can start one
         // for every volume at once.
-        return WorkerThreads.Shared.RunAsync(
+        var ran = false;
+        var built = WorkerThreads.RunAsync(
+            _run,
             () =>
             {
+                Volatile.Write(ref ran, true);
+
                 using (source)
                 {
                     return Build(source, table, scan);
                 }
             },
             CancellationToken.None);
+
+        // A thread the system would not start never ran the build, and the build is all that closes
+        // the handle. A build that ran and failed closed it on the way out.
+        if (built.IsFaulted && !Volatile.Read(ref ran))
+        {
+            source.Dispose();
+        }
+
+        return built;
     }
 
     private static Built Build(IMftSource source, TableTuning tuning, CancellationToken scan)
