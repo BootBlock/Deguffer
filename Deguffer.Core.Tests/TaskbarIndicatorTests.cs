@@ -138,12 +138,32 @@ public sealed class TaskbarIndicatorTests
         _work.Changed += (_, _) => changes++;
 
         span.Report(0.75);
-        span.Fail();
 
         Assert.Equal(0, changes);
         Assert.Equal(TaskbarProgress.None, indicator.Current);
         Assert.True(_work.IsIdle);
         Assert.Equal(0.5, span.Fraction);
+    }
+
+    /// <summary>
+    /// A failure counted for an ended span would turn the bar red at the end of whatever work came
+    /// next, for a run the page had already reported as finished.
+    /// </summary>
+    [Fact]
+    public void AFailureThatArrivesAfterItsSpanEndedIsIgnored()
+    {
+        var indicator = Indicator();
+        var span = _work.Begin();
+        span.Dispose();
+        var failures = 0;
+        _work.Failed += (_, _) => failures++;
+        _userIsHere = false;
+
+        span.Fail();
+        _work.Begin().Dispose();
+
+        Assert.Equal(0, failures);
+        Assert.Equal(TaskbarProgress.None, indicator.Current);
     }
 
     [Fact]

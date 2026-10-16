@@ -3,6 +3,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Working;
 using Deguffer.Testing;
 
@@ -419,5 +420,87 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         Assert.Equal([RunningAction.BackupRestore], whileRestoring);
         Assert.True(_running.MayEndProcess);
         Assert.Equal("Restored. The entry is back in the list.", page.Actions.Report);
+    });
+
+    /// <summary>A removal is work under way until it has reported, and one that passed fails nothing.</summary>
+    [Fact]
+    public void ARemovalIsUnderWayUntilItHasReported() => UiThread.Run(async () =>
+    {
+        Stale("Gone");
+        var page = Page();
+        await page.RefreshAsync();
+        page.Actions.BackUpFirst = false;
+        page.Actions.SelectStale([page.StaleRows[0].Entry]);
+        var underWay = false;
+        _registry.AfterDelete = _ => underWay = !_work.IsIdle;
+        var failures = 0;
+        _work.Failed += (_, _) => failures++;
+
+        await page.Actions.RemoveCommand.ExecuteAsync(null);
+
+        Assert.True(underWay);
+        Assert.Equal(0, failures);
+        await Eventually.HoldsAsync(() => _work.IsIdle, "the list read after the removal ending");
+    });
+
+    /// <summary>§5.6: an entry beside the removed one went missing, which the taskbar shows as a failure.</summary>
+    [Fact]
+    public void ARemovalWhoseCheckFailsSaysItFailed() => UiThread.Run(async () =>
+    {
+        Stale("Gone");
+        var neighbour = Stale("Neighbour");
+        var page = Page();
+        await page.RefreshAsync();
+        page.Actions.BackUpFirst = false;
+        page.Actions.SelectStale([page.StaleRows.Single(row => row.Name == "Gone").Entry]);
+        _registry.AfterDelete = _ => _registry.Remove(neighbour);
+        var failures = 0;
+        _work.Failed += (_, _) => failures++;
+
+        await page.Actions.RemoveCommand.ExecuteAsync(null);
+
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error, page.Actions.ReportSeverity);
+        Assert.Equal(1, failures);
+    });
+
+    /// <summary>A queue of two says how far it has got, as the share of its uninstallers already finished.</summary>
+    [Fact]
+    public void AnUninstallQueueSaysHowFarItHasGot() => UiThread.Run(async () =>
+    {
+        var a = Installed("A");
+        var b = Installed("B");
+        var seen = new List<double?>();
+        _launcher.WhileRunning = launch =>
+        {
+            seen.Add(Assert.Single(_work.Current).Fraction);
+            _registry.Remove(launch.FileName.Contains($"{Path.DirectorySeparatorChar}A{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ? a : b);
+        };
+        var page = Page();
+        await page.RefreshAsync();
+        page.Actions.SelectInstalled([.. page.InstalledRows.Select(r => r.Entry)]);
+
+        await page.Actions.UninstallCommand.ExecuteAsync(null);
+
+        Assert.Equal([0, 0.5], seen);
+        await Eventually.HoldsAsync(() => _work.IsIdle, "the list read after the uninstalls ending");
+    });
+
+    [Fact]
+    public void ARestoreThatFailsSaysItFailed() => UiThread.Run(async () =>
+    {
+        var key = new UninstallKey(UninstallScope.CurrentUser, "Tool");
+        _runner.Replying(RegExe, _ => new CommandOutcome(1, string.Empty, "ERROR: Access is denied."));
+        var file = Path.Combine(_temp.CreateDirectory("backups"), "tool.reg");
+        File.WriteAllLines(file, ["Windows Registry Editor Version 5.00", "", $"[{key.PhysicalPath}]", "\"DisplayName\"=\"Tool\""], System.Text.Encoding.Unicode);
+        var page = Page();
+        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true));
+        var failures = 0;
+        _work.Failed += (_, _) => failures++;
+
+        await page.Actions.RestoreCommand.ExecuteAsync(null);
+
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error, page.Actions.ReportSeverity);
+        Assert.Equal(1, failures);
+        await Eventually.HoldsAsync(() => _work.IsIdle, "the list read after the restore ending");
     });
 }

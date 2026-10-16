@@ -10,8 +10,9 @@ namespace Deguffer.App.Shell;
 ///
 /// <para>The button is decoration, as the backdrop is (§6.5), so a taskbar that refuses is left as
 /// it is. Explorer may not be the shell, or may be restarting. A write that fails returns its
-/// HRESULT rather than throwing, and the next one, or the button being made again, puts it
-/// right.</para>
+/// HRESULT rather than throwing, and the next one, or the button being made again, puts it right.
+/// A taskbar that could not be reached when the window opened is asked for again when Explorer says
+/// it has made the button.</para>
 ///
 /// <para>Explorer forgets every button's bar when it restarts, and says so with the registered
 /// <c>TaskbarButtonCreated</c> message once it has made the button again, so the bar is written
@@ -31,7 +32,7 @@ internal sealed class TaskbarButton
 
     private readonly nint _window;
     private readonly TaskbarIndicator _indicator;
-    private readonly ITaskbarList3? _taskbar;
+    private ITaskbarList3? _taskbar;
 
     /// <summary>What the OS holds a raw pointer to, rooted for the window's life as SystemMotion's is.</summary>
     private readonly SubclassProc _watch;
@@ -131,6 +132,7 @@ internal sealed class TaskbarButton
     {
         if (message == TaskbarButtonCreated)
         {
+            _taskbar ??= Connect();
             Show();
         }
 

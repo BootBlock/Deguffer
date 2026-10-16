@@ -2,7 +2,15 @@ namespace Deguffer.Core.InstalledApps;
 
 /// <summary>An uninstaller about to start, and where it stands in the queue.</summary>
 /// <param name="Number">Its place, counting from 1.</param>
-public sealed record UninstallStep(PreparedUninstall Item, int Number, int Count);
+public sealed record UninstallStep(PreparedUninstall Item, int Number, int Count)
+{
+    /// <summary>
+    /// How far the queue has got, from 0 to 1, as the share of its uninstallers already finished, or
+    /// null for a queue of one. An uninstaller is another program and cannot say how far it has got,
+    /// so a queue of one has no measure at all.
+    /// </summary>
+    public double? Fraction => Count > 1 ? (double)(Number - 1) / Count : null;
+}
 
 /// <summary>What a queue of uninstalls came to.</summary>
 /// <param name="Finished">Each uninstall that was tried, in order, with what the list says after it.</param>

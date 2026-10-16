@@ -234,10 +234,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
                 new Progress<UninstallStep>(step =>
                 {
                     ShowWaiting(step);
-
-                    // How many of a queue's uninstallers have finished. One running cannot say how far
-                    // it has got, so a queue of one has no measure at all.
-                    work.Report(step.Count > 1 ? (double)(step.Number - 1) / step.Count : null);
+                    work.Report(step.Fraction);
                 }),
                 watching.Token);
 

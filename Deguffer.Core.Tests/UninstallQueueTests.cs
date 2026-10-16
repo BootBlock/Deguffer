@@ -48,8 +48,20 @@ public sealed class UninstallQueueTests : IDisposable
         Assert.Equal(["A", "B", "C"], Started);
         Assert.Equal(["Uninstall 'B' next?", "Uninstall 'C' next?"], _prompt.Prompts.Select(p => p.Title));
         Assert.Equal([(1, 3), (2, 3), (3, 3)], steps.Select(s => (s.Number, s.Count)));
+        Assert.Equal(new double?[] { 0, 1.0 / 3, 2.0 / 3 }, steps.Select(s => s.Fraction));
         Assert.Equal(3, report.Finished.Count);
         Assert.True(report.IsComplete);
+    }
+
+    /// <summary>One uninstaller cannot say how far it has got, so a queue of one has no measure.</summary>
+    [Fact]
+    public async Task AQueueOfOneHasNoMeasure()
+    {
+        var steps = new List<UninstallStep>();
+
+        await Queue.RunAsync([Installed("A")], new CallbackProgress<UninstallStep>(steps.Add), CancellationToken.None);
+
+        Assert.Null(Assert.Single(steps).Fraction);
     }
 
     /// <summary>The question comes after the last one exited, so it can say what the list now says.</summary>
