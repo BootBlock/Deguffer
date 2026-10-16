@@ -389,7 +389,7 @@ public sealed class SourceDirectoryDiscovery
 
         var raced = await RouteRace.FirstAsync(
             stop => FromIndexAsync(search, root, stop),
-            stop => Task.Run(() => Walk(search, root, stop), stop),
+            stop => WorkerThreads.Shared.RunAsync(() => Walk(search, root, stop), stop),
             walked => walked.RootListed,
             ct).ConfigureAwait(false);
 

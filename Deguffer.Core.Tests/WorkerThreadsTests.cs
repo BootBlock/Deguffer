@@ -121,6 +121,148 @@ public sealed class WorkerThreadsTests
         Assert.Null(seen);
     }
 
+    /// <summary>
+    /// More passes than the pool's minimum all run at once, each holding its thread until every one is
+    /// running. On the pool the ones past the minimum would wait for it to grow, about one every half
+    /// second, which for this many is twice the patience given.
+    /// </summary>
+    [Fact]
+    public async Task MorePassesThanThePoolsMinimumRunAtOnce()
+    {
+        ThreadPool.GetMinThreads(out var poolMinimum, out _);
+        var passes = poolMinimum + 40;
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+        using var allRunning = new CountdownEvent(passes);
+        using var released = new ManualResetEventSlim();
+
+        var running = Enumerable.Range(0, passes).Select(_ => set.RunAsync(
+            () =>
+            {
+                allRunning.Signal();
+                released.Wait();
+                return 0;
+            },
+            CancellationToken.None)).ToArray();
+
+        var reached = allRunning.Wait(Patience);
+        var started = passes - allRunning.CurrentCount;
+        released.Set();
+
+        Assert.True(reached, $"{started} of {passes} passes were running at once.");
+        await Task.WhenAll(running).WaitAsync(Patience);
+    }
+
+    /// <summary>A failure reaches whoever awaits the pass, and never the thread, where it would end the process.</summary>
+    [Fact]
+    public async Task APassThatFailsFaultsItsTask()
+    {
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+
+        var pass = set.RunAsync<int>(() => throw new IOException("the volume went away"), CancellationToken.None);
+
+        var failure = await Assert.ThrowsAsync<IOException>(() => pass);
+        Assert.Equal("the volume went away", failure.Message);
+        Assert.True(pass.IsFaulted);
+    }
+
+    /// <summary>A pass stopped for its own token is cancelled, as a caller racing two routes reads it.</summary>
+    [Fact]
+    public async Task APassStoppedForItsTokenIsCancelledNotFaulted()
+    {
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+        using var stop = new CancellationTokenSource();
+
+        var pass = set.RunAsync<int>(
+            () =>
+            {
+                stop.Cancel();
+                stop.Token.ThrowIfCancellationRequested();
+                return 0;
+            },
+            stop.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pass);
+        Assert.True(pass.IsCanceled);
+    }
+
+    /// <summary>
+    /// A stop for some other token is the pass's failure, not its cancellation, even with its own token
+    /// cancelled as it stops.
+    /// </summary>
+    [Fact]
+    public async Task APassStoppedForAnotherTokenIsFaulted()
+    {
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+        using var own = new CancellationTokenSource();
+        using var other = new CancellationTokenSource();
+        other.Cancel();
+
+        var pass = set.RunAsync<int>(
+            () =>
+            {
+                own.Cancel();
+                other.Token.ThrowIfCancellationRequested();
+                return 0;
+            },
+            own.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pass);
+        Assert.True(pass.IsFaulted);
+    }
+
+    [Fact]
+    public void APassAskedForWithItsTokenAlreadyCancelledNeverRuns()
+    {
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+        var ran = false;
+
+        var pass = set.RunAsync(() => ran = true, new CancellationToken(canceled: true));
+
+        Assert.True(pass.IsCanceled);
+        Assert.False(ran);
+        Assert.Equal(0, set.Count);
+    }
+
+    /// <summary>
+    /// A pass runs under its caller's context, as a task the caller started would: a provider gathers
+    /// what its measurements meet in an AsyncLocal. The thread keeps none of it for the next piece of work.
+    /// </summary>
+    [Fact]
+    public async Task APassRunsUnderItsCallersContextAndTheThreadKeepsNone()
+    {
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+        var ambient = new AsyncLocal<string?> { Value = "the caller's" };
+
+        var seen = await set.RunAsync(() => (ambient.Value, Environment.CurrentManagedThreadId), CancellationToken.None);
+
+        Assert.Equal("the caller's", seen.Value);
+        Assert.True(SpinWait.SpinUntil(() => set.Idle == 1, Patience));
+        var after = RunAndWait(set, () => (ambient.Value, Environment.CurrentManagedThreadId));
+
+        Assert.Equal(seen.CurrentManagedThreadId, after.CurrentManagedThreadId);
+        Assert.Null(after.Value);
+    }
+
+    /// <summary>
+    /// What the caller does next never runs on the pass's thread, even asked to run synchronously, so
+    /// the thread goes back to the set as the pass ends rather than carrying the caller's work.
+    /// </summary>
+    [Fact]
+    public async Task WhatFollowsAPassNeverRunsOnItsThread()
+    {
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+
+        var threads = set.RunAsync(() => Environment.CurrentManagedThreadId, CancellationToken.None)
+            .ContinueWith(
+                ended => (Pass: ended.Result, Next: Environment.CurrentManagedThreadId),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+        var (pass, next) = await threads.WaitAsync(Patience);
+        Assert.NotEqual(pass, next);
+    }
+
     private static T RunAndWait<T>(WorkerThreads set, Func<T> work)
     {
         var result = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);

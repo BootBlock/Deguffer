@@ -1,9 +1,16 @@
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
-/// The threads a <see cref="WorkerCrew"/>'s helpers run on: the process's own, each started when a
-/// helper finds none free, parked between runs, and ended once it has been parked for
-/// <see cref="IdleLifetime"/>.
+/// The threads a <see cref="WorkerCrew"/> runs on, its helpers and the thread that drives it: the
+/// process's own, each started when work finds none free, parked between runs, and ended once it has
+/// been parked for <see cref="IdleLifetime"/>.
+///
+/// <para><b>The driving thread too</b> (<see cref="RunAsync{T}"/>). A crew's calling thread works and
+/// waits for the whole of its run, a walk or a pass over a file table, which is seconds to minutes.
+/// On the pool that is a thread held for all of it, and a preview measuring for eight providers at
+/// once, or building the index of more volumes than the machine has processors, holds more than the
+/// pool's minimum. Every run past it waits for the pool to grow before it starts, and so does every
+/// other piece of the process's pool work, the continuations of the app's async code included.</para>
 ///
 /// <para><b>Not the thread pool.</b> A walk's helper spends most of its life blocked in a directory
 /// listing. The pool starts threads past its minimum, one per processor, only once it finds itself
@@ -88,6 +95,52 @@ internal sealed class WorkerThreads
         // idle lifetime the thread may end before this, and the count is one low only until it runs.
         new Parked(this, work).Start();
         Interlocked.Increment(ref _alive);
+    }
+
+    /// <summary>
+    /// Run <paramref name="work"/> on a thread of its own now, as <see cref="Run"/> does, and hand back
+    /// what it returns or throws as a task, as <see cref="Task.Run{TResult}(Func{TResult}, CancellationToken)"/>
+    /// would: for work that holds its thread for a whole walk or pass.
+    ///
+    /// <para>Already cancelled where <paramref name="ct"/> is cancelled before the work starts, and
+    /// cancelled rather than faulted where the work stops for <paramref name="ct"/>. It runs under the
+    /// caller's context, as a task started by the caller does: what a provider gathers in an
+    /// <see cref="AsyncLocal{T}"/> while it measures, and the culture it formats with, go with it. The
+    /// thread itself keeps none of it once the work ends.</para>
+    ///
+    /// <para>The task's continuations run on the pool, never on this thread, which goes back to the set
+    /// at once rather than running whatever the caller does next.</para>
+    /// </summary>
+    public Task<T> RunAsync<T>(Func<T> work, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested)
+        {
+            return Task.FromCanceled<T>(ct);
+        }
+
+        var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = ExecutionContext.Capture();
+
+        void Finish()
+        {
+            try
+            {
+                done.SetResult(work());
+            }
+            catch (OperationCanceledException stopped) when (stopped.CancellationToken == ct && ct.IsCancellationRequested)
+            {
+                done.SetCanceled(ct);
+            }
+            catch (Exception failure)
+            {
+                // Not swallowed: handed to whoever awaits the task, as Task.Run hands it. Nothing may
+                // escape to the thread, where it would end the process.
+                done.SetException(failure);
+            }
+        }
+
+        Run(context is null ? Finish : () => ExecutionContext.Run(context, static finish => ((Action)finish!)(), (Action)Finish));
+        return done.Task;
     }
 
     /// <summary>One thread of the set, and the work it is handed while parked.</summary>

@@ -52,8 +52,9 @@ public sealed class ExploreScanner(
 
         // Both routes are synchronous and long: reading a table is millions of records, and the
         // walk enumerates before its first yield. On the caller's thread that is a frozen window
-        // for the length of the scan, which is the one thing §5.5 asks a scanner not to be.
-        return await Task.Run(() => Scan(root, progress, ct), ct).ConfigureAwait(false);
+        // for the length of the scan, which is the one thing §5.5 asks a scanner not to be. On a pool
+        // thread it is a thread held for as long, which the pool has too few of (WorkerThreads).
+        return await WorkerThreads.Shared.RunAsync(() => Scan(root, progress, ct), ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -99,7 +100,7 @@ public sealed class ExploreScanner(
     {
         ArgumentNullException.ThrowIfNull(folders);
 
-        return await Task.Run(() => ScanFolders(folders, unlisted, progress, ct), ct).ConfigureAwait(false);
+        return await WorkerThreads.Shared.RunAsync(() => ScanFolders(folders, unlisted, progress, ct), ct).ConfigureAwait(false);
     }
 
     private ScannedFolder[] ScanFolders(
