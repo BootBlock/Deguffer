@@ -151,9 +151,11 @@ public sealed class ExploreActionPolicy
                 discovered[index] = await asked[index].DiscoverToolRootsAsync(token).ConfigureAwait(false))
             .ConfigureAwait(false);
 
+        var declared = await DeclaredRoots.ReadAsync(asked, ct).ConfigureAwait(false);
+
         return new ExploreActionPolicy(
             ProtectedRegions.For(system, environment),
-            [.. asked.SelectMany(p => p.ToolRoots)],
+            declared,
             volumes,
             probedRoots: [.. discovered.SelectMany(roots => roots)]);
     }

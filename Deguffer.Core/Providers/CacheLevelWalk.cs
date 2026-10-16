@@ -158,7 +158,7 @@ public static class CacheLevelWalk
 /// </param>
 /// <param name="Unrecognised">
 /// Every child classified Tier 4, with the reason the user is shown. Not yet what a plan asserts:
-/// <see cref="Survivors"/> is.
+/// <see cref="SurvivorsAsync"/> is.
 /// </param>
 /// <param name="Notes">What the walk has to say: a link it declined, a directory it could not list.</param>
 /// <param name="EmptiedAContainer">
@@ -191,10 +191,20 @@ public readonly record struct LevelWalk(
     /// walk found, as Claude Code's leftovers row does, so reading every row's declarations from
     /// inside a walk would ask that row for a declaration it is still building.</para>
     /// </summary>
-    public IReadOnlyList<(string Path, string Reason)> Survivors(RowDeclarations declarations, CancellationToken ct)
+    public async Task<IReadOnlyList<(string Path, string Reason)>> SurvivorsAsync(RowDeclarations declarations, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(declarations);
 
-        return [.. Unrecognised.Where(child => !declarations.OfferedByARow(child.Path, ct))];
+        List<(string Path, string Reason)> survivors = [];
+
+        foreach (var child in Unrecognised)
+        {
+            if (!await declarations.OfferedByARowAsync(child.Path, ct).ConfigureAwait(false))
+            {
+                survivors.Add(child);
+            }
+        }
+
+        return survivors;
     }
 }

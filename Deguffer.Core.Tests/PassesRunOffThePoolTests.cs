@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
@@ -143,6 +144,52 @@ public sealed class PassesRunOffThePoolTests : IDisposable
             policy,
             bin)));
         Assert.Equal(folder, Assert.Single(bin.Paths));
+    }
+
+    /// <summary>
+    /// The declarations a plan asks about what it spares, read from a plan on the pool before the
+    /// Chromium rows have planned: their declaration walks both application-data roots.
+    /// </summary>
+    [Fact]
+    public async Task TheDeclarationsAPlanAsksAboutAreReadOffThePool()
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        var application = ChromiumApplication(environment);
+        var declarations = new RowDeclarations();
+        declarations.Admit([new ChromiumCacheProvider(environment, declarations: declarations)]);
+        var offered = false;
+
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () =>
+            offered = await Task.Run(() => declarations.OfferedByARowAsync(Path.Combine(application, "GPUCache")))));
+        Assert.True(offered);
+    }
+
+    /// <summary>The declarations Explore builds its policy from, read the same way.</summary>
+    [Fact]
+    public async Task TheDeclarationsExploreRefusesByAreReadOffThePool()
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        var application = ChromiumApplication(environment);
+        ExploreActionPolicy? policy = null;
+
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () => policy = await Task.Run(() => ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path),
+            environment,
+            new FakeVolumeInventory(),
+            [new ChromiumCacheProvider(environment)]))));
+        var verdict = policy!.MayRemove(Path.Combine(application, "Local Storage"));
+        Assert.False(verdict.IsAllowed);
+        // Refused by the row's declaration, as a child it does not recognise in a folder it declares.
+        Assert.Contains($"not something Deguffer recognises inside '{application}'", verdict.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>An application's Chromium user-data folder, identified by its marker.</summary>
+    private static string ChromiumApplication(FakeUserEnvironment environment)
+    {
+        var application = Path.Combine(environment.RoamingAppData, "SomeApp");
+        Directory.CreateDirectory(Path.Combine(application, "GPUCache"));
+        File.WriteAllText(Path.Combine(application, "Local State"), "{}");
+        return application;
     }
 
     private static Task Measure(IDirectoryScanner scanner, string measurement, string folder) => measurement switch

@@ -302,7 +302,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 + $"environments as {LongPath.Display(environments)}."),
         };
 
-        var (targets, walk, spared, withheld) = CollectTargets(cacheRoot, environments, notes, ct);
+        var (targets, walk, spared, withheld) = await CollectTargetsAsync(cacheRoot, environments, notes, ct).ConfigureAwait(false);
         var (deletions, deleted) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         var (commands, cleared, commandDeclined, repositoriesUnreachable) = await PlanRepositoryClearsAsync(
@@ -422,12 +422,12 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <para><c>Withheld</c> is a recognised child that holds the configured environments. It is
     /// spared as surely as a Tier 4 child, so §5.6 names it alongside the walk's own survivors.</para>
     /// </summary>
-    private (
+    private async Task<(
         IReadOnlyList<DeletionTarget> Targets,
         LevelWalk Walk,
         IReadOnlyList<(string Path, string Reason)> Spared,
-        IReadOnlyList<(string Path, string Reason)> Withheld)
-        CollectTargets(
+        IReadOnlyList<(string Path, string Reason)> Withheld)>
+        CollectTargetsAsync(
         string cacheRoot,
         string environments,
         List<PlanNote> notes,
@@ -435,7 +435,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     {
         var walk = CacheLevelWalk.Under(Levels, cacheRoot, ct);
 
-        var spared = walk.Survivors(_declarations, ct);
+        var spared = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
 
         notes.AddRange(walk.Notes);
         notes.AddRange(spared.Select(CacheLevelWalk.SparedNote));

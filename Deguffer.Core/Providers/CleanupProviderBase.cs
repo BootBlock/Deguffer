@@ -378,7 +378,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     /// <summary>
     /// §5.6 for a plan built on <see cref="CacheLevelWalk"/>: the paths the provider names itself,
-    /// then <paramref name="spared"/>, which is <see cref="LevelWalk.Survivors"/> as the plan read it,
+    /// then <paramref name="spared"/>, which is <see cref="LevelWalk.SurvivorsAsync"/> as the plan read it,
     /// and every child the walk declined.
     ///
     /// <para>The walk's own lists are the ones that must not be left out. A spared child is a sibling
