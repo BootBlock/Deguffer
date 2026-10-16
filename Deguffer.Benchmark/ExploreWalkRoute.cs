@@ -29,7 +29,7 @@ internal static class ExploreWalkRoute
 
         // A folder the walk was refused, or a file it could not measure, leaves the root's size
         // unknown, and the run timed less than the folder holds.
-        return new RunTally(tree.NodeCount - 1, BytesRead: 0, Complete: !tree.HasUnknownSizes, Kept: tree);
+        return new RunTally(tree.NodeCount - 1, BytesRead: 0, Complete: !tree.HasUnknownSizes, Kept: new KeptResult(tree));
     }
 
     private sealed class Discarded : IProgress<ExploreProgress>

@@ -15,8 +15,6 @@ internal static class Timing
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        var heldBefore = GC.GetTotalMemory(forceFullCollection: false);
-
         // Precise, and process-wide: both routes allocate on several threads, and the imprecise
         // figure leaves out what each thread has not yet handed back.
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
@@ -34,14 +32,18 @@ internal static class Timing
 
         // After the clock, and after the counts above, because measuring it is a full collection of
         // its own. The result is let go here, so a run does not hold the last run's tree.
-        var kept = 0L;
-        if (tally.Kept is { } result)
+        var keptBytes = 0L;
+        if (tally.Kept is { } kept)
         {
-            kept = GC.GetTotalMemory(forceFullCollection: true) - heldBefore;
-            GC.KeepAlive(result);
+            // The heap with the result and then without it, a moment apart, rather than against the
+            // heap before the run: a run leaves buffers in shared pools for the next to rent, and
+            // those are not what the result keeps.
+            var holding = GC.GetTotalMemory(forceFullCollection: true);
+            kept.Release();
+            keptBytes = holding - GC.GetTotalMemory(forceFullCollection: true);
             tally = tally with { Kept = null };
         }
 
-        return new RunSample(clock.Elapsed, tally, allocated, full, peak, kept);
+        return new RunSample(clock.Elapsed, tally, allocated, full, peak, keptBytes);
     }
 }

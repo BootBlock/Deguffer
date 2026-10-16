@@ -67,7 +67,10 @@ internal static class TableRoutes
     {
         var read = MftExploreReader.Read(source, rootPath, components, tuning, onProgress: null, ct);
 
-        return Tally(source, read is { Tree: not null, WholeTable: true }) with { Kept = read.Tree };
+        return Tally(source, read is { Tree: not null, WholeTable: true }) with
+        {
+            Kept = read.Tree is { } tree ? new KeptResult(tree) : null,
+        };
     }
 
     private static RunTally Tally(CountingMftSource source, bool complete) =>

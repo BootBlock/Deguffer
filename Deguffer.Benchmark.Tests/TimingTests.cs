@@ -12,13 +12,39 @@ public sealed class TimingTests
 {
     private const int Held = 32 << 20;
 
+    // What else the heap figure moves by between two collections a moment apart: a few hundred
+    // bytes, measured, with room to spare and far below any size asserted here.
+    private const int Noise = 64 << 10;
+
+    // What one run leaves behind, as a shared pool would hold it.
+    private static byte[]? _leftBehind;
+
     [Fact]
     public void MeasuresWhatTheResultKeepsAndLetsItGo()
     {
-        var sample = Timing.Measure(_ => new RunTally(1, 0, Complete: true, Kept: new byte[Held]), CancellationToken.None);
+        var sample = Timing.Measure(_ => new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held])), CancellationToken.None);
 
-        Assert.InRange(sample.KeptBytes, Held, Held + (8 << 20));
+        Assert.InRange(sample.KeptBytes, Held - Noise, Held + Noise);
         Assert.Null(sample.Tally.Kept);
+    }
+
+    /// <summary>
+    /// A run leaves buffers in shared pools for the next one to rent, which outlive it but are not
+    /// what its result keeps. Here the run keeps such a buffer in a field of its own.
+    /// </summary>
+    [Fact]
+    public void WhatTheRunLeavesBehindIsNotCountedAsKept()
+    {
+        var sample = Timing.Measure(
+            _ =>
+            {
+                _leftBehind = new byte[Held];
+                return new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held / 4]));
+            },
+            CancellationToken.None);
+
+        Assert.InRange(sample.KeptBytes, (Held / 4) - Noise, (Held / 4) + Noise);
+        GC.KeepAlive(_leftBehind);
     }
 
     [Fact]

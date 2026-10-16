@@ -12,8 +12,8 @@ namespace Deguffer.Benchmark;
 /// own.
 /// </param>
 /// <param name="KeptBytes">
-/// The managed heap the route's result holds, measured after a full collection with the result
-/// still referenced, against the heap before the run. What a scan keeps for as long as it is shown,
+/// The managed heap the route's result holds: the heap after a full collection with the result
+/// still referenced, less the heap after one without it. What a scan keeps for as long as it is shown,
 /// which the peak working set cannot say: that counts what the run threw away too. Zero for a route
 /// that keeps nothing.
 /// </param>

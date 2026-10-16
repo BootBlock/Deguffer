@@ -130,7 +130,7 @@ public sealed class TableRoutesTests
         Assert.True(tally.Complete);
         Assert.Equal(Records, tally.Items);
 
-        var tree = Assert.IsType<ExploreTree>(tally.Kept);
+        var tree = Assert.IsType<ExploreTree>(tally.Kept?.Result);
         Assert.Equal($@"{Drive}:\folder", tree.RootPath);
         Assert.Equal(2, tree.NodeCount);
         Assert.Equal(4000, tree.TotalLength);

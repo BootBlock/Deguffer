@@ -17,4 +17,4 @@ namespace Deguffer.Benchmark;
 /// What the route built and a scan would keep, held only until <see cref="Timing"/> has measured
 /// it (<see cref="RunSample.KeptBytes"/>), or null for a route that keeps nothing.
 /// </param>
-internal readonly record struct RunTally(long Items, long BytesRead, bool Complete, int PeakListings = 0, object? Kept = null);
+internal readonly record struct RunTally(long Items, long BytesRead, bool Complete, int PeakListings = 0, KeptResult? Kept = null);
