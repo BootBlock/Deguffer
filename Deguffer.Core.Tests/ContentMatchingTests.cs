@@ -23,7 +23,7 @@ public sealed class ContentMatchingTests
     public async Task TwoVolumesOnOneSpinningDiskShareOneReader()
     {
         var queries = new FakeStorageQueries().Volume(@"X:\", 0).Volume(@"Y:\", 0).Disk(0, Sata, seekPenalty: true);
-        var reads = new HeldReads(hold: TimeSpan.FromMilliseconds(5));
+        using var reads = new HeldReads(hold: TimeSpan.FromMilliseconds(5));
 
         await Matching(queries, reads.Read).MatchAsync(
             [Group(@"X:\", 1000, 8), Group(@"Y:\", 2000, 8)], MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
@@ -64,18 +64,40 @@ public sealed class ContentMatchingTests
 
     /// <summary>
     /// A solid-state disk is read by several readers, up to the bound and no further. Each read is held
-    /// until the bound's worth are running, or long enough that they would have been.
+    /// until the bound's worth are running, or long enough that they would have been, and then for a
+    /// while longer, in which a reader past the bound would have started too.
     /// </summary>
     [Fact]
     public async Task ASolidStateDiskIsReadByTheBoundAndNoMore()
     {
         var queries = new FakeStorageQueries().Volume(@"X:\", 1).Disk(1, Nvme, seekPenalty: false);
-        var reads = new HeldReads(hold: TimeSpan.FromMilliseconds(20));
+        using var reads = new HeldReads(hold: TimeSpan.FromMilliseconds(20), gather: ReadingLanes.SolidStateReaders);
 
         await Matching(queries, reads.Read).MatchAsync(
             [Group(@"X:\", 1000, 3 * ReadingLanes.SolidStateReaders)], MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
 
         Assert.Equal(ReadingLanes.SolidStateReaders, reads.Peak);
+    }
+
+    /// <summary>
+    /// A read blocks its thread for as long as the disk takes, and the pool has as many threads as the
+    /// machine has processors until it finds itself starved, so a lane read there is read by fewer
+    /// than its bound, and holds the threads the rest of the process's pool work waits for.
+    /// </summary>
+    [Fact]
+    public async Task NoFileIsReadOnThePool()
+    {
+        var queries = new FakeStorageQueries()
+            .Volume(@"X:\", 1).Disk(1, Nvme, seekPenalty: false)
+            .Volume(@"Y:\", 2).Disk(2, Sata, seekPenalty: true);
+        using var reads = new HeldReads(hold: TimeSpan.FromMilliseconds(1));
+
+        await Matching(queries, reads.Read).MatchAsync(
+            [Group(@"X:\", 1000, 3 * ReadingLanes.SolidStateReaders), Group(@"Y:\", 2000, 4)],
+            MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
+
+        Assert.Equal((3 * ReadingLanes.SolidStateReaders) + 4, reads.Count);
+        Assert.Equal(0, reads.OnThePool);
     }
 
     /// <summary>
@@ -85,7 +107,7 @@ public sealed class ContentMatchingTests
     [Fact]
     public async Task AVolumeWhoseDisksAreUnknownIsReadByOne()
     {
-        var reads = new HeldReads(hold: TimeSpan.FromMilliseconds(5));
+        using var reads = new HeldReads(hold: TimeSpan.FromMilliseconds(5));
 
         await Matching(new FakeStorageQueries(), reads.Read).MatchAsync(
             [Group(@"X:\", 1000, 6)], MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
@@ -121,25 +143,50 @@ public sealed class ContentMatchingTests
         return new ContentReading(ContentReadResult.Read, checksum.Finish());
     }
 
-    /// <summary>Reads that each take a while, counting how many ran at once at most.</summary>
-    private sealed class HeldReads(TimeSpan hold)
+    /// <summary>
+    /// Reads that each take a while, counting how many ran at once at most. Where
+    /// <paramref name="gather"/> is more than one, every read first waits until that many are
+    /// running, or long enough that they would have been, so how soon each reader's thread starts
+    /// never decides how many are seen at once.
+    /// </summary>
+    private sealed class HeldReads(TimeSpan hold, int gather = 1) : IDisposable
     {
+        private static readonly TimeSpan GatherAtMost = TimeSpan.FromSeconds(10);
+
+        private readonly ManualResetEventSlim _gathered = new(initialState: false);
         private int _running;
         private int _peak;
         private int _count;
+        private int _onThePool;
 
         public int Peak => Volatile.Read(ref _peak);
 
         public int Count => Volatile.Read(ref _count);
+
+        public int OnThePool => Volatile.Read(ref _onThePool);
+
+        public void Dispose() => _gathered.Dispose();
 
         public ContentReading Read(DuplicateCandidate file, ContentPart part, Checksum checksum, CancellationToken ct)
         {
             var running = Interlocked.Increment(ref _running);
             Interlocked.Increment(ref _count);
 
+            if (Thread.CurrentThread.IsThreadPoolThread)
+            {
+                Interlocked.Increment(ref _onThePool);
+            }
+
             for (var peak = Peak; running > peak; peak = Peak)
             {
                 Interlocked.CompareExchange(ref _peak, running, peak);
+            }
+
+            // Once, for the first reads: the rest only need holding, and a lane read by fewer than
+            // were asked for waits out the limit once rather than at every read.
+            if (running >= gather || !_gathered.Wait(GatherAtMost, ct))
+            {
+                _gathered.Set();
             }
 
             Thread.Sleep(hold);

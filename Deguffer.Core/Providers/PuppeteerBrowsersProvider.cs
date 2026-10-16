@@ -53,7 +53,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes: volumes)
         => _liveTrees = liveTrees ?? LiveTreeInspector.Default;
 

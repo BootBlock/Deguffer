@@ -2,6 +2,7 @@ using System.Collections;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
+using Deguffer.Core.Scanning.Mft;
 using Microsoft.Win32;
 
 namespace Deguffer.Core.Safety;
@@ -109,6 +110,16 @@ public interface IUserEnvironment
     /// employer, and Windows writes it into owner and process messages a report quotes.</para>
     /// </summary>
     string DomainName { get; }
+
+    /// <summary>
+    /// Opens this machine's volume file tables, for §5.5's fast route, where the process is allowed to.
+    ///
+    /// <para>Part of the machine rather than of the scanner, so a scanner built for an environment reads
+    /// that environment's volumes. Run elevated, a scanner that found the real tables for itself would
+    /// read the disk under a test's fixture instead of the fixture, which is what a build agent's
+    /// administrator account does.</para>
+    /// </summary>
+    IMftSourceFactory VolumeTables { get; }
 
     /// <summary>
     /// Resolve an executable on <c>PATH</c>, or null if it is not installed. A file Windows will not
@@ -327,6 +338,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
     public string MachineName { get; } = Environment.MachineName;
 
     public string DomainName { get; } = Environment.UserDomainName;
+
+    public IMftSourceFactory VolumeTables => VolumeMftSourceFactory.Default;
 
     public void Invalidate() => _block = null;
 

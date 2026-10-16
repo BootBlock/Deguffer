@@ -52,7 +52,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             servicing: servicing)
     {
         _roots =

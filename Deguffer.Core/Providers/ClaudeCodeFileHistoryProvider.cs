@@ -91,7 +91,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;

@@ -140,7 +140,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default) =>
+            scanner) =>
         _declarations = declarations ?? new RowDeclarations();
 
     public override string Id => "epic-launcher-webcache";

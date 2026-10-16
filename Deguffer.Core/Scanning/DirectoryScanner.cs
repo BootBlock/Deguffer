@@ -20,18 +20,22 @@ public sealed class DirectoryScanner : IDirectoryScanner
     private readonly ParallelEnumerationScanner _fallback;
     private readonly ScanTuner _tuner;
 
+    /// <param name="sources">
+    /// Opens each volume's table. Never defaulted, so no scanner reads this machine's tables unless
+    /// it was handed them, as <see cref="CreateDefault"/> hands it an environment's.
+    /// </param>
     /// <param name="tuning">
     /// The route the user allows and the values each read runs with, asked as each measurement
     /// starts. <see cref="ScanTuner.Shipped"/> where none is given.
     /// </param>
     public DirectoryScanner(
-        IMftSourceFactory? sources = null,
+        IMftSourceFactory sources,
         ScanEstimateCache? estimates = null,
         ParallelEnumerationScanner? fallback = null,
         ScanTuner? tuning = null)
     {
         _tuner = tuning ?? ScanTuner.Shipped;
-        _volumes = new MftVolumeIndexCache(sources ?? VolumeMftSourceFactory.Default, _tuner);
+        _volumes = new MftVolumeIndexCache(sources, _tuner);
         _estimates = estimates;
         _fallback = fallback ?? new ParallelEnumerationScanner(_tuner);
     }
@@ -44,10 +48,23 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// provider would rebuild it three times over, making the MFT route slower than the walk it
     /// replaces.
     /// </summary>
-    public static DirectoryScanner Default { get; } = CreateDefault(UserEnvironment.Current);
+    private static DirectoryScanner Default { get; } = CreateDefault(UserEnvironment.Current);
 
+    /// <summary>
+    /// A scanner of the machine <paramref name="environment"/> describes: its volumes' tables, and
+    /// sizes remembered where it keeps its application data.
+    /// </summary>
     public static DirectoryScanner CreateDefault(IUserEnvironment environment, ScanTuner? tuning = null) =>
-        new(VolumeMftSourceFactory.Default, new ScanEstimateCache(environment), tuning: tuning);
+        new(environment.VolumeTables, new ScanEstimateCache(environment), tuning: tuning);
+
+    /// <summary>
+    /// The scanner a provider or a planner given only <paramref name="environment"/> measures with.
+    /// <see cref="Default"/> for this machine, which every <see cref="UserEnvironment"/> describes, so
+    /// the one index stays shared. Any other environment is a machine of its caller's own, a test's
+    /// fixture among them, and gets a scanner of that machine rather than the disks underneath it.
+    /// </summary>
+    public static DirectoryScanner For(IUserEnvironment environment) =>
+        environment is UserEnvironment ? Default : CreateDefault(environment);
 
     public async ValueTask<ScanResult> MeasureAsync(
         string path,

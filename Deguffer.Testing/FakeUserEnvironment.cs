@@ -1,4 +1,6 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 using Microsoft.Win32;
 
 namespace Deguffer.Testing;
@@ -113,6 +115,12 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public const string Domain = "TESTDOMAIN";
 
     public string DomainName { get; } = Domain;
+
+    /// <summary>
+    /// No table to read, as an unelevated process finds, unless a test sets one, so whether the suite
+    /// runs elevated changes nothing a test measures.
+    /// </summary>
+    public IMftSourceFactory VolumeTables { get; set; } = FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated);
 
     /// <summary>
     /// Pretend the account is unidentifiable, which is how a provider that keys on the SID is shown

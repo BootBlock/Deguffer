@@ -65,7 +65,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             cloud: cloud)
     {
         _cloud = cloud;

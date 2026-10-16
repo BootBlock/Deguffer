@@ -43,7 +43,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             servicing: servicing)
     {
         system ??= SystemDirectories.Current;

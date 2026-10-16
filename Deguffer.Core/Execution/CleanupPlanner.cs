@@ -86,8 +86,9 @@ public sealed class CleanupPlanner
     /// </param>
     /// <param name="tuning">
     /// The route and the read sizes the user chose on the Settings page, which every provider's
-    /// measurement runs with. Without it every provider shares <see cref="DirectoryScanner.Default"/>
-    /// at the shipped values, as a test or the Explore page's provider list wants.
+    /// measurement runs with. Without it every provider shares the scanner of
+    /// <paramref name="environment"/> at the shipped values (<see cref="DirectoryScanner.For"/>), as a
+    /// test or the Explore page's provider list wants.
     /// </param>
     /// <param name="scope">
     /// What the providers' declarations will be asked about, for a discovery that need not look
@@ -103,9 +104,9 @@ public sealed class CleanupPlanner
         environment ??= UserEnvironment.Current;
         var roots = new SourceRootStore(environment);
 
-        // One scanner for every provider, as DirectoryScanner.Default is one: its volume index is the
+        // One scanner for every provider, as this machine's shared one is: its volume index is the
         // whole cost of the fast path, and an unshared scanner per provider would rebuild it for each.
-        var scanner = tuning is null ? DirectoryScanner.Default : DirectoryScanner.CreateDefault(environment, tuning);
+        var scanner = tuning is null ? DirectoryScanner.For(environment) : DirectoryScanner.CreateDefault(environment, tuning);
         var hardLinks = tuning is null ? HardLinkAwareScanner.Default : new HardLinkAwareScanner(tuning);
 
         // One discovery for every provider that searches the user's own folders, and one live-tree

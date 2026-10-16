@@ -1,5 +1,7 @@
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -180,6 +182,8 @@ public class CrashLogTests
         public string MachineName => string.Empty;
 
         public string DomainName => string.Empty;
+
+        public IMftSourceFactory VolumeTables { get; } = FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated);
 
         public string? FindExecutable(string command) => null;
 

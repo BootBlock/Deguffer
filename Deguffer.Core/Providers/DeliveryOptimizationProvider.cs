@@ -51,7 +51,7 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _system = system ?? SystemDirectories.Current;
         _cache = new DeliveryOptimizationCache(_system, Runner);

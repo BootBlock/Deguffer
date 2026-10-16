@@ -101,7 +101,7 @@ public sealed partial class ExplorePage : Page
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
         // whatever the framework's initialisation order does next.
         ViewModel = new ExploreViewModel(
-            new ExploreScanner(tuning: App.ScanTuning),
+            new ExploreScanner(UserEnvironment.Current.VolumeTables, tuning: App.ScanTuning),
             VolumeInventory.Current,
             WindowsHiddenSpace.Default,
             TimeProvider.System,

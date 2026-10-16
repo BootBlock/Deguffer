@@ -57,7 +57,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _root = Path.Combine(Environment.LocalAppData, ".dartServer");
         _declarations = declarations ?? new RowDeclarations();

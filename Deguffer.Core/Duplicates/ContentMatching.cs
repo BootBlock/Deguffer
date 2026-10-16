@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Duplicates;
@@ -19,9 +20,10 @@ internal delegate ContentReading ReadContent(DuplicateCandidate file, ContentPar
 /// is read, and a group of the last stage is passed on then, so results reach the page while the
 /// search runs. Nothing is passed on once the search is stopped.</para>
 ///
-/// <para><b>Read in lanes, one a disk</b> (<see cref="ReadingLanes"/>), each bounded, all at once.
-/// A file that could not be read, or was not the identified file by the time it was, is left out
-/// and counted; an error never makes two files the same.</para>
+/// <para><b>Read in lanes, one a disk</b> (<see cref="ReadingLanes"/>), each bounded, all at once,
+/// each on threads of its own (<see cref="LaneReaders{T}"/>) rather than the pool's. A file that
+/// could not be read, or was not the identified file by the time it was, is left out and counted;
+/// an error never makes two files the same.</para>
 /// </summary>
 internal sealed class ContentMatching
 {
@@ -102,29 +104,32 @@ internal sealed class ContentMatching
 
         try
         {
-            await Task.WhenAll(lanes.Select(lane => Parallel.ForEachAsync(
-                lane.Files,
-                new ParallelOptions { MaxDegreeOfParallelism = lane.Readers, CancellationToken = ct },
-                (item, token) =>
+            void ReadOne((int Group, int File) item, CancellationToken token)
+            {
+                checksums[item.Group][item.File] = Read(groups[item.Group][item.File], part, algorithm, idle, token);
+
+                var finished = Interlocked.Increment(ref done);
+                var now = Environment.TickCount64;
+                var last = Volatile.Read(ref reported);
+
+                if (finished == total || (now - last >= ReportEveryMilliseconds && Interlocked.CompareExchange(ref reported, now, last) == last))
                 {
-                    checksums[item.Group][item.File] = Read(groups[item.Group][item.File], part, algorithm, idle, token);
+                    progress?.Report(new DuplicateSearchProgress(stage, finished, total));
+                }
 
-                    var finished = Interlocked.Increment(ref done);
-                    var now = Environment.TickCount64;
-                    var last = Volatile.Read(ref reported);
+                if (Interlocked.Decrement(ref unread[item.Group]) == 0)
+                {
+                    Settle(groups[item.Group], checksums[item.Group], part, criteria, confirmed, further, ct);
+                }
+            }
 
-                    if (finished == total || (now - last >= ReportEveryMilliseconds && Interlocked.CompareExchange(ref reported, now, last) == last))
-                    {
-                        progress?.Report(new DuplicateSearchProgress(stage, finished, total));
-                    }
-
-                    if (Interlocked.Decrement(ref unread[item.Group]) == 0)
-                    {
-                        Settle(groups[item.Group], checksums[item.Group], part, criteria, confirmed, further, ct);
-                    }
-
-                    return ValueTask.CompletedTask;
-                }))).ConfigureAwait(false);
+            await Task.WhenAll(lanes.Select(lane => WorkerThreads.Shared.RunAsync(
+                () =>
+                {
+                    LaneReaders<(int Group, int File)>.Read(lane, ReadOne, ct);
+                    return true;
+                },
+                ct))).ConfigureAwait(false);
         }
         finally
         {

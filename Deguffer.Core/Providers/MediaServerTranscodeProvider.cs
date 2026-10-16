@@ -37,7 +37,7 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
         IUserEnvironment environment,
         IProcessRunner runner,
         IProcessInspector inspector,
-        IDirectoryScanner scanner,
+        IDirectoryScanner? scanner,
         IVolumeInventory? volumes)
         : base(environment, runner, inspector, scanner, volumes: volumes)
     {

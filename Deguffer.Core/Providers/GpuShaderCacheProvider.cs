@@ -132,7 +132,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _direct3DCache = Path.Combine(Environment.LocalAppData, Direct3DCacheName);
     }

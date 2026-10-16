@@ -52,7 +52,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default) =>
+            scanner) =>
         _systemDirectories = systemDirectories ?? SystemDirectories.Current;
 
     public override string Id => "conda";
