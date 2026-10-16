@@ -71,6 +71,18 @@ public sealed class BenchmarkRequestTests
         Assert.Null(BenchmarkRequest.Parse(["sources", "relative", "--read-size", "1024"], out _));
     }
 
+    /// <summary>The measure route walks a folder as the walk route does, so it takes one and the walk's values.</summary>
+    [Fact]
+    public void TheMeasureRouteTakesAFolderAndTheWalksValues()
+    {
+        var request = BenchmarkRequest.Parse(["measure", "relative", "--threads", "16", "--listing-buffer", "64"], out _);
+
+        Assert.Equal(Route.Measure, request!.Route);
+        Assert.Equal(Path.GetFullPath("relative"), request.Path);
+        Assert.Equal(new WalkTuning(16, 64 * 1024), request.Walk);
+        Assert.Null(BenchmarkRequest.Parse(["measure", "relative", "--read-by", "name"], out _));
+    }
+
     [Fact]
     public void TheRunsCanBeChosen() =>
         Assert.Equal(3, BenchmarkRequest.Parse(["walk", @"C:\", "--runs", "3"], out _)!.Runs);

@@ -43,6 +43,7 @@ dotnet build Deguffer.Benchmark -c Release
 cd Deguffer.Benchmark\bin\Release\net10.0-windows10.0.19041.0
 
 Deguffer.Benchmark walk C:\Users\<user>\source --runs 5
+Deguffer.Benchmark measure C:\Users\<user>\source --threads 16
 Deguffer.Benchmark sources C:\Users\<user>\source --runs 5
 Deguffer.Benchmark links C:\Users\<user>\AppData\Local\pnpm\store --read-by handle
 Deguffer.Benchmark table C
@@ -52,6 +53,9 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
+- `measure <folder>` measures a folder as an unelevated scan does: the same walk, and what the
+  scan adds up for each entry it lists. Time it beside `walk` on the same folder to see what that
+  work costs.
 - `explorewalk <folder>` builds the Explore tree for a folder by walking it, as an unelevated
   Explore does. `--snapshots on|off` sets whether it also assembles the pictures of the tree so far
   that Explore draws while it walks. The default is on. Time it both ways to see what they cost.
@@ -68,7 +72,7 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 - `--runs N` runs the route N times. The default is 5.
 - `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
   how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan
-  uses, and only `walk`, `explorewalk` and `sources` take them.
+  uses, and only `walk`, `measure`, `explorewalk` and `sources` take them.
 - `--read-size KiB`, `--reads-in-flight N` and `--parse-threads N` set how many KiB of records each
   read of the file table asks for (4 to 16384), how many reads are outstanding at once (1 to 32),
   and how many threads parse what arrives (1 to 64). They default to what a scan uses on a drive of
