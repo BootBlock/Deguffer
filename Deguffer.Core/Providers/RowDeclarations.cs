@@ -30,17 +30,18 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Asked while a plan is assembled, never from a walk or from a declaration.</b> Answering
 /// reads every row's <see cref="ICleanupProvider.ToolRoots"/>, and a row may build those from its own
 /// walk, so a question asked from inside either would ask a row for the declaration it is still
-/// building. <see cref="LevelWalk.Survivors"/> is the one place a walk's children meet it.</para>
+/// building. <see cref="LevelWalk.SurvivorsAsync"/> is the one place a walk's children meet it.</para>
 ///
-/// <para><b>Asked from several plans at once.</b> A pass plans several rows together, and the first
-/// question reads every row's declaration, which takes seconds where a row builds its own from a
-/// walk. A row that asks meanwhile waits for that one reading rather than starting a second.</para>
+/// <para><b>Asked from several plans at once, and awaited.</b> A pass plans several rows together,
+/// and the first question reads every row's declaration, which takes seconds where a row builds its
+/// own from a walk. That reading runs on a thread of the walk's own (<see cref="DeclaredRoots"/>), so
+/// neither the plan that asked first nor one that asks meanwhile holds a pool thread for it: each
+/// awaits the one reading rather than starting a second.</para>
 /// </summary>
 public sealed class RowDeclarations
 {
-    private readonly Lock _gate = new();
+    private readonly PassMemo<Task<Dictionary<string, List<ToolRoot>>>> _byFolder = new();
     private IReadOnlyList<ICleanupProvider> _rows = [];
-    private Dictionary<string, List<ToolRoot>>? _byFolder;
 
     /// <summary>
     /// The rows whose declarations are consulted. <see cref="Execution.CleanupPlanner"/> admits its
@@ -51,24 +52,15 @@ public sealed class RowDeclarations
     {
         ArgumentNullException.ThrowIfNull(rows);
 
-        lock (_gate)
-        {
-            _rows = rows;
-            _byFolder = null;
-        }
+        Volatile.Write(ref _rows, rows);
+        _byFolder.Forget();
     }
 
     /// <summary>
     /// Drop the index. The rows rebuild their declarations for each planning pass, so an index kept
     /// across passes would miss a folder that appeared between them.
     /// </summary>
-    public void Invalidate()
-    {
-        lock (_gate)
-        {
-            _byFolder = null;
-        }
-    }
+    public void Invalidate() => _byFolder.Forget();
 
     /// <summary>
     /// Whether some row declares <paramref name="folder"/>, a directory that is not a link, as one it
@@ -76,62 +68,61 @@ public sealed class RowDeclarations
     /// </summary>
     /// <param name="ct">
     /// Checked between rows while the set is read. A row's declaration cannot be stopped part-way, but
-    /// the first question in a pass reads every row's, inside the plan of whichever row asked.
+    /// the first question in a pass reads every row's, for whichever row asked.
     /// </param>
-    public bool OfferedByARow(string folder, CancellationToken ct = default) =>
+    public async Task<bool> OfferedByARowAsync(string folder, CancellationToken ct = default) =>
         Path.GetDirectoryName(folder) is { } parent
         && LongPath.Entry(parent) is { } key
-        && ByFolder(ct).TryGetValue(key, out var roots)
+        && (await ByFolderAsync(ct).ConfigureAwait(false)).TryGetValue(key, out var roots)
         && roots.Exists(root => root.Recognises(new ToolRootChild(Path.GetFileName(folder), ChildKind.Folder)));
 
     /// <summary>Built once per planning pass (G4), because a plan asks once per spared child.</summary>
-    private Dictionary<string, List<ToolRoot>> ByFolder(CancellationToken ct)
+    private async Task<Dictionary<string, List<ToolRoot>>> ByFolderAsync(CancellationToken ct)
     {
-        if (Volatile.Read(ref _byFolder) is { } built)
-        {
-            return built;
-        }
-
-        // A row whose declaration asked this would recurse until the stack ran out, which ends the
-        // process with nothing to say why. Held by this thread is that recursion, because a
-        // declaration is read on the thread that asked; held by another is a plan waiting its turn.
-        if (_gate.IsHeldByCurrentThread)
+        // A row whose declaration asked this would wait for the reading it is part of, which never
+        // ends and says nothing about why.
+        if (DeclaredRoots.IsBeingRead)
         {
             throw new InvalidOperationException(
                 "A row asked what other rows offer while its own declaration was being read.");
         }
 
-        lock (_gate)
+        while (true)
         {
-            if (_byFolder is { } raced)
+            var reading = _byFolder.Get(() => IndexAsync(Volatile.Read(ref _rows), ct));
+
+            try
             {
-                return raced;
+                return await reading.WaitAsync(ct).ConfigureAwait(false);
             }
-
-            built = new Dictionary<string, List<ToolRoot>>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var row in _rows)
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                ct.ThrowIfCancellationRequested();
-
-                foreach (var root in row.ToolRoots)
-                {
-                    if (LongPath.Configured(root.Path) is not { } key)
-                    {
-                        continue;
-                    }
-
-                    if (!built.TryGetValue(key, out var roots))
-                    {
-                        built[key] = roots = [];
-                    }
-
-                    roots.Add(root);
-                }
+                // The plan that started the reading was stopped, and this one was not. The memo keeps
+                // no stopped reading, so asking again starts one for this plan.
             }
-
-            Volatile.Write(ref _byFolder, built);
-            return built;
         }
+    }
+
+    private static async Task<Dictionary<string, List<ToolRoot>>> IndexAsync(
+        IReadOnlyList<ICleanupProvider> rows, CancellationToken ct)
+    {
+        var byFolder = new Dictionary<string, List<ToolRoot>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var root in await DeclaredRoots.ReadAsync(rows, ct).ConfigureAwait(false))
+        {
+            if (LongPath.Configured(root.Path) is not { } key)
+            {
+                continue;
+            }
+
+            if (!byFolder.TryGetValue(key, out var roots))
+            {
+                byFolder[key] = roots = [];
+            }
+
+            roots.Add(root);
+        }
+
+        return byFolder;
     }
 }

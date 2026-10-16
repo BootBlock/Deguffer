@@ -133,7 +133,8 @@ public interface ICleanupProvider
     /// <para>Read synchronously, and a provider may keep the answer until
     /// <see cref="InvalidateCaches"/>. A declaration that needs a subprocess cannot be made here, and
     /// belongs in <see cref="DiscoverToolRootsAsync"/>, which is asked again each time Explore builds
-    /// its policy.</para>
+    /// its policy. One built from a walk may be, so async code reads every declaration through
+    /// <see cref="DeclaredRoots"/>, never from a thread of the pool.</para>
     /// </summary>
     IReadOnlyList<ToolRoot> ToolRoots { get; }
 

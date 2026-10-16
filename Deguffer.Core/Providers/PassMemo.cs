@@ -6,8 +6,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Why not <c>_value ??= Work()</c>.</b> A planning pass plans several providers at once,
 /// and a provider's cache is read from threads other than its own: the temporary-folder row asks its
-/// tenants what they claim, and <see cref="RowDeclarations"/> reads every row's declaration from the
-/// thread of whichever row asked first. Two threads that both found the field empty would both do the
+/// tenants what they claim, and <see cref="RowDeclarations"/> reads every row's declaration for
+/// whichever row asked first, on a thread of the walk's own. Two threads that both found the field empty would both do the
 /// work, a walk of the disk or a run of a tool, and could each act on a different answer within the
 /// one pass, so two rows would disagree about what the disk held. A field of a struct type is worse:
 /// its write is not one step, so a reader could see half of each answer.</para>

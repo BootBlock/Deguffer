@@ -202,7 +202,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
         var walk = CacheLevelWalk.Under(Levels, home, ct);
 
-        var spared = walk.Survivors(_declarations, ct);
+        var spared = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
 
         List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
 

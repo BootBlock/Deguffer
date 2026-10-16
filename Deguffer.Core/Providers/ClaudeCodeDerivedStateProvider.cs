@@ -305,6 +305,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         var effective = MinimumAge.Stricter(keep, survey.Looked);
 
         var (steps, measured) = await PlanDeletionsAsync(targets, effective, ct).ConfigureAwait(false);
+        var spared = await survey.Root.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -325,7 +326,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths =
             [
-                .. Protect([.. Survivors(survey, ct)]),
+                .. Protect([.. Survivors(survey, spared)]),
 
                 // Measured during planning, so each was there when the plan was made: the claim
                 // CleanupPlan.NarrowedTo makes for a step the user declined.
@@ -345,7 +346,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// begin the same way, every file at its top level, every folder at its top level, and what each
     /// kind of leftover left alone.
     /// </summary>
-    private IEnumerable<(string Path, string Reason)> Survivors(Survey survey, CancellationToken ct)
+    /// <param name="spared">What the walk of the folder's top level spared that no other row offers.</param>
+    private IEnumerable<(string Path, string Reason)> Survivors(Survey survey, IReadOnlyList<(string Path, string Reason)> spared)
     {
         yield return (survey.Evidence.Home, "Claude Code's own folder must survive — only recognised leftovers inside it are removed.");
 
@@ -362,7 +364,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             yield return (LongPath.Display(file.FullName), NamedFiles.GetValueOrDefault(file.Name, RootFileReason));
         }
 
-        foreach (var survivor in survey.Root.Survivors(_declarations, ct).Concat(survey.Root.Declined))
+        foreach (var survivor in spared.Concat(survey.Root.Declined))
         {
             yield return survivor;
         }
