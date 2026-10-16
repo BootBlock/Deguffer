@@ -91,6 +91,11 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = WholeVolume(source);
+
+        // First, and bounded: every node is one the root reaches, so the walk to the root below
+        // ends for each of them.
+        Assert.Equal(Reachable(tree).Count, tree.NodeCount);
+
         var paths = Enumerable.Range(0, tree.NodeCount).Select(tree.PathOf).ToList();
 
         Assert.Single(paths, path => path == @"C:\$MFT");
@@ -592,6 +597,9 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
+
+        // First, and bounded, for the reason the test above gives.
+        Assert.Equal(Reachable(tree).Count, tree.NodeCount);
 
         Assert.All(
             Enumerable.Range(0, tree.NodeCount),
