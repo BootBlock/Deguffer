@@ -1,0 +1,301 @@
+name: Release
+
+# Manual-only: this never runs on push, on a pull request, or on a schedule. Publish a release by
+# opening the repository's "Actions" tab, selecting this workflow, and clicking "Run workflow".
+#
+# There is no version box. The version a release carries is the <Version> that
+# Directory.Build.props already declares, because that is the number the build stamps into every
+# assembly and the About page shows. Bumping it is an ordinary change that lands on main like any
+# other, and then this is dispatched. A version typed into a box here could disagree with the one
+# the binaries report, and nobody could then say which build a user is running.
+#
+# Deguffer deletes directories on other people's machines, so what this publishes has to be what
+# main tested. The run therefore refuses a commit that main does not contain, builds the solution
+# and runs every test against that commit in Release, and only then publishes. Dispatching
+# main releases its head. Dispatching an existing v* tag re-runs that release, which finishes one
+# that failed part-way and changes nothing once it is complete.
+on:
+  workflow_dispatch:
+
+# Least privilege. Only the release job, which pushes the tag and writes the Release, is given
+# contents: write.
+permissions:
+  contents: read
+
+# One release at a time, and a newer run queues behind an in-flight one rather than cancelling it.
+# A release cancelled between pushing its tag and publishing would leave a tag with a draft behind
+# it, which a re-run can finish but nothing should have to.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Decide what is being published before any time is spent building it.
+  resolve:
+    name: Resolve the release version
+    runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history, so the commit can be tested against main below.
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve, check and record the release version
+        id: resolve
+        shell: bash
+        run: |
+          # Ask MSBuild rather than reading the XML, so the number is the one the build evaluates.
+          version="$(dotnet msbuild Deguffer.Core/Deguffer.Core.csproj -getProperty:Version | tr -d '\r')"
+
+          # Refuse a malformed value here rather than letting it become a tag nothing can order.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error title=Malformed version::Directory.Build.props declares \"$version\", which is not a version this workflow can publish. Use MAJOR.MINOR.PATCH, optionally with a -prerelease suffix."
+            exit 1
+          fi
+
+          # Only what main contains is released. A branch that never landed was never gated by the
+          # review and the tests that landing requires, and a tag on it would put a release on
+          # history main does not have.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error title=Not on main::$GITHUB_SHA is not on main. Land the change on main, then dispatch main."
+            exit 1
+          fi
+
+          tag="v$version"
+          # Resolve to the commit the tag names. The tags this workflow pushes are annotated, so
+          # refs/tags/$tag is the tag object's own SHA and would never equal a commit. ^{} is the
+          # peeled ref, which exists only for an annotated tag, so fall back to the plain ref in case
+          # a lightweight one was pushed by hand.
+          existing="$(git ls-remote origin "refs/tags/$tag^{}" | cut -f1)"
+          if [ -z "$existing" ]; then
+            existing="$(git ls-remote origin "refs/tags/$tag" | cut -f1)"
+          fi
+
+          if [ -n "$existing" ] && [ "$existing" != "$GITHUB_SHA" ]; then
+            echo "::error title=Release version already published::Tag $tag already points at $existing, but this run is $GITHUB_SHA. Land a version bump in Directory.Build.props, or dispatch $tag itself to finish the release it names."
+            exit 1
+          fi
+
+          echo "Releasing $tag from $GITHUB_SHA."
+
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+
+  # The whole solution built and every test run against exactly the commit being released, on a
+  # clean machine whose only state is the checkout. Release, because that is the configuration the
+  # packages are built in.
+  gate:
+    name: Build and test
+    needs: resolve
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build Deguffer.sln --configuration Release
+
+      # --no-build is safe here only because a failed build has already stopped the job. After a
+      # failed build it would test the previous binaries and report them as passing.
+      - name: Test
+        run: dotnet test Deguffer.sln --configuration Release --no-build
+
+  # One self-contained build per processor, each published through its own profile in
+  # Deguffer.App/Properties/PublishProfiles, so a release is built the way a local publish is.
+  publish:
+    name: Publish ${{ matrix.rid }}
+    needs: [resolve, gate]
+    runs-on: windows-latest
+    strategy:
+      # A release ships every processor or none, so one failure stops the others.
+      fail-fast: true
+      matrix:
+        include:
+          - platform: x64
+            rid: win-x64
+            smoke: true
+          - platform: x86
+            rid: win-x86
+            smoke: true
+          # The runner is x64, so an ARM64 build cannot be started here.
+          - platform: ARM64
+            rid: win-arm64
+            smoke: false
+    env:
+      PACKAGE: Deguffer-${{ needs.resolve.outputs.version }}-${{ matrix.rid }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Published outside !Distribution on purpose. There, the build output and the publish output
+      # share one folder, so anything publish forgot to copy would still be present and the package
+      # would look complete. A separate folder holds only what publish wrote, which is what a user
+      # receives. That is how the missing resource index that once crashed the app at start-up was
+      # found, and it is why PublishGeneratedXamlArtefacts exists.
+      - name: Publish
+        run: >-
+          dotnet publish Deguffer.App/Deguffer.App.csproj
+          --configuration Release
+          -p:Platform=${{ matrix.platform }}
+          -p:PublishDir=${{ runner.temp }}\${{ env.PACKAGE }}\
+
+      # A packaging fault in a WinUI app does not fail the build. It shows only when the exe starts,
+      # as an exit with 0xC000027B before any window appears. Start the exe and require it to still
+      # be running a while later. Starting it changes nothing on the runner beyond the app's own
+      # settings, because Deguffer removes nothing until a user confirms a clean.
+      - name: Check the published app starts
+        if: matrix.smoke
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP "$env:PACKAGE\Deguffer.App.exe"
+          $process = Start-Process -FilePath $exe -PassThru
+          if ($process.WaitForExit(30000)) {
+              Write-Output ("::error title=Published app exited::{0} exited with 0x{1:X8} within 30 seconds of starting." -f $exe, $process.ExitCode)
+              exit 1
+          }
+          Stop-Process -Id $process.Id -Force
+          Write-Output "$exe was still running after 30 seconds."
+
+      # The archive holds one folder named after itself, so extracting it never scatters the app's
+      # several hundred files across whatever folder it was extracted into.
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path (Join-Path $env:RUNNER_TEMP $env:PACKAGE) -DestinationPath (Join-Path $env:RUNNER_TEMP "$env:PACKAGE.zip") -CompressionLevel Optimal
+
+      - name: Upload the package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.PACKAGE }}
+          path: ${{ runner.temp }}/${{ env.PACKAGE }}.zip
+          if-no-files-found: error
+          # Already compressed, so a second pass would cost time and save nothing.
+          compression-level: 0
+
+  # Record and publish what was built. This runs only once every package exists, so a tag means the
+  # release was built, gated and packaged, not merely attempted.
+  #
+  # The Release is written as a draft, given its packages, and only then published. A Release that
+  # failed while uploading would otherwise sit public with some of its packages missing. A re-run
+  # finds the draft, replaces its packages with this run's, and publishes it. A published Release is
+  # left alone, because a user may already hold its packages and the checksums it lists.
+  release:
+    name: Tag and publish the release
+    needs: [resolve, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download the packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: Deguffer-*
+          path: ${{ runner.temp }}/packages
+          merge-multiple: true
+
+      # A file a user can check a download against without trusting the page that served it.
+      - name: Write the checksums
+        working-directory: ${{ runner.temp }}/packages
+        run: |
+          sha256sum -- *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Tag the released commit
+        run: |
+          # The resolve job has already refused a tag of this name on any other commit.
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)" ]; then
+            echo "$TAG is already recorded for this commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Deguffer $VERSION, released by run $GITHUB_RUN_ID."
+          git push origin "refs/tags/$TAG"
+          echo "Recorded $TAG at $(git rev-parse HEAD)."
+
+      # Runs in the checkout, because the git calls below need it, and so names the packages by path.
+      - name: Publish the release
+        env:
+          GH_REPO: ${{ github.repository }}
+          PACKAGES: ${{ runner.temp }}/packages
+        run: |
+          # Listed rather than asked for by tag, so a release that does not exist yet reads as empty
+          # and any other failure, such as a refused token, stops the step instead of reading as
+          # "no release". The list includes drafts, because this job can write the repository.
+          state="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\") | if .draft then \"draft\" else \"published\" end")"
+          state="${state:-none}"
+
+          if [ "$state" = published ]; then
+            echo "$TAG is already published."
+            exit 0
+          fi
+
+          if [ "$state" = none ]; then
+            # The release before this one is the highest tag sorting below it, not the highest other
+            # tag. The two differ when this run finishes an older release, and the newer start tag
+            # would leave the notes empty. --refs drops the peeled ^{} entries annotated tags also
+            # publish. sort -V puts v1.0.0-rc.1 after v1.0.0, which at worst shortens the notes.
+            remote_tags="$(git ls-remote --tags --refs origin 'refs/tags/v*' | awk '{print $2}' | sed 's#refs/tags/##')"
+            previous="$({ echo "$remote_tags"; echo "$TAG"; } | sort -V -u | awk -v tag="$TAG" '$0 == tag { print prev; exit } { prev = $0 }')"
+
+            notes_args=(-f "tag_name=$TAG")
+            if [ -n "$previous" ]; then
+              notes_args+=(-f "previous_tag_name=$previous")
+            fi
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" "${notes_args[@]}" --jq .body > "$RUNNER_TEMP/notes.md"
+
+            {
+              echo "Download the zip for your processor, extract it, and run \`Deguffer.App.exe\`. Deguffer needs no installation and includes its own .NET runtime. It runs on Windows 10 (version 1809 or later) and Windows 11."
+              echo
+              echo "Most Windows PCs need \`win-x64\`. Choose \`win-arm64\` for an ARM processor, and \`win-x86\` only for 32-bit Windows."
+              echo
+              echo "The files are not code-signed, so Windows SmartScreen may warn you the first time you run Deguffer. \`SHA256SUMS.txt\` lists each zip's SHA-256 checksum."
+              echo
+              echo "Built from commit $(git rev-parse HEAD) by run $GITHUB_RUN_ID."
+              echo
+              cat "$RUNNER_TEMP/notes.md"
+            } > "$RUNNER_TEMP/body.md"
+
+            prerelease=()
+            case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+
+            # --verify-tag refuses to invent a tag, so this publishes the one the step above pushed.
+            gh release create "$TAG" --draft --verify-tag "${prerelease[@]}" \
+              --title "Deguffer $VERSION" --notes-file "$RUNNER_TEMP/body.md"
+          fi
+
+          # A draft left by an earlier run may hold some of that run's packages, which were built
+          # separately and do not match this run's checksums, so every file is replaced.
+          gh release upload "$TAG" --clobber -- "$PACKAGES"/*.zip "$PACKAGES/SHA256SUMS.txt"
+          gh release edit "$TAG" --draft=false
+          echo "Published $TAG."
