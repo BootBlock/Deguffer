@@ -56,40 +56,11 @@ internal static class ReadingLanes
         // Asked once a volume, and remembered by the cache for the life of the app.
         return
         [
-            .. SharingADisk([.. byVolume.Values.Select(held => (held.Volume, media.Of(held.Volume)))])
+            .. DiskSharing.Sets([.. byVolume.Values.Select(held => (held.Volume, Media: media.Of(held.Volume)))], volume => volume.Media.PhysicalDisks)
                 .Select(shared => new ReadingLane<T>(
                     shared.All(volume => IsSolidState(volume.Media)) ? SolidStateReaders : 1,
                     [.. shared.SelectMany(volume => byVolume[volume.Volume.RootPath].Files)])),
         ];
-    }
-
-    /// <summary>The volumes in sets, each set every volume that shares a disk with another in it.</summary>
-    private static IEnumerable<IReadOnlyList<(LocalVolume Volume, VolumeMedia Media)>> SharingADisk(
-        IReadOnlyList<(LocalVolume Volume, VolumeMedia Media)> volumes)
-    {
-        var setOf = Enumerable.Range(0, volumes.Count).ToArray();
-        Dictionary<int, int> firstOnDisk = [];
-
-        int Find(int volume) => setOf[volume] == volume ? volume : setOf[volume] = Find(setOf[volume]);
-
-        for (var i = 0; i < volumes.Count; i++)
-        {
-            foreach (var disk in volumes[i].Media.PhysicalDisks)
-            {
-                if (firstOnDisk.TryGetValue(disk, out var other))
-                {
-                    setOf[Find(i)] = Find(other);
-                }
-                else
-                {
-                    firstOnDisk[disk] = i;
-                }
-            }
-        }
-
-        return Enumerable.Range(0, volumes.Count)
-            .GroupBy(Find)
-            .Select(set => (IReadOnlyList<(LocalVolume, VolumeMedia)>)[.. set.Select(i => volumes[i])]);
     }
 
     /// <summary>

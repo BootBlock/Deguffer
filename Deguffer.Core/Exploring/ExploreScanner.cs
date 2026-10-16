@@ -70,8 +70,13 @@ public sealed class ExploreScanner(
     /// it: a caller asking about several folders has no more business knowing there are two routes
     /// than one asking about a single folder.</para>
     ///
+    /// <para><b>Disks at once, volumes on one disk in turn.</b> The folders on each set of physical
+    /// disks are scanned at the same time as those on every other set (<see cref="FolderPipelines"/>),
+    /// so folders on two disks cost the longer of the two scans, not their sum.</para>
+    ///
     /// <para><paramref name="progress"/> is told counts only, never a snapshot: a caller asking
-    /// about several folders draws nothing until it has every one.</para>
+    /// about several folders draws nothing until it has every one. The counts are those of every
+    /// pass added together (<see cref="FolderScanProgress"/>).</para>
     /// </summary>
     /// <param name="folders">Full paths of folders, in either form <see cref="Safety.LongPath"/> produces.</param>
     /// <returns>One scan per folder, in the order they were asked for.</returns>
@@ -100,79 +105,145 @@ public sealed class ExploreScanner(
     {
         ArgumentNullException.ThrowIfNull(folders);
 
-        return await WorkerThreads.Shared.RunAsync(() => ScanFolders(folders, unlisted, progress, ct), ct).ConfigureAwait(false);
-    }
+        // Each scan is a look at the machine of its own, as in Scan. Planned on a worker thread,
+        // because learning which disks a volume is on opens its devices and waits on them.
+        var pipelines = await WorkerThreads.Shared.RunAsync(
+            () =>
+            {
+                _tuning.Invalidate();
+                return FolderPipelines.Of(folders, _tuning.StorageOf);
+            },
+            ct).ConfigureAwait(false);
 
-    private ScannedFolder[] ScanFolders(
-        IReadOnlyList<string> folders,
-        IReadOnlyList<LeavesUnlisted?>? unlisted,
-        IProgress<ExploreProgress>? progress,
-        CancellationToken ct)
-    {
-        var scans = new ScannedFolder?[folders.Count];
-        var reasons = new FallbackReason[folders.Count];
-        var onVolumes = new Dictionary<char, List<(int Index, VolumePath Path)>>();
+        var scans = new ScannedFolder[folders.Count];
+        var sum = progress is null ? null : new FolderScanProgress(progress);
 
-        _tuning.Invalidate();
-
-        for (var i = 0; i < folders.Count; i++)
+        if (pipelines.Count == 1)
         {
-            if (!VolumePath.TryParse(folders[i], out var volume))
-            {
-                reasons[i] = FallbackReason.VolumeNotAddressable;
-                continue;
-            }
-
-            if (!onVolumes.TryGetValue(volume.DriveLetter, out var held))
-            {
-                onVolumes[volume.DriveLetter] = held = [];
-            }
-
-            held.Add((i, volume));
+            await WorkerThreads.Shared.RunAsync(
+                () =>
+                {
+                    ScanPipeline(pipelines[0], folders, unlisted, scans, sum, ct);
+                    return true;
+                },
+                ct).ConfigureAwait(false);
+            return scans;
         }
 
-        foreach (var (letter, held) in onVolumes)
+        await ScanPipelinesAtOnce(pipelines, folders, unlisted, scans, sum, ct).ConfigureAwait(false);
+        return scans;
+    }
+
+    /// <summary>
+    /// Run every pipeline at once, each on a worker thread of its own, as
+    /// <see cref="WorkerThreads"/> says a pass must.
+    ///
+    /// <para><b>Bounded by the disks.</b> There is one pipeline for each set of disks the folders are
+    /// on, so never more than there are drive letters and shares asked for, and each pass in one
+    /// bounds its own threads by its volume's tuning, as it does when it runs alone.</para>
+    ///
+    /// <para><b>One failure stops the rest.</b> The search has failed once any pipeline has, and the
+    /// others would otherwise read whole volumes for a result nobody receives. What failed is what is
+    /// thrown, never the stop it caused in the others.</para>
+    /// </summary>
+    private async Task ScanPipelinesAtOnce(
+        IReadOnlyList<IReadOnlyList<VolumeFolders>> pipelines,
+        IReadOnlyList<string> folders,
+        IReadOnlyList<LeavesUnlisted?>? unlisted,
+        ScannedFolder[] scans,
+        FolderScanProgress? sum,
+        CancellationToken ct)
+    {
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        Task<bool>[] running =
+        [
+            .. pipelines.Select(pipeline => WorkerThreads.Shared.RunAsync(
+                () =>
+                {
+                    var finished = false;
+
+                    try
+                    {
+                        ScanPipeline(pipeline, folders, unlisted, scans, sum, stopping.Token);
+                        finished = true;
+                    }
+                    finally
+                    {
+                        if (!finished)
+                        {
+                            stopping.Cancel();
+                        }
+                    }
+
+                    return true;
+                },
+                stopping.Token)),
+        ];
+
+        // A pipeline the stop reached ends cancelled, not faulted, because every pass throws for the
+        // token it was given, and Task.WhenAll throws a failure in preference to a cancellation.
+        await Task.WhenAll(running).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// One pipeline's volumes, one after another: each volume's file table read once for every folder
+    /// on it, then the walk of each folder the tables could not answer. Writes each folder's scan into
+    /// its own slot of <paramref name="scans"/>, which no other pipeline writes.
+    /// </summary>
+    private void ScanPipeline(
+        IReadOnlyList<VolumeFolders> pipeline,
+        IReadOnlyList<string> folders,
+        IReadOnlyList<LeavesUnlisted?>? unlisted,
+        ScannedFolder[] scans,
+        FolderScanProgress? sum,
+        CancellationToken ct)
+    {
+        List<(int Index, FallbackReason Reason)> toWalk = [];
+
+        foreach (var volume in pipeline)
         {
             ct.ThrowIfCancellationRequested();
 
-            var (tree, reason, everyRecordRead) = ReadVolume(letter, progress, ct);
+            if (volume.DriveLetter is not { } letter)
+            {
+                toWalk.AddRange(volume.Folders.Select(folder => (folder.Index, FallbackReason.VolumeNotAddressable)));
+                continue;
+            }
 
-            foreach (var (index, volume) in held)
+            var (tree, reason, everyRecordRead) = ReadVolume(letter, sum?.Pass(), ct);
+
+            foreach (var folder in volume.Folders)
             {
                 if (tree is null)
                 {
-                    reasons[index] = reason;
+                    toWalk.Add((folder.Index, reason));
                     continue;
                 }
 
-                var located = MftExploreReader.Locate(tree, volume.Components);
+                var located = MftExploreReader.Locate(tree, folder.Volume!.Value.Components);
 
                 if (located.Node is { } node)
                 {
-                    scans[index] = new ScannedFolder(
+                    scans[folder.Index] = new ScannedFolder(
                         tree, node, ScanStrategy.MasterFileTable, FallbackReason.None,
                         FromIncompleteTable: !everyRecordRead);
                 }
                 else
                 {
-                    reasons[index] = located.Reason;
+                    toWalk.Add((folder.Index, located.Reason));
                 }
             }
         }
 
-        for (var i = 0; i < folders.Count; i++)
+        foreach (var (index, reason) in toWalk)
         {
-            if (scans[i] is null)
-            {
-                // No snapshots: what asks for several folders draws nothing until they are all
-                // read, and a snapshot nobody draws is a pass over the tree for nothing.
-                var walked = Walk(folders[i], reasons[i], progress, assembleSnapshot: null, ct, unlisted?[i]);
-                scans[i] = new ScannedFolder(
-                    walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback, FromIncompleteTable: false);
-            }
+            // No snapshots: what asks for several folders draws nothing until they are all read, and
+            // a snapshot nobody draws is a pass over the tree for nothing.
+            var walked = Walk(folders[index], reason, sum?.Pass(), assembleSnapshot: null, ct, unlisted?[index]);
+            scans[index] = new ScannedFolder(
+                walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback, FromIncompleteTable: false);
         }
-
-        return [.. scans.Select(scan => scan!)];
     }
 
     /// <summary>
