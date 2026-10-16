@@ -52,6 +52,9 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     {
         var letter = UnusedDriveLetter();
         var sources = new HeldMftSourceFactory(letter, Volume());
+
+        // Its reads go ahead, so a build that started after all ends, and the test fails rather than waits.
+        sources.Release();
         var cache = new MftVolumeIndexCache(sources, ScanTuner.Shipped, static _ => throw new OutOfMemoryException("no thread"));
 
         await Assert.ThrowsAsync<OutOfMemoryException>(() => cache.Get(letter));
