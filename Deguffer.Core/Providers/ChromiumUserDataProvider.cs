@@ -111,7 +111,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _discovery = discovery ?? new ChromiumUserDataDiscovery(Environment);
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;

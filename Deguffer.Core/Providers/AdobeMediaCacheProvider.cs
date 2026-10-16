@@ -55,7 +55,7 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes: volumes)
     {
         _stillClosed = new RunningProcessCheck(Inspector, AdobeMediaCacheLayout.ProcessNames);

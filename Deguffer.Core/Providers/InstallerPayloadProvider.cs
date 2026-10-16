@@ -48,7 +48,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
         IUserEnvironment environment,
         IProcessRunner runner,
         IProcessInspector inspector,
-        IDirectoryScanner scanner,
+        IDirectoryScanner? scanner,
         ILiveTreeInspector liveTrees,
         IEnumerable<InstallerPayloadRoot> candidates)
         : base(environment, runner, inspector, scanner)

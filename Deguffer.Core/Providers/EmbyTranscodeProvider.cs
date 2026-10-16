@@ -19,7 +19,7 @@ public sealed class EmbyTranscodeProvider : MediaServerTranscodeProvider
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes)
     {
     }

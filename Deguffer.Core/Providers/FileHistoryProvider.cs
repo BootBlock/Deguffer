@@ -87,7 +87,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _discovery = new FileHistoryDiscovery(Environment);
         _preferences = preferences ?? DefaultPreferences.Instance;

@@ -43,7 +43,7 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _visualStudio = Path.Combine(Environment.LocalAppData, "Microsoft", "VisualStudio");
         _roslyn = Path.Combine(_visualStudio, "Roslyn");

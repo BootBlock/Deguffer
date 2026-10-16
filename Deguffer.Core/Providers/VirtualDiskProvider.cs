@@ -44,7 +44,7 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _system = system ?? SystemDirectories.Current;
         _docker = new DockerInsideFigure(Environment, Runner, Inspector);

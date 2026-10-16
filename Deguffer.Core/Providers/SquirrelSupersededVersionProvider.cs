@@ -61,7 +61,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _discovery = discovery ?? new SquirrelDiscovery(Environment);
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;

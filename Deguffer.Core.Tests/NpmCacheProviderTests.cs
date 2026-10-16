@@ -140,6 +140,22 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("administrator", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// A provider given no scanner measures the volumes of the machine it was given. One that measured
+    /// this machine's instead would, run elevated, read the real disk's table under the fixture. A
+    /// reason neither an elevated nor an unelevated process gives for a real volume shows which tables
+    /// were asked.
+    /// </summary>
+    [Fact]
+    public async Task WithNoScannerGivenTheVolumesMeasuredAreTheEnvironments()
+    {
+        _environment.VolumeTables = FakeMftSourceFactory.Unavailable(FallbackReason.NotNtfsVolume);
+
+        var plan = await PlanWithPopulatedCache();
+
+        Assert.Equal(FallbackReason.NotNtfsVolume, plan.Fallback);
+    }
+
     [Fact]
     public async Task ReResolvesTheCacheDirectoryAfterInvalidationBecauseItCanMove()
     {

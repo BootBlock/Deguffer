@@ -27,7 +27,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes: volumes)
     {
     }

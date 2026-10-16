@@ -74,7 +74,7 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes: volumes)
     {
         _discovery = discovery ?? new RetroArchDiscovery(Environment, volumes: Volumes);

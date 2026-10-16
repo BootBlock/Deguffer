@@ -69,7 +69,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _root = Path.Combine(Environment.LocalAppData, "Microsoft", "vscode-cpptools");
     }

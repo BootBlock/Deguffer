@@ -134,7 +134,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _discovery = new VsCodeUserDataDiscovery(Environment);
         _declarations = declarations ?? new RowDeclarations();

@@ -547,6 +547,51 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// Every default provider measures the volumes of the environment the planner is built over, with
+    /// the user's tuning and without it. A scanner of this machine's volumes, run elevated, reads the
+    /// real disk's table under a test's fixture. Asked of each provider's own scanner, because the one
+    /// a provider was built with is what its plan measures with. The hard-link scanner only walks, and
+    /// never asks for a table.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EveryDefaultProviderMeasuresTheVolumesOfTheEnvironmentItIsGiven(bool tuned)
+    {
+        using var temp = new TempDirectory();
+        var measured = temp.CreateDirectory("measured");
+        var environment = new FakeUserEnvironment(temp.Path)
+        {
+            VolumeTables = FakeMftSourceFactory.Unavailable(FallbackReason.NotNtfsVolume),
+        };
+        var planner = CleanupPlanner.CreateDefault(
+            liveTrees: FakeLiveTreeInspector.NothingLive,
+            environment: environment,
+            tuning: tuned ? RouteTuners.Table : null);
+
+        var scanners = planner.Providers
+            .Select(provider => (provider.Id, Scanner: ScannerOf(provider)))
+            .Where(row => row.Scanner is not HardLinkAwareScanner)
+            .ToList();
+
+        Assert.True(scanners.Count >= 70, $"only {scanners.Count} providers measure with a table");
+
+        foreach (var (id, scanner) in scanners)
+        {
+            var result = await scanner.MeasureAsync(measured);
+
+            Assert.True(
+                result.Fallback == FallbackReason.NotNtfsVolume,
+                $"'{id}' measured with tables other than the environment's ({result.Fallback}).");
+        }
+
+        static IDirectoryScanner ScannerOf(ICleanupProvider provider) =>
+            (IDirectoryScanner)typeof(CleanupProviderBase)
+                .GetProperty("Scanner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .GetValue(provider)!;
+    }
+
+    /// <summary>
     /// The default is §7's strict rule, so a caller that never mentions the preference still gets
     /// the typed phrase demanded of it. Forgetting to pass it has to fail closed, not open.
     /// </summary>

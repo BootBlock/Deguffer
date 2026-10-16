@@ -67,7 +67,7 @@ public sealed partial class GraphicsDriverInstallerProvider : InstallerPayloadPr
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             liveTrees ?? LiveTreeInspector.Default,
             Candidates(system ?? SystemDirectories.Current))
     {

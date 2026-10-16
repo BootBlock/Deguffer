@@ -18,14 +18,18 @@ namespace Deguffer.Core.Exploring;
 /// <para>The snapshot cadence is measured through <paramref name="time"/>, so a test decides when
 /// the interval has passed rather than spending real time for it.</para>
 /// </summary>
+/// <param name="sources">
+/// Opens each volume's table. Never defaulted, so no scan reads this machine's tables unless it was
+/// handed them: the app hands it <see cref="Safety.IUserEnvironment.VolumeTables"/>.
+/// </param>
 /// <param name="occupancy">What the walk asks about a file whose listing cannot say what it occupies.</param>
 public sealed class ExploreScanner(
-    IMftSourceFactory? sources = null,
+    IMftSourceFactory sources,
     TimeProvider? time = null,
     ScanTuner? tuning = null,
     IOccupancyProbe? occupancy = null) : IExploreScanner
 {
-    private readonly IMftSourceFactory _sources = sources ?? VolumeMftSourceFactory.Default;
+    private readonly IMftSourceFactory _sources = sources;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly ScanTuner _tuning = tuning ?? ScanTuner.Shipped;
     private readonly IOccupancyProbe _occupancy = occupancy ?? OccupancyProbe.Default;

@@ -67,7 +67,7 @@ public sealed class CrashDumpProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _roots = Declare(system ?? SystemDirectories.Current);
     }
