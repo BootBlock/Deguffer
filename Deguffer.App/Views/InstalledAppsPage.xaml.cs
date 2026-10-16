@@ -33,10 +33,12 @@ public sealed partial class InstalledAppsPage : Page
                 () => new ContentDialogInstalledAppsConfirmation(XamlRoot, ActualTheme),
                 App.Preferences,
                 ElevatedRelaunch.IsElevated,
-                App.Running),
+                App.Running,
+                App.Work),
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
-            App.Running);
+            App.Running,
+            App.Work);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 

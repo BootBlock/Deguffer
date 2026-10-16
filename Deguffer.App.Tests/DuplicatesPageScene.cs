@@ -4,6 +4,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Working;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -22,6 +23,7 @@ public abstract class DuplicatesPageScene : IDisposable
     private protected readonly List<DuplicateSearch> _searches = [];
     private protected readonly List<ElevationRequest> _relaunches = [];
     private protected readonly RunningActions _running = new();
+    private protected readonly BusyWork _work = new();
 
     protected DuplicatesPageScene()
     {
@@ -90,6 +92,7 @@ public abstract class DuplicatesPageScene : IDisposable
                 return false;
             },
             _running,
+            _work,
             requested);
 
     /// <summary>A page with one location, ready to search.</summary>

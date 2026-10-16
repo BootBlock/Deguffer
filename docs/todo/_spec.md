@@ -435,6 +435,12 @@ Deliberate points, and the traps that come with them:
   run. Logging off, restarting and shutting down ask Windows to do it, which asks every program to
   close and lets any of them refuse. Deguffer never forces it. That is the one call outside §7.2.1
   that ends other programs, and a test holds it to that one file and to those flags.
+- **The taskbar button says when Deguffer is working.** While a scan, a search, a clean or a removal
+  runs on any page, the button shows a bar: filled where the work can say how far it has got, and
+  moving where it cannot. The bar goes when the page's own busy indicator does, however the work
+  ended. Work that ends while the user is in another program flashes the button, and work that
+  failed then, including a §5.6 verification, leaves the bar red until the window is next activated.
+  A failure in front of the user is the page's to show, so it turns nothing red.
 - **Age is a first-class column** for per-workspace and per-project data — "last touched 5 months
   ago" drives the decision more than size does.
 - **The Acrylic backdrop (§6.5) is decoration, never information.** Tier, risk and selection state

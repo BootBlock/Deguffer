@@ -7,6 +7,7 @@ using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
+using Deguffer.Core.Working;
 using Microsoft.UI.Xaml;
 
 namespace Deguffer.App;
@@ -98,6 +99,13 @@ public partial class App : Application
     /// clean or a removal still running on another.
     /// </summary>
     public static RunningActions Running { get; } = new();
+
+    /// <summary>
+    /// What is under way on every page, scans included, which the window's taskbar button shows.
+    /// Shared for the reason <see cref="Running"/> is: a scan goes on running on a page the user has
+    /// left.
+    /// </summary>
+    public static BusyWork Work { get; } = new();
 
     /// <summary>
     /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Page"/> has no

@@ -5,6 +5,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Viewing;
+using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
 
@@ -38,6 +39,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
     private readonly DuplicateActions _actions;
     private readonly IReadOnlyList<DuplicateGroupRow> _groups;
+    private readonly BusyWork _work;
 
     private DuplicateMarks? _marks;
     private DuplicateSearch? _asked;
@@ -46,10 +48,11 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     private CancellationTokenSource? _stopping;
 
     /// <param name="groups">The page's groups, in the order it shows them.</param>
-    public DuplicateMarkingViewModel(DuplicateActions actions, IReadOnlyList<DuplicateGroupRow> groups)
+    public DuplicateMarkingViewModel(DuplicateActions actions, IReadOnlyList<DuplicateGroupRow> groups, BusyWork work)
     {
         _actions = actions;
         _groups = groups;
+        _work = work;
     }
 
     /// <summary>The named rules, in the order the rule list offers them (§7.4).</summary>
@@ -208,7 +211,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
             _ => new MarkingRule.MarkInFolder(RuleFolder),
         };
 
-        await StoppableAsync(async stop =>
+        await StoppableAsync(async (stop, _) =>
         {
             RuleOutcome? outcome = null;
 
@@ -289,7 +292,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
         var marks = _marks!;
 
-        await StoppableAsync(async stop =>
+        await StoppableAsync(async (stop, work) =>
         {
             try
             {
@@ -314,6 +317,12 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                 }
 
                 Say(answer.Statement);
+
+                // A check left unpassed is §5.6 failing to prove the removal left what it had to.
+                if (answer.Statement.Checks.Count > 0)
+                {
+                    work.Fail();
+                }
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
@@ -369,7 +378,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     }
 
     /// <summary>Run <paramref name="action"/> with every mark, rule and removal held until it ends, and Stop open meanwhile.</summary>
-    private async Task StoppableAsync(Func<CancellationToken, Task> action)
+    private async Task StoppableAsync(Func<CancellationToken, BusySpan, Task> action)
     {
         using var stopping = new CancellationTokenSource();
         _stopping = stopping;
@@ -377,7 +386,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
         try
         {
-            await RunningAsync(() => action(stopping.Token));
+            await RunningAsync(work => action(stopping.Token, work));
         }
         finally
         {
@@ -387,18 +396,21 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     }
 
     /// <summary>Run <paramref name="action"/> with every mark, rule and removal held until it ends.</summary>
-    private async Task RunningAsync(Func<Task> action)
+    private async Task RunningAsync(Func<BusySpan, Task> action)
     {
         IsBusy = true;
-        Refresh();
+        var work = _work.Begin();
 
         try
         {
-            await action();
+            Refresh();
+
+            await action(work);
         }
         finally
         {
             IsBusy = false;
+            work.Dispose();
             Counted();
         }
     }

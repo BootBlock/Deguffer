@@ -120,6 +120,7 @@ public sealed partial class ExplorePage : Page
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
             App.Running,
+            App.Work,
             App.ScanHistory,
             SystemMotion.Current);
 

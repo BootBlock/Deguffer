@@ -6,6 +6,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
 
@@ -27,6 +28,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     private readonly Func<Task<string?>> _chooseCsv;
     private readonly Func<ElevationRequest, bool> _relaunch;
     private readonly RunningActions _running;
+    private readonly BusyWork _work;
 
     /// <summary>The search running now, or null, so a callback from one that was replaced is ignored.</summary>
     private Search? _search;
@@ -43,15 +45,17 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         bool isElevated,
         Func<ElevationRequest, bool> relaunch,
         RunningActions running,
+        BusyWork work,
         DuplicatesRequest? requested = null)
     {
         _run = run;
         _chooseCsv = chooseCsv;
         _relaunch = relaunch;
         _running = running;
+        _work = work;
         Filters = new DuplicateFiltersViewModel(preferences);
         Filters.Changed += (_, _) => Judge();
-        Marking = new DuplicateMarkingViewModel(actions, Groups);
+        Marking = new DuplicateMarkingViewModel(actions, Groups, work);
         Groups.CollectionChanged += (_, _) => SaveCsvCommand.NotifyCanExecuteChanged();
 
         // A new search would take the groups from under a rule or a removal reading them.
@@ -183,6 +187,9 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Headline = "Searching…";
         Show(new DuplicateSearchProgress(DuplicateSearchStage.Finding, 0, Total: null));
 
+        // Its own span, ended whether or not the search is still the page's when it ends.
+        var work = _work.Begin();
+
         try
         {
             var result = await _run(
@@ -190,7 +197,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
                 marks => search.Marks = marks,
                 new Progress<CandidateFinding>(finding => Found(search, finding)),
                 new Progress<DuplicateGroup>(group => Confirmed(search, group)),
-                new Progress<DuplicateSearchProgress>(progress => Reached(search, progress)),
+                new Progress<DuplicateSearchProgress>(progress => Reached(search, work, progress)),
                 search.Stop.Token);
 
             if (ReferenceEquals(_search, search))
@@ -216,6 +223,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             }
 
             search.Stop.Dispose();
+            work.Dispose();
         }
     }
 
@@ -293,11 +301,14 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Headline = $"Searching… {Groups.Count:N0} {(Groups.Count == 1 ? "group" : "groups")} so far.";
     }
 
-    private void Reached(Search search, DuplicateSearchProgress progress)
+    private void Reached(Search search, BusySpan work, DuplicateSearchProgress progress)
     {
         if (ReferenceEquals(_search, search))
         {
             Show(progress);
+
+            // The stage's own measure, as the page's bar shows it, so the two never disagree.
+            work.Report(StageProgressIsUnknown ? null : StageProgress / 100);
         }
     }
 

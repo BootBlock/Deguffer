@@ -10,6 +10,7 @@ using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
+using Deguffer.Core.Working;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Deguffer.App.ViewModels;
@@ -37,6 +38,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly SelectionService _selections;
     private readonly KeepService _keeps;
     private readonly RunningActions _running;
+    private readonly BusyWork _work;
     private readonly Func<IConfirmationPrompt> _prompt;
     private readonly ReportOrigin _origin;
 
@@ -106,6 +108,7 @@ public sealed partial class CleanViewModel : ObservableObject
         SelectionService selections,
         KeepService keeps,
         RunningActions running,
+        BusyWork work,
         Func<IConfirmationPrompt> prompt,
         string appVersion,
         WhenCompleteViewModel whenComplete,
@@ -119,6 +122,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _selections = selections;
         _keeps = keeps;
         _running = running;
+        _work = work;
         _prompt = prompt;
         WhenComplete = whenComplete;
         ScanChoice = scanChoice;
@@ -534,12 +538,13 @@ public sealed partial class CleanViewModel : ObservableObject
     private async Task ScanAsync(ProviderChoice? chosen, CancellationToken ct)
     {
         IsBusy = true;
-
-        // A previous run's figures describe a machine state this preview is about to replace.
-        ClearRunResult();
+        var work = _work.Begin();
 
         try
         {
+            // A previous run's figures describe a machine state this preview is about to replace.
+            ClearRunResult();
+
             await LoadPreviewAsync(chosen, ct);
 
             ReportPreviewSummary();
@@ -553,10 +558,12 @@ public sealed partial class CleanViewModel : ObservableObject
             // A provider failing must not take the window down — this app's entire premise is
             // being trustworthy around deletion, and a crash is the worst available outcome.
             Report($"Scan failed: {ex.Message}", InfoBarSeverity.Error);
+            work.Fail();
         }
         finally
         {
             IsBusy = false;
+            work.Dispose();
         }
     }
 
@@ -598,23 +605,27 @@ public sealed partial class CleanViewModel : ObservableObject
 
         IsBusy = true;
 
-        // A previous run's figures and its §5.6 verdict describe a machine state this run is about
-        // to replace, exactly as a preview's do. Cleared here rather than when the new ones arrive,
-        // because a run that fails, or is cancelled while its confirmations are collected, never
-        // reaches RecordRunResult: leaving the old verdict up would stand "All protected paths
-        // survived" over a deletion nobody verified,
-        // which is the inversion §5.6 exists to prevent. After the confirmation above, so declining
-        // still leaves the screen exactly as it was.
-        ClearRunResult();
-
-        var freeBefore = FreeSpaceOfProfile();
-
         // Set only by a run that reached its §5.6 verdict. A clean that was declined, cancelled
         // before it started or failed has nothing for the choice beside the button to follow.
         RunOutcome? finished = null;
 
+        // Ended with IsBusy rather than at the end of the method, so the countdown that may follow
+        // the run is not shown as work under way.
+        var work = _work.Begin();
+
         try
         {
+            // A previous run's figures and its §5.6 verdict describe a machine state this run is
+            // about to replace, exactly as a preview's do. Cleared here rather than when the new ones
+            // arrive, because a run that fails, or is cancelled while its confirmations are
+            // collected, never reaches RecordRunResult: leaving the old verdict up would stand "All
+            // protected paths survived" over a deletion nobody verified, which is the inversion §5.6
+            // exists to prevent. After the confirmation above, so declining still leaves the screen
+            // exactly as it was.
+            ClearRunResult();
+
+            var freeBefore = FreeSpaceOfProfile();
+
             // §7's confirmation is collected here, on the UI thread and before any work starts:
             // a dialog cannot be raised from the worker below, and asking mid-deletion would be
             // asking after the point the answer could still change anything.
@@ -654,7 +665,11 @@ public sealed partial class CleanViewModel : ObservableObject
             var proving = StandingProof.For(Findings.Select(row => row.Finding), authorised);
 
             var progress = new Progress<string>(message => Report(message));
-            var completed = new Progress<double>(SetCleanProgress);
+            var completed = new Progress<double>(fraction =>
+            {
+                SetCleanProgress(fraction);
+                work.Report(fraction);
+            });
             List<CleanupResult> removedSoFar = [];
             var landed = new Progress<CleanupResult>(result => CountRemoved(removedSoFar, result));
 
@@ -679,12 +694,20 @@ public sealed partial class CleanViewModel : ObservableObject
                 // describes the run that has just ended, and leaving it up over a scan would show a
                 // full bar against a status line counting providers.
                 IsCleaning = false;
+
+                // The re-plan that follows cannot say how far it has got.
+                work.Report(null);
             }
 
             // The card takes the run's figures and its §5.6 verdict the moment the run ends, before
             // the rescan below: it is the durable record, and leaving it showing the previous run
             // for the length of a scan would describe a machine that no longer exists.
             var outcome = RecordRunResult(results, freeBefore);
+
+            if (outcome.VerificationFailed)
+            {
+                work.Fail();
+            }
 
             // The rows the run changed say sizes and "Ready to clean" labels about a machine that no
             // longer exists, so they are planned again. Only those: every other row still describes
@@ -714,10 +737,12 @@ public sealed partial class CleanViewModel : ObservableObject
             // the planner then demanded: a bug rather than a user outcome, but the planner refusing
             // to delete is the correct half of it — so report it instead of crashing mid-deletion.
             Report($"Clean failed: {ex.Message}", InfoBarSeverity.Error);
+            work.Fail();
         }
         finally
         {
             IsBusy = false;
+            work.Dispose();
             FreeSpaceNow = FreeSpaceOfProfile();
         }
 
