@@ -60,10 +60,17 @@ public sealed class DescendedLinkTests : IDisposable
     {
         var (root, folder, outside) = Fixture();
         var kept = Path.Combine(outside, "outside.bin");
-        var fs = new ListingHookFileSystem(WindowsFileSystem.Default, folder, () => SwapWhenListing(folder, folder, outside));
+        var swapped = false;
+        var fs = new ListingHookFileSystem(WindowsFileSystem.Default, folder, () =>
+        {
+            SwapWhenListing(folder, folder, outside);
+            swapped |= LongPath.IsReparsePoint(folder);
+        });
 
         await DirectoryRemover.RemoveAsync(root, fileSystem: fs);
 
+        // The removal takes the junction too, so whether it was ever put there is asked as it is listed.
+        Assert.True(swapped, "the folder was never swapped for a junction");
         Assert.True(LongPath.FileExists(kept), "the junction's target lost its file");
         Assert.False(LongPath.DirectoryExists(root));
     }

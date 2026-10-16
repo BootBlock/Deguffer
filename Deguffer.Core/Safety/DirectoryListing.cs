@@ -49,12 +49,6 @@ internal sealed class DirectoryListing<T> : FileSystemEnumerator<T>
     /// <summary>How the listing ended. Read it once enumeration has finished.</summary>
     public PathPresence Outcome => _error == 0 ? PathPresence.Present : ListingEnd.Failed(_error, whileReading: false).Presence;
 
-    /// <summary>
-    /// Whether the listing was refused because the account may not read the directory, as against
-    /// any other refusal. Read it once enumeration has finished.
-    /// </summary>
-    public bool WasDenied => _error != 0 && ListingEnd.Failed(_error, whileReading: false).Denied;
-
     protected override T TransformEntry(ref System.IO.Enumeration.FileSystemEntry entry) => _transform(ref entry);
 
     protected override bool ShouldIncludeEntry(ref System.IO.Enumeration.FileSystemEntry entry) => _include?.Invoke(ref entry) ?? true;
