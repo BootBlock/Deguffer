@@ -31,25 +31,47 @@ internal static class TableRoutes
     /// for the index, did not abandon the volume. Records <c>$MFT</c>'s <c>$BITMAP</c> marks free are
     /// never read, so how many records were read cannot say whether the table was read whole.
     /// </summary>
-    public static RunTally Run(Route route, IMftSourceFactory volumes, char drive, TableTuning tuning, CancellationToken ct)
+    /// <param name="target">
+    /// The volume's root, or for <see cref="Route.ExploreFolder"/> the folder, fully qualified.
+    /// </param>
+    public static RunTally Run(Route route, IMftSourceFactory volumes, string target, TableTuning tuning, CancellationToken ct)
     {
+        if (!VolumePath.TryParse(target, out var place))
+        {
+            throw new ArgumentException("A table route reads a volume, so its target has a drive letter.", nameof(target));
+        }
+
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
         using var source = new CountingMftSource(
-            volumes.TryOpen(drive, out var reason)
+            volumes.TryOpen(place.DriveLetter, out var reason)
             ?? throw new IOException($"The volume could not be opened again: {reason}."));
 
         var count = (int)Math.Min(source.RecordCount, int.MaxValue);
 
-        var complete = route switch
+        return route switch
         {
-            Route.Table => ReadOnly(source, count, tuning, ct),
-            Route.Index => MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct),
-            Route.Explore => MftExploreReader.Read(source, $"{drive}:\\", [], tuning, onProgress: null, ct) is { Tree: not null, WholeTable: true },
+            Route.Table => Tally(source, ReadOnly(source, count, tuning, ct)),
+            Route.Index => Tally(source, MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct)),
+            Route.Explore => Explore(source, $"{place.DriveLetter}:\\", [], tuning, ct),
+            Route.ExploreFolder => Explore(source, place.FullPath, place.Components, tuning, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
-
-        return new RunTally(source.RecordsRead, source.BytesRead, complete);
     }
+
+    /// <summary>
+    /// The tree for <paramref name="rootPath"/>, complete where the table was read whole and the
+    /// folder was found in it, and handed back for what it keeps to be measured.
+    /// </summary>
+    private static RunTally Explore(
+        CountingMftSource source, string rootPath, IReadOnlyList<string> components, TableTuning tuning, CancellationToken ct)
+    {
+        var read = MftExploreReader.Read(source, rootPath, components, tuning, onProgress: null, ct);
+
+        return Tally(source, read is { Tree: not null, WholeTable: true }) with { Kept = read.Tree };
+    }
+
+    private static RunTally Tally(CountingMftSource source, bool complete) =>
+        new(source.RecordsRead, source.BytesRead, complete);
 
     /// <summary>
     /// Read and parse every record and keep none of them: the floor the two structures are built on.

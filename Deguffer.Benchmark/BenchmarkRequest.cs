@@ -10,8 +10,9 @@ namespace Deguffer.Benchmark;
 /// What to time, read from the command line.
 /// </summary>
 /// <param name="Path">
-/// For a route that reads the table, the root of the volume, such as <c>C:\</c>. For a route that
-/// walks, the folder, fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
+/// For a route that reads the table, the root of the volume, such as <c>C:\</c>, or for
+/// <see cref="Route.ExploreFolder"/> the folder. For a route that walks, the folder. A folder is
+/// fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
 /// <param name="Walk">The values the routes that walk run with. The table routes take none of them.</param>
@@ -36,6 +37,9 @@ internal sealed record BenchmarkRequest(
           table <drive>     Read the volume's file table end to end, parse only. Elevated.
           index <drive>     Build the file-table index the deletion path measures from. Elevated.
           explore <drive>   Build the Explore tree for the volume from its file table. Elevated.
+          explorefolder <folder>
+                            Build the Explore tree for the folder from its volume's file
+                            table, as an elevated Explore of a folder does. Elevated.
           walk <folder>     Walk the folder as an unelevated scan does.
           measure <folder>  Measure the folder as an unelevated scan does: the walk, and
                             what the scan adds up for each entry.
@@ -63,7 +67,8 @@ internal sealed record BenchmarkRequest(
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
         --parse-threads N      Table routes only. How many threads parse records, 1 to 64.
 
-        A table route's defaults are what a scan uses on a drive of unknown kind.
+        A table route's defaults are what a scan uses on a drive of unknown kind. The Explore
+        routes also report what the finished tree keeps on the managed heap.
 
         It only reads. Nothing on the drive is written, moved or deleted.
         """;
@@ -94,7 +99,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, walk, measure, explorewalk, sources or links.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources or links.";
             return null;
         }
 
@@ -146,11 +151,11 @@ internal sealed record BenchmarkRequest(
             }
         }
 
-        var path = route.ReadsTable() ? VolumeRoot(args[1]) : Folder(args[1]);
-        if (path is null)
+        var path = route.TargetsVolume() ? VolumeRoot(args[1]) : Folder(args[1]);
+        if (path is null || (route.ReadsTable() && !VolumePath.TryParse(path, out _)))
         {
-            error = route.ReadsTable()
-                ? "The target must be a drive letter, such as C or C:."
+            error = route.TargetsVolume() ? "The target must be a drive letter, such as C or C:."
+                : route.ReadsTable() ? "The target must be a folder on a drive with a letter, such as C:\\Users."
                 : "The target must be a folder.";
             return null;
         }

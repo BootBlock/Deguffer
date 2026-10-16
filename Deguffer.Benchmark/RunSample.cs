@@ -11,8 +11,14 @@ namespace Deguffer.Benchmark;
 /// process, so after the first run this is the highest any run has reached rather than this run's
 /// own.
 /// </param>
+/// <param name="KeptBytes">
+/// The managed heap the route's result holds, measured after a full collection with the result
+/// still referenced, against the heap before the run. What a scan keeps for as long as it is shown,
+/// which the peak working set cannot say: that counts what the run threw away too. Zero for a route
+/// that keeps nothing.
+/// </param>
 internal readonly record struct RunSample(
-    TimeSpan Elapsed, RunTally Tally, long AllocatedBytes, int FullCollections, long PeakWorkingSet)
+    TimeSpan Elapsed, RunTally Tally, long AllocatedBytes, int FullCollections, long PeakWorkingSet, long KeptBytes = 0)
 {
     public double ItemsPerSecond => Tally.Items / Seconds;
 

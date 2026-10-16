@@ -1,3 +1,4 @@
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
@@ -101,7 +102,7 @@ public sealed class TableRoutesTests
         Assert.Throws<IOException>(() => TableRoutes.Run(
             Route.Table,
             FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable),
-            Drive,
+            $@"{Drive}:\",
             TableTuning.Default,
             CancellationToken.None));
 
@@ -117,7 +118,34 @@ public sealed class TableRoutesTests
             .AddDirectory(16, 5, "folder")
             .AddFile(17, 16, "file.bin", allocated: 4096, logical: 4000);
 
-    private static RunTally Run(string route, MftFixture volume) =>
+    /// <summary>
+    /// A folder read from the table reads the whole table, as a whole volume's does, and hands back
+    /// the folder's tree alone for what it keeps to be measured.
+    /// </summary>
+    [Fact]
+    public void AFolderReadFromTheTableReadsItWholeAndKeepsTheFolder()
+    {
+        var tally = Run("ExploreFolder", Volume().WithoutBitmap(), $@"{Drive}:\folder");
+
+        Assert.True(tally.Complete);
+        Assert.Equal(Records, tally.Items);
+
+        var tree = Assert.IsType<ExploreTree>(tally.Kept);
+        Assert.Equal($@"{Drive}:\folder", tree.RootPath);
+        Assert.Equal(2, tree.NodeCount);
+        Assert.Equal(4000, tree.TotalLength);
+    }
+
+    /// <summary>A folder the table does not hold is answered by no tree, so the run is not complete.</summary>
+    [Fact]
+    public void AFolderTheTableDoesNotHoldIsAnIncompleteRun() =>
+        Assert.False(Run("ExploreFolder", Volume().WithoutBitmap(), $@"{Drive}:\elsewhere").Complete);
+
+    private static RunTally Run(string route, MftFixture volume, string? target = null) =>
         TableRoutes.Run(
-            Enum.Parse<Route>(route), FakeMftSourceFactory.Serving(Drive, volume), Drive, TableTuning.Default, CancellationToken.None);
+            Enum.Parse<Route>(route),
+            FakeMftSourceFactory.Serving(Drive, volume),
+            target ?? $@"{Drive}:\",
+            TableTuning.Default,
+            CancellationToken.None);
 }

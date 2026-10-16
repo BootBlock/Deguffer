@@ -352,6 +352,46 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
+    /// A rescan of the same place that numbers its entries afresh, as the file table's does when a
+    /// folder made before them appears, is still the same directory measured again. The rows stay
+    /// the same rows at the entries' new numbers, so the reader keeps their place in the list, and
+    /// what was picked stays picked.
+    /// </summary>
+    [Fact]
+    public void ARescanThatNumbersTheEntriesAfreshKeepsTheRowsAndWhatIsPicked() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Page();
+
+        var first = new ExploreTreeBuilder(@"C:\");
+        var users = first.AddChildren(ExploreTreeBuilder.RootNode, [
+            ExploreFixture.File("Users.bin", 300),
+            ExploreFixture.File("Windows.bin", 200),
+        ]);
+        await _explore.ScanAsync(page, ExploreScan.Fast(first.Build(ExploreChildOrder.BySize)));
+
+        page.Selection.Select([users + 1]);
+        var windows = page.Rows.Single(row => row.Name == "Windows.bin");
+        var changes = Watch(page.Rows);
+
+        var second = new ExploreTreeBuilder(@"C:\");
+        var moved = second.AddChildren(ExploreTreeBuilder.RootNode, [
+            ExploreFixture.File("Earlier.bin", 100),
+            ExploreFixture.File("Users.bin", 300),
+            ExploreFixture.File("Windows.bin", 200),
+        ]) + 2;
+        await _explore.ScanAsync(page, ExploreScan.Fast(second.Build(ExploreChildOrder.BySize)));
+
+        // The case under test: the entry under another number.
+        Assert.NotEqual(users + 1, moved);
+
+        Assert.Equal([moved], page.Selection.Nodes);
+        Assert.Same(windows, page.Rows.Single(row => row.Name == "Windows.bin"));
+        Assert.Equal(moved, windows.Node);
+        Assert.Equal([NotifyCollectionChangedAction.Add], changes);
+    });
+
+    /// <summary>
     /// A snapshot is the same directory measured again. What is picked stays picked, and the rows
     /// are brought up to date in place, so the reader keeps their place in the list while the scan
     /// runs. The finished tree is in a different order, so the rows are rebuilt; the selection
