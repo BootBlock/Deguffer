@@ -9,8 +9,10 @@ namespace Deguffer.Core.Exploring;
 /// <see cref="ITrackedTree.CounterpartsIn"/>.
 ///
 /// <para>The common case costs nothing: within one walked scan a node keeps its number from one
-/// snapshot to the next, so a node standing under its parent's counterpart with the same name is
-/// taken as it is. Otherwise the parent's children are indexed by name once, and every later lookup
+/// snapshot to the next, so a node standing under its parent's counterpart with exactly the same
+/// name is taken as it is. Exactly, because the number is a guess: two file-table scans number only
+/// what each reaches, so a number can move to a sibling, and in a directory with case sensitivity
+/// turned on that sibling can be <c>cache</c> beside the <c>Cache</c> being looked for. Otherwise the parent's children are indexed by name once, and every later lookup
 /// in that folder is a dictionary read, because a folder of a hundred thousand files would make a
 /// search per node the slowest step of all.</para>
 /// </summary>
@@ -46,7 +48,7 @@ internal sealed class ExploreCounterparts(ExploreTree earlier, ExploreTree later
         if (later.Holds(number)
             && number != later.RootNode
             && later.ParentOf(number) == folder
-            && later.NameSpanOf(number).Equals(name, StringComparison.OrdinalIgnoreCase))
+            && later.NameSpanOf(number).SequenceEqual(name))
         {
             return number;
         }
@@ -55,9 +57,8 @@ internal sealed class ExploreCounterparts(ExploreTree earlier, ExploreTree later
         {
             children = new ChildrenByName(later);
 
-            // The first of two names that differ only in case keeps it, as a directory with case
-            // sensitivity turned on can hold both; the order is the tree's own, so it is the same
-            // answer every time.
+            // In the tree's own order, so of two names that differ only in case and neither of which
+            // is the one looked for, the same one answers every time.
             foreach (var child in later.ChildrenOf(folder))
             {
                 children.Add(child);

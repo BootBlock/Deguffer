@@ -505,7 +505,7 @@ public class RouteAgreementTests
         var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, onProgress: null, default).Tree!;
 
         var walkedDates = DatesByPath(walked, walked.RootNode);
-        var indexedDates = DatesByPath(indexed, NodeAt(indexed, path));
+        var indexedDates = DatesByPath(indexed, ExploreTreePaths.NodeAt(indexed, path));
 
         // Both routes found the same tree, or the comparison below is over an empty intersection.
         Assert.Equal(4, walkedDates.Count);
@@ -633,19 +633,6 @@ public class RouteAgreementTests
         }
 
         return stored;
-    }
-
-    /// <summary>The node an absolute path names, found by descending from the tree's own root.</summary>
-    private static int NodeAt(ExploreTree tree, string path)
-    {
-        var node = tree.RootNode;
-
-        foreach (var component in path[3..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
-        {
-            node = tree.ChildrenOf(node).ToArray().Single(c => tree.NameOf(c) == component);
-        }
-
-        return node;
     }
 
     /// <summary>

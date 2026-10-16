@@ -20,14 +20,13 @@ public static class ExplorePlace
     /// The node of <paramref name="arriving"/> that stands where <paramref name="node"/> stood in
     /// <paramref name="standing"/>, or the new tree's root where nothing does.
     ///
-    /// <para>Decided by comparing the two paths rather than by trusting the number. A snapshot and
-    /// the tree that follows it come from one <see cref="ExploreTreeBuilder"/>, whose node numbers
-    /// are indices into lists that only ever grow, so the same number is the same directory
-    /// throughout a walked scan and the place carries forward. The file-table route publishes no
-    /// snapshot at all and numbers its nodes by record, so the same number carries no meaning from
-    /// a walked tree into one of its trees — while two file-table scans of one volume do agree,
-    /// because a record number is the same directory in both. Comparing the paths settles all
-    /// three cases without this having to know which route produced either tree.</para>
+    /// <para>Found by path rather than by trusting the number. A tree's node numbers are its own: a
+    /// walked scan keeps a node's number from one snapshot to the next, but two file-table scans of
+    /// one place number only what each reaches (<see cref="ExploreTree.Create"/>), so a folder that
+    /// gained a sibling between them can have another number in the second. And two trees of
+    /// different places number their nodes alike, where the same number would name one folder while
+    /// listing another's contents. Finding the same path settles every case without this having to
+    /// know which route produced either tree.</para>
     ///
     /// <para>Compared without regard to case, because the two trees can be rooted at the same
     /// volume written differently — a scan of <c>c:\</c> after one of <c>C:\</c> — and NTFS does not
@@ -36,12 +35,7 @@ public static class ExplorePlace
     /// <param name="standing">The tree on screen, or null where nothing has been scanned yet.</param>
     /// <param name="node">The node being looked at in <paramref name="standing"/>.</param>
     /// <param name="arriving">The tree replacing it.</param>
-    /// <returns>
-    /// A node of <paramref name="arriving"/> whose parent chain reaches that tree's root, which is
-    /// what <see cref="ExploreTree.TryPathOf"/> answering at all establishes. The trail is built by
-    /// walking to the root, so a node without that property would not draw wrongly — it would not
-    /// finish.
-    /// </returns>
+    /// <returns>A node <paramref name="arriving"/> holds (<see cref="ExploreTree.Holds"/>).</returns>
     public static int Carry(ExploreTree? standing, int node, ExploreTree arriving) =>
         TryCarry(standing, node, arriving) ?? arriving.RootNode;
 
@@ -50,8 +44,12 @@ public static class ExplorePlace
     /// the one carry into the other at all. A tree rooted somewhere else is somewhere else, and so is
     /// the first tree after none.
     /// </summary>
-    public static bool IsRootedAlike([NotNullWhen(true)] ExploreTree? standing, ExploreTree arriving) =>
-        standing is not null && TryCarry(standing, standing.RootNode, arriving) is not null;
+    public static bool IsRootedAlike([NotNullWhen(true)] ExploreTree? standing, ExploreTree arriving)
+    {
+        ArgumentNullException.ThrowIfNull(arriving);
+
+        return standing is not null && string.Equals(standing.RootPath, arriving.RootPath, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// The node of <paramref name="arriving"/> that stands where <paramref name="node"/> stood in
@@ -66,24 +64,26 @@ public static class ExplorePlace
     /// <param name="standing">The tree on screen, or null where nothing has been scanned yet.</param>
     /// <param name="node">The node being looked at in <paramref name="standing"/>.</param>
     /// <param name="arriving">The tree replacing it.</param>
-    /// <returns>
-    /// <paramref name="node"/> itself where it still names what it named, and null otherwise. The
-    /// number never changes: this says whether it still means the same thing, not what to renumber
-    /// it to.
-    /// </returns>
-    public static int? TryCarry(ExploreTree? standing, int node, ExploreTree arriving)
-    {
-        ArgumentNullException.ThrowIfNull(arriving);
+    public static int? TryCarry(ExploreTree? standing, int node, ExploreTree arriving) =>
+        Carrying(standing, arriving)?.Invoke(node);
 
-        if (standing is null)
+    /// <summary>
+    /// <see cref="TryCarry"/> for every node of <paramref name="standing"/> at once, for a caller
+    /// carrying several: each folder's children in <paramref name="arriving"/> are indexed by name
+    /// once, rather than once per node. Null where <paramref name="arriving"/> is rooted somewhere
+    /// else (<see cref="IsRootedAlike"/>), where no node carries.
+    /// </summary>
+    public static Func<int, int?>? Carrying(ExploreTree? standing, ExploreTree arriving)
+    {
+        if (!IsRootedAlike(standing, arriving))
         {
             return null;
         }
 
-        return standing.TryPathOf(node) is { } was
-            && arriving.TryPathOf(node) is { } now
-            && string.Equals(was, now, StringComparison.OrdinalIgnoreCase)
-                ? node
-                : null;
+        var counterparts = new ExploreCounterparts(standing, arriving);
+
+        // A node taken out of the tree on screen is no longer there to stand on, wherever its path
+        // leads in the other.
+        return node => standing.Holds(node) ? counterparts.Find(node) : null;
     }
 }

@@ -66,6 +66,42 @@ internal sealed class NamePool
     /// </summary>
     public Frozen Freeze() => new(_chunks, _entries.Freeze());
 
+    /// <summary>
+    /// A pool holding only the names <paramref name="nameNumbers"/> use, each copied once, with every
+    /// number in <paramref name="nameNumbers"/> rewritten to its name's number there.
+    ///
+    /// <para>For a tree that keeps fewer nodes than its reader numbered names for. The file table's
+    /// reader names every record on the volume, so a tree of one folder would otherwise keep every
+    /// name on the disk to show the few under it. No name is looked up: each was distinct in
+    /// <paramref name="names"/>, so each stays distinct, and the pool is handed back frozen because
+    /// one that could intern more would hold nothing to find these by.</para>
+    /// </summary>
+    public static Frozen Keeping(Frozen names, Span<int> nameNumbers)
+    {
+        var kept = new NamePool();
+
+        // Zero in the map is "not copied yet", which the empty name, number zero in both pools,
+        // never needs to be.
+        var renumbered = new int[names.Count];
+
+        foreach (ref var number in nameNumbers)
+        {
+            if (number == Empty)
+            {
+                continue;
+            }
+
+            if (renumbered[number] == Empty)
+            {
+                renumbered[number] = kept.Append(names[number]);
+            }
+
+            number = renumbered[number];
+        }
+
+        return kept.Freeze();
+    }
+
     private ReadOnlySpan<char> this[int number] => Read(_chunks, _entries[number]);
 
     private static ReadOnlySpan<char> Read(char[][] chunks, in Entry entry) =>

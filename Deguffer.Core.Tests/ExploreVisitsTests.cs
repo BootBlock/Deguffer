@@ -252,6 +252,38 @@ public sealed class ExploreVisitsTests
         Assert.False(visits.CanGoBack(top, arriving, Volume, Zooms));
     }
 
+    /// <summary>
+    /// A rescan of the same place can number a folder afresh, as the file table's does when a record
+    /// before it appears. The step follows the folder to its number in the arriving tree, so Back
+    /// opens the folder it left rather than whatever now has the old number.
+    /// </summary>
+    [Fact]
+    public void ARescanThatNumbersAFolderAfreshKeepsItsStepAtTheNewNumber()
+    {
+        var (first, outer, _) = Tree(@"D:\");
+        var visits = new ExploreVisits();
+
+        visits.Leave(At(outer));
+
+        var builder = new ExploreTreeBuilder(@"D:\");
+        var moved = builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [
+                new ExploreChild("earlier", IsDirectory: true, IsLink: false, Size: 0),
+                new ExploreChild("outer", IsDirectory: true, IsLink: false, Size: 0),
+            ]) + 1;
+        var arriving = builder.Build(ExploreChildOrder.BySize);
+
+        // The case under test: the folder under another number.
+        Assert.NotEqual(outer.Node, moved);
+
+        visits.Carry(first, arriving);
+
+        Assert.Equal(
+            At(ExplorePosition.Inside(moved)),
+            visits.Back(At(ExplorePosition.Inside(arriving.RootNode)), arriving, Volume, Zooms));
+    }
+
     [Fact]
     public void ATreeRootedSomewhereElseForgetsEveryStep()
     {

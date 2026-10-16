@@ -20,7 +20,10 @@ public class ExplorePlaceTests
     // A synthetic profile tree for the file-table half, with invented paths.
     private const uint Users = 6;
     private const uint ProfileRecord = 7;
-    private const uint Cache = 8;
+    private const uint Android = 8;
+    private const uint Cache = 9;
+
+    private const string CachePath = @"C:\Users\testuser\.npm-cache";
 
     /// <summary>
     /// The case the page exists to fix: the walk publishes a partial tree every so often, and the
@@ -115,28 +118,86 @@ public class ExplorePlaceTests
     }
 
     /// <summary>
-    /// The file-table route, which is the case the issue behind these tests called out. It publishes
-    /// no snapshot and numbers its nodes by record, so a node held from a walked scan lands on a
-    /// record that is in range and describes nothing at all. Placing it is refused rather than
-    /// guessed. <c>MftExploreReaderTests</c> is where that refusal is pinned against the shape a
-    /// real volume leaves, which this fixture's blank metadata records do not reproduce.
+    /// A node held from a walked scan whose path the file table's tree of the same place does not
+    /// hold. The number is in range there and names something else, so it is not trusted, and the
+    /// page goes back to the root.
     /// </summary>
     [Fact]
-    public void GoesBackToTheRootWhenTheNodeIsUnreachableInTheNewTree()
+    public void GoesBackToTheRootWhenTheNewTreeHoldsNothingAtThatPath()
     {
-        using var source = new MftFixture()
-            .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
-            .AddDirectory(ProfileRecord, Users, "testuser")
-            .AddDirectory(Cache, ProfileRecord, ".npm-cache")
-            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
-            .Build();
+        using var source = Table().Build();
 
-        var table = MftExploreReader.Read(source, @"C:\", [], TableTuning.Default, onProgress: null, default).Tree!;
+        var table = WholeVolume(source);
         var walked = ProfileTree(@"C:\");
 
-        // Record 1 is in range and was never described, so this tree cannot place it.
-        Assert.Null(table.TryPathOf(1));
+        Assert.True(table.Holds(1));
         Assert.Equal(table.RootNode, ExplorePlace.Carry(walked, 1, table));
+    }
+
+    /// <summary>
+    /// #364: the file table's tree keeps only what its root reaches and numbers that again, so two
+    /// scans of one volume can give one folder two numbers. Here a folder made between them takes a
+    /// record before the cache's, which moves the cache's number, and the place follows the cache to
+    /// it. Trusting the number would stand the page on <c>.android</c> under the cache's name.
+    /// </summary>
+    [Fact]
+    public void KeepsThePlaceAcrossTwoTableScansThatNumberItDifferently()
+    {
+        using var before = Table().Build();
+        using var after = Table().AddDirectory(Android, ProfileRecord, ".android").Build();
+
+        var standing = WholeVolume(before);
+        var arriving = WholeVolume(after);
+        var cache = ExploreTreePaths.NodeAt(standing, CachePath);
+        var moved = ExploreTreePaths.NodeAt(arriving, CachePath);
+
+        // The case under test: the same folder under another number.
+        Assert.NotEqual(cache, moved);
+
+        Assert.Equal(moved, ExplorePlace.Carry(standing, cache, arriving));
+        Assert.Equal(moved, ExplorePlace.TryCarry(standing, cache, arriving));
+    }
+
+    /// <summary>
+    /// A walked scan and a file-table scan of one place number their nodes by different rules, and
+    /// the place still carries between them, because it is found by its path.
+    /// </summary>
+    [Fact]
+    public void KeepsThePlaceFromAWalkIntoATableScanOfTheSamePlace()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var users = builder.AddChildren(ExploreTreeBuilder.RootNode, [Folder("Users")]);
+        var profile = builder.AddChildren(users, [Folder("testuser")]);
+        var cache = builder.AddChildren(profile, [Folder(".npm-cache")]);
+        var walked = builder.Build(ExploreChildOrder.BySize);
+
+        using var source = Table().Build();
+        var table = WholeVolume(source);
+
+        Assert.Equal(ExploreTreePaths.NodeAt(table, CachePath), ExplorePlace.Carry(walked, cache, table));
+    }
+
+    /// <summary>
+    /// A directory with case sensitivity turned on holds <c>Cache</c> and <c>cache</c> as two folders.
+    /// A rescan that numbers them the other way round gives <c>cache</c> the number <c>Cache</c> had,
+    /// and the place follows the name spelt exactly, not the number.
+    /// </summary>
+    [Fact]
+    public void CarriesAFolderToItsOwnSpellingWhereTwoDifferOnlyInCase()
+    {
+        var first = new ExploreTreeBuilder(Root);
+        var upper = first.AddChildren(ExploreTreeBuilder.RootNode, [Folder("Cache"), Folder("cache")]);
+        var standing = first.Build(ExploreChildOrder.BySize);
+
+        var second = new ExploreTreeBuilder(Root);
+        var lower = second.AddChildren(ExploreTreeBuilder.RootNode, [Folder("cache"), Folder("Cache")]);
+        var arriving = second.Build(ExploreChildOrder.BySize);
+
+        // The case under test: the number Cache had is cache's now.
+        Assert.Equal("cache", arriving.NameOf(upper));
+
+        Assert.Equal(lower + 1, ExplorePlace.TryCarry(standing, upper, arriving));
+        Assert.Equal(lower, ExplorePlace.TryCarry(standing, upper + 1, arriving));
     }
 
     /// <summary>Nothing on screen yet, which is every first scan.</summary>
@@ -185,6 +246,16 @@ public class ExplorePlaceTests
     {
         Assert.Null(ExplorePlace.TryCarry(standing: null, 3, ProfileTree(Root)));
     }
+
+    /// <summary>A file table holding a profile's cache, with invented paths.</summary>
+    private static MftFixture Table() => new MftFixture()
+        .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
+        .AddDirectory(ProfileRecord, Users, "testuser")
+        .AddDirectory(Cache, ProfileRecord, ".npm-cache")
+        .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096);
+
+    private static ExploreTree WholeVolume(IMftSource source) =>
+        MftExploreReader.Read(source, @"C:\", [], TableTuning.Default, onProgress: null, default).Tree!;
 
     /// <summary>A whole small tree, built the way the walk builds one.</summary>
     private static ExploreTree ProfileTree(string root)
