@@ -109,10 +109,12 @@ internal static class DirectoryDeletion
     private static bool IsEmpty(string extendedPath, IFileSystem fs)
     {
         var entries = new List<WalkEntry>();
+        using var memory = new ListingMemory(WalkTuning.MinimumListingBuffer);
 
         // Unreadable or already gone: neither is a directory to go on clearing attributes on.
         // Counted, so no file is named but a store.
-        return fs.ListEntries(extendedPath, DirectoryListing.EveryEntry, FileNames.Stores, entries) is { Presence: PathPresence.Present }
+        var request = new ListingRequest(memory, memory.Bytes, FollowsLink: true, FileNames.Stores);
+        return fs.ListEntries(extendedPath, request, entries) is { Presence: PathPresence.Present }
             && entries.Count == 0;
     }
 

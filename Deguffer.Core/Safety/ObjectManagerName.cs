@@ -10,6 +10,9 @@ namespace Deguffer.Core.Safety;
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct UnicodeString
 {
+    /// <summary>The longest name one holds, in characters: its lengths are counted in bytes, in 16 bits.</summary>
+    public const int LongestName = ushort.MaxValue / sizeof(char);
+
     public ushort Length;
     public ushort MaximumLength;
     public char* Buffer;

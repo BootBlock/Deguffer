@@ -144,10 +144,12 @@ public sealed class SiblingCheck
     private static IReadOnlyList<string>? Names(string directory, IFileSystem fs)
     {
         var entries = new List<WalkEntry>();
+        using var memory = new ListingMemory(WalkTuning.MinimumListingBuffer);
 
         // Nothing rather than a partial view, on ChildDirectories.Under's reasoning: half a listing
         // would let a missing sibling read as one that was never there.
-        return fs.ListEntries(LongPath.Extended(directory), DirectoryListing.EveryEntry, FileNames.All, entries) is { Presence: PathPresence.Present }
+        var request = new ListingRequest(memory, memory.Bytes, FollowsLink: true, FileNames.All);
+        return fs.ListEntries(LongPath.Extended(directory), request, entries) is { Presence: PathPresence.Present }
             ? [.. entries.Select(entry => entry.Name)]
             : null;
     }

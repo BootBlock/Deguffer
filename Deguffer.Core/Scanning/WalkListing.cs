@@ -6,18 +6,37 @@ namespace Deguffer.Core.Scanning;
 /// <param name="Denied">
 /// Whether a refusal was the account not being allowed to read the directory, which no retry changes.
 /// </param>
-public readonly record struct ListingEnd(PathPresence Presence, bool Denied);
+/// <param name="WhileReading">
+/// Whether the listing failed after the directory was opened, while its entries were read: the only
+/// failure a different buffer can change. False for a listing that did not fail.
+/// </param>
+public readonly record struct ListingEnd(PathPresence Presence, bool Denied, bool WhileReading)
+{
+    private const int ErrorFileNotFound = 2;
+    private const int ErrorPathNotFound = 3;
+    private const int ErrorAccessDenied = 5;
+
+    /// <summary>A directory listed to the end.</summary>
+    public static ListingEnd Listed => new(PathPresence.Present, Denied: false, WhileReading: false);
+
+    /// <summary>
+    /// How a listing that failed with the Win32 error <paramref name="error"/> ended. A directory that
+    /// is not there is <see cref="PathPresence.Absent"/>, decided on the two errors .NET turns into a
+    /// <see cref="DirectoryNotFoundException"/>. Every other failure, access denied included, is
+    /// <see cref="PathPresence.Refused"/>, which is what catching <see cref="UnauthorizedAccessException"/>
+    /// and <see cref="IOException"/> made of it.
+    /// </summary>
+    public static ListingEnd Failed(int error, bool whileReading) => new(
+        error is ErrorFileNotFound or ErrorPathNotFound ? PathPresence.Absent : PathPresence.Refused,
+        Denied: error == ErrorAccessDenied,
+        whileReading);
+}
 
 /// <summary>
-/// List <paramref name="directory"/> into <paramref name="into"/> with <paramref name="options"/>,
-/// keeping of each file what <paramref name="files"/> asks, and return how the listing ended. Entries
-/// listed before a failure stay in the list.
+/// List <paramref name="directory"/> into <paramref name="into"/> as <paramref name="request"/> asks,
+/// and return how the listing ended. Entries listed before a failure stay in the list.
 /// </summary>
-internal delegate ListingEnd ListDirectory(
-    string directory,
-    EnumerationOptions options,
-    FileNames files,
-    List<WalkEntry> into);
+internal delegate ListingEnd ListDirectory(string directory, ListingRequest request, List<WalkEntry> into);
 
 /// <summary>
 /// One worker's listing of one directory at a time, sorted into what <see cref="DirectoryContents"/>
@@ -30,32 +49,35 @@ internal delegate ListingEnd ListDirectory(
 /// its own place on the volume, so counting through one both double-counts and describes a tree the
 /// caller never classified.</para>
 ///
-/// <para>The lists are reused for every directory the worker reads, because a walk reads hundreds of
-/// thousands of them and the lists are what a listing would otherwise allocate (G4).</para>
+/// <para>The lists and the <see cref="ListingMemory"/> are reused for every directory the worker reads,
+/// because a walk reads hundreds of thousands of them and they are what a listing would otherwise
+/// allocate (G4). Dispose it once the worker has ended.</para>
 /// </summary>
-internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, FileNames files)
+internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, FileNames files) : IDisposable
 {
+    private readonly ListingMemory _memory = new(buffer.Largest);
     private readonly List<WalkEntry> _entries = [];
     private readonly List<WalkEntry> _links = [];
     private readonly List<WalkEntry> _reparseFiles = [];
 
     /// <param name="directory">In the extended form (§6.3).</param>
-    public DirectoryContents Read(string directory)
+    /// <param name="followsLink">See <see cref="ListingRequest.FollowsLink"/>.</param>
+    public DirectoryContents Read(string directory, bool followsLink)
     {
         _entries.Clear();
         _links.Clear();
         _reparseFiles.Clear();
 
-        var options = buffer.Options;
-        var end = list(directory, options, files, _entries);
+        var bytes = buffer.Bytes;
+        var end = list(directory, new ListingRequest(_memory, bytes, followsLink, files), _entries);
 
-        if (buffer.RetryAfter(options, end) is { } smaller)
+        if (buffer.RetryAfter(bytes, end) is { } smaller)
         {
             // Started again rather than continued: a listing cannot be resumed part-way, and keeping
             // what the first attempt read would hand those entries back twice.
             _entries.Clear();
 
-            var retried = list(directory, smaller, files, _entries);
+            var retried = list(directory, new ListingRequest(_memory, smaller, followsLink, files), _entries);
             if (retried.Presence is PathPresence.Present)
             {
                 buffer.Rejected();
@@ -69,6 +91,8 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
         return new DirectoryContents(directory, _entries, _links, _reparseFiles, end.Presence);
     }
+
+    public void Dispose() => _memory.Dispose();
 
     private void SetReparsePointsApart()
     {
@@ -88,22 +112,5 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
         {
             _entries.RemoveAll(static entry => entry.IsReparsePoint);
         }
-    }
-
-    /// <summary>The listing every walk takes outside a test: the directory as the volume holds it.</summary>
-    public static ListingEnd FromDisk(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
-    {
-        using var listing = new DirectoryListing<WalkEntry>(
-            directory,
-            (ref System.IO.Enumeration.FileSystemEntry entry) => WalkEntry.Of(directory, files, ref entry),
-            files.KeepsFiles ? null : static (ref System.IO.Enumeration.FileSystemEntry entry) => entry.IsDirectory,
-            options);
-
-        while (listing.MoveNext())
-        {
-            into.Add(listing.Current);
-        }
-
-        return new ListingEnd(listing.Outcome, listing.WasDenied);
     }
 }

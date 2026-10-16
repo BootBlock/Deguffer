@@ -75,7 +75,7 @@ internal static class RootSetWalk
         TimeProvider clock,
         CancellationToken ct)
         where TFolder : class =>
-        Visit(roots, tuning, files, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
+        Visit(roots, tuning, files, DirectoryQuery.List, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// The walk above, listing each directory through <paramref name="list"/>: the seam a test lists a
@@ -128,8 +128,8 @@ internal static class RootSetWalk
 
         return folders.Count == 0
             ? list
-            : (directory, options, files, into) =>
-                list(directory, options, folders.Contains(directory) ? FileNames.All : files, into);
+            : (directory, request, into) =>
+                list(directory, folders.Contains(directory) ? request with { Files = FileNames.All } : request, into);
     }
 
     /// <summary>One directory, for every root it lies in, and the roots each of its children lies in.</summary>

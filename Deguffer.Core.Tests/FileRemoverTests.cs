@@ -216,8 +216,8 @@ public sealed class FileRemoverTests : IDisposable
 
         public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
-        public ListingEnd ListEntries(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into) =>
-            inner.ListEntries(directory, options, files, into);
+        public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
+            inner.ListEntries(directory, request, into);
 
         public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 

@@ -88,7 +88,7 @@ internal static class BoundedFileWalk
         TimeProvider clock,
         CancellationToken ct)
     {
-        Visit(root, rootState, tuning, files, WalkListing.FromDisk, onDirectory, onProgress, clock, ct);
+        Visit(root, rootState, tuning, files, DirectoryQuery.List, onDirectory, onProgress, clock, ct);
     }
 
     /// <summary>
@@ -146,20 +146,47 @@ internal static class BoundedFileWalk
         // Once for the walk, so every worker counts against the volume through the same limit.
         var budgeted = budget.Around(list, tuning.Threads);
 
-        new WalkWorkers<TState>(
-                tuning.Threads,
-                descend => DiskReader(new WalkListing(buffer, budgeted, files), onDirectory, descend),
-                onProgress,
-                clock,
-                ct)
-            .Run([.. roots.Select(root => (LongPath.Extended(root.Root), root.State))]);
+        // One for each thread the walk takes, each holding its worker's memory until the walk is over.
+        var listings = new List<WalkListing>(tuning.Threads);
+
+        try
+        {
+            new WalkWorkers<(TState State, bool Descended)>(
+                    tuning.Threads,
+                    descend =>
+                    {
+                        var listing = new WalkListing(buffer, budgeted, files);
+                        lock (listings)
+                        {
+                            listings.Add(listing);
+                        }
+
+                        return DiskReader(listing, onDirectory, descend);
+                    },
+                    onProgress,
+                    clock,
+                    ct)
+                .Run([.. roots.Select(root => (LongPath.Extended(root.Root), (root.State, Descended: false)))]);
+        }
+        finally
+        {
+            // Run returns, or throws, only once every worker has ended, so none is still listing.
+            foreach (var listing in listings)
+            {
+                listing.Dispose();
+            }
+        }
     }
 
-    /// <summary>One worker's reading of a directory: its own listing, handed to the caller's callback.</summary>
-    private static Action<string, TState> DiskReader<TState>(
+    /// <summary>
+    /// One worker's reading of a directory: its own listing, handed to the caller's callback. A root is
+    /// listed as it always was, through a link at its name, and every directory below it as itself
+    /// (<see cref="ListingRequest.FollowsLink"/>).
+    /// </summary>
+    private static Action<string, (TState State, bool Descended)> DiskReader<TState>(
         WalkListing listing,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
-        Action<string, TState> descend)
+        Action<string, (TState State, bool Descended)> descend)
     {
         Action<WalkEntry, TState> descendUnlessLink = (directory, state) =>
         {
@@ -170,10 +197,10 @@ internal static class BoundedFileWalk
             // can be made.
             if (!directory.IsReparsePoint)
             {
-                descend(directory.FullName, state);
+                descend(directory.FullName, (state, Descended: true));
             }
         };
 
-        return (path, state) => onDirectory(state, listing.Read(path), descendUnlessLink);
+        return (path, at) => onDirectory(at.State, listing.Read(path, followsLink: !at.Descended), descendUnlessLink);
     }
 }

@@ -175,13 +175,13 @@ public sealed class RootSetWalkTests
             return this;
         }
 
-        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
+        public ListingEnd List(string directory, ListingRequest request, List<WalkEntry> into)
         {
             Listings.AddOrUpdate(directory, 1, (_, count) => count + 1);
 
             if (!_folders.TryGetValue(directory, out var children))
             {
-                return new ListingEnd(PathPresence.Absent, Denied: false);
+                return new ListingEnd(PathPresence.Absent, Denied: false, WhileReading: false);
             }
 
             foreach (var (name, attributes) in children)
@@ -189,7 +189,7 @@ public sealed class RootSetWalkTests
                 into.Add(new WalkEntry(directory, name, attributes, attributes.HasFlag(FileAttributes.Directory) ? 0 : 10, default, default));
             }
 
-            return new ListingEnd(PathPresence.Present, Denied: false);
+            return ListingEnd.Listed;
         }
     }
 
@@ -209,7 +209,7 @@ public sealed class RootSetWalkTests
 
         public int Listed => Volatile.Read(ref _listed);
 
-        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
+        public ListingEnd List(string directory, ListingRequest request, List<WalkEntry> into)
         {
             Interlocked.Increment(ref _listed);
 
@@ -223,7 +223,7 @@ public sealed class RootSetWalkTests
             _released.Wait();
             Interlocked.Decrement(ref _inFlight);
 
-            return new ListingEnd(PathPresence.Present, Denied: false);
+            return ListingEnd.Listed;
         }
 
         public bool WaitForFullCount(TimeSpan deadline) => _full.Wait(deadline);

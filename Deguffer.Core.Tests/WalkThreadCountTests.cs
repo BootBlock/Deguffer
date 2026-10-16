@@ -78,7 +78,7 @@ public sealed class WalkThreadCountTests
 
         public int Listed => Volatile.Read(ref _listed);
 
-        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
+        public ListingEnd List(string directory, ListingRequest request, List<WalkEntry> into)
         {
             Interlocked.Increment(ref _listed);
 
@@ -90,7 +90,7 @@ public sealed class WalkThreadCountTests
                 }
 
                 _sinceRoot.Start();
-                return new ListingEnd(PathPresence.Present, Denied: false);
+                return ListingEnd.Listed;
             }
 
             var now = Interlocked.Increment(ref _inFlight);
@@ -103,7 +103,7 @@ public sealed class WalkThreadCountTests
             _released.Wait();
             Interlocked.Decrement(ref _inFlight);
 
-            return new ListingEnd(PathPresence.Present, Denied: false);
+            return ListingEnd.Listed;
         }
 
         /// <summary>Whether the full count was listing at once within <paramref name="deadline"/> of the root's listing.</summary>
