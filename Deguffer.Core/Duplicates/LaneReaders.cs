@@ -9,8 +9,9 @@ namespace Deguffer.Core.Duplicates;
 /// <para><b>Not the thread pool.</b> A read blocks its thread for as long as the disk takes. On the
 /// pool, a lane's readers are as many as the pool has threads free, and the pool starts threads past
 /// its minimum, one per processor, only once it finds itself starved, about one every half second.
-/// A solid-state disk on a machine of four processors was read by two, and on two by one, while the
-/// rest of the process's pool work waited behind the reads. On threads of their own
+/// Until it does, a lane bound to four readers can be read by fewer, as the content-matching tests saw
+/// with the processor count held at four, and the rest of the process's pool work waits behind the
+/// reads. On threads of their own
 /// (<see cref="WorkerThreads"/>) the lane is read by its bound from the first file.</para>
 ///
 /// <para><b>Stops taking files</b> once the search is stopped or a reader has failed. A read already

@@ -90,8 +90,8 @@ public sealed class ProcessInspectorTests
     /// able to open one would skip the branch this test exists for while still passing.</para>
     ///
     /// <para>The one caller an empty DACL does not stop is one with <c>SeDebugPrivilege</c> enabled,
-    /// and an elevated test host has it enabled, because <see cref="Process"/> enables it whenever
-    /// the account holds it. So the probe is asked from <see cref="ThreadWithoutDebugPrivilege"/>, and
+    /// and an elevated test host has it enabled, because <see cref="Process"/> enables it the first
+    /// time it looks a process up by id or lists them. So the probe is asked from <see cref="ThreadWithoutDebugPrivilege"/>, and
     /// the refusal holds elevated or not.</para>
     /// </summary>
     [Fact]

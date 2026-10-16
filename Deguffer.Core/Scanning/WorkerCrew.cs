@@ -9,9 +9,11 @@ namespace Deguffer.Core.Scanning;
 /// <see cref="WorkerThreads.RunAsync{T}(Func{T}, CancellationToken)"/>, so the calling thread is not
 /// the pool's either.
 ///
-/// <para>The walk (<see cref="WalkWorkers{TState}"/>) and the read of the file table
-/// (<see cref="Mft.MftReadPass"/>) differ in what their work is and in when they are over. They agree
-/// in how a helper starts, ends, fails and is waited for, which is what this holds.</para>
+/// <para>The walk (<see cref="WalkWorkers{TState}"/>), the read of the file table
+/// (<see cref="Mft.MftReadPass"/>) and the reading of a duplicate search's files
+/// (<see cref="Duplicates.LaneReaders{T}"/>) differ in what their work is and in when they are
+/// over. They agree in how a helper starts, ends, fails and is waited for, which is what this
+/// holds.</para>
 ///
 /// <para><b>A helper that finds no work ends</b> rather than holding a thread. The calling
 /// thread instead waits for a <see cref="Signal"/>, which anything that changes what it is waiting
