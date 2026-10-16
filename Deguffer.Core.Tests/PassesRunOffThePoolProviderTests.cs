@@ -1,4 +1,4 @@
-﻿using Deguffer.Core.Cloud;
+using Deguffer.Core.Cloud;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
@@ -40,11 +40,10 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
         ChromiumApplication("Chatter");
         var present = false;
 
-        var made = await CrewsMadeBy(async () => present = await ChromiumProvider().IsPresentAsync());
+        var made = await CrewThreads.MadeBy(async () => present = await ChromiumProvider().IsPresentAsync());
 
         Assert.True(present);
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
+        CrewThreads.AssertOffThePool(made);
     }
 
     /// <summary>
@@ -55,15 +54,14 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
     [Fact]
     public async Task AChromiumRowsPlanIsWalkedOffThePool()
     {
-        var made = await CrewsMadeBy(async () =>
+        var made = await CrewThreads.MadeBy(async () =>
         {
             var plan = await ChromiumProvider().PlanAsync();
 
             Assert.Empty(plan.Steps);
         });
 
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
+        CrewThreads.AssertOffThePool(made);
     }
 
     /// <summary>
@@ -76,11 +74,10 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
         ChromiumApplication("Chatter");
         IReadOnlyList<CleanedPlace> places = [];
 
-        var made = await CrewsMadeBy(async () => places = await ChromiumProvider().CleanedPlacesAsync());
+        var made = await CrewThreads.MadeBy(async () => places = await ChromiumProvider().CleanedPlacesAsync());
 
         Assert.NotEmpty(places);
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
+        CrewThreads.AssertOffThePool(made);
     }
 
     /// <summary>
@@ -101,10 +98,9 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
             Estimated = ScanSize.FromLengths(64),
         });
 
-        var made = await CrewsMadeBy(async () => Assert.Single((await provider.PlanAsync()).Steps));
+        var made = await CrewThreads.MadeBy(async () => Assert.Single((await provider.PlanAsync()).Steps));
 
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
+        CrewThreads.AssertOffThePool(made);
     }
 
     /// <summary>
@@ -119,13 +115,12 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
         var discovery = SourceDiscovery(scanner);
         SourceDiscovery? found = null;
 
-        var made = await CrewsMadeBy(async () => found = await discovery.FindAsync([new SourceRoot(root)]));
+        var made = await CrewThreads.MadeBy(async () => found = await discovery.FindAsync([new SourceRoot(root)]));
 
         Assert.Equal(1, scanner.FindCalls);
         Assert.True(found!.FellBack);
         Assert.Equal([Path.Combine(root, "Example", "obj")], found.Candidates);
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
+        CrewThreads.AssertOffThePool(made);
     }
 
     /// <summary>
@@ -139,12 +134,11 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
         var discovery = SourceDiscovery(new RacingScanner(new FakeDirectoryScanner()));
         SourceDiscovery? found = null;
 
-        var made = await CrewsMadeBy(async () => found = await discovery.FindAsync([new SourceRoot(root)]));
+        var made = await CrewThreads.MadeBy(async () => found = await discovery.FindAsync([new SourceRoot(root)]));
 
         Assert.True(found!.FellBack);
         Assert.Equal([Path.Combine(root, "Example", "obj")], found.Candidates);
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
+        CrewThreads.AssertOffThePool(made);
     }
 
     /// <summary>
@@ -163,21 +157,10 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
         var provider = new CloudLocalCopiesProvider(
             cloud, _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, new FakeDirectoryScanner());
 
-        var made = await CrewsMadeBy(async () =>
+        var made = await CrewThreads.MadeBy(async () =>
             Assert.IsType<ReleaseLocalCopiesStep>(Assert.Single((await provider.PlanAsync()).Steps)));
 
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
-    }
-
-    /// <summary>Whether each crew <paramref name="act"/> made was made on a pool thread.</summary>
-    private static async Task<IReadOnlyList<bool>> CrewsMadeBy(Func<Task> act)
-    {
-        var made = new System.Collections.Concurrent.ConcurrentQueue<bool>();
-        WorkerCrew.Made.Value = made.Enqueue;
-        try { await act(); }
-        finally { WorkerCrew.Made.Value = null; }
-        return [.. made];
+        CrewThreads.AssertOffThePool(made);
     }
 
     /// <summary>A fresh row, so the memoised discovery walks on the first ask.</summary>

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
@@ -35,11 +34,11 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     [Fact]
     public async Task AVolumesIndexIsBuiltOffThePool()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var cache = new MftVolumeIndexCache(FakeMftSourceFactory.Serving(letter, Volume()), ScanTuner.Shipped);
         MftVolumeIndexCache.Built built = default;
 
-        AssertOffThePool(await CrewsMadeBy(async () => built = await cache.Get(letter)));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () => built = await cache.Get(letter)));
         Assert.NotNull(built.Index);
     }
 
@@ -50,7 +49,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     [Fact]
     public async Task ABuildWithNoThreadClosesTheVolumeItOpened()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var sources = new HeldMftSourceFactory(letter, Volume());
 
         // Its reads go ahead, so a build that started after all ends, and the test fails rather than waits.
@@ -66,22 +65,22 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     [Fact]
     public async Task AnExploreScanReadsItsTableOffThePool()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
         ExploreScan? scan = null;
 
-        AssertOffThePool(await CrewsMadeBy(async () => scan = await scanner.ScanAsync($@"{letter}:\")));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () => scan = await scanner.ScanAsync($@"{letter}:\")));
         Assert.Equal(ScanStrategy.MasterFileTable, scan!.Strategy);
     }
 
     [Fact]
     public async Task AFolderScanReadsItsTableOffThePool()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
         IReadOnlyList<ScannedFolder> scans = [];
 
-        AssertOffThePool(await CrewsMadeBy(async () => scans = await scanner.ScanFoldersAsync([$@"{letter}:\Users"])));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () => scans = await scanner.ScanFoldersAsync([$@"{letter}:\Users"])));
         Assert.Equal(ScanStrategy.MasterFileTable, Assert.Single(scans).Strategy);
     }
 
@@ -92,7 +91,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
         var folder = Tree();
         var scanner = new ParallelEnumerationScanner(ScanTuner.Shipped);
 
-        AssertOffThePool(await CrewsMadeBy(() => Measure(scanner, measurement, folder)));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(() => Measure(scanner, measurement, folder)));
     }
 
     [Theory]
@@ -102,7 +101,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
         var folder = Tree();
         var scanner = new HardLinkAwareScanner(ScanTuner.Shipped);
 
-        AssertOffThePool(await CrewsMadeBy(() => Measure(scanner, measurement, folder)));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(() => Measure(scanner, measurement, folder)));
     }
 
     /// <summary>The look inside a tree for an Outlook data file before a command is let loose on it.</summary>
@@ -111,7 +110,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     {
         var folder = Tree();
 
-        AssertOffThePool(await CrewsMadeBy(() => WholeTreeLook.TakeAsync([folder], MinimumAge.Off, default)));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(() => WholeTreeLook.TakeAsync([folder], MinimumAge.Off, default)));
     }
 
     /// <summary>The walk a removal makes of a folder before it takes anything from it.</summary>
@@ -122,7 +121,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
         var sibling = _temp.CreateFile(16, "profile", "kept.txt");
         RemovalOutcome? outcome = null;
 
-        AssertOffThePool(await CrewsMadeBy(async () => outcome = await DirectoryRemover.RemoveAsync(folder)));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () => outcome = await DirectoryRemover.RemoveAsync(folder)));
         Assert.True(outcome!.RootRemoved);
         Assert.True(LongPath.FileExists(sibling));
     }
@@ -138,7 +137,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
             new FakeVolumeInventory());
         var bin = new FakeRecycleBin();
 
-        AssertOffThePool(await CrewsMadeBy(() => ExploreRemover.RemoveAsync(
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(() => ExploreRemover.RemoveAsync(
             [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
             ExploreRemovalMode.RecycleBin,
             policy,
@@ -153,31 +152,6 @@ public sealed class PassesRunOffThePoolTests : IDisposable
         _ => scanner.MeasureManyAsync([new ScanRequest(folder)]).AsTask(),
     };
 
-    /// <summary>Whether each crew <paramref name="act"/> made was made on a pool thread.</summary>
-    private static async Task<IReadOnlyList<bool>> CrewsMadeBy(Func<Task> act)
-    {
-        var made = new ConcurrentQueue<bool>();
-        WorkerCrew.Made.Value = made.Enqueue;
-
-        try
-        {
-            await act();
-        }
-        finally
-        {
-            WorkerCrew.Made.Value = null;
-        }
-
-        return [.. made];
-    }
-
-    /// <summary>Some crew was made, so the operation walked, and none on a pool thread.</summary>
-    private static void AssertOffThePool(IReadOnlyList<bool> made)
-    {
-        Assert.NotEmpty(made);
-        Assert.DoesNotContain(true, made);
-    }
-
     private string Tree()
     {
         var folder = _temp.CreateDirectory("profile", "cache");
@@ -185,11 +159,4 @@ public sealed class PassesRunOffThePoolTests : IDisposable
         _temp.CreateFile(32, "profile", "cache", "nested", "b.bin");
         return folder;
     }
-
-    /// <summary>
-    /// A drive letter no volume answers to, so a scan that left the table would find nothing to walk
-    /// rather than walk a real disk.
-    /// </summary>
-    private static char UnusedDriveLetter() =>
-        "ZYXWVUTSRQPONM".First(letter => !Directory.Exists($@"{letter}:\"));
 }

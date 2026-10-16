@@ -45,7 +45,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReadsTheTableForAWholeVolumeWhereItCan()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"{letter}:\");
@@ -65,7 +65,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task AScanOfATableWithARecordItCouldNotReadSaysItIsIncomplete()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume().CorruptSectorStamp(21)));
 
         var scan = await scanner.ScanAsync($@"{letter}:\");
@@ -82,7 +82,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task FallsBackToTheWalkAndOffersElevationWhenTheTableCannotBeOpened()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
 
         var scan = await scanner.ScanAsync($@"{letter}:\");
@@ -100,7 +100,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReadsTheTableForAFolderBelowTheVolumeRoot()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"{letter}:\Users\testuser\.npm-cache");
@@ -128,7 +128,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task NamesAFolderInTheFormAPersonReadsWhateverFormItWasGiven()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"\\?\{letter}:\Users\testuser\.npm-cache");
@@ -175,7 +175,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task WalksAFolderReachedThroughALinkWithoutOfferingARouteThatWasNeverLost()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var sources = FakeMftSourceFactory.Serving(
             letter, Volume().AddDirectoryLink(30, Profile, "linked-cache"));
 
@@ -195,7 +195,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReportsAFolderTheTableDoesNotDescribe()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var sources = FakeMftSourceFactory.Serving(letter, Volume());
 
         var scan = await new ExploreScanner(sources).ScanAsync($@"{letter}:\Users\testuser\.pnpm-store");
@@ -258,7 +258,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReportsAMeasuredFractionWhileItReadsTheTable()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var progress = new ProgressRecorder<ExploreProgress>();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume().AddUnused(70_000)));
 
@@ -419,7 +419,7 @@ public class ExploreScannerTests
     [Fact]
     public async Task StopsTheTableReadWhenTheScanIsCancelled()
     {
-        var letter = UnusedDriveLetter();
+        var letter = DriveLetters.Unused();
         var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume().AddUnused(70_000)));
 
         using var cancel = new CancellationTokenSource();
@@ -443,13 +443,4 @@ public class ExploreScannerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress, cancel.Token).AsTask());
     }
-
-    /// <summary>
-    /// A drive letter no volume answers to, so a scan rooted at it reaches the route choice and then
-    /// finds nothing to walk. Without it, testing the volume-root branch would mean walking a real
-    /// disk.
-    /// </summary>
-    private static char UnusedDriveLetter() =>
-        "ZYXWVUTSRQPONM".First(letter => !Directory.Exists($@"{letter}:\"));
-
 }
