@@ -80,9 +80,9 @@ public sealed class RowDeclarationsTests : IDisposable
                 () =>
                 {
                     together.SignalAndWait();
-                    return declarations.OfferedByARow(Path.Combine(_temp.Path, "row7", "root3", "cache"));
+                    return declarations.OfferedByARowAsync(Path.Combine(_temp.Path, "row7", "root3", "cache"));
                 },
-                TaskCreationOptions.LongRunning)))
+                TaskCreationOptions.LongRunning).Unwrap()))
             .WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.All(answers, Assert.True);
@@ -204,14 +204,14 @@ public sealed class RowDeclarationsTests : IDisposable
     /// what it holds is nobody's. Read as Win32 reads it, it was the declared folder.
     /// </summary>
     [Fact]
-    public void AFolderBesideTheDeclaredOneWithATrailingDotDeclaresNothing()
+    public async Task AFolderBesideTheDeclaredOneWithATrailingDotDeclaresNothing()
     {
         var editor = CreateEditor();
         var declarations = new RowDeclarations();
         declarations.Admit([new VsCodeCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning)]);
 
-        Assert.True(declarations.OfferedByARow(Path.Combine(editor, "CachedData")));
-        Assert.False(declarations.OfferedByARow(Path.Combine(editor + ".", "CachedData")));
+        Assert.True(await declarations.OfferedByARowAsync(Path.Combine(editor, "CachedData")));
+        Assert.False(await declarations.OfferedByARowAsync(Path.Combine(editor + ".", "CachedData")));
     }
 
     /// <summary>
@@ -219,7 +219,7 @@ public sealed class RowDeclarationsTests : IDisposable
     /// not declare is nobody's, and a name no table offers is nobody's either.
     /// </summary>
     [Fact]
-    public void OnlyANameARowOffersInTheFolderItDeclaresIsOffered()
+    public async Task OnlyANameARowOffersInTheFolderItDeclaresIsOffered()
     {
         var editor = CreateEditor();
         var elsewhere = Path.Combine(_environment.RoamingAppData, "Elsewhere");
@@ -228,11 +228,11 @@ public sealed class RowDeclarationsTests : IDisposable
         var declarations = new RowDeclarations();
         declarations.Admit([new VsCodeCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning)]);
 
-        Assert.True(declarations.OfferedByARow(Path.Combine(editor, "CachedData")));
-        Assert.True(declarations.OfferedByARow(Path.Combine(editor, "cacheddata")));
-        Assert.False(declarations.OfferedByARow(Path.Combine(editor, "User")));
-        Assert.False(declarations.OfferedByARow(Path.Combine(editor, "Code Cache")));
-        Assert.False(declarations.OfferedByARow(Path.Combine(elsewhere, "CachedData")));
+        Assert.True(await declarations.OfferedByARowAsync(Path.Combine(editor, "CachedData")));
+        Assert.True(await declarations.OfferedByARowAsync(Path.Combine(editor, "cacheddata")));
+        Assert.False(await declarations.OfferedByARowAsync(Path.Combine(editor, "User")));
+        Assert.False(await declarations.OfferedByARowAsync(Path.Combine(editor, "Code Cache")));
+        Assert.False(await declarations.OfferedByARowAsync(Path.Combine(elsewhere, "CachedData")));
     }
 
     /// <summary>
@@ -240,14 +240,14 @@ public sealed class RowDeclarationsTests : IDisposable
     /// with the device prefix or a trailing separator names the same folder (§6.3).
     /// </summary>
     [Fact]
-    public void TheFolderIsComparedInItsResolvedForm()
+    public async Task TheFolderIsComparedInItsResolvedForm()
     {
         var editor = CreateEditor();
         var declarations = new RowDeclarations();
         declarations.Admit([new VsCodeCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning)]);
 
-        Assert.True(declarations.OfferedByARow(@"\\?\" + Path.Combine(editor, "CachedData")));
-        Assert.True(declarations.OfferedByARow(Path.Combine(editor, ".", "CachedData")));
+        Assert.True(await declarations.OfferedByARowAsync(@"\\?\" + Path.Combine(editor, "CachedData")));
+        Assert.True(await declarations.OfferedByARowAsync(Path.Combine(editor, ".", "CachedData")));
     }
 
     /// <summary>
@@ -255,11 +255,11 @@ public sealed class RowDeclarationsTests : IDisposable
     /// it can cause is a false alarm, never a survivor left unasserted.
     /// </summary>
     [Fact]
-    public void DeclarationsNoPlannerAdmittedOfferNothing()
+    public async Task DeclarationsNoPlannerAdmittedOfferNothing()
     {
         var editor = CreateEditor();
 
-        Assert.False(new RowDeclarations().OfferedByARow(Path.Combine(editor, "CachedData")));
+        Assert.False(await new RowDeclarations().OfferedByARowAsync(Path.Combine(editor, "CachedData")));
     }
 
     /// <summary>
@@ -268,50 +268,94 @@ public sealed class RowDeclarationsTests : IDisposable
     /// drop survivors nobody removes.
     /// </summary>
     [Fact]
-    public void ADiscoveredRootIsNeverReadAsAnOffer()
+    public async Task ADiscoveredRootIsNeverReadAsAnOffer()
     {
         var folder = Path.Combine(_environment.LocalAppData, "Tool");
         var declarations = new RowDeclarations();
         declarations.Admit([new DeclaringRow([], discovered: [ToolRoot.Sparing(folder, "Configuration.", ["config"])])]);
 
-        Assert.False(declarations.OfferedByARow(Path.Combine(folder, "anything")));
+        Assert.False(await declarations.OfferedByARowAsync(Path.Combine(folder, "anything")));
     }
 
     /// <summary>
-    /// A row whose declaration asked what other rows offer would recurse until the stack ran out,
-    /// which ends the process with no account of why. It is refused with one instead.
+    /// A row whose declaration asked what other rows offer would wait for ever for the reading it is
+    /// part of, with no account of why. It is refused with one instead.
     /// </summary>
     [Fact]
-    public void ARowWhoseDeclarationAsksWhatOthersOfferIsRefused()
+    public async Task ARowWhoseDeclarationAsksWhatOthersOfferIsRefused()
     {
         var folder = Path.Combine(_environment.LocalAppData, "Tool");
         var declarations = new RowDeclarations();
         declarations.Admit([new DeclaringRow(() =>
         {
-            declarations.OfferedByARow(Path.Combine(folder, "child"));
+            declarations.OfferedByARowAsync(Path.Combine(folder, "child")).GetAwaiter().GetResult();
             return [];
         })]);
 
-        Assert.Throws<InvalidOperationException>(() => declarations.OfferedByARow(Path.Combine(folder, "child")));
+        // Bounded, so a declaration left waiting for the reading it is part of fails rather than hangs.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => declarations.OfferedByARowAsync(Path.Combine(folder, "child")).WaitAsync(TimeSpan.FromSeconds(30)));
     }
 
     /// <summary>
-    /// The first question in a pass reads every row's declaration from inside the plan of whichever
-    /// row asked, so a cancelled pass stops there rather than reading the rest.
+    /// The first question in a pass reads every row's declaration for whichever row asked, so a
+    /// pass cancelled while one row is read stops there rather than reading the rest.
     /// </summary>
     [Fact]
-    public void ACancelledPassStopsReadingTheRows()
+    public async Task ACancelledPassStopsReadingTheRows()
     {
-        var read = 0;
-        var declarations = new RowDeclarations();
-        declarations.Admit([new DeclaringRow(() => { read++; return []; })]);
-
         using var cancelled = new CancellationTokenSource();
-        cancelled.Cancel();
+        var readAfter = 0;
+        var declarations = new RowDeclarations();
+        declarations.Admit(
+        [
+            new DeclaringRow(() => { cancelled.Cancel(); return []; }),
+            new DeclaringRow(() => { readAfter++; return []; }),
+        ]);
 
-        Assert.Throws<OperationCanceledException>(
-            () => declarations.OfferedByARow(Path.Combine(_environment.LocalAppData, "Tool", "cache"), cancelled.Token));
-        Assert.Equal(0, read);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => declarations.OfferedByARowAsync(Path.Combine(_environment.LocalAppData, "Tool", "cache"), cancelled.Token));
+        Assert.Equal(0, readAfter);
+    }
+
+    /// <summary>
+    /// Plans share the one reading the first of them started, under that plan's token. A plan still
+    /// running is answered when that first plan is stopped, rather than stopped with it.
+    /// </summary>
+    [Fact]
+    public async Task APlanStillRunningIsAnsweredWhenThePlanThatStartedTheReadingIsStopped()
+    {
+        var folder = Path.Combine(_environment.LocalAppData, "Tool");
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var first = true;
+        var declarations = new RowDeclarations();
+        declarations.Admit(
+        [
+            new DeclaringRow(() =>
+            {
+                if (first)
+                {
+                    first = false;
+                    entered.Set();
+                    release.Wait(TimeSpan.FromSeconds(30));
+                }
+
+                return [];
+            }),
+            new DeclaringRow(() => [ToolRoot.Folders(folder, "A tool's own folder.", name => name == "cache")]),
+        ]);
+
+        using var stopped = new CancellationTokenSource();
+        var starter = declarations.OfferedByARowAsync(Path.Combine(folder, "cache"), stopped.Token);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30)), "the reading never started.");
+
+        var running = declarations.OfferedByARowAsync(Path.Combine(folder, "cache"));
+        stopped.Cancel();
+        release.Set();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => starter);
+        Assert.True(await running.WaitAsync(TimeSpan.FromSeconds(30)));
     }
 
     /// <summary>
@@ -319,19 +363,19 @@ public sealed class RowDeclarationsTests : IDisposable
     /// miss a folder that appeared since.
     /// </summary>
     [Fact]
-    public void AnInvalidatedSetReadsTheRowsAgain()
+    public async Task AnInvalidatedSetReadsTheRowsAgain()
     {
         var folder = Path.Combine(_environment.LocalAppData, "Tool");
         IReadOnlyList<ToolRoot> roots = [];
         var declarations = new RowDeclarations();
         declarations.Admit([new DeclaringRow(() => roots)]);
 
-        Assert.False(declarations.OfferedByARow(Path.Combine(folder, "cache")));
+        Assert.False(await declarations.OfferedByARowAsync(Path.Combine(folder, "cache")));
 
         roots = [ToolRoot.Folders(folder, "A tool's own folder.", name => name == "cache")];
         declarations.Invalidate();
 
-        Assert.True(declarations.OfferedByARow(Path.Combine(folder, "cache")));
+        Assert.True(await declarations.OfferedByARowAsync(Path.Combine(folder, "cache")));
     }
 
     /// <summary>A row that does nothing but declare.</summary>

@@ -174,6 +174,9 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     ///
     /// <para>Both rows declare the same folders with disjoint tables. §7.1 reads the union of every
     /// declaration covering a path, so each row states only what it removes.</para>
+    ///
+    /// <para>The first read after <see cref="InvalidateCaches"/> walks both application-data roots,
+    /// which is why every declaration is read through <see cref="DeclaredRoots"/>.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
         _toolRoots.Get(() =>
@@ -199,7 +202,9 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// another drive's tree, or a copy found where its search was not told it would look.</para>
     ///
     /// <para>Waits here, without holding a thread, for a scan's tree where the discovery reads one,
-    /// so <see cref="ToolRoots"/>, read once every probe is in, finds the answer ready.</para>
+    /// so the walk behind <see cref="ToolRoots"/>, read once every probe is in, finds the scope's
+    /// answer ready rather than waiting for the scan. That walk still runs the first time
+    /// <see cref="ToolRoots"/> is read, on the thread <see cref="DeclaredRoots"/> reads it on.</para>
     /// </summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
     [
@@ -344,7 +349,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 }
 
                 var walk = CacheLevelWalk.Under(CacheLevels, profile, ct);
-                var spares = walk.Survivors(_declarations, ct);
+                var spares = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
 
                 // Listed under the application and the profile, because those are what a reader
                 // knows: nobody chooses between 'Code Cache' folders by name.

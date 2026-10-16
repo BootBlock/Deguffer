@@ -461,9 +461,10 @@ public class ExploreTreeTests
     /// list doubling through the large object heap, a cursor array or a key array per directory is
     /// a hundred megabytes thrown away each time.
     ///
-    /// <para>What is kept is the child starts and the child list, four bytes a node each, and a
-    /// byte a node for whether it was reached. The order is four more, so thirteen in all, and the
-    /// bound leaves one for the key buffer and the tree itself.</para>
+    /// <para>What is kept is the child starts and the child list, four bytes a node each. The order
+    /// is four more, so twelve in all, and the bound leaves one for the key buffer and the tree
+    /// itself. A tree whose every node is reached keeps the arrays it was handed, so nothing is
+    /// copied for one.</para>
     /// </summary>
     [Theory]
     [InlineData(ExploreChildOrder.BySize)]
@@ -484,9 +485,9 @@ public class ExploreTreeTests
         Assert.Equal(folders * filesInEach, tree.TotalBytes);
         Assert.Equal(filesInEach, tree.ChildrenOf(1).Length);
 
-        // From thirteen, so that a measurement that missed the large object heap, where every one
+        // From twelve, so that a measurement that missed the large object heap, where every one
         // of these arrays is, fails rather than passing at nothing.
-        Assert.InRange(perNode, 13, 14);
+        Assert.InRange(perNode, 12, 13);
     }
 
     /// <summary>

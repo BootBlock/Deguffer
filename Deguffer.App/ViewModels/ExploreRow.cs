@@ -10,8 +10,8 @@ namespace Deguffer.App.ViewModels;
 /// <summary>
 /// One row of the list view, and one entry of any other view's detail.
 ///
-/// <para>Split in two by what a later tree can change. The node, the name and what kind of entry
-/// it is are the row's identity and are fixed for its life; the size, the share, the age and the
+/// <para>Split in two by what a later tree can change. The name and what kind of entry it is are
+/// the row's identity and are fixed for its life; the node, the size, the share, the age and the
 /// dates are re-read from every tree that arrives. That split is what lets a snapshot landing
 /// mid-scan update the list in place instead of rebuilding it — a rebuild is a Reset for the bound
 /// <c>ListView</c>, which throws away the scroll position and the selection with it.</para>
@@ -59,11 +59,13 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
         DatesLabel = ExploreRowText.Dates(tree, node);
     }
 
-    /// <summary>What this row stands for, whichever tree of one walk is on screen.</summary>
+    /// <summary>What this row stands for, whichever tree of the same folder is on screen.</summary>
     public ExploreRowKey Key { get; }
 
-    /// <summary>Which node in the tree this stands for.</summary>
-    public int Node { get; }
+    /// <summary>
+    /// Which node in the tree on screen this stands for, which a later tree can number differently.
+    /// </summary>
+    public int Node { get; private set; }
 
     public string Name { get; }
 
@@ -176,28 +178,31 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     /// What <paramref name="node"/> of <paramref name="tree"/> is, for matching it against the rows
     /// already on screen.
     ///
-    /// <para>The node number alone is not enough. Through the snapshots of one walk it is, because
-    /// they come from one builder whose lists only grow — but a rescan numbers its nodes afresh, and
-    /// a row updated on the strength of a coincidence would show one directory's size under
-    /// another's name. The name settles it: the parent is the same directory in both trees, or the
-    /// page would not be standing on it, so a child of that parent with this number and this name is
-    /// this entry.</para>
+    /// <para>By name and kind, not by node number. Through the snapshots of one walk the number
+    /// would do, because they come from one builder whose lists only grow, but a rescan can number an
+    /// entry afresh: the file table's tree numbers only what it reaches, so a file made before this
+    /// one moves it. A row matched by number would show one entry's size under another's name, and a
+    /// row matched by nothing would be rebuilt, losing the reader's place in the list. The name
+    /// settles it: the parent is the same directory in both trees, or the page would not keep the
+    /// rows, and a directory holds one entry of each exact name.</para>
     /// </summary>
     public static ExploreRowKey KeyOf(ExploreTree tree, int node)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        return new ExploreRowKey(node, tree.IsDirectory(node), tree.IsLink(node), tree.NameOf(node));
+        return new ExploreRowKey(tree.IsDirectory(node), tree.IsLink(node), tree.NameOf(node));
     }
 
     /// <summary>
-    /// Re-read everything a later tree can have changed. See the class summary for why this is not
-    /// a new row.
+    /// Re-read everything a later tree can have changed, from <paramref name="node"/>, which stands
+    /// for this row's entry there (<see cref="KeyOf"/>). See the class summary for why this is not a
+    /// new row.
     /// </summary>
-    public void Describe(ExploreTree tree, long parentTotal, DateTime now)
+    public void Describe(ExploreTree tree, int node, long parentTotal, DateTime now)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
+        Node = node;
         SizeLabel = ExploreRowText.Size(tree, Node);
         StorageLabel = ExploreRowText.Storage(tree, Node);
         Share = ShareOf(tree, Node, parentTotal);
@@ -212,9 +217,9 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
 
 /// <summary>
 /// What a row is about, as against what a later tree can change about it. See
-/// <see cref="ExploreRow.KeyOf"/> for why the node number is not this on its own.
+/// <see cref="ExploreRow.KeyOf"/> for why the node number is not part of it.
 /// </summary>
-public readonly record struct ExploreRowKey(int Node, bool IsDirectory, bool IsLink, string Name);
+public readonly record struct ExploreRowKey(bool IsDirectory, bool IsLink, string Name);
 
 /// <summary>One step of the path back to the top.</summary>
 /// <param name="Position">

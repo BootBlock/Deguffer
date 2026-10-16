@@ -42,7 +42,7 @@ Func<CancellationToken, RunTally> run = request.Route switch
     Route.ExploreWalk => ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct),
     Route.Sources => ct => SourcesRoute.Run(request.Path, request.Walk, ct),
     Route.Links => ct => LinksRoute.Run(request.Path, request.ReadBy, ct),
-    _ => ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Drive, request.Table, ct),
+    _ => ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, ct),
 };
 
 using var cancel = new CancellationTokenSource();

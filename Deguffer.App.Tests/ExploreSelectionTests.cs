@@ -106,6 +106,32 @@ public sealed class ExploreSelectionTests : IDisposable
         Assert.Equal([folder], selection.Nodes);
     }
 
+    /// <summary>
+    /// A rescan of the same place can number what was picked afresh, as the file table's does when a
+    /// record before it appears. What was picked is kept at its number in the rescan, and nothing
+    /// else is picked in its place.
+    /// </summary>
+    [Fact]
+    public void CarryingFollowsWhatWasPickedToItsNumberInTheRescan()
+    {
+        var (tree, folder, file) = Scanned();
+        var selection = Selection(tree);
+
+        var builder = new ExploreTreeBuilder(tree.PathOf(tree.RootNode));
+        var moved = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            ExploreFixture.File("earlier.bin", 1),
+            ExploreFixture.Folder("old"),
+            ExploreFixture.File("keep.bin", 5),
+        ]) + 1;
+        var rescan = builder.Build(ExploreChildOrder.BySize);
+
+        selection.Select([folder, file]);
+        selection.Carry(rescan);
+
+        Assert.Equal([moved, moved + 1], selection.Nodes);
+        Assert.Equal(["old", "keep.bin"], selection.Nodes.Select(rescan.NameOf));
+    }
+
     [Fact]
     public void TheNoteSaysWhyTheSelectionWillNotBeRemoved()
     {

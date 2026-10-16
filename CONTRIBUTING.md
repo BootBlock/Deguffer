@@ -49,6 +49,7 @@ Deguffer.Benchmark links C:\Users\<user>\AppData\Local\pnpm\store --read-by hand
 Deguffer.Benchmark table C
 Deguffer.Benchmark index C
 Deguffer.Benchmark explore C
+Deguffer.Benchmark explorefolder C:\Users\<user>\Downloads
 Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 ```
 
@@ -66,9 +67,10 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
   each file's link count and sizes. `--read-by name|handle` sets whether each file is read by
   name, as a scan does where the file system answers that, or through a handle opened on it. The
   default is name. Time it both ways to see what the handles cost.
-- `table`, `index` and `explore` read a volume's file table, which needs an elevated prompt.
-  `table` reads and parses every record and keeps nothing. `index` builds what the clean measures
-  locations from. `explore` builds the Explore tree for the whole volume.
+- `table`, `index`, `explore` and `explorefolder` read a volume's file table, which needs an
+  elevated prompt. `table` reads and parses every record and keeps nothing. `index` builds what the
+  clean measures locations from. `explore` builds the Explore tree for the whole volume, and
+  `explorefolder <folder>` the tree for one folder on it, which still reads the whole table.
 - `--runs N` runs the route N times. The default is 5.
 - `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
   how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan
@@ -84,7 +86,9 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 The first run is reported apart from the median of the rest, because they answer different
 questions. The walk's first run lists folders from the drive, and later runs list them largely from
 the Windows file cache. The file table is read without the cache, so its later runs mostly measure
-the drive again. The peak working set for the later runs is the highest the process reached.
+the drive again. The peak working set for the later runs is the highest the process reached. The
+Explore routes also report what the finished tree keeps: the managed heap with the tree held, less
+the heap once it is let go, which the peak working set cannot show.
 
 To report a result, open an issue and paste the output as it stands. It names the drive letter and
 the file system, and never a path, a volume label, a user or a machine. Add the kind of drive

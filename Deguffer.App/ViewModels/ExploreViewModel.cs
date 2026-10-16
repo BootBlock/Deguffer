@@ -1441,7 +1441,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             row => row.Key,
             child => ExploreRow.KeyOf(tree, child),
             child => new ExploreRow(tree, child, total, now, _guide),
-            (row, _) => row.Describe(tree, total, now));
+            (row, child) => row.Describe(tree, child, total, now));
     }
 
     /// <summary>

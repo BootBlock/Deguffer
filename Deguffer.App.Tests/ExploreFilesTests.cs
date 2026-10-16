@@ -215,8 +215,9 @@ public sealed class ExploreFilesTests : IDisposable
     /// <summary>
     /// §7.1: a row is a node number, and a click selects that number in the tree on screen. A row
     /// left standing from another tree while the new one is searched would select, and offer to
-    /// delete, whatever the number means there. So a new tree takes away every row it does not put
-    /// at the same path, before anything else can happen, and the snapshots of one walk keep theirs.
+    /// delete, whatever the number means there. So before anything else can happen, a new tree takes
+    /// away every row whose file it does not hold, and gives every other row the number its file has
+    /// there. The snapshots of one walk keep theirs as they are.
     /// </summary>
     [Fact]
     public void ARowFromAnotherTreeIsGoneBeforeTheSearchAnswers() => UiThread.Run(async () =>
@@ -241,11 +242,14 @@ public sealed class ExploreFilesTests : IDisposable
         Assert.All(files.Rows, row => Assert.Equal(continued.PathOf(row.Node), row.Path));
         await Eventually.HoldsAsync(() => files.Rows[0].SizeLabel == "450 B", "the continued tree listed");
 
-        // Another scan numbers its nodes afresh: the number that was a.iso is x.iso here.
+        // Another scan numbers its nodes afresh: the number that was a.iso is x.iso here, and b.bin
+        // is gone. The a.iso row follows its file, and the b.bin row goes with it.
         var other = Flat(("x.iso", 500), ("a.iso", 100));
         files.Show(other, other.RootNode);
 
-        Assert.Empty(files.Rows);
+        var kept = Assert.Single(files.Rows);
+        Assert.Equal("a.iso", Path.GetFileName(kept.Path));
+        Assert.Equal(other.PathOf(kept.Node), kept.Path);
         Assert.Equal(string.Empty, files.Summary);
 
         await Eventually.HoldsAsync(() => files.Rows.Count == 2, "the other tree listed");
