@@ -251,13 +251,23 @@ public sealed class WorkerThreadsTests
     public async Task WhatFollowsAPassNeverRunsOnItsThread()
     {
         var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+        using var followed = new ManualResetEventSlim();
 
-        var threads = set.RunAsync(() => Environment.CurrentManagedThreadId, CancellationToken.None)
+        // The pass ends only once what follows it is attached, or what follows would run on the
+        // thread that attached it, whatever the pass's task allows.
+        var threads = set.RunAsync(
+                () =>
+                {
+                    followed.Wait();
+                    return Environment.CurrentManagedThreadId;
+                },
+                CancellationToken.None)
             .ContinueWith(
                 ended => (Pass: ended.Result, Next: Environment.CurrentManagedThreadId),
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
+        followed.Set();
 
         var (pass, next) = await threads.WaitAsync(Patience);
         Assert.NotEqual(pass, next);
