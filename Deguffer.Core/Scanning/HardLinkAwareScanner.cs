@@ -65,7 +65,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(() => MeasureNow([new ScanRequest(path, bounds)], [keep], progress, ct)[0][0], ct));
+        new(WorkerThreads.Shared.RunAsync(() => MeasureNow([new ScanRequest(path, bounds)], [keep], progress, ct)[0][0], ct));
 
     /// <summary>
     /// Every directory among <paramref name="asked"/> in one walk, as <see cref="RootSetWalk"/> walks
@@ -75,11 +75,11 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         IReadOnlyList<ScanRequest> asked,
         MinimumAge keep = default,
         CancellationToken ct = default) =>
-        new(Task.Run(() => (IReadOnlyList<ScanResult>)[.. MeasureNow(asked, [keep], progress: null, ct).Select(readings => readings[0])], ct));
+        new(WorkerThreads.Shared.RunAsync(() => (IReadOnlyList<ScanResult>)[.. MeasureNow(asked, [keep], progress: null, ct).Select(readings => readings[0])], ct));
 
     /// <summary>One walk, tallied twice. See <see cref="IDirectoryScanner.MeasureAgedAsync"/>.</summary>
     public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
-        new(Task.Run(() => AgedScan.Of(MeasureNow([new ScanRequest(path)], AgedScan.Keeps(age), progress: null, ct)[0]), ct));
+        new(WorkerThreads.Shared.RunAsync(() => AgedScan.Of(MeasureNow([new ScanRequest(path)], AgedScan.Keeps(age), progress: null, ct)[0]), ct));
 
     /// <summary>
     /// The directory is asked about first, and the file only where no directory is there, so each

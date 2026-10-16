@@ -78,7 +78,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
         ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(Task.Run(() => MeasureNow([new ScanRequest(path, bounds)], [keep], progress, ct)[0][0], ct));
+        new(WorkerThreads.Shared.RunAsync(() => MeasureNow([new ScanRequest(path, bounds)], [keep], progress, ct)[0][0], ct));
 
     /// <summary>
     /// Every directory among <paramref name="asked"/> in one walk, as <see cref="RootSetWalk"/> walks
@@ -92,7 +92,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
 
     /// <summary>One walk, tallied twice. See <see cref="IDirectoryScanner.MeasureAgedAsync"/>.</summary>
     public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
-        new(Task.Run(() => AgedScan.Of(MeasureNow([new ScanRequest(path)], AgedScan.Keeps(age), progress: null, ct)[0]), ct));
+        new(WorkerThreads.Shared.RunAsync(() => AgedScan.Of(MeasureNow([new ScanRequest(path)], AgedScan.Keeps(age), progress: null, ct)[0]), ct));
 
     /// <summary>
     /// Each of <paramref name="asked"/> measured once for each of <paramref name="keeps"/>, in their
@@ -107,7 +107,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
         MinimumAge[] keeps,
         IProgress<ScanSize>? progress,
         CancellationToken ct) =>
-        Task.Run(() => MeasureNow(asked, keeps, progress, ct), ct);
+        WorkerThreads.Shared.RunAsync(() => MeasureNow(asked, keeps, progress, ct), ct);
 
     /// <summary>
     /// Nothing is remembered here, so every reading is already taken from the disk.

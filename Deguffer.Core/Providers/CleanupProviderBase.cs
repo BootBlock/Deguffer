@@ -231,7 +231,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // Stamped here for the reason the guard is: no provider held the defect, and a provider
         // cannot be allowed to forget the fix. After the guard, so what is asked again is exactly
         // what the guard leaves to the removal, and the subtraction is from the guarded figure.
-        return RecordedRefusals.Apply(guarded, _refusals, WindowsFileSystem.Default, ct);
+        // On a thread of its own: asking again walks each place a refusal was recorded in, and the
+        // walk holds the thread that drives it for its whole length.
+        return await WorkerThreads.Shared.RunAsync(
+            () => RecordedRefusals.Apply(guarded, _refusals, WindowsFileSystem.Default, ct), ct).ConfigureAwait(false);
     }
 
     /// <summary>
