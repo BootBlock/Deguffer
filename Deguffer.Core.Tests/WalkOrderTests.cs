@@ -42,6 +42,12 @@ public sealed class WalkOrderTests : IDisposable
     /// level waiting above it, until the second worker has read something. The second worker must
     /// take the last top-level folder, not the folder beside the one being read (a shared stack) nor
     /// the next top-level one (a shared queue).
+    ///
+    /// <para>The second worker is held in turn, in the first folder it took, until the first is held
+    /// in its own. Otherwise a first worker slow to be scheduled, as on a busy machine of few
+    /// processors, lets the second steal every top-level folder in turn, <c>a</c> among them, and the
+    /// first never reaches the folder it is meant to be held in. The second worker's choice is made
+    /// when it steals, before it is held, so holding it decides nothing this test asks.</para>
     /// </summary>
     [Fact]
     public void AWorkerThatHasRunOutTakesTheShallowestFolderWaiting()
@@ -55,21 +61,30 @@ public sealed class WalkOrderTests : IDisposable
         var callingThread = Environment.CurrentManagedThreadId;
         var helperReads = new ConcurrentQueue<string>();
         using var helperRead = new ManualResetEventSlim();
+        using var heldInA1 = new ManualResetEventSlim();
         var heldUntilHelperRead = false;
+        var firstReachedA1 = true;
 
         Walk(root, new WalkTuning(2, WalkTuning.MinimumListingBuffer), (name, thread) =>
         {
             if (thread != callingThread)
             {
+                if (helperReads.IsEmpty)
+                {
+                    firstReachedA1 = heldInA1.Wait(TimeSpan.FromSeconds(10));
+                }
+
                 helperReads.Enqueue(name);
                 helperRead.Set();
             }
             else if (name == "a1")
             {
+                heldInA1.Set();
                 heldUntilHelperRead = helperRead.Wait(TimeSpan.FromSeconds(10));
             }
         });
 
+        Assert.True(firstReachedA1, "The first worker never reached the folder it is held in.");
         Assert.True(heldUntilHelperRead, "The second worker read nothing while the first was held.");
         Assert.True(helperReads.TryPeek(out var first));
         Assert.Equal("c", first);
