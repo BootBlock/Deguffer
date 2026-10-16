@@ -9,24 +9,60 @@ namespace Deguffer.Core.Exploring;
 /// it.</para>
 ///
 /// <para>Of two names that differ only in case, which a directory with case sensitivity turned on
-/// can hold, the first added is the one found.</para>
+/// can hold, the one spelt exactly as asked is found, and otherwise the first added. The two are
+/// different folders, so <c>Cache</c> asked for where <c>cache</c> was added first is
+/// <c>Cache</c>.</para>
 /// </summary>
 internal sealed class ChildrenByName
 {
     private readonly HashSet<int> _children;
     private readonly HashSet<int>.AlternateLookup<ReadOnlySpan<char>> _byName;
+    private readonly ExploreTree _tree;
+
+    // Children whose names another child's already matched without regard to case. Only a directory
+    // with case sensitivity turned on has any.
+    private List<int>? _differingInCase;
 
     public ChildrenByName(ExploreTree tree)
     {
+        _tree = tree;
         _children = new HashSet<int>(new ByName(tree));
         _byName = _children.GetAlternateLookup<ReadOnlySpan<char>>();
     }
 
-    /// <summary>Add <paramref name="child"/>, unless a child of the same name is already here.</summary>
-    public void Add(int child) => _children.Add(child);
+    /// <summary>
+    /// Add <paramref name="child"/>. One whose name matches a child already here only without regard
+    /// to case is found only by its exact spelling.
+    /// </summary>
+    public void Add(int child)
+    {
+        if (!_children.Add(child))
+        {
+            (_differingInCase ??= []).Add(child);
+        }
+    }
 
     /// <summary>The child called <paramref name="name"/>, or null.</summary>
-    public int? Find(ReadOnlySpan<char> name) => _byName.TryGetValue(name, out var child) ? child : null;
+    public int? Find(ReadOnlySpan<char> name)
+    {
+        if (!_byName.TryGetValue(name, out var child))
+        {
+            return null;
+        }
+
+        if (_differingInCase is not null && !_tree.NameSpanOf(child).SequenceEqual(name))
+        {
+            foreach (var other in _differingInCase)
+            {
+                if (_tree.NameSpanOf(other).SequenceEqual(name))
+                {
+                    return other;
+                }
+            }
+        }
+
+        return child;
+    }
 
     /// <summary>Compares nodes of one tree by their names, ordinally and without regard to case.</summary>
     private sealed class ByName(ExploreTree tree) : IEqualityComparer<int>, IAlternateEqualityComparer<ReadOnlySpan<char>, int>

@@ -58,6 +58,12 @@ internal static class Report
         }
 
         Row(text, "allocated", Bytes(first.AllocatedBytes), Over(later, r => r.AllocatedBytes, Bytes));
+
+        if (route.KeepsResult())
+        {
+            Row(text, "kept", Bytes(first.KeptBytes), Over(later, r => r.KeptBytes, Bytes));
+        }
+
         Row(text, "full collections", Count(first.FullCollections), Over(later, r => r.FullCollections, Count));
         Row(text, "peak working set", Bytes(first.PeakWorkingSet), later.Length > 0 ? Bytes(later.Max(r => r.PeakWorkingSet)) : string.Empty);
         Row(text, route.ItemName(), Count(first.Tally.Items), Over(later, r => r.Tally.Items, Count));

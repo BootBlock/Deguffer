@@ -23,17 +23,23 @@ public class ChildrenByNameTests
     }
 
     /// <summary>
-    /// A directory with case sensitivity turned on can hold <c>Cache</c> and <c>cache</c> at once. The
-    /// first added answers for both spellings, so the answer is the same every time.
+    /// A directory with case sensitivity turned on can hold <c>Cache</c> and <c>cache</c> at once, and
+    /// they are two folders. Each spelling finds its own, whichever was added first, and a spelling
+    /// that is neither finds the first added, so the answer is the same every time.
+    ///
+    /// <para>What a later scan of the same place is matched by. Its node numbers are its own, so the
+    /// folder is found again by its name, and taking the first match without regard to case would
+    /// follow <c>Cache</c> into <c>cache</c>.</para>
     /// </summary>
     [Fact]
-    public void TheFirstOfTwoNamesDifferingOnlyInCaseAnswers()
+    public void EachOfTwoNamesDifferingOnlyInCaseFindsItself()
     {
         var (tree, first) = Folder("Cache", "cache");
         var children = Indexed(tree);
 
         Assert.Equal(first, children.Find("Cache"));
-        Assert.Equal(first, children.Find("cache"));
+        Assert.Equal(first + 1, children.Find("cache"));
+        Assert.Equal(first, children.Find("CACHE"));
     }
 
     private static (ExploreTree Tree, int First) Folder(params string[] names)

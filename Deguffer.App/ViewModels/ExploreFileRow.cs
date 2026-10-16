@@ -40,8 +40,12 @@ public sealed record ExploreFileRow(
     /// <summary>A file's glyph, the one the folder list gives a file. See <see cref="ExploreRow.Icon"/>.</summary>
     public string Icon => ExploreRow.FileGlyph;
 
-    /// <summary>What the row identifies, for matching it against the rows already on screen.</summary>
-    public (int Node, string Path) Key => (Node, Path);
+    /// <summary>
+    /// What the row identifies, for matching it against the rows already on screen: its path, because
+    /// the rows on screen can be from another tree of the same place, which can number the file
+    /// differently.
+    /// </summary>
+    public string Key => Path;
 
     /// <summary>The refusal as the row states it, under the folder, or null where there is none.</summary>
     public string? RefusalLine => Refusal is null ? null : $"Explore will not remove this. {Refusal}";
