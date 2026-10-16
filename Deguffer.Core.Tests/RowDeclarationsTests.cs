@@ -299,21 +299,63 @@ public sealed class RowDeclarationsTests : IDisposable
 
     /// <summary>
     /// The first question in a pass reads every row's declaration for whichever row asked, so a
-    /// cancelled pass stops there rather than reading the rest.
+    /// pass cancelled while one row is read stops there rather than reading the rest.
     /// </summary>
     [Fact]
     public async Task ACancelledPassStopsReadingTheRows()
     {
-        var read = 0;
-        var declarations = new RowDeclarations();
-        declarations.Admit([new DeclaringRow(() => { read++; return []; })]);
-
         using var cancelled = new CancellationTokenSource();
-        cancelled.Cancel();
+        var readAfter = 0;
+        var declarations = new RowDeclarations();
+        declarations.Admit(
+        [
+            new DeclaringRow(() => { cancelled.Cancel(); return []; }),
+            new DeclaringRow(() => { readAfter++; return []; }),
+        ]);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => declarations.OfferedByARowAsync(Path.Combine(_environment.LocalAppData, "Tool", "cache"), cancelled.Token));
-        Assert.Equal(0, read);
+        Assert.Equal(0, readAfter);
+    }
+
+    /// <summary>
+    /// Plans share the one reading the first of them started, under that plan's token. A plan still
+    /// running is answered when that first plan is stopped, rather than stopped with it.
+    /// </summary>
+    [Fact]
+    public async Task APlanStillRunningIsAnsweredWhenThePlanThatStartedTheReadingIsStopped()
+    {
+        var folder = Path.Combine(_environment.LocalAppData, "Tool");
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var first = true;
+        var declarations = new RowDeclarations();
+        declarations.Admit(
+        [
+            new DeclaringRow(() =>
+            {
+                if (first)
+                {
+                    first = false;
+                    entered.Set();
+                    release.Wait(TimeSpan.FromSeconds(30));
+                }
+
+                return [];
+            }),
+            new DeclaringRow(() => [ToolRoot.Folders(folder, "A tool's own folder.", name => name == "cache")]),
+        ]);
+
+        using var stopped = new CancellationTokenSource();
+        var starter = declarations.OfferedByARowAsync(Path.Combine(folder, "cache"), stopped.Token);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30)), "the reading never started.");
+
+        var running = declarations.OfferedByARowAsync(Path.Combine(folder, "cache"));
+        stopped.Cancel();
+        release.Set();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => starter);
+        Assert.True(await running.WaitAsync(TimeSpan.FromSeconds(30)));
     }
 
     /// <summary>
