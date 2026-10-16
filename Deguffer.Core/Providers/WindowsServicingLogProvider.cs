@@ -89,7 +89,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             handlers: handlers)
     {
         _handlers = handlers;

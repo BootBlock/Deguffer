@@ -82,7 +82,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
     {
         _root = Path.Combine(Environment.LocalAppData, RootName);
         _releases = Path.Combine(_root, ReleasesName);

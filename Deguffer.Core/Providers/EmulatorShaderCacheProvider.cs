@@ -56,7 +56,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes: volumes)
     {
         _folders = folders ?? new EmulatorFolderStore(Environment);

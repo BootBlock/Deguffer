@@ -24,7 +24,7 @@ public sealed partial class DuplicatesPage : Page
     public DuplicatesPage()
     {
         var finder = new CandidateFinder(
-            new ExploreScanner(tuning: App.ScanTuning),
+            new ExploreScanner(UserEnvironment.Current.VolumeTables, tuning: App.ScanTuning),
             VolumeInventory.Current,
             WindowsUninstallRegistry.Default,
             UserEnvironment.Current,

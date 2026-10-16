@@ -152,7 +152,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default)
+            scanner)
         => _discovery = new MozillaProfileDiscovery(Environment, ApplicationDirectory);
 
     public override string Id => "firefox";

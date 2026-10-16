@@ -101,7 +101,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner ?? DirectoryScanner.Default,
+            scanner,
             volumes: volumes)
     {
         _discovery = new PoetryDiscovery(Runner);

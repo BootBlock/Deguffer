@@ -71,6 +71,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// How a <see cref="RemoveRestorePointsStep"/> is carried out and proved, on the terms
     /// <paramref name="emptier"/> is given: the real one removes the machine's restore points.
     /// </param>
+    /// <param name="scanner">
+    /// What every measurement asks. Where none is given, the scanner of the machine
+    /// <paramref name="environment"/> describes (<see cref="DirectoryScanner.For"/>), never this
+    /// machine's on a fixture's behalf: run elevated, that one reads the real volume's table.
+    /// </param>
     /// <param name="volumes">
     /// Asked every other path a folder is reachable at, by the checks this provider makes of a folder a
     /// setting names and by the executor's last check before a removal, the same instance for both.
@@ -80,7 +85,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         IUserEnvironment environment,
         IProcessRunner runner,
         IProcessInspector inspector,
-        IDirectoryScanner scanner,
+        IDirectoryScanner? scanner,
         IRecycleBinEmptier? emptier = null,
         ICloudFiles? cloud = null,
         IDiskCleanupHandlers? handlers = null,
@@ -92,13 +97,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Environment = environment;
         Volumes = volumes ?? VolumeInventory.Current;
         Inspector = inspector;
-        Scanner = scanner;
+        Scanner = scanner ?? DirectoryScanner.For(environment);
         _refusals = RefusalRecord.For(environment);
         _cloud = cloud;
         _protection = protection;
         Servicing = servicing ?? WindowsServicing.Current;
         _executor = new PlanExecutor(
-            runner, scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
+            runner, Scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
             protection: protection, volumes: Volumes);
         Runner = runner;
     }
