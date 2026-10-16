@@ -23,6 +23,11 @@ internal static class Tuning
                 $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads");
         }
 
+        if (route is Route.Folders)
+        {
+            return "the values a search uses for each drive's kind, under the shipped settings";
+        }
+
         if (route is Route.Links)
         {
             return readBy is LinkRead.Name

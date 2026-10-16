@@ -59,19 +59,27 @@ public sealed class ScanTuner
     /// without asking anything. A path on no volume the inventory lists is
     /// <see cref="StorageMedia.Unknown"/>, which gets the conservative values.
     /// </summary>
-    public StorageMedia MediaOf(string path)
+    public StorageMedia MediaOf(string path) => StorageOf(path)?.Class ?? StorageMedia.Unknown;
+
+    /// <summary>
+    /// What <paramref name="path"/> is on, its disks included, or null where nothing was asked: a
+    /// tuner built without the machine's devices, or a path on no volume the inventory lists. A share
+    /// is <see cref="StorageMedia.Network"/> on no disk of this machine, without asking anything. Asks
+    /// the device the first time a volume is met, so never call it on the UI thread.
+    /// </summary>
+    public VolumeMedia? StorageOf(string path)
     {
         if (_media is null || _volumes is null)
         {
-            return StorageMedia.Unknown;
+            return null;
         }
 
         if (LongPath.IsShare(path))
         {
-            return StorageMedia.Network;
+            return new VolumeMedia(StorageMedia.Network, []);
         }
 
-        return HostVolume.For(_volumes, path) is { } volume ? _media.Of(volume).Class : StorageMedia.Unknown;
+        return HostVolume.For(_volumes, path) is { } volume ? _media.Of(volume) : null;
     }
 
     /// <summary>

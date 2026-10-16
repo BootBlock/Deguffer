@@ -54,12 +54,21 @@ internal enum Route
     /// count and sizes by name or through a handle: what a pnpm store or the driver store costs.
     /// </summary>
     Links,
+
+    /// <summary>
+    /// Scan several folders as a duplicate search does: each volume's file table read once where it
+    /// can be and the walk where it cannot, with the volumes on separate disks scanned at the same
+    /// time. Timed against each folder alone, whose times add up to what the scan cost when it took
+    /// the volumes one after another, the difference is what scanning the disks at once saves.
+    /// </summary>
+    Folders,
 }
 
 internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
-    public static bool ReadsTable(this Route route) => route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links);
+    public static bool ReadsTable(this Route route) =>
+        route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders);
 
     /// <summary>
     /// Whether the route walks with the values given on the command line. The links route walks with
@@ -82,7 +91,7 @@ internal static class RouteFacts
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route switch
     {
-        Route.Walk or Route.Measure or Route.ExploreWalk => "entries",
+        Route.Walk or Route.Measure or Route.ExploreWalk or Route.Folders => "entries",
         Route.Sources => "candidates",
         Route.Links => "files",
         _ => "records",

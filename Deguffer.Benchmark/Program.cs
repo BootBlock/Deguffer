@@ -29,9 +29,11 @@ if (request.Route.ReadsTable())
         return 2;
     }
 }
-else if (LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
+else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not PathPresence.Present))
 {
-    Console.Error.WriteLine("The folder does not exist, or it cannot be read.");
+    Console.Error.WriteLine(request.Folders.Count == 1
+        ? "The folder does not exist, or it cannot be read."
+        : "A folder does not exist, or it cannot be read.");
     return 2;
 }
 
@@ -42,6 +44,7 @@ Func<CancellationToken, RunTally> run = request.Route switch
     Route.ExploreWalk => ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct),
     Route.Sources => ct => SourcesRoute.Run(request.Path, request.Walk, ct),
     Route.Links => ct => LinksRoute.Run(request.Path, request.ReadBy, ct),
+    Route.Folders => ct => FoldersRoute.Run(VolumeMftSourceFactory.Default, request.Folders, ct),
     _ => ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, ct),
 };
 
@@ -80,7 +83,7 @@ catch (IOException ex)
 Console.Out.Write(Report.Render(
     request.Route,
     Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy),
-    MeasuredPlace.Of(request.Path),
+    [.. request.Folders.Select(MeasuredPlace.Of).Distinct()],
     MachineFacts.Current,
     runs));
 return 0;

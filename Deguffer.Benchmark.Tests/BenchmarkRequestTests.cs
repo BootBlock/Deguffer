@@ -47,6 +47,37 @@ public sealed class BenchmarkRequestTests
         Assert.True(Path.IsPathFullyQualified(request.Path));
     }
 
+    [Fact]
+    public void TheFoldersRouteTakesEveryFolderBeforeTheOptions()
+    {
+        var request = BenchmarkRequest.Parse(["folders", "first", @"C:\second", "--runs", "3"], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.Folders, request!.Route);
+        Assert.Equal([Path.GetFullPath("first"), @"C:\second"], request.Folders);
+        Assert.Equal(request.Folders[0], request.Path);
+        Assert.Equal(3, request.Runs);
+    }
+
+    /// <summary>Only the folders route scans more than one place, so another route given two is refused rather than timed on one.</summary>
+    [Fact]
+    public void AnotherRouteRefusesASecondTarget()
+    {
+        Assert.Null(BenchmarkRequest.Parse(["walk", "first", "second"], out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TheFoldersRouteNeedsAFolderBeforeTheOptions()
+    {
+        Assert.Null(BenchmarkRequest.Parse(["folders", "--runs", "3"], out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void AnyOtherRouteTakesItsTargetAsItsOnlyFolder() =>
+        Assert.Equal([Path.GetFullPath("relative")], BenchmarkRequest.Parse(["walk", "relative"], out _)!.Folders);
+
     /// <summary>By name only. Enum parsing would read a number or a list of names as a route.</summary>
     [Theory]
     [InlineData("scan")]

@@ -51,6 +51,7 @@ Deguffer.Benchmark index C
 Deguffer.Benchmark explore C
 Deguffer.Benchmark explorefolder C:\Users\<user>\Downloads
 Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
+Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
@@ -67,6 +68,11 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
   each file's link count and sizes. `--read-by name|handle` sets whether each file is read by
   name, as a scan does where the file system answers that, or through a handle opened on it. The
   default is name. Time it both ways to see what the handles cost.
+- `folders <folder> [<folder>...]` scans several folders as a duplicate search does: each volume's
+  file table read once where it can be, the walk where it cannot, and the volumes on separate disks
+  at the same time. It reads the tables only from an elevated prompt. Time it beside each folder
+  alone: the folders' own times add up to what the scan cost when it took the volumes one after
+  another.
 - `table`, `index`, `explore` and `explorefolder` read a volume's file table, which needs an
   elevated prompt. `table` reads and parses every record and keeps nothing. `index` builds what the
   clean measures locations from. `explore` builds the Explore tree for the whole volume, and

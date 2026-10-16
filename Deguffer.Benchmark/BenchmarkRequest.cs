@@ -12,7 +12,8 @@ namespace Deguffer.Benchmark;
 /// <param name="Path">
 /// For a route that reads the table, the root of the volume, such as <c>C:\</c>, or for
 /// <see cref="Route.ExploreFolder"/> the folder. For a route that walks, the folder. A folder is
-/// fully qualified. Never printed: see <see cref="MeasuredPlace"/>.
+/// fully qualified. For <see cref="Route.Folders"/>, the first of <paramref name="Folders"/>. Never
+/// printed: see <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
 /// <param name="Walk">The values the routes that walk run with. The table routes take none of them.</param>
@@ -22,8 +23,19 @@ namespace Deguffer.Benchmark;
 /// walks. Timed both ways, the difference is what they cost the walk. No other route takes any.
 /// </param>
 /// <param name="ReadBy">How the links route reads each file. No other route reads any.</param>
+/// <param name="Folders">
+/// Every folder the folders route scans, fully qualified, in the order given. For any other route,
+/// <paramref name="Path"/> alone.
+/// </param>
 internal sealed record BenchmarkRequest(
-    Route Route, string Path, int Runs, WalkTuning Walk, TableTuning Table, bool Snapshots, LinkRead ReadBy)
+    Route Route,
+    string Path,
+    int Runs,
+    WalkTuning Walk,
+    TableTuning Table,
+    bool Snapshots,
+    LinkRead ReadBy,
+    IReadOnlyList<string> Folders)
 {
     public const int DefaultRuns = 5;
 
@@ -32,6 +44,7 @@ internal sealed record BenchmarkRequest(
     public const string Usage =
         """
         Usage: Deguffer.Benchmark <route> <target> [--runs N] [options]
+               Deguffer.Benchmark folders <folder> [<folder>...] [--runs N]
 
         Routes:
           table <drive>     Read the volume's file table end to end, parse only. Elevated.
@@ -49,6 +62,11 @@ internal sealed record BenchmarkRequest(
           sources <folder>  Find build outputs in the folder as an unelevated scan does.
           links <folder>    Measure the folder as a hard-linked store such as pnpm's is
                             measured, reading each file's link count and sizes.
+          folders <folder> [<folder>...]
+                            Scan the folders as a duplicate search does: each volume's file
+                            table read once where it can be, the walk where it cannot, and
+                            the volumes on separate disks at the same time. Timed against
+                            each folder alone, the difference is what that saves.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
@@ -99,7 +117,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources or links.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links or folders.";
             return null;
         }
 
@@ -112,7 +130,11 @@ internal sealed record BenchmarkRequest(
         var snapshots = true;
         var readBy = LinkRead.Name;
 
-        for (var i = 2; i < args.Count; i += 2)
+        // Only the folders route takes more than one target, so for it the options start at the
+        // first argument that is one.
+        var options = route is Route.Folders ? FirstOption(args) : 2;
+
+        for (var i = options; i < args.Count; i += 2)
         {
             var value = i + 1 < args.Count ? args[i + 1] : null;
 
@@ -151,8 +173,15 @@ internal sealed record BenchmarkRequest(
             }
         }
 
+        if (options < 2)
+        {
+            error = "Name a folder before the options.";
+            return null;
+        }
+
         var path = route.TargetsVolume() ? VolumeRoot(args[1]) : Folder(args[1]);
-        if (path is null || (route.ReadsTable() && !VolumePath.TryParse(path, out _)))
+        string?[] folders = route is Route.Folders ? [.. args.Take(options).Skip(1).Select(Folder)] : [path];
+        if (path is null || folders.Contains(null) || (route.ReadsTable() && !VolumePath.TryParse(path, out _)))
         {
             error = route.TargetsVolume() ? "The target must be a drive letter, such as C or C:."
                 : route.ReadsTable() ? "The target must be a folder on a drive with a letter, such as C:\\Users."
@@ -167,7 +196,22 @@ internal sealed record BenchmarkRequest(
             new WalkTuning(threads, bufferKiB * 1024),
             new TableTuning(readKiB * 1024, readsInFlight, parseThreads),
             snapshots,
-            readBy);
+            readBy,
+            [.. folders.Select(folder => folder!)]);
+    }
+
+    /// <summary>The index of the first argument after the route that is an option, or the count where none is.</summary>
+    private static int FirstOption(IReadOnlyList<string> args)
+    {
+        for (var i = 1; i < args.Count; i++)
+        {
+            if (args[i].StartsWith("--", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return args.Count;
     }
 
     /// <summary>

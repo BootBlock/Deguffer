@@ -133,17 +133,31 @@ public sealed class ReportTests
     [Fact]
     public void ADebugBuildIsCalledOut()
     {
-        var text = Report.Render(Route.Walk, Tuning, Place, Machine with { DebugBuild = true }, [Run(1)]);
+        var text = Report.Render(Route.Walk, Tuning, [Place], Machine with { DebugBuild = true }, [Run(1)]);
 
         Assert.StartsWith("warning ", Line(text, "warning"), StringComparison.Ordinal);
         Assert.DoesNotContain("warning", Render(Route.Walk, Run(1)), StringComparison.Ordinal);
     }
 
+    /// <summary>The folders route measures on every drive its folders are on, and names each.</summary>
+    [Fact]
+    public void SeveralPlacesAreEachNamed() =>
+        Assert.Equal(
+            "places             C: (Fixed, NTFS), D: (Fixed, NTFS)",
+            Line(Report.Render(Route.Folders, Tuning, [Place, Place with { Root = "D:" }], Machine, [Run(1)]), "places"));
+
+    /// <summary>The folders route runs with what a search would use on each drive, not with values the command line gave.</summary>
+    [Fact]
+    public void TheFoldersRouteSaysItRanWithASearchsValues() =>
+        Assert.Equal(
+            "the values a search uses for each drive's kind, under the shipped settings",
+            Deguffer.Benchmark.Tuning.Describe(Route.Folders, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots: true, LinkRead.Name));
+
     [Fact]
     public void ThePlaceIsTheDriveAndItsFileSystem() =>
         Assert.Equal("place              C: (Fixed, NTFS)", Line(Render(Route.Walk, Run(1)), "place"));
 
-    private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, Place, Machine, runs);
+    private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, [Place], Machine, runs);
 
     private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0, long kept = 0) =>
         new(

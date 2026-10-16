@@ -6,7 +6,7 @@ namespace Deguffer.Benchmark;
 /// <summary>
 /// The result as text that can be pasted into an issue as it stands.
 ///
-/// <para>It is handed a <see cref="MeasuredPlace"/> and never the request's path, so no path, label,
+/// <para>It is handed <see cref="MeasuredPlace"/>s and never the request's paths, so no path, label,
 /// user or machine name can reach it.</para>
 ///
 /// <para>The first run is reported apart from the rest because the two answer different questions.
@@ -21,8 +21,9 @@ internal static class Report
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
+    /// <param name="places">Every drive the route measured on, each once.</param>
     public static string Render(
-        Route route, string tuning, MeasuredPlace place, MachineFacts machine, IReadOnlyList<RunSample> runs)
+        Route route, string tuning, IReadOnlyList<MeasuredPlace> places, MachineFacts machine, IReadOnlyList<RunSample> runs)
     {
         ArgumentOutOfRangeException.ThrowIfZero(runs.Count);
 
@@ -32,7 +33,7 @@ internal static class Report
 
         Line(text, "Deguffer scan benchmark");
         Field(text, "route", route.ToString().ToLowerInvariant());
-        Field(text, "place", place.ToString());
+        Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
         Field(text, "tuning", tuning);
         Field(text, "machine", Describe(machine));
         Field(text, "runs", $"{runs.Count} ({runs.Count(r => r.Tally.Complete)} complete)");
