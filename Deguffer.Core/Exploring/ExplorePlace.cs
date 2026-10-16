@@ -28,9 +28,13 @@ public static class ExplorePlace
     /// listing another's contents. Finding the same path settles every case without this having to
     /// know which route produced either tree.</para>
     ///
-    /// <para>Compared without regard to case, because the two trees can be rooted at the same
-    /// volume written differently — a scan of <c>c:\</c> after one of <c>C:\</c> — and NTFS does not
-    /// tell those apart either.</para>
+    /// <para>The roots are compared without regard to case, because the two trees can be rooted at
+    /// the same volume written differently: a scan of <c>c:\</c> after one of <c>C:\</c>. Every
+    /// name below the root is matched exactly. A directory with case sensitivity turned on holds
+    /// <c>Cache</c> and <c>cache</c> as two folders, so where <c>Cache</c> has gone, a match that
+    /// ignored case would carry what the user picked to the other one, and §7.1 lets Explore act
+    /// only on what was picked by hand. A folder renamed only in case is dropped instead, which
+    /// costs a place and never chooses a target.</para>
     /// </summary>
     /// <param name="standing">The tree on screen, or null where nothing has been scanned yet.</param>
     /// <param name="node">The node being looked at in <paramref name="standing"/>.</param>
@@ -83,7 +87,28 @@ public static class ExplorePlace
         var counterparts = new ExploreCounterparts(standing, arriving);
 
         // A node taken out of the tree on screen is no longer there to stand on, wherever its path
-        // leads in the other.
-        return node => standing.Holds(node) ? counterparts.Find(node) : null;
+        // leads in the other. The counterparts fall back to a name that differs only in case, which
+        // a map following its shapes can live with and a selection cannot, so each one found is
+        // held to the exact spelling.
+        return node => standing.Holds(node) && counterparts.Find(node) is { } found && SpeltAlike(standing, node, arriving, found)
+            ? found
+            : null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="node"/> and <paramref name="found"/> have the same name at every level
+    /// below their roots. They are counterparts, so their parent chains are of one length.
+    /// </summary>
+    private static bool SpeltAlike(ExploreTree standing, int node, ExploreTree arriving, int found)
+    {
+        for (; node != standing.RootNode; node = standing.ParentOf(node), found = arriving.ParentOf(found))
+        {
+            if (found == arriving.RootNode || !standing.NameSpanOf(node).SequenceEqual(arriving.NameSpanOf(found)))
+            {
+                return false;
+            }
+        }
+
+        return found == arriving.RootNode;
     }
 }

@@ -43,7 +43,7 @@ public sealed record ExploreFileRow(
     /// <summary>
     /// What the row identifies, for matching it against the rows already on screen: its path, because
     /// the rows on screen can be from another tree of the same place, which can number the file
-    /// differently (<see cref="ExploreTree.Create"/>).
+    /// differently.
     /// </summary>
     public string Key => Path;
 

@@ -247,6 +247,36 @@ public class ExplorePlaceTests
         Assert.Null(ExplorePlace.TryCarry(standing: null, 3, ProfileTree(Root)));
     }
 
+    /// <summary>
+    /// §7.1: Explore acts only on what was picked by hand. Where <c>Cache</c> has gone, from a
+    /// removal or a rescan, nothing that stood in it carries to <c>cache</c> beside it, a different
+    /// folder whose name differs only in case, or to anything below <c>cache</c>.
+    /// </summary>
+    [Fact]
+    public void CarriesNothingToAFolderWhoseNameDiffersOnlyInCase()
+    {
+        var first = new ExploreTreeBuilder(Root);
+        var upper = first.AddChildren(ExploreTreeBuilder.RootNode, [Folder("Cache"), Folder("cache")]);
+        var inUpper = first.AddChildren(upper, [Entry("big.bin", 4096)]);
+        first.AddChildren(upper + 1, [Entry("big.bin", 4096)]);
+        var standing = first.Build(ExploreChildOrder.BySize);
+
+        var left = standing.Without([upper]);
+
+        var second = new ExploreTreeBuilder(Root);
+        var lower = second.AddChildren(ExploreTreeBuilder.RootNode, [Folder("cache")]);
+        second.AddChildren(lower, [Entry("big.bin", 4096)]);
+        var rescan = second.Build(ExploreChildOrder.BySize);
+
+        Assert.Null(ExplorePlace.TryCarry(standing, upper, left));
+        Assert.Null(ExplorePlace.TryCarry(standing, inUpper, left));
+        Assert.Null(ExplorePlace.TryCarry(standing, upper, rescan));
+        Assert.Null(ExplorePlace.TryCarry(standing, inUpper, rescan));
+
+        // The folder that is still there carries, so the refusal is of the spelling alone.
+        Assert.Equal(lower, ExplorePlace.TryCarry(standing, upper + 1, rescan));
+    }
+
     /// <summary>A file table holding a profile's cache, with invented paths.</summary>
     private static MftFixture Table() => new MftFixture()
         .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")

@@ -5,16 +5,18 @@ namespace Deguffer.Core.Exploring;
 /// <summary>
 /// Finds nodes of one scanned tree in another scan of the same place, by path: the root is the root
 /// where both are of the same path, and any other node is the child of its parent's counterpart
-/// with the same name, without regard to case as Windows names are. See
-/// <see cref="ITrackedTree.CounterpartsIn"/>.
+/// with the same name, spelt exactly where such a child exists and otherwise without regard to case
+/// as Windows names are (<see cref="ChildrenByName"/>). See <see cref="ITrackedTree.CounterpartsIn"/>,
+/// and <see cref="ExplorePlace.Carrying"/> for the caller that will take an exact spelling only.
 ///
 /// <para>The common case costs nothing: within one walked scan a node keeps its number from one
 /// snapshot to the next, so a node standing under its parent's counterpart with exactly the same
 /// name is taken as it is. Exactly, because the number is a guess: two file-table scans number only
 /// what each reaches, so a number can move to a sibling, and in a directory with case sensitivity
-/// turned on that sibling can be <c>cache</c> beside the <c>Cache</c> being looked for. Otherwise the parent's children are indexed by name once, and every later lookup
-/// in that folder is a dictionary read, because a folder of a hundred thousand files would make a
-/// search per node the slowest step of all.</para>
+/// turned on that sibling can be <c>cache</c> beside the <c>Cache</c> being looked for. Otherwise
+/// the parent's children are indexed by name once, and every later lookup in that folder is a
+/// dictionary read, because a folder of a hundred thousand files would make a search per node the
+/// slowest step of all.</para>
 /// </summary>
 internal sealed class ExploreCounterparts(ExploreTree earlier, ExploreTree later)
 {
