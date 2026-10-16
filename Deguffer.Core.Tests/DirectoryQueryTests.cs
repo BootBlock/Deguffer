@@ -29,7 +29,12 @@ public sealed class DirectoryQueryTests : IDisposable
     public void ListsEachEntryAsTheRuntimeListsIt()
     {
         var folder = _temp.CreateDirectory("folder");
-        _temp.CreateFile(1234, "folder", "data.bin");
+        var data = _temp.CreateFile(1234, "folder", "data.bin");
+
+        // Each time apart from the others, so a listing that read one in place of another is caught.
+        File.SetCreationTimeUtc(data, new DateTime(2019, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(data, new DateTime(2020, 6, 7, 8, 9, 10, DateTimeKind.Utc));
+        File.SetLastAccessTimeUtc(data, new DateTime(2021, 11, 12, 13, 14, 15, DateTimeKind.Utc));
         File.SetAttributes(_temp.CreateFile(10, "folder", "hidden.bin"), FileAttributes.Hidden);
         File.SetAttributes(_temp.CreateFile(20, "folder", "locked.bin"), FileAttributes.ReadOnly);
         _temp.CreateFile(30, "folder", "sub", "below.bin");
