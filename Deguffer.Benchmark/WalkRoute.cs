@@ -18,7 +18,7 @@ internal static class WalkRoute
     {
         long entries = 0;
         var refused = 0;
-        var listings = new ListingsInFlight(WalkListing.FromDisk);
+        var listings = new ListingsInFlight(DirectoryQuery.List);
 
         // §6.3: the walk is handed the extended form, as both scanners hand it, so a tree deeper
         // than MAX_PATH is walked rather than cut short and timed as though it were smaller.

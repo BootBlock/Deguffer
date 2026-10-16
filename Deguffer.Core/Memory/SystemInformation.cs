@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Memory;
 
@@ -25,11 +26,8 @@ internal static partial class SystemInformation
     public static nint AddressOf<T>(T[] pinned) where T : unmanaged =>
         Marshal.UnsafeAddrOfPinnedArrayElement(pinned, 0);
 
-    public static Win32Exception Failure(int status) => new(RtlNtStatusToDosError(status));
+    public static Win32Exception Failure(int status) => new(NtStatus.ToWin32Error(status));
 
     [LibraryImport("ntdll.dll")]
     public static partial int NtQuerySystemInformation(int informationClass, nint buffer, int length, out int returned);
-
-    [LibraryImport("ntdll.dll")]
-    private static partial int RtlNtStatusToDosError(int status);
 }

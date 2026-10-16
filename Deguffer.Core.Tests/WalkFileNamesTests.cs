@@ -99,8 +99,9 @@ public sealed class WalkFileNamesTests : IDisposable
     {
         var folder = LongPath.Extended(Fixture());
 
-        var contents = new WalkListing(
-            new ListingBuffer(WalkTuning.MinimumListingBuffer), WalkListing.FromDisk, FileNames.Stores).Read(folder);
+        using var listing = new WalkListing(
+            new ListingBuffer(WalkTuning.MinimumListingBuffer), DirectoryQuery.List, FileNames.Stores);
+        var contents = listing.Read(folder, followsLink: true);
 
         Assert.Same(folder, contents.Directory);
         Assert.All(contents.Entries, entry => Assert.Same(folder, entry.Directory));
@@ -159,7 +160,8 @@ public sealed class WalkFileNamesTests : IDisposable
     private static List<WalkEntry> List(string folder, FileNames files)
     {
         var into = new List<WalkEntry>();
-        var end = WalkListing.FromDisk(LongPath.Extended(folder), DirectoryListing.EveryEntry, files, into);
+        using var memory = new ListingMemory(WalkTuning.MinimumListingBuffer);
+        var end = DirectoryQuery.List(LongPath.Extended(folder), new ListingRequest(memory, memory.Bytes, FollowsLink: true, files), into);
         Assert.Equal(PathPresence.Present, end.Presence);
         return into;
     }

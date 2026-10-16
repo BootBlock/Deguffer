@@ -193,8 +193,29 @@ public static partial class LongPath
     /// for the same reason nothing but the prefix changes.
     /// </summary>
     /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
-    internal static string ObjectManagerForm(string path) =>
-        string.Concat(ObjectManagerPrefix, Extended(path).AsSpan(DevicePrefix.Length));
+    internal static string ObjectManagerForm(string path)
+    {
+        var extended = Extended(path);
+
+        return string.Create(extended.Length, extended, static (into, from) => WriteObjectManagerForm(from, into));
+    }
+
+    /// <summary>
+    /// <see cref="ObjectManagerForm(string)"/> written into <paramref name="into"/>, for a caller that
+    /// names many paths and reuses one buffer for them. The two prefixes are the same length, so the
+    /// name is exactly as long as the <see cref="Extended"/> form of <paramref name="path"/>, and
+    /// <paramref name="into"/> must hold that many characters.
+    /// </summary>
+    /// <returns>How many characters were written.</returns>
+    internal static int WriteObjectManagerForm(string path, Span<char> into)
+    {
+        var rest = Extended(path).AsSpan(DevicePrefix.Length);
+
+        ObjectManagerPrefix.CopyTo(into);
+        rest.CopyTo(into[ObjectManagerPrefix.Length..]);
+
+        return ObjectManagerPrefix.Length + rest.Length;
+    }
 
     /// <summary>
     /// Whether <paramref name="path"/> names a location on a network share, in ordinary or

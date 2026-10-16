@@ -27,11 +27,12 @@ public sealed record WalkTuning
     /// What every scan uses. The thread count is the value the walk used before it could be set.
     ///
     /// <para>The buffer is the size that was fastest, or level with the fastest, on each tree it was
-    /// measured on: three folders on one NVMe drive, alternating with the walk it replaced. A larger
-    /// buffer is not free on a local drive. Each listing pays for the whole buffer however few
-    /// entries the folder holds, and at 1 MiB a walk of mostly small folders ran four to nine times
-    /// slower. The gain Microsoft describes from a larger buffer is for network shares, which were
-    /// not measured.</para>
+    /// measured on: three folders on one NVMe drive. With each worker reusing one buffer for every
+    /// directory it reads, 64 KiB and 256 KiB were level with it or 5 to 30 percent slower (#370).
+    /// A walk that once allocated and freed the buffer for each directory ran four to nine times slower
+    /// at 1 MiB, which was the allocation and not the size: reused, 1 MiB was level with 16 KiB. The
+    /// gain Microsoft describes from a larger buffer is for network shares, which were not measured
+    /// (#256).</para>
     /// </summary>
     public static readonly WalkTuning Default = new(
         Math.Min(Environment.ProcessorCount * 2, 16),

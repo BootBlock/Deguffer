@@ -3,8 +3,9 @@ using System.Diagnostics;
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
-/// What one worker does with each directory it takes, built once for that worker so whatever it reuses
-/// lasts for every directory the worker reads.
+/// What one worker does with each directory it takes, built once for each of the walk's threads so
+/// whatever it reuses lasts for every directory read there, and asked for no more often than the walk
+/// has threads.
 /// </summary>
 /// <param name="descend">How the worker stacks a child: its path, and the value carried down to it.</param>
 internal delegate Action<string, TState> NewDirectoryReader<TState>(Action<string, TState> descend);
@@ -75,6 +76,11 @@ internal sealed class WalkWorkers<TState>
     // whichever other one is free for each turn it takes, which _borrowed marks.
     private readonly WorkStealingStack<(string Path, TState State)>[] _stacks;
     private readonly int[] _borrowed;
+
+    // One for each stack, made by the first turn taken at it. Whoever holds a stack holds its worker,
+    // so a helper started after another ended reuses what the first one built: a walk of a narrow tree
+    // starts and ends helpers many times.
+    private readonly Worker?[] _workers;
     private readonly Lock _reporting = new();
 
     private readonly WorkerCrew _crew;
@@ -103,6 +109,7 @@ internal sealed class WalkWorkers<TState>
     {
         _stacks = [.. Enumerable.Range(0, threads).Select(_ => new WorkStealingStack<(string, TState)>())];
         _borrowed = new int[threads];
+        _workers = new Worker?[threads];
         _crew = new WorkerCrew(threads, NewHelper, () => !Stopping && Volatile.Read(ref _waiting) > 0);
         _readyToLook = () => Volatile.Read(ref _waiting) > 0 || Stopping || Volatile.Read(ref _outstanding) == 0;
         _newReader = newReader;
@@ -135,7 +142,7 @@ internal sealed class WalkWorkers<TState>
 
         try
         {
-            WorkAndWait(new Worker(this));
+            WorkAndWait(WorkerAt(CallingThread));
         }
         catch (Exception ex)
         {
@@ -167,8 +174,6 @@ internal sealed class WalkWorkers<TState>
 
     private Action NewHelper()
     {
-        var worker = new Worker(this);
-
         return () =>
         {
             // Borrowed for this turn only. A helper takes a turn only while the crew counts it, and is
@@ -177,7 +182,7 @@ internal sealed class WalkWorkers<TState>
             var slot = BorrowStack();
             try
             {
-                worker.Drain(slot);
+                WorkerAt(slot).Drain(slot);
             }
             finally
             {
@@ -185,6 +190,13 @@ internal sealed class WalkWorkers<TState>
             }
         };
     }
+
+    /// <summary>
+    /// The worker for the stack at <paramref name="slot"/>, made on the first turn taken there. Asked
+    /// only by whoever holds the stack, and the borrow that hands a stack on orders this write before
+    /// the next holder's read.
+    /// </summary>
+    private Worker WorkerAt(int slot) => _workers[slot] ??= new Worker(this);
 
     private int BorrowStack()
     {

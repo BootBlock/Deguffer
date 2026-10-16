@@ -1,4 +1,5 @@
 using System.IO.Enumeration;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Safety;
 
@@ -13,11 +14,8 @@ namespace Deguffer.Core.Safety;
 /// before it throws, both when the directory is opened and when a read fails part-way, so answering
 /// there is the whole mechanism.</para>
 ///
-/// <para><b>The three answers are the ones every listing here already gave.</b> A directory that is
-/// not there is <see cref="PathPresence.Absent"/>, decided on the two errors .NET turns into a
-/// <see cref="DirectoryNotFoundException"/>. Every other failure, access denied included, is
-/// <see cref="PathPresence.Refused"/>, which is what catching <see cref="UnauthorizedAccessException"/>
-/// and <see cref="IOException"/> made of it. <see cref="PathPresence.Present"/> means the directory
+/// <para><b>The three answers are the ones every listing here gives</b>, read from the error as
+/// <see cref="ListingEnd.Failed"/> reads it. <see cref="PathPresence.Present"/> means the directory
 /// was listed to the end.</para>
 ///
 /// <para><b>Entries yielded before a failure are real</b>, and <see cref="Outcome"/> is only settled
@@ -41,27 +39,21 @@ internal sealed class DirectoryListing<T> : FileSystemEnumerator<T>
     public DirectoryListing(
         string directory,
         FileSystemEnumerable<T>.FindTransform transform,
-        FileSystemEnumerable<T>.FindPredicate? include = null,
-        EnumerationOptions? options = null)
-        : base(LongPath.Extended(directory), options ?? DirectoryListing.EveryEntry)
+        FileSystemEnumerable<T>.FindPredicate? include = null)
+        : base(LongPath.Extended(directory), DirectoryListing.EveryEntry)
     {
         _transform = transform;
         _include = include;
     }
 
     /// <summary>How the listing ended. Read it once enumeration has finished.</summary>
-    public PathPresence Outcome => _error switch
-    {
-        0 => PathPresence.Present,
-        ErrorFileNotFound or ErrorPathNotFound => PathPresence.Absent,
-        _ => PathPresence.Refused,
-    };
+    public PathPresence Outcome => _error == 0 ? PathPresence.Present : ListingEnd.Failed(_error, whileReading: false).Presence;
 
     /// <summary>
     /// Whether the listing was refused because the account may not read the directory, as against
     /// any other refusal. Read it once enumeration has finished.
     /// </summary>
-    public bool WasDenied => _error == ErrorAccessDenied;
+    public bool WasDenied => _error != 0 && ListingEnd.Failed(_error, whileReading: false).Denied;
 
     protected override T TransformEntry(ref System.IO.Enumeration.FileSystemEntry entry) => _transform(ref entry);
 
@@ -73,10 +65,6 @@ internal sealed class DirectoryListing<T> : FileSystemEnumerator<T>
         _error = error;
         return true;
     }
-
-    private const int ErrorFileNotFound = 2;
-    private const int ErrorPathNotFound = 3;
-    private const int ErrorAccessDenied = 5;
 }
 
 /// <summary>The listings every caller here asks for.</summary>
@@ -86,19 +74,11 @@ internal static class DirectoryListing
     /// Every entry, hidden and system ones included, with the listing buffer left to the runtime. The
     /// safety listings all use this one.
     /// </summary>
-    public static readonly EnumerationOptions EveryEntry = EveryEntryWithBuffer(0);
-
-    /// <summary>
-    /// The same listing, asking Windows for <paramref name="bufferBytes"/> of entries per call. Only
-    /// the walk asks for a size of its own: the safety listings read one directory at a time, where the
-    /// buffer cannot be what decides how long they take.
-    /// </summary>
-    public static EnumerationOptions EveryEntryWithBuffer(int bufferBytes) => new()
+    public static readonly EnumerationOptions EveryEntry = new()
     {
         AttributesToSkip = 0,
         IgnoreInaccessible = false,
         RecurseSubdirectories = false,
-        BufferSize = bufferBytes,
     };
 
     /// <summary>Every entry as a <see cref="FileSystemInfo"/>, which carries what the listing read.</summary>

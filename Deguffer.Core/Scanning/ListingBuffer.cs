@@ -3,39 +3,39 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
-/// Which listing buffer one walk asks for, and the smaller one it falls back to where a server
-/// rejects it.
+/// How many bytes of entries one walk asks Windows for in each call, and the smaller size it falls
+/// back to where a server rejects it.
 ///
 /// <para>Some network servers reject a large directory query buffer. A listing that fails that way
 /// cannot be told from a refusal by its error alone, and reporting it as one would leave every total
-/// above the folder short. So a refused listing is tried again with the smallest buffer, and once the
-/// smaller buffer has listed a folder the larger one could not, the rest of the walk asks for the
-/// smaller one from the start: one server answers every folder on the share the same way.</para>
+/// above the folder short. So a listing refused while it was read is tried again with the smallest
+/// buffer, and once the smaller buffer has listed a folder the larger one could not, the rest of the
+/// walk asks for the smaller one from the start: one server answers every folder on the share the
+/// same way.</para>
 ///
-/// <para>A folder the account may not read is never tried again. It is the refusal a volume holds
-/// hundreds of, and no buffer changes it.</para>
+/// <para>A folder that could not be opened is never tried again, and nor is one the account may not
+/// read. The buffer is only used once the folder is open, so neither a sharing violation at the open
+/// nor the refusal a volume holds hundreds of is changed by its size.</para>
 /// </summary>
 internal sealed class ListingBuffer
 {
-    private static readonly EnumerationOptions Smallest =
-        DirectoryListing.EveryEntryWithBuffer(WalkTuning.MinimumListingBuffer);
-
-    private readonly EnumerationOptions _requested;
+    private const int Smallest = WalkTuning.MinimumListingBuffer;
 
     private int _rejected;
 
-    public ListingBuffer(int bytes) =>
-        _requested = bytes > WalkTuning.MinimumListingBuffer ? DirectoryListing.EveryEntryWithBuffer(bytes) : Smallest;
+    public ListingBuffer(int bytes) => Largest = Math.Max(bytes, Smallest);
+
+    /// <summary>The most any listing asks for, which is what each worker's memory holds.</summary>
+    public int Largest { get; }
 
     /// <summary>What the next listing asks for.</summary>
-    public EnumerationOptions Options => Volatile.Read(ref _rejected) == 1 ? Smallest : _requested;
+    public int Bytes => Volatile.Read(ref _rejected) == 1 ? Smallest : Largest;
 
     /// <summary>
-    /// The options to try a listing again with, or null where trying again cannot change how it
-    /// ended.
+    /// The size to try a listing again with, or null where trying again cannot change how it ended.
     /// </summary>
-    public EnumerationOptions? RetryAfter(EnumerationOptions used, ListingEnd end) =>
-        end.Presence is PathPresence.Refused && !end.Denied && !ReferenceEquals(used, Smallest)
+    public int? RetryAfter(int used, ListingEnd end) =>
+        end is { Presence: PathPresence.Refused, WhileReading: true, Denied: false } && used > Smallest
             ? Smallest
             : null;
 

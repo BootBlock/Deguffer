@@ -108,12 +108,12 @@ public sealed class ListingBudgetTests
     public async Task AListingThatThrowsGivesItsSlotBack()
     {
         var budget = new ListingBudget();
-        var failing = budget.Around((_, _, _, _) => throw new IOException("The device is not ready."), limit: 1);
+        var failing = budget.Around((_, _, _) => throw new IOException("The device is not ready."), limit: 1);
         var listing = budget.Around(EmptyListing, limit: 1);
 
-        Assert.Throws<IOException>(() => failing(@"\\?\Q:\gone", DirectoryListing.EveryEntryWithBuffer(WalkTuning.MinimumListingBuffer), FileNames.All, []));
+        Assert.Throws<IOException>(() => failing(@"\\?\Q:\gone", default, []));
 
-        var end = await Task.Run(() => listing(@"\\?\Q:\next", DirectoryListing.EveryEntryWithBuffer(WalkTuning.MinimumListingBuffer), FileNames.All, []))
+        var end = await Task.Run(() => listing(@"\\?\Q:\next", default, []))
             .WaitAsync(Deadline);
 
         Assert.Equal(PathPresence.Present, end.Presence);
@@ -140,8 +140,8 @@ public sealed class ListingBudgetTests
                 CancellationToken.None),
             TaskCreationOptions.LongRunning);
 
-    private static ListingEnd EmptyListing(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into) =>
-        new(PathPresence.Present, Denied: false);
+    private static ListingEnd EmptyListing(string directory, ListingRequest request, List<WalkEntry> into) =>
+        ListingEnd.Listed;
 
     /// <summary>
     /// Roots holding a row of folders each, every one of which waits while it is listed until
@@ -157,7 +157,7 @@ public sealed class ListingBudgetTests
 
         public int Peak => Volatile.Read(ref _peak);
 
-        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
+        public ListingEnd List(string directory, ListingRequest request, List<WalkEntry> into)
         {
             var now = Interlocked.Increment(ref _inFlight);
             InterlockedMax(ref _peak, now);
@@ -172,7 +172,7 @@ public sealed class ListingBudgetTests
                 if (Path.GetFileName(directory).StartsWith('d'))
                 {
                     _reached.Wait(Patience);
-                    return new ListingEnd(PathPresence.Present, Denied: false);
+                    return ListingEnd.Listed;
                 }
 
                 for (var i = 0; i < Children; i++)
@@ -180,7 +180,7 @@ public sealed class ListingBudgetTests
                     into.Add(new WalkEntry(directory, $"d{i}", FileAttributes.Directory, 0, default, default));
                 }
 
-                return new ListingEnd(PathPresence.Present, Denied: false);
+                return ListingEnd.Listed;
             }
             finally
             {

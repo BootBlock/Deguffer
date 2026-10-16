@@ -19,9 +19,9 @@ public sealed class WalkListingTests
     public void ListsAFolderAgainWithTheSmallestBufferWhenTheLargerOneIsRejected()
     {
         var server = new FakeServer();
-        var listing = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All);
+        using var listing = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All);
 
-        var contents = listing.Read(Folder);
+        var contents = listing.Read(Folder, followsLink: true);
 
         Assert.False(contents.WasRefused);
         Assert.Equal(["a.bin", "b.bin", "c.bin"], contents.Entries.Select(e => e.Name));
@@ -39,10 +39,15 @@ public sealed class WalkListingTests
         var server = new FakeServer();
         var buffer = new ListingBuffer(Large);
 
-        new WalkListing(buffer, server.List, FileNames.All).Read(Folder);
+        using (var first = new WalkListing(buffer, server.List, FileNames.All))
+        {
+            first.Read(Folder, followsLink: true);
+        }
+
         server.BuffersAskedFor.Clear();
 
-        new WalkListing(buffer, server.List, FileNames.All).Read(Folder + @"\next");
+        using var second = new WalkListing(buffer, server.List, FileNames.All);
+        second.Read(Folder + @"\next", followsLink: false);
 
         Assert.Equal([WalkTuning.MinimumListingBuffer], server.BuffersAskedFor);
     }
@@ -54,9 +59,26 @@ public sealed class WalkListingTests
     [Fact]
     public void ReportsAFolderItMayNotReadWithoutListingItAgain()
     {
-        var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, Denied: true) };
+        var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, Denied: true, WhileReading: false) };
 
-        var contents = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All).Read(Folder);
+        using var listing = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All);
+        var contents = listing.Read(Folder, followsLink: true);
+
+        Assert.True(contents.WasRefused);
+        Assert.Equal([Large], server.BuffersAskedFor);
+    }
+
+    /// <summary>
+    /// A folder that could not be opened was refused before any buffer was used, so no size changes
+    /// it: a sharing violation at the open is reported at once rather than met twice.
+    /// </summary>
+    [Fact]
+    public void ReportsAFolderItCouldNotOpenWithoutListingItAgain()
+    {
+        var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, Denied: false, WhileReading: false) };
+
+        using var listing = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All);
+        var contents = listing.Read(Folder, followsLink: true);
 
         Assert.True(contents.WasRefused);
         Assert.Equal([Large], server.BuffersAskedFor);
@@ -72,11 +94,12 @@ public sealed class WalkListingTests
         var server = new FakeServer { FailsAtEverySize = true };
         var buffer = new ListingBuffer(Large);
 
-        var contents = new WalkListing(buffer, server.List, FileNames.All).Read(Folder);
+        using var listing = new WalkListing(buffer, server.List, FileNames.All);
+        var contents = listing.Read(Folder, followsLink: true);
 
         Assert.True(contents.WasRefused);
         Assert.Equal([Large, WalkTuning.MinimumListingBuffer], server.BuffersAskedFor);
-        Assert.Equal(Large, buffer.Options.BufferSize);
+        Assert.Equal(Large, buffer.Bytes);
     }
 
     [Fact]
@@ -84,7 +107,8 @@ public sealed class WalkListingTests
     {
         var server = new FakeServer { FailsAtEverySize = true };
 
-        new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List, FileNames.All).Read(Folder);
+        using var listing = new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List, FileNames.All);
+        listing.Read(Folder, followsLink: true);
 
         Assert.Equal([WalkTuning.MinimumListingBuffer], server.BuffersAskedFor);
     }
@@ -108,7 +132,8 @@ public sealed class WalkListingTests
             ],
         };
 
-        var contents = new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List, FileNames.All).Read(Folder);
+        using var listing = new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List, FileNames.All);
+        var contents = listing.Read(Folder, followsLink: true);
 
         Assert.Equal(["first.bin", "folder", "last.bin"], contents.Entries.Select(e => e.Name));
         Assert.Equal(["link"], contents.Links.Select(e => e.Name));
@@ -131,25 +156,29 @@ public sealed class WalkListingTests
             Entry("c.bin", FileAttributes.Archive),
         ];
 
-        /// <summary>How a rejected listing ends. ERROR_INVALID_PARAMETER by default, which is no refusal of access.</summary>
-        public ListingEnd Answer { get; init; } = new(PathPresence.Refused, Denied: false);
+        /// <summary>
+        /// How a rejected listing ends. ERROR_INVALID_PARAMETER while the entries were read by default,
+        /// which is no refusal of access. An answer from the open, or a refusal of access, comes at
+        /// every size.
+        /// </summary>
+        public ListingEnd Answer { get; init; } = new(PathPresence.Refused, Denied: false, WhileReading: true);
 
         public bool FailsAtEverySize { get; init; }
 
         public List<int> BuffersAskedFor { get; } = [];
 
-        public ListingEnd List(string directory, EnumerationOptions options, FileNames files, List<WalkEntry> into)
+        public ListingEnd List(string directory, ListingRequest request, List<WalkEntry> into)
         {
-            BuffersAskedFor.Add(options.BufferSize);
+            BuffersAskedFor.Add(request.BufferBytes);
 
-            if (FailsAtEverySize || options.BufferSize > WalkTuning.MinimumListingBuffer || Answer.Denied)
+            if (FailsAtEverySize || request.BufferBytes > WalkTuning.MinimumListingBuffer || !Answer.WhileReading || Answer.Denied)
             {
                 into.Add(Entries[0]);
                 return Answer;
             }
 
             into.AddRange(Entries);
-            return new ListingEnd(PathPresence.Present, Denied: false);
+            return ListingEnd.Listed;
         }
     }
 }

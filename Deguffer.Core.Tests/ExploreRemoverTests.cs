@@ -539,7 +539,7 @@ public sealed class ExploreRemoverTests : IDisposable
         // The second listing of Downloads is the check that follows the removal, which is the
         // moment Windows has to stop describing the store.
         var listings = 0;
-        var fs = new ListingHook(WindowsFileSystem.Default, downloads, () =>
+        var fs = new ListingHookFileSystem(WindowsFileSystem.Default, downloads, () =>
         {
             if (++listings == 2)
             {
@@ -966,41 +966,5 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.Equal(ordinary, Assert.Single(report.Removed).Path);
         Assert.False(LongPath.DirectoryExists(ordinary));
         Assert.True(report.Verification.Passed, report.Summary);
-    }
-
-    /// <summary>The real filesystem, calling <paramref name="listed"/> each time one directory is listed.</summary>
-    private sealed class ListingHook(IFileSystem inner, string directory, Action listed) : IFileSystem
-    {
-        public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
-        public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
-
-        public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
-
-        public ListingEnd ListEntries(string path, EnumerationOptions options, FileNames files, List<WalkEntry> into)
-        {
-            if (LongPath.Display(path).Equals(directory, StringComparison.OrdinalIgnoreCase))
-            {
-                listed();
-            }
-
-            return inner.ListEntries(path, options, files, into);
-        }
-
-        public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
-
-        public long? TryGetNewestFileTime(string path) => inner.TryGetNewestFileTime(path);
-
-        public void DeleteFile(string path) => inner.DeleteFile(path);
-
-        public RefusalReason? ProbeRemoval(string path) => inner.ProbeRemoval(path);
-
-        public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
-
-        public void ClearAttributes(string path) => inner.ClearAttributes(path);
-
-        public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
-
-        public bool MayExist(string path) => inner.MayExist(path);
     }
 }
