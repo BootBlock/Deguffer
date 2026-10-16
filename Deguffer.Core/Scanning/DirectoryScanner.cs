@@ -48,7 +48,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// provider would rebuild it three times over, making the MFT route slower than the walk it
     /// replaces.
     /// </summary>
-    public static DirectoryScanner Default { get; } = CreateDefault(UserEnvironment.Current);
+    private static DirectoryScanner Default { get; } = CreateDefault(UserEnvironment.Current);
 
     /// <summary>
     /// A scanner of the machine <paramref name="environment"/> describes: its volumes' tables, and

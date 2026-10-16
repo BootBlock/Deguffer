@@ -104,7 +104,7 @@ public sealed class CleanupPlanner
         environment ??= UserEnvironment.Current;
         var roots = new SourceRootStore(environment);
 
-        // One scanner for every provider, as DirectoryScanner.Default is one: its volume index is the
+        // One scanner for every provider, as this machine's shared one is: its volume index is the
         // whole cost of the fast path, and an unshared scanner per provider would rebuild it for each.
         var scanner = tuning is null ? DirectoryScanner.For(environment) : DirectoryScanner.CreateDefault(environment, tuning);
         var hardLinks = tuning is null ? HardLinkAwareScanner.Default : new HardLinkAwareScanner(tuning);

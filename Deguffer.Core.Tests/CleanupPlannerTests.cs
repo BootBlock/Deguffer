@@ -547,11 +547,16 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
-    /// Every default provider measures the volumes of the environment the planner is built over, with
-    /// the user's tuning and without it. A scanner of this machine's volumes, run elevated, reads the
-    /// real disk's table under a test's fixture. Asked of each provider's own scanner, because the one
-    /// a provider was built with is what its plan measures with. The hard-link scanner only walks, and
-    /// never asks for a table.
+    /// Every default provider measures the volumes of the environment the planner is built over, and
+    /// remembers what it measured in that environment's application data, with the user's tuning and
+    /// without it. A scanner of this machine's volumes, run elevated, reads the real disk's table under
+    /// a test's fixture, and one of this machine's estimates writes the fixture's paths into the real
+    /// account's. Asked of each provider's own scanner, because the one a provider was built with is
+    /// what its plan measures with. The hard-link scanner only walks, and never asks for a table.
+    ///
+    /// <para>The environment's tables count what they were asked, so no real volume can stand in for
+    /// them. Each scanner is asked once: a shared one has its answer for the volume by its second
+    /// provider.</para>
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -560,10 +565,9 @@ public sealed class CleanupPlannerTests
     {
         using var temp = new TempDirectory();
         var measured = temp.CreateDirectory("measured");
-        var environment = new FakeUserEnvironment(temp.Path)
-        {
-            VolumeTables = FakeMftSourceFactory.Unavailable(FallbackReason.NotNtfsVolume),
-        };
+        var tables = FakeMftSourceFactory.Unavailable(FallbackReason.NotNtfsVolume);
+        var environment = new FakeUserEnvironment(temp.Path) { VolumeTables = tables };
+        var estimates = Path.Combine(environment.LocalAppData, "Deguffer", "scan-estimates.json");
         var planner = CleanupPlanner.CreateDefault(
             liveTrees: FakeLiveTreeInspector.NothingLive,
             environment: environment,
@@ -576,13 +580,21 @@ public sealed class CleanupPlannerTests
 
         Assert.True(scanners.Count >= 70, $"only {scanners.Count} providers measure with a table");
 
-        foreach (var (id, scanner) in scanners)
+        foreach (var (id, scanner) in scanners.DistinctBy(row => row.Scanner, ReferenceEqualityComparer.Instance))
         {
+            var opened = tables.OpenCount;
+            if (File.Exists(estimates))
+            {
+                File.Delete(estimates);
+            }
+
             var result = await scanner.MeasureAsync(measured);
 
+            Assert.True(tables.OpenCount > opened, $"'{id}' measured without asking the environment's tables.");
             Assert.True(
                 result.Fallback == FallbackReason.NotNtfsVolume,
                 $"'{id}' measured with tables other than the environment's ({result.Fallback}).");
+            Assert.True(File.Exists(estimates), $"'{id}' remembered its measurement outside the environment.");
         }
 
         static IDirectoryScanner ScannerOf(ICleanupProvider provider) =>
