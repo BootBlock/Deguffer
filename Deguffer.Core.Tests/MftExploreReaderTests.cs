@@ -28,7 +28,10 @@ public class MftExploreReaderTests
 
     // The folder the scoped reads below are pointed at, and the components that locate it under
     // the volume's own root — the two halves of what the scanner hands over.
-    private const string CachePath = @"C:\Users\testuser\.npm-cache";
+    private const string ProfilePath = @"C:\Users\testuser";
+    private const string CachePath = ProfilePath + @"\.npm-cache";
+    private const string NestedPath = CachePath + @"\content-v2";
+    private const string SiblingPath = ProfilePath + @"\.config";
 
     private static readonly string[] CacheComponents = ["Users", "testuser", ".npm-cache"];
 
@@ -40,54 +43,47 @@ public class MftExploreReaderTests
         .AddDirectory(Sibling, Profile, ".config");
 
     /// <summary>
-    /// A record the table never described has no path, and asking for one must end rather than run.
+    /// The tree keeps only what its root reaches, so every node it has answers with a path.
     ///
-    /// <para>This route sizes its arrays to the whole record count, and most of those slots are
-    /// never filled — a free record leaves a default parent of zero, and record zero's own parent
-    /// is zero too, which is not the root's record number. Walking that chain to the root therefore
-    /// never arrives. Both <c>PathOf</c> and <c>NodeCount</c> are public, so the obvious loop over
-    /// every node hangs the caller with no exception to catch and no output to look at.</para>
-    ///
-    /// <para>It refuses rather than answering because the caller wants this for a label today and
-    /// to open a folder tomorrow. A guessed path is a wrong path, and the one thing worse than no
-    /// answer is a plausible one.</para>
+    /// <para>This route sizes its arrays to the whole record count before it reads one, and most of
+    /// those slots are never filled: a free record leaves a default parent of zero. Kept, those slots
+    /// cost memory for as long as the tree is shown, and walking from one to the root never arrives.
+    /// Both <c>PathOf</c> and <c>NodeCount</c> are public, so the obvious loop over every node is
+    /// what this asserts terminates.</para>
     /// </summary>
     [Fact]
-    public void RefusesAPathForANodeThatDoesNotReachTheRoot()
+    public void KeepsOnlyTheRecordsTheRootReaches()
     {
         using var source = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
+            .AddFile(21, parent: 9000, "orphan.tgz", allocated: 8192, logical: 8000)
+            .AddUnused(70_000)
             .Build();
 
         var tree = WholeVolume(source);
 
-        // Record 0 is blank here, which is what an unused entry looks like — so the reader never
-        // placed it, and nothing links it to anything. The test below covers the shape a real
-        // volume leaves instead, where record 0 is described and the walk alone cannot tell.
-        Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf(0));
-
-        // The reachable ones still answer, so the guard has not simply refused everything.
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+        // The root, the five folders and the file: none of the free records, the blank metadata
+        // slots or the orphan.
+        Assert.Equal(7, tree.NodeCount);
+        Assert.Equal(tree.NodeCount, Reachable(tree).Count);
+        Assert.All(Enumerable.Range(0, tree.NodeCount), node => Assert.NotNull(tree.TryPathOf(node)));
+        Assert.Equal(4096, tree.SizeOf(At(tree, CachePath + @"\a.tgz")));
     }
 
     /// <summary>
-    /// The same refusal on the shape a real volume actually leaves, where following the parent
-    /// links produces a path rather than running out of them.
+    /// The plausible wrong answer the tree must never give, on the shape a real volume leaves, where
+    /// following the parent links produces a path rather than running out of them.
     ///
     /// <para>An undescribed record keeps the array default for its parent, which is record zero.
     /// On a real volume record zero is <c>$MFT</c>: it parses, it carries a name, and its own
     /// parent is the volume's root. So the chain from an undescribed record does arrive at the
-    /// root, through a file that has nothing to do with it, and the answer is <c>C:\$MFT</c> — a
-    /// path that is entirely well formed and belongs to something else. That is the plausible
-    /// wrong answer this refusal exists to stop, and no walk over the parent links can detect
-    /// it.</para>
-    ///
-    /// <para>The distinction reaches past a label. <see cref="ExplorePlace"/> asks two trees for
-    /// the same node's path to decide whether the user is still standing where they were, and a
-    /// fabricated path is an answer it cannot tell from a real one.</para>
+    /// root, through a file that has nothing to do with it, and the answer is <c>C:\$MFT</c>: a
+    /// path that is entirely well formed and belongs to something else. A tree that kept such a
+    /// record would name two nodes <c>C:\$MFT</c>, and <see cref="ExplorePlace"/>, which finds a
+    /// place again by its path, could not tell the real one from the other.</para>
     /// </summary>
     [Fact]
-    public void RefusesAPathForAnUndescribedRecordWhoseParentChainRunsThroughMetadata()
+    public void KeepsNoUndescribedRecordWhoseParentChainRunsThroughMetadata()
     {
         using var source = Tree()
             .AddFile(0, MftRecord.RootRecordNumber, "$MFT", allocated: 4096, logical: 4096)
@@ -96,15 +92,41 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        // The metadata file itself is a real record, so it keeps its real path.
-        Assert.Equal(@"C:\$MFT", tree.PathOf(0));
+        // First, and bounded: every node is one the root reaches, so the walk to the root below
+        // ends for each of them.
+        Assert.Equal(Reachable(tree).Count, tree.NodeCount);
 
-        // Record 1 is $MFTMirr's slot, left undescribed. Its parent is the default zero, so the
-        // chain reaches the root through $MFT and would otherwise answer C:\$MFT for it too.
-        Assert.Null(tree.TryPathOf(1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf(1));
+        var paths = Enumerable.Range(0, tree.NodeCount).Select(tree.PathOf).ToList();
 
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+        Assert.Single(paths, path => path == @"C:\$MFT");
+        Assert.Equal(paths.Count, paths.Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains(CachePath + @"\a.tgz", paths);
+    }
+
+    /// <summary>
+    /// #364: a scan of one folder keeps that folder and what is under it, and none of the rest of the
+    /// volume: no slot for a record outside it, and no name only such a record uses.
+    ///
+    /// <para>The table's reader names every record in use wherever it is, so a tree that kept its
+    /// pool as read would hold the name of every file on the disk to show a few under one folder.
+    /// The names counted are the folder's path, which the root carries, and the three below it, with
+    /// the empty name every pool begins with.</para>
+    /// </summary>
+    [Fact]
+    public void AFolderRootedTreeKeepsNoRecordOrNameFromOutsideTheFolder()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .AddFile(21, Nested, "sha512.tgz", allocated: 2048, logical: 1500)
+            .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
+            .AddUnused(70_000)
+            .Build();
+
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
+
+        Assert.Equal(4, tree.NodeCount);
+        Assert.Equal(5, tree.NamesHeld);
+        Assert.Equal(1500, tree.LengthOf(At(tree, NestedPath + @"\sha512.tgz")));
     }
 
     /// <summary>
@@ -170,7 +192,7 @@ public class MftExploreReaderTests
         var tree = WholeVolume(source);
 
         Assert.Equal(7000, tree.TotalLength);
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\linked.dll", tree.PathOf(21));
+        Assert.Equal(3000, tree.LengthOf(At(tree, CachePath + @"\linked.dll")));
         Assert.False(tree.HasUnknownSizes, "every record was placed and the total was still called a lower bound");
 
         using var strict = fixture.Build();
@@ -249,11 +271,10 @@ public class MftExploreReaderTests
         using var source = fixture.Build();
         var tree = WholeVolume(source);
 
-        Assert.Equal("a.tgz", tree.NameOf(20));
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\content-v2\sha512.tgz", tree.PathOf(21));
+        Assert.Equal(4000, tree.LengthOf(At(tree, CachePath + @"\a.tgz")));
+        Assert.Equal(1500, tree.LengthOf(At(tree, NestedPath + @"\sha512.tgz")));
         Assert.Equal(5500, tree.TotalLength);
-        Assert.Equal(1500, tree.LengthOf((int)Nested));
+        Assert.Equal(1500, tree.LengthOf(At(tree, NestedPath)));
 
         using var again = fixture.Build();
         Assert.True(MftVolumeIndexBuilder.TryBuild(again, TableTuning.Default, out var index));
@@ -290,8 +311,7 @@ public class MftExploreReaderTests
         var tree = WholeVolume(source);
 
         Assert.Equal(4000, tree.TotalLength);
-        Assert.Equal("a.tgz", tree.NameOf(20));
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+        Assert.Equal(4000, tree.LengthOf(At(tree, CachePath + @"\a.tgz")));
 
         Assert.True(tree.HasUnknownSizes, "the picture kept going and did not say it was short");
     }
@@ -318,7 +338,7 @@ public class MftExploreReaderTests
         var tree = WholeVolume(source);
 
         Assert.Equal(4000, tree.TotalLength);
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+        Assert.Equal(4000, tree.LengthOf(At(tree, CachePath + @"\a.tgz")));
         Assert.DoesNotContain("unreachable.tgz", Reachable(tree).Select(tree.NameOf));
 
         Assert.True(tree.HasUnknownSizes, "four gigabytes went missing and the total was called exact");
@@ -340,9 +360,10 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\fragmented.tgz", tree.PathOf(20));
+        var fragmented = At(tree, CachePath + @"\fragmented.tgz");
+        Assert.Equal(8000, tree.LengthOf(fragmented));
         Assert.Equal(8000, tree.TotalLength);
-        Assert.False(tree.HasUnknownSizeBelow(20));
+        Assert.False(tree.HasUnknownSizeBelow(fragmented));
         Assert.True(tree.HasUnknownSizes, "the table stopped short and the total was called exact");
     }
 
@@ -367,14 +388,14 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        Assert.True(tree.HasUnknownSizeBelow(21));
-        Assert.True(tree.HasUnknownSizeBelow((int)Nested));
-        Assert.True(tree.HasUnknownSizeBelow((int)Cache));
-        Assert.True(tree.HasUnknownSizeBelow((int)Profile));
+        Assert.True(tree.HasUnknownSizeBelow(At(tree, NestedPath + @"\fragmented.tgz")));
+        Assert.True(tree.HasUnknownSizeBelow(At(tree, NestedPath)));
+        Assert.True(tree.HasUnknownSizeBelow(At(tree, CachePath)));
+        Assert.True(tree.HasUnknownSizeBelow(At(tree, ProfilePath)));
 
-        Assert.False(tree.HasUnknownSizeBelow((int)Sibling));
+        Assert.False(tree.HasUnknownSizeBelow(At(tree, SiblingPath)));
 
-        Assert.Equal(4000, tree.LengthOf((int)Nested));
+        Assert.Equal(4000, tree.LengthOf(At(tree, NestedPath)));
         Assert.Equal(5000, tree.TotalLength);
     }
 
@@ -415,14 +436,13 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        Assert.Equal((int)MftRecord.RootRecordNumber, tree.RootNode);
         Assert.Equal(Root, tree.NameOf(tree.RootNode));
         Assert.Equal(Root, tree.PathOf(tree.RootNode));
         Assert.Equal(tree.RootNode, tree.ParentOf(tree.RootNode));
         Assert.True(tree.IsDirectory(tree.RootNode));
 
         Assert.Equal(4000, tree.TotalLength);
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\a.tgz", tree.PathOf(20));
+        Assert.Equal(4000, tree.LengthOf(At(tree, CachePath + @"\a.tgz")));
     }
 
     /// <summary>
@@ -439,10 +459,11 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        Assert.True(tree.IsLink(30));
-        Assert.True(tree.IsDirectory(30));
-        Assert.False(tree.IsLink((int)Cache));
-        Assert.False(tree.IsLink(20));
+        var link = At(tree, ProfilePath + @"\linked-cache");
+        Assert.True(tree.IsLink(link));
+        Assert.True(tree.IsDirectory(link));
+        Assert.False(tree.IsLink(At(tree, CachePath)));
+        Assert.False(tree.IsLink(At(tree, CachePath + @"\a.tgz")));
     }
 
     /// <summary>
@@ -496,8 +517,9 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        Assert.Equal(made, tree.CreatedOf(20).Utc);
-        Assert.Equal(written, tree.ModifiedOf(20).Utc);
+        var file = At(tree, CachePath + @"\a.tgz");
+        Assert.Equal(made, tree.CreatedOf(file).Utc);
+        Assert.Equal(written, tree.ModifiedOf(file).Utc);
     }
 
     /// <summary>
@@ -518,11 +540,11 @@ public class MftExploreReaderTests
 
         var tree = WholeVolume(source);
 
-        Assert.False(tree.CreatedOf(20).IsKnown);
-        Assert.False(tree.ModifiedOf(20).IsKnown);
+        var file = At(tree, CachePath + @"\undated.tgz");
+        Assert.False(tree.CreatedOf(file).IsKnown);
+        Assert.False(tree.ModifiedOf(file).IsKnown);
 
-        Assert.Equal(@"C:\Users\testuser\.npm-cache\undated.tgz", tree.PathOf(20));
-        Assert.Equal(4096, tree.SizeOf(20));
+        Assert.Equal(4096, tree.SizeOf(file));
 
         // And the volume is not reported as partly unreadable because of it, which is the failure
         // that would take the whole fast path off a real disk.
@@ -550,10 +572,9 @@ public class MftExploreReaderTests
         var tree = read.Tree!;
 
         Assert.Equal(FallbackReason.None, read.Reason);
-        Assert.Equal((int)Cache, tree.RootNode);
         Assert.Equal(CachePath, tree.RootPath);
         Assert.Equal(CachePath, tree.PathOf(tree.RootNode));
-        Assert.Equal(CachePath + @"\content-v2\sha512.tgz", tree.PathOf(21));
+        Assert.Equal(1500, tree.LengthOf(At(tree, NestedPath + @"\sha512.tgz")));
 
         Assert.Equal(5500, tree.TotalLength);
         Assert.False(tree.HasUnknownSizes);
@@ -564,10 +585,8 @@ public class MftExploreReaderTests
     /// anything above or beside that folder reaching the tree makes the number it reports wrong —
     /// silently, and in the direction that looks like a plausible measurement.
     ///
-    /// <para>The volume's root is still in the arrays, still present, and still its own parent, so
-    /// this is also what pins the link inversion on that shape rather than on the node number.
-    /// Exclude the root by its record number instead and record 5 becomes its own child, which is a
-    /// cycle sitting one hop outside everything the tree draws.</para>
+    /// <para>Asserted on every node the tree keeps, by its path: each is the folder or below it.
+    /// </para>
     /// </summary>
     [Fact]
     public void KeepsAFolderRootedScanInsideThatFolder()
@@ -578,22 +597,18 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
-        var reachable = Reachable(tree);
 
-        Assert.DoesNotContain((int)MftRecord.RootRecordNumber, reachable);
-        Assert.DoesNotContain((int)Users, reachable);
-        Assert.DoesNotContain((int)Profile, reachable);
-        Assert.DoesNotContain((int)Sibling, reachable);
-        Assert.DoesNotContain(22, reachable);
+        // First, and bounded, for the reason the test above gives.
+        Assert.Equal(Reachable(tree).Count, tree.NodeCount);
+
+        Assert.All(
+            Enumerable.Range(0, tree.NodeCount),
+            node => Assert.StartsWith(CachePath, tree.PathOf(node), StringComparison.Ordinal));
+        Assert.DoesNotContain("settings.json", Reachable(tree).Select(tree.NameOf));
 
         Assert.Equal(4000, tree.TotalLength);
         Assert.Equal(tree.RootNode, tree.ParentOf(tree.RootNode));
-        Assert.Throws<ArgumentOutOfRangeException>(() => tree.PathOf((int)Sibling));
-
-        // The volume's root, left where it was, is not made a child of itself.
-        Assert.DoesNotContain(
-            (int)MftRecord.RootRecordNumber,
-            tree.ChildrenOf((int)MftRecord.RootRecordNumber).ToArray());
+        Assert.DoesNotContain(tree.RootNode, tree.ChildrenOf(tree.RootNode).ToArray());
     }
 
     /// <summary>
@@ -696,14 +711,12 @@ public class MftExploreReaderTests
             source, @"C:\Users\testuser\cache", ["Users", "testuser", "cache"],
             TableTuning.Default, onProgress: null, default).Tree!;
 
-        Assert.Equal((int)LowerCache, lower.RootNode);
         Assert.Equal(1000, lower.TotalLength);
 
         var upper = MftExploreReader.Read(
             source, @"C:\Users\testuser\Cache", ["Users", "testuser", "Cache"],
             TableTuning.Default, onProgress: null, default).Tree!;
 
-        Assert.Equal((int)UpperCache, upper.RootNode);
         Assert.Equal(8000, upper.TotalLength);
 
         // No exact match, so the case-insensitive one still answers rather than the path failing.
@@ -711,7 +724,7 @@ public class MftExploreReaderTests
             source, @"C:\Users\testuser\CACHE", ["Users", "testuser", "CACHE"],
             TableTuning.Default, onProgress: null, default).Tree!;
 
-        Assert.Equal((int)UpperCache, neither.RootNode);
+        Assert.Equal(8000, neither.TotalLength);
     }
 
     /// <summary>
@@ -752,23 +765,25 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = WholeVolume(source);
+        var cache = At(tree, CachePath);
+        var film = At(tree, CachePath + @"\film.mkv");
 
-        Assert.Equal(0, tree.SizeOf(20));
-        Assert.Equal(200_000_000_000, tree.LengthOf(20));
-        Assert.Equal(65_536 + 8192, tree.SizeOf((int)Cache));
-        Assert.Equal(200_000_000_000 + 9_000_000 + 8000, tree.LengthOf((int)Cache));
+        Assert.Equal(0, tree.SizeOf(film));
+        Assert.Equal(200_000_000_000, tree.LengthOf(film));
+        Assert.Equal(65_536 + 8192, tree.SizeOf(cache));
+        Assert.Equal(200_000_000_000 + 9_000_000 + 8000, tree.LengthOf(cache));
         Assert.Equal(65_536 + 8192, tree.TotalBytes);
 
         // One cause, the cloud, though the placeholder is sparse too: the walk sees only the one.
-        Assert.Equal(FileStorage.CloudOnly, tree.StorageOf(20));
-        Assert.Equal(FileStorage.Plain, tree.StorageOf(22));
-        Assert.Equal(FileStorage.CloudOnly, tree.StorageOf((int)Cache));
+        Assert.Equal(FileStorage.CloudOnly, tree.StorageOf(film));
+        Assert.Equal(FileStorage.Plain, tree.StorageOf(At(tree, CachePath + @"\kept.tgz")));
+        Assert.Equal(FileStorage.CloudOnly, tree.StorageOf(cache));
 
         // A placeholder is content, never a link, whatever its reparse point.
-        Assert.False(tree.IsLink(20));
+        Assert.False(tree.IsLink(film));
 
         // Ordered by what it occupies, so the empty film is last rather than first.
-        Assert.Equal(20, tree.ChildrenOf((int)Cache)[^1]);
+        Assert.Equal(film, tree.ChildrenOf(cache)[^1]);
     }
 
     /// <summary>
@@ -784,13 +799,16 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = WholeVolume(source);
+        var log = At(tree, CachePath + @"\log.txt");
+        var disk = At(tree, CachePath + @"\disk.vhdx");
+        var cache = At(tree, CachePath);
 
-        Assert.Equal(131_072, tree.SizeOf(20));
-        Assert.Equal(FileStorage.Compressed, tree.StorageOf(20));
-        Assert.Equal(0, tree.SizeOf(21));
-        Assert.Equal(FileStorage.Sparse, tree.StorageOf(21));
-        Assert.Equal(2 * 2_097_152, tree.LengthOf((int)Cache));
-        Assert.Equal(FileStorage.Compressed | FileStorage.Sparse, tree.StorageOf((int)Cache));
+        Assert.Equal(131_072, tree.SizeOf(log));
+        Assert.Equal(FileStorage.Compressed, tree.StorageOf(log));
+        Assert.Equal(0, tree.SizeOf(disk));
+        Assert.Equal(FileStorage.Sparse, tree.StorageOf(disk));
+        Assert.Equal(2 * 2_097_152, tree.LengthOf(cache));
+        Assert.Equal(FileStorage.Compressed | FileStorage.Sparse, tree.StorageOf(cache));
     }
 
     /// <summary>
@@ -806,11 +824,12 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = WholeVolume(source);
+        var setup = At(tree, CachePath + @"\setup.exe");
 
-        Assert.Equal(139_264, tree.SizeOf(20));
-        Assert.Equal(2_097_152, tree.LengthOf(20));
-        Assert.Equal(FileStorage.Compressed, tree.StorageOf(20));
-        Assert.False(tree.IsLink(20));
+        Assert.Equal(139_264, tree.SizeOf(setup));
+        Assert.Equal(2_097_152, tree.LengthOf(setup));
+        Assert.Equal(FileStorage.Compressed, tree.StorageOf(setup));
+        Assert.False(tree.IsLink(setup));
         Assert.False(tree.HasUnknownSizes);
     }
 
@@ -829,9 +848,10 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = WholeVolume(followed);
+        var setup = At(tree, CachePath + @"\setup.exe");
 
-        Assert.Equal(139_264, tree.SizeOf(20));
-        Assert.Equal(FileStorage.Compressed, tree.StorageOf(20));
+        Assert.Equal(139_264, tree.SizeOf(setup));
+        Assert.Equal(FileStorage.Compressed, tree.StorageOf(setup));
         Assert.False(tree.HasUnknownSizes);
 
         using var changing = Tree()
@@ -840,7 +860,8 @@ public class MftExploreReaderTests
                 ListMismatch.ItsOwnSequence)
             .Build();
 
-        Assert.True(WholeVolume(changing).HasUnknownSizeBelow(20));
+        var changed = WholeVolume(changing);
+        Assert.True(changed.HasUnknownSizeBelow(At(changed, CachePath + @"\setup.exe")));
     }
 
     /// <summary>
@@ -857,10 +878,11 @@ public class MftExploreReaderTests
             .Build();
 
         var tree = WholeVolume(source);
+        var synced = At(tree, CachePath + @"\synced.docx");
 
-        Assert.Equal(8192, tree.SizeOf(20));
-        Assert.False(tree.HasUnknownSizeBelow(20));
-        Assert.True(tree.HasUnknownSizeBelow(21));
+        Assert.Equal(8192, tree.SizeOf(synced));
+        Assert.False(tree.HasUnknownSizeBelow(synced));
+        Assert.True(tree.HasUnknownSizeBelow(At(tree, CachePath + @"\setup.exe")));
     }
 
     /// <summary>
@@ -870,6 +892,8 @@ public class MftExploreReaderTests
     /// </summary>
     private static ExploreTree WholeVolume(IMftSource source) =>
         MftExploreReader.Read(source, Root, [], TableTuning.Default, onProgress: null, default).Tree!;
+
+    private static int At(ExploreTree tree, string path) => ExploreTreePaths.NodeAt(tree, path);
 
     private static List<int> Reachable(ExploreTree tree)
     {

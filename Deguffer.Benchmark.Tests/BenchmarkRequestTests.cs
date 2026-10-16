@@ -59,6 +59,24 @@ public sealed class BenchmarkRequestTests
         Assert.NotNull(error);
     }
 
+    /// <summary>
+    /// The folder Explore reads from the table is a folder, and the table's values are what it takes.
+    /// A folder with no drive letter has no table to read.
+    /// </summary>
+    [Fact]
+    public void TheFolderReadFromTheTableTakesAFolderAndTheTablesValues()
+    {
+        var request = BenchmarkRequest.Parse(["explorefolder", @"C:\Users\testuser", "--parse-threads", "4"], out _);
+
+        Assert.Equal(Route.ExploreFolder, request!.Route);
+        Assert.Equal(@"C:\Users\testuser", request.Path);
+        Assert.Equal('C', request.Drive);
+        Assert.Equal(4, request.Table.ParseThreads);
+        Assert.Null(BenchmarkRequest.Parse(["explorefolder", @"C:\Users\testuser", "--threads", "4"], out _));
+        Assert.Null(BenchmarkRequest.Parse(["explorefolder", @"\\server.test\share\folder"], out var error));
+        Assert.Contains("drive with a letter", error, StringComparison.Ordinal);
+    }
+
     /// <summary>The source search walks a folder, so it takes one and the walk's values.</summary>
     [Fact]
     public void TheSourceSearchTakesAFolderAndTheWalksValues()

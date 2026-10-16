@@ -19,6 +19,13 @@ internal enum Route
     Explore,
 
     /// <summary>
+    /// Build the Explore tree for one folder from its volume's file table: the route an elevated
+    /// Explore of a folder takes. It reads the whole table, as <see cref="Explore"/> does, and keeps
+    /// only the folder.
+    /// </summary>
+    ExploreFolder,
+
+    /// <summary>
     /// Walk one folder through <c>BoundedFileWalk</c>: the route an unelevated run takes, and the
     /// one every run takes where the table declines.
     /// </summary>
@@ -59,6 +66,18 @@ internal static class RouteFacts
     /// the values a scan ships with, because what it compares is the read of each file.
     /// </summary>
     public static bool TakesWalkTuning(this Route route) => route is Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources;
+
+    /// <summary>
+    /// Whether the route's target is a volume rather than a folder. A folder read from the table is
+    /// still read from the whole of its volume's.
+    /// </summary>
+    public static bool TargetsVolume(this Route route) => route.ReadsTable() && route is not Route.ExploreFolder;
+
+    /// <summary>
+    /// Whether the route builds what a scan keeps on screen, so what it holds once built is part of
+    /// its cost. See <see cref="RunSample.KeptBytes"/>.
+    /// </summary>
+    public static bool KeepsResult(this Route route) => route is Route.Explore or Route.ExploreFolder or Route.ExploreWalk;
 
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route switch

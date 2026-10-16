@@ -55,6 +55,22 @@ public sealed class ReportTests
         Assert.DoesNotContain("folders at once", Render(Route.Table, Run(2)), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A route that builds what Explore keeps on screen says what that keeps, which the peak working
+    /// set cannot. A route that keeps nothing shows no figure rather than a figure of zero.
+    /// </summary>
+    [Fact]
+    public void OnlyARouteThatKeepsWhatItBuiltReportsWhatItKeeps()
+    {
+        var text = Render(Route.ExploreFolder, Run(1, kept: 8L << 20), Run(1, kept: 2L << 20), Run(1, kept: 4L << 20));
+
+        Assert.Equal("kept               8.0 MiB         3.0 MiB (2.0 MiB to 4.0 MiB)", Line(text, "kept"));
+        Assert.Contains("kept ", Render(Route.Explore, Run(1)), StringComparison.Ordinal);
+        Assert.Contains("kept ", Render(Route.ExploreWalk, Run(1)), StringComparison.Ordinal);
+        Assert.DoesNotContain("kept ", Render(Route.Table, Run(1)), StringComparison.Ordinal);
+        Assert.DoesNotContain("kept ", Render(Route.Walk, Run(1)), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ARateIsTheItemsOverTheTime()
     {
@@ -129,8 +145,10 @@ public sealed class ReportTests
 
     private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, Place, Machine, runs);
 
-    private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0) =>
-        new(TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, FullCollections: 0, PeakWorkingSet: 64 << 20);
+    private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0, long kept = 0) =>
+        new(
+            TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, FullCollections: 0,
+            PeakWorkingSet: 64 << 20, kept);
 
     private static string Line(string text, string label) =>
         text.Split('\n').Single(line => line.StartsWith(label + " ", StringComparison.Ordinal));

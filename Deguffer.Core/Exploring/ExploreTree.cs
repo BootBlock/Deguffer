@@ -18,7 +18,7 @@ namespace Deguffer.Core.Exploring;
 /// The other tree behind that seam is <see cref="Memory.MemoryTree"/>.</para>
 ///
 /// <para>One file past the usual length because every member reads the same private arrays, and
-/// building them is the three passes that make them mean anything. What is taken out after a
+/// building them is the passes that make them mean anything. What is taken out after a
 /// removal is its own type, <see cref="Exploring.RemovedSinceScan"/>, which this only consults.</para>
 /// </summary>
 public sealed class ExploreTree : Layout.ITrackedTree
@@ -37,7 +37,6 @@ public sealed class ExploreTree : Layout.ITrackedTree
     private readonly FileVisibility[] _visibility;
     private readonly int[] _childStart;
     private readonly int[] _children;
-    private readonly bool[] _placed;
     private readonly FrozenSet<int> _listingRefused;
 
     /// <summary>What has been taken out since the scan, or null for the tree as the scan found it.</summary>
@@ -60,7 +59,6 @@ public sealed class ExploreTree : Layout.ITrackedTree
         FileVisibility[] visibility,
         int[] childStart,
         int[] children,
-        bool[] placed,
         ExploreChildOrder childOrder,
         FrozenSet<int> listingRefused)
     {
@@ -81,7 +79,6 @@ public sealed class ExploreTree : Layout.ITrackedTree
         _visibility = visibility;
         _childStart = childStart;
         _children = children;
-        _placed = placed;
         _listingRefused = listingRefused;
         Scanned = this;
     }
@@ -109,7 +106,6 @@ public sealed class ExploreTree : Layout.ITrackedTree
         _visibility = scanned._visibility;
         _childStart = scanned._childStart;
         _children = scanned._children;
-        _placed = scanned._placed;
         _listingRefused = scanned._listingRefused;
         _removed = removed;
         Scanned = scanned;
@@ -130,10 +126,9 @@ public sealed class ExploreTree : Layout.ITrackedTree
     public string RootPath { get; }
 
     /// <summary>
-    /// The node <see cref="RootPath"/> names. Not always zero: the master file table addresses its
-    /// root by a fixed record number, and a scan scoped to a folder is rooted at whichever record
-    /// holds that folder. Remapping every node to make it zero would cost a pass over the whole
-    /// volume to save an assumption nothing needs.
+    /// The node <see cref="RootPath"/> names. Not always zero: the nodes keep the order their reader
+    /// numbered them in (see <see cref="Create"/>), and the file table's reader numbers by record, where
+    /// the folder a scan is rooted at need not come before what it holds.
     /// </summary>
     public int RootNode { get; }
 
@@ -169,6 +164,9 @@ public sealed class ExploreTree : Layout.ITrackedTree
     public bool HasUnknownSizes => _sizeUnknown[RootNode];
 
     public int NodeCount => _nameNumbers.Length;
+
+    /// <summary>How many distinct names the tree keeps, the empty name included. See <see cref="Create"/>.</summary>
+    internal int NamesHeld => _names.Count;
 
     /// <summary>
     /// This node's name, made as a string for each call: for a name that is shown or kept. A pass
@@ -292,12 +290,13 @@ public sealed class ExploreTree : Layout.ITrackedTree
             : _children.AsSpan(_childStart[node], _childStart[node + 1] - _childStart[node]);
 
     /// <summary>
-    /// Whether this tree holds <paramref name="node"/>: a number in range, reachable from the root,
-    /// and not taken out since the scan (<see cref="Without"/>). Everything the tree lists, draws or
+    /// Whether this tree holds <paramref name="node"/>: a number in range, and not taken out since the
+    /// scan (<see cref="Without"/>). The tree keeps only the nodes its root reaches (<see cref="Create"/>),
+    /// so a number in range is one the root reaches. Everything the tree lists, draws or
     /// names a path for is a node it holds.
     /// </summary>
     public bool Holds(int node) =>
-        node >= 0 && node < NodeCount && _placed[node] && _removed?.Covers(node, ParentOf) != true;
+        node >= 0 && node < NodeCount && _removed?.Covers(node, ParentOf) != true;
 
     /// <summary>
     /// This tree with <paramref name="removed"/> taken out, each with everything under it: the
@@ -326,11 +325,8 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// <summary>
     /// The full path of <paramref name="node"/>, rebuilt by walking to the root.
     ///
-    /// <para>Throws for a node this tree cannot place. Such nodes exist: the file-table route sizes
-    /// its arrays to the whole record count and most of those slots are never filled, so their
-    /// parent is a default zero and the walk would never terminate. Every node reachable through
-    /// <see cref="ChildrenOf"/> from the root is safe by construction, and that is the only way
-    /// anything gets one to pass here.</para>
+    /// <para>Throws for a node this tree does not hold (<see cref="Holds"/>): a number from another
+    /// tree that is past the end of this one, or a node taken out since the scan.</para>
     ///
     /// <para>Throwing rather than answering, because the caller wants this for a label today and to
     /// open a folder tomorrow. A guessed path is a wrong path, and the one thing worse than no
@@ -339,26 +335,20 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// </summary>
     public string PathOf(int node) =>
         TryPathOf(node) ?? throw new ArgumentOutOfRangeException(
-            nameof(node), node, "This node is not reachable from the root, so it has no path.");
+            nameof(node), node, "This tree does not hold this node, so it has no path.");
 
     /// <summary>
     /// The full path of <paramref name="node"/>, or null where this tree does not hold it
-    /// (<see cref="Holds"/>): a number past its end, one whose parent chain does not reach the root,
-    /// or one taken out since the scan.
+    /// (<see cref="Holds"/>): a number past its end, or one taken out since the scan.
     ///
     /// <para>Rebuilt rather than stored: a path per node would cost more than every other array
     /// here combined, and the UI asks for one only when the user points at something.</para>
     ///
     /// <para>Null rather than a throw is for the caller holding a node number from a <i>different</i>
-    /// tree, where being unable to place it is the expected answer rather than a mistake — see
-    /// <see cref="ExplorePlace"/>.</para>
+    /// tree, where being unable to place it is the expected answer rather than a mistake.</para>
     /// </summary>
     public string? TryPathOf(int node)
     {
-        // Every way of "this tree cannot place it", asked before the walk rather than discovered
-        // during it. A node number from another tree can be past the end of this one, and a record
-        // the file table never described is in range and holds nothing — see Placed for why walking
-        // out of one of those does not end where it looks as though it should.
         if (!Holds(node))
         {
             return null;
@@ -371,8 +361,8 @@ public sealed class ExploreTree : Layout.ITrackedTree
 
         var components = new List<string>();
 
-        // Unbounded, and it terminates because the node is placed: every ancestor of a placed node
-        // is placed, and the chain of them ends at the root by the definition of reachability.
+        // Unbounded, and it terminates because every node the tree keeps is one the root reaches, so
+        // its chain of parents ends at the root.
         for (var current = node; current != RootNode; current = _parents[current])
         {
             components.Add(NameOf(current));
@@ -384,17 +374,25 @@ public sealed class ExploreTree : Layout.ITrackedTree
     }
 
     /// <summary>
-    /// Assemble a tree from the arrays a reader produced: invert the parent links, total each
-    /// subtree, and order every child list by size.
+    /// Assemble a tree from the arrays a reader produced: invert the parent links, keep only what the
+    /// root reaches, total each subtree, and order every child list by size.
     ///
     /// <para>Shared by both routes on purpose. The master file table and the directory walk gather
-    /// entirely differently, but what they gather is the same shape, and these three steps are
-    /// where a mistake would be invisible in the picture rather than obvious in it.</para>
+    /// entirely differently, but what they gather is the same shape, and these steps are where a
+    /// mistake would be invisible in the picture rather than obvious in it.</para>
     ///
     /// <paramref name="rootNode"/> is where the scan started, which for the file table is a record
     /// number rather than a position: record 5 for a whole volume, and the record holding the folder
-    /// for a scan scoped to one. Nodes outside that subtree stay in the arrays and are simply never
-    /// reached, so nothing here has to know which case it is in.
+    /// for a scan scoped to one.
+    ///
+    /// <para><b>Only the nodes the root reaches are kept</b>, renumbered by <see cref="ReachedNodes"/>
+    /// in the order the reader numbered them, with the names they use and no others. The file table's
+    /// reader sizes its arrays to every record on the volume and names every one in use, so a tree
+    /// of one folder kept as read would hold the whole volume's records and names for as long as it
+    /// is shown, and a rescan two of them. Kept for a whole volume too, which drops the free records
+    /// and those no folder reaches. A tree's node numbers are therefore its own: the same folder in two
+    /// scans of one place can have two numbers, and is found in the other by its path
+    /// (<see cref="ExploreCounterparts"/>). Nothing for the walk, whose every node is reached.</para>
     ///
     /// <paramref name="present"/> says which slots the reader actually filled. The walk fills every
     /// one; the table leaves free and unreadable records empty, and without this those read as a
@@ -449,6 +447,29 @@ public sealed class ExploreTree : Layout.ITrackedTree
         var order = TopDownOrder(childStart, children, rootNode);
         ct.ThrowIfCancellationRequested();
 
+        if (order.Length < parents.Length)
+        {
+            var reached = new ReachedNodes(order, parents.Length);
+
+            nameNumbers = reached.Keep(nameNumbers);
+            names = NamePool.Keeping(names, nameNumbers);
+            parents = reached.Parents(parents);
+            sizes = reached.Keep(sizes);
+            lengths = reached.Keep(lengths);
+            storage = reached.Keep(storage);
+            isDirectory = reached.Keep(isDirectory);
+            isLink = reached.Keep(isLink);
+            sizeUnknown = reached.Keep(sizeUnknown);
+            created = reached.Keep(created);
+            modified = reached.Keep(modified);
+            visibility = reached.Keep(visibility);
+            (childStart, children) = reached.Links(childStart, children);
+            listingRefused = listingRefused is { Count: > 0 } ? reached.KeepOnly(listingRefused) : null;
+            reached.Renumber(order);
+            rootNode = reached[rootNode];
+            ct.ThrowIfCancellationRequested();
+        }
+
         RollUp(order, parents, sizes, lengths, storage, sizeUnknown, modified, rootNode);
         ct.ThrowIfCancellationRequested();
 
@@ -459,7 +480,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
 
         return new ExploreTree(
             rootPath, rootNode, nameNumbers, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-            created, modified, visibility, childStart, children, Placed(order, nameNumbers.Length), childOrder,
+            created, modified, visibility, childStart, children, childOrder,
             listingRefused is { Count: > 0 } ? listingRefused.ToFrozenSet() : FrozenSet<int>.Empty);
     }
 
@@ -548,10 +569,10 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// <para>Breadth first, so that the order is its own queue: one array sized to the tree, with no
     /// stack beside it and no list doubling its way through the large object heap. Each node has one
     /// parent, so none is reached twice and the array cannot overflow. Nothing needs depth first:
-    /// <see cref="RollUp"/> and <see cref="Placed"/> ask only that a parent comes before its
-    /// children.</para>
+    /// <see cref="RollUp"/> asks only that a parent comes before its children, and
+    /// <see cref="ReachedNodes"/> only which nodes are here.</para>
     /// </summary>
-    private static ReadOnlySpan<int> TopDownOrder(int[] childStart, int[] children, int rootNode)
+    private static Span<int> TopDownOrder(int[] childStart, int[] children, int rootNode)
     {
         var order = new int[childStart.Length - 1];
         order[0] = rootNode;
@@ -568,30 +589,6 @@ public sealed class ExploreTree : Layout.ITrackedTree
         }
 
         return order.AsSpan(0, reached);
-    }
-
-    /// <summary>
-    /// Which nodes the root can actually reach, taken from the traversal that has just established
-    /// it. A byte per node, so that asking is a lookup rather than a walk.
-    ///
-    /// <para><b>Reachability is not the same question as whether the reader filled the slot, and
-    /// the file table is where they come apart.</b> An undescribed record keeps the array default
-    /// for its parent, which is record zero — and on a real volume record zero is <c>$MFT</c>,
-    /// described, and a child of the volume's root. So a walk up from an undescribed record does
-    /// arrive at the root, through a node that has nothing to do with it, and produces a path that
-    /// looks entirely ordinary. That is the plausible wrong answer <see cref="PathOf"/> exists to
-    /// refuse, and no walk can detect it from the parent links alone.</para>
-    /// </summary>
-    private static bool[] Placed(ReadOnlySpan<int> order, int count)
-    {
-        var placed = new bool[count];
-
-        foreach (var node in order)
-        {
-            placed[node] = true;
-        }
-
-        return placed;
     }
 
     /// <summary>

@@ -20,7 +20,7 @@ public sealed class ExploreVisits
     /// <summary>
     /// How many steps are kept in either direction, the oldest forgotten first. Bounded because every
     /// snapshot of a walked scan carries each step into the arriving tree (see <see cref="Carry"/>),
-    /// which builds two paths per step, at every snapshot.
+    /// which finds each step's folder again in it, at every snapshot.
     /// </summary>
     public const int Depth = 50;
 
@@ -70,9 +70,9 @@ public sealed class ExploreVisits
 
     /// <summary>
     /// Bring every step into <paramref name="arriving"/>, which replaces <paramref name="leaving"/>:
-    /// a step stays where its node still names what it named, by <see cref="ExplorePlace.TryCarry"/>,
-    /// and is forgotten where it does not. A tree rooted somewhere else is somewhere else, and forgets
-    /// them all.
+    /// a step stays where its node's path is still there, at the node that holds it there, by
+    /// <see cref="ExplorePlace.TryCarry"/>, and is forgotten where it is not. A tree rooted somewhere
+    /// else is somewhere else, and forgets them all.
     ///
     /// <para>Every step comes back at the whole picture. A zoom is a part of one layout, and the
     /// arriving tree lays out differently, so the same part of it is not the same shapes.</para>
@@ -91,14 +91,14 @@ public sealed class ExploreVisits
             return;
         }
 
-        if (!ExplorePlace.IsRootedAlike(leaving, arriving))
+        if (ExplorePlace.Carrying(leaving, arriving) is not { } carry)
         {
             Clear();
             return;
         }
 
-        CarryInto(_back, leaving, arriving);
-        CarryInto(_forward, leaving, arriving);
+        CarryInto(_back, carry);
+        CarryInto(_forward, carry);
     }
 
     private void Clear()
@@ -156,7 +156,7 @@ public sealed class ExploreVisits
     /// <see cref="Carry"/> for one direction, written over in place and in order, so a step that is
     /// gone closes the gap behind it.
     /// </summary>
-    private static void CarryInto(List<ExploreVisit> steps, ExploreTree leaving, ExploreTree arriving)
+    private static void CarryInto(List<ExploreVisit> steps, Func<int, int?> carry)
     {
         var kept = 0;
 
@@ -164,12 +164,12 @@ public sealed class ExploreVisits
         {
             var visit = steps[read];
 
-            if (ExplorePlace.TryCarry(leaving, visit.Position.Node, arriving) is null)
+            if (carry(visit.Position.Node) is not { } node)
             {
                 continue;
             }
 
-            steps[kept++] = visit with { Viewport = MapViewport.Whole };
+            steps[kept++] = visit with { Position = visit.Position with { Node = node }, Viewport = MapViewport.Whole };
         }
 
         steps.RemoveRange(kept, steps.Count - kept);

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
@@ -189,9 +191,7 @@ internal sealed class WorkerThreads
         {
             while (true)
             {
-                var work = _work!;
-                _work = null;
-                work();
+                RunGiven();
 
                 lock (set._gate)
                 {
@@ -203,6 +203,20 @@ internal sealed class WorkerThreads
                     return;
                 }
             }
+        }
+
+        /// <summary>
+        /// Run the work handed over, in a frame of its own. Held in <see cref="Work"/>'s loop, the
+        /// last work stayed on this thread's stack while it was parked, and with it everything that
+        /// work reached: for a file-table pass, every array the reader sized to the volume, kept for
+        /// as long as the thread waited after the scan had finished with them.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void RunGiven()
+        {
+            var work = _work!;
+            _work = null;
+            work();
         }
 
         /// <summary>

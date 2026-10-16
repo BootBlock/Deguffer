@@ -174,8 +174,8 @@ public sealed partial class ExploreSelection : ObservableObject
     /// snapshot arriving mid-scan is the same subject measured again, and dropping the selection
     /// every time one lands is what made a folder impossible to pick while a scan ran.</para>
     ///
-    /// <para>A node is kept only where it still names what it named, which is
-    /// <see cref="ExplorePlace.TryCarry"/>'s rule and the same one that decides where the page is
+    /// <para>A node is kept only where its path is still there, as the node that holds it there, which
+    /// is <see cref="ExplorePlace.TryCarry"/>'s rule and the same one that decides where the page is
     /// standing. One that does not carry is dropped rather than replaced: §7.1 lets this act only on
     /// what the user picked out by hand, and putting something else in its place would be the tool
     /// choosing the target.</para>
@@ -185,7 +185,8 @@ public sealed partial class ExploreSelection : ObservableObject
         ArgumentNullException.ThrowIfNull(tree);
 
         // Read against the tree the numbers belong to, before that becomes the arriving one.
-        var kept = _nodes.Where(node => ExplorePlace.TryCarry(_tree, node, tree) is not null).ToArray();
+        var carry = ExplorePlace.Carrying(_tree, tree);
+        int[] kept = carry is null ? [] : [.. _nodes.Select(carry).OfType<int>()];
 
         _tree = tree;
 

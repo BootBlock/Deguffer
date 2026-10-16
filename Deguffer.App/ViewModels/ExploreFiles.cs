@@ -173,28 +173,36 @@ public sealed partial class ExploreFiles : ObservableObject
     }
 
     /// <summary>
-    /// Keep only the rows that still name what they named, now <paramref name="arriving"/> is the
-    /// tree on screen, and do it before anything can be clicked.
+    /// Keep only the rows whose files <paramref name="arriving"/> still holds, at the numbers it gives
+    /// them, now it is the tree on screen, and do it before anything can be clicked.
     ///
     /// <para><b>§7.1, and the reason this cannot wait for the search.</b> A row holds a node number,
     /// and a click sends that number to <see cref="ExploreSelection"/>, which reads it against the tree
     /// on screen. The search for the arriving tree takes as long as a pass over it, and a row left
     /// standing from the last tree for that long would select, and offer to delete, whatever its
     /// number means in this one: another file, or a number past the end that throws. So a row stays
-    /// only where the arriving tree puts its number at the same path, which is
-    /// <see cref="ExplorePlace.TryCarry"/>'s rule and the selection's own. The snapshots of one walk
-    /// keep their rows, and a scan of anything else keeps none.</para>
+    /// only where the arriving tree holds its path, and takes the number the file has there, which
+    /// is <see cref="ExplorePlace.TryCarry"/>'s rule and the selection's own. A rescan of the same
+    /// place keeps its rows, and a scan of anything else keeps none.</para>
     ///
     /// <para>Off screen nothing is kept, because nothing is looking at the rows.</para>
     /// </summary>
     private void Carry(ExploreTree? arriving)
     {
-        ExploreFileRow[] kept = IsActive && arriving is not null
-            ? [.. Rows.Where(row => string.Equals(arriving.TryPathOf(row.Node), row.Path, StringComparison.OrdinalIgnoreCase))]
-            : [];
+        var carry = IsActive && arriving is not null ? ExplorePlace.Carrying(_tree, arriving) : null;
+
+        ExploreFileRow[] kept = carry is null
+            ? []
+            : [.. Rows.Select(row => carry(row.Node) is { } node ? row with { Node = node } : null).OfType<ExploreFileRow>()];
 
         if (kept.Length == Rows.Count)
         {
+            // Every row is still listed, so the sentence that counted them still holds.
+            if (!kept.SequenceEqual(Rows))
+            {
+                ShowRows(kept);
+            }
+
             return;
         }
 

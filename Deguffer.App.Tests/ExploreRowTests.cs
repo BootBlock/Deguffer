@@ -168,12 +168,39 @@ public sealed class ExploreRowTests : IDisposable
         var changed = new List<string?>();
 
         row.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
-        row.Describe(later, later.SizeOf(later.RootNode), Now);
+        row.Describe(later, node, later.SizeOf(later.RootNode), Now);
 
         Assert.Equal(75, row.Share);
         Assert.Equal(FreeSpace.Format(300), row.SizeLabel);
         Assert.Contains(nameof(ExploreRow.SizeLabel), changed);
         Assert.Equal(ExploreRow.KeyOf(later, node), row.Key);
+    }
+
+    /// <summary>
+    /// A rescan of the same folder can number an entry afresh, as the file table's does when a file
+    /// made before it appears. The row is the same entry by its name and kind, so the later tree
+    /// rewrites it, and it takes the number the entry has there.
+    /// </summary>
+    [Fact]
+    public void ALaterTreeThatNumbersTheEntryAfreshRewritesTheRowAtItsNewNumber()
+    {
+        var (first, node, _) = Files(100, 100);
+        var builder = new ExploreTreeBuilder(first.RootPath);
+        var moved = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            new ExploreChild("earlier.bin", IsDirectory: false, IsLink: false, Size: 50),
+            new ExploreChild(first.NameOf(node), IsDirectory: false, IsLink: false, Size: 300),
+        ]) + 1;
+        var later = builder.Build(ExploreChildOrder.BySize);
+        var row = Row(first, node);
+
+        // The case under test: the entry under another number.
+        Assert.NotEqual(node, moved);
+        Assert.Equal(ExploreRow.KeyOf(later, moved), row.Key);
+
+        row.Describe(later, moved, later.SizeOf(later.RootNode), Now);
+
+        Assert.Equal(moved, row.Node);
+        Assert.Equal(FreeSpace.Format(300), row.SizeLabel);
     }
 
     private ExploreRow Row(ExploreTree tree, int node) =>
