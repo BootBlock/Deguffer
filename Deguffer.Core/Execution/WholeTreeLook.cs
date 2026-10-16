@@ -43,7 +43,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         IReadOnlyList<string> paths,
         MinimumAge keep,
         CancellationToken ct) =>
-        Task.Run(() => Take(paths, keep, WindowsFileSystem.Default, ct), ct);
+        WorkerThreads.Shared.RunAsync(() => Take(paths, keep, WindowsFileSystem.Default, ct), ct);
 
     /// <summary>The same look through <paramref name="fs"/>, which is how a test hands it a refusal.</summary>
     internal static WholeTreeLook Take(IReadOnlyList<string> paths, MinimumAge keep, IFileSystem fs, CancellationToken ct) =>

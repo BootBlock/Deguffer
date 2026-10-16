@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -47,9 +48,10 @@ public static class DirectoryRemover
         CancellationToken ct = default,
         IFileSystem? fileSystem = null,
         RemovalBounds? bounds = null) =>
-        // Not handed the token: Task.Run throws for a token cancelled before the work starts, which
-        // would break the contract above at its first step.
-        Task.Run(
+        // Not handed the token: a task handed one is cancelled where the token is before the work
+        // starts, which would break the contract above at its first step. On a thread of its own,
+        // because the walk holds the thread that drives it for the whole removal.
+        WorkerThreads.Shared.RunAsync(
             () => Remove(
                 path, keep, bounds ?? RemovalBounds.None, progress, fileSystem ?? WindowsFileSystem.Default, ct),
             CancellationToken.None);

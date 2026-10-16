@@ -151,6 +151,13 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         _applications.Get(() => [.. _discovery.Discover(ct).Where(app => HasRecognisedChild(app, ct))]);
 
     /// <summary>
+    /// <see cref="Applications"/> on a thread of the walk's own: the first ask walks every
+    /// application-data root, and the walk holds the thread that drives it for its whole length.
+    /// </summary>
+    private Task<IReadOnlyList<ChromiumUserData>> ApplicationsAsync(CancellationToken ct) =>
+        WorkerThreads.Shared.RunAsync(() => Applications(ct), ct);
+
+    /// <summary>
     /// §5.2 as §7.1 needs it read from outside: one root per level of every profile of every
     /// Chromium folder on the machine.
     ///
@@ -221,15 +228,14 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// and the sign-in cookies and passwords beside the caches are never reached, so none of them is a
     /// place.
     /// </summary>
-    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+    public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         [
-            .. from application in _discovery.Discover(ct)
+            .. from application in await WorkerThreads.Shared.RunAsync(() => _discovery.Discover(ct), ct).ConfigureAwait(false)
                from profile in application.Profiles
                from level in CacheLevels
                from name in level.Children.DisposableNames
                select CleanedPlace.Whole(Path.Combine(level.Resolve(profile), name)),
-        ]);
+        ];
 
     /// <summary>
     /// Presence is something to remove actually on disk, never a folder existing. An application that
@@ -247,15 +253,14 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// <para>A browser Deguffer did not look inside, because a link or a refused segment stood in
     /// front of it, counts as present for the same reason: the plan is where that is said.</para>
     /// </summary>
-    public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(
-            Applications(ct).Count > 0
-            || _discovery.UnreadableRoots.Count > 0
-            || _discovery.Obstructed.Count > 0);
+    public override async Task<bool> IsPresentAsync(CancellationToken ct = default) =>
+        (await ApplicationsAsync(ct).ConfigureAwait(false)).Count > 0
+        || _discovery.UnreadableRoots.Count > 0
+        || _discovery.Obstructed.Count > 0;
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var applications = Applications(ct);
+        var applications = await ApplicationsAsync(ct).ConfigureAwait(false);
 
         if (applications.Count == 0 && _discovery.Obstructed.Count == 0)
         {

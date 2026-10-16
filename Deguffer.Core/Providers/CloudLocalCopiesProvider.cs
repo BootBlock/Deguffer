@@ -166,7 +166,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
                 continue;
             }
 
-            var selection = await Task.Run(
+            var selection = await WorkerThreads.Shared.RunAsync(
                     () => PlaceholderWalk.Of(_cloud, root.Path, keep, _tuning.For(root.Path).Walk.Threads, ct), ct)
                 .ConfigureAwait(false);
 

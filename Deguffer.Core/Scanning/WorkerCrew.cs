@@ -5,7 +5,9 @@ namespace Deguffer.Core.Scanning;
 /// <summary>
 /// The threads of one parallel run: the calling thread, which works and is the only one that waits,
 /// and up to a bound of helpers on <see cref="WorkerThreads"/>, each started when there is work for
-/// it and ended when there is none.
+/// it and ended when there is none. Async code starts the run on
+/// <see cref="WorkerThreads.RunAsync{T}(Func{T}, CancellationToken)"/>, so the calling thread is not
+/// the pool's either.
 ///
 /// <para>The walk (<see cref="WalkWorkers{TState}"/>) and the read of the file table
 /// (<see cref="Mft.MftReadPass"/>) differ in what their work is and in when they are over. They agree
@@ -30,6 +32,13 @@ internal sealed class WorkerCrew
     private int _helpers;
     private ExceptionDispatchInfo? _failure;
 
+    /// <summary>
+    /// Told, as each crew in the flow it is set in is made, whether the thread making it is the
+    /// pool's: the seam a test pins a pass off the pool through. The thread that makes a crew is the
+    /// one that drives it, and the flow carries the observer to it however the pass was started.
+    /// </summary>
+    internal static readonly AsyncLocal<Action<bool>?> Made = new();
+
     /// <param name="threads">How many threads may work at once, the calling thread included.</param>
     /// <param name="newHelper">
     /// What one helper does each time it looks for work: take work until none is left. Asked once
@@ -49,6 +58,8 @@ internal sealed class WorkerCrew
         _hasWork = hasWork;
         _run = run;
         _help = Help;
+
+        Made.Value?.Invoke(Thread.CurrentThread.IsThreadPoolThread);
     }
 
     /// <summary>Whether a worker has failed, after which the run is stopping.</summary>

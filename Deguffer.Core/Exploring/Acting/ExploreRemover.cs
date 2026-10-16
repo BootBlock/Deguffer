@@ -387,7 +387,8 @@ public static class ExploreRemover
 
             if (item.IsDirectory && !fs.IsReparsePoint(LongPath.Extended(item.Path)))
             {
-                var look = WholeTreeLook.Take([item.Path], MinimumAge.Off, fs, ct);
+                var look = await WorkerThreads.Shared.RunAsync(
+                    () => WholeTreeLook.Take([item.Path], MinimumAge.Off, fs, ct), ct).ConfigureAwait(false);
 
                 if (look.Stores.Count > 0)
                 {
