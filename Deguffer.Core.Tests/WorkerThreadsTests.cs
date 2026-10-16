@@ -42,6 +42,46 @@ public sealed class WorkerThreadsTests
         Assert.Equal(Pieces, set.Count);
     }
 
+    /// <summary>
+    /// A parked thread holds nothing of the work it last ran. A file-table pass's work reaches every
+    /// array the reader sized to the volume, so a thread holding it while parked would keep a whole
+    /// volume's records alive for as long as it waited, after the scan had finished with them.
+    /// </summary>
+    [Fact]
+    public void AParkedThreadHoldsNothingOfItsLastWork()
+    {
+        var set = new WorkerThreads(WorkerThreads.IdleLifetime);
+        using var ran = new ManualResetEventSlim();
+
+        var held = HandOver(set, ran);
+
+        Assert.True(ran.Wait(Patience));
+        Assert.True(SpinWait.SpinUntil(() => set.Idle == 1, Patience));
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        Assert.False(held.IsAlive, "a parked thread kept its last work's objects alive");
+    }
+
+    /// <summary>
+    /// Hand <paramref name="set"/> work that holds an object of its own, and return a weak reference
+    /// to that object. Apart, so that nothing in the test's own frame holds it.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference HandOver(WorkerThreads set, ManualResetEventSlim ran)
+    {
+        var payload = new byte[1024];
+        set.Run(() =>
+        {
+            GC.KeepAlive(payload);
+            ran.Set();
+        });
+
+        return new WeakReference(payload);
+    }
+
     /// <summary>A thread that has finished its work takes the next piece, so a scan starts its threads once.</summary>
     [Fact]
     public void AParkedThreadTakesTheNextPieceOfWork()
