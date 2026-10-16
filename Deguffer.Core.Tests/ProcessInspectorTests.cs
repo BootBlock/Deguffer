@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using Deguffer.Core.Safety;
+using Deguffer.Testing;
 using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Tests;
@@ -86,9 +87,12 @@ public sealed class ProcessInspectorTests
     /// <para><b>The refusal belongs to the fixture, not to the account running the suite.</b> The
     /// ping is given a DACL with no entries, and Windows grants nothing to anybody through one. A
     /// system process would not do: which of them refuse depends on elevation, and an elevated run
-    /// able to open one would skip the branch this test exists for while still passing. The one
-    /// caller an empty DACL does not stop is one with <c>SeDebugPrivilege</c> enabled, and nothing
-    /// in this suite enables it.</para>
+    /// able to open one would skip the branch this test exists for while still passing.</para>
+    ///
+    /// <para>The one caller an empty DACL does not stop is one with <c>SeDebugPrivilege</c> enabled,
+    /// and an elevated test host has it enabled, because <see cref="Process"/> enables it whenever
+    /// the account holds it. So the probe is asked from <see cref="ThreadWithoutDebugPrivilege"/>, and
+    /// the refusal holds elevated or not.</para>
     /// </summary>
     [Fact]
     public void AProcessThisAccountMayNotOpenIsRunningWithNoCreationTime()
@@ -99,7 +103,14 @@ public sealed class ProcessInspectorTests
         {
             DenyEveryone(child);
 
-            Assert.Equal(ProcessLiveness.Running(startedAt: null), new ProcessInspector().Probe(child.Id));
+            ProcessLiveness liveness;
+
+            using (new ThreadWithoutDebugPrivilege())
+            {
+                liveness = new ProcessInspector().Probe(child.Id);
+            }
+
+            Assert.Equal(ProcessLiveness.Running(startedAt: null), liveness);
         }
         finally
         {
