@@ -11,9 +11,18 @@ installed programs list, and show where your memory is going.
 *Guff* is British slang for rubbish, the stuff that piles up and serves no purpose, which is what
 Deguffer clears away.
 
+> [!WARNING]
+> **Deguffer is beta software, and it deletes files and folders.** It is designed to remove only what
+> you choose and to check afterwards that everything it promised to leave alone is still there, but
+> it may still have faults, and a removal may not be reversible. Back up anything you cannot afford
+> to lose before you use it. Deguffer is provided under the MIT licence "as is", without warranty of
+> any kind, and its authors accept no liability for any loss of data or other damage that results
+> from its use.
+
 Deguffer runs on Windows 10 (version 1809 or later) and Windows 11, and it is free and open source
-under the MIT licence. It is at version 0.70.0 and has no published release yet, so for now you will
-need to [build it from source](#building).
+under the MIT licence. Download the zip for your processor from the
+[releases page](https://github.com/BootBlock/Deguffer/releases), extract it, and run
+`Deguffer.App.exe`. It needs no installation. You can also [build it from source](#building).
 
 ## What it does
 
