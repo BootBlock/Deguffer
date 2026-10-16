@@ -3,6 +3,7 @@ using Deguffer.App.Views;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Working;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,6 +18,7 @@ public sealed partial class MainWindow : Window
     private readonly PageArrival _arrival = new(SystemMotion.Current);
     private readonly WindowSizing _sizing;
     private readonly CloseGuard _closeGuard = new(App.Running);
+    private readonly TaskbarButton _taskbarButton;
 
     public MainWindow()
     {
@@ -31,6 +33,7 @@ public sealed partial class MainWindow : Window
         _crossfade = new WindowCrossfade((FrameworkElement)Content, SystemMotion.Current);
         _sizing = new WindowSizing(this, new WindowMetricsStore(UserEnvironment.Current));
         SystemMotion.Current.Follow(this);
+        _taskbarButton = new TaskbarButton(this, new TaskbarIndicator(App.Work, TaskbarButton.UserIsHere));
 
         // Where the window ends up is the user's, so it outlives the session that produced it.
         Closed += (_, _) => _sizing.Remember();

@@ -15,6 +15,7 @@ using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
+using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
 
@@ -65,6 +66,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>What is changing the machine on every page, which the elevated relaunch waits for.</summary>
     private readonly RunningActions _running;
+    private readonly BusyWork _work;
 
     /// <summary>
     /// What a redraw puts in the list and the trail above it. Filled again per redraw and never
@@ -138,6 +140,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         bool isElevated,
         Func<ExploreRequest, bool> relaunch,
         RunningActions running,
+        BusyWork work,
         ScanHistory history,
         IMotionPolicy motion)
     {
@@ -151,8 +154,9 @@ public sealed partial class ExploreViewModel : ObservableObject
         _isElevated = isElevated;
         _relaunch = relaunch;
         _running = running;
+        _work = work;
 
-        Selection = new ExploreSelection(actions);
+        Selection = new ExploreSelection(actions, work);
         Growth = new ExploreGrowth(history);
         Replay = new ExploreReplay(motion);
         Files = new ExploreFiles(actions, time);
@@ -754,9 +758,19 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Status = $"Scanning {target}…";
 
+        // Next to the try, so nothing can throw between the two and leave the taskbar busy.
+        var work = _work.Begin();
+
         try
         {
-            var scan = await _scanner.ScanAsync(target, new Progress<ExploreProgress>(Report), ct);
+            var scan = await _scanner.ScanAsync(
+                target,
+                new Progress<ExploreProgress>(progress =>
+                {
+                    Report(progress);
+                    work.Report(progress.Fraction);
+                }),
+                ct);
             scanned.TrySetResult(scan);
 
             // Read afresh and handed to Show, which is what draws the map, because the space figures
@@ -813,12 +827,14 @@ public sealed partial class ExploreViewModel : ObservableObject
             // worth taking the window down for, and the page is read-only — there is nothing
             // half-done to report.
             Status = $"Could not scan {target}: {ex.Message}";
+            work.Fail();
         }
         finally
         {
             scanned.TrySetResult(null);
             IsBusy = false;
             Progress = null;
+            work.Dispose();
         }
     }
 

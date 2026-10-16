@@ -3,6 +3,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Working;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -55,6 +56,7 @@ internal sealed class StoragePage : IDisposable
             Selections,
             Keeps,
             Running,
+            Work,
             () =>
             {
                 PromptsBuilt++;
@@ -85,6 +87,9 @@ internal sealed class StoragePage : IDisposable
 
     /// <summary>What is running on every page, which a test can add to as another page would.</summary>
     public RunningActions Running { get; } = new();
+
+    /// <summary>What is under way on every page, which the taskbar button shows.</summary>
+    public BusyWork Work { get; } = new();
 
     public ScriptedPrompt Prompt { get; } = new();
 

@@ -349,9 +349,14 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         var page = PageWithPhotos(Finds(Group(kept, copy)));
         await page.SearchCommand.ExecuteAsync(null);
         Toggle(page, copy);
+        var failures = 0;
+        _work.Failed += (_, _) => failures++;
 
         await page.Marking.MoveToRecycleBinCommand.ExecuteAsync(null);
 
+        // The taskbar shows nothing under way, and nothing failed to turn it red.
+        Assert.True(_work.IsIdle);
+        Assert.Equal(0, failures);
         Assert.False(File.Exists(copy.Path));
         Assert.True(File.Exists(kept.Path));
         Assert.Single(Directory.GetFiles(_scene.Bin));
@@ -395,9 +400,14 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         await page.SearchCommand.ExecuteAsync(null);
         Toggle(page, copyFirst);
         Toggle(page, copy);
+        var failures = 0;
+        _work.Failed += (_, _) => failures++;
 
         await page.Marking.MoveToRecycleBinCommand.ExecuteAsync(null);
 
+        // §5.6 did not pass, which the taskbar shows as a failure once the removal has ended.
+        Assert.True(_work.IsIdle);
+        Assert.Equal(1, failures);
         Assert.Contains("did not pass", page.Marking.Outcome, StringComparison.Ordinal);
         Assert.True(page.Marking.HasOutcomeChecks);
         Assert.Equal(2, page.Marking.OutcomeChecks.Count);

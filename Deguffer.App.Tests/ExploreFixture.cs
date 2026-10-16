@@ -6,6 +6,7 @@ using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Working;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -65,6 +66,9 @@ internal sealed class ExploreFixture : IDisposable
     /// <summary>What is running on every page, which a test can add to as another page would.</summary>
     public RunningActions Running { get; } = new();
 
+    /// <summary>What is under way on every page, which the taskbar button shows.</summary>
+    public BusyWork Work { get; } = new();
+
     /// <summary>Whether a relaunch the page asks for starts, which is the user accepting the UAC prompt.</summary>
     public bool RelaunchStarts { get; set; }
 
@@ -83,6 +87,7 @@ internal sealed class ExploreFixture : IDisposable
                 return RelaunchStarts;
             },
             Running,
+            Work,
             History,
             Motion);
 

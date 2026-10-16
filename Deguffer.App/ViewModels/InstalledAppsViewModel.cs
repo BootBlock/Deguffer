@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
 using Deguffer.Core.Viewing;
+using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
 
@@ -16,6 +17,7 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
     private readonly Func<CancellationToken, InstalledAppsReading> _read;
     private readonly Func<ElevationRequest, bool> _relaunch;
     private readonly RunningActions _running;
+    private readonly BusyWork _work;
     private InstalledAppsReading _reading = new([], []);
     private CancellationTokenSource? _reads;
 
@@ -27,11 +29,13 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
         InstalledAppsActions actions,
         bool isElevated,
         Func<ElevationRequest, bool> relaunch,
-        RunningActions running)
+        RunningActions running,
+        BusyWork work)
     {
         _read = read;
         _relaunch = relaunch;
         _running = running;
+        _work = work;
         Actions = actions;
         Actions.EntriesChanged += (_, _) => _ = RefreshAsync();
         CanElevate = ElevationOffer.ShouldOffer(isElevated);
@@ -80,6 +84,9 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
         using var reads = new CancellationTokenSource();
         _reads = reads;
         IsReading = true;
+
+        // Ended by every read, the abandoned one included: each read is its own span.
+        using var work = _work.Begin();
 
         try
         {

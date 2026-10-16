@@ -6,6 +6,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
 
@@ -24,6 +25,7 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class ExploreSelection : ObservableObject
 {
     private readonly ExploreActions _actions;
+    private readonly BusyWork _work;
 
     private ExploreTree? _tree;
 
@@ -32,9 +34,10 @@ public sealed partial class ExploreSelection : ObservableObject
     private string _figures = string.Empty;
     private string? _note;
 
-    public ExploreSelection(ExploreActions actions)
+    public ExploreSelection(ExploreActions actions, BusyWork work)
     {
         _actions = actions;
+        _work = work;
 
         // Started here rather than on the first selection, because §5.2's probed half takes a moment
         // and the page has nothing else to do while it opens. Until it lands every path is refused
@@ -284,6 +287,7 @@ public sealed partial class ExploreSelection : ObservableObject
         }
 
         Working?.Invoke(this, true);
+        var work = _work.Begin();
 
         try
         {
@@ -309,6 +313,12 @@ public sealed partial class ExploreSelection : ObservableObject
 
             Reported?.Invoke(this, report.Statement);
 
+            // A check left unpassed is §5.6 failing to prove the removal left what it had to.
+            if (report.Statement.Checks.Count > 0)
+            {
+                work.Fail();
+            }
+
             if (!ReferenceEquals(left, tree))
             {
                 Removed?.Invoke(this, new RemovedFrom(tree, left));
@@ -326,11 +336,13 @@ public sealed partial class ExploreSelection : ObservableObject
             // escaping here is rethrown on the UI thread and takes the process down mid-deletion.
             // The Storage page's clean flow guards itself the same way and for the same reason.
             Reported?.Invoke(this, OutcomeStatement.Said($"The removal stopped: {ex.Message}"));
+            work.Fail();
         }
         finally
         {
             MarkRemoving(null, []);
             Working?.Invoke(this, false);
+            work.Dispose();
         }
     }
 

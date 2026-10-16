@@ -3,6 +3,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
+using Deguffer.Core.Working;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -42,6 +43,8 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     private readonly RunningActions _running = new();
 
+    private readonly BusyWork _work = new();
+
     private readonly FakeUninstallLauncher _launcher = new();
 
     public InstalledAppsViewModelTests() =>
@@ -64,14 +67,16 @@ public sealed class InstalledAppsViewModelTests : IDisposable
                 () => _prompt,
                 _preferences,
                 isElevated: false,
-                _running),
+                _running,
+                _work),
             isElevated: false,
             request =>
             {
                 _relaunches.Add(request);
                 return relaunchStarts;
             },
-            _running);
+            _running,
+            _work);
     }
 
     private UninstallKey Stale(string name) => _registry.With(UninstallScope.CurrentUser, name,
@@ -79,6 +84,27 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     private UninstallKey Installed(string name) => _registry.With(UninstallScope.CurrentUser, name,
         ("DisplayName", name), ("UninstallString", $"\"{StandingFile(name, "unins000.exe")}\""));
+
+    /// <summary>
+    /// A read abandoned for a newer one is its own work, ended as the newer one is, so the taskbar is
+    /// not left busy by the read nobody waits for.
+    /// </summary>
+    [Fact]
+    public void EveryReadEndsItsWorkTheAbandonedOneIncluded() => UiThread.Run(async () =>
+    {
+        Installed("Tool");
+        var page = Page();
+
+        var first = page.RefreshAsync();
+        var second = page.RefreshAsync();
+
+        Assert.Equal(2, _work.Current.Count);
+
+        await Task.WhenAll(first, second);
+
+        Assert.True(_work.IsIdle);
+        Assert.Equal(["Tool"], page.InstalledRows.Select(r => r.Name));
+    });
 
     [Fact]
     public void AReadingFillsBothListsAndTheHeadline() => UiThread.Run(async () =>

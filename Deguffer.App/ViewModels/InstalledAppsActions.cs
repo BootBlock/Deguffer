@@ -5,6 +5,7 @@ using Deguffer.App.Shell;
 using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
 using Deguffer.Core.Viewing;
+using Deguffer.Core.Working;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Deguffer.App.ViewModels;
@@ -35,6 +36,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
     private readonly PreferenceService _preferences;
     private readonly bool _isElevated;
     private readonly RunningActions _running;
+    private readonly BusyWork _work;
     private IReadOnlyList<InstalledEntry> _stale = [];
     private IReadOnlyList<InstalledEntry> _installed = [];
     private bool _anyUninstallable;
@@ -49,7 +51,8 @@ public sealed partial class InstalledAppsActions : ObservableObject
         Func<IInstalledAppsConfirmation> confirmation,
         PreferenceService preferences,
         bool isElevated,
-        RunningActions running)
+        RunningActions running,
+        BusyWork work)
     {
         _remover = remover;
         _restorer = restorer;
@@ -60,6 +63,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
         _preferences = preferences;
         _isElevated = isElevated;
         _running = running;
+        _work = work;
     }
 
     /// <summary>Raised after an action changed the entries, so the page reads them again.</summary>
@@ -170,6 +174,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
         // Each action here is held in RunningActions until its report is on screen, so neither the
         // window nor an Elevate button ends the process before it has said what it did.
         using var running = _running.Begin(RunningAction.EntryRemoval);
+        var work = _work.Begin();
 
         try
         {
@@ -178,10 +183,16 @@ public sealed partial class InstalledAppsActions : ObservableObject
             Show(
                 string.Join(Environment.NewLine, [report.Summary, .. report.Details]),
                 report.IsComplete ? InfoBarSeverity.Success : report.Verification.Passed ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
+
+            if (!report.Verification.Passed)
+            {
+                work.Fail();
+            }
         }
         finally
         {
             IsActing = false;
+            work.Dispose();
         }
 
         ShowBackups();
@@ -214,10 +225,21 @@ public sealed partial class InstalledAppsActions : ObservableObject
         IsWatching = true;
 
         using var running = _running.Begin(RunningAction.Uninstall);
+        var work = _work.Begin();
 
         try
         {
-            var report = await _queue.RunAsync(selection.Runnable, new Progress<UninstallStep>(ShowWaiting), watching.Token);
+            var report = await _queue.RunAsync(
+                selection.Runnable,
+                new Progress<UninstallStep>(step =>
+                {
+                    ShowWaiting(step);
+
+                    // How many of a queue's uninstallers have finished. One running cannot say how far
+                    // it has got, so a queue of one has no measure at all.
+                    work.Report(step.Count > 1 ? (double)(step.Number - 1) / step.Count : null);
+                }),
+                watching.Token);
 
             Show(
                 report.Summary,
@@ -230,6 +252,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
             _watching = null;
             IsWatching = false;
             IsActing = false;
+            work.Dispose();
         }
 
         EntriesChanged?.Invoke(this, EventArgs.Empty);
@@ -272,16 +295,23 @@ public sealed partial class InstalledAppsActions : ObservableObject
         IsActing = true;
 
         using var running = _running.Begin(RunningAction.BackupRestore);
+        var work = _work.Begin();
 
         try
         {
             var outcome = await Task.Run(() => _restorer.RestoreAsync(backup.File, _isElevated, CancellationToken.None));
 
             Show(outcome.Message, outcome.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error);
+
+            if (!outcome.Succeeded)
+            {
+                work.Fail();
+            }
         }
         finally
         {
             IsActing = false;
+            work.Dispose();
         }
 
         // The same backup now meets an entry that is there, so its note says so.

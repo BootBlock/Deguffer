@@ -51,6 +51,7 @@ public sealed partial class DuplicatesPage : Page
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
             App.Running,
+            App.Work,
             ElevatedRelaunch.Requested as DuplicatesRequest);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();

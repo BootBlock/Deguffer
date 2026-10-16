@@ -46,6 +46,7 @@ public sealed partial class CleanPage : Page
             App.Selections,
             App.Keeps,
             App.Running,
+            App.Work,
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme),
             AppVersion.Current,
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
