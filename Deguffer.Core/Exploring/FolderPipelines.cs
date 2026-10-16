@@ -25,8 +25,14 @@ internal sealed record VolumeFolders(char? DriveLetter, IReadOnlyList<FolderAske
 /// <para><b>Apart only where known to be apart.</b> A volume whose disks are not listed might be on
 /// any disk: a <c>subst</c> letter Windows would not describe, a volume that would not open, a tuner
 /// built without the machine's devices. Where any is, every volume goes in one pipeline, which is how
-/// every search ran before. A share, or an optical drive, is on no disk of this machine, and is
-/// apart from every other.</para>
+/// every search ran before. An optical drive is on no disk of this machine, and is apart from every
+/// other.</para>
+///
+/// <para><b>Everything on the network is one pipeline.</b> A share, or a letter mapped to one, is on
+/// no disk of this machine either, but two of them can be folders of one share, or shares of one
+/// server on one set of disks, and nothing here says which. So they are scanned in turn, as if on
+/// one disk (<see cref="Network"/>), and a search over many folders of one share walks one at a
+/// time.</para>
 ///
 /// <para><b>A volume's disks are those of its top and of every folder asked for on it.</b> A folder
 /// can be a mount point of a volume on another disk, which its walk reads, while the table read is
@@ -35,11 +41,16 @@ internal sealed record VolumeFolders(char? DriveLetter, IReadOnlyList<FolderAske
 /// </summary>
 internal static class FolderPipelines
 {
+    /// <summary>
+    /// The disk everything on the network is taken to share: a number no physical disk has, as
+    /// Windows numbers them from 0 (<see cref="VolumeMedia.PhysicalDisks"/>).
+    /// </summary>
+    internal const int Network = -1;
+
     /// <param name="storageOf">What a path is on, or null where that is not known (<see cref="ScanTuner.StorageOf"/>).</param>
     /// <returns>
-    /// Each pipeline's volumes, in the order work on them is to run. Pipelines and the volumes in each
-    /// come in the order their first folder was asked for, so a scan with one pipeline runs in the
-    /// order of the request.
+    /// Each pipeline's volumes. Pipelines and the volumes in each come in the order their first folder
+    /// was asked for.
     /// </returns>
     public static IReadOnlyList<IReadOnlyList<VolumeFolders>> Of(IReadOnlyList<string> folders, Func<string, VolumeMedia?> storageOf)
     {
@@ -85,8 +96,8 @@ internal static class FolderPipelines
     }
 
     /// <summary>
-    /// Every disk under any of <paramref name="paths"/>, or null where one of them might be on any
-    /// disk. Empty for paths on no disk of this machine.
+    /// Every disk under any of <paramref name="paths"/>, <see cref="Network"/> for those on the
+    /// network, or null where one of them might be on any disk. Empty for an optical drive.
     /// </summary>
     private static IReadOnlyList<int>? DisksUnder(IReadOnlyList<string> paths, Func<string, VolumeMedia?> storageOf)
     {
@@ -99,6 +110,11 @@ internal static class FolderPipelines
             if (storageOf(path) is not { } media || media is { PhysicalDisks.Count: 0, Reason: not MediaUnknownReason.None })
             {
                 return null;
+            }
+
+            if (media is { Class: StorageMedia.Network, PhysicalDisks.Count: 0 })
+            {
+                under.Add(Network);
             }
 
             under.UnionWith(media.PhysicalDisks);

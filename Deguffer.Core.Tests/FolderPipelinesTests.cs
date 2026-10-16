@@ -60,7 +60,7 @@ public sealed class FolderPipelinesTests
 
     /// <summary>A share is on no disk of this machine, so it is apart from every local volume.</summary>
     [Fact]
-    public void AShareIsAPipelineOfItsOwn()
+    public void AShareIsAPipelineApartFromLocalVolumes()
     {
         var pipelines = FolderPipelines.Of(
             [@"C:\a", @"\\server.test\share\b"],
@@ -68,6 +68,22 @@ public sealed class FolderPipelinesTests
 
         Assert.Equal([["C"], ["-"]], Letters(pipelines));
         Assert.Null(pipelines[1][0].Folders[0].Volume);
+    }
+
+    /// <summary>
+    /// Two folders of one share, or shares of one server, may be on one set of the server's disks,
+    /// and nothing says which, so everything on the network is scanned in turn.
+    /// </summary>
+    [Fact]
+    public void EverythingOnTheNetworkIsOnePipeline()
+    {
+        var network = new VolumeMedia(StorageMedia.Network, []);
+
+        var pipelines = FolderPipelines.Of(
+            [@"\\server.test\share\a", @"C:\a", @"\\server.test\share\b", @"N:\c"],
+            Storage((@"C:\", On(0)), (@"\\", network), (@"N:\", network)));
+
+        Assert.Equal([["-", "-", "N"], ["C"]], Letters(pipelines));
     }
 
     /// <summary>

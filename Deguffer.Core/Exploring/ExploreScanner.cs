@@ -139,8 +139,9 @@ public sealed class ExploreScanner(
     /// <see cref="WorkerThreads"/> says a pass must.
     ///
     /// <para><b>Bounded by the disks.</b> There is one pipeline for each set of disks the folders are
-    /// on, so never more than there are drive letters and shares asked for, and each pass in one
-    /// bounds its own threads by its volume's tuning, as it does when it runs alone.</para>
+    /// on, one for everything on the network, and one for each optical drive, so never more than the
+    /// machine has disks and optical drives, and one more. Each pass in one bounds its own threads by its
+    /// volume's tuning, as it does when it runs alone.</para>
     ///
     /// <para><b>One failure stops the rest.</b> The search has failed once any pipeline has, and the
     /// others would otherwise read whole volumes for a result nobody receives. What failed is what is
@@ -188,8 +189,8 @@ public sealed class ExploreScanner(
 
     /// <summary>
     /// One pipeline's volumes, one after another: each volume's file table read once for every folder
-    /// on it, then the walk of each folder the tables could not answer. Writes each folder's scan into
-    /// its own slot of <paramref name="scans"/>, which no other pipeline writes.
+    /// on it, then the walk of each folder the tables could not answer, volume by volume. Writes each
+    /// folder's scan into its own slot of <paramref name="scans"/>, which no other pipeline writes.
     /// </summary>
     private void ScanPipeline(
         IReadOnlyList<VolumeFolders> pipeline,
