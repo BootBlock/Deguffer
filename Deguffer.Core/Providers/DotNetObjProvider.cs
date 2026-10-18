@@ -18,7 +18,8 @@ namespace Deguffer.Core.Providers;
 /// it. Nothing inside a recognised one is unique — it is derived entirely from source and the
 /// package cache, both of which are still present.
 ///
-/// Recognition is <see cref="DotNetIntermediateSignature"/>'s job and lives there; discovery is
+/// Recognition is <see cref="DotNetIntermediateSignature"/>'s job for an SDK-style project and
+/// <see cref="NonSdkIntermediateSignature"/>'s for an old-style one; discovery is
 /// <see cref="SourceDirectoryDiscovery"/>'s. This holds the rules about what to do with the answers.
 /// </summary>
 public sealed class DotNetObjProvider : CleanupProviderBase
@@ -145,7 +146,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             _discovery,
             ApprovedRoots,
             DirectoryNames,
-            candidate => DotNetIntermediateSignature.TryRecognise(candidate, ct) is { } project
+            candidate => Recognise(candidate, ct) is { } project
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
             Questions,
@@ -183,7 +184,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         {
             ct.ThrowIfCancellationRequested();
 
-            if (DotNetIntermediateSignature.TryRecognise(candidate, ct) is { } project)
+            if (Recognise(candidate, ct) is { } project)
             {
                 targets.Add(new RecognisedObj(candidate, project));
             }
@@ -297,15 +298,24 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         };
     }
 
+    /// <summary>
+    /// The project <paramref name="candidate"/> is intermediate output for, by whichever layout its
+    /// project writes. Each recogniser holds its own evidence and neither weakens the other's.
+    /// </summary>
+    private static RecognisedProject? Recognise(string candidate, CancellationToken ct) =>
+        DotNetIntermediateSignature.TryRecognise(candidate, ct) ?? NonSdkIntermediateSignature.TryRecognise(candidate, ct);
+
     /// <summary>One directory that proved its identity, and the project that proved it.</summary>
     private readonly record struct RecognisedObj(string Path, RecognisedProject Project);
 
     /// <summary>
-    /// §5.6. Three things around every directory removed have to survive, and each is a different
+    /// §5.6. Four things around every directory removed have to survive, and each is a different
     /// way an over-broad rule could reach too far: the project directory (deleting the parent
-    /// instead of the child), the project file itself (the source the output was derived from), and
-    /// <c>bin</c> (the sibling that looks equivalent and is not — it can hold hand-placed native
-    /// dependencies and copied assets that no build reproduces, which is why it is out of scope).
+    /// instead of the child), the project file itself (the source the output was derived from),
+    /// <c>packages.config</c> (what an old-style project's restore reads, and which an SDK-style one
+    /// does not have, so there it is evidence of nothing), and <c>bin</c> (the sibling that looks
+    /// equivalent and is not — it can hold hand-placed native dependencies and copied assets that no
+    /// build reproduces, which is why it is out of scope).
     ///
     /// Every declined candidate is protected by name as well, and so is every directory held back
     /// because something is using it. They are directories of the same name, often in the same tree,
@@ -325,6 +335,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             {
                 (directory, $"The project directory for {project.ProjectName} — only its build output is removed."),
                 (project.ProjectFilePath, "The project file itself is source, not build output."),
+                (Path.Combine(directory, "packages.config"), "The package list a restore reads is source, not build output."),
                 (Path.Combine(directory, "bin"), "Output directories are out of scope: they can hold files no build reproduces."),
             };
         }),

@@ -77,6 +77,95 @@ public static class ProjectFixture
     }
 
     /// <summary>
+    /// Create an old-style (non-SDK) project and its <c>obj</c> as a .NET Framework build leaves
+    /// them, and return the path to the <c>obj</c>: a project file in the MSBuild 2003 namespace,
+    /// <c>packages.config</c>, a source file, and a configuration directory per entry of
+    /// <paramref name="built"/> holding the build's bookkeeping, each file list naming paths inside
+    /// its own directory and in <c>bin</c>.
+    /// </summary>
+    /// <param name="extension">The project file's extension, with its dot.</param>
+    /// <param name="built">Configuration directories a build ran in, relative to <c>obj</c>.</param>
+    /// <param name="designTime">
+    /// Configuration directories only a design-time build touched, relative to <c>obj</c>: a
+    /// resolve cache, <c>build.force</c>, an assembly-attributes file and an empty <c>TempPE</c>.
+    /// </param>
+    /// <param name="projectXml">The project file's text. Defaults to an old-style project.</param>
+    /// <param name="writeProjectFile">False leaves the bookkeeping naming a project that is not there.</param>
+    /// <param name="bookkeepingStem">
+    /// The project filename the bookkeeping is named after. Defaults to the project's own.
+    /// </param>
+    /// <param name="fileListRoot">
+    /// The directory the file lists' paths start from, in place of the project directory. Override
+    /// it to reproduce a tree copied from another place, whose lists still name the original.
+    /// </param>
+    public static string CreateLegacyProject(
+        string projectDirectory,
+        string projectName,
+        string extension = ".vbproj",
+        string[]? built = null,
+        string[]? designTime = null,
+        string? projectXml = null,
+        bool writeProjectFile = true,
+        string? bookkeepingStem = null,
+        string? fileListRoot = null)
+    {
+        var projectFileName = projectName + extension;
+        var obj = Path.Combine(projectDirectory, "obj");
+        var stem = bookkeepingStem ?? projectFileName;
+        var listedObj = Path.Combine(fileListRoot ?? projectDirectory, "obj");
+
+        Directory.CreateDirectory(LongPath.Extended(obj));
+
+        if (writeProjectFile)
+        {
+            WriteText(
+                Path.Combine(projectDirectory, projectFileName),
+                projectXml ?? LegacyProjectXml);
+        }
+
+        WriteText(Path.Combine(projectDirectory, "packages.config"), "<packages />");
+        WriteText(Path.Combine(projectDirectory, "Module1" + (extension == ".vbproj" ? ".vb" : ".cs")), "' source");
+
+        foreach (var configuration in built ?? ["Debug"])
+        {
+            var directory = Path.Combine(obj, configuration);
+            var listed = Path.Combine(listedObj, configuration);
+            Directory.CreateDirectory(LongPath.Extended(Path.Combine(directory, "TempPE")));
+
+            WriteText(
+                Path.Combine(directory, stem + ".FileListAbsolute.txt"),
+                string.Join(
+                    "\r\n",
+                    Path.Combine(fileListRoot ?? projectDirectory, "bin", configuration, projectName + ".exe"),
+                    Path.Combine(listed, projectName + ".exe"),
+                    Path.Combine(listed, stem + ".CoreCompileInputs.cache"),
+                    string.Empty));
+            WriteText(Path.Combine(directory, stem + ".CoreCompileInputs.cache"), "0");
+            WriteText(Path.Combine(directory, stem + "AssemblyReference.cache"), "0");
+            File.WriteAllBytes(LongPath.Extended(Path.Combine(directory, projectName + ".exe")), new byte[4096]);
+        }
+
+        foreach (var configuration in designTime ?? [])
+        {
+            var directory = Path.Combine(obj, configuration);
+            Directory.CreateDirectory(LongPath.Extended(Path.Combine(directory, "TempPE")));
+
+            WriteText(Path.Combine(directory, "DesignTimeResolveAssemblyReferencesInput.cache"), "0");
+            WriteText(Path.Combine(directory, "build.force"), string.Empty);
+            WriteText(Path.Combine(directory, ".NETFramework,Version=v4.8.AssemblyAttributes.cs"), "// generated");
+        }
+
+        return obj;
+    }
+
+    /// <summary>An old-style project's opening, as Visual Studio writes it.</summary>
+    public const string LegacyProjectXml =
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"
+        + "<Project ToolsVersion=\"15.0\" DefaultTargets=\"Build\" xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\r\n"
+        + "  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>\r\n"
+        + "</Project>\r\n";
+
+    /// <summary>
     /// The directory named <c>obj</c> that is not build output: third-party Wavefront models,
     /// materials and importer sidecars, with no manifest and nothing a build could regenerate.
     /// This is the shape found in a real asset pack, and the case a name check deletes silently.
