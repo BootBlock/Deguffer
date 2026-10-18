@@ -82,12 +82,14 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
 
     /// <summary>
     /// Design-time configurations alone are not enough: nothing in them names a path, so nothing
-    /// ties them to the directory in hand.
+    /// ties them to the directory in hand. The project-named cache in one is there so that the
+    /// project is named, and what is missing is the file list and nothing else.
     /// </summary>
     [Fact]
     public void LeavesAnObjNoBuildRanInAlone()
     {
         var obj = ProjectFixture.CreateLegacyProject(Folder("Example"), "Example", built: [], designTime: ["Debug"]);
+        File.WriteAllText(Path.Combine(obj, "Debug", "Example.vbprojAssemblyReference.cache"), "0");
 
         Assert.Null(NonSdkIntermediateSignature.TryRecognise(obj));
     }
@@ -228,8 +230,12 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
         Assert.Null(NonSdkIntermediateSignature.TryRecognise(obj));
     }
 
+    /// <summary>
+    /// File lists for two projects in one configuration. Each list is named after its project, so
+    /// two of them are two projects, and the bookkeeping cannot agree.
+    /// </summary>
     [Fact]
-    public void LeavesAConfigurationWithTwoFileListsAlone()
+    public void LeavesAConfigurationWithFileListsForTwoProjectsAlone()
     {
         var obj = ProjectFixture.CreateLegacyProject(Folder("Example"), "Example");
         File.Copy(
@@ -242,6 +248,11 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
     /// <summary>
     /// A link at either level is a tree nobody examined: the <c>obj</c> itself, its project
     /// directory, a configuration and a platform's configuration.
+    ///
+    /// <para>Each link is the only thing wrong. A link to the <c>obj</c> or the project leads to file
+    /// lists written by a build that ran through that link, so they name the path in hand. A link
+    /// to a configuration leads to one only a design-time build touched, which names no path at
+    /// all. Without the link checks, every one of these is recognised.</para>
     /// </summary>
     [Theory]
     [InlineData("obj")]
@@ -251,9 +262,6 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
     public void LeavesAnObjWithALinkAtEitherLevelAlone(string where)
     {
         var elsewhere = Folder("elsewhere");
-        var outside = ProjectFixture.CreateLegacyProject(
-            Path.Combine(elsewhere, "Example"), "Example", built: ["Debug", Path.Combine("x64", "Debug")]);
-
         string obj;
 
         switch (where)
@@ -262,28 +270,35 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
                 var directory = Folder("Example");
                 File.WriteAllText(Path.Combine(directory, "Example.vbproj"), ProjectFixture.LegacyProjectXml);
                 obj = Path.Combine(directory, "obj");
-                SymbolicLink.ToDirectory(obj, outside);
+                SymbolicLink.ToDirectory(
+                    obj,
+                    ProjectFixture.CreateLegacyProject(Path.Combine(elsewhere, "Example"), "Example", fileListRoot: directory));
                 break;
 
             case "project":
                 var link = Path.Combine(_temp.Path, "Linked");
-                SymbolicLink.ToDirectory(link, Path.Combine(elsewhere, "Example"));
+                var target = Path.Combine(elsewhere, "Example");
+                ProjectFixture.CreateLegacyProject(target, "Example", fileListRoot: link);
+                SymbolicLink.ToDirectory(link, target);
                 obj = Path.Combine(link, "obj");
                 break;
 
             case "configuration":
+                var designed = ProjectFixture.CreateLegacyProject(
+                    Path.Combine(elsewhere, "Example"), "Example", designTime: ["Release"]);
                 obj = ProjectFixture.CreateLegacyProject(Folder("Example"), "Example");
-                SymbolicLink.ToDirectory(Path.Combine(obj, "Release"), Path.Combine(outside, "Debug"));
+                SymbolicLink.ToDirectory(Path.Combine(obj, "Release"), Path.Combine(designed, "Release"));
                 break;
 
             default:
+                var platform = ProjectFixture.CreateLegacyProject(
+                    Path.Combine(elsewhere, "Example"), "Example", designTime: [Path.Combine("x64", "Release")]);
                 obj = ProjectFixture.CreateLegacyProject(
                     Folder("Example"), "Example", built: ["Debug", Path.Combine("x64", "Debug")]);
-                SymbolicLink.ToDirectory(Path.Combine(obj, "x64", "Release"), Path.Combine(outside, "x64", "Debug"));
+                SymbolicLink.ToDirectory(Path.Combine(obj, "x64", "Release"), Path.Combine(platform, "x64", "Release"));
                 break;
         }
 
-        Assert.NotNull(NonSdkIntermediateSignature.TryRecognise(outside));
         Assert.Null(NonSdkIntermediateSignature.TryRecognise(obj));
     }
 

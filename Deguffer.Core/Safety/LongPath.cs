@@ -451,11 +451,12 @@ public static partial class LongPath
     /// truth: a preview promising back a figure nobody could check, and a folder moved to the Recycle
     /// Bin unexamined. So each settles <see cref="PathPresence.Refused"/> first and says so.</para>
     ///
-    /// <para><b>Three callers do <em>not</em> ask first, and each is answered by what it does with a
-    /// true.</b> <see cref="BuildDirectorySignature"/> and <see cref="DotNetIntermediateSignature"/>
-    /// put a candidate and its parent through this without probing either, and what they say when
-    /// they get a true is "not recognised as build output, so it is left alone" — §5.2's own answer
-    /// for a thing that could not be classified, which names no link and claims nothing.
+    /// <para><b>Four callers do <em>not</em> ask first, and each is answered by what it does with a
+    /// true.</b> <see cref="BuildDirectorySignature"/>, <see cref="DotNetIntermediateSignature"/> and
+    /// <see cref="NonSdkIntermediateSignature"/> put a candidate and its parent through this without
+    /// probing either, and what they say when they get a true is "not recognised as build output, so
+    /// it is left alone" — §5.2's own answer for a thing that could not be classified, which names
+    /// no link and claims nothing.
     /// <see cref="Execution.FileRemover"/> asks this through the <see cref="IFileSystem"/> seam, and
     /// a true there removes the path as a link, once the recent-files guard allows it, and reports
     /// nothing reclaimed rather than its length. That under-reports, which is the safe

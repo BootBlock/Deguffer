@@ -4521,6 +4521,7 @@ the tool itself writes inside it.
 | Directory | Must sit beside it | Must be inside it |
 | --- | --- | --- |
 | `obj` | A project file the restore manifest names | `project.assets.json`, and the generated NuGet imports for that same project |
+| `obj` of an old-style project | An old-style project file (the MSBuild 2003 namespace, no `Sdk`) that the build's records name | Only configuration and platform directories, at least one holding the build's file list, which names that same directory |
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
 | `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
 | `target` | `Cargo.toml` | `CACHEDIR.TAG`, which Cargo writes |
@@ -4534,6 +4535,17 @@ intermediate output whatever the manifest beside it claims. The check needs git 
 is installed but cannot answer, the directory is left alone. Where git cannot be found at all, the
 conditions above decide alone, as they do for every other directory here, and for a directory inside
 a repository the scan says that the tracked-file check did not run.
+
+An old-style .NET project, the kind Visual Studio made before the SDK format and still makes for
+.NET Framework, writes no restore manifest, so its `obj` is recognised by the records the build
+keeps instead. Every directory inside it has to be a configuration (`Debug`) or a platform holding
+configurations (`x64\Debug`). A configuration a build ran in holds `<project>.FileListAbsolute.txt`,
+the build's own list of what it wrote, and that list has to name a path inside that very directory:
+a copy of the source tree keeps lists naming the original, so the copy is left alone. A
+configuration Visual Studio only opened holds a few files a design-time build writes, and anything
+else there means the whole `obj` is left alone. Every record has to name the same project, and the
+file list is only read as evidence: nothing it names outside `obj` is ever removed. A project moved
+or renamed since it was last built is left alone until it is built again.
 
 Two of those requirements are there for a reason worth stating, because both look like fussiness and
 neither is:
@@ -4621,8 +4633,9 @@ Everything except the one directory in each row, asserted by name after the dele
 
 - **The project folder itself** — only the build directory inside it is removed.
 - **Every file the rebuild reads.** `Assets`, `Packages` and `ProjectSettings` for Unity;
-  `Cargo.toml`; `package.json` and the lock file; the Python manifest. These are what make the
-  directory regenerable, so losing one would falsify the whole claim.
+  the .NET project file and `packages.config`; `Cargo.toml`; `package.json` and the lock file; the
+  Python manifest. These are what make the directory regenerable, so losing one would falsify the
+  whole claim.
 - **For Unreal, the `.uproject` descriptor, `Source`, `Content`, `Config` and `Plugins`, and `Saved`
   and `Binaries`.** `Saved` holds the editor's autosaves, which are the only copy of work nobody
   saved, and your editor settings. `Binaries` is compiled output, but on a team an artist often

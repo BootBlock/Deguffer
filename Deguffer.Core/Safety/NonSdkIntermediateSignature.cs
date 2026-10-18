@@ -166,13 +166,12 @@ public static class NonSdkIntermediateSignature
     /// </summary>
     private static bool IsBookkept(string directory, IReadOnlyList<FileSystemInfo> entries, Evidence evidence)
     {
-        var fileLists = entries
-            .Where(entry => entry is FileInfo && entry.Name.EndsWith(FileListSuffix, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (fileLists.Count != 1
+        // Every file list is named after its project, so once all the bookkeeping agrees there can be
+        // only one.
+        if (entries.FirstOrDefault(entry => entry is FileInfo
+                && entry.Name.EndsWith(FileListSuffix, StringComparison.OrdinalIgnoreCase)) is not { } fileList
             || !entries.Where(entry => entry is FileInfo).All(entry => AgreesOnProject(entry.Name, evidence))
-            || !NamesAPathInside(Path.Combine(directory, fileLists[0].Name), directory))
+            || !NamesAPathInside(Path.Combine(directory, fileList.Name), directory))
         {
             return false;
         }
