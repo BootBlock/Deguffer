@@ -1,4 +1,7 @@
+using System.Buffers;
+using System.Text;
 using System.Xml;
+using Deguffer.Core.Providers;
 
 namespace Deguffer.Core.Safety;
 
@@ -25,8 +28,8 @@ namespace Deguffer.Core.Safety;
 /// directory. Every one surveyed did.</item>
 /// <item>A configuration directory with no such record holds only what a design-time build
 /// writes, from a closed list. Visual Studio creates these for every configuration and platform it
-/// has shown, whether or not anything was built there; a third of the directories surveyed were
-/// one.</item>
+/// has shown, whether or not anything was built there, and they were common among the
+/// directories surveyed.</item>
 /// <item>Every bookkeeping file names the same project, and that project file sits in the parent
 /// as an old-style project.</item>
 /// </list>
@@ -56,9 +59,21 @@ public static class NonSdkIntermediateSignature
     /// Bookkeeping files MSBuild names after the project file, as the suffix after its name. Each
     /// one found must name the same project, so a directory shared by two projects, or holding one
     /// project's records under another's, is unrecognised.
+    ///
+    /// <para>The reference caches have three spellings: current MSBuild writes
+    /// <c>Example.vbproj.AssemblyReference.cache</c>, older ones
+    /// <c>Example.vbprojAssemblyReference.cache</c> and
+    /// <c>Example.vbprojResolveAssemblyReference.cache</c>. The first match wins, so each suffix comes
+    /// before any shorter one that ends it.</para>
     /// </summary>
     private static readonly string[] BookkeepingSuffixes =
-        [FileListSuffix, ".CoreCompileInputs.cache", "AssemblyReference.cache"];
+    [
+        FileListSuffix,
+        ".CoreCompileInputs.cache",
+        ".AssemblyReference.cache",
+        "ResolveAssemblyReference.cache",
+        "AssemblyReference.cache",
+    ];
 
     /// <summary>
     /// What a design-time build writes into a configuration directory, by exact name. Measured, not
@@ -76,8 +91,23 @@ public static class NonSdkIntermediateSignature
 
     private const string TempPE = "TempPE";
 
-    /// <summary>The largest project file or file list read. Real ones run to kilobytes.</summary>
-    private const long MaximumReadBytes = 16L * 1024 * 1024;
+    /// <summary>
+    /// The largest project file read. Real ones run to tens of kilobytes; one past this is not a
+    /// project file anybody maintains by hand.
+    /// </summary>
+    private const int MaximumProjectBytes = 1024 * 1024;
+
+    /// <summary>
+    /// The largest file list read. A line is one path, so this is tens of thousands of files built
+    /// into one configuration, past anything a single project writes.
+    /// </summary>
+    private const int MaximumFileListBytes = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// Characters no path holds. A line carrying one is not a line MSBuild wrote, and some of them
+    /// make path parsing throw rather than answer.
+    /// </summary>
+    private static readonly SearchValues<char> InvalidPathCharacters = SearchValues.Create(Path.GetInvalidPathChars());
 
     private static readonly XmlReaderSettings ProjectReading = new()
     {
@@ -263,16 +293,18 @@ public static class NonSdkIntermediateSignature
     /// </summary>
     private static bool NamesAPathInside(string fileList, string directory)
     {
+        if (BoundedFile.Read(fileList, MaximumFileListBytes) is not { } content)
+        {
+            return false;
+        }
+
         var inside = false;
 
-        foreach (var line in ReadLines(fileList) ?? [])
+        foreach (var line in Encoding.UTF8.GetString(content.Span).Split(
+            ['\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (line.Length == 0)
-            {
-                continue;
-            }
-
-            if (!Path.IsPathFullyQualified(line))
+            if (line.AsSpan().ContainsAny(InvalidPathCharacters) || !Path.IsPathFullyQualified(line))
             {
                 // Not the file MSBuild writes, whose every line is an absolute path.
                 return false;
@@ -287,16 +319,14 @@ public static class NonSdkIntermediateSignature
     /// <summary>Whether <paramref name="projectFile"/> is an old-style project, read from its root element.</summary>
     private static bool IsLegacyProject(string projectFile)
     {
+        if (BoundedFile.Read(projectFile, MaximumProjectBytes) is not { } content)
+        {
+            return false;
+        }
+
         try
         {
-            var file = new FileInfo(LongPath.Extended(projectFile));
-
-            if (!file.Exists || file.Length > MaximumReadBytes)
-            {
-                return false;
-            }
-
-            using var stream = file.OpenRead();
+            using var stream = new MemoryStream(content.ToArray(), writable: false);
             using var reader = XmlReader.Create(stream, ProjectReading);
 
             // An SDK-style project may carry the 2003 namespace too, so the Sdk attribute is what
@@ -307,38 +337,11 @@ public static class NonSdkIntermediateSignature
                 && reader.NamespaceURI == LegacyNamespace
                 && reader.GetAttribute("Sdk") is null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or XmlException)
+        catch (XmlException)
         {
-            // Locked, refused or not XML: the project could not be confirmed, which is Tier 4.
+            // Not XML, or a document type declaration, which is refused rather than processed: the
+            // project could not be confirmed, which is Tier 4.
             return false;
-        }
-    }
-
-    /// <summary>The lines of a file list, or null if it cannot be read in full.</summary>
-    private static IReadOnlyList<string>? ReadLines(string path)
-    {
-        try
-        {
-            var file = new FileInfo(LongPath.Extended(path));
-
-            if (!file.Exists || file.Length > MaximumReadBytes)
-            {
-                return null;
-            }
-
-            using var reader = file.OpenText();
-            var lines = new List<string>();
-
-            while (reader.ReadLine() is { } line)
-            {
-                lines.Add(line.Trim());
-            }
-
-            return lines;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return null;
         }
     }
 

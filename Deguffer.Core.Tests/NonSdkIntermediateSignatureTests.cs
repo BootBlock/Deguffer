@@ -57,6 +57,9 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
     [InlineData("TemporaryGeneratedFile_036C0B5B-1481-4323-8D20-8F5ADCB23D92.cs", true)]
     [InlineData("TemporaryGeneratedFile_notes.cs", false)]
     [InlineData("Example.vbprojAssemblyReference.cache", true)]
+    [InlineData("Example.vbproj.AssemblyReference.cache", true)]
+    [InlineData("Example.vbprojResolveAssemblyReference.cache", true)]
+    [InlineData("Other.vbproj.AssemblyReference.cache", false)]
     [InlineData("Example.vbproj.CoreCompileInputs.cache", true)]
     [InlineData("notes.txt", false)]
     public void AcceptsOnlyWhatADesignTimeBuildWritesInAConfigurationWithNoFileList(string name, bool recognised)
@@ -122,8 +125,9 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
     }
 
     /// <summary>
-    /// Bookkeeping named after a different project. The parent holds both project files, so what
-    /// disqualifies it is the stem and nothing else.
+    /// Bookkeeping named after a different project. The parent holds an old-style project, but not
+    /// the one the records name, so the records are what disqualify it. With the named project
+    /// beside them instead, the same directory is recognised as that project's.
     /// </summary>
     [Fact]
     public void LeavesBookkeepingForADifferentProjectAlone()
@@ -226,6 +230,22 @@ public sealed class NonSdkIntermediateSignatureTests : IDisposable
     {
         var obj = ProjectFixture.CreateLegacyProject(Folder("Example"), "Example");
         File.AppendAllText(Path.Combine(obj, "Debug", "Example.vbproj.FileListAbsolute.txt"), @"obj\Debug\Example.exe");
+
+        Assert.Null(NonSdkIntermediateSignature.TryRecognise(obj));
+    }
+
+    /// <summary>
+    /// A hand-edited list can hold what no path does. A character Windows rejects in a device-form
+    /// line makes path parsing throw, so it has to be refused before the line is compared, or one
+    /// edited file would end the whole plan rather than leave one directory alone.
+    /// </summary>
+    [Fact]
+    public void LeavesAFileListWithACharacterNoPathHoldsAlone()
+    {
+        var obj = ProjectFixture.CreateLegacyProject(Folder("Example"), "Example");
+        File.AppendAllText(
+            Path.Combine(obj, "Debug", "Example.vbproj.FileListAbsolute.txt"),
+            @"\\.\C:\a" + (char)0 + "b" + Environment.NewLine);
 
         Assert.Null(NonSdkIntermediateSignature.TryRecognise(obj));
     }
