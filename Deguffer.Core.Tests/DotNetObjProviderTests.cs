@@ -342,6 +342,84 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An old-style project's <c>obj</c> is offered under its project's name, as an SDK-style one is,
+    /// and its §5.6 negative holds after a real run: the project file, <c>packages.config</c>, the
+    /// source, <c>bin</c> and an unrecognised <c>obj</c> beside it are all still standing.
+    /// </summary>
+    [Fact]
+    public async Task OffersAnOldStyleProjectsObjAndLeavesEverythingAroundItStanding()
+    {
+        var root = ApproveRoot();
+        var directory = Path.Combine(root, "Example");
+        var obj = ProjectFixture.CreateLegacyProject(
+            directory, "Example", built: ["Debug", Path.Combine("x86", "Release")], designTime: ["Release"]);
+        var bin = Path.Combine(directory, "bin");
+        Directory.CreateDirectory(bin);
+        File.WriteAllBytes(Path.Combine(bin, "native.dll"), new byte[2048]);
+
+        var art = ProjectFixture.CreateArtAssets(Path.Combine(root, "Models"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<DeleteStep>());
+        Assert.Equal(obj, step.Path);
+        Assert.Equal([new ItemFacet("Project", "Example.vbproj")], step.Facets);
+
+        foreach (var survivor in new[] { "Example.vbproj", "packages.config" })
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(Path.Combine(directory, survivor), StringComparison.OrdinalIgnoreCase));
+        }
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(art, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(LongPath.DirectoryExists(obj));
+
+        foreach (var file in new[] { "Example.vbproj", "packages.config", "Module1.vb", Path.Combine("bin", "native.dll") })
+        {
+            Assert.True(LongPath.FileExists(Path.Combine(directory, file)), file);
+        }
+
+        Assert.True(LongPath.FileExists(Path.Combine(art, "barrel.obj")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The second opinions apply to an old-style <c>obj</c> unchanged: git holding a tracked file in
+    /// it overrules recognition, and so does a program using the project.
+    /// </summary>
+    [Fact]
+    public async Task HoldsBackAnOldStyleObjGitTracksOrSomethingIsUsing()
+    {
+        var root = ApproveRoot();
+        var repository = Path.Combine(root, "repo");
+        Directory.CreateDirectory(Path.Combine(repository, ".git"));
+
+        var tracked = ProjectFixture.CreateLegacyProject(Path.Combine(repository, "Tracked"), "Tracked");
+        var busy = ProjectFixture.CreateLegacyProject(Path.Combine(root, "Busy"), "Busy");
+        var idle = ProjectFixture.CreateLegacyProject(Path.Combine(root, "Idle"), "Idle");
+
+        _environment.WithExecutable("git");
+        var runner = new FakeProcessRunner().Responding(Git, "ls-files", "Tracked/obj/Debug/committed.resources\0");
+
+        var provider = CreateProvider(runner: runner, liveTrees: new FakeLiveTreeInspector(busy));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([idle], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(tracked, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(LongPath.DirectoryExists(tracked));
+        Assert.True(LongPath.DirectoryExists(busy));
+        Assert.False(LongPath.DirectoryExists(idle));
+    }
+
+    /// <summary>
     /// §5.6 when the developer runs a Clean of their own while the preview sits on screen. MSBuild's
     /// Clean deletes the output files it built and leaves <c>bin\Debug\&lt;framework&gt;</c> standing,
     /// so <c>bin</c> ends the run holding only empty folders. Deguffer never touched it, so the run is

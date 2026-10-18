@@ -34,8 +34,9 @@ public static class DotNetIntermediateSignature
     /// Project file extensions whose <c>obj</c> this recognises. Deliberately not <c>.proj</c> or
     /// <c>.msbuildproj</c>: they exist in the wild but are rare enough that they were never
     /// observed being verified end-to-end here, and an unrecognised extension costs only the space.
+    /// <see cref="NonSdkIntermediateSignature"/> recognises the same three.
     /// </summary>
-    private static readonly string[] ProjectExtensions = [".csproj", ".fsproj", ".vbproj"];
+    internal static readonly string[] ProjectExtensions = [".csproj", ".fsproj", ".vbproj"];
 
     /// <summary>
     /// Schema versions of <c>project.assets.json</c> whose <c>project.restore.projectPath</c> was
@@ -66,6 +67,8 @@ public static class DotNetIntermediateSignature
     /// central <c>artifacts/obj/&lt;Project&gt;/</c> instead, and those stay Tier 4 until they have
     /// tests of their own — the manifest's own <c>projectPath</c> is the evidence that survives
     /// relocation, so adding them later is a second recogniser rather than a change to this one.
+    /// An old-style project, which writes no manifest, already has one:
+    /// <see cref="NonSdkIntermediateSignature"/>.
     ///
     /// Requiring the project file in the parent, rather than merely somewhere on disk, is what
     /// closes a hole found while surveying real directories: a source tree copied for backup keeps
