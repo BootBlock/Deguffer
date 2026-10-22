@@ -581,6 +581,27 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(64, new FileInfo(index).Length);
     }
 
+    /// <summary>
+    /// An index that went whole, and a file where the folder it indexes was: what came out was the
+    /// index, and the sentence says so rather than calling the folder removed. Asked of the outcome
+    /// directly, because in a run the look before the step meets the file first.
+    /// </summary>
+    [Fact]
+    public void AnIndexRemovedBeforeAFileWasFoundAtTheFolderIsNotCalledTheFolderRemoved()
+    {
+        var step = new DeleteDirectoryStep(Path.Combine(_temp.Path, "out"), "Output")
+        {
+            IndexedBy = [Path.Combine(_temp.Path, "index")],
+        };
+        var removal = new RemovalOutcome(64, Refusals.None, RootRemoved: false, EntriesRemoved: 2) { NotADirectory = true };
+
+        var outcome = PlanExecutor.Deleted(step, removal, stores: 0);
+
+        Assert.True(outcome.Succeeded);
+        Assert.Equal(64, outcome.BytesReclaimed);
+        Assert.Equal("Removed its index, and left alone a file that now stands where this folder was.", outcome.Message);
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

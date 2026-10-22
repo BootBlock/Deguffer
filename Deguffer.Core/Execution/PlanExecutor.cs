@@ -708,6 +708,17 @@ public sealed class PlanExecutor(
             Kept = removal.Kept + index.Kept,
         };
 
+        var stores = removal.MailStores.Count + index.MailStores;
+
+        return removal.Interrupted ? Stopped(step, removal, stores) : Deleted(step, removal, stores);
+    }
+
+    /// <summary>
+    /// What a directory step that ran to its end reports, from its removal with its index's figures
+    /// already added.
+    /// </summary>
+    internal static StepOutcome Deleted(DeleteDirectoryStep step, RemovalOutcome removal, int stores)
+    {
         // A refusal is not a failure (§5.3). The step only fails if the directory survived intact
         // and nothing at all was reclaimed — that is, we achieved nothing.
         //
@@ -719,13 +730,6 @@ public sealed class PlanExecutor(
         // it reclaims no bytes.
         // An Outlook mail store left where it was is something achieved for the same reason: it is the
         // outcome §9 requires, and a folder holding nothing else would otherwise read as a failure.
-        var stores = removal.MailStores.Count + index.MailStores;
-
-        if (removal.Interrupted)
-        {
-            return Stopped(step, removal, stores);
-        }
-
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0
             || removal.EntriesRemoved > 0 || stores > 0;
 
@@ -734,6 +738,12 @@ public sealed class PlanExecutor(
             false when removal.NotADirectory => LeftInPlace.NotAFolder,
 
             false => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
+
+            // Whatever came out was the index, which went whole before the folder was looked at: a
+            // removal that met a file at the folder's path takes nothing. "Removed" alone would claim
+            // the folder.
+            _ when removal.NotADirectory =>
+                "Removed its index, and left alone a file that now stands where this folder was.",
 
             // Nothing came out and the folder is still standing, which is the guard's own case: it
             // held back everything this step named. Saying "Removed" here would be a false statement

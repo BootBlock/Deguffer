@@ -193,6 +193,43 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.True(File.Exists(bystander), "the removal followed a link at its root");
     }
 
+    /// <summary>
+    /// A root is reported gone only where nothing is at its path. A file written there the moment the
+    /// directory went is something there, which the directory probe alone answers Absent for.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReportARootAFileTookTheNameOfAsRemoved()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(1024, "cache", "a.bin");
+        var fs = new ReplacingFileSystem(WindowsFileSystem.Default, LongPath.Extended(root));
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, fileSystem: fs);
+
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(1024, outcome.BytesReclaimed);
+        Assert.True(File.Exists(root));
+    }
+
+    /// <summary>The same for a root that is a link, which is removed as the link and then asked again.</summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DoesNotReportALinkAFileTookTheNameOfAsRemoved(DirectoryLinkKind kind)
+    {
+        var outside = _temp.CreateDirectory("elsewhere");
+        var bystander = _temp.CreateFile(10, "elsewhere", "bystander.bin");
+        var root = Path.Combine(_temp.Path, "cache");
+        DirectoryLink.Create(kind, root, outside);
+        var fs = new ReplacingFileSystem(WindowsFileSystem.Default, LongPath.Extended(root));
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, fileSystem: fs);
+
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(0, outcome.EntriesRemoved);
+        Assert.True(File.Exists(root));
+        Assert.True(File.Exists(bystander), "the removal followed a link at its root");
+    }
+
     [Fact]
     public async Task RemovesANestedTreeAndReportsWhatItReclaimed()
     {
