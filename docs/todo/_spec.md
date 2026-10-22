@@ -390,7 +390,10 @@ Deliberate points, and the traps that come with them:
 ## 7. UX principles
 
 - **Group by cause, sort by size, colour by tier.** The first screen answers "what is eating my
-  disk", not "what folders exist".
+  disk", not "what folders exist". Largest first is the shipped order and the one a new install
+  opens in. The user can reorder the list by name, or by tier with the largest first in each, and
+  the choice is remembered. Reordering is presentation only: it never changes what is offered,
+  ticked or removed, and a row that a kept item or a clean shrinks still stays where it stands.
 - **Every row states what happens on next use, and reaches it without a pointer**: "re-downloads on
   next build (~10 GB)" is more useful than a checkbox. The list has two densities, and the shipped
   one is **Compact**, which trades the sentence off the row for the whole list being on screen at

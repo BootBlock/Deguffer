@@ -207,6 +207,31 @@ public sealed partial class CleanViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ShowAlreadyClear { get; set; }
 
+    /// <summary>
+    /// How the rows are ordered. Set by the view from the preference and from the page's order picker,
+    /// so this type still knows nothing about settings, and read back by it, because a value no order
+    /// is named for is stored as the shipped one (<see cref="StorageRowOrder.Known"/>).
+    ///
+    /// <para>Changing it moves each row that is out of place, in the fewest moves, and never removes,
+    /// re-creates or resets one, so every row keeps its ticks and its steps. A row that does not have to
+    /// move keeps its container as well. It is the one thing that reorders a finished list: a row
+    /// shrunk by keeping an item, or emptied by a clean, still stays where it stands.</para>
+    /// </summary>
+    public StorageOrder Order
+    {
+        get => _order;
+        set
+        {
+            if (SetProperty(ref _order, StorageRowOrder.Known(value)))
+            {
+                var comparer = StorageRowOrder.Comparer(_order);
+                LiveList.Show(Findings, [.. Findings.OrderBy(OrderedRowOf, comparer)], row => row);
+            }
+        }
+    }
+
+    private StorageOrder _order;
+
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
 
     /// <summary>
@@ -798,7 +823,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _barShowsPreviewSummary = false;
 
         var progress = new Progress<string>(message => Report(message));
-        var found = new Progress<Finding>(AddRowInSizeOrder);
+        var found = new Progress<Finding>(AddRowInOrder);
 
         // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
@@ -946,10 +971,11 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// §7: sort by size. Inserting each row where it belongs keeps the list ordered while it is
-    /// still filling, rather than letting it reshuffle under the user once the last provider lands.
+    /// §7: sort by size, or by the order the user chose. Inserting each row where it belongs keeps the
+    /// list ordered while it is still filling, rather than letting it reshuffle under the user once
+    /// the last provider lands.
     /// </summary>
-    private void AddRowInSizeOrder(Finding finding)
+    private void AddRowInOrder(Finding finding)
     {
         var row = new FindingViewModel(finding, _selections.Memory, _keeps.Current, _isElevated);
 
@@ -969,19 +995,20 @@ public sealed partial class CleanViewModel : ObservableObject
         // Rows arrive while a preview is running, when the keep list is not to be changed.
         AllowKeepListChanges(row, !IsBusy);
 
-        // The row's own figure rather than the finding's, so a kept item does not place a row by
-        // space it will never offer.
-        Findings.Insert(
-            SizeOrder.IndexFor(
-                Findings.Select(listed => (listed.Finding.EstimatedBytes, _planner.PlaceOf(listed.Finding.Provider))),
-                row.Finding.EstimatedBytes,
-                _planner.PlaceOf(finding.Provider)),
-            row);
+        Findings.Insert(StorageRowOrder.IndexFor(Findings.Select(OrderedRowOf), OrderedRowOf(row), _order), row);
         UpdateShares();
 
         // A row can start ticked, and it raises no selection change for that: nobody ticked it.
         UpdateSelectionTotal();
     }
+
+    /// <summary>
+    /// What <see cref="StorageRowOrder"/> places <paramref name="row"/> by. The row's own figure
+    /// rather than the finding the scan reported, so a kept item does not place a row by space it will
+    /// never offer.
+    /// </summary>
+    private OrderedRow OrderedRowOf(FindingViewModel row) =>
+        new(row.Name, row.Finding.EstimatedBytes, row.Tier, _planner.PlaceOf(row.Finding.Provider));
 
     /// <summary>
     /// Each row's bar is drawn relative to the largest finding, so the biggest cause fills the bar

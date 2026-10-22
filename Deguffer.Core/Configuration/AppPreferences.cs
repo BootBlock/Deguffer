@@ -28,6 +28,25 @@ public enum ViewDensity
 }
 
 /// <summary>
+/// How the Storage page orders its rows. <see cref="Size"/> is the shipped order, because §7's first
+/// screen answers "what is eating my disk". See <see cref="Viewing.StorageRowOrder"/>.
+///
+/// <para>The values are ordinal, and the page's order picker lists them in this order. They are
+/// stored by name rather than by number.</para>
+/// </summary>
+public enum StorageOrder
+{
+    /// <summary>Largest first.</summary>
+    Size = 0,
+
+    /// <summary>Alphabetically, A to Z.</summary>
+    Name = 1,
+
+    /// <summary>Tier 1 first, and largest first within each tier.</summary>
+    Tier = 2,
+}
+
+/// <summary>
 /// How the Explore page draws what it found.
 ///
 /// <para><see cref="Treemap"/> is the shipped view: it is what every tool in this category shows by
@@ -219,6 +238,11 @@ public enum ExploreScheme
 /// <paramref name="ShowNotInstalled"/>: every provider is still scanned, so switching it on lists
 /// them with no rescan.
 /// </param>
+/// <param name="StorageOrder">
+/// How the Storage page orders its rows. Largest first by default. Presentation only, in the same
+/// way <paramref name="View"/> is: it changes where a row stands, never what is scanned, offered or
+/// deleted.
+/// </param>
 /// <param name="ExploreNotesDismissed">
 /// Whether Explore's notes are collapsed to the button that brings them back. Off by default, and
 /// only the reader ever turns it on.
@@ -375,6 +399,7 @@ public sealed record AppPreferences(
     bool MemoryOverviewHidden = false,
     bool ShowNotInstalled = false,
     bool ShowAlreadyClear = false,
+    StorageOrder StorageOrder = StorageOrder.Size,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false,

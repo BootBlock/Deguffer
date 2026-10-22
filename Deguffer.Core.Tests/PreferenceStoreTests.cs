@@ -32,6 +32,7 @@ public class PreferenceStoreTests
             MemoryOverviewHidden: true,
             ShowNotInstalled: true,
             ShowAlreadyClear: true,
+            StorageOrder: StorageOrder.Tier,
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
             RequireTypedConfirmation: true,
@@ -101,6 +102,9 @@ public class PreferenceStoreTests
 
         Assert.True(loaded.ShowNotInstalled);
         Assert.True(loaded.ShowAlreadyClear);
+
+        // Not the default, which is zero, so a file that lost the order would not pass.
+        Assert.Equal(StorageOrder.Tier, loaded.StorageOrder);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
         Assert.True(loaded.RequireTypedConfirmation);
@@ -268,6 +272,7 @@ public class PreferenceStoreTests
         Assert.Equal(ViewDensity.Compact, AppPreferences.Default.View);
         Assert.False(AppPreferences.Default.ShowNotInstalled);
         Assert.False(AppPreferences.Default.ShowAlreadyClear);
+        Assert.Equal(StorageOrder.Size, AppPreferences.Default.StorageOrder);
     }
 
     /// <summary>
