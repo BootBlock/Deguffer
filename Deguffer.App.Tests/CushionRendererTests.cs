@@ -169,8 +169,8 @@ public sealed class CushionRendererTests : IDisposable
 
     /// <summary>
     /// Every finish the style can ask for is shaded as it is painted: flat, bevelled, lined round each
-    /// block or each folder, light or dark, thin or thick, folders filled grey, and cushions at every
-    /// depth with a line round them. A finish with no cushion in it is whole numbers on both routes,
+    /// block or each folder, light or dark, thin or thick, and cushions at every depth, with a line round
+    /// them or none. A finish with no cushion in it is whole numbers on both routes,
     /// so it is the same picture exactly; one with a cushion is held to the cushions' tolerance.
     /// </summary>
     [Theory]
@@ -180,7 +180,7 @@ public sealed class CushionRendererTests : IDisposable
         var picture = Picture(MapViewport.Seen(zoom: 1.6, left: 0.2, top: 0.3), style: style);
         var finish = picture.Quads()!.Finish;
 
-        Assert.True(finish.Borders.Width > 0 || finish.Bevel.Width > 0 || style.FolderFill == MapFolderFill.Grey, $"{name} draws nothing a cushion does not");
+        Assert.True(finish.Borders.Width > 0 || finish.Bevel.Width > 0 || style.Relief != MapStyle.Default.Relief, $"{name} draws nothing the shipped cushion does not");
 
         if (style.Shading == MapShading.Cushion)
         {
@@ -199,7 +199,7 @@ public sealed class CushionRendererTests : IDisposable
         { "bevel, no lines", new MapStyle(MapShading.Bevel) },
         { "strong bevel, thick light lines", new MapStyle(MapShading.Bevel, MapRelief.Strong, MapBorder.Strong, MapBorder.Medium, MapBorderWidth.Thick, MapBorderTone.Light) },
         { "SpaceMonger", MapPreset.SpaceMonger.Style },
-        { "cushions with grey frames", MapPreset.WizTree.Style },
+        { "deep cushions, no lines", MapPreset.WizTree.Style },
         { "cushions with lines", new MapStyle(MapShading.Cushion, MapRelief.Subtle, MapBorder.Medium, MapBorder.Strong) },
         { "flat without bands or names", MapPreset.Outlined.Style with { FolderNames = false } },
     };

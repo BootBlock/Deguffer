@@ -328,7 +328,6 @@ public abstract class ExploreSurface
     /// provable without a clock (G8) — the same seam
     /// <see cref="Scanning.RelativeAge.Describe"/> takes.
     /// </param>
-    /// <param name="style">How every shape is finished, or null for <see cref="MapStyle.Default"/>.</param>
     public static ExploreSurface Create(
         ExploreTree tree,
         int root,
@@ -341,12 +340,11 @@ public abstract class ExploreSurface
         ExploreScheme scheme,
         DateTime nowUtc,
         ExploreSpacing spacing,
-        VolumeSpace volume,
-        MapStyle? style = null) =>
+        VolumeSpace volume) =>
         Create(
             tree, root, view, width, height, scale, textScale,
             ShapeColours.For(tree, colouring, scheme, nowUtc, growth: null, types: null),
-            spacing, volume, style: style);
+            spacing, volume);
 
     /// <summary>
     /// The picture <paramref name="tree"/> is actually drawn as when <paramref name="view"/> is

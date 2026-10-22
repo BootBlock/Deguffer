@@ -209,7 +209,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     /// </summary>
     public int PresetIndex
     {
-        get => IndexOfPreset();
+        get => MapPreset.Of(_look) is { } preset ? MapPreset.All.Index().First(entry => entry.Item == preset).Index : -1;
         set
         {
             if (value >= 0 && value < MapPreset.All.Count)
@@ -220,8 +220,8 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     }
 
     /// <summary>Which preset the look is drawn as, in words, or that it is the reader's own.</summary>
-    public string PresetSummary => IndexOfPreset() is var index and >= 0
-        ? $"The map is drawn as the {MapPreset.All[index].Name} preset."
+    public string PresetSummary => MapPreset.Of(_look) is { } preset
+        ? $"The map is drawn as the {preset.Name} preset."
         : "The map is drawn in a look of your own. Choose a preset to start again from it.";
 
     /// <summary>
@@ -249,19 +249,6 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         _look = _look with { Spacing = stored };
 
         Raise();
-    }
-
-    private int IndexOfPreset()
-    {
-        for (var i = 0; i < MapPreset.All.Count; i++)
-        {
-            if (MapPreset.All[i].Describes(_look))
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
     /// <summary>

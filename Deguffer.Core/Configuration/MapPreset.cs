@@ -7,10 +7,10 @@ namespace Deguffer.Core.Configuration;
 /// <para>Two of them follow other disk maps, from grounding in what those tools draw.
 /// <see cref="SpaceMonger"/> is SpaceMonger 1.4's: flat boxes with a one-pixel bevel, a black line
 /// round every box, each folder named in a band, and a colour per level of depth from its own eight.
-/// <see cref="WizTree"/> is WizTree 4's: cushions with no line round them, a narrow gap between
-/// files, folders as dark grey frames named in their bands, and files coloured by kind. Each is as
-/// close as this map draws, not a copy: the font, the background and the selection stay the
-/// application's own.</para>
+/// <see cref="WizTree"/> is WizTree 4's: cushions with no line round them, a narrow gap round
+/// what each folder holds, folders as dark grey frames named in their bands, and files coloured by
+/// kind. Each is as close as this map draws, not a copy: the font, the background and the selection
+/// stay the application's own.</para>
 ///
 /// <para>A preset changes nothing about the schemes chosen for each view. It is applied as a whole and
 /// then forgotten: a change made afterwards makes a custom look, and the window says so.</para>
@@ -73,10 +73,10 @@ public sealed record MapPreset(
         ExploreSpacing.Dense,
         ExploreColouring.Type);
 
-    /// <summary>Flat colour with faint lines, and nothing lit.</summary>
+    /// <summary>Flat colour with faint lines, and no cushion or bevel.</summary>
     public static readonly MapPreset Flat = new(
         "Flat",
-        "Every shape in its own colour with no light on it, a faint line round each and a firmer one round each folder.",
+        "Every shape in its own colour with no cushion or bevel, a faint line round each and a firmer one round each folder.",
         new MapStyle(
             Shading: MapShading.Flat,
             BlockBorders: MapBorder.Faint,
@@ -99,6 +99,18 @@ public sealed record MapPreset(
 
     /// <summary>Every preset, in the order the appearance window lists them.</summary>
     public static IReadOnlyList<MapPreset> All { get; } = [Standard, SpaceMonger, WizTree, Flat, Outlined];
+
+    /// <summary>
+    /// The preset <paramref name="look"/> is drawn as (see <see cref="Describes"/>), or null for a look
+    /// of the reader's own: a preset is forgotten once applied, so this is asked of the look, never
+    /// remembered beside it.
+    /// </summary>
+    public static MapPreset? Of(MapLook look)
+    {
+        ArgumentNullException.ThrowIfNull(look);
+
+        return All.FirstOrDefault(preset => preset.Describes(look));
+    }
 
     /// <summary><paramref name="look"/> with this preset's style and spacing, and its schemes as they were.</summary>
     public MapLook AppliedTo(MapLook look)

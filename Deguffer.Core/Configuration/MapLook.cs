@@ -39,10 +39,10 @@ public sealed record MapLook(
         ArgumentNullException.ThrowIfNull(preferences);
 
         return new(
-            Defined(preferences.TreemapSpacing, ExploreSpacing.Comfortable),
-            Defined(preferences.TreemapScheme, ExploreScheme.Standard),
-            Defined(preferences.IcicleScheme, ExploreScheme.Standard),
-            Defined(preferences.SunburstScheme, ExploreScheme.Standard),
+            StoredEnum.Defined(preferences.TreemapSpacing, ExploreSpacing.Comfortable),
+            StoredEnum.Defined(preferences.TreemapScheme, ExploreScheme.Standard),
+            StoredEnum.Defined(preferences.IcicleScheme, ExploreScheme.Standard),
+            StoredEnum.Defined(preferences.SunburstScheme, ExploreScheme.Standard),
             preferences.MapStyle.Defined());
     }
 
@@ -69,10 +69,6 @@ public sealed record MapLook(
         ExploreView.Sunburst => this with { Sunburst = scheme },
         _ => this with { Treemap = scheme },
     };
-
-    private static T Defined<T>(T value, T fallback)
-        where T : struct, Enum =>
-        Enum.IsDefined(value) ? value : fallback;
 
     /// <summary><paramref name="preferences"/> with this look in place of theirs, and nothing else changed.</summary>
     public AppPreferences Into(AppPreferences preferences)

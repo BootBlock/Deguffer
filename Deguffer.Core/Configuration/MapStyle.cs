@@ -52,19 +52,15 @@ public sealed record MapStyle(
     /// must never stop the map drawing (see <see cref="PreferenceStore.Load"/>).</para>
     /// </summary>
     public MapStyle Defined() => new(
-        Defined(Shading, Default.Shading),
-        Defined(Relief, Default.Relief),
-        Defined(BlockBorders, Default.BlockBorders),
-        Defined(FolderBorders, Default.FolderBorders),
-        Defined(BorderWidth, Default.BorderWidth),
-        Defined(BorderTone, Default.BorderTone),
-        Defined(FolderFill, Default.FolderFill),
+        StoredEnum.Defined(Shading, Default.Shading),
+        StoredEnum.Defined(Relief, Default.Relief),
+        StoredEnum.Defined(BlockBorders, Default.BlockBorders),
+        StoredEnum.Defined(FolderBorders, Default.FolderBorders),
+        StoredEnum.Defined(BorderWidth, Default.BorderWidth),
+        StoredEnum.Defined(BorderTone, Default.BorderTone),
+        StoredEnum.Defined(FolderFill, Default.FolderFill),
         FolderNames,
         ShapeNames);
-
-    private static T Defined<T>(T value, T fallback)
-        where T : struct, Enum =>
-        Enum.IsDefined(value) ? value : fallback;
 }
 
 /// <summary>
@@ -85,7 +81,7 @@ public enum MapShading
     /// </summary>
     Bevel = 1,
 
-    /// <summary>Each shape in its own colour and nothing else, with no light on it.</summary>
+    /// <summary>Each shape in its own colour and nothing else: no cushion and no bevel. The pointer's light still falls on it.</summary>
     Flat = 2,
 }
 

@@ -154,7 +154,7 @@
 
                         <TextBlock TextWrapping="Wrap"
                                    Style="{StaticResource SecondaryText}"
-                                   Text="A cushion rises to the middle of each shape and falls away to its edges. A bevel is flat, lighter along the top and left edges and darker along the bottom and right. Flat is each shape in its own colour with no light on it." />
+                                   Text="A cushion rises to the middle of each shape and falls away to its edges. A bevel is flat, lighter along the top and left edges and darker along the bottom and right. Flat is each shape in its own colour, with no cushion and no bevel." />
 
                         <ComboBox MinWidth="200"
                                   Header="Depth of a cushion or a bevel"

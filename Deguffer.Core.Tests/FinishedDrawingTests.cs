@@ -304,12 +304,14 @@ public sealed class FinishedDrawingTests
 
     /// <summary>
     /// The rows of the map coloured by depth: every shape the colour of its level, the levels repeating
-    /// every eight, and a shape's level counted from the folder on screen.
+    /// every eight, and a shape's level counted from the folder on screen. Drawn inside a folder, so a
+    /// level counted from the top of the scan would be one too many.
     /// </summary>
     [Fact]
     public void EveryShapeIsPaintedTheColourOfItsLevel()
     {
-        var drawing = Drawn(ExploreView.Treemap, MapStyle.Default, ShapeColours.ByDepth);
+        var folder = Tree.ChildrenOf(ExploreTreeBuilder.RootNode).ToArray().First(node => Tree.IsDirectory(node));
+        var drawing = Drawn(ExploreView.Treemap, MapStyle.Default, ShapeColours.ByDepth, folder);
         var quads = drawing.Quads()!.Quads.ToArray();
         var tiles = drawing.Tiles.Where(tile => CushionQuad.Of(tile, drawing.Finish).Reaches(Width, Height)).ToList();
 
@@ -321,7 +323,7 @@ public sealed class FinishedDrawingTests
             if (tiles[i].IsNode)
             {
                 Assert.Equal(DepthPalette.For(tiles[i].Depth), quads[i].Colour);
-                Assert.Equal(tiles[i].Depth, DepthPalette.LevelOf(Tree, tiles[i].Node, ExploreTreeBuilder.RootNode));
+                Assert.Equal(tiles[i].Depth, DepthPalette.LevelOf(Tree, tiles[i].Node, folder));
             }
         }
 
@@ -341,8 +343,8 @@ public sealed class FinishedDrawingTests
         Assert.Equal(0, DepthPalette.LevelOf(Tree, folder, folder));
     }
 
-    private static ExploreSurface Drawn(ExploreView view, MapStyle style, ShapeColours? colours = null) => ExploreSurface.Create(
-        Tree, ExploreTreeBuilder.RootNode, view, Width, Height, scale: 1, textScale: 1,
+    private static ExploreSurface Drawn(ExploreView view, MapStyle style, ShapeColours? colours = null, int root = ExploreTreeBuilder.RootNode) => ExploreSurface.Create(
+        Tree, root, view, Width, Height, scale: 1, textScale: 1,
         colours ?? ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, style: style);
 
     /// <summary>

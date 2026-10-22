@@ -80,8 +80,8 @@ public sealed class MapPresetTests
     }
 
     /// <summary>
-    /// WizTree 4 draws cushions with no line round them, a narrow gap between files, folders as dark
-    /// grey frames named in their bands, and files coloured by kind.
+    /// WizTree 4 draws cushions with no line round them, a narrow gap round what each folder holds,
+    /// folders as dark grey frames named in their bands, and files coloured by kind.
     /// </summary>
     [Fact]
     public void WizTreeIsCushionsWithNoLinesInGreyFoldersColouredByKind()
@@ -94,6 +94,23 @@ public sealed class MapPresetTests
         Assert.True(style.FolderNames);
         Assert.Equal(ExploreSpacing.Dense, MapPreset.WizTree.Spacing);
         Assert.Equal(ExploreColouring.Type, MapPreset.WizTree.Colouring);
+    }
+
+    /// <summary>
+    /// A look is drawn as the preset that describes it, and as none once a single choice moves it away
+    /// from every preset, which is the reader's own look the window names.
+    /// </summary>
+    [Fact]
+    public void ALookIsDrawnAsThePresetThatDescribesItOrAsNone()
+    {
+        foreach (var preset in MapPreset.All)
+        {
+            Assert.Same(preset, MapPreset.Of(preset.AppliedTo(MapLook.Default)));
+        }
+
+        var own = MapPreset.Flat.AppliedTo(MapLook.Default) with { Spacing = ExploreSpacing.Spacious };
+
+        Assert.Null(MapPreset.Of(own));
     }
 
     /// <summary>
