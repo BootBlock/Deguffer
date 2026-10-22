@@ -48,6 +48,9 @@ public sealed class ComponentStoreProviderTests : IDisposable
     private ComponentStoreCleanupProvider Cleanup(ComponentStoreAnalysis? analysis = null) =>
         new(_environment, _runner, FakeProcessInspector.NothingRunning, _system, _servicing, analysis);
 
+    private ComponentStoreCleanupProvider Cleanup(FakeProcessInspector inspector, OwnServicingCalls servicingCalls) =>
+        new(_environment, _runner, inspector, _system, _servicing, servicingCalls: servicingCalls);
+
     private ComponentStoreResetBaseProvider Reset(ComponentStoreAnalysis? analysis = null) =>
         new(_environment, _runner, FakeProcessInspector.NothingRunning, _system, _servicing, analysis);
 
@@ -329,6 +332,115 @@ public sealed class ComponentStoreProviderTests : IDisposable
         Assert.Equal(2, analyses);
         Assert.False(Assert.Single(result.Steps).Succeeded);
         Assert.DoesNotContain(_runner.Invocations, call => IsCleanup(call.Arguments));
+    }
+
+    /// <summary>
+    /// Windows starts its servicing stack for every analysis and keeps it running for minutes, so the
+    /// stack the analysis before the command woke is running when the hold is asked again. Taken for an
+    /// update, it held the cleanup on every run, and the store was offered again at the same size.
+    /// </summary>
+    [Fact]
+    public async Task TheServicingStackDeguffersOwnAnalysisWokeDoesNotHoldTheCleanup()
+    {
+        var inspector = FakeProcessInspector.NothingRunning;
+        WakingTheServicingStack(inspector, 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte);
+
+        var provider = Cleanup(inspector, new OwnServicingCalls());
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        var step = Assert.Single(result.Steps);
+        Assert.True(step.Succeeded, step.Message);
+        Assert.Equal(2 * Gigabyte, step.BytesReclaimed);
+        Assert.Contains(_runner.Invocations, call => IsCleanup(call.Arguments));
+        Assert.Equal(["TrustedInstaller", "TiWorker"], inspector.FindRunning(["TrustedInstaller", "TiWorker"]));
+    }
+
+    /// <summary>
+    /// The cleanup command is one of Deguffer's own DISM calls too. A servicing stack Windows starts for
+    /// it does not hold the scan that follows the clean.
+    /// </summary>
+    [Fact]
+    public async Task TheServicingStackTheCleanupWokeDoesNotHoldTheNextScan()
+    {
+        var inspector = FakeProcessInspector.NothingRunning;
+        Analyses(_ => inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow), 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte);
+
+        var provider = Cleanup(inspector, new OwnServicingCalls());
+        Assert.True(Assert.Single((await provider.ExecuteAsync(await provider.PlanAsync())).Steps).Succeeded);
+        Assert.Single(inspector.FindRunning(["TiWorker"]));
+
+        provider.InvalidateCaches();
+        var next = await provider.PlanAsync();
+
+        Assert.False(next.WaitsForAnUpdate);
+        Assert.Single(next.Steps);
+    }
+
+    /// <summary>
+    /// A servicing stack created outside every one of Deguffer's own calls was started by something
+    /// else, which may be an update, so it still holds the cleanup.
+    /// </summary>
+    [Fact]
+    public async Task AServicingStackStartedOutsideDeguffersOwnCallsHoldsTheCleanup()
+    {
+        var inspector = FakeProcessInspector.NothingRunning;
+        Analyses(null, 21 * Gigabyte);
+
+        var provider = Cleanup(inspector, new OwnServicingCalls());
+        var plan = await provider.PlanAsync();
+        inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow);
+        var result = await provider.ExecuteAsync(plan);
+
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.Contains("TiWorker", step.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(_runner.Invocations, call => IsCleanup(call.Arguments));
+    }
+
+    /// <summary>
+    /// A servicing stack whose creation time could not be read, as on an unelevated run, may be an
+    /// update's, so it holds even while Deguffer's own analysis is running.
+    /// </summary>
+    [Fact]
+    public async Task AServicingStackOfUnknownStartHoldsTheCleanup()
+    {
+        var inspector = FakeProcessInspector.NothingRunning;
+        _runner.Replying(Dism, arguments =>
+        {
+            inspector.WithRunning("TrustedInstaller");
+            return new CommandOutcome(0, Report(21 * Gigabyte), string.Empty);
+        });
+
+        var provider = Cleanup(inspector, new OwnServicingCalls());
+        var plan = await provider.PlanAsync();
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Assert.Single(result.Steps).Succeeded);
+        Assert.DoesNotContain(_runner.Invocations, call => IsCleanup(call.Arguments));
+    }
+
+    /// <summary>
+    /// DISM as <see cref="Analyses"/> sets it, which also starts Windows' servicing stack the first time
+    /// it is called, as Windows does for any DISM call, and leaves it running.
+    /// </summary>
+    private void WakingTheServicingStack(FakeProcessInspector inspector, params long[] actualSizes)
+    {
+        var woken = false;
+        var next = 0;
+
+        _runner.Replying(Dism, arguments =>
+        {
+            if (!woken)
+            {
+                woken = true;
+                inspector.WithRunning("TrustedInstaller", DateTimeOffset.UtcNow).WithRunning("TiWorker", DateTimeOffset.UtcNow);
+            }
+
+            return IsAnalysis(arguments)
+                ? new CommandOutcome(0, Report(actualSizes[Math.Min(next++, actualSizes.Length - 1)]), string.Empty)
+                : new CommandOutcome(0, "The operation completed successfully.", string.Empty);
+        });
     }
 
     /// <summary>

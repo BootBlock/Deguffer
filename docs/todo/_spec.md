@@ -1264,8 +1264,10 @@ say so. `/ResetBase` removes the means to uninstall every update installed so fa
 Tier 3 row of its own rather than a switch on the first. Both are sized by DISM's
 `/AnalyzeComponentStore`, whose actual size counts the store's hard links into Windows once, and
 what a clean freed is DISM's figure immediately before and after the command. Neither is planned or
-run while an update is unfinished. Deleting from the store by path, and everything else in this
-section, stays excluded.
+run while an update is unfinished. Windows starts its servicing stack for Deguffer's own analysis too
+and keeps it running for minutes, so a servicing process created while one of Deguffer's DISM calls
+ran is not taken for an update, and one of unknown creation time is. Deleting from the store by
+path, and everything else in this section, stays excluded.
 
 **Restore points are offered on the component store's terms: only through Windows' own route, and
 never by path.** They are kept as shadow copies in `System Volume Information`, which no folder shows

@@ -311,6 +311,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(IDiskCleanupHandlers) ? FakeDiskCleanupHandlers.Windows()
         : parameter == typeof(ISystemProtection) ? new FakeSystemProtection()
         : parameter == typeof(IWindowsServicing) ? FakeWindowsServicing.Settled
+        : parameter == typeof(OwnServicingCalls) ? new OwnServicingCalls()
 
         // Never the real one: it would list the driver store of whoever ran the suite.
         : parameter == typeof(IDriverStore) ? new FakeDriverStore()

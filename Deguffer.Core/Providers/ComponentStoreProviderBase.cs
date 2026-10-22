@@ -27,6 +27,7 @@ namespace Deguffer.Core.Providers;
 public abstract class ComponentStoreProviderBase : CleanupProviderBase
 {
     private readonly ComponentStoreAnalysis _analysis;
+    private readonly OwnServicingCalls _servicingCalls;
     private readonly string _store;
     private readonly string _packages;
     private readonly string _windows;
@@ -38,7 +39,8 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         ISystemDirectories? system,
         IWindowsServicing? servicing,
         ComponentStoreAnalysis? analysis,
-        IDirectoryScanner? scanner)
+        IDirectoryScanner? scanner,
+        OwnServicingCalls? servicingCalls)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -47,7 +49,8 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             servicing: servicing)
     {
         system ??= SystemDirectories.Current;
-        _analysis = analysis ?? new ComponentStoreAnalysis(system, Runner);
+        _servicingCalls = servicingCalls ?? OwnServicingCalls.Current;
+        _analysis = analysis ?? new ComponentStoreAnalysis(system, Runner, _servicingCalls);
         _windows = system.WindowsDirectory;
         _store = Path.Combine(_windows, "WinSxS");
         _packages = Path.Combine(_windows, "servicing", "Packages");
@@ -94,7 +97,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         }
 
         // Asked before DISM is, because the analysis waits on the servicing stack while it works.
-        if (UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is { } updating)
+        if (UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is { } updating)
         {
             return EmptyPlan(updating) with { ProtectedPaths = [UnfinishedUpdate.Held(_store)] };
         }
@@ -141,6 +144,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
                     SharesReclaim = Overhead,
                     RequiresElevation = true,
                     HeldWhileUpdating = true,
+                    ServicingCalls = _servicingCalls,
                 },
             ],
             ProtectedPaths = Protect(

@@ -5425,7 +5425,9 @@ Nothing is offered:
   an unelevated scan says so, and a scan as administrator is what lets Deguffer ask.
 - **while an update is unfinished**: while a restart is owed for an update, or the servicing stack
   or Windows Setup is running. It is asked when the scan plans the row and again when the clean
-  reaches it. The previous installation's test for a restart due to move a file inside its folder
+  reaches it. Windows starts the servicing stack for Deguffer's own analysis too, and keeps it
+  running for minutes, so a servicing stack started during one of Deguffer's own DISM calls does not
+  count. The previous installation's test for a restart due to move a file inside its folder
   does not apply, because this row removes nothing by path.
 - **where Windows reports that the store does not need cleaning**, which is DISM's own verdict.
 

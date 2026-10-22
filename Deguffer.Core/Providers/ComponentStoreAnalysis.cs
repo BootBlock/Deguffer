@@ -13,10 +13,18 @@ namespace Deguffer.Core.Providers;
 /// the run asks of <see cref="MeasureAsync"/> is never kept: it is a figure subtracted from another,
 /// and a remembered one would report nothing freed.</para>
 ///
+/// <para><b>Every call is recorded in <see cref="OwnServicingCalls"/>.</b> Windows starts its servicing
+/// stack for the analysis and keeps it running for minutes afterwards, and the hold on an unfinished
+/// update would otherwise take that stack for an update and refuse the cleanup the analysis was
+/// measuring for.</para>
+///
 /// <para><b>Only an administrator is answered.</b> DISM refuses every other account with exit code
 /// 740 before it looks at anything, which is a reason to elevate rather than a failure to report.</para>
 /// </summary>
-public sealed class ComponentStoreAnalysis(ISystemDirectories system, IProcessRunner runner) : IToolMeasurement
+public sealed class ComponentStoreAnalysis(
+    ISystemDirectories system,
+    IProcessRunner runner,
+    OwnServicingCalls? servicingCalls = null) : IToolMeasurement
 {
     /// <summary>The read-only analysis, in English so its labels can be read.</summary>
     public const string AnalyzeArguments = "/Online /English /Cleanup-Image /AnalyzeComponentStore";
@@ -25,6 +33,7 @@ public sealed class ComponentStoreAnalysis(ISystemDirectories system, IProcessRu
     public const int ElevationRequired = 740;
 
     private readonly PassMemo<Task<ComponentStoreReading>> _reading = new();
+    private readonly OwnServicingCalls _servicingCalls = servicingCalls ?? OwnServicingCalls.Current;
 
     /// <summary>DISM, as Windows ships it for this machine's architecture.</summary>
     public string Dism { get; } = NativeSystemTool.In(system, "Dism.exe");
@@ -41,7 +50,7 @@ public sealed class ComponentStoreAnalysis(ISystemDirectories system, IProcessRu
 
     private async Task<ComponentStoreReading> ReadAsync(CancellationToken ct)
     {
-        var outcome = await runner.RunAsync(Dism, AnalyzeArguments, ct).ConfigureAwait(false);
+        var outcome = await _servicingCalls.MakeAsync(() => runner.RunAsync(Dism, AnalyzeArguments, ct)).ConfigureAwait(false);
 
         if (outcome.ExitCode == ElevationRequired)
         {
