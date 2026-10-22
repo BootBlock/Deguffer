@@ -227,7 +227,7 @@ internal static class MftExploreReader
         return new MftExploreRead(
             ExploreTree.Create(
                 rootPath, root, nameNumbers, names.Freeze(), parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-                created, modified, visibility, present, ExploreChildOrder.BySize),
+                created, modified, visibility, present, ExploreChildOrder.BySize, ct: ct),
             FallbackReason.None,
             !couldNotReadWholeTable,
             !couldNotReadWholeTable && !sawUnreadableRecord);

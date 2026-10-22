@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using Deguffer.Core.Scanning;
 
@@ -412,8 +413,9 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// linked, so that tree is not sorted at all — the sort that, done again on every snapshot of a
     /// scan in progress, was most of its cost.
     ///
-    /// <paramref name="ct"/> is asked between the passes, so a snapshot of a walk that has ended
-    /// stops within one pass rather than holding the end of the walk until it is finished.
+    /// <paramref name="ct"/> is asked between the passes and by the sort, so a snapshot of a walk that
+    /// has ended, or a table read whose scan was cancelled, stops within one pass rather than holding
+    /// the end of the scan until the tree is finished.
     /// </summary>
     internal static ExploreTree Create(
         string rootPath,
@@ -475,7 +477,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
 
         if (childOrder is ExploreChildOrder.BySize)
         {
-            SortChildren(childStart, children, sizes, nameNumbers, names);
+            SortChildren(childStart, children, sizes, nameNumbers, names, ct);
         }
 
         return new ExploreTree(
@@ -638,40 +640,66 @@ public sealed class ExploreTree : Layout.ITrackedTree
     }
 
     /// <summary>
+    /// How many threads order the children of a tree at once. Measured on a synthetic tree of 2.4
+    /// million nodes, 240 thousand of them folders: one thread took about 250 ms, two about 130 and
+    /// four about 95, and thirty-two no less than four. Threads past four would only be taken from a
+    /// scan of another volume, which the duplicate search runs beside this one.
+    /// </summary>
+    private static readonly int SortWorkers = Math.Min(Environment.ProcessorCount, 4);
+
+    /// <summary>
+    /// Nodes handed to a sorting thread at a time, files among them, so a share holds a few hundred
+    /// folders on an ordinary volume: small enough to spread folders of very different sizes.
+    /// </summary>
+    private const int NodesPerShare = 4096;
+
+    /// <summary>
     /// Order each node's children by size, in place, once. See <see cref="ChildrenOf"/> for why the
     /// order belongs here rather than in each consumer. Name order needs no sort: see
     /// <see cref="Create"/>.
+    ///
+    /// <para>Each node here is one the root reaches (<see cref="ReachedNodes"/>), so a scan of one
+    /// folder sorts that folder's tree and not the volume around it. Each folder's children are
+    /// ordered apart from every other folder's, so the folders are shared among
+    /// <see cref="SortWorkers"/> threads.</para>
     /// </summary>
     private static void SortChildren(
-        int[] childStart, int[] children, long[] sizes, int[] nameNumbers, NamePool.Frozen names)
+        int[] childStart, int[] children, long[] sizes, int[] nameNumbers, NamePool.Frozen names, CancellationToken ct)
     {
         // One delegate each for the whole tree rather than one per directory. A volume has hundreds
         // of thousands of directories (G5).
         var byName = ByName(nameNumbers, names);
         Func<int, long> sizeOf = node => sizes[node];
 
-        // One key buffer for every directory, sized to the largest, rather than one per directory.
+        // One key buffer for each thread, sized to the largest folder, rather than one per folder.
         var most = 0;
+        var nodeCount = childStart.Length - 1;
 
-        for (var node = 0; node + 1 < childStart.Length; node++)
+        for (var node = 0; node < nodeCount; node++)
         {
             most = Math.Max(most, childStart[node + 1] - childStart[node]);
         }
 
-        var keys = new long[most];
-
-        for (var node = 0; node + 1 < childStart.Length; node++)
-        {
-            var from = childStart[node];
-            var length = childStart[node + 1] - from;
-
-            if (length <= 1)
+        Parallel.ForEach(
+            Partitioner.Create(0, nodeCount, NodesPerShare),
+            new ParallelOptions { MaxDegreeOfParallelism = SortWorkers, CancellationToken = ct },
+            () => new long[most],
+            (share, _, keys) =>
             {
-                continue;
-            }
+                for (var node = share.Item1; node < share.Item2; node++)
+                {
+                    var from = childStart[node];
+                    var length = childStart[node + 1] - from;
 
-            OrderBySize(children.AsSpan(from, length), keys, sizeOf, byName);
-        }
+                    if (length > 1)
+                    {
+                        OrderBySize(children.AsSpan(from, length), keys, sizeOf, byName);
+                    }
+                }
+
+                return keys;
+            },
+            static _ => { });
     }
 
     /// <summary>
