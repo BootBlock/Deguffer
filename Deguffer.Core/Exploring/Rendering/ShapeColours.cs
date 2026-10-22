@@ -7,11 +7,11 @@ namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
 /// What the colours of one drawing say: which branch a shape belongs to, how long ago it was last
-/// written, how much it grew since an earlier scan, or what kind of file it holds.
+/// written, how much it grew since an earlier scan, what kind of file it holds, or how deep it is.
 ///
-/// <para>Separate from <see cref="ExploreSurface"/> because only one of the four applies to every
-/// tree. A branch is a fact about any tree's shape. A last-written date, a growth and a kind of file
-/// are facts about a scanned drive, so a memory tree can be coloured by none of them.</para>
+/// <para>Separate from <see cref="ExploreSurface"/> because only two of the five apply to every
+/// tree. A branch and a depth are facts about any tree's shape. A last-written date, a growth and a
+/// kind of file are facts about a scanned drive, so a memory tree can be coloured by none of them.</para>
 ///
 /// <para>An aggregate and a volume's free space are coloured by neither. <see cref="ExploreSurface"/>
 /// settles that before asking, because neither is a thing with a branch or a date.</para>
@@ -68,8 +68,16 @@ public abstract class ShapeColours
             ExploreColouring.Age => new AgeColours(tree, scheme, nowUtc),
             ExploreColouring.Growth => new GrowthColours(tree, growth?.Describes(tree) == true ? growth : null),
             ExploreColouring.Type => new TypeColours(tree, ReferenceEquals(types?.Tree, tree) ? types : null),
+            ExploreColouring.Depth => ByDepth,
             _ => ByBranch(scheme),
         };
+
+    /// <summary>
+    /// A colour per level below the drawing's root, the same for every shape at that level. See
+    /// <see cref="DepthPalette"/>. Describes any tree, as a branch colouring does, and holds nothing,
+    /// so there is one (G5).
+    /// </summary>
+    public static ShapeColours ByDepth { get; } = new DepthColours();
 
     /// <summary>
     /// A step of a replay of what grew, painted as the map coloured by growth paints the tree now:
@@ -117,6 +125,11 @@ public abstract class ShapeColours
     {
         internal override TileColour For(ExploreSurface surface, int node, int depth) =>
             TilePalette.For(surface.HueOf(node), depth, scheme);
+    }
+
+    private sealed class DepthColours : ShapeColours
+    {
+        internal override TileColour For(ExploreSurface surface, int node, int depth) => DepthPalette.For(depth);
     }
 
     private sealed class ContrastedColours(ContrastColours colours) : ShapeColours

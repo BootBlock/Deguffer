@@ -9,7 +9,7 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class CanvasLightTests
 {
-    private static readonly CushionQuads Quads = new([], 1000, 1000, (_, _) => default);
+    private static readonly CushionQuads Quads = new([], 1000, 1000, _ => default, ShapeFinish.Cushioned);
 
     private static readonly PointerLight Here = new(100, 100, 10);
 

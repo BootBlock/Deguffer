@@ -243,10 +243,13 @@ public sealed class ContrastDrawingTests
             Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, Width, Height, scale, textScale,
             Contrasted, ExploreSpacing.Comfortable, VolumeSpace.None);
 
-        Assert.Equal(new QuadEdges(Text, width), drawing.Quads()!.Edges);
+        var finish = drawing.Quads()!.Finish;
+
+        Assert.Equal(MapShading.Flat, finish.Shading);
+        Assert.Equal(new ShapeBorders(Text, width, ShapeFinish.Whole, ShapeFinish.Whole), finish.Borders);
     }
 
-    /// <summary>A coloured map has no edges: its shapes are cushions.</summary>
+    /// <summary>A coloured map in the style nobody has changed has no edges: its shapes are cushions.</summary>
     [Fact]
     public void AColouredMapHasNoEdges()
     {
@@ -254,7 +257,7 @@ public sealed class ContrastDrawingTests
             Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
 
-        Assert.Null(drawing.Quads()!.Edges);
+        Assert.Equal(ShapeFinish.Cushioned, drawing.Quads()!.Finish);
         Assert.All(drawing.MorphShapes(drawing.NodesDrawn.ToHashSet()), shape => Assert.Null(shape.Edges));
     }
 
@@ -266,7 +269,7 @@ public sealed class ContrastDrawingTests
         var tiling = new MapTiling(Width, Height);
         var tile = drawing.Tile(tiling, tiling.At(1, 0.4, 0.6)!.Value);
 
-        Assert.Equal(drawing.Quads()!.Edges, tile.Quads().Edges);
+        Assert.Equal(drawing.Quads()!.Finish, tile.Quads().Finish);
         Assert.All(tile.Quads().Quads.ToArray(), quad => Assert.Equal(Window, quad.Colour));
     }
 

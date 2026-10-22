@@ -4,9 +4,10 @@
 // rasteriser's.
 //
 // The light is CushionShading's, and has to stay it: ambient plus Lambertian diffuse from van Wijk's
-// light, the same constants, the same flat shapes. CushionRenderer's test compares this picture with
-// the rasteriser's, pixel by pixel. The pointer's light (PointerLight) is added to it, and adds
-// nothing past its reach.
+// light, the same constants, the same flat shapes. The finish is ShapeFinish's, decided pixel by pixel
+// by the rule TileRasteriser decides it by, with its colours mixed in the same whole numbers out of
+// 256. CushionRenderer's test compares this picture with the rasteriser's, pixel by pixel. The
+// pointer's light (PointerLight) is added to it, and adds nothing past its reach.
 
 cbuffer Canvas : register(b0)
 {
@@ -25,19 +26,26 @@ cbuffer Canvas : register(b0)
     float strength;
     float height;
 
-    // How many pixels wide each quad's edges are drawn, inside its sides, in place of its cushion; zero
-    // for cushions. A high contrast theme's picture: see QuadEdges.
-    float edge;
+    // How many pixels wide the line inside each quad's sides is drawn; zero for none.
+    float lineWidth;
 
-    // The edges' red, green and blue, from 0 to 255, and a value nothing reads.
-    float4 edgeColour;
+    // The line's tone: red, green and blue from 0 to 255; and the shading: 0 for cushions, 1 for a
+    // bevel, 2 for flat.
+    float4 tone;
+
+    // How far a block's line and a folder's are mixed towards the tone, out of 256; how many pixels
+    // wide the bevel is; and how far its lit side is mixed towards white, out of 256.
+    float4 finish;
+
+    // How far the bevel's shaded side is mixed towards black, out of 256, and three values nothing reads.
+    float4 bevel;
 };
 
 struct Quad
 {
     int4 edges : EDGES;      // left, top, right, bottom: the columns and rows covered, the far ones excluded
     float ridge : RIDGE;     // zero for a flat shape
-    uint4 colour : COLOUR;   // red, green, blue, and a byte nothing reads
+    uint4 colour : COLOUR;   // red, green, blue, and one for a folder drawn round what it holds
     uint corner : SV_VertexID;
 };
 
@@ -46,6 +54,7 @@ struct Pixel
     float4 position : SV_Position;
     nointerpolation float4 edges : EDGES;
     nointerpolation float4 shade : SHADE;  // ridge, red, green, blue
+    nointerpolation uint framed : FRAMED;
 };
 
 Pixel vs(Quad quad)
@@ -58,22 +67,71 @@ Pixel vs(Quad quad)
     pixel.position = float4((at.x / size.x * 2) - 1, 1 - (at.y / size.y * 2), 0, 1);
     pixel.edges = edges;
     pixel.shade = float4(quad.ridge, float3(quad.colour.rgb));
+    pixel.framed = quad.colour.a;
     return pixel;
+}
+
+// ShapeFinish.Mix: each channel mixed amount parts in 256 towards the other, cut to a whole level.
+uint3 mix256(uint3 colour, uint3 toward, uint amount)
+{
+    return ((colour * (256 - amount)) + (toward * amount)) >> 8;
+}
+
+// The pointer's light on a point whose surface tilts by nx and ny: a point above the canvas, so a slope
+// facing it catches more of it, fading to nothing at its reach.
+float pointer(float2 at, float nx, float ny)
+{
+    if (strength <= 0)
+    {
+        return 0;
+    }
+
+    float3 normal = normalize(float3(nx, ny, 1));
+    float2 apart = lightAt - (at + 0.5);
+    float fade = 1 - saturate(dot(apart, apart) / (reach * reach));
+
+    return strength * saturate(dot(normal, normalize(float3(apart, height)))) * fade * fade;
 }
 
 float4 ps(Pixel pixel) : SV_Target
 {
     // The pixel's own column and row, as the rasteriser counts them: the position is its centre.
     float2 at = floor(pixel.position.xy);
+    uint3 colour = uint3(pixel.shade.yzw);
 
-    // Flat and unlit, with the edges inside the quad's sides, as TileRasteriser draws them: nothing of
-    // the light or the pointer's light, which a high contrast theme's picture has none of.
-    if (edge > 0)
+    // How far in from each side, in whole pixels. A side off the canvas is far away, so nothing is
+    // drawn along it.
+    float fromLeft = at.x - pixel.edges.x;
+    float fromTop = at.y - pixel.edges.y;
+    float fromRight = pixel.edges.z - 1 - at.x;
+    float fromBottom = pixel.edges.w - 1 - at.y;
+    float nearest = min(min(fromLeft, fromRight), min(fromTop, fromBottom));
+
+    uint amount = pixel.framed != 0 ? (uint)finish.y : (uint)finish.x;
+    float drawn = amount > 0 ? lineWidth : 0;
+    bool bevelled = tone.w == 1 && pixel.shade.x > 0;
+    float band = drawn + (bevelled ? finish.z : 0);
+
+    // The line, flat and unlit: nothing of the light or the pointer's light.
+    if (nearest < drawn)
     {
-        bool onEdge = at.x < pixel.edges.x + edge || at.x >= pixel.edges.z - edge
-            || at.y < pixel.edges.y + edge || at.y >= pixel.edges.w - edge;
+        return float4(float3(mix256(colour, uint3(tone.rgb), amount)) / 255, 1);
+    }
 
-        return float4((onEdge ? edgeColour.rgb : pixel.shade.yzw) / 255, 1);
+    // Flat inside, or the bevel along the edges: the lit side is the top or the left only where it is
+    // nearer than both the bottom and the right, as TileRasteriser decides it.
+    if (tone.w != 0)
+    {
+        uint3 flat = colour;
+
+        if (nearest < band)
+        {
+            flat = min(fromLeft, fromTop) < min(fromRight, fromBottom)
+                ? mix256(colour, uint3(255, 255, 255), (uint)finish.w)
+                : mix256(colour, uint3(0, 0, 0), (uint)bevel.x);
+        }
+
+        return float4(floor(clamp(float3(flat) * (1 + pointer(at, 0, 0)), 0, 255)) / 255, 1);
     }
 
     float spanX = pixel.edges.z - pixel.edges.x;
@@ -86,18 +144,7 @@ float4 ps(Pixel pixel) : SV_Target
 
     // CushionShading.LightAt, with its light above and to the left.
     float cosine = ((nx * -0.09759) + (ny * -0.19518) + 0.9759) / sqrt((nx * nx) + (ny * ny) + 1);
-    float light = 0.13 + (0.87 * saturate(cosine));
-
-    // The pointer's light: a point above the canvas, so a slope facing it catches more of it, fading to
-    // nothing at its reach.
-    if (strength > 0)
-    {
-        float3 normal = normalize(float3(nx, ny, 1));
-        float2 apart = lightAt - (at + 0.5);
-        float fade = 1 - saturate(dot(apart, apart) / (reach * reach));
-
-        light += strength * saturate(dot(normal, normalize(float3(apart, height)))) * fade * fade;
-    }
+    float light = 0.13 + (0.87 * saturate(cosine)) + pointer(at, nx, ny);
 
     // Truncated to a byte as CushionShading.Write truncates, so the two agree but for rounding at the
     // last bit of a float against a double.

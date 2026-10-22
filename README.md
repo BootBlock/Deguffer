@@ -213,9 +213,16 @@ explains most of these sources in detail.
 
 Explore reads the drive's file table when Deguffer runs as administrator, and walks the folders when
 it does not. You can view a whole drive or one folder as a treemap, an icicle, a sunburst or a list,
-and colour it by folder, by age, by growth or by file type. The Files view lists the largest files
-at any depth, filtered by name or wildcard, type, size, and how long it has been since each file was
-written.
+and colour it by folder, by age, by growth, by file type or by depth. The Files view lists the
+largest files at any depth, filtered by name or wildcard, type, size, and how long it has been since
+each file was written.
+
+The gear button beside the map opens *Map appearance*, where you can change how the map is drawn
+while you watch it change. Each view has its own colours. You can shade each shape as a cushion, a
+bevel or flat colour, draw a line of your chosen strength round each file and round each folder,
+fill folders with grey, and leave out the folder name bands or the names inside shapes. Presets set
+all of these at once, including looks like SpaceMonger's and WizTree's. Your choices are kept, and
+the Memory page's map uses them too.
 
 Two cards sit beside the map. *What grew* ranks folders by how much they grew since an earlier scan,
 and it can replay the change on the map from then to now. *What kind of files* breaks the folder

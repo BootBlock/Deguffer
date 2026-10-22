@@ -1,3 +1,7 @@
+using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring.Files;
+using Deguffer.Core.Exploring.Rendering;
+
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
@@ -20,6 +24,25 @@ public static class MapSample
 
     /// <summary>The sample, built once: it never changes.</summary>
     public static ExploreTree Tree { get; } = Build();
+
+    /// <summary>The kind of file each folder of the sample holds most of, measured once.</summary>
+    private static readonly DominantTypes Types = DominantTypes.Measure(Tree);
+
+    /// <summary>
+    /// The colours the sample is drawn in beside a map coloured by <paramref name="colouring"/> in
+    /// <paramref name="scheme"/>: the same colouring where the sample can say it, and its branches
+    /// otherwise.
+    ///
+    /// <para>A branch, a depth and a kind of file are facts about the sample's own shape and names. An
+    /// age and a growth are facts it has none of, and would draw it in the one grey a map gives what
+    /// has no date or no comparison, which shows nothing of what a look does.</para>
+    /// </summary>
+    public static ShapeColours ColoursFor(ExploreColouring colouring, ExploreScheme scheme) => colouring switch
+    {
+        ExploreColouring.Depth => ShapeColours.ByDepth,
+        ExploreColouring.Type => ShapeColours.For(Tree, ExploreColouring.Type, scheme, DateTime.UnixEpoch, growth: null, Types),
+        _ => ShapeColours.ByBranch(scheme),
+    };
 
     private static ExploreTree Build()
     {

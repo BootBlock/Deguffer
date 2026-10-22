@@ -73,14 +73,16 @@ public sealed class CushionQuadsTests
             ],
             100,
             100,
-            (node, depth) => new TileColour((byte)node, (byte)depth, 0)).Quads.ToArray();
+            tile => new TileColour((byte)tile.Node, (byte)tile.Depth, 0),
+            ShapeFinish.Cushioned).Quads.ToArray();
 
         Assert.Equal([new TileColour(7, 2, 0), new TileColour(9, 5, 0)], quads.Select(quad => quad.Colour));
     }
 
     /// <summary>
-    /// The GPU reads an array of quads as it stands, as four integers, a float and three bytes, so the
-    /// layout is part of what a quad is. A field moved or widened shades garbage, with no error.
+    /// The GPU reads an array of quads as it stands, as four integers, a float, three bytes of colour and
+    /// a byte saying whether the quad is a folder's frame, so the layout is part of what a quad is. A
+    /// field moved or widened shades garbage, with no error.
     /// </summary>
     [Fact]
     public void AQuadIsLaidOutAsTheGpuReadsIt()
@@ -88,16 +90,16 @@ public sealed class CushionQuadsTests
         Assert.Equal(24, Unsafe.SizeOf<CushionQuad>());
         Assert.Equal(24, Marshal.SizeOf<CushionQuad>());
 
-        var quad = new CushionQuad(1, 2, 3, 4, 0.5f, new TileColour(5, 6, 7));
+        var quad = new CushionQuad(1, 2, 3, 4, 0.5f, new TileColour(5, 6, 7), Framed: true);
         var bytes = MemoryMarshal.AsBytes(new ReadOnlySpan<CushionQuad>(in quad));
 
         Assert.Equal([1, 2, 3, 4], MemoryMarshal.Cast<byte, int>(bytes[..16]).ToArray());
         Assert.Equal(0.5f, MemoryMarshal.Read<float>(bytes[16..20]));
-        Assert.Equal([5, 6, 7], bytes[20..23].ToArray());
+        Assert.Equal([5, 6, 7, 1], bytes[20..24].ToArray());
     }
 
     private static CushionQuad[] Quads(params ExploreTile[] tiles) =>
-        new CushionQuads(tiles, 100, 100, (_, _) => Red).Quads.ToArray();
+        new CushionQuads(tiles, 100, 100, _ => Red, ShapeFinish.Cushioned).Quads.ToArray();
 
     private static (int Left, int Top, int Right, int Bottom) Edges(CushionQuad quad) =>
         (quad.Left, quad.Top, quad.Right, quad.Bottom);

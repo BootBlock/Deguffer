@@ -8,7 +8,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 ///
 /// <para>What both routes to the screen shade. The CPU paints them a region at a time with
 /// <see cref="TileRasteriser"/>, and the GPU draws them all in one pass. Made once, so neither works
-/// out a shape's colour or edges for itself, and the two cannot come to disagree about either.</para>
+/// out a shape's colour, edges or finish for itself, and the two cannot come to disagree about any of
+/// them.</para>
 ///
 /// <para>Only the quads that cover a pixel of the canvas. A zoomed picture's shapes run far off it,
 /// and a shape too thin to cover a pixel once rounded shows nowhere.</para>
@@ -19,14 +20,10 @@ public sealed class CushionQuads
 
     /// <summary>
     /// Get <paramref name="tiles"/> ready to shade on a canvas of <paramref name="width"/> by
-    /// <paramref name="height"/>, each painted the colour <paramref name="colourOf"/> gives its node at
-    /// its depth.
+    /// <paramref name="height"/>, each painted the colour <paramref name="colourOf"/> gives it.
     /// </summary>
-    /// <param name="edges">
-    /// The edges every quad is drawn with in place of its cushion, flat between them, or null for
-    /// cushions. See <see cref="QuadEdges"/>.
-    /// </param>
-    public CushionQuads(IReadOnlyList<ExploreTile> tiles, int width, int height, Func<int, int, TileColour> colourOf, QuadEdges? edges = null)
+    /// <param name="finish">How every quad is finished. See <see cref="ShapeFinish"/>.</param>
+    public CushionQuads(IReadOnlyList<ExploreTile> tiles, int width, int height, Func<ExploreTile, TileColour> colourOf, ShapeFinish finish)
     {
         ArgumentNullException.ThrowIfNull(tiles);
         ArgumentNullException.ThrowIfNull(colourOf);
@@ -35,7 +32,7 @@ public sealed class CushionQuads
 
         Width = width;
         Height = height;
-        Edges = edges;
+        Finish = finish;
 
         var quads = new CushionQuad[tiles.Count];
         var count = 0;
@@ -44,11 +41,11 @@ public sealed class CushionQuads
         for (var i = 0; i < tiles.Count; i++)
         {
             var tile = tiles[i];
-            var quad = CushionQuad.Of(tile);
+            var quad = CushionQuad.Of(tile, finish);
 
             if (quad.Reaches(width, height))
             {
-                quads[count++] = quad with { Colour = colourOf(tile.Node, tile.Depth) };
+                quads[count++] = quad with { Colour = colourOf(tile) };
             }
         }
 
@@ -59,11 +56,8 @@ public sealed class CushionQuads
 
     public int Height { get; }
 
-    /// <summary>
-    /// The edges every quad is drawn with, flat and unlit between them, or null where each is shaded as
-    /// a cushion. Both routes to the screen draw them alike.
-    /// </summary>
-    public QuadEdges? Edges { get; }
+    /// <summary>How every quad is finished. Both routes to the screen draw it alike.</summary>
+    public ShapeFinish Finish { get; }
 
     /// <summary>Every quad that covers a pixel of the canvas, in the order they are drawn.</summary>
     public ReadOnlySpan<CushionQuad> Quads => _quads;

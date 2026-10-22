@@ -1295,6 +1295,12 @@ public sealed partial class ExploreViewModel : ObservableObject
             figures += tree.IsDirectory(node) ? $", largest kind: {kind}" : $", {kind}";
         }
 
+        // The level the shape is painted for, where the map is coloured by depth, for the same reason.
+        if (SelectedColouring == ExploreColouring.Depth && DepthPalette.LevelOf(tree, node, CurrentNode) is { } level)
+        {
+            figures += $", {DepthPalette.Name(level).ToLowerInvariant()}";
+        }
+
         return (path, figures, Joined(_guide.DescribeNearest(path)?.Tip(), HiddenSpaceNote.For(tree, node, Volume)));
     }
 

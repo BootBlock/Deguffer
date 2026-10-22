@@ -1,14 +1,13 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
-using Deguffer.Core.Exploring.Rendering;
-using Windows.UI;
 
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
 /// What the map appearance window shows and changes: the colours the picture on screen is drawn in,
-/// and how much room a treemap leaves round each folder.
+/// how much room a treemap leaves round each folder, how every shape is finished, and the presets
+/// that set all of those at once.
 ///
 /// <para>It holds the look rather than reading it from the preferences each time, and applies a
 /// change before it writes it. See <see cref="MapLook"/> for why that order: somebody trying colours
@@ -16,6 +15,24 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class MapAppearanceViewModel : ObservableObject
 {
+    /// <summary>Every property a change of look can move, raised together so each box shows the look as it now stands.</summary>
+    private static readonly string[] LookProperties =
+    [
+        nameof(SchemeIndex),
+        nameof(SpacingIndex),
+        nameof(ShadingIndex),
+        nameof(ReliefIndex),
+        nameof(BlockBordersIndex),
+        nameof(FolderBordersIndex),
+        nameof(BorderWidthIndex),
+        nameof(BorderToneIndex),
+        nameof(FolderFillIndex),
+        nameof(FolderNames),
+        nameof(ShapeNames),
+        nameof(PresetIndex),
+        nameof(PresetSummary),
+    ];
+
     private readonly PreferenceService _preferences;
 
     private MapLook _look;
@@ -46,11 +63,21 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     /// <summary>The look changed. Whoever draws a map draws it again.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>
+    /// A preset whose look is part of what its colours say was chosen, and the page is to colour its
+    /// map by this. The page applies and writes it as it does a choice in its own Colour box, which is
+    /// where that choice belongs.
+    /// </summary>
+    public event EventHandler<ExploreColouring>? ColouringChosen;
+
     /// <summary>The look as it stands, whether or not it has reached the preferences file yet.</summary>
     public MapLook Look => _look;
 
     /// <summary>Every scheme, in the order the window lists them.</summary>
     public IReadOnlyList<MapSchemeOption> Schemes => MapSchemeOption.All;
+
+    /// <summary>Every preset, in the order the window lists them.</summary>
+    public IReadOnlyList<MapPreset> Presets => MapPreset.All;
 
     /// <summary>
     /// The view the page is showing, which is the one the scheme picker speaks for. Set by the page
@@ -60,6 +87,13 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SchemeHeading))]
     [NotifyPropertyChangedFor(nameof(SchemeIndex))]
     public partial ExploreView View { get; set; }
+
+    /// <summary>
+    /// What the colours on the page's map say, which the preview is coloured by as near as it can be.
+    /// Set by the page whenever its Colour box moves.
+    /// </summary>
+    [ObservableProperty]
+    public partial ExploreColouring Colouring { get; set; }
 
     /// <summary>Which picture the scheme picker changes, said in words because the picker is one list for three views.</summary>
     public string SchemeHeading => MapLook.Drawn(View) switch
@@ -106,6 +140,90 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         }
     }
 
+    /// <summary>Index into the shading list, ordered to match <see cref="MapShading"/>.</summary>
+    public int ShadingIndex
+    {
+        get => (int)_look.Style.Shading;
+        set => Restyle(value, style => style with { Shading = (MapShading)value });
+    }
+
+    /// <summary>Index into the relief list, ordered to match <see cref="MapRelief"/>.</summary>
+    public int ReliefIndex
+    {
+        get => (int)_look.Style.Relief;
+        set => Restyle(value, style => style with { Relief = (MapRelief)value });
+    }
+
+    /// <summary>Index into the list of lines round each block, ordered to match <see cref="MapBorder"/>.</summary>
+    public int BlockBordersIndex
+    {
+        get => (int)_look.Style.BlockBorders;
+        set => Restyle(value, style => style with { BlockBorders = (MapBorder)value });
+    }
+
+    /// <summary>Index into the list of lines round each folder, ordered to match <see cref="MapBorder"/>.</summary>
+    public int FolderBordersIndex
+    {
+        get => (int)_look.Style.FolderBorders;
+        set => Restyle(value, style => style with { FolderBorders = (MapBorder)value });
+    }
+
+    /// <summary>Index into the line width list, ordered to match <see cref="MapBorderWidth"/>.</summary>
+    public int BorderWidthIndex
+    {
+        get => (int)_look.Style.BorderWidth;
+        set => Restyle(value, style => style with { BorderWidth = (MapBorderWidth)value });
+    }
+
+    /// <summary>Index into the line tone list, ordered to match <see cref="MapBorderTone"/>.</summary>
+    public int BorderToneIndex
+    {
+        get => (int)_look.Style.BorderTone;
+        set => Restyle(value, style => style with { BorderTone = (MapBorderTone)value });
+    }
+
+    /// <summary>Index into the folder fill list, ordered to match <see cref="MapFolderFill"/>.</summary>
+    public int FolderFillIndex
+    {
+        get => (int)_look.Style.FolderFill;
+        set => Restyle(value, style => style with { FolderFill = (MapFolderFill)value });
+    }
+
+    /// <summary>Whether each treemap folder with room for one keeps a band with its name in it.</summary>
+    public bool FolderNames
+    {
+        get => _look.Style.FolderNames;
+        set => Restyle(style => style with { FolderNames = value });
+    }
+
+    /// <summary>Whether a shape with room for it has its name and size written inside it.</summary>
+    public bool ShapeNames
+    {
+        get => _look.Style.ShapeNames;
+        set => Restyle(style => style with { ShapeNames = value });
+    }
+
+    /// <summary>
+    /// Index into the preset list of the preset the look is drawn as, or -1 for a look of the reader's
+    /// own. Set to apply that preset.
+    /// </summary>
+    public int PresetIndex
+    {
+        get => MapPreset.Of(_look) is { } preset ? MapPreset.All.Index().First(entry => entry.Item == preset).Index : -1;
+        set
+        {
+            if (value >= 0 && value < MapPreset.All.Count)
+            {
+                Choose(MapPreset.All[value]);
+            }
+        }
+    }
+
+    /// <summary>Which preset the look is drawn as, in words, or that it is the reader's own.</summary>
+    public string PresetSummary => MapPreset.Of(_look) is { } preset
+        ? $"The map is drawn as the {preset.Name} preset."
+        : "The map is drawn in a look of your own. Choose a preset to start again from it.";
+
     /// <summary>
     /// Take up a spacing chosen on the Settings page while the Explore page was away. Not written
     /// back, because the Settings page has already written it.
@@ -130,18 +248,53 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
         _look = _look with { Spacing = stored };
 
-        OnPropertyChanged(nameof(SpacingIndex));
-        Changed?.Invoke(this, EventArgs.Empty);
+        Raise();
     }
 
     /// <summary>
-    /// Show <paramref name="look"/>, then write the one setting that changed through
+    /// Show and write <paramref name="preset"/>'s look in one change, and hand its colouring to the
+    /// page where it has one. The colouring goes even where the look was already the preset's, because
+    /// a reader choosing it again is asking for the whole of it.
+    /// </summary>
+    private void Choose(MapPreset preset)
+    {
+        if (Apply(preset.AppliedTo(_look), preset.Into))
+        {
+            _storedSpacing = preset.Spacing;
+        }
+
+        if (preset.Colouring is { } colouring)
+        {
+            ColouringChosen?.Invoke(this, colouring);
+        }
+    }
+
+    /// <summary>Change one part of the style, where <paramref name="index"/> is a choice. See <see cref="SchemeIndex"/> for -1.</summary>
+    private void Restyle(int index, Func<MapStyle, MapStyle> change)
+    {
+        if (index >= 0)
+        {
+            Restyle(change);
+        }
+    }
+
+    /// <summary>
+    /// Change one part of the style, on screen and in the preferences. Only that part is written: the
+    /// rest of the stored style is left as the file holds it.
+    /// </summary>
+    private void Restyle(Func<MapStyle, MapStyle> change) =>
+        Apply(
+            _look with { Style = change(_look.Style) },
+            current => current with { MapStyle = change(current.MapStyle.Defined()) });
+
+    /// <summary>
+    /// Show <paramref name="look"/>, then write the settings that changed through
     /// <paramref name="write"/>.
     ///
     /// <para>Applied first and written second, as the Explore page's own boxes are. A file that could
-    /// not be written leaves the map in the colours the reader picked, for this session.</para>
+    /// not be written leaves the map in the look the reader picked, for this session.</para>
     ///
-    /// <para>The one setting rather than the whole look. The spacing is also chosen on the Settings
+    /// <para>Only what changed rather than the whole look. The spacing is also chosen on the Settings
     /// page while this window can stay open, and writing every field would put back whatever this
     /// window last knew over what the reader has since chosen there.</para>
     /// </summary>
@@ -155,77 +308,19 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
         _look = look;
 
-        OnPropertyChanged(nameof(SchemeIndex));
-        OnPropertyChanged(nameof(SpacingIndex));
-        Changed?.Invoke(this, EventArgs.Empty);
+        Raise();
 
         return _preferences.Update(write);
     }
-}
 
-/// <summary>
-/// One scheme as the window offers it: a name, what it looks like in a sentence, and a strip of
-/// its colours, so the choice can be made by eye before it is made on the map.
-///
-/// <para>Which scheme an option is, is its place in <see cref="All"/>: the list is bound by index,
-/// as the other boxes indexed against an enum are, so <see cref="All"/> is in
-/// <see cref="ExploreScheme"/>'s order and built from it.</para>
-///
-/// <para>The strips are colours rather than brushes. A brush is a XAML object, and one made in a
-/// static initialiser ties every reader of <see cref="All"/> to a running XAML host; the window's
-/// template paints each swatch from its colour instead. The strips are decoration: the name and the
-/// sentence say what the scheme is, with or without them (§6.5).</para>
-/// </summary>
-/// <param name="Branches">A few branch colours at the first level, as a treemap's largest folders are drawn.</param>
-/// <param name="Ages">The age bands, newest first, without the grey for an undated entry.</param>
-public sealed record MapSchemeOption(
-    string Name,
-    string Description,
-    IReadOnlyList<MapSwatch> Branches,
-    IReadOnlyList<MapSwatch> Ages)
-{
-    /// <summary>
-    /// Hues spread round the circle, and alternately lifted, as a folder's children are given them.
-    /// </summary>
-    private static readonly BranchHue[] SampleHues =
-    [
-        new(0, 30, false),
-        new(60, 30, true),
-        new(120, 30, false),
-        new(180, 30, true),
-        new(240, 30, false),
-        new(300, 30, true),
-    ];
-
-    /// <summary>Every scheme, in <see cref="ExploreScheme"/>'s order, built once for the life of the app (G5).</summary>
-    public static IReadOnlyList<MapSchemeOption> All { get; } =
-        [.. Enum.GetValues<ExploreScheme>().Select(Option)];
-
-    /// <summary>What a screen reader announces for the row, which has no text beside the swatches.</summary>
-    public string Spoken => $"{Name}. {Description}";
-
-    private static MapSchemeOption Option(ExploreScheme scheme)
+    /// <summary>Tell every box and whoever draws a map that the look moved.</summary>
+    private void Raise()
     {
-        var (name, description) = scheme switch
+        foreach (var property in LookProperties)
         {
-            ExploreScheme.Vivid => ("Vivid", "Stronger colours. Ages run from yellow through orange to blue."),
-            ExploreScheme.Soft => ("Soft", "Pale colours. Ages run from pale yellow to lilac."),
-            ExploreScheme.Deep => ("Deep", "Darker colours. Ages run from cream through red to dark purple."),
-            _ => ("Standard", "Even colours. Ages run from yellow to purple."),
-        };
+            OnPropertyChanged(property);
+        }
 
-        return new(
-            name,
-            description,
-            [.. SampleHues.Select(hue => new MapSwatch(TilePalette.For(hue, 1, scheme)))],
-            [.. AgePalette.Bands(scheme).SkipLast(1).Select(band => new MapSwatch(band.Colour))]);
+        Changed?.Invoke(this, EventArgs.Empty);
     }
-}
-
-/// <summary>One colour of a scheme's strip, as the map draws it.</summary>
-/// <param name="Tile">The colour as the map's palette states it.</param>
-public sealed record MapSwatch(TileColour Tile)
-{
-    /// <summary>The colour the window's template paints the swatch in. Opaque, as a tile is drawn.</summary>
-    public Color Colour => Color.FromArgb(255, Tile.Red, Tile.Green, Tile.Blue);
 }

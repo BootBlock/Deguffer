@@ -17,8 +17,9 @@ public sealed class SunburstSurface : ExploreSurface
         int width,
         int height,
         LayoutLimits limits,
-        ShapeColours colours)
-        : base(tree, root, width, height, limits, colours, viewport: null)
+        ShapeColours colours,
+        MapStyle style)
+        : base(tree, root, width, height, limits, colours, style, viewport: null)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
 
@@ -28,7 +29,7 @@ public sealed class SunburstSurface : ExploreSurface
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override CanvasPainter Painter(TileColour background) =>
-        new SectorRasteriser(_hits, Width, Height, background, ColourFor, Edges);
+        new SectorRasteriser(_hits, Width, Height, background, (node, depth) => ColourFor(node, depth), Finish);
 
     public override CushionQuads? Quads() => null;
 
@@ -183,7 +184,9 @@ public sealed class SunburstSurface : ExploreSurface
         {
             if (!sector.IsAggregate && nodes.Contains(sector.Node))
             {
-                shapes.Add(new MorphShape(sector.Node, sector.Depth, ColourFor(sector.Node, sector.Depth), MorphOutline.Of(sunburst, sector), Edges));
+                var colour = ColourFor(sector.Node, sector.Depth);
+
+                shapes.Add(new MorphShape(sector.Node, sector.Depth, colour, MorphOutline.Of(sunburst, sector), Finish.EdgesOf(colour, folder: false)));
             }
         }
 
@@ -307,6 +310,12 @@ public sealed class SunburstSurface : ExploreSurface
         // there is always room across the ring for one line of text.
         var sunburst = _hits.Sunburst;
         var labels = new List<ExploreLabel>();
+
+        // Every name on a sunburst is inside its own sector, so a style that writes none writes nothing.
+        if (!Style.ShapeNames)
+        {
+            return labels;
+        }
 
         foreach (var sector in sunburst.Sectors)
         {
