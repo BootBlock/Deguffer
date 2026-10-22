@@ -282,7 +282,7 @@ public sealed class PlanExecutor(
     {
         _inspector.Invalidate();
 
-        if (UnfinishedUpdate.HoldsEverything(_servicing, _inspector) is { } everything)
+        if (UnfinishedUpdate.HoldsEverything(_servicing, _inspector, (step as RunCommandStep)?.ServicingCalls) is { } everything)
         {
             return $"Nothing was removed: {everything}";
         }
@@ -369,13 +369,17 @@ public sealed class PlanExecutor(
         var measuredBefore = step.MeasuredBy is { } asked ? await asked.MeasureAsync(ct).ConfigureAwait(false) : before;
 
         // Asked again, because the tool's measurement can take a minute, and an update that starts
-        // during it is exactly what the hold exists for.
+        // during it is exactly what the hold exists for. The servicing stack the measurement itself
+        // woke is not that update, where the step names the record it was made in: see
+        // RunCommandStep.ServicingCalls.
         if (step is { HeldWhileUpdating: true, MeasuredBy: not null } && StillUpdating(step) is { } updating)
         {
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
         }
 
-        var outcome = await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
+        var outcome = step.ServicingCalls is { } calls
+            ? await calls.MakeAsync(() => runner.RunAsync(step.FileName, step.Arguments, ct)).ConfigureAwait(false)
+            : await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
 
         if (outcome.Succeeded && step is { Removes: { } item, Scheduled: { } scheduled })
         {

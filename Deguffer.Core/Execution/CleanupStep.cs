@@ -284,6 +284,13 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// </summary>
     public ICommandTargetCheck? TargetCheck { get; init; }
 
+    /// <summary>
+    /// Where the command asks Windows' servicing stack to do something, the record the run makes it
+    /// in, so the stack it wakes is not taken for an update afterwards. Null for every command that
+    /// does not reach the servicing stack. See <see cref="OwnServicingCalls"/>.
+    /// </summary>
+    public OwnServicingCalls? ServicingCalls { get; init; }
+
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
 
     /// <summary>

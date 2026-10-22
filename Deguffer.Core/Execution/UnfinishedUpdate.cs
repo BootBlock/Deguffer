@@ -26,10 +26,23 @@ internal static class UnfinishedUpdate
     ];
 
     /// <summary>
+    /// The servicing stack, which Windows also starts for any DISM call, Deguffer's own included.
+    /// The setup engine is never started that way, so it always holds.
+    /// </summary>
+    private static readonly HashSet<string> ServicingStack = new(["TiWorker", "TrustedInstaller"], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Why nothing an update left may be offered on this machine right now, or null where nothing
     /// says an update is going on.
     /// </summary>
-    public static string? HoldsEverything(IWindowsServicing servicing, IProcessInspector inspector)
+    /// <param name="ownCalls">
+    /// Deguffer's own calls into the servicing stack, for a DISM command alone, whose stack the hold
+    /// then does not take for an update where <paramref name="ownCalls"/> shows Deguffer woke it. An
+    /// update that reuses that stack cannot be told from it, which is safe only for DISM: Windows runs
+    /// one servicing session at a time, and DISM refuses to clean while a restart is owed. Null for
+    /// a removal by path, which nothing serialises against an update, so any servicing stack holds it.
+    /// </param>
+    public static string? HoldsEverything(IWindowsServicing servicing, IProcessInspector inspector, OwnServicingCalls? ownCalls = null)
     {
         if (servicing.IsRestartPending)
         {
@@ -37,7 +50,13 @@ internal static class UnfinishedUpdate
                 + "part of it. They are offered once Windows has restarted.";
         }
 
-        var running = inspector.FindRunning(Processes);
+        IReadOnlyList<string> running =
+        [
+            .. inspector.FindRunningProcesses(Processes)
+                .Where(process => !(ownCalls is not null && ServicingStack.Contains(process.Name) && process.StartedAt is { } started && ownCalls.Started(started)))
+                .Select(process => process.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+        ];
 
         return running.Count > 0
             ? $"Windows is installing an update now ({string.Join(", ", running)} "
