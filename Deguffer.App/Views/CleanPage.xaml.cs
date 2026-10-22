@@ -66,6 +66,7 @@ public sealed partial class CleanPage : Page
         // silently back to Standard, in the same session and with no explanation.
         ShowFindingsAt(App.Preferences.Current.View);
         ListNotInstalled(App.Preferences.Current.ShowNotInstalled);
+        OrderFindings(App.Preferences.Current.StorageOrder);
 
         // A row's share bar comes in from nothing as the row itself arrives, rather than standing at
         // its figure under a row still fading in. Never as a row only scrolls into sight.
@@ -177,6 +178,30 @@ public sealed partial class CleanPage : Page
     {
         NotInstalledToggle.IsChecked = show;
         ViewModel.ShowNotInstalled = show;
+    }
+
+    /// <summary>
+    /// Order the rows by <paramref name="order"/>, and leave the selector agreeing with the order the
+    /// view-model took, which is the shipped one for a value no order is named for. Read once at
+    /// construction for the same reason the view is, and safe to call from the selector's own change
+    /// handler for the same reason <see cref="ShowFindingsAt"/> is.
+    /// </summary>
+    private void OrderFindings(StorageOrder order)
+    {
+        ViewModel.Order = order;
+        OrderSelector.SelectedIndex = (int)ViewModel.Order;
+    }
+
+    /// <summary>
+    /// Applied first and persisted second, exactly as the view is, and for the same reason: it
+    /// decides where a row stands and nothing about what gets deleted.
+    /// </summary>
+    private void OnOrderSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var order = (StorageOrder)OrderSelector.SelectedIndex;
+
+        OrderFindings(order);
+        App.Preferences.Update(current => current with { StorageOrder = ViewModel.Order });
     }
 
     /// <summary>

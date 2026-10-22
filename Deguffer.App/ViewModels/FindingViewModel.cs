@@ -177,7 +177,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <see cref="SharePercent"/> is: it answers a question about the list, not about this finding.
     ///
     /// Hidden rather than never built, so switching the filter needs no rescan and the row keeps
-    /// its place in the size order it was inserted at.
+    /// its place in the order it was inserted in.
     /// </summary>
     [ObservableProperty]
     public partial bool IsListed { get; set; } = true;
