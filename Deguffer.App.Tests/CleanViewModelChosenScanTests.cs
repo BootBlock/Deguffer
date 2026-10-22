@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
@@ -91,6 +92,46 @@ public class CleanViewModelChosenScanTests
         page.ViewModel.ScanChoice.Choose([temp], chosen: false);
 
         Assert.False(command.CanExecute(null));
+    }
+
+    /// <summary>
+    /// The Scan split button is disabled whole on <c>IsIdle</c>, since its command disables only the
+    /// primary half and the template leaves that half's disabled text on the accent. So it has to go
+    /// off for a scan and a clean alike, and come back on, with a notification each way for the
+    /// binding to follow.
+    /// </summary>
+    [Fact]
+    public void TheScanButtonIsOffWhileAScanOrACleanRunsAndBackOnAfter()
+    {
+        var temp = Provider("temp", ProviderCategory.TemporaryFiles, 10);
+        using var page = new StoragePage([temp]);
+        var told = new List<bool>();
+        page.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CleanViewModel.IsIdle))
+            {
+                told.Add(page.ViewModel.IsIdle);
+            }
+        };
+
+        Assert.True(page.ViewModel.IsIdle);
+
+        bool? idleWhileScanning = null;
+        temp.WhilePlanning = () => idleWhileScanning = page.ViewModel.IsIdle;
+        page.Scan();
+        temp.WhilePlanning = null;
+
+        Assert.False(idleWhileScanning);
+        Assert.True(page.ViewModel.IsIdle);
+        Assert.Equal([false, true], told);
+
+        bool? idleWhileCleaning = null;
+        temp.AfterCleaning = () => idleWhileCleaning = page.ViewModel.IsIdle;
+        page.Clean();
+
+        Assert.False(idleWhileCleaning);
+        Assert.True(page.ViewModel.IsIdle);
+        Assert.Equal([false, true, false, true], told);
     }
 
     /// <summary>

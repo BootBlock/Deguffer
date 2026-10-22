@@ -307,6 +307,7 @@ public sealed partial class CleanViewModel : ObservableObject
     public partial InfoBarSeverity StatusSeverity { get; set; } = InfoBarSeverity.Informational;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyCanExecuteChangedFor(nameof(PreviewCommand))]
     [NotifyCanExecuteChangedFor(nameof(PreviewChosenCommand))]
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
@@ -1185,7 +1186,14 @@ public sealed partial class CleanViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRunResult));
     }
 
-    private bool CanRun() => !IsBusy;
+    /// <summary>
+    /// Whether a scan can start. The Scan split button is disabled as a whole on it, rather than
+    /// through its command, because a command disables only the primary half: the template then
+    /// draws that half's disabled text over the accent it keeps behind it, where it cannot be read.
+    /// </summary>
+    public bool IsIdle => !IsBusy;
+
+    private bool CanRun() => IsIdle;
 
     /// <summary>
     /// Elevating ends this process, so it waits for this page's own work and for every page's
