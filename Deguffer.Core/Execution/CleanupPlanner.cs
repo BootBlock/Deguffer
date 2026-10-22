@@ -330,9 +330,9 @@ public sealed class CleanupPlanner
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
 
     /// <summary>
-    /// Where <paramref name="provider"/> stands in <see cref="Providers"/>: the order findings of equal
-    /// size are listed in, because a pass reports them in the order their providers finish
-    /// (<see cref="Viewing.SizeOrder"/>).
+    /// Where <paramref name="provider"/> stands in <see cref="Providers"/>: the order findings that
+    /// compare equal are listed in, because a pass reports them in the order their providers finish
+    /// (<see cref="Viewing.StorageRowOrder"/>).
     /// </summary>
     public int PlaceOf(ICleanupProvider provider) => _places[provider];
 
