@@ -226,6 +226,30 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A file that has taken a picked folder's name since the picture was drawn is not the folder
+    /// deleted, and not a folder partly deleted either.
+    /// </summary>
+    [Fact]
+    public async Task APickedFolderThatIsNowAFileIsLeftAloneAndSaysSo()
+    {
+        var file = _temp.CreateFile(32, "profile", "Downloads", "junk");
+        var sibling = _temp.CreateFile(8, "profile", "Downloads", "keep.bin");
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(file, IsDirectory: true, Bytes: 32)],
+            ExploreRemovalMode.Permanent,
+            _policy);
+
+        Assert.Empty(report.Removed);
+        Assert.Equal(
+            "Not deleted: a file now stands where the folder was, and Deguffer left it alone.",
+            Assert.Single(report.Refused).Message);
+        Assert.Equal(32, new FileInfo(file).Length);
+        Assert.True(LongPath.FileExists(sibling));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// A file left in place says which kind of refusal left it. The old sentence said a file held open
     /// and one this account may not touch "are the same answer from here", and the removal can now
     /// tell them apart: the reader answers the first by closing a program.

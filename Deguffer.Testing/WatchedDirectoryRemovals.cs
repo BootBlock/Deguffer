@@ -45,6 +45,8 @@ public sealed class WatchedDirectoryRemovals(
 
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
+    public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
+
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>

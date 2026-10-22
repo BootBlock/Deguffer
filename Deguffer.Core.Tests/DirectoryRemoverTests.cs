@@ -82,6 +82,38 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.True(outcome.RefusedFolders.IsEmpty);
     }
 
+    /// <summary>
+    /// A file that has taken the directory's name is not the directory gone. The directory probe
+    /// answers Absent for a file, which reported the root removed — a "Removed." for a path still
+    /// occupied, and an index the directory it belongs to went ahead of.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DoesNotReportAFileWhereTheDirectoryWasAsRemoved(bool keepRoot)
+    {
+        var file = _temp.CreateFile(1024, "cache");
+        var sibling = _temp.CreateFile(16, "beside.bin");
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            file, fileSystem: fs, bounds: new RemovalBounds(KeepRoot: keepRoot, []));
+
+        Assert.True(outcome.NotADirectory);
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(0, outcome.BytesReclaimed);
+        Assert.Equal(0, outcome.EntriesRemoved);
+        Assert.Empty(outcome.LeftStanding);
+
+        // §5.6: left alone, and so is what stands beside it.
+        Assert.Equal(1024, new FileInfo(file).Length);
+        Assert.True(File.Exists(sibling));
+
+        // §6.3: the probes that decided it were asked in extended-length form.
+        Assert.NotEmpty(fs.Paths);
+        Assert.All(fs.Paths, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+    }
+
     /// <summary>A path already gone was not removed by this run, so nothing is counted for it.</summary>
     [Fact]
     public async Task CountsNothingForATreeThatWasAlreadyGone() =>

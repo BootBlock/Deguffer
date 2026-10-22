@@ -496,7 +496,8 @@ public sealed class PlanExecutor(
 
         while (true)
         {
-            if (LongPath.ProbeDirectory(item) is PathPresence.Absent)
+            // The entry probe, because the directory probe answers Absent for a file at the path too.
+            if (LongPath.ProbeEntry(item) is PathPresence.Absent)
             {
                 return Marking.Removed;
             }
@@ -730,6 +731,8 @@ public sealed class PlanExecutor(
 
         var message = succeeded switch
         {
+            false when removal.NotADirectory => LeftInPlace.NotAFolder,
+
             false => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
 
             // Nothing came out and the folder is still standing, which is the guard's own case: it
@@ -801,13 +804,18 @@ public sealed class PlanExecutor(
             return Stopped(step, removal, stores);
         }
 
-        var succeeded = removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
-            || removal.Spared > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty);
+        // A file standing where the folder was is not a folder that held nothing, which is what a clear
+        // that met no refusal otherwise reports.
+        var succeeded = !removal.NotADirectory
+            && (removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
+                || removal.Spared > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty));
 
         // Asked of the entries as well as the bytes: a folder holding only empty folders reclaims no
         // bytes, and it was still cleared.
         var message = (succeeded, removal.BytesReclaimed, removal.EntriesRemoved) switch
         {
+            (false, _, _) when removal.NotADirectory => LeftInPlace.NotAFolder,
+
             (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to

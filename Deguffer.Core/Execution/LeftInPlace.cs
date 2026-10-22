@@ -18,6 +18,12 @@ namespace Deguffer.Core.Execution;
 internal static class LeftInPlace
 {
     /// <summary>
+    /// The sentence for a folder step that found a file at its path. See
+    /// <see cref="RemovalOutcome.NotADirectory"/>.
+    /// </summary>
+    public const string NotAFolder = "Left alone: a file now stands where this folder was, so nothing was removed.";
+
+    /// <summary>
     /// What a step that achieved something has to add about what it left behind, or nothing where it
     /// left nothing.
     /// </summary>
