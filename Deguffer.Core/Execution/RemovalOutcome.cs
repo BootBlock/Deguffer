@@ -95,4 +95,13 @@ public sealed record RemovalOutcome(
     /// it gathered and never tried, because it had gone inside each of them.
     /// </summary>
     public bool Interrupted { get; init; }
+
+    /// <summary>
+    /// Whether a file stood where the directory was meant to be, which the removal left alone. Never
+    /// with <see cref="RootRemoved"/>: nothing was taken, and something is still at the path.
+    ///
+    /// <para>Its own state rather than an absence, because an absence is a success — the directory went
+    /// before the run arrived — and a file nobody planned for is not.</para>
+    /// </summary>
+    public bool NotADirectory { get; init; }
 }

@@ -487,6 +487,121 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.False(Directory.Exists(cache));
     }
 
+    /// <summary>
+    /// A file standing where a directory step's folder was is left alone and said to be, rather than
+    /// reported as the folder removed. A folder that is simply gone is still a success, and is asserted
+    /// beside it so the two stay apart.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LeavesAFileWhereADirectoryStepsFolderWasAndSaysSo(bool clear)
+    {
+        var file = _temp.CreateFile(1024, "cache");
+        var sibling = _temp.CreateFile(16, "beside.bin");
+        CleanupStep step = clear ? new ClearDirectoryStep(file, "A cache") : new DeleteDirectoryStep(file, "A cache");
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
+
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(LeftInPlace.NotAFolder, outcome.Message);
+        Assert.Equal(0, outcome.BytesReclaimed);
+
+        // §5.6: nothing was taken, at the path or beside it.
+        Assert.Equal(1024, new FileInfo(file).Length);
+        Assert.True(File.Exists(sibling));
+        Assert.True(result.Verification!.Passed);
+    }
+
+    [Fact]
+    public async Task StillReportsAFolderThatWentBeforeTheRunAsRemoved()
+    {
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(
+                PlanDeleting(new DeleteDirectoryStep(Path.Combine(_temp.Path, "gone"), "A cache")),
+                runReach: null,
+                residue: null,
+                progress: null,
+                default);
+
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.True(outcome.Succeeded);
+        Assert.Equal("Removed.", outcome.Message);
+    }
+
+    /// <summary>
+    /// A file standing where an index was is no evidence the index went, so the removal of the index
+    /// is not complete and the directory it indexes is not touched. The removal read the file as the
+    /// index gone. Asked of the index removal itself, because in a run the look before an all-or-nothing
+    /// step meets the file first: this is the file arriving between that look and the removal.
+    /// </summary>
+    [Fact]
+    public async Task AFileWhereAnIndexWasLeavesTheIndexRemovalIncomplete()
+    {
+        var index = _temp.CreateFile(64, "project", "index");
+        var output = _temp.CreateDirectory("project", "out");
+        var step = new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] };
+
+        var removal = await IndexRemoval.RemoveAsync(step, MinimumAge.Off, RefusalLog, new RunResidue(), default);
+
+        Assert.False(removal.Complete);
+        Assert.True(removal.NotADirectory);
+
+        var outcome = removal.Stopped(step);
+
+        Assert.False(outcome.Succeeded);
+        Assert.Equal(
+            $"Left {LongPath.Display(output)} alone: a file now stands where part of its index was, "
+            + "so nothing shows the index is gone.",
+            outcome.Message);
+        Assert.Equal(64, new FileInfo(index).Length);
+    }
+
+    /// <summary>
+    /// The same file met by a whole run: whatever stops it, the folder the index belongs to and the
+    /// file both stay (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheIndexedFolderAloneWhenAFileStandsWhereItsIndexWas()
+    {
+        var index = _temp.CreateFile(64, "project", "index");
+        var output = _temp.CreateDirectory("project", "out");
+        var built = _temp.CreateFile(1024, "project", "out", "built.bin");
+        var step = new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
+
+        Assert.False(Assert.Single(result.Steps).Succeeded);
+        Assert.True(File.Exists(built));
+        Assert.Equal(64, new FileInfo(index).Length);
+    }
+
+    /// <summary>
+    /// An index that went whole, and a file where the folder it indexes was: what came out was the
+    /// index, and the sentence says so rather than calling the folder removed. Asked of the outcome
+    /// directly, because in a run the look before the step meets the file first.
+    /// </summary>
+    [Fact]
+    public void AnIndexRemovedBeforeAFileWasFoundAtTheFolderIsNotCalledTheFolderRemoved()
+    {
+        var step = new DeleteDirectoryStep(Path.Combine(_temp.Path, "out"), "Output")
+        {
+            IndexedBy = [Path.Combine(_temp.Path, "index")],
+        };
+        var removal = new RemovalOutcome(64, Refusals.None, RootRemoved: false, EntriesRemoved: 2) { NotADirectory = true };
+
+        var outcome = PlanExecutor.Deleted(step, removal, stores: 0);
+
+        Assert.True(outcome.Succeeded);
+        Assert.Equal(64, outcome.BytesReclaimed);
+        Assert.Equal("Removed its index, and left alone a file that now stands where this folder was.", outcome.Message);
+    }
+
     private static CleanupPlan PlanDeleting(CleanupStep step) => new()
     {
         ProviderId = "test",

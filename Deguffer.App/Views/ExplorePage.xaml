@@ -255,8 +255,8 @@
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateAndRescanCommand}" />
 
-            <!-- Mapped to ExploreView by ExplorePage.Views, so the order here is the order of that
-                 array. The three pictures come before the lists because that is the order they are
+            <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order of that
+                 list. The three pictures come before the lists because that is the order they are
                  read in, and the tree is Memory's alone. -->
             <ComboBox x:Name="ViewSelector"
                       Grid.Column="6"
