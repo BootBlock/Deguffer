@@ -4,7 +4,7 @@ namespace Deguffer.Core.Configuration;
 /// What the Explore page opens on: the picture it draws, and what that picture's colours say. The
 /// part of <see cref="AppPreferences"/> the page's View and Colour boxes change, as one value.
 /// </summary>
-/// <param name="View">The picture the page draws. Always one of <see cref="Views"/>.</param>
+/// <param name="View">The picture the page draws. One of <see cref="Views"/> in a choice <see cref="From"/> made.</param>
 /// <param name="Colouring">What the colours in that picture say.</param>
 public sealed record ExploreChoice(ExploreView View, ExploreColouring Colouring)
 {
@@ -19,18 +19,7 @@ public sealed record ExploreChoice(ExploreView View, ExploreColouring Colouring)
     /// Where <paramref name="view"/> sits in <see cref="Views"/>, or the treemap's place where it is
     /// not there: the tree, or a number no member names.
     /// </summary>
-    public static int IndexOf(ExploreView view)
-    {
-        for (var i = 0; i < Views.Count; i++)
-        {
-            if (Views[i] == view)
-            {
-                return i;
-            }
-        }
-
-        return 0;
-    }
+    public static int IndexOf(ExploreView view) => StoredEnum.IndexOf(view, Views);
 
     /// <summary>
     /// The choice <paramref name="preferences"/> ask for.

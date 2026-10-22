@@ -1,3 +1,5 @@
+using Deguffer.Core.Configuration;
+
 namespace Deguffer.Core.Execution;
 
 /// <summary>
@@ -32,18 +34,8 @@ public static class WhenCleanComplete
     /// chosen, or a number edited into the settings file by hand. Nothing is the only safe reading of
     /// either, because any other would end a session the user did not ask to end.</para>
     /// </summary>
-    public static int IndexOf(CompletionAction stored, IReadOnlyList<CompletionAction> offered)
-    {
-        for (var i = 0; i < offered.Count; i++)
-        {
-            if (offered[i] == stored)
-            {
-                return i;
-            }
-        }
-
-        return 0;
-    }
+    public static int IndexOf(CompletionAction stored, IReadOnlyList<CompletionAction> offered) =>
+        StoredEnum.IndexOf(stored, offered);
 
     /// <summary>
     /// Whether a clean that ended with <paramref name="outcome"/> is followed by
