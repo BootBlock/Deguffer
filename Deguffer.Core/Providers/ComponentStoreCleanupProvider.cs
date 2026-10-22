@@ -24,8 +24,9 @@ public sealed class ComponentStoreCleanupProvider(
     ISystemDirectories? system = null,
     IWindowsServicing? servicing = null,
     ComponentStoreAnalysis? analysis = null,
-    IDirectoryScanner? scanner = null)
-    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis, scanner)
+    IDirectoryScanner? scanner = null,
+    OwnServicingCalls? servicingCalls = null)
+    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis, scanner, servicingCalls)
 {
     public override string Id => "component-store";
 

@@ -20,6 +20,14 @@ public interface IProcessInspector
     IReadOnlyList<string> FindRunning(IEnumerable<string> names);
 
     /// <summary>
+    /// Of <paramref name="names"/>, every process running, each with when it was created, for a
+    /// caller that must tell one process of a name from another. A creation time is read at the
+    /// moment of the call, and is null where it could not be: for a service on an unelevated run,
+    /// for instance.
+    /// </summary>
+    IReadOnlyList<StartedProcess> FindRunningProcesses(IEnumerable<string> names);
+
+    /// <summary>
     /// Whether the process with <paramref name="processId"/> is running, and when it was created.
     ///
     /// <para><b>Three answers, not two.</b> <see cref="ProcessState.Undetermined"/> means the
@@ -56,7 +64,7 @@ public sealed class ProcessInspector : IProcessInspector
     public static readonly ProcessInspector Default = new();
 
     private readonly Lock _gate = new();
-    private HashSet<string>? _snapshot;
+    private Dictionary<string, List<int>>? _snapshot;
 
     public IReadOnlyList<string> FindRunning(IEnumerable<string> names)
     {
@@ -66,8 +74,21 @@ public sealed class ProcessInspector : IProcessInspector
             return [];
         }
 
-        wanted.IntersectWith(Snapshot());
+        wanted.IntersectWith(Snapshot().Keys);
         return [.. wanted];
+    }
+
+    public IReadOnlyList<StartedProcess> FindRunningProcesses(IEnumerable<string> names)
+    {
+        var snapshot = Snapshot();
+
+        return
+        [
+            .. names.Distinct(StringComparer.OrdinalIgnoreCase)
+                .SelectMany(name => snapshot.GetValueOrDefault(name, []).Select(id => (Name: name, Now: ProcessProbe.Of(id))))
+                .Where(found => found.Now.State is not ProcessState.NotRunning)
+                .Select(found => new StartedProcess(found.Name, found.Now.StartedAt)),
+        ];
     }
 
     public ProcessLiveness Probe(int processId) => ProcessProbe.Of(processId);
@@ -84,7 +105,7 @@ public sealed class ProcessInspector : IProcessInspector
     /// <see cref="Process.GetProcesses"/> is a full-system snapshot and is far too expensive to
     /// repeat once per provider.
     /// </summary>
-    private HashSet<string> Snapshot()
+    private Dictionary<string, List<int>> Snapshot()
     {
         lock (_gate)
         {
@@ -93,13 +114,20 @@ public sealed class ProcessInspector : IProcessInspector
                 return _snapshot;
             }
 
-            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var names = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var process in Process.GetProcesses())
             {
                 try
                 {
-                    names.Add(process.ProcessName);
+                    var name = process.ProcessName;
+
+                    if (!names.TryGetValue(name, out var ids))
+                    {
+                        names[name] = ids = [];
+                    }
+
+                    ids.Add(process.Id);
                 }
                 catch (InvalidOperationException)
                 {
@@ -115,3 +143,8 @@ public sealed class ProcessInspector : IProcessInspector
         }
     }
 }
+
+/// <summary>One running process of a name the caller asked about.</summary>
+/// <param name="Name">The name asked about, as the caller spelled it.</param>
+/// <param name="StartedAt">When the process was created, in UTC, or null where it could not be read.</param>
+public sealed record StartedProcess(string Name, DateTimeOffset? StartedAt);

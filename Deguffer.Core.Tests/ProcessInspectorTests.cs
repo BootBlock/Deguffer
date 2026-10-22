@@ -40,6 +40,22 @@ public sealed class ProcessInspectorTests
     }
 
     /// <summary>
+    /// A process found by name carries the creation time Windows recorded, which the update hold
+    /// compares with when Deguffer's own DISM calls ran.
+    /// </summary>
+    [Fact]
+    public void AProcessFoundByNameReportsTheCreationTimeWindowsRecorded()
+    {
+        using var self = Process.GetCurrentProcess();
+
+        var found = new ProcessInspector().FindRunningProcesses([self.ProcessName]);
+
+        Assert.Contains(found, process =>
+            process.Name == self.ProcessName && process.StartedAt?.ToFileTime() == self.StartTime.ToFileTimeUtc());
+        Assert.Empty(new ProcessInspector().FindRunningProcesses(["Deguffer-no-such-process"]));
+    }
+
+    /// <summary>
     /// A process that has exited is not running, even while something still holds it open and so
     /// keeps its id taken.
     ///
