@@ -454,7 +454,7 @@ public sealed class ExploreMap : UserControl
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
         _settled.IsRepeating = false;
-        _settled.Tick += (_, _) => Redraw();
+        _settled.TickGuarded(Redraw);
 
         SizeChanged += OnSizeChanged;
         PointerPressed += OnPointerPressed;
@@ -1531,7 +1531,7 @@ public sealed class ExploreMap : UserControl
         // move that comes first.
         if (drawing.Viewport is { IsWhole: false })
         {
-            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, Underlay);
+            DispatcherQueue.TryEnqueueGuarded(DispatcherQueuePriority.Low, Underlay);
         }
     }
 
@@ -2251,7 +2251,7 @@ public sealed class ExploreMap : UserControl
     /// Draw again for a new text size, because the bands and the label thresholds are sized for the
     /// old one. Raised off the UI thread, so it is sent back to it.
     /// </summary>
-    private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(Redraw);
+    private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueueGuarded(Redraw);
 
     /// <summary>
     /// Follow a change of accent colour, or high contrast turned on or off or to another theme, which
@@ -2259,7 +2259,7 @@ public sealed class ExploreMap : UserControl
     /// above.
     /// </summary>
     private void OnSystemColoursChanged(UISettings sender, object args) =>
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueueGuarded(() =>
         {
             TintHighlight();
 
@@ -2271,7 +2271,7 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>Follow the compositor's word on whether effects are fast, which a remote session changes.</summary>
     private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
-        DispatcherQueue.TryEnqueue(TintHighlight);
+        DispatcherQueue.TryEnqueueGuarded(TintHighlight);
 
     /// <summary>
     /// Follow the reader turning animation effects on or off, which says whether the picture coasts

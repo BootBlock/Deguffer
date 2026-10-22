@@ -23,8 +23,9 @@ public static class FaultReporting
         //
         // It does *not* cover a throw from inside DispatcherQueue.TryEnqueue — measured, not
         // assumed: that one fails fast across the WinRT boundary without reaching any managed
-        // handler, and leaves nothing behind. Nothing in the app enqueues today; anything that
-        // starts to must catch at the callback rather than rely on this.
+        // handler, and leaves nothing behind, and nor does a DispatcherQueueTimer tick. Work the app
+        // queues on the dispatcher therefore goes through DispatcherFaults, which records the fault
+        // at the callback.
         application.UnhandledException += (_, e) => log.Record("Application.UnhandledException", e.Exception);
 
         // A faulted Task nobody awaited. The runtime ignores these rather than terminating, so

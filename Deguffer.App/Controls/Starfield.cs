@@ -241,11 +241,11 @@ public sealed partial class Starfield : Grid
 
     /// <summary>High contrast turned on or off. Raised off the UI thread.</summary>
     private void OnSystemColoursChanged(UISettings sender, object args) =>
-        DispatcherQueue.TryEnqueue(Decide);
+        DispatcherQueue.TryEnqueueGuarded(Decide);
 
     /// <summary>The compositor's word on whether effects are fast, which a remote session changes. Raised off the UI thread.</summary>
     private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
-        DispatcherQueue.TryEnqueue(Decide);
+        DispatcherQueue.TryEnqueueGuarded(Decide);
 
     /// <summary>The reader turned animation effects on or off. Raised on the UI thread.</summary>
     private void OnMotionChanged(object? sender, EventArgs e) => Decide();

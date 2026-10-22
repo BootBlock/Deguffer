@@ -107,7 +107,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _settle = dispatcher.CreateTimer();
         _settle.Interval = JumpSettleTime;
         _settle.IsRepeating = false;
-        _settle.Tick += (_, _) => Rest();
+        _settle.TickGuarded(Rest);
 
         FollowMotion();
     }
