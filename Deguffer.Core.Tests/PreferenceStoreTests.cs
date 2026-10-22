@@ -40,7 +40,21 @@ public class PreferenceStoreTests
             FileHistoryRetentionDays: 30,
             MinimumTemporaryFileAgeDays: 2,
             BackUpInstalledAppEntries: false,
-            WhenCleanComplete: CompletionAction.Hibernate)));
+            WhenCleanComplete: CompletionAction.Hibernate)
+        {
+            // Every field of the map's style away from its default, so a field dropped from the file, or
+            // read from another field's key, fails here.
+            MapStyle = new MapStyle(
+                MapShading.Bevel,
+                MapRelief.Strong,
+                MapBorder.Faint,
+                MapBorder.Solid,
+                MapBorderWidth.Thick,
+                MapBorderTone.Light,
+                MapFolderFill.Grey,
+                FolderNames: false,
+                ShapeNames: false),
+        }));
 
         var loaded = store.Load();
 
@@ -62,6 +76,19 @@ public class PreferenceStoreTests
         Assert.Equal(ExploreScheme.Vivid, loaded.TreemapScheme);
         Assert.Equal(ExploreScheme.Soft, loaded.IcicleScheme);
         Assert.Equal(ExploreScheme.Deep, loaded.SunburstScheme);
+
+        Assert.Equal(
+            new MapStyle(
+                MapShading.Bevel,
+                MapRelief.Strong,
+                MapBorder.Faint,
+                MapBorder.Solid,
+                MapBorderWidth.Thick,
+                MapBorderTone.Light,
+                MapFolderFill.Grey,
+                FolderNames: false,
+                ShapeNames: false),
+            loaded.MapStyle);
 
         // Not the default, for the reason the two above give: false is what the record declares and
         // what a missing key deserialises to, so asserting false would pass with the preference
@@ -364,6 +391,39 @@ public class PreferenceStoreTests
     [InlineData("""{ "Theme": "Dark", "Scanning": { "Nvme": null } }""")]
     public void ANullWhereScanSettingsBelongIsACorruptFile(string json) =>
         Assert.Equal(AppPreferences.Default, LoadWritten(json));
+
+    /// <summary>
+    /// A file written before the map's style existed is every file on an upgraded machine. It reads
+    /// with the look the map always had.
+    /// </summary>
+    [Fact]
+    public void AFileFromBeforeTheMapStyleReadsTheLookTheMapAlwaysHad()
+    {
+        var loaded = LoadWritten("""{ "Theme": "Dark" }""");
+
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.Equal(MapStyle.Default, loaded.MapStyle);
+    }
+
+    /// <summary>
+    /// A style the file states only part of takes each declared default for the rest. The two names
+    /// prove it: both default to on, and a missing key read as <c>default(bool)</c> would take every
+    /// folder's band and every name off an upgraded machine's map.
+    /// </summary>
+    [Fact]
+    public void AStyleTheFileStatesInPartTakesTheDefaultsForTheRest()
+    {
+        var loaded = LoadWritten("""{ "Theme": "Dark", "MapStyle": { "Shading": "Flat" } }""");
+
+        Assert.Equal(MapStyle.Default with { Shading = MapShading.Flat }, loaded.MapStyle);
+        Assert.True(loaded.MapStyle.FolderNames);
+        Assert.True(loaded.MapStyle.ShapeNames);
+    }
+
+    /// <summary>A hand-edited null where the map's style belongs is a corrupt file, as one where the scan settings belong is.</summary>
+    [Fact]
+    public void ANullWhereTheMapStyleBelongsIsACorruptFile() =>
+        Assert.Equal(AppPreferences.Default, LoadWritten("""{ "Theme": "Dark", "MapStyle": null }"""));
 
     private static AppPreferences LoadWritten(string json)
     {

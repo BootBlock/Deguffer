@@ -1,9 +1,9 @@
 namespace Deguffer.Core.Configuration;
 
 /// <summary>
-/// How the maps are drawn: the colours each picture is drawn in, and how much room a treemap leaves
-/// round what each folder holds. The part of <see cref="AppPreferences"/> the map appearance window
-/// changes, as one value.
+/// How the maps are drawn: the colours each picture is drawn in, how much room a treemap leaves
+/// round what each folder holds, and how every shape is finished. The part of
+/// <see cref="AppPreferences"/> the map appearance window changes, as one value.
 ///
 /// <para>A value of its own because the window applies a change before it is written. A reader
 /// trying colours wants each one on the map as they pick it, and a preferences file that could not
@@ -14,12 +14,17 @@ namespace Deguffer.Core.Configuration;
 /// <param name="Treemap">The colours the treemap is drawn in.</param>
 /// <param name="Icicle">The colours the icicle is drawn in.</param>
 /// <param name="Sunburst">The colours the sunburst is drawn in.</param>
+/// <param name="Style">How every shape is finished, in every picture.</param>
 public sealed record MapLook(
     ExploreSpacing Spacing,
     ExploreScheme Treemap,
     ExploreScheme Icicle,
-    ExploreScheme Sunburst)
+    ExploreScheme Sunburst,
+    MapStyle Style)
 {
+    /// <summary>The look of a map nobody has changed.</summary>
+    public static readonly MapLook Default = From(AppPreferences.Default);
+
     /// <summary>
     /// The look <paramref name="preferences"/> ask for.
     ///
@@ -37,7 +42,8 @@ public sealed record MapLook(
             Defined(preferences.TreemapSpacing, ExploreSpacing.Comfortable),
             Defined(preferences.TreemapScheme, ExploreScheme.Standard),
             Defined(preferences.IcicleScheme, ExploreScheme.Standard),
-            Defined(preferences.SunburstScheme, ExploreScheme.Standard));
+            Defined(preferences.SunburstScheme, ExploreScheme.Standard),
+            preferences.MapStyle.Defined());
     }
 
     /// <summary>
@@ -79,6 +85,7 @@ public sealed record MapLook(
             TreemapScheme = Treemap,
             IcicleScheme = Icicle,
             SunburstScheme = Sunburst,
+            MapStyle = Style,
         };
     }
 }

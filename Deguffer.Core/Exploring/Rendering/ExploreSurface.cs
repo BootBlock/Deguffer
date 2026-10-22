@@ -227,6 +227,7 @@ public abstract class ExploreSurface
     /// <summary>The shapes at the top of the picture, once asked.</summary>
     private IReadOnlyList<MapShape>? _top;
 
+    /// <param name="style">How every shape is finished, and what text is written on them.</param>
     protected ExploreSurface(
         ISizedTree tree,
         int root,
@@ -234,10 +235,12 @@ public abstract class ExploreSurface
         int height,
         LayoutLimits limits,
         ShapeColours colours,
+        MapStyle style,
         MapViewport? viewport)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(colours);
+        ArgumentNullException.ThrowIfNull(style);
 
         colours.EnsureDescribes(tree);
 
@@ -247,8 +250,17 @@ public abstract class ExploreSurface
         Height = height;
         Viewport = viewport;
         Limits = limits;
+        Style = style;
         _colours = colours;
         _hues = new BranchHues(tree, root);
+
+        // One device pixel at 100%, and as many as the display's scale makes of one, so a line or a
+        // bevel is as heavy on a screen at 200% as on one at 100%. The scale is the one the limits
+        // were measured at (LayoutLimits.At), which the row height carries untouched by the reader's
+        // text size.
+        var pixel = Math.Max(1, (int)MathF.Round(limits.RowHeight / LayoutLimits.Default.RowHeight));
+
+        Finish = colours.Contrast is { } contrast ? ShapeFinish.Contrasted(contrast, pixel) : ShapeFinish.Of(style, pixel);
     }
 
     public int Width { get; }
@@ -261,7 +273,7 @@ public abstract class ExploreSurface
     ///
     /// <para>Said by the drawing rather than assumed by the caller, because the caller asks for a view
     /// and does not always get it: a scan still running is drawn as an icicle whichever view was
-    /// picked (see <see cref="Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport)"/>).
+    /// picked (see <see cref="Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle)"/>).
     /// A caller that took its own zoom as what was drawn would place the picture, and resolve a click
     /// on it, for a zoom the picture does not have (§7.1).</para>
     /// </summary>
@@ -295,6 +307,16 @@ public abstract class ExploreSurface
 
     protected LayoutLimits Limits { get; }
 
+    /// <summary>How every shape is finished, and what text is written on them.</summary>
+    protected MapStyle Style { get; }
+
+    /// <summary>
+    /// How every shape of this drawing is finished, on this display: the style asked for, or in a high
+    /// contrast theme's colours, every shape flat with a line of the theme's text colour inside its
+    /// sides, whatever the style. See <see cref="ShapeFinish"/>.
+    /// </summary>
+    public ShapeFinish Finish { get; }
+
     /// <summary>
     /// Lay <paramref name="root"/> of a scanned <paramref name="tree"/> out for
     /// <paramref name="view"/>, coloured to say <paramref name="colouring"/>. See the overload taking
@@ -306,6 +328,7 @@ public abstract class ExploreSurface
     /// provable without a clock (G8) — the same seam
     /// <see cref="Scanning.RelativeAge.Describe"/> takes.
     /// </param>
+    /// <param name="style">How every shape is finished, or null for <see cref="MapStyle.Default"/>.</param>
     public static ExploreSurface Create(
         ExploreTree tree,
         int root,
@@ -318,11 +341,12 @@ public abstract class ExploreSurface
         ExploreScheme scheme,
         DateTime nowUtc,
         ExploreSpacing spacing,
-        VolumeSpace volume) =>
+        VolumeSpace volume,
+        MapStyle? style = null) =>
         Create(
             tree, root, view, width, height, scale, textScale,
             ShapeColours.For(tree, colouring, scheme, nowUtc, growth: null, types: null),
-            spacing, volume);
+            spacing, volume, style: style);
 
     /// <summary>
     /// The picture <paramref name="tree"/> is actually drawn as when <paramref name="view"/> is
@@ -379,6 +403,10 @@ public abstract class ExploreSurface
     /// The part of the picture to show. Only the treemap can be zoomed, and every other drawing shows
     /// the whole picture whatever this asks; <see cref="Viewport"/> says which happened.
     /// </param>
+    /// <param name="style">
+    /// How every shape is finished and what is written on them, or null for
+    /// <see cref="MapStyle.Default"/>. Its folder bands are part of the treemap's layout as well.
+    /// </param>
     public static ExploreSurface Create(
         ISizedTree tree,
         int root,
@@ -390,26 +418,28 @@ public abstract class ExploreSurface
         ShapeColours colours,
         ExploreSpacing spacing,
         VolumeSpace volume,
-        MapViewport viewport = default)
+        MapViewport viewport = default,
+        MapStyle? style = null)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var limits = LayoutLimits.Default.Spaced(spacing).ForText(textScale).At(scale);
+        var styled = style ?? MapStyle.Default;
+        var limits = LayoutLimits.Default.Spaced(spacing).Banded(styled.FolderNames).ForText(textScale).At(scale);
         var beside = root == tree.RootNode ? volume : VolumeSpace.None;
 
         return Drawn(tree, view) switch
         {
             ExploreView.Sunburst => new SunburstSurface(
-                tree, root, width, height, limits, colours),
+                tree, root, width, height, limits, colours, styled),
             ExploreView.Icicle => new TiledSurface(
-                tree, root, width, height, limits, colours,
+                tree, root, width, height, limits, colours, styled,
                 IcicleLayout.Compute(tree, root, width, height, limits)),
 
             // Including List, Tree and Files, none of which draws a map at all. A page hides the map
             // rather than telling it to stop, so this is the drawing it will be showing again when
             // the user switches back, and it is the one they last saw.
             _ => new TiledSurface(
-                tree, root, width, height, limits, colours,
+                tree, root, width, height, limits, colours, styled,
                 TreemapLayout.Compute(tree, root, width, height, limits, beside, viewport),
                 viewport,
                 beside),
@@ -599,9 +629,14 @@ public abstract class ExploreSurface
     /// act on it.</para>
     ///
     /// <para>In a high contrast theme's colours every shape and block is the theme's window colour, and
-    /// only its edges tell it from its neighbour (<see cref="Edges"/>).</para>
+    /// only its edges tell it from its neighbour (<see cref="Finish"/>).</para>
+    ///
+    /// <para>A folder drawn round what it holds is the neutral frame grey where the style asks for
+    /// grey frames, whatever the colouring says of it, so the colours on the picture are what the
+    /// folders hold.</para>
     /// </summary>
-    protected TileColour ColourFor(int node, int depth) => _colours.Contrast is { } contrast
+    /// <param name="framed">Whether the shape is a folder drawn round what it holds.</param>
+    protected TileColour ColourFor(int node, int depth, bool framed = false) => _colours.Contrast is { } contrast
         ? contrast.Window
         : node switch
         {
@@ -610,27 +645,18 @@ public abstract class ExploreSurface
             ExploreTile.Unaccounted => TilePalette.Unaccounted,
             ExploreTile.ShadowCopies => TilePalette.ShadowCopies,
             ExploreTile.ReservedStorage => TilePalette.ReservedStorage,
+            _ when framed && Style.FolderFill == MapFolderFill.Grey => TilePalette.FolderFrame,
             _ => _colours.For(this, node, depth),
         };
+
+    /// <summary>What a rectangle of this drawing is painted. See <see cref="ColourFor(int, int, bool)"/>.</summary>
+    protected TileColour ColourOf(ExploreTile tile) => ColourFor(tile.Node, tile.Depth, tile.Framed);
 
     /// <summary>
     /// The colour text over a shape of this node at this depth has to be drawn in: in a high contrast
     /// theme's colours, the theme's own text colour, which every shape shares.
     /// </summary>
-    protected TileColour TextColourFor(int node, int depth) =>
-        _colours.Contrast is { } contrast ? contrast.Text : ColourFor(node, depth).ContrastingText;
-
-    /// <summary>
-    /// The edges each shape is drawn with in place of its cushion, where the drawing is in a high
-    /// contrast theme's colours, and null where it is shaded. See <see cref="QuadEdges"/>.
-    ///
-    /// <para>One device pixel at 100%, and as many as the display's scale makes of one, so the line is
-    /// as heavy on a screen at 200% as on one at 100%. The scale is the one the limits were measured at
-    /// (<see cref="LayoutLimits.At"/>), which the row height carries untouched by the reader's text
-    /// size.</para>
-    /// </summary>
-    protected QuadEdges? Edges =>
-        _colours.Contrast is { } contrast
-            ? new QuadEdges(contrast.Text, Math.Max(1, (int)MathF.Round(Limits.RowHeight / LayoutLimits.Default.RowHeight)))
-            : null;
+    /// <param name="framed">Whether the shape is a folder drawn round what it holds.</param>
+    protected TileColour TextColourFor(int node, int depth, bool framed = false) =>
+        _colours.Contrast is { } contrast ? contrast.Text : ColourFor(node, depth, framed).ContrastingText;
 }

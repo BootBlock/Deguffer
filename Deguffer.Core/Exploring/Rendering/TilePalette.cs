@@ -145,6 +145,13 @@ public static class TilePalette
     /// </summary>
     public static TileColour ReservedStorage => TileColour.FromRgb(0xB0B0B0);
 
+    /// <summary>
+    /// The colour of a folder drawn round what it holds, where the style asks for grey frames
+    /// (<see cref="Configuration.MapFolderFill.Grey"/>): a dark neutral with a cool cast, darker than
+    /// every block's grey so a frame is never read as one of them, as WizTree draws its folders.
+    /// </summary>
+    public static TileColour FolderFrame => TileColour.FromRgb(0x46474C);
+
     /// <summary>Where one scheme's lightness and saturation start, and how far each level moves them.</summary>
     private readonly record struct Ramp(
         double RootLightness,

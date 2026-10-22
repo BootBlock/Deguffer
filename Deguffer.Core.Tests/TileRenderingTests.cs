@@ -251,9 +251,10 @@ public sealed class TileRenderingTests
         new TileRasteriser(
             new CushionQuads(
                 tiles, width, height,
-                (node, depth) => node == ExploreTile.Aggregated
+                tile => tile.IsAggregate
                     ? TilePalette.Aggregate
-                    : Hues.Colour(branchOf(node), depth)),
+                    : Hues.Colour(branchOf(tile.Node), tile.Depth),
+                ShapeFinish.Cushioned),
             ground)
             .PaintRegions(pixels);
 

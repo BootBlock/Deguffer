@@ -109,9 +109,10 @@ public sealed class LargeCanvasPaintingTests
         new TileRasteriser(
             new CushionQuads(
                 tiles, Width, Height,
-                (node, depth) => node == ExploreTile.Aggregated
+                tile => tile.IsAggregate
                     ? TilePalette.Aggregate
-                    : Hues.Colour(node, depth)),
+                    : Hues.Colour(tile.Node, tile.Depth),
+                ShapeFinish.Cushioned),
             Ground)
             .PaintRegions(pixels);
 

@@ -184,7 +184,8 @@ public sealed class SectorRenderingTests
             new SectorHitTest(sunburst), Size, Size, Ground,
             (node, _) => node == ExploreTile.Aggregated
                 ? TilePalette.Aggregate
-                : Hues.Colour(0, 0))
+                : Hues.Colour(0, 0),
+            ShapeFinish.Cushioned)
             .PaintRegions(pixels);
 
         return pixels;

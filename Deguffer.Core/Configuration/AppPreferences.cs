@@ -81,7 +81,9 @@ public enum ExploreView
 /// written to one of them in two years. <see cref="Growth"/> answers "what filled the drive since I last
 /// looked", which a size picture shows only once the culprit is the largest thing on the disk.
 /// <see cref="Type"/> answers "what kind of thing is this space", which is often the quickest way to
-/// know what it is: a folder of video and a folder of disk images look alike by size.</para>
+/// know what it is: a folder of video and a folder of disk images look alike by size.
+/// <see cref="Depth"/> answers "how deep is this", the question the earliest disk maps coloured
+/// by: a whole level of the tree in one colour, the next in another.</para>
 /// </summary>
 public enum ExploreColouring
 {
@@ -109,6 +111,12 @@ public enum ExploreColouring
     /// See <c>TypePalette</c> and <c>DominantTypes</c>.
     /// </summary>
     Type = 3,
+
+    /// <summary>
+    /// A colour per level below the folder on screen, the same for every shape at that level and
+    /// repeating every eight levels. See <c>DepthPalette</c>.
+    /// </summary>
+    Depth = 4,
 }
 
 /// <summary>
@@ -378,6 +386,13 @@ public sealed record AppPreferences(
     Execution.CompletionAction WhenCleanComplete = Execution.CompletionAction.Nothing)
 {
     public static readonly AppPreferences Default = new();
+
+    /// <summary>
+    /// How the shapes of every map are finished: shading, borders, folder fills and names. A property
+    /// for the reason <see cref="Scanning"/> is one, and a settings file written before it existed
+    /// reads with the look the map always had. See <see cref="Configuration.MapStyle"/>.
+    /// </summary>
+    public MapStyle MapStyle { get; init; } = MapStyle.Default;
 
     /// <summary>
     /// How a scan reads the disk. Read by Core when a scan starts, and it changes how fast a scan

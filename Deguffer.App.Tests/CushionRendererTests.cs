@@ -167,11 +167,108 @@ public sealed class CushionRendererTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Every finish the style can ask for is shaded as it is painted: flat, bevelled, lined round each
+    /// block or each folder, light or dark, thin or thick, folders filled grey, and cushions at every
+    /// depth with a line round them. A finish with no cushion in it is whole numbers on both routes,
+    /// so it is the same picture exactly; one with a cushion is held to the cushions' tolerance.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Finishes))]
+    public void EveryFinishIsShadedAsItIsPainted(string name, MapStyle style)
+    {
+        var picture = Picture(MapViewport.Seen(zoom: 1.6, left: 0.2, top: 0.3), style: style);
+        var finish = picture.Quads()!.Finish;
+
+        Assert.True(finish.Borders.Width > 0 || finish.Bevel.Width > 0 || style.FolderFill == MapFolderFill.Grey, $"{name} draws nothing a cushion does not");
+
+        if (style.Shading == MapShading.Cushion)
+        {
+            AssertShadedAsPainted(picture);
+        }
+        else
+        {
+            AssertShadedExactlyAsPainted(picture);
+        }
+    }
+
+    /// <summary>The finishes <see cref="EveryFinishIsShadedAsItIsPainted"/> asks about, each by name.</summary>
+    public static TheoryData<string, MapStyle> Finishes => new()
+    {
+        { "flat, faint blocks, solid folders", new MapStyle(MapShading.Flat, BlockBorders: MapBorder.Faint, FolderBorders: MapBorder.Solid) },
+        { "bevel, no lines", new MapStyle(MapShading.Bevel) },
+        { "strong bevel, thick light lines", new MapStyle(MapShading.Bevel, MapRelief.Strong, MapBorder.Strong, MapBorder.Medium, MapBorderWidth.Thick, MapBorderTone.Light) },
+        { "SpaceMonger", MapPreset.SpaceMonger.Style },
+        { "cushions with grey frames", MapPreset.WizTree.Style },
+        { "cushions with lines", new MapStyle(MapShading.Cushion, MapRelief.Subtle, MapBorder.Medium, MapBorder.Strong) },
+        { "flat without bands or names", MapPreset.Outlined.Style with { FolderNames = false } },
+    };
+
+    /// <summary>
+    /// On a flat picture the pointer's light brightens what is round it and leaves the rest as it was,
+    /// pixel for pixel. A line takes none of it: within the light, the inside of each file brightens and
+    /// the line round it does not. The lines are a mid tone, which a light could brighten, so a line left
+    /// alone is the shader's choice and not black that no light can change.
+    /// </summary>
+    [Fact]
+    public void ThePointerLightBrightensAFlatPictureWithinItsReachButNotItsLines()
+    {
+        var picture = Picture(MapViewport.Whole, style: new MapStyle(MapShading.Flat, BlockBorders: MapBorder.Medium, BorderWidth: MapBorderWidth.Thick));
+        var quads = picture.Quads()!;
+        var light = new PointerLight(400, 300, 160);
+        var unlit = Shaded(quads);
+        var lit = _renderer.Shade(quads, Ground, Whole(quads), light).GetPixelBytes(0, 0, quads.Width, quads.Height);
+        var brighter = 0;
+
+        for (var i = 0; i < unlit.Length; i += 4)
+        {
+            var x = (i / 4 % quads.Width) + 0.5f - light.X;
+            var y = (i / 4 / quads.Width) + 0.5f - light.Y;
+            var within = (x * x) + (y * y) < light.Reach * light.Reach;
+
+            for (var channel = 0; channel < 3; channel++)
+            {
+                if (within)
+                {
+                    Assert.True(lit[i + channel] >= unlit[i + channel], $"the light darkened pixel {i / 4}");
+                }
+                else
+                {
+                    Assert.Equal(unlit[i + channel], lit[i + channel]);
+                }
+            }
+
+            brighter += within && lit[i + 1] > unlit[i + 1] + 8 ? 1 : 0;
+        }
+
+        Assert.True(brighter > 1000, $"only {brighter} pixels were lit");
+
+        // Files whose middle the light brightened: the line along their left side is as it was.
+        var files = picture.Tiles
+            .Where(tile => tile.IsNode && !tile.Framed && tile.Width >= 12 && tile.Height >= 12)
+            .Select(tile => CushionQuad.Of(tile, quads.Finish))
+            .Where(quad => quad.Left >= 0 && quad.Top >= 0 && quad.Right <= quads.Width && quad.Bottom <= quads.Height)
+            .Select(quad => (Quad: quad, Middle: Offset(quads, (quad.Left + quad.Right) / 2, (quad.Top + quad.Bottom) / 2)))
+            .Where(file => lit[file.Middle + 1] > unlit[file.Middle + 1] + 8)
+            .ToList();
+
+        Assert.NotEmpty(files);
+
+        foreach (var (quad, _) in files)
+        {
+            var edge = Offset(quads, quad.Left, (quad.Top + quad.Bottom) / 2);
+
+            Assert.True(lit.AsSpan(edge, 3).SequenceEqual(unlit.AsSpan(edge, 3)), $"the light reached the line at ({quad.Left}, {(quad.Top + quad.Bottom) / 2})");
+        }
+    }
+
+    private static int Offset(CushionQuads quads, int x, int y) => ((y * quads.Width) + x) * 4;
+
     /// <summary>A canvas with no shapes on it is the ground alone.</summary>
     [Fact]
     public void ACanvasWithNoShapesIsTheGround()
     {
-        var shaded = Shaded(new CushionQuads([], 64, 48, (_, _) => default));
+        var shaded = Shaded(new CushionQuads([], 64, 48, _ => default, ShapeFinish.Cushioned));
 
         for (var i = 0; i < shaded.Length; i += 4)
         {
@@ -214,6 +311,25 @@ public sealed class CushionRendererTests : IDisposable
             $"{differing} of {painted.Length / 4} pixels differ by a level");
     }
 
+    private void AssertShadedExactlyAsPainted(ExploreSurface picture)
+    {
+        var quads = picture.Quads()!;
+        var painted = new byte[PixelBuffer.LengthFor(picture.Width, picture.Height)];
+
+        picture.Painter(Ground).Paint(painted, new CanvasRegion(0, 0, picture.Width, picture.Height));
+
+        var shaded = Shaded(quads);
+
+        Assert.True(quads.Quads.Length > 100, $"only {quads.Quads.Length} shapes drawn, too few to say anything");
+
+        for (var i = 0; i < painted.Length; i += 4)
+        {
+            Assert.True(
+                painted.AsSpan(i, 4).SequenceEqual(shaded.AsSpan(i, 4)),
+                $"pixel ({i / 4 % picture.Width}, {i / 4 / picture.Width}) is {Colour(shaded, i)} shaded and {Colour(painted, i)} painted");
+        }
+    }
+
     private byte[] Shaded(CushionQuads quads) =>
         _renderer.Shade(quads, Ground, Whole(quads), light: null).GetPixelBytes(0, 0, quads.Width, quads.Height);
 
@@ -221,7 +337,7 @@ public sealed class CushionRendererTests : IDisposable
 
     private static string Colour(byte[] pixels, int i) => $"#{pixels[i + 2]:X2}{pixels[i + 1]:X2}{pixels[i]:X2}";
 
-    private static ExploreSurface Picture(MapViewport viewport, int width = Width, int height = Height, ShapeColours? colours = null) =>
+    private static ExploreSurface Picture(MapViewport viewport, int width = Width, int height = Height, ShapeColours? colours = null, MapStyle? style = null) =>
         ExploreSurface.Create(
             Tree,
             Tree.RootNode,
@@ -233,7 +349,8 @@ public sealed class CushionRendererTests : IDisposable
             colours ?? ShapeColours.ByBranch(ExploreScheme.Standard),
             ExploreSpacing.Comfortable,
             VolumeSpace.None,
-            viewport);
+            viewport,
+            style);
 
     /// <summary>
     /// Folders inside folders four levels down, each with files of falling sizes, so the picture has
