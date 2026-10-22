@@ -413,7 +413,7 @@ public sealed partial class CleanPage : Page
             // Deferred, because the rows are only just visible again and a control that has not been
             // laid out cannot take focus. A preview that replaced the rows leaves nothing to find,
             // and that is correct: the row the list came from no longer exists.
-            DispatcherQueue.TryEnqueue(() => FocusItemsLinkOf(row));
+            DispatcherQueue.TryEnqueueGuarded(() => FocusItemsLinkOf(row));
         }
     }
 

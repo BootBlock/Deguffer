@@ -690,7 +690,7 @@ public sealed partial class ExplorePage : Page
         // from inside its own report.
         if (!_showingSelectedRows && !_swappingRows && !ViewModel.IsShowingRows)
         {
-            DispatcherQueue.TryEnqueue(() =>
+            DispatcherQueue.TryEnqueueGuarded(() =>
             {
                 // Asked again on arrival. A ListView commits a pointer selection on the release, so
                 // a press can land between the two and take the list back; this repair is then

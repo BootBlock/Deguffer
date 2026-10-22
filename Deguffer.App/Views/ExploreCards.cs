@@ -195,5 +195,5 @@ internal sealed class ExploreCards
     }
 
     /// <summary>Run <paramref name="action"/> once the change being made now has been laid out.</summary>
-    private void Later(Action action) => _map.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => action());
+    private void Later(Action action) => _map.DispatcherQueue.TryEnqueueGuarded(DispatcherQueuePriority.Low, action);
 }
