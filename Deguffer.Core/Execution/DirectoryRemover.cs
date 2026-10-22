@@ -70,8 +70,25 @@ public static class DirectoryRemover
         }
 
         var extended = LongPath.Extended(path);
+        var presence = fs.ProbeDirectory(extended);
 
-        switch (fs.ProbeDirectory(extended))
+        // The directory probe answers Absent for a file, so absence is decided by the entry probe. A
+        // file that has taken the directory's name since the preview is nothing this step planned to
+        // remove, and reading it as the directory gone reported "Removed." for a path still occupied —
+        // and let the directory an index belongs to go while a file stood where the index was.
+        if (presence is PathPresence.Absent)
+        {
+            presence = fs.ProbeEntry(extended);
+
+            if (presence is PathPresence.Present)
+            {
+                progress?.Report(1.0);
+
+                return new RemovalOutcome(0, Refusals.None, RootRemoved: false) { NotADirectory = true };
+            }
+        }
+
+        switch (presence)
         {
             case PathPresence.Absent:
                 // A caller keeping the root is asking about a directory that is meant to still be
@@ -128,7 +145,7 @@ public static class DirectoryRemover
 
             // "Removed" has to mean Windows said it is gone. A refused probe answers false to the
             // two-state question, which would report a link that is still there as one this run took.
-            var linkRemoved = fs.ProbeDirectory(extended) is PathPresence.Absent;
+            var linkRemoved = fs.ProbeEntry(extended) is PathPresence.Absent;
 
             return new RemovalOutcome(
                 0,
@@ -282,7 +299,7 @@ public static class DirectoryRemover
         return new RemovalOutcome(
             reclaimed,
             refused.Total,
-            RootRemoved: !bounds.KeepRoot && fs.ProbeDirectory(extended) is PathPresence.Absent,
+            RootRemoved: !bounds.KeepRoot && fs.ProbeEntry(extended) is PathPresence.Absent,
             inventory.Kept,
             inventory.Spared.Count,
             Interlocked.Read(ref removed))

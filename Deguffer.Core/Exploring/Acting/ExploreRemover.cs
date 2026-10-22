@@ -456,6 +456,7 @@ public static class ExploreRemover
             {
                 { Interrupted: true, BytesReclaimed: 0, EntriesRemoved: 0 } => "Not deleted: the removal was cancelled first.",
                 { Interrupted: true } => $"Partly deleted before the removal was cancelled{left}, so the folder is still there.",
+                { NotADirectory: true } => "Not deleted: a file now stands where the folder was, and Deguffer left it alone.",
                 { RootRemoved: true } => "Deleted.",
                 _ => $"Partly deleted{left}, so the folder is still there.",
             })

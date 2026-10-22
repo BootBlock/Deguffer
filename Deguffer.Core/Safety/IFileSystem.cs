@@ -33,6 +33,16 @@ public interface IFileSystem
     PathPresence ProbeDirectory(string path);
 
     /// <summary>
+    /// The same three-state answer for anything at <paramref name="path"/>, a file included. See
+    /// <see cref="LongPath.ProbeEntry"/>.
+    ///
+    /// <para>Asked wherever an absence becomes a claim that a directory went. The directory probe
+    /// answers <see cref="PathPresence.Absent"/> for a file, so a file that has taken a directory's
+    /// name would otherwise be reported as the directory removed.</para>
+    /// </summary>
+    PathPresence ProbeEntry(string path);
+
+    /// <summary>
     /// Whether <paramref name="path"/> is a junction or symbolic link.
     ///
     /// Asked of the removal root, which is the one entry no enumeration ever classifies: every
@@ -139,6 +149,8 @@ public sealed class WindowsFileSystem : IFileSystem
     public bool DirectoryExists(string path) => Directory.Exists(path);
 
     public PathPresence ProbeDirectory(string path) => LongPath.ProbeDirectory(path);
+
+    public PathPresence ProbeEntry(string path) => LongPath.ProbeEntry(path);
 
     public bool IsReparsePoint(string path) => LongPath.IsReparsePoint(path);
 
