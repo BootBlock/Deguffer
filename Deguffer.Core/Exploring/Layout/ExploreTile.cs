@@ -36,6 +36,11 @@ namespace Deguffer.Core.Exploring.Layout;
 /// layout, which is what decided not to draw them, and what a deeper zoom would draw them at (see
 /// <see cref="MapCeiling"/>).
 /// </param>
+/// <param name="Framed">
+/// Whether this rectangle is a folder drawn round what it holds, so what shows of it is the frame
+/// round its contents: its band where it has one, and the gap. Never for a block, nor for any shape of
+/// an icicle, whose folders sit beside what they hold.
+/// </param>
 public readonly record struct ExploreTile(
     int Node,
     int Depth,
@@ -45,7 +50,8 @@ public readonly record struct ExploreTile(
     float Width,
     float Height,
     float Header = 0,
-    float Finest = 0)
+    float Finest = 0,
+    bool Framed = false)
 {
     /// <summary>
     /// The node number of a rectangle standing in for omitted siblings.
@@ -160,13 +166,18 @@ public readonly record struct ExploreTile(
 /// The gap a treemap leaves between a folder's edge and what it holds, down its sides and along its
 /// bottom. The top edge has <see cref="HeaderHeight"/> instead. See <see cref="ExploreSpacing"/>.
 /// </param>
+/// <param name="FolderBands">
+/// Whether a treemap folder with room for one keeps a band along its top for its name. Without it,
+/// the top edge has the gap the other three have. See <see cref="Configuration.MapStyle.FolderNames"/>.
+/// </param>
 public readonly record struct LayoutLimits(
     float MinimumTileSize,
     int MaximumDepth,
     float RowHeight,
     float MinimumLabelWidth,
     float MinimumLabelHeight,
-    float ContainerGap)
+    float ContainerGap,
+    bool FolderBands = true)
 {
     public static readonly LayoutLimits Default = new(
         MinimumTileSize: 3f,
@@ -192,6 +203,9 @@ public readonly record struct LayoutLimits(
             _ => 3f,
         },
     };
+
+    /// <summary>These limits with a band along the top of each folder with room for one, or without.</summary>
+    public LayoutLimits Banded(bool bands) => this with { FolderBands = bands };
 
     /// <summary>
     /// The gap between a shape's edge and the text inside it. A quarter of the label height, so the
@@ -222,5 +236,6 @@ public readonly record struct LayoutLimits(
         (float)(RowHeight * scale),
         (float)(MinimumLabelWidth * scale),
         (float)(MinimumLabelHeight * scale),
-        (float)(ContainerGap * scale));
+        (float)(ContainerGap * scale),
+        FolderBands);
 }

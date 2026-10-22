@@ -208,7 +208,7 @@ public sealed class ExploreMap : UserControl
     private ExploreLayers _departing;
 
     /// <summary>
-    /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, ExploreSpacing, VolumeSpace)"/>
+    /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace)"/>
     /// has been handed, so a double-click can tell whether the page opened what it asked for.
     /// </summary>
     private int _picturesHanded;
@@ -259,12 +259,12 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private Func<int, string> _labelText = _ => string.Empty;
 
-    /// <summary>How much room a treemap leaves round what each folder holds.</summary>
-    private ExploreSpacing _spacing = ExploreSpacing.Comfortable;
+    /// <summary>How much room a treemap leaves round what each folder holds, and how every shape is finished.</summary>
+    private MapLook _look = MapLook.Default;
 
     /// <summary>
     /// The volume to draw beside the node, or <see cref="VolumeSpace.None"/>; the page decides. See
-    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport)"/>
+    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle)"/>
     /// for where it is drawn.
     /// </summary>
     private VolumeSpace _volume = VolumeSpace.None;
@@ -777,6 +777,7 @@ public sealed class ExploreMap : UserControl
     /// The volume to draw beside <paramref name="node"/>, where the reader is on a volume the scan
     /// covered the whole of, and <see cref="VolumeSpace.None"/> otherwise.
     /// </param>
+    /// <param name="look">How much room a treemap leaves round each folder, and how every shape is finished.</param>
     /// <param name="growth">What grew since the last scan, for a map coloured by growth, or null.</param>
     /// <param name="types">The kind of file each node holds most of, for a map coloured by type, or null.</param>
     /// <param name="viewport">See the other overload.</param>
@@ -786,7 +787,7 @@ public sealed class ExploreMap : UserControl
         ExploreView view,
         ExploreColouring colouring,
         ExploreScheme scheme,
-        ExploreSpacing spacing,
+        MapLook look,
         VolumeSpace volume,
         Core.Exploring.History.ScanGrowth? growth,
         Core.Exploring.Files.DominantTypes? types,
@@ -798,12 +799,18 @@ public sealed class ExploreMap : UserControl
             tree is null
                 ? _ => ShapeColours.ByBranch(scheme)
                 : now => ShapeColours.For(tree, colouring, scheme, now, growth, types),
-            tree is null
-                ? _ => string.Empty
-                : drawn => $"{tree.NameOf(drawn)}  {FreeSpace.Format(tree.SizeOf(drawn))}",
-            spacing,
+            tree is null ? _ => string.Empty : NamedAndSized(tree),
+            look,
             volume,
             viewport);
+
+    /// <summary>What a shape of a scanned <paramref name="tree"/> is labelled with: its name, then its size.</summary>
+    public static Func<int, string> NamedAndSized(ExploreTree tree)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        return node => $"{tree.NameOf(node)}  {FreeSpace.Format(tree.SizeOf(node))}";
+    }
 
     /// <summary>
     /// Draw <paramref name="node"/> of any tree a layout can lay out.
@@ -822,7 +829,10 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     /// <param name="colours">What the colours are to say, asked at each repaint.</param>
     /// <param name="labelText">What to write on a shape of the tree this drawing chose to label.</param>
-    /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
+    /// <param name="look">
+    /// How much room a treemap leaves round what each folder holds, and how every shape is finished.
+    /// Its schemes are not read: the colours already say what they are drawn in.
+    /// </param>
     /// <param name="volume">The volume to draw beside <paramref name="node"/>, or <see cref="VolumeSpace.None"/>.</param>
     /// <param name="viewport">
     /// The zoom to show the picture at, for a page going back or forward to where the reader had
@@ -834,17 +844,18 @@ public sealed class ExploreMap : UserControl
         ExploreView view,
         Func<DateTime, ShapeColours> colours,
         Func<int, string> labelText,
-        ExploreSpacing spacing,
+        MapLook look,
         VolumeSpace volume,
         MapViewport? viewport = null)
     {
         ArgumentNullException.ThrowIfNull(colours);
         ArgumentNullException.ThrowIfNull(labelText);
+        ArgumentNullException.ThrowIfNull(look);
 
         // A zoom is into one picture. Another tree, another folder or another view is another
         // picture, and the part of this one the reader had magnified means nothing in it. So is the
         // same root with the volume beside it or without it, which is the root opened or closed. A
-        // new colouring, scheme or spacing is the same picture, so the zoom stays.
+        // new colouring, scheme, spacing or finish is the same picture, so the zoom stays.
         var was = _zoom.Shown;
         var another = !ReferenceEquals(tree, _tree) || node != _node || view != _view || volume != _volume;
 
@@ -888,7 +899,7 @@ public sealed class ExploreMap : UserControl
                 && opened == left.Viewport
                 && Stepping)
             {
-                Return(drawing, colours, labelText, spacing);
+                Return(drawing, colours, labelText, look);
                 return;
             }
 
@@ -954,7 +965,7 @@ public sealed class ExploreMap : UserControl
         _view = view;
         _colours = colours;
         _labelText = labelText;
-        _spacing = spacing;
+        _look = look;
         _volume = volume;
 
         // A step in starts before the new picture is drawn, so the drawing arrives into a flight
@@ -1150,17 +1161,19 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Draw the picture on screen again in a new look: <paramref name="colours"/> and
-    /// <paramref name="spacing"/>, for the same tree, folder and view. The old look fades into the new
-    /// once the new drawing has landed, and shapes a new spacing moved travel to their new places
+    /// <paramref name="look"/>'s spacing and finish, for the same tree, folder and view. The old look
+    /// fades into the new once the new drawing has landed, and shapes a new spacing or a band shown or
+    /// hidden moved travel to their new places
     /// (<see cref="Shift"/>), so the difference a choice makes is seen as it is made, rather than the
     /// new look replacing the old a region at a time.
     /// </summary>
-    public void Restyle(Func<DateTime, ShapeColours> colours, ExploreSpacing spacing)
+    public void Restyle(Func<DateTime, ShapeColours> colours, MapLook look)
     {
         ArgumentNullException.ThrowIfNull(colours);
+        ArgumentNullException.ThrowIfNull(look);
 
         _colours = colours;
-        _spacing = spacing;
+        _look = look;
 
         Shift();
     }
@@ -1399,11 +1412,11 @@ public sealed class ExploreMap : UserControl
         var scale = _scale;
         var textScale = SystemSettings.TextScaleFactor;
         var colours = _shapeColours!;
-        var spacing = _spacing;
+        var look = _look;
         var volume = DrawnVolume;
 
         return () => ExploreSurface.Create(
-            tree, node, view, width, height, scale, textScale, colours, spacing, volume, viewport);
+            tree, node, view, width, height, scale, textScale, colours, look.Spacing, volume, viewport, look.Style);
     }
 
     /// <summary>
@@ -2361,7 +2374,7 @@ public sealed class ExploreMap : UserControl
     ///
     /// <para>The page is what decides whether a node opens, and it says so by showing it here before
     /// <see cref="Activated"/> returns. The camera then flies into the folder's shape, as it does for
-    /// every step into a folder however the page asked for it (see <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, ExploreSpacing, VolumeSpace, MapViewport?)"/>).
+    /// every step into a folder however the page asked for it (see <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace, MapViewport?)"/>).
     /// The root of a scan of a whole volume opens the same way, out of the volume drawn beside it.</para>
     ///
     /// <para>What does not open, a file, the block standing in for items too small to draw, or the
@@ -2839,7 +2852,7 @@ public sealed class ExploreMap : UserControl
     /// at: the flight turns round from where it is, at the speed it has, and the drawing left, still on
     /// screen, is the one the map works from again. Nothing is drawn afresh, and nothing jumps.
     /// </summary>
-    private void Return(ExploreSurface drawing, Func<DateTime, ShapeColours> colours, Func<int, string> labelText, ExploreSpacing spacing)
+    private void Return(ExploreSurface drawing, Func<DateTime, ShapeColours> colours, Func<int, string> labelText, MapLook look)
     {
         var left = _left!;
         var leaving = _zoom.Shown;
@@ -2863,7 +2876,7 @@ public sealed class ExploreMap : UserControl
         _volume = left.Volume;
         _colours = colours;
         _labelText = labelText;
-        _spacing = spacing;
+        _look = look;
         _shapeColours = left.Colours;
 
         // A step out still waiting for its picture had not moved yet: there is nothing to turn round.

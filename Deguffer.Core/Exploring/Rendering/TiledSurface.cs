@@ -45,10 +45,11 @@ public sealed class TiledSurface : ExploreSurface
         int height,
         LayoutLimits limits,
         ShapeColours colours,
+        MapStyle style,
         IReadOnlyList<ExploreTile> tiles,
         MapViewport? viewport = null,
         VolumeSpace beside = default)
-        : base(tree, root, width, height, limits, colours, viewport)
+        : base(tree, root, width, height, limits, colours, style, viewport)
     {
         ArgumentNullException.ThrowIfNull(tiles);
 
@@ -71,7 +72,7 @@ public sealed class TiledSurface : ExploreSurface
 
     public override CanvasPainter Painter(TileColour background) => new TileRasteriser(Quads(), background);
 
-    public override CushionQuads Quads() => new(_tiles, Width, Height, ColourFor, Edges);
+    public override CushionQuads Quads() => new(_tiles, Width, Height, ColourOf, Finish);
 
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index ? new ExploreHit(_tiles[index].Node, _tiles[index].Bytes) : null;
@@ -107,7 +108,7 @@ public sealed class TiledSurface : ExploreSurface
             Tree, Root, Width, Height, Limits, _beside, viewport,
             new TreemapDetail(Limits, zoom, MapTiling.DetailOf(key.Level)), width, height);
 
-        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourFor, Edges);
+        return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourOf, Finish);
     }
 
     public override MapFrame? FrameOf(int node) =>
@@ -283,7 +284,9 @@ public sealed class TiledSurface : ExploreSurface
         {
             if (tile.IsNode && nodes.Contains(tile.Node) && found.Add(tile.Node))
             {
-                shapes.Add(new MorphShape(tile.Node, tile.Depth, ColourFor(tile.Node, tile.Depth), MorphOutline.Of(tile), Edges));
+                var colour = ColourOf(tile);
+
+                shapes.Add(new MorphShape(tile.Node, tile.Depth, colour, MorphOutline.Of(tile), Finish.EdgesOf(colour, tile.Framed)));
             }
         }
 
@@ -375,7 +378,8 @@ public sealed class TiledSurface : ExploreSurface
                     headers.Add(i);
                 }
             }
-            else if (!tile.IsAggregate
+            else if (Style.ShapeNames
+                && !tile.IsAggregate
                 && (tile.IsFreeSpace || (tile.Node != Root && !covered.Contains(tile.Node)))
                 && shown.HasRoomForALabel(Limits))
             {
@@ -400,7 +404,7 @@ public sealed class TiledSurface : ExploreSurface
                 shown.Width - (Limits.LabelPadding * 2),
                 Rotation: 0,
                 Centred: false,
-                TextColourFor(tile.Node, tile.Depth),
+                TextColourFor(tile.Node, tile.Depth, tile.Framed),
                 tile.Bytes,
                 new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Header)));
         }
@@ -417,7 +421,7 @@ public sealed class TiledSurface : ExploreSurface
                 shown.Width - (Limits.LabelPadding * 2),
                 Rotation: 0,
                 Centred: false,
-                TextColourFor(tile.Node, tile.Depth),
+                TextColourFor(tile.Node, tile.Depth, tile.Framed),
                 tile.Bytes,
                 new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Height)));
         }

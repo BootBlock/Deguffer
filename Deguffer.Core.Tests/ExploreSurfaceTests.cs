@@ -147,7 +147,7 @@ public sealed class ExploreSurfaceTests
         var height = (int)(limits.HeaderHeight * 2);
 
         var surface = new TiledSurface(
-            tree, tree.RootNode, (int)Width, height, limits, ShapeColours.ByBranch(ExploreScheme.Standard),
+            tree, tree.RootNode, (int)Width, height, limits, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default,
             TreemapLayout.Compute(tree, tree.RootNode, Width, height, limits));
 
         Assert.DoesNotContain("branch", Names(tree, surface));
@@ -167,7 +167,7 @@ public sealed class ExploreSurfaceTests
         var limits = LayoutLimits.Default;
 
         var surface = new TiledSurface(
-            tree, tree.RootNode, 60, 30, limits, ShapeColours.ByBranch(ExploreScheme.Standard),
+            tree, tree.RootNode, 60, 30, limits, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default,
             TreemapLayout.Compute(tree, tree.RootNode, 60, 30, limits));
 
         Assert.DoesNotContain(tree.RootNode, surface.Labels.Select(l => l.Node));
@@ -204,7 +204,7 @@ public sealed class ExploreSurfaceTests
         var tree = builder.Build(ExploreChildOrder.BySize);
         var limits = LayoutLimits.Default;
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
-        var labelled = new TiledSurface(tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard), tiles)
+        var labelled = new TiledSurface(tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default, tiles)
             .Labels.Select(label => label.Node).ToHashSet();
 
         var candidates = tiles.Where(tile => tile.Depth == 1 && tile.HasRoomForALabel(limits)).ToList();
@@ -301,12 +301,13 @@ public sealed class ExploreSurfaceTests
         Height,
         limits,
         ShapeColours.ByBranch(ExploreScheme.Standard),
+        MapStyle.Default,
         TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits));
 
     private static ExploreSurface Sunburst(ExploreTree tree) => Sunburst(tree, LayoutLimits.Default);
 
     private static ExploreSurface Sunburst(ExploreTree tree, LayoutLimits limits) =>
-        new SunburstSurface(tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard));
+        new SunburstSurface(tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default);
 
     /// <summary>Equal children of one root, which is the shape that defeats a size threshold.</summary>
     private static ExploreTree FlatTree(int children)

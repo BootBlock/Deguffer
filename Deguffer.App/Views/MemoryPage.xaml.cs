@@ -297,9 +297,10 @@ public sealed partial class MemoryPage : Page
     }
 
     /// <summary>
-    /// Draw again if the colours or the treemap spacing changed. Re-read on every visit, because
-    /// both are chosen elsewhere — the spacing on the Settings page, and both in the Explore page's
-    /// appearance window, which can stay open while this page is on screen.
+    /// Draw again if the colours, the treemap spacing or the finish of the shapes changed. Re-read on
+    /// every visit, because all of them are chosen elsewhere — the spacing on the Settings page, and
+    /// all of them in the Explore page's appearance window, which can stay open while this page is on
+    /// screen.
     /// </summary>
     private void FollowLook()
     {
@@ -331,7 +332,7 @@ public sealed partial class MemoryPage : Page
             ViewModel.SelectedView,
             _ => colours,
             ViewModel.LabelFor,
-            _look.Spacing,
+            _look,
             VolumeSpace.None);
     }
 

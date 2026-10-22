@@ -37,22 +37,26 @@ public sealed class MapPreview : UserControl
         AutomationProperties.SetAccessibilityView(_map, AccessibilityView.Raw);
     }
 
-    /// <summary>Draw the sample as <paramref name="look"/> would draw it in <paramref name="view"/>.</summary>
-    public void Show(MapLook look, ExploreView view)
+    /// <summary>
+    /// Draw the sample as <paramref name="look"/> would draw it in <paramref name="view"/>, coloured as
+    /// near to <paramref name="colouring"/> as the sample can be (<see cref="MapSample.ColoursFor"/>).
+    /// </summary>
+    public void Show(MapLook look, ExploreView view, ExploreColouring colouring = ExploreColouring.Branch)
     {
         ArgumentNullException.ThrowIfNull(look);
 
         var drawn = MapLook.Drawn(view);
-        var scheme = look.SchemeFor(drawn);
-        var tree = MapSample.Tree;
+        var colours = MapSample.ColoursFor(colouring, look.SchemeFor(drawn));
 
         if (_view == drawn)
         {
-            _map.Restyle(now => ShapeColours.For(tree, ExploreColouring.Branch, scheme, now, null, null), look.Spacing);
+            _map.Restyle(_ => colours, look);
             return;
         }
 
+        var tree = MapSample.Tree;
+
         _view = drawn;
-        _map.Show(tree, tree.RootNode, drawn, ExploreColouring.Branch, scheme, look.Spacing, VolumeSpace.None, null, null);
+        _map.Show(tree, tree.RootNode, drawn, _ => colours, ExploreMap.NamedAndSized(tree), look, VolumeSpace.None);
     }
 }

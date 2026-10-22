@@ -253,6 +253,10 @@ public sealed partial class ExplorePage : Page
             ShowCurrentNode();
         };
 
+        // A preset whose colours are part of its look moves the Colour box, which applies and writes
+        // the colouring as a choice made in it does.
+        _appearance.ColouringChosen += (_, colouring) => ColourAs(colouring);
+
         // The spacing is chosen on the Settings page, so it can change while this page is away.
         Loaded += (_, _) => FollowSpacing();
 
@@ -403,6 +407,7 @@ public sealed partial class ExplorePage : Page
     {
         ViewModel.SelectedColouring = colouring;
         ColourSelector.SelectedIndex = (int)colouring;
+        _appearance.Colouring = colouring;
 
         ShowCurrentNode();
     }
@@ -423,7 +428,7 @@ public sealed partial class ExplorePage : Page
                 ViewModel.SelectedView,
                 _ => ShapeColours.ForReplay(frame),
                 frame.Label,
-                _appearance.Look.Spacing,
+                _appearance.Look,
                 frame.Replay.VolumeAt(frame.Step, ViewModel.VolumeBeside));
 
             _cards.Relight();
@@ -436,7 +441,7 @@ public sealed partial class ExplorePage : Page
             ViewModel.SelectedView,
             ViewModel.SelectedColouring,
             ViewModel.SelectedScheme,
-            _appearance.Look.Spacing,
+            _appearance.Look,
             ViewModel.VolumeBeside,
             ViewModel.Growth.Comparison,
             ViewModel.Types.Dominant,

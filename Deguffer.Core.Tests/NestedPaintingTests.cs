@@ -119,7 +119,7 @@ public sealed class NestedPaintingTests
     {
         var pixels = new byte[PixelBuffer.LengthFor(width, height)];
 
-        new TileRasteriser(new CushionQuads(tiles, width, height, (node, depth) => Hues.Colour(node, depth)), Ground)
+        new TileRasteriser(new CushionQuads(tiles, width, height, tile => Hues.Colour(tile.Node, tile.Depth), ShapeFinish.Cushioned), Ground)
             .PaintRegions(pixels);
 
         return pixels;

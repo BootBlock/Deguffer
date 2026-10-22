@@ -136,7 +136,7 @@ public static class TreemapLayout
             // rendering of "there is more in here than fits".
             var (header, gap) = level >= 0 ? detail.FrameOf(frame.Width, frame.Height, level) : (0f, 0f);
 
-            tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, canvas, header, level >= 0 ? 0 : FinestIn(tree, node, frame)));
+            tiles.Add(Tile(node, depth, tree.SizeOf(node), frame, canvas, header, level >= 0 ? 0 : FinestIn(tree, node, frame), framed: level >= 0));
 
             if (level < 0)
             {
@@ -389,7 +389,7 @@ public static class TreemapLayout
     /// first: its visible edge would otherwise be the sum of two numbers as large as the magnified
     /// picture, rounded. Where the cut can come on screen is said at <see cref="Reach"/>.</para>
     /// </summary>
-    private static ExploreTile Tile(int node, int depth, long bytes, Rectangle frame, Bounds bounds, float header = 0, float finest = 0)
+    private static ExploreTile Tile(int node, int depth, long bytes, Rectangle frame, Bounds bounds, float header = 0, float finest = 0, bool framed = false)
     {
         // Measured from the canvas rather than the window, so every tile of the map cuts a shape that
         // runs off all of them alike, and its cushion is shaded the same way across each of them.
@@ -401,7 +401,7 @@ public static class TreemapLayout
 
         return new ExploreTile(
             node, depth, bytes,
-            (float)left, (float)top, (float)(right - left), (float)(bottom - top), header, finest);
+            (float)left, (float)top, (float)(right - left), (float)(bottom - top), header, finest, framed);
     }
 
     /// <summary>

@@ -109,7 +109,7 @@ public sealed class LabelFadeTests
         var limits = LayoutLimits.Default;
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
         var surface = new TiledSurface(
-            tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard), tiles);
+            tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default, tiles);
 
         var branch = surface.Labels.Single(label => tree.NameOf(label.Node) == "branch");
         var branchTile = tiles.Single(tile => tile.Node == branch.Node);

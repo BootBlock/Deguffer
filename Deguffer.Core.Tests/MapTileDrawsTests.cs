@@ -219,7 +219,7 @@ public sealed class MapTileDrawsTests
         var limits = LayoutLimits.Default;
 
         return new TiledSurface(
-            tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard),
+            tree, tree.RootNode, Width, Height, limits, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default,
             TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits, viewport: viewport),
             viewport);
     }

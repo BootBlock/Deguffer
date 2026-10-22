@@ -107,7 +107,8 @@ internal sealed class TreemapDetail
     ///
     /// <para>The band is given only where the name fits across it and the children keep at least as
     /// much height again below it. Less than that, and the folder would be all name and no
-    /// contents.</para>
+    /// contents. Where the limits keep no bands (<see cref="LayoutLimits.FolderBands"/>), every folder
+    /// has the gap on all four sides, as a folder too short for its band does.</para>
     ///
     /// <para>The single pixel is a pixel of the level, not of the canvas, as every limit is. Left as a
     /// canvas pixel it was the one measure of the frame that did not scale, so a folder framed by it
@@ -128,7 +129,7 @@ internal sealed class TreemapDetail
         var (limits, pixel) = _levels[level];
         var gap = limits.ContainerGap;
 
-        if (width >= limits.MinimumLabelWidth && height >= (limits.HeaderHeight * 2) + gap)
+        if (limits.FolderBands && width >= limits.MinimumLabelWidth && height >= (limits.HeaderHeight * 2) + gap)
         {
             return (limits.HeaderHeight, gap);
         }

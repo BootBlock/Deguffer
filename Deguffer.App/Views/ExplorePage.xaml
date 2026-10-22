@@ -284,6 +284,7 @@
                 <ComboBoxItem Content="Age" />
                 <ComboBoxItem Content="Growth" />
                 <ComboBoxItem Content="Type" />
+                <ComboBoxItem Content="Depth" />
             </ComboBox>
 
             <!-- Beside the two boxes that decide what the picture shows, because this decides how it

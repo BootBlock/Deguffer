@@ -16,13 +16,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 public readonly record struct ContrastColours(TileColour Window, TileColour Text);
 
 /// <summary>
-/// The edges every quad of a drawing in <see cref="ContrastColours"/> is drawn with, in place of its
-/// cushion: <paramref name="Width"/> pixels inside each of its four sides, in <paramref name="Colour"/>,
-/// with the quad's own colour flat between them.
-///
-/// <para>Inside rather than across the edge, so each shape draws only its own pixels and the quads
-/// still claim the canvas as they do with cushions: two siblings that share an edge draw a line twice
-/// as wide between them, and a folder's line stays apart from the lines of what it holds by the gap the
-/// layout leaves round them.</para>
+/// The line round one shape a change of view carries: <paramref name="Width"/> pixels inside its sides,
+/// in <paramref name="Colour"/>. What <see cref="ShapeFinish.EdgesOf"/> gives a shape of its drawing,
+/// so the shape travels with the line the picture draws round it.
 /// </summary>
 public readonly record struct QuadEdges(TileColour Colour, int Width);

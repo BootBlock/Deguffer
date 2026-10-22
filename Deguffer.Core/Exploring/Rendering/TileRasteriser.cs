@@ -1,3 +1,5 @@
+using Deguffer.Core.Configuration;
+
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
@@ -25,21 +27,21 @@ public sealed class TileRasteriser : CanvasPainter
     /// </summary>
     private readonly CushionQuad[] _quads;
 
-    /// <summary>The edges drawn in place of cushions, or null. See <see cref="CushionQuads.Edges"/>.</summary>
-    private readonly QuadEdges? _edges;
+    /// <summary>How every quad is finished. See <see cref="CushionQuads.Finish"/>.</summary>
+    private readonly ShapeFinish _finish;
 
     /// <summary>
     /// Get ready to paint <paramref name="quads"/> on <paramref name="background"/>, on a canvas of
     /// their size.
     ///
-    /// <para>The colours and the edges are the quads': see <see cref="CushionQuads"/> for why the two
+    /// <para>The colours and the finish are the quads': see <see cref="CushionQuads"/> for why the two
     /// routes to the screen share them rather than each working them out.</para>
     /// </summary>
     public TileRasteriser(CushionQuads quads, TileColour background)
         : base(quads.Width, quads.Height, background)
     {
         _quads = quads.Array;
-        _edges = quads.Edges;
+        _finish = quads.Finish;
     }
 
     /// <summary>
@@ -66,51 +68,19 @@ public sealed class TileRasteriser : CanvasPainter
         // backwards: a shape can only show where nothing nested inside it already does.
         for (var i = _quads.Length - 1; i >= 0 && !claimed.IsFull; i--)
         {
-            if (_edges is { } edges)
-            {
-                Edged(pixels, claimed, Width, Height, _quads[i], edges);
-            }
-            else
-            {
-                Cushion(pixels, claimed, Width, Height, _quads[i]);
-            }
+            Paint(pixels, claimed, Width, Height, _quads[i], _finish);
         }
     }
 
     /// <summary>
-    /// Draw one quad flat in its own colour, with <paramref name="edges"/> inside each of its sides,
-    /// into whichever of <paramref name="claimed"/>'s pixels are still free. A side off the canvas is
-    /// not drawn: the shape goes on past it, as a cushion does.
-    /// </summary>
-    private static void Edged(byte[] pixels, ClaimedPixels claimed, int width, int height, CushionQuad quad, QuadEdges edges)
-    {
-        var area = claimed.Region;
-        var left = Math.Max(Math.Max(0, quad.Left), area.X);
-        var right = Math.Min(Math.Min(width, quad.Right), area.Right);
-        var firstRow = Math.Max(Math.Max(0, quad.Top), area.Y);
-        var lastRow = Math.Min(Math.Min(height, quad.Bottom), area.Bottom);
-
-        for (var y = firstRow; y < lastRow; y++)
-        {
-            var across = y < quad.Top + edges.Width || y >= quad.Bottom - edges.Width;
-            var offset = ((y * width) + left) * 4;
-
-            for (var x = left; x < right; x++)
-            {
-                if (claimed.Claim(x, y))
-                {
-                    var edge = across || x < quad.Left + edges.Width || x >= quad.Right - edges.Width;
-
-                    PixelBuffer.Write(pixels, offset, edge ? edges.Colour : quad.Colour);
-                }
-
-                offset += 4;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Shade one quad into whichever of <paramref name="claimed"/>'s pixels are still free.
+    /// Paint one quad, finished as <paramref name="finish"/> says, into whichever of
+    /// <paramref name="claimed"/>'s pixels are still free: its line inside its sides, then its bevel
+    /// inside that, then its cushion or its own colour across the rest.
+    ///
+    /// <para>A side off the canvas is not drawn, nor its line or its bevel: the shape goes on past it.
+    /// Where two sides meet, the bevel's lit side is the top or the left only where it is nearer than
+    /// both the bottom and the right, so a corner where one of each meets is shaded, as a raised button
+    /// is drawn. The shader decides every pixel by the same rule.</para>
     ///
     /// <para>The cushion is measured across the whole quad and only <em>drawn</em> where it shows.
     /// Measuring it within the region instead would restart the gradient at every region boundary and
@@ -121,7 +91,7 @@ public sealed class TileRasteriser : CanvasPainter
     /// cushion measured across only the part on the canvas would put a whole cushion in that part,
     /// then move it as the zoom did.</para>
     /// </summary>
-    private static void Cushion(byte[] pixels, ClaimedPixels claimed, int width, int height, CushionQuad quad)
+    private static void Paint(byte[] pixels, ClaimedPixels claimed, int width, int height, CushionQuad quad, ShapeFinish finish)
     {
         var area = claimed.Region;
         var left = Math.Max(Math.Max(0, quad.Left), area.X);
@@ -134,13 +104,23 @@ public sealed class TileRasteriser : CanvasPainter
             return;
         }
 
+        var line = finish.Borders.WidthFor(quad.Framed);
+        var lineColour = line > 0 ? ShapeFinish.Mix(quad.Colour, finish.Borders.Tone, finish.Borders.AmountFor(quad.Framed)) : default;
+        var bevelled = finish.Shading == MapShading.Bevel && quad.Ridge > 0;
+        var band = line + (bevelled ? finish.Bevel.Width : 0);
+        var lit = bevelled ? finish.Lit(quad.Colour) : default;
+        var shaded = bevelled ? finish.Shaded(quad.Colour) : default;
+        var cushioned = finish.Shading == MapShading.Cushion;
+
         var ridge = (double)quad.Ridge;
         var spanWidth = quad.Right - quad.Left;
         var spanHeight = quad.Bottom - quad.Top;
 
         for (var y = firstRow; y < lastRow; y++)
         {
-            var v = spanHeight <= 1 ? 0.5 : (double)(y - quad.Top) / (spanHeight - 1);
+            var fromTop = y - quad.Top;
+            var fromBottom = quad.Bottom - 1 - y;
+            var v = spanHeight <= 1 ? 0.5 : (double)fromTop / (spanHeight - 1);
             var ny = ridge * ((2 * v) - 1);
             var offset = ((y * width) + left) * 4;
 
@@ -148,10 +128,29 @@ public sealed class TileRasteriser : CanvasPainter
             {
                 if (claimed.Claim(x, y))
                 {
-                    var u = spanWidth <= 1 ? 0.5 : (double)(x - quad.Left) / (spanWidth - 1);
-                    var nx = ridge * ((2 * u) - 1);
+                    var fromLeft = x - quad.Left;
+                    var fromRight = quad.Right - 1 - x;
+                    var nearest = Math.Min(Math.Min(fromLeft, fromRight), Math.Min(fromTop, fromBottom));
 
-                    CushionShading.Write(pixels, offset, quad.Colour, CushionShading.LightAt(nx, ny));
+                    if (nearest < line)
+                    {
+                        PixelBuffer.Write(pixels, offset, lineColour);
+                    }
+                    else if (nearest < band)
+                    {
+                        PixelBuffer.Write(pixels, offset, Math.Min(fromLeft, fromTop) < Math.Min(fromRight, fromBottom) ? lit : shaded);
+                    }
+                    else if (cushioned)
+                    {
+                        var u = spanWidth <= 1 ? 0.5 : (double)fromLeft / (spanWidth - 1);
+                        var nx = ridge * ((2 * u) - 1);
+
+                        CushionShading.Write(pixels, offset, quad.Colour, CushionShading.LightAt(nx, ny));
+                    }
+                    else
+                    {
+                        PixelBuffer.Write(pixels, offset, quad.Colour);
+                    }
                 }
 
                 offset += 4;

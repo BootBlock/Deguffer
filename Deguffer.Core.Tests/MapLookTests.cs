@@ -57,22 +57,29 @@ public sealed class MapLookTests
 
         File.WriteAllText(
             Path.Combine(directory.FullName, "preferences.json"),
-            """{ "TreemapSpacing": 9, "TreemapScheme": 9, "IcicleScheme": -1, "SunburstScheme": "Deep" }""");
+            """{ "TreemapSpacing": 9, "TreemapScheme": 9, "IcicleScheme": -1, "SunburstScheme": "Deep", "MapStyle": { "Shading": 9, "Relief": -2, "BlockBorders": "Solid", "FolderFill": 7 } }""");
 
         var look = MapLook.From(new PreferenceStore(environment).Load());
 
-        Assert.Equal(new MapLook(ExploreSpacing.Comfortable, ExploreScheme.Standard, ExploreScheme.Standard, ExploreScheme.Deep), look);
+        Assert.Equal(
+            new MapLook(
+                ExploreSpacing.Comfortable,
+                ExploreScheme.Standard,
+                ExploreScheme.Standard,
+                ExploreScheme.Deep,
+                MapStyle.Default with { BlockBorders = MapBorder.Solid }),
+            look);
     }
 
     /// <summary>
-    /// Written back into the preferences, the look replaces its own four settings and leaves every
-    /// other one as it was, including the ones that govern what is deleted.
+    /// Written back into the preferences, the look replaces its own settings and leaves every other
+    /// one as it was, including the ones that govern what is deleted.
     /// </summary>
     [Fact]
     public void WritingTheLookBackChangesNothingElse()
     {
         var before = AppPreferences.Default with { ConfirmBeforeCleaning = false, KeepFilesChangedWithinHours = 4 };
-        var look = new MapLook(ExploreSpacing.Dense, ExploreScheme.Vivid, ExploreScheme.Soft, ExploreScheme.Deep);
+        var look = new MapLook(ExploreSpacing.Dense, ExploreScheme.Vivid, ExploreScheme.Soft, ExploreScheme.Deep, MapPreset.SpaceMonger.Style);
 
         var after = look.Into(before);
 
@@ -84,6 +91,7 @@ public sealed class MapLookTests
                 TreemapScheme = ExploreScheme.Vivid,
                 IcicleScheme = ExploreScheme.Soft,
                 SunburstScheme = ExploreScheme.Deep,
+                MapStyle = MapPreset.SpaceMonger.Style,
             },
             after);
     }

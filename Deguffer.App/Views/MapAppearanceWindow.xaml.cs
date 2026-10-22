@@ -7,15 +7,16 @@ using Microsoft.UI.Xaml;
 namespace Deguffer.App.Views;
 
 /// <summary>
-/// The map appearance window: the colours each picture is drawn in, and the room a treemap leaves
-/// round each folder. It changes nothing but how the maps look.
+/// The map appearance window: presets, the colours each picture is drawn in, how every shape is
+/// shaded and outlined, and the room a treemap leaves round each folder. It changes nothing but how
+/// the maps look.
 ///
 /// <para>Modeless and owned by the main window, so the reader can keep it open, move it clear of
 /// the map, and watch each change land. See <see cref="ToolWindowPlacement"/>.</para>
 /// </summary>
 public sealed partial class MapAppearanceWindow : Window
 {
-    private const int OpenWidth = 380;
+    private const int OpenWidth = 460;
     private const int OpenHeight = 800;
 
     private readonly FrameworkElement? _ownerRoot;
@@ -77,14 +78,17 @@ public sealed partial class MapAppearanceWindow : Window
 
     private void OnLookChanged(object? sender, EventArgs e) => ShowPreview();
 
-    /// <summary>The page's View box moved, so the scheme list and the preview speak for another picture.</summary>
+    /// <summary>
+    /// The page's View or Colour box moved, so the scheme list and the preview speak for another
+    /// picture, or the preview is coloured another way.
+    /// </summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MapAppearanceViewModel.View))
+        if (e.PropertyName is nameof(MapAppearanceViewModel.View) or nameof(MapAppearanceViewModel.Colouring))
         {
             ShowPreview();
         }
     }
 
-    private void ShowPreview() => Preview.Show(ViewModel.Look, ViewModel.View);
+    private void ShowPreview() => Preview.Show(ViewModel.Look, ViewModel.View, ViewModel.Colouring);
 }
