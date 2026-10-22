@@ -11,4 +11,22 @@ internal static class StoredEnum
     public static T Defined<T>(T value, T fallback)
         where T : struct, Enum =>
         Enum.IsDefined(value) ? value : fallback;
+
+    /// <summary>
+    /// Where <paramref name="stored"/> sits in <paramref name="offered"/>, or the first place where it
+    /// is not there. A caller lists the one safe reading of a missing value first.
+    /// </summary>
+    public static int IndexOf<T>(T stored, IReadOnlyList<T> offered)
+        where T : struct, Enum
+    {
+        for (var i = 0; i < offered.Count; i++)
+        {
+            if (EqualityComparer<T>.Default.Equals(offered[i], stored))
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
 }
