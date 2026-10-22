@@ -496,6 +496,38 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
+    /// A scan cancelled once the table has been read stops before the tree is built from it. Building
+    /// a whole volume's tree takes a fraction of a second on millions of records, and a scan that has
+    /// been cancelled has nobody waiting for it.
+    ///
+    /// <para>Cancelled by the last progress report, which the stream makes as the plan runs out, so
+    /// every check the read itself makes has already passed and only the build is left to see it. The
+    /// free records are there to reach a report at all: the stream reports once per 65,536 records.</para>
+    /// </summary>
+    [Fact]
+    public void StopsBeforeBuildingTheTreeWhenCancelledOnceTheTableIsRead()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
+            .AddUnused(70_000)
+            .Build();
+
+        using var cancel = new CancellationTokenSource();
+
+        void CancelOnceRead(long dealtWith)
+        {
+            if (dealtWith == source.RecordCount)
+            {
+                cancel.Cancel();
+            }
+        }
+
+        Assert.ThrowsAny<OperationCanceledException>(
+            () => MftExploreReader.Read(source, Root, [], TableTuning.Default, CancelOnceRead, cancel.Token));
+        Assert.True(cancel.IsCancellationRequested);
+    }
+
+    /// <summary>
     /// The dates come out of <c>$STANDARD_INFORMATION</c>, which is the pass already being made —
     /// <c>docs/todo/after-the-scanner.md</c> item 4's whole argument for taking them from here
     /// rather than from a directory walk.
