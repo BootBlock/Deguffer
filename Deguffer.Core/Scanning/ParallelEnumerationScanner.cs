@@ -135,6 +135,9 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     {
     }
 
+    /// <summary>Nothing is retained between calls, so there is nothing to keep.</summary>
+    public PassHold Hold() => PassHold.Nothing;
+
     /// <summary>
     /// Each path asked about, in the order asked, read once for each of <paramref name="keeps"/>: a
     /// file read directly, and every directory walked with the others on drives of its kind.

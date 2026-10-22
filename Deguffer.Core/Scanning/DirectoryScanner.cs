@@ -6,7 +6,7 @@ namespace Deguffer.Core.Scanning;
 
 /// <summary>
 /// The scanner §5.5 asks for: read the MFT, fall back to a bounded parallel walk where that is not
-/// possible, cache across runs, and stream partial results rather than blocking.
+/// possible, cache within a planning pass, and stream partial results rather than blocking.
 ///
 /// Choosing between the two routes lives here and nowhere else. Providers, the planner and the
 /// executor ask <see cref="IDirectoryScanner"/> for a size and are told how it was obtained; none
@@ -482,4 +482,10 @@ public sealed class DirectoryScanner : IDirectoryScanner
         _volumes.Invalidate();
         _tuner.Invalidate();
     }
+
+    /// <summary>
+    /// Keep the volume indexes for the pass. Remembered estimates are not held, because they are
+    /// meant to outlast it, as <see cref="Invalidate"/> says.
+    /// </summary>
+    public PassHold Hold() => _volumes.Hold();
 }

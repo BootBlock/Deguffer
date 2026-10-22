@@ -269,5 +269,7 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
             inner.TryFindDirectoriesAsync(search, root, ct);
 
         public void Invalidate() => inner.Invalidate();
+
+        public PassHold Hold() => inner.Hold();
     }
 }

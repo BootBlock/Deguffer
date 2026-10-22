@@ -51,8 +51,8 @@ public sealed class MftVolumeTree(int count)
     /// runs to millions of entries.</para>
     ///
     /// <para>Populated for every record, whether or not a guard is ever asked about it. The table is
-    /// built once per volume and cached across planning passes, and a guard the user switches on
-    /// afterwards must not need it rebuilt. A record whose <c>$STANDARD_INFORMATION</c> the parser
+    /// built once per volume for a planning pass, and the pass asks it with the guard off as well as
+    /// on (<see cref="AgedScan"/>), so neither reading may need it rebuilt. A record whose <c>$STANDARD_INFORMATION</c> the parser
     /// could not read lands at zero, which is the start of the NTFS epoch and older than any window
     /// — so its bytes count as reclaimable. That is the fail-open direction, and it is confined to a
     /// size estimate: nothing deletes from this table, and both removers re-read the real timestamp

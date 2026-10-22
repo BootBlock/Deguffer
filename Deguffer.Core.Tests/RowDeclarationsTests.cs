@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -421,6 +422,8 @@ public sealed class RowDeclarationsTests : IDisposable
         public void InvalidateCaches()
         {
         }
+
+        public PassHold HoldCaches() => PassHold.Nothing;
 
         public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
             throw new NotSupportedException("This stub exists only to carry a declaration.");

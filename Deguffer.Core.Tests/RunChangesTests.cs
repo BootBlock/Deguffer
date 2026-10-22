@@ -200,6 +200,8 @@ public sealed class RunChangesTests
 
         public void InvalidateCaches() => throw new NotSupportedException();
 
+        public PassHold HoldCaches() => throw new NotSupportedException();
+
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>

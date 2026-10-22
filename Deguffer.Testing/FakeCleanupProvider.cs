@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Testing;
 
@@ -93,6 +94,8 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     public void InvalidateCaches()
     {
     }
+
+    public PassHold HoldCaches() => PassHold.Nothing;
 
     public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(IsPresent);
 
