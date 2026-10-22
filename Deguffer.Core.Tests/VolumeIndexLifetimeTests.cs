@@ -59,8 +59,9 @@ public sealed class VolumeIndexLifetimeTests
     }
 
     /// <summary>
-    /// Two passes may share one scanner. The first to end must not take the index from the other, and
-    /// ending the same hold twice must not count as a second pass ending.
+    /// Every provider of a pass holds the scanner they share. The first to give its hold back must not
+    /// take the index from the rest, and ending the same hold twice must not count as a second hold
+    /// ending.
     /// </summary>
     [Fact]
     public async Task TheIndexIsKeptWhileAnotherHoldStands()
@@ -81,6 +82,29 @@ public sealed class VolumeIndexLifetimeTests
         second.Dispose();
         await scanner.MeasureAsync(letter + @":" + Cache);
         Assert.Equal(2, factory.OpenCount);
+    }
+
+    /// <summary>
+    /// A build still reading the table when the last hold ends is stopped, and ends cancelled rather
+    /// than faulted. Nothing awaits it once its index is dropped, and a faulted task nobody awaits is
+    /// recorded as a crash when the collector finds it. It still closes the volume.
+    /// </summary>
+    [Fact]
+    public async Task ABuildStoppedByTheLastHoldEndsCancelledNotFaulted()
+    {
+        var letter = DriveLetters.Unused();
+        var sources = new HeldMftSourceFactory(letter, Volume());
+        var cache = new MftVolumeIndexCache(sources, ScanTuner.Shipped);
+
+        var hold = cache.Hold();
+        var building = cache.Get(letter);
+        hold.Dispose();
+        sources.Release();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => building.WaitAsync(TimeSpan.FromSeconds(30)));
+
+        Assert.True(building.IsCanceled, $"The stopped build ended {building.Status}.");
+        Assert.Equal(1, sources.CloseCount);
     }
 
     /// <summary>

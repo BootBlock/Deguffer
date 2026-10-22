@@ -24,8 +24,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// volume's table, so a system volume of a few million slots holds over a hundred megabytes. Nothing
 /// reads it once the pass that built it has ended, because the next pass starts with
 /// <see cref="Invalidate"/>. So the last <see cref="Hold"/> to end drops every index and ends every
-/// build, as <see cref="Invalidate"/> does. The holds are counted rather than paired, because two
-/// passes may share one cache, and the first to end must not take the index from the other.</para>
+/// build, as <see cref="Invalidate"/> does. The holds are counted rather than paired, because every
+/// provider of a pass takes one on the scanner they share, and the first provider to give its hold
+/// back must not take the index from the rest.</para>
 /// </summary>
 public sealed class MftVolumeIndexCache
 {
@@ -96,8 +97,9 @@ public sealed class MftVolumeIndexCache
             return Task.FromResult(new Built(null, reason));
         }
 
-        // Never cancelled before it starts, so the volume handle is always closed by the build that
-        // owns it. A build Invalidate ends stops at its next check of the token, with the handle in hand.
+        // A build Invalidate or the last hold ends stops at its next check of the token, with the handle
+        // in hand, and ends cancelled rather than faulted. Its index is dropped by then, so nothing
+        // awaits it, and a fault nobody observes is reported as a crash when the collector finds it.
         // Not on the pool: the build holds its thread for the whole pass, and a preview can start one
         // for every volume at once.
         var ran = false;
@@ -112,11 +114,11 @@ public sealed class MftVolumeIndexCache
                     return Build(source, table, scan);
                 }
             },
-            CancellationToken.None);
+            scan);
 
-        // A thread the system would not start never ran the build, and the build is all that closes
-        // the handle. A build that ran and failed closed it on the way out.
-        if (built.IsFaulted && !Volatile.Read(ref ran))
+        // A thread the system would not start, or a scan ended before the build began, never ran the
+        // build, and the build is all that closes the handle. A build that ran closed it on the way out.
+        if ((built.IsFaulted || built.IsCanceled) && !Volatile.Read(ref ran))
         {
             source.Dispose();
         }

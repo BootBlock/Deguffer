@@ -5,7 +5,7 @@ namespace Deguffer.Core.Scanning;
 /// <see cref="IDirectoryScanner.Hold"/>.
 ///
 /// <para>Ending it twice gives back once. A holder that counts its holds would otherwise count one
-/// pass's end twice, and drop what another pass still holds.</para>
+/// hold's end twice, and drop what another hold of the same pass still keeps.</para>
 /// </summary>
 public sealed class PassHold : IDisposable
 {

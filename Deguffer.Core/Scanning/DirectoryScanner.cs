@@ -6,7 +6,8 @@ namespace Deguffer.Core.Scanning;
 
 /// <summary>
 /// The scanner §5.5 asks for: read the MFT, fall back to a bounded parallel walk where that is not
-/// possible, cache within a planning pass, and stream partial results rather than blocking.
+/// possible, cache across runs, and stream partial results rather than blocking. What outlasts a run
+/// is each path's size. The volume index is kept only for the planning pass that built it.
 ///
 /// Choosing between the two routes lives here and nowhere else. Providers, the planner and the
 /// executor ask <see cref="IDirectoryScanner"/> for a size and are told how it was obtained; none
