@@ -95,13 +95,15 @@ internal static class ToolchainItems
         new(
             KnownPlace.LocalAppData,
             "npm-cache",
-            "npm's cache on Windows: an opaque store of every package archive and web response it "
-            + "has fetched. It only grows, and gigabytes is normal on a machine that builds "
-            + "JavaScript projects. npm describes it as self-healing, so it does not need clearing "
-            + "for any reason except space.",
+            "npm's cache on Windows. Its '_cacache' folder is an opaque store of every package "
+            + "archive and web response npm has fetched. Beside it, '_npx' holds the packages npx "
+            + "ran and '_logs' npm's logs. It only grows, and gigabytes is normal on a machine that "
+            + "builds JavaScript projects. npm describes the store as self-healing, so it does not "
+            + "need clearing for any reason except space.",
 
-            "'npm cache clean --force' empties it, and the only cost is that the next install "
-            + "downloads everything again."),
+            "'npm cache clean --force' empties '_cacache', and the only cost is that the next "
+            + "install downloads everything again. It leaves '_npx' and '_logs', and no npm command "
+            + "clears '_npx'."),
 
         new(
             KnownPlace.LocalAppData,

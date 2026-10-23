@@ -116,7 +116,8 @@ public sealed class NpmCacheProviderTests : IDisposable
 
     /// <summary>
     /// §5.6: run as npm runs it, the clean takes <c>_cacache</c>, and the verification proves the
-    /// cache folder, the packages npx ran and the logs all outlived it.
+    /// cache folder and the packages npx ran outlived it. The logs are not protected, because npm
+    /// prunes them itself on every run, so the test checks them directly.
     /// </summary>
     [Fact]
     public async Task VerifiesWhatNpmsCleanLeavesBesideThePackageCacheSurvived()
