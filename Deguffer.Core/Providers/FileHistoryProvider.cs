@@ -63,11 +63,15 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     public static readonly int MaximumRetentionDays = (int)MinimumAge.MaximumWindow.TotalDays;
 
     /// <summary>
-    /// The command, resolved on <c>PATH</c> rather than assumed under <c>System32</c>. It ships with
-    /// every Windows 11 install, so its presence says nothing about whether File History is set up —
-    /// see <see cref="FileHistoryDiscovery"/>.
+    /// The command, where Windows ships it. It ships with every Windows 11 install, so its presence
+    /// says nothing about whether File History is set up — see <see cref="FileHistoryDiscovery"/>.
+    ///
+    /// <para>Named by the Windows directory rather than found on <c>PATH</c>. It has no 32-bit build,
+    /// so a 32-bit Deguffer asks through <see cref="NativeSystemTool"/>, and a <c>PATH</c> that lost
+    /// <c>System32</c>, or that puts a writable folder ahead of it, can neither hide it nor stand
+    /// another file in for it on a Tier 3 command.</para>
     /// </summary>
-    private const string ManagerCommand = "FhManagew";
+    private readonly string _manager;
 
     private readonly FileHistoryDiscovery _discovery;
 
@@ -82,7 +86,8 @@ public sealed class FileHistoryProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ICurrentPreferences? preferences = null)
+        ICurrentPreferences? preferences = null,
+        ISystemDirectories? system = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -91,6 +96,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     {
         _discovery = new FileHistoryDiscovery(Environment);
         _preferences = preferences ?? DefaultPreferences.Instance;
+        _manager = NativeSystemTool.In(system ?? SystemDirectories.Current, "FhManagew.exe");
     }
 
     public override string Id => "file-history";
@@ -220,13 +226,19 @@ public sealed class FileHistoryProvider : CleanupProviderBase
             return DescribeAbsence(located);
         }
 
-        var manager = Environment.FindExecutable(ManagerCommand);
-        if (manager is null)
+        switch (LongPath.ProbeFile(_manager))
         {
-            return UnexaminedPlan(
-                $"Windows' own File History command ({ManagerCommand}.exe) is not on this machine, "
-                + "so nothing is offered — the saved versions are only ever removed by asking "
-                + "Windows to remove them.");
+            case PathPresence.Absent:
+                return UnexaminedPlan(
+                    $"Windows' own File History command is not at {_manager}, so nothing is offered — "
+                    + "the saved versions are only ever removed by asking Windows to remove them.");
+
+            // Not "is not at": nothing established that it is missing.
+            case PathPresence.Refused:
+                return UnexaminedPlan(
+                    $"Windows would not say whether its own File History command is at {_manager}, so "
+                    + "nothing is offered — the saved versions are only ever removed by asking Windows "
+                    + "to remove them.") with { HasUnreadableRoot = true };
         }
 
         var days = RetentionDays;
@@ -271,7 +283,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
             Steps =
             [
                 new RunCommandStep(
-                    manager,
+                    _manager,
                     $"-cleanup {days} -quiet",
                     $"Drop File History versions older than {days} days using Windows' own command")
                 {

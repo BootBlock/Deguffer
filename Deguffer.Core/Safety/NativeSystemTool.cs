@@ -10,8 +10,10 @@ namespace Deguffer.Core.Safety;
 /// </summary>
 public static class NativeSystemTool
 {
-    public static string In(ISystemDirectories system, string fileName) => Path.Combine(
+    /// <param name="system">Where Windows is.</param>
+    /// <param name="relativePath">The tool, or a folder Windows ships, relative to <c>System32</c>.</param>
+    public static string In(ISystemDirectories system, string relativePath) => Path.Combine(
         system.WindowsDirectory,
         Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess ? "Sysnative" : "System32",
-        fileName);
+        relativePath);
 }

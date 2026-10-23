@@ -15,8 +15,10 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Windows PowerShell, from the Windows directory.</b> The module ships with Windows
 /// PowerShell under <c>System32</c>, so that host is named by where Windows put it rather than found
-/// on <c>PATH</c>. The in-box module loads under every execution policy, including
-/// <c>Restricted</c>, which was observed on Windows 11 24H2, so no policy is overridden.</para>
+/// on <c>PATH</c>, and through <see cref="NativeSystemTool"/>, so a 32-bit Deguffer runs the host and
+/// reads the module built for the running Windows rather than their 32-bit copies. The in-box module
+/// loads under every execution policy, including <c>Restricted</c>, which was observed on Windows 11
+/// 24H2, so no policy is overridden.</para>
 /// </summary>
 internal sealed class DeliveryOptimizationCache : IToolMeasurement
 {
@@ -44,7 +46,7 @@ internal sealed class DeliveryOptimizationCache : IToolMeasurement
     {
         _runner = runner;
 
-        var host = Path.Combine(system.WindowsDirectory, "System32", "WindowsPowerShell", "v1.0");
+        var host = NativeSystemTool.In(system, Path.Combine("WindowsPowerShell", "v1.0"));
         PowerShell = Path.Combine(host, "powershell.exe");
         ModuleManifest = Path.Combine(host, "Modules", "DeliveryOptimization", "DeliveryOptimization.psd1");
     }
