@@ -57,7 +57,7 @@ public sealed class MapLookTests
 
         File.WriteAllText(
             Path.Combine(directory.FullName, "preferences.json"),
-            """{ "TreemapSpacing": 9, "TreemapScheme": 9, "IcicleScheme": -1, "SunburstScheme": "Deep", "MapStyle": { "Shading": 9, "Relief": -2, "BlockBorders": "Solid", "FolderFill": 7 } }""");
+            """{ "TreemapSpacing": 9, "TreemapScheme": 9, "IcicleScheme": -1, "SunburstScheme": "Deep", "MapStyle": { "Shading": 9, "Relief": -2, "BlockBorders": "Solid", "FolderFill": 7 }, "MapPointerLight": { "Shown": false, "Strength": 9 } }""");
 
         var look = MapLook.From(new PreferenceStore(environment).Load());
 
@@ -67,7 +67,8 @@ public sealed class MapLookTests
                 ExploreScheme.Standard,
                 ExploreScheme.Standard,
                 ExploreScheme.Deep,
-                MapStyle.Default with { BlockBorders = MapBorder.Solid }),
+                MapStyle.Default with { BlockBorders = MapBorder.Solid },
+                new MapPointerLight(Shown: false)),
             look);
     }
 
@@ -79,7 +80,13 @@ public sealed class MapLookTests
     public void WritingTheLookBackChangesNothingElse()
     {
         var before = AppPreferences.Default with { ConfirmBeforeCleaning = false, KeepFilesChangedWithinHours = 4 };
-        var look = new MapLook(ExploreSpacing.Dense, ExploreScheme.Vivid, ExploreScheme.Soft, ExploreScheme.Deep, MapPreset.SpaceMonger.Style);
+        var look = new MapLook(
+            ExploreSpacing.Dense,
+            ExploreScheme.Vivid,
+            ExploreScheme.Soft,
+            ExploreScheme.Deep,
+            MapPreset.SpaceMonger.Style,
+            new MapPointerLight(Shown: false, MapLightStrength.Bright));
 
         var after = look.Into(before);
 
@@ -92,6 +99,7 @@ public sealed class MapLookTests
                 IcicleScheme = ExploreScheme.Soft,
                 SunburstScheme = ExploreScheme.Deep,
                 MapStyle = MapPreset.SpaceMonger.Style,
+                MapPointerLight = new MapPointerLight(Shown: false, MapLightStrength.Bright),
             },
             after);
     }

@@ -13,8 +13,8 @@ public sealed class PointerLightTests
     [Fact]
     public void TheReachFollowsTheDisplayScale()
     {
-        Assert.Equal(PointerLight.ReachInDips, PointerLight.At(0, 0, 1).Reach);
-        Assert.Equal(PointerLight.ReachInDips * 1.5f, PointerLight.At(0, 0, 1.5).Reach);
+        Assert.Equal(PointerLight.ReachInDips, PointerLight.At(0, 0, 1, PointerLight.StandardStrength).Reach);
+        Assert.Equal(PointerLight.ReachInDips * 1.5f, PointerLight.At(0, 0, 1.5, PointerLight.StandardStrength).Reach);
     }
 
     /// <summary>
