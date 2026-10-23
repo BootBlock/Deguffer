@@ -54,7 +54,9 @@ public sealed class ListWorkersTests
 
                     together.Signal();
 
-                    if (!together.Wait(GatherAtMost))
+                    // Waited out once: a run below its bound fails on the first miss rather than at
+                    // every item.
+                    if (Volatile.Read(ref apart) == 0 && !together.Wait(GatherAtMost))
                     {
                         Interlocked.Increment(ref apart);
                     }
