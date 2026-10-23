@@ -12,6 +12,10 @@ namespace Deguffer.Benchmark;
 /// <param name="RecordsInUse">How many records <c>$MFT</c>'s <c>$BITMAP</c> marks in use.</param>
 internal readonly record struct TableCensus(long RecordsInUse, int BytesPerRecord)
 {
-    /// <summary>The bytes of free records a run read, or nothing where it read fewer records than are in use.</summary>
+    /// <summary>
+    /// The bytes of free records a run read, or nothing where it read fewer records than are in use.
+    /// Only a complete run's figure is exact: a run that stopped short never read some records in
+    /// use, so its figure is less than what it read of free records.
+    /// </summary>
     public long FreeBytesRead(RunTally tally) => Math.Max(0, tally.Items - RecordsInUse) * BytesPerRecord;
 }

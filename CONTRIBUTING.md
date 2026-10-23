@@ -97,6 +97,9 @@ Explore routes also report what the finished tree keeps: the managed heap with t
 the heap once it is let go, which the peak working set cannot show. "Processors busy" is the
 process's processor time over the elapsed time: a run that waits on the drive keeps few busy, and
 one that waits on its own work keeps about as many busy as it has threads doing that work.
+The table routes also report how many reads each run made, how many records `$MFT`'s bitmap marks in
+use, counted once before the first run, and the bytes of free records each run read beyond those:
+what reading across free records cost the run. That last figure holds only for a complete run.
 
 To report a result, open an issue and paste the output as it stands. It names the drive letter and
 the file system, and never a path, a volume label, a user or a machine. Add the kind of drive
