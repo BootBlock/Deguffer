@@ -49,19 +49,18 @@ internal sealed record LiveTreeQuestion(Func<RecognisedBuildDirectory, LiveTreeQ
 }
 
 /// <param name="Cleared">
-/// The directories a plan may go on to target. Empty where the answer was not whole: a directory the
-/// veto could not ask about is not one it found unused.
+/// The directories a plan may go on to target. A directory the veto could not ask about is never
+/// among them: it is not one the veto found unused.
 /// </param>
 /// <param name="Vetoed">The directories something is using, and what is using each.</param>
 /// <param name="Unchecked">
-/// The directories held back because the answer was not whole, among those it did not find in use.
+/// The directories held back because the question about them could not be asked in full, among
+/// those it did not find in use. Every one of them where the process table itself could not be read.
 /// </param>
-/// <param name="Complete">False where liveness could not be established in full.</param>
 public sealed record LiveTreeVetoResult(
     IReadOnlyList<ClearedBuildDirectory> Cleared,
     IReadOnlyList<LiveTree> Vetoed,
-    IReadOnlyList<string> Unchecked,
-    bool Complete)
+    IReadOnlyList<string> Unchecked)
 {
     /// <summary>
     /// Every directory the veto held back, with why, for the §5.6 report: the ones in use and the ones
@@ -158,11 +157,10 @@ internal static class LiveTreeVeto
                     .Select(c => new ClearedBuildDirectory(c.Path, c.Project, new LiveTreeCheck(inspector, c, questions))),
             ],
             findings.Live,
-            [.. unused.Where(c => !findings.IsAnswered(c.Path)).Select(c => c.Path)],
-            findings.Complete);
+            [.. unused.Where(c => !findings.IsAnswered(c.Path)).Select(c => c.Path)]);
     }
 
-    private static readonly LiveTreeVetoResult Nothing = new([], [], [], Complete: true);
+    private static readonly LiveTreeVetoResult Nothing = new([], [], []);
 
     /// <summary>
     /// What the user is told about the directories that were held back, or null if none were.

@@ -359,8 +359,8 @@ public static class TempMarkerSurvey
         /// under, in their order, for the clean to ask again. Null for an entry offered on none of them.
         ///
         /// <para>A directory carries the question the veto handed out with it, which holds it back where
-        /// the answer is partial, because the survey refused every directory on a partial answer rather
-        /// than offering it with a note.</para>
+        /// the answer at the clean is partial. The survey offers a directory only on an answer that was
+        /// whole for it, so a partial one at the clean is evidence the preview never had.</para>
         /// </summary>
         /// <param name="directoryCheck">The veto's question, or null for a file, which the veto was never asked about.</param>
         private IUseCheck? Recheck(TempMarker marker, string path, IUseCheck? directoryCheck)

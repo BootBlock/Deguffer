@@ -40,9 +40,10 @@ namespace Deguffer.Core.Providers;
 /// because there is nothing to name it by. The plan still holds both back.</para>
 ///
 /// <para><b>A candidate the veto could not ask about is declared as well</b>, as the plan withholds
-/// it. Where the process table itself could not be read, the candidates are only those near the
-/// places it did yield, and the plan, which walks every root, withholds more than Explore
-/// refuses.</para>
+/// it. But only a candidate is asked about, and the plan walks every root, so the plan withholds two
+/// kinds of directory that Explore does not refuse: every build directory away from where a program
+/// is when the process table itself could not be read, and one whose own lock file could not be
+/// asked about, such as a Unity project past <c>MAX_PATH</c>, when no program is near it.</para>
 /// </summary>
 internal static class InUseBuildDirectories
 {
