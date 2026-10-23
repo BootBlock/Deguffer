@@ -68,26 +68,27 @@ public sealed partial class DuplicatesPage : Page
 
     public DuplicatesViewModel ViewModel { get; }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ViewModel.Locations.RefreshDrives();
-
         // Once: a return to the cached page keeps what the search found. An elevated relaunch was
         // asked to search, and the user already pressed the button that asked it.
-        if (_shown)
+        if (!_shown)
         {
-            return;
+            _shown = true;
+
+            if (ViewModel.IsRequested && ViewModel.SearchCommand.CanExecute(null))
+            {
+                ViewModel.SearchCommand.Execute(null);
+            }
         }
 
-        _shown = true;
-
-        if (ViewModel.IsRequested && ViewModel.SearchCommand.CanExecute(null))
-        {
-            ViewModel.SearchCommand.Execute(null);
-        }
+        // After the search starts, which searches the locations listed and not the drive picker's
+        // rows, so it does not wait on the drives being read.
+        await ViewModel.Locations.RefreshDrivesAsync(CancellationToken.None);
     }
 
-    private void OnDriveListOpened(object sender, object e) => ViewModel.Locations.RefreshDrives();
+    private async void OnDriveListOpened(object sender, object e) =>
+        await ViewModel.Locations.RefreshDrivesAsync(CancellationToken.None);
 
     private static Task<string?> ChooseCsvAsync() =>
         App.MainWindow is { } window ? CsvFileDialog.ChooseAsync(window, "Duplicates") : Task.FromResult<string?>(null);

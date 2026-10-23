@@ -32,7 +32,7 @@ public sealed class VolumeInventoryTests
     {
         using var temp = new TempDirectory();
 
-        var volume = VolumeInventory.Describe([Path.GetPathRoot(temp.Path)!]);
+        var volume = VolumeInventory.Current.Describe([Path.GetPathRoot(temp.Path)!]);
 
         Assert.Equal("NTFS", volume.FileSystem);
         Assert.True(volume.KeepsFileNumbers);
@@ -50,12 +50,12 @@ public sealed class VolumeInventoryTests
         var mountPoint = temp.CreateDirectory("mount") + Path.DirectorySeparatorChar;
         var absent = Path.Combine(temp.Path, "no-media") + Path.DirectorySeparatorChar;
 
-        Assert.Equal(VolumeReadiness.Ready, VolumeInventory.Describe([mountPoint]).Readiness);
-        Assert.Equal(VolumeReadiness.NoMedia, VolumeInventory.Describe([absent]).Readiness);
+        Assert.Equal(VolumeReadiness.Ready, VolumeInventory.Current.Describe([mountPoint]).Readiness);
+        Assert.Equal(VolumeReadiness.NoMedia, VolumeInventory.Current.Describe([absent]).Readiness);
 
         using (DeniedDirectory.WithUnreadableAttributes(mountPoint))
         {
-            var refused = VolumeInventory.Describe([mountPoint]);
+            var refused = VolumeInventory.Current.Describe([mountPoint]);
 
             Assert.Equal(VolumeReadiness.Refused, refused.Readiness);
             Assert.False(refused.IsReady);
@@ -262,7 +262,7 @@ public sealed class VolumeInventoryTests
     [Fact]
     public void RemembersTheListUntilItIsInvalidated()
     {
-        var inventory = new VolumeInventory();
+        var inventory = new VolumeInventory(VolumeQueries.Machine);
 
         var first = inventory.Volumes;
         Assert.Same(first, inventory.Volumes);

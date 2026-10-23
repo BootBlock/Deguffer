@@ -34,29 +34,58 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
     public ObservableCollection<DriveEntry> Entries { get; } = [];
 
     /// <summary>
-    /// Read the volumes again, unless the last reading is younger than <see cref="FreshFor"/>.
+    /// Read the volumes again off the calling thread, unless the last reading is younger than
+    /// <see cref="FreshFor"/>. The rows are not touched, so a caller that has to guard against what
+    /// a change of rows does to a bound picker guards <see cref="Show"/> alone, and the user's own
+    /// choices while the machine is being read are taken as theirs.
+    ///
+    /// <para>Resumes where it was called, because the caller goes on to <see cref="Show"/>, which
+    /// writes <see cref="Entries"/>, a list bound to a control.</para>
+    ///
+    /// <para>The reading is the inventory's <see cref="IVolumeInventory.RefreshAsync"/>, never a
+    /// drop of the list and a read of it here: that read asks every volume the machine has mounted, and a
+    /// drive picker refreshes on the UI thread as it opens (#181).</para>
     /// </summary>
-    /// <returns>Whether the machine was read, so a caller knows the rows may have changed.</returns>
-    public bool Refresh()
+    /// <returns>What was read, or null where the last reading, finished or still under way, stands.</returns>
+    public async Task<IReadOnlyList<LocalVolume>?> ReadAsync(CancellationToken ct)
     {
         var now = time.GetUtcNow();
 
         if (_readAt is { } readAt && now - readAt < FreshFor)
         {
-            return false;
+            return null;
         }
 
+        // Before the await, so a picker opened while the page's own reading runs does not start a
+        // second one.
         _readAt = now;
 
-        volumes.Invalidate();
+        try
+        {
+            return await volumes.RefreshAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Nothing was read, so the next caller reads.
+            _readAt = null;
 
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Bring the rows to <paramref name="read"/>, as <see cref="ReadAsync"/> answered it. On the UI
+    /// thread, because <see cref="Entries"/> is bound.
+    /// </summary>
+    public void Show(IReadOnlyList<LocalVolume> read)
+    {
         _arriving.Clear();
 
         // Not volumes with nothing in them. An optical drive with no disc and a card reader with no
         // card are both mounted and both answer no, and offering them is offering a scan that cannot
         // start. A volume Windows would not describe is listed and refused, because the user can see
         // it in File Explorer and leaving it out would not say why. See DriveChoice.UnreadableRefusal.
-        foreach (var volume in volumes.Volumes.Where(v => v.Readiness is not VolumeReadiness.NoMedia && v.Kind != DriveType.Network))
+        foreach (var volume in read.Where(v => v.Readiness is not VolumeReadiness.NoMedia && v.Kind != DriveType.Network))
         {
             _arriving.Add(DriveChoice.From(volume));
         }
@@ -74,8 +103,6 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
             static choice => choice.RootPath,
             static choice => new DriveEntry(choice),
             static (entry, choice) => entry.Update(choice));
-
-        return true;
     }
 
     /// <summary>

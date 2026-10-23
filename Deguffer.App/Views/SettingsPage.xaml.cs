@@ -91,7 +91,7 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async void OnAddSourceRoot(object sender, RoutedEventArgs e)
     {
-        if (await PickFolderAsync() is not { } folder || ViewModel.ApprovalFor(folder) is not { } approval)
+        if (await PickFolderAsync() is not { } folder || await ViewModel.ApprovalForAsync(folder, CancellationToken.None) is not { } approval)
         {
             return;
         }

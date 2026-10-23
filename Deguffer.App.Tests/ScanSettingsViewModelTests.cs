@@ -31,10 +31,27 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         var queries = new FakeStorageQueries()
             .Volume(@"C:\", 1).Disk(1, Nvme, seekPenalty: false)
             .Volume(@"D:\", 0).Disk(0, Sata, seekPenalty: true);
-        var volumes = new FakeVolumeInventory().With(@"C:\").With(@"D:\");
-        var tuner = new ScanTuner(preferences, new VolumeMediaCache(queries), volumes);
+        var tuner = new ScanTuner(preferences, new VolumeMediaCache(queries), _volumes);
 
-        return (new ScanSettingsViewModel(preferences, tuner, volumes), preferences, queries);
+        return (new ScanSettingsViewModel(preferences, tuner, _volumes), preferences, queries);
+    }
+
+    private readonly FakeVolumeInventory _volumes = new FakeVolumeInventory().With(@"C:\").With(@"D:\");
+
+    /// <summary>
+    /// The page reads the volumes again off the window's thread and never drops the shared list:
+    /// a dropped list is read again, every volume asked, by whichever page on the window's thread
+    /// asks for it next.
+    /// </summary>
+    [Fact]
+    public async Task ListingTheDrivesReadsTheVolumesAgainWithoutDroppingTheList()
+    {
+        var (section, _, _) = Section();
+
+        await section.RefreshDrivesAsync(CancellationToken.None);
+
+        Assert.Equal(1, _volumes.RefreshCount);
+        Assert.Equal(0, _volumes.InvalidateCount);
     }
 
     [Fact]

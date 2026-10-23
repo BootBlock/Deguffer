@@ -24,6 +24,9 @@ public sealed class FakeVolumeInventory : IVolumeInventory
 
     public int InvalidateCount { get; private set; }
 
+    /// <summary>How many times <see cref="RefreshAsync"/> was asked to read the volumes again.</summary>
+    public int RefreshCount { get; private set; }
+
     /// <summary>
     /// Pretend <paramref name="rootPath"/> is a mounted volume. It defaults to the fixed, ready
     /// case, so a test that names another kind is visibly testing that kind.
@@ -168,4 +171,47 @@ public sealed class FakeVolumeInventory : IVolumeInventory
             : null;
 
     public void Invalidate() => InvalidateCount++;
+
+    /// <summary>
+    /// The volumes as they stand, answered at once, as a machine with nothing slow mounted answers.
+    /// A caller's awaits then finish where they stand, so a test drives a page's reading without a
+    /// dispatcher. That the real reading is taken off the caller's thread is
+    /// <c>VolumeListingTests</c>' to show.
+    /// </summary>
+    public Task<IReadOnlyList<LocalVolume>> RefreshAsync(CancellationToken ct)
+    {
+        RefreshCount++;
+
+        if (ct.IsCancellationRequested)
+        {
+            return Task.FromCanceled<IReadOnlyList<LocalVolume>>(ct);
+        }
+
+        return _held is { } held ? AfterAsync(held.Task) : Task.FromResult<IReadOnlyList<LocalVolume>>([.. _volumes]);
+    }
+
+    /// <summary>
+    /// Keep every reading from here on under way until the returned action is called, so a test can
+    /// act while one runs. The volumes a held reading answers are those standing at the release.
+    /// </summary>
+    public Action HoldRefreshes()
+    {
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _held = held;
+
+        return () =>
+        {
+            _held = null;
+            held.TrySetResult();
+        };
+    }
+
+    private TaskCompletionSource? _held;
+
+    private async Task<IReadOnlyList<LocalVolume>> AfterAsync(Task released)
+    {
+        await released.ConfigureAwait(false);
+
+        return [.. _volumes];
+    }
 }

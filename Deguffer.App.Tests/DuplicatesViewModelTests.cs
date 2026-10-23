@@ -105,7 +105,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
     public void TheLocationsAreHandedOverInTheirRoles() => UiThread.Run(async () =>
     {
         var page = Page();
-        page.Locations.RefreshDrives();
+        await page.Locations.RefreshDrivesAsync(CancellationToken.None);
         page.Locations.SelectedDrive = page.Locations.Drives.Single(drive => drive.RootPath == @"D:\");
         page.Locations.AddDriveCommand.Execute(null);
         page.Locations.AddFolder(Photos);

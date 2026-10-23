@@ -99,13 +99,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// page shows it and asks; nothing is stored by asking. Null where the choice was not a folder on
     /// a disk, which <see cref="SourceRootNotOnDisk"/> then states.
     ///
-    /// <para>The remembered volume list is dropped first. It is kept for the life of a planning pass,
-    /// so a cloud client that mounted itself since the last one would be missing from it and the
-    /// folder would be stored with no warning shown. One enumeration of the machine's drives per
-    /// folder the user picks by hand is not a cost worth a stale answer.</para>
+    /// <para>The volumes are read again first. The list is kept for the life of a planning pass, so
+    /// a cloud client that mounted itself since the last one would be missing from it and the folder
+    /// would be stored with no warning shown. One enumeration of the machine's drives per folder the
+    /// user picks by hand is not a cost worth a stale answer, and it is taken off the UI thread,
+    /// since it asks every volume the machine has mounted.</para>
     /// </summary>
     /// <param name="folder">What the picker returned, which may name nothing on a disk.</param>
-    public SourceRootApproval? ApprovalFor(string folder)
+    public async Task<SourceRootApproval?> ApprovalForAsync(string folder, CancellationToken ct)
     {
         var onDisk = PickedFolder.OnDisk(folder);
         SourceRootNotOnDisk = onDisk is null;
@@ -115,7 +116,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return null;
         }
 
-        _volumes.Invalidate();
+        await _volumes.RefreshAsync(ct);
 
         return SourceRootApproval.For(_volumes, onDisk);
     }

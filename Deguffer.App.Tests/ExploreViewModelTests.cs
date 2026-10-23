@@ -256,11 +256,27 @@ public sealed class ExploreViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// An elevated replacement asked to rescan a whole drive scans that drive. The page is built
+    /// before any drive is read, and pointed only once its first showing has read them: pointed at
+    /// construction, it found no row for the drive, scanned nothing, and named the default drive.
+    /// </summary>
+    [Fact]
+    public async Task AnElevatedReplacementIsPointedOnceItsDrivesAreRead()
+    {
+        _explore.Volumes.With(@"C:\").With(@"D:\");
+        var page = _explore.Built(isElevated: true);
+
+        Assert.True(await page.ShownAsync(new ExploreRequest(@"D:\", null), CancellationToken.None));
+        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
+        Assert.True(page.ScanCommand.CanExecute(null));
+    }
+
+    /// <summary>
     /// A drive taken away between two readings moves the page to one nobody picked, and a folder on
     /// the drive that went goes with it.
     /// </summary>
     [Fact]
-    public void AReadingThatLosesTheChosenDriveDropsTheFolder()
+    public async Task AReadingThatLosesTheChosenDriveDropsTheFolder()
     {
         _explore.Volumes.With(@"C:\").With(@"E:\");
         var page = _explore.Page();
@@ -268,11 +284,39 @@ public sealed class ExploreViewModelTests : IDisposable
         page.ScopeTo(@"E:\Photos");
         _explore.Volumes.Without(@"E:\");
         _explore.Time.Advance(DriveList.FreshFor);
-        page.RefreshDrives();
+        await page.RefreshDrivesAsync(CancellationToken.None);
 
         Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
         Assert.Null(page.ScopeFolder);
     }
+
+    /// <summary>
+    /// The drives are read off the window's thread, so the picker can be used while they are. A
+    /// drive picked then is the reader's choice: it drops the folder on the drive they left, and the
+    /// reading that lands after it does not put the old drive back.
+    /// </summary>
+    [Fact]
+    public void ADrivePickedWhileTheDrivesAreReadIsTheReadersChoice() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\").With(@"D:\");
+        var page = _explore.Page();
+
+        page.ScopeTo(@"C:\Users\testuser");
+
+        var release = _explore.Volumes.HoldRefreshes();
+        _explore.Time.Advance(DriveList.FreshFor);
+        var reading = page.RefreshDrivesAsync(CancellationToken.None);
+
+        page.SelectedDrive = page.Drives.Single(drive => drive.RootPath == @"D:\");
+
+        Assert.False(reading.IsCompleted, "The reading was meant to be under way when the drive was picked.");
+
+        release();
+        await reading;
+
+        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
+        Assert.Null(page.ScopeFolder);
+    });
 
     /// <summary>
     /// The picker lets go of its selection while the list under it changes, writing null back
@@ -293,7 +337,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         _explore.Volumes.With(@"E:\");
         _explore.Time.Advance(DriveList.FreshFor);
-        page.RefreshDrives();
+        await page.RefreshDrivesAsync(CancellationToken.None);
 
         Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
         Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
@@ -320,7 +364,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         _explore.Volumes.With(@"C:\");
         _explore.Time.Advance(DriveList.FreshFor);
-        page.RefreshDrives();
+        await page.RefreshDrivesAsync(CancellationToken.None);
 
         Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
         Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
@@ -658,6 +702,10 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal(scanned with { FreeBytes = 110 }, page.Volume);
         Assert.Equal(5, page.Tree!.TotalBytes);
+
+        // Neither the scan's end nor the removal drops the list for the window's thread to read
+        // again: that read asks every volume the machine has mounted.
+        Assert.Equal(0, _explore.Volumes.InvalidateCount);
     });
 
     /// <summary>

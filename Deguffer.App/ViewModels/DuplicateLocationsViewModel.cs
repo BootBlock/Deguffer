@@ -48,11 +48,22 @@ public sealed partial class DuplicateLocationsViewModel : ObservableObject
     /// <summary>Add the folder the picker returned, or say why not.</summary>
     public void AddFolder(string picked) => Add(LocationChoice.WhyNotAdded(Chosen, picked), picked);
 
-    /// <summary>Read the drives again for the picker, unless the last reading is fresh.</summary>
-    public void RefreshDrives()
+    /// <summary>
+    /// Read the drives again for the picker, off the UI thread, unless the last reading is fresh.
+    /// The choice is taken once the reading lands and before the rows change, so a drive picked
+    /// meanwhile is kept, and a null the picker writes back as its rows change is not taken for one.
+    /// </summary>
+    public async Task RefreshDrivesAsync(CancellationToken ct)
     {
-        _drives.Refresh();
-        SelectedDrive = _drives.Choose(SelectedDrive?.RootPath);
+        var read = await _drives.ReadAsync(ct);
+        var chosen = SelectedDrive?.RootPath;
+
+        if (read is not null)
+        {
+            _drives.Show(read);
+        }
+
+        SelectedDrive = _drives.Choose(chosen);
     }
 
     private bool CanAddDrive() => SelectedDrive is not null;
