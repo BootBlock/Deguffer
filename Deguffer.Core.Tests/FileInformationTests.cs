@@ -262,6 +262,7 @@ public sealed class FileInformationTests
         var file = LongPath.Extended(temp.CreateFile(10, "plain.bin"));
         using var openedDirectory = FileInformation.Open(directory, HandleUse.Describe);
         using var openedFile = FileInformation.Open(file, HandleUse.Describe);
+        Assert.False(openedDirectory.IsInvalid || openedFile.IsInvalid);
 
         Assert.Same(openedDirectory, FileInformation.AsNamed(directory + Path.DirectorySeparatorChar, openedDirectory));
         Assert.Same(openedFile, FileInformation.AsNamed(file, openedFile));
