@@ -257,18 +257,15 @@ public sealed partial class ExplorePage : Page
         // back would be its own defect.
         NavigationCacheMode = NavigationCacheMode.Required;
 
-        // An elevated replacement opens straight here, pointed where the instance it replaced was
-        // pointed. Only where that target survived the relaunch: PointAt says so, and a drive that
-        // has since gone leaves the page waiting rather than scanning something else.
-        if (ElevatedRelaunch.Requested is ExploreRequest requested
-            && ViewModel.PointAt(requested.Drive, requested.Folder))
-        {
-            // Deferred to Loaded rather than run here, as the Storage page defers its own: the scan
-            // reports back through the dispatcher, and starting it before the page is live would
-            // report into nothing.
-            Loaded += StartRequestedScan;
-        }
+        // An elevated replacement opens straight here, and is pointed where the instance it replaced
+        // was pointed once its drives have been read, as it is first shown (OnNavigatedTo).
+        _resuming = ElevatedRelaunch.Requested as ExploreRequest;
     }
+
+    /// <summary>
+    /// Where an elevated relaunch asked this page to point, until the first showing has done so.
+    /// </summary>
+    private ExploreRequest? _resuming;
 
     public ExploreViewModel ViewModel { get; }
 
@@ -570,12 +567,33 @@ public sealed partial class ExplorePage : Page
     /// <summary>
     /// Read the volumes as the page is shown, on the same terms as the picker opening, the first
     /// visit included. The page is kept alive by NavigationCacheMode.
+    ///
+    /// <para>The first showing of an elevated replacement then points where the instance it replaced
+    /// was pointed, and scans. Only where that target survived the relaunch: ShownAsync says so, and
+    /// a drive that has since gone leaves the page waiting rather than scanning something else.</para>
     /// </summary>
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
 
-        await ViewModel.RefreshDrivesAsync(CancellationToken.None);
+        var resuming = _resuming;
+        _resuming = null;
+
+        if (!await ViewModel.ShownAsync(resuming, CancellationToken.None))
+        {
+            return;
+        }
+
+        // Started once the page is live, as the Storage page starts its own: the scan reports back
+        // through the dispatcher, and starting it before then would report into nothing.
+        if (IsLoaded)
+        {
+            StartRequestedScan(this, new RoutedEventArgs());
+        }
+        else
+        {
+            Loaded += StartRequestedScan;
+        }
     }
 
     /// <summary>Applied first and persisted second, for the reason above.</summary>

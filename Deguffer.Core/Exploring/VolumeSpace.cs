@@ -79,7 +79,7 @@ public readonly record struct VolumeSpace(
     ///
     /// <para>Asked of that one volume through <see cref="IVolumeInventory.SpaceOf"/>, never by reading
     /// the list again. The page shows what is left as the removal reports it, on the UI thread, and a
-    /// fresh list there would wait on every device on the machine (#181). That this space is not
+    /// fresh list there would wait on every volume the machine has mounted (#181). That this space is not
     /// <see cref="None"/> already says the scan covered the whole of the volume.</para>
     /// </summary>
     public VolumeSpace Remeasured(IVolumeInventory volumes, string scannedRoot) =>

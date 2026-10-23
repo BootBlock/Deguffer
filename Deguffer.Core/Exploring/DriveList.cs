@@ -43,7 +43,7 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
     /// writes <see cref="Entries"/>, a list bound to a control.</para>
     ///
     /// <para>The reading is the inventory's <see cref="IVolumeInventory.RefreshAsync"/>, never a
-    /// drop of the list and a read of it here: that read asks every device on the machine, and a
+    /// drop of the list and a read of it here: that read asks every volume the machine has mounted, and a
     /// drive picker refreshes on the UI thread as it opens (#181).</para>
     /// </summary>
     /// <returns>What was read, or null where the last reading, finished or still under way, stands.</returns>

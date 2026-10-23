@@ -98,7 +98,7 @@ public sealed class DriveListTests
     /// <summary>
     /// The picker reads the machine through the inventory's own off-thread reading, never by
     /// dropping the list and reading it where it stands: a picker refreshes on the UI thread as it
-    /// opens, and that read waits on every device the machine has.
+    /// opens, and that read waits on every volume the machine has mounted.
     /// </summary>
     [Fact]
     public async Task NeverDropsTheListToReadItWhereItStands()

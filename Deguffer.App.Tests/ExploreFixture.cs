@@ -79,7 +79,7 @@ internal sealed class ExploreFixture : IDisposable
     public ExploreViewModel Page(bool isElevated = false)
     {
         var page = Built(isElevated);
-        var shown = page.RefreshDrivesAsync(CancellationToken.None);
+        var shown = page.ShownAsync(null, CancellationToken.None);
 
         Assert.True(shown.IsCompleted, "The fake inventory answers at once, so the first reading finishes as the page is shown.");
         shown.GetAwaiter().GetResult();
@@ -87,7 +87,8 @@ internal sealed class ExploreFixture : IDisposable
         return page;
     }
 
-    private ExploreViewModel Built(bool isElevated) =>
+    /// <summary>A page built and not yet shown, so nothing has read its drives.</summary>
+    public ExploreViewModel Built(bool isElevated = false) =>
         new(
             Scanner,
             Volumes,

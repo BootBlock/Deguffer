@@ -776,7 +776,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             // Read afresh and handed to Show, which is what draws the map, because the space figures
             // the drive picker holds are from whenever it last opened. Read off the UI thread, since
-            // the reading asks every device on the machine.
+            // the reading asks every volume the machine has mounted.
             await _volumes.RefreshAsync(ct);
 
             var volume = await VolumeSpace.ReadAsync(_volumes, _hidden, target, scan.Tree, ct);
@@ -912,6 +912,22 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
+    /// The page being shown: read the drives (<see cref="RefreshDrivesAsync"/>), then point it at
+    /// <paramref name="resuming"/> where an elevated relaunch asked for a target.
+    ///
+    /// <para>In that order and in one place, because <see cref="PointAt"/> finds the drive among the
+    /// rows, and the rows are filled only once the reading lands off the UI thread. Pointed before
+    /// then, a relaunch to rescan a whole drive found no row, and scanned nothing.</para>
+    /// </summary>
+    /// <returns>Whether the page now points where <paramref name="resuming"/> asked, so the caller may scan.</returns>
+    public async Task<bool> ShownAsync(ExploreRequest? resuming, CancellationToken ct)
+    {
+        await RefreshDrivesAsync(ct);
+
+        return resuming is { } requested && PointAt(requested.Drive, requested.Folder);
+    }
+
+    /// <summary>
     /// Point the page where an earlier instance was pointed, so an elevated replacement resumes the
     /// scan the user asked for instead of starting from nothing. See <see cref="ExploreRequest"/>
     /// and <see cref="ExploreTarget.Pointing"/>.
@@ -922,6 +938,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </returns>
     public bool PointAt(string? drive, string? folder)
     {
+        // Asked of the rows, so it means something only once the drives have been read: see
+        // ShownAsync, which is how the page calls it.
         if (Target.Pointing(_drives.Find(drive)?.RootPath, folder) is not { } pointed)
         {
             return false;

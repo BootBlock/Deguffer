@@ -278,8 +278,8 @@ public sealed class TreemapVolumeTests
 
     /// <summary>
     /// The page remeasures as a removal reports, on the window's thread, so it asks the one volume
-    /// and never the list. A fresh list there waits on every device the machine has, a share's
-    /// included, and a remembered one still holds the space as it was before the removal.
+    /// and never the list. A fresh list there waits on every volume the machine has mounted, and a
+    /// remembered one still holds the space as it was before the removal.
     /// </summary>
     [Fact]
     public void AVolumeIsRemeasuredByAskingItAndNotTheList()

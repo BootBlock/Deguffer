@@ -256,6 +256,22 @@ public sealed class ExploreViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// An elevated replacement asked to rescan a whole drive scans that drive. The page is built
+    /// before any drive is read, and pointed only once its first showing has read them: pointed at
+    /// construction, it found no row for the drive, scanned nothing, and named the default drive.
+    /// </summary>
+    [Fact]
+    public async Task AnElevatedReplacementIsPointedOnceItsDrivesAreRead()
+    {
+        _explore.Volumes.With(@"C:\").With(@"D:\");
+        var page = _explore.Built(isElevated: true);
+
+        Assert.True(await page.ShownAsync(new ExploreRequest(@"D:\", null), CancellationToken.None));
+        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
+        Assert.True(page.ScanCommand.CanExecute(null));
+    }
+
+    /// <summary>
     /// A drive taken away between two readings moves the page to one nobody picked, and a folder on
     /// the drive that went goes with it.
     /// </summary>
@@ -688,7 +704,7 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal(5, page.Tree!.TotalBytes);
 
         // Neither the scan's end nor the removal drops the list for the window's thread to read
-        // again: that read asks every device on the machine, a share's included.
+        // again: that read asks every volume the machine has mounted.
         Assert.Equal(0, _explore.Volumes.InvalidateCount);
     });
 

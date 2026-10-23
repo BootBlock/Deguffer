@@ -158,10 +158,14 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     /// Find the drives present and their kinds, then describe them. Off the UI thread, because the
     /// first question about a drive opens its device. The kinds are kept, so a change to a value
     /// redescribes the drives without asking a device again.
+    ///
+    /// <para>The volumes are read again through <see cref="IVolumeInventory.RefreshAsync"/> rather than
+    /// dropped: the list is shared, and a dropped one would be read again by whichever page on the UI
+    /// thread asked for it next.</para>
     /// </summary>
     public async Task RefreshDrivesAsync(CancellationToken ct)
     {
-        _volumes.Invalidate();
+        await _volumes.RefreshAsync(ct);
         _tuner.Invalidate();
 
         _drives = await Task.Run(() => _tuner.Drives(ct), ct);

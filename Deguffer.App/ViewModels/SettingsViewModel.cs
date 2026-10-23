@@ -103,7 +103,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// a cloud client that mounted itself since the last one would be missing from it and the folder
     /// would be stored with no warning shown. One enumeration of the machine's drives per folder the
     /// user picks by hand is not a cost worth a stale answer, and it is taken off the UI thread,
-    /// since it asks every device on the machine.</para>
+    /// since it asks every volume the machine has mounted.</para>
     /// </summary>
     /// <param name="folder">What the picker returned, which may name nothing on a disk.</param>
     public async Task<SourceRootApproval?> ApprovalForAsync(string folder, CancellationToken ct)
