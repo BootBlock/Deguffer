@@ -109,6 +109,21 @@ internal static class AutoTuning
     /// process was warm: its index took 169 ms parsed on one thread, 165 ms on two, 172 ms on four
     /// and 176 ms on eight. The first run in a process did not: 0.35 to 0.42 s on one thread
     /// against 0.18 to 0.25 s on two to four.</para>
+    ///
+    /// <para>The NVMe system volume, 3.0 M records, was timed at 1, 2, 4, 8 and 16 threads, 1 MiB
+    /// reads, eight in flight, three rounds of four runs, the second in reverse order. Its disk was
+    /// shared with other work, and a run is left out below where the disk read more than the pass
+    /// did, or where it was slow with fewer processors busy than the same count in the other rounds.
+    /// The medians of the later runs of the <c>table</c> route were 3.16 to 3.66 s on one thread,
+    /// 2.97 to 3.12 s on two, 2.84 to 3.05 s on four, 2.99 to 3.04 s on eight and 2.82 to 3.13 s on
+    /// sixteen, and the <c>index</c> route 2.96 to 3.28 s on one, 2.94 to 3.19 s on two, 2.88 to
+    /// 3.12 s on four and 2.91 to 3.08 s on sixteen. Every round at eight was slowed by the disk's
+    /// other work. The pass kept 0.3 to 0.6 processors busy at every count, so the parse is not what
+    /// sets its pace: the drive is. A second thread likely pays because a buffer waiting to be
+    /// parsed is not free for a read. The <c>explore</c> route took 3.24 to 3.97 s at every count,
+    /// about one processor busy, so its pace is set by building the tree rather than by the parse.
+    /// The 1.8 TB volume, timed in the same rounds, took 160 to 178 ms from four threads to sixteen,
+    /// 169 to 209 ms on two and 164 to 313 ms on one. Nothing measured earns more than four.</para>
     /// </summary>
     public static int TableParseThreads() => Math.Min(Environment.ProcessorCount, 4);
 }
