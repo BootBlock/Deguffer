@@ -405,14 +405,48 @@ internal sealed unsafe partial class FileInformation
     /// </summary>
     /// <param name="extendedPath">The path in the extended form §6.3 requires.</param>
     internal static SafeFileHandle Open(string extendedPath, HandleUse use) =>
-        CreateFile(
+        AsNamed(extendedPath, CreateFile(
             extendedPath,
             FileReadAttributes,
             ShareAll,
             securityAttributes: 0,
             OpenExisting,
             use is HandleUse.Describe ? BackupSemantics | OpenReparsePoint : BackupSemantics,
-            templateFile: 0);
+            templateFile: 0));
+
+    /// <summary>
+    /// The handle an open of <paramref name="extendedPath"/> gave, or an invalid one with
+    /// <c>ERROR_DIRECTORY</c> set where the path names a file with a trailing separator, which no file
+    /// can be named.
+    ///
+    /// <para><b>Windows does not give that answer every time.</b> Measured on NTFS on 2026-10-23: an
+    /// open of a file just written, through its name with a separator after it, succeeded in about 97%
+    /// of tries while eight threads wrote files beside it, in a sync root and outside one, and failed
+    /// with <c>ERROR_DIRECTORY</c> once the file had been left alone. An open asking for delete access
+    /// failed every time. A caller reads the open as its presence probe, so without this the same path
+    /// would be there or not by timing, against <see cref="LongPath.ProbeEntry(string)"/>, which
+    /// settles the separator before it asks Windows anything.</para>
+    /// </summary>
+    /// <param name="opened">What Windows answered, disposed here where this answers otherwise.</param>
+    internal static SafeFileHandle AsNamed(string extendedPath, SafeFileHandle opened)
+    {
+        // A handle that cannot say what it is open on stays as Windows gave it: closing it would read
+        // a refusal to describe as absence.
+        if (opened.IsInvalid
+            || !LongPath.EndsWithSeparator(extendedPath)
+            || !TryBasic(opened, out var basic)
+            || (basic.FileAttributes & (uint)System.IO.FileAttributes.Directory) != 0)
+        {
+            return opened;
+        }
+
+        opened.Dispose();
+
+        // After the close, which sets the last error of its own.
+        Marshal.SetLastPInvokeError(LongPath.ErrorDirectory);
+
+        return new SafeFileHandle(-1, ownsHandle: false);
+    }
 
     /// <summary>
     /// Opens the file numbered <paramref name="identity"/> on the volume <paramref name="volume"/> is
@@ -447,14 +481,14 @@ internal sealed unsafe partial class FileInformation
     /// </summary>
     /// <param name="extendedPath">The path in the extended form §6.3 requires.</param>
     internal static SafeFileHandle OpenHeld(string extendedPath, HeldFor use) =>
-        CreateFile(
+        AsNamed(extendedPath, CreateFile(
             extendedPath,
             use is HeldFor.Removing ? GenericRead | Delete : GenericRead,
             use is HeldFor.Removing ? ShareRead | ShareDelete : ShareRead,
             securityAttributes: 0,
             OpenExisting,
             OpenReparsePoint | SequentialScan,
-            templateFile: 0);
+            templateFile: 0));
 
     /// <summary>
     /// Every named stream of the file <paramref name="handle"/> is open on, as Windows names them
