@@ -315,6 +315,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                 CachePrune + " --force",
                 "Clear the PlatformIO cache using its own command")
             {
+                WhenCancelled = CancelledCommand.Ended,
                 Estimated = measured.Total,
                 MeasuredPaths = [locations.CacheDirectory],
             },
@@ -341,7 +342,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
         CancellationToken ct)
     {
         var outcome = await Runner
-            .RunAsync(pio, PackagePrune + " --dry-run", ct)
+            .RunAsync(pio, PackagePrune + " --dry-run", ToolRun.Query, ct)
             .ConfigureAwait(false);
 
         var preview = PlatformIoPruneReport.TryRead(outcome.StandardOutput);
@@ -395,6 +396,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                 PackagePrune + " --force",
                 "Remove packages no installed platform still needs, using PlatformIO's own command")
             {
+                WhenCancelled = CancelledCommand.Ended,
                 // Approximate, and not for want of trying: PlatformIO prints its total humanised to
                 // two decimal places, so it is rounded before Deguffer ever sees it.
                 Estimated = ScanSize.Approximate(preview.Bytes),
@@ -474,7 +476,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     private async Task<PlatformIoLocations> AskLocationsAsync(string pio, CancellationToken ct)
     {
         var outcome = await Runner
-            .RunAsync(pio, "system info --json-output", ct)
+            .RunAsync(pio, "system info --json-output", ToolRun.Query, ct)
             .ConfigureAwait(false);
 
         return PlatformIoLocations.Read(

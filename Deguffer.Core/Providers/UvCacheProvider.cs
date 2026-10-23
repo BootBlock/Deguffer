@@ -144,6 +144,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
         {
             new RunCommandStep(uv, "cache clean", "Clear the uv cache using uv's own command")
             {
+                WhenCancelled = CancelledCommand.Ended,
                 Estimated = measured.Total,
                 MeasuredPaths = [cacheDirectory],
             },
@@ -194,7 +195,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
     {
         // --color never because uv colourises this path when it thinks it is writing to a terminal,
         // and the escape sequences would land inside the parsed path.
-        var outcome = await Runner.RunAsync(uv, "cache dir --color never", ct).ConfigureAwait(false);
+        var outcome = await Runner.RunAsync(uv, "cache dir --color never", ToolRun.Query, ct).ConfigureAwait(false);
 
         var reported = outcome.Succeeded
             ? outcome.StandardOutput

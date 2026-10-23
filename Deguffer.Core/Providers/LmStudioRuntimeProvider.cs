@@ -218,7 +218,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
                 + "LM Studio's command would start LM Studio if it were closed.");
         }
 
-        var listed = await Runner.RunAsync(Lms, "runtime ls", ct).ConfigureAwait(false);
+        var listed = await Runner.RunAsync(Lms, "runtime ls", ToolRun.Query, ct).ConfigureAwait(false);
 
         if (!listed.Succeeded || LmStudioRuntimeList.TryRead(listed.StandardOutput) is not { } runtimes)
         {
@@ -276,6 +276,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             // The command beside it names the runtime, and the heading and the version column say it again.
             "Remove this runtime using LM Studio's own command")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = size,
             MeasuredPaths = [item.Folder],
             Removes = item.Folder,

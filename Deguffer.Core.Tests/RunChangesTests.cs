@@ -164,7 +164,7 @@ public sealed class RunChangesTests
         new(path, "Contents") { Estimated = new ScanSize(4096, 4096) };
 
     private static RunCommandStep Runs(params string[] reaches) =>
-        new("tool", "clear", "Clear") { Estimated = new ScanSize(4096, 4096), MeasuredPaths = reaches };
+        new("tool", "clear", "Clear") { WhenCancelled = CancelledCommand.Ended, Estimated = new ScanSize(4096, 4096), MeasuredPaths = reaches };
 
     /// <summary>Only its identity is read here; nothing is ever planned, run or verified.</summary>
     private sealed class NamedProvider(string id) : ICleanupProvider

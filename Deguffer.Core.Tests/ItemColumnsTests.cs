@@ -1,5 +1,6 @@
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Tests;
 
@@ -44,7 +45,7 @@ public class ItemColumnsTests
     [Fact]
     public void AStepThatIsNotAnItemHasAnEmptyValueInEveryColumn()
     {
-        var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache");
+        var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache") { WhenCancelled = CancelledCommand.Ended };
         var columns = ItemColumns.Of([command, Item("api", new ItemFacet("Project", "api"))]);
 
         Assert.Equal([""], columns.ValuesOf(command));
@@ -77,6 +78,7 @@ public class ItemColumnsTests
     {
         var runtime = new RunCommandStep("lms.exe", "runtime remove --yes llama.cpp-win-x86_64-avx2@2.13.0", "Remove a runtime")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Removes = @"C:\Users\testuser\.lmstudio\extensions\backends\llama.cpp-win-x86_64-avx2-2.13.0",
             Facets = [new ItemFacet("Version", "2.13.0")],
         };

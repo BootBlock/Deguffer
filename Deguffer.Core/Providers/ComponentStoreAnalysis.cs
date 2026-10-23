@@ -29,6 +29,13 @@ public sealed class ComponentStoreAnalysis(
     /// <summary>The read-only analysis, in English so its labels can be read.</summary>
     public const string AnalyzeArguments = "/Online /English /Cleanup-Image /AnalyzeComponentStore";
 
+    /// <summary>
+    /// The analysis is read-only, so a cancelled scan ends it rather than leave DISM analysing beside
+    /// the next scan's own analysis. It takes a minute or more, and many on a slow disk, so it is given
+    /// far longer than an ordinary query before it is taken to have hung.
+    /// </summary>
+    internal static readonly ToolRun AnalysisRun = ToolRun.QueryWithin(TimeSpan.FromMinutes(30));
+
     /// <summary>DISM's exit code where the account is not an administrator.</summary>
     public const int ElevationRequired = 740;
 
@@ -50,7 +57,7 @@ public sealed class ComponentStoreAnalysis(
 
     private async Task<ComponentStoreReading> ReadAsync(CancellationToken ct)
     {
-        var outcome = await _servicingCalls.MakeAsync(() => runner.RunAsync(Dism, AnalyzeArguments, ct)).ConfigureAwait(false);
+        var outcome = await _servicingCalls.MakeAsync(() => runner.RunAsync(Dism, AnalyzeArguments, AnalysisRun, ct)).ConfigureAwait(false);
 
         if (outcome.ExitCode == ElevationRequired)
         {

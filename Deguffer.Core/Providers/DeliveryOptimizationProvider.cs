@@ -142,6 +142,7 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
                     DeliveryOptimizationCache.ClearArguments,
                     "Clear the Delivery Optimization cache using Windows' own command")
                 {
+                    WhenCancelled = CancelledCommand.Ended,
                     Estimated = ScanSize.FromLengths(bytes),
                     MeasuredBy = _cache,
                 },

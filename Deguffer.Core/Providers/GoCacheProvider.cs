@@ -255,6 +255,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
         var steps = locations
             .Zip(measured.Sizes, (location, size) => (CleanupStep)new RunCommandStep(go, location.Arguments, location.What)
             {
+                WhenCancelled = CancelledCommand.Ended,
                 Estimated = size,
                 MeasuredPaths = [location.Path],
             })
@@ -327,7 +328,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
     private async Task<GoLocations> AskLocationsAsync(string go, CancellationToken ct)
     {
         var outcome = await Runner
-            .RunAsync(go, "env " + string.Join(' ', QueriedVariables), ct)
+            .RunAsync(go, "env " + string.Join(' ', QueriedVariables), ToolRun.Query, ct)
             .ConfigureAwait(false);
 
         var reported = outcome.Succeeded

@@ -114,7 +114,10 @@ public sealed class PlanExecutorCancellationTests : IDisposable
 
         var result = await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
             Plan(
-                [new RunCommandStep("tool", "clean", "Clean"), new RunCommandStep("tool", "prune", "Prune")],
+                [
+                    new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended },
+                    new RunCommandStep("tool", "prune", "Prune") { WhenCancelled = CancelledCommand.Ended },
+                ],
                 new ProtectedPath(root, "The tool's own folder.", PathPresence.Present)),
             runReach: null,
             residue: null,
@@ -131,6 +134,70 @@ public sealed class PlanExecutorCancellationTests : IDisposable
 
         Assert.True(result.Verification!.Passed);
         Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification.Checks).Outcome);
+    }
+
+    /// <summary>
+    /// A command that is left to finish has finished by the time the run hears of the cancellation, so
+    /// it is reported as run rather than as stopped, and the steps after it are not started. What it
+    /// freed is not counted, because measuring it is more work the user asked to stop.
+    /// </summary>
+    [Fact]
+    public async Task ACommandLeftToFinishIsReportedAsRunWhenTheCleanIsCancelledAndThePlanVerified()
+    {
+        var root = _temp.CreateDirectory("tool");
+        using var cts = new CancellationTokenSource();
+
+        var runner = new FakeProcessRunner().Replying("tool", _ =>
+        {
+            cts.Cancel();
+            return new CommandOutcome(0, "Cleaned.", string.Empty);
+        });
+
+        var result = await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
+            Plan(
+                [
+                    new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Finishes },
+                    new RunCommandStep("tool", "prune", "Prune") { WhenCancelled = CancelledCommand.Finishes },
+                ],
+                new ProtectedPath(root, "The tool's own folder.", PathPresence.Present)),
+            runReach: null,
+            residue: null,
+            progress: null,
+            cts.Token);
+
+        Assert.True(result.Interrupted);
+        Assert.Equal(ToolRun.Command(CancelledCommand.Finishes), Assert.Single(runner.Invocations).Run);
+
+        var finished = Assert.Single(result.Steps);
+        Assert.False(finished.Interrupted);
+        Assert.True(finished.Succeeded);
+        Assert.Equal(0, finished.BytesReclaimed);
+        Assert.Equal(
+            "Cleaned. (the clean was cancelled while this command ran, and it was left to finish because stopping it "
+            + "part-way could do harm, so what it freed is not counted)",
+            finished.Message);
+
+        Assert.True(result.Verification!.Passed);
+        Assert.Equal(VerificationOutcome.Survived, Assert.Single(result.Verification.Checks).Outcome);
+    }
+
+    /// <summary>
+    /// A command that may be ended is asked of the runner as one, so the runner ends it when the clean
+    /// is cancelled rather than leave it working after the page says the clean stopped.
+    /// </summary>
+    [Fact]
+    public async Task ACommandThatMayBeEndedIsRunAsOne()
+    {
+        var runner = new FakeProcessRunner().Replying("tool", _ => new CommandOutcome(0, string.Empty, string.Empty));
+
+        await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
+            Plan([new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended }]),
+            runReach: null,
+            residue: null,
+            progress: null,
+            CancellationToken.None);
+
+        Assert.Equal(ToolRun.Command(CancelledCommand.Ended), Assert.Single(runner.Invocations).Run);
     }
 
     /// <summary>A plan cancelled before its first step runs none of them, and is verified all the same.</summary>

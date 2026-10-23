@@ -93,7 +93,7 @@ public sealed partial class PoetryDiscovery(IProcessRunner runner)
     /// </summary>
     public async Task<IReadOnlyList<string>> ListCachesAsync(string poetry, CancellationToken ct)
     {
-        var outcome = await runner.RunAsync(poetry, "cache list --no-ansi", ct).ConfigureAwait(false);
+        var outcome = await runner.RunAsync(poetry, "cache list --no-ansi", ToolRun.Query, ct).ConfigureAwait(false);
 
         if (!outcome.Succeeded)
         {
@@ -124,7 +124,7 @@ public sealed partial class PoetryDiscovery(IProcessRunner runner)
     /// </summary>
     private async Task<string?> AskAsync(string poetry, string key, CancellationToken ct)
     {
-        var outcome = await runner.RunAsync(poetry, $"config {key} --no-ansi", ct).ConfigureAwait(false);
+        var outcome = await runner.RunAsync(poetry, $"config {key} --no-ansi", ToolRun.Query, ct).ConfigureAwait(false);
 
         return outcome.Succeeded
             ? outcome.StandardOutput

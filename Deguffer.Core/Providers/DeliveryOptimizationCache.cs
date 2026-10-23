@@ -61,7 +61,7 @@ internal sealed class DeliveryOptimizationCache : IToolMeasurement
     /// <summary>Asks Windows what the cache holds, and says why where it would not answer.</summary>
     public async Task<DeliveryOptimizationReading> ReadAsync(CancellationToken ct)
     {
-        var outcome = await _runner.RunAsync(PowerShell, MeasureArguments, ct).ConfigureAwait(false);
+        var outcome = await _runner.RunAsync(PowerShell, MeasureArguments, ToolRun.Query, ct).ConfigureAwait(false);
 
         if (!outcome.Succeeded)
         {

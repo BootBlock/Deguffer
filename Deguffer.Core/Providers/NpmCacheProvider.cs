@@ -159,6 +159,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         steps.Add(new RunCommandStep(npm, "cache clean --force", "Clear the npm cache using npm's own command")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = measured.Total,
             MeasuredPaths = [contentCache],
         });
@@ -209,7 +210,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
     private async Task<string> AskCacheDirectoryAsync(string npm, CancellationToken ct)
     {
-        var outcome = await Runner.RunAsync(npm, "config get cache", ct).ConfigureAwait(false);
+        var outcome = await Runner.RunAsync(npm, "config get cache", ToolRun.Query, ct).ConfigureAwait(false);
 
         var reported = outcome.Succeeded
             ? outcome.StandardOutput

@@ -1,9 +1,10 @@
-using System.Diagnostics;
-using System.Text;
+using System.ComponentModel;
 
 namespace Deguffer.Core.Safety;
 
-/// <param name="ExitCode">The process exit code, or -1 if it could not be started.</param>
+/// <param name="ExitCode">
+/// The process exit code, or -1 if it could not be started or was ended at its <see cref="ToolRun.Limit"/>.
+/// </param>
 public sealed record CommandOutcome(int ExitCode, string StandardOutput, string StandardError)
 {
     public bool Succeeded => ExitCode == 0;
@@ -30,12 +31,21 @@ public sealed record CommandOutcome(int ExitCode, string StandardOutput, string 
 }
 
 /// <summary>
-/// Runs a tool's own eviction command (§5.1). Behind an interface so a plan's command steps can
-/// be asserted in tests without a package manager being installed.
+/// Runs a tool's own eviction command (§5.1), or a query of what a tool knows. Behind an interface so
+/// a plan's command steps can be asserted in tests without a package manager being installed.
 /// </summary>
 public interface IProcessRunner
 {
-    Task<CommandOutcome> RunAsync(string fileName, string arguments, CancellationToken ct);
+    /// <param name="run">
+    /// How long the tool may run, and whether a cancellation ends it. See <see cref="ToolRun"/>.
+    /// </param>
+    /// <param name="ct">
+    /// Never starts a tool once cancelled. A started tool that is <see cref="CancelledCommand.Ended"/>
+    /// is ended with everything it started, and the cancellation is thrown once they have exited, so
+    /// nothing it started is still at work when the caller moves on. One that
+    /// <see cref="CancelledCommand.Finishes"/> is waited for, and its outcome returned.
+    /// </param>
+    Task<CommandOutcome> RunAsync(string fileName, string arguments, ToolRun run, CancellationToken ct);
 }
 
 /// <summary>
@@ -52,32 +62,59 @@ public interface IProcessRunner
 /// by absolute path, and no caller has a reason to choose a different directory, so there is no
 /// choice for a caller to get wrong.</para>
 /// </summary>
-public sealed class ProcessRunner(string workingDirectory) : IProcessRunner
+public sealed class ProcessRunner : IProcessRunner
 {
     public static readonly ProcessRunner Default = new(WorkingDirectoryFor(UserEnvironment.Current));
+
+    private readonly string _workingDirectory;
+    private readonly Func<ToolJob> _lifetime;
+
+    public ProcessRunner(string workingDirectory)
+        : this(workingDirectory, () => ToolJob.Lifetime)
+    {
+    }
+
+    /// <param name="lifetime">
+    /// The job every tool that may be ended is placed in, which ends what is left in it when it closes.
+    /// The shared one lasts as long as Deguffer, so a test gives its own to prove what closing it does.
+    /// </param>
+    internal ProcessRunner(string workingDirectory, Func<ToolJob> lifetime)
+    {
+        _workingDirectory = workingDirectory;
+        _lifetime = lifetime;
+    }
 
     internal static string WorkingDirectoryFor(IUserEnvironment environment) =>
         Path.Combine(environment.LocalAppData, "Deguffer", "tool-working-directory");
 
     /// <summary>The directory every tool this runner starts runs in.</summary>
-    internal string WorkingDirectory => workingDirectory;
+    internal string WorkingDirectory => _workingDirectory;
 
-    public async Task<CommandOutcome> RunAsync(string fileName, string arguments, CancellationToken ct)
+    public async Task<CommandOutcome> RunAsync(string fileName, string arguments, ToolRun run, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         // Windows gives an empty LocalAppData where no profile is loaded, and the folder composed
         // from it is relative, so it would resolve against Deguffer's own directory: the folder
         // this runner exists to keep tools out of.
-        if (!Path.IsPathFullyQualified(workingDirectory))
+        if (!Path.IsPathFullyQualified(_workingDirectory))
         {
             return new CommandOutcome(
-                -1, string.Empty, $"Not run, because the folder tools run in, '{workingDirectory}', is not a full path.");
+                -1, string.Empty, $"Not run, because the folder tools run in, '{_workingDirectory}', is not a full path.");
+        }
+
+        // Started by full path only, so Windows searches nowhere for the program, Deguffer's own
+        // directory included. Every caller resolves its tool before asking.
+        if (!Path.IsPathFullyQualified(fileName))
+        {
+            return new CommandOutcome(-1, string.Empty, $"Not run, because '{fileName}' is not a full path.");
         }
 
         try
         {
             // Made on every run rather than once, so a folder removed while Deguffer is open is
             // there again for the next tool instead of failing every launch after it.
-            Directory.CreateDirectory(LongPath.Extended(workingDirectory));
+            Directory.CreateDirectory(LongPath.Extended(_workingDirectory));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -86,49 +123,84 @@ public sealed class ProcessRunner(string workingDirectory) : IProcessRunner
             return new CommandOutcome(-1, string.Empty, ex.Message);
         }
 
-        // npm and friends ship as .cmd shims on Windows, and CreateProcess cannot launch a batch
-        // file directly — it has to go through the interpreter.
-        var isBatch = Path.GetExtension(fileName) is ".cmd" or ".bat";
+        var (application, commandLine) = CommandLineFor(fileName, arguments);
 
-        var startInfo = isBatch
-            ? new ProcessStartInfo("cmd.exe", $"/d /c \"\"{fileName}\" {arguments}\"")
-            : new ProcessStartInfo(fileName, arguments);
-
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
-        startInfo.UseShellExecute = false;
-        startInfo.CreateNoWindow = true;
-        // The plain form, because cmd.exe refuses an extended-length current directory, and the
-        // .cmd shims run through it. The folder is a short child of LocalAppData.
-        startInfo.WorkingDirectory = workingDirectory;
-
-        using var process = new Process { StartInfo = startInfo };
-
-        var stdout = new StringBuilder();
-        var stderr = new StringBuilder();
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdout.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) stderr.AppendLine(e.Data); };
+        ToolJob? job = null;
+        ToolProcess tool;
 
         try
         {
-            process.Start();
+            // A job of its own as well as the lifetime one, so ending this tool ends what it started
+            // and nothing another run started.
+            IReadOnlyList<ToolJob> jobs = run.WhenCancelled is CancelledCommand.Ended
+                ? [_lifetime(), job = ToolJob.Create(killOnClose: false)]
+                : [];
+
+            // The plain form of the folder, because cmd.exe refuses an extended-length current
+            // directory, and the .cmd shims run through it. The folder is a short child of LocalAppData.
+            tool = ToolProcess.Start(application, commandLine, _workingDirectory, jobs);
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception
-                                      or InvalidOperationException
-                                      or PlatformNotSupportedException)
+        catch (Win32Exception ex)
         {
             // The tool is on PATH but could not be launched — a broken shim, a missing
-            // interpreter, a blocked executable. Report it as a failed step rather than taking
-            // the whole run down. Deliberately not a blanket catch: cancellation and
+            // interpreter, a blocked executable — or Windows would not make its job. Report it as a
+            // failed step rather than taking the whole run down. Deliberately not a blanket catch:
             // out-of-memory must keep propagating.
+            job?.Dispose();
             return new CommandOutcome(-1, string.Empty, ex.Message);
         }
 
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+        using (job)
+        using (tool)
+        {
+            if (job is null)
+            {
+                // Left to finish: the cancellation is the caller's to act on once the tool is done.
+                await tool.Exited.ConfigureAwait(false);
+                return new CommandOutcome(tool.ExitCode, tool.StandardOutput, tool.StandardError);
+            }
 
-        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            using var limit = new CancellationTokenSource(run.Limit ?? Timeout.InfiniteTimeSpan);
+            using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, limit.Token);
 
-        return new CommandOutcome(process.ExitCode, stdout.ToString(), stderr.ToString());
+            try
+            {
+                await tool.Exited.WaitAsync(stop.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                job.Terminate();
+                await tool.EndedAsync().ConfigureAwait(false);
+
+                ct.ThrowIfCancellationRequested();
+
+                return new CommandOutcome(
+                    -1,
+                    tool.StandardOutput,
+                    $"{Path.GetFileName(fileName)} did not finish within {Described(run.Limit!.Value)}, so Deguffer ended it.");
+            }
+
+            return new CommandOutcome(tool.ExitCode, tool.StandardOutput, tool.StandardError);
+        }
     }
+
+    /// <summary>
+    /// The program Windows starts and the command line it is given, quoted as
+    /// <see cref="System.Diagnostics.Process"/> quoted it, which every caller's arguments were written for.
+    /// </summary>
+    private static (string Application, string CommandLine) CommandLineFor(string fileName, string arguments)
+    {
+        // npm and friends ship as .cmd shims on Windows, and CreateProcess cannot launch a batch
+        // file directly — it has to go through the interpreter.
+        if (Path.GetExtension(fileName) is ".cmd" or ".bat")
+        {
+            var cmd = NativeSystemTool.In(SystemDirectories.Current, "cmd.exe");
+            return (cmd, $"\"{cmd}\" /d /c \"\"{fileName}\" {arguments}\"");
+        }
+
+        return (fileName, arguments.Length == 0 ? $"\"{fileName}\"" : $"\"{fileName}\" {arguments}");
+    }
+
+    private static string Described(TimeSpan limit) =>
+        limit.TotalMinutes >= 1 ? $"{limit.TotalMinutes:0.#} minutes" : $"{limit.TotalSeconds:0.#} seconds";
 }
