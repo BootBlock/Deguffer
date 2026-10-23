@@ -124,6 +124,13 @@ public readonly record struct ExploreTile(
     /// </summary>
     public bool HasRoomForALabel(LayoutLimits limits) =>
         Width >= limits.MinimumLabelWidth && Height >= limits.MinimumLabelHeight;
+
+    /// <summary>
+    /// Where this rectangle lies on the canvas it was laid out on, <paramref name="width"/> by
+    /// <paramref name="height"/> pixels, in fractions of it. Divided in double precision, so a frame
+    /// made from a shape agrees with one the layout measured in it.
+    /// </summary>
+    public MapFrame FrameIn(double width, double height) => new(X / width, Y / height, Width / width, Height / height);
 }
 
 /// <summary>

@@ -29,7 +29,6 @@ public sealed class WindowPlacementStore<T>
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
-    private readonly string _directory;
     private readonly string _file;
 
     /// <param name="fileName">The file under <c>%LOCALAPPDATA%\Deguffer</c> this window's placement is kept in.</param>
@@ -38,8 +37,7 @@ public sealed class WindowPlacementStore<T>
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
 
-        _directory = Path.Combine(environment.LocalAppData, "Deguffer");
-        _file = Path.Combine(_directory, fileName);
+        _file = Path.Combine(environment.LocalAppData, "Deguffer", fileName);
     }
 
     /// <summary>
@@ -75,8 +73,7 @@ public sealed class WindowPlacementStore<T>
 
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(_directory));
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(placement, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(placement, SerializerOptions));
 
             return true;
         }

@@ -53,7 +53,7 @@ public static class MorphOutline
 
         for (var i = 0; i <= Steps; i++)
         {
-            var angle = sector.StartAngle + (sector.SweepAngle * i / Steps);
+            var angle = sector.AngleAt(i, Steps);
 
             points[i] = sunburst.PointAt(sector.InnerRadius, angle);
             points[Points - 1 - i] = sunburst.PointAt(sector.OuterRadius, angle);

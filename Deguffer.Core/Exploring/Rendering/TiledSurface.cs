@@ -11,18 +11,11 @@ namespace Deguffer.Core.Exploring.Rendering;
 public sealed class TiledSurface : ExploreSurface
 {
     /// <summary>
-    /// How many folders to name in their frames at most, on top of the labels inside the shapes.
-    ///
-    /// <para>Separate from <see cref="ExploreSurface.MaximumLabels"/>, which keeps the text over the
-    /// picture from becoming noise. A folder's name is in a band the layout set aside for it, so it
-    /// covers nothing, and a band left empty reads as a folder with no name — so this is set high
-    /// enough that a real drive at 4K does not reach it. A band needs a folder at least three lines
-    /// of text tall and a name wide, which a 3840 by 2160 canvas fits under two thousand of side by
-    /// side; nesting and the mix of sizes on a real drive leave far fewer. This bounds the controls
-    /// the shell creates for a canvas that somehow has more, and the smallest folders are the ones
-    /// that go without.</para>
+    /// How far a shape may pass another's edge and still be inside it: the rounding of single
+    /// precision, because a folder drawn with no room round what it holds ends where its last shape
+    /// does, by a sum that need not round the same way twice.
     /// </summary>
-    private const int MaximumHeaders = 1024;
+    private const float Rounding = 1f / 64;
 
     private readonly IReadOnlyList<ExploreTile> _tiles;
     private readonly TileHitTest _hits;
@@ -58,7 +51,9 @@ public sealed class TiledSurface : ExploreSurface
         _beside = beside;
         HasVolumeBeside = TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits);
 
-        Labels = BuildLabels();
+        Labels = new TileLabels(
+            tiles, tree, root, width, height, limits, style.ShapeNames, MaximumLabels,
+            tile => TextColourFor(tile.Node, tile.Depth, tile.Framed)).Build();
         Ceiling = viewport is { } drawn ? MapCeiling.Of(drawn.Zoom, Deeper()) : null;
     }
 
@@ -111,10 +106,7 @@ public sealed class TiledSurface : ExploreSurface
         return new MapTile(this, drawnAt, key, viewport, tiling.FrameOf(key), width, height, shapes, ColourOf, Finish);
     }
 
-    public override MapFrame? FrameOf(int node) =>
-        Deepest(node) is { } shape
-            ? new MapFrame(shape.X / (double)Width, shape.Y / (double)Height, shape.Width / (double)Width, shape.Height / (double)Height)
-            : null;
+    public override MapFrame? FrameOf(int node) => Deepest(node)?.FrameIn(Width, Height);
 
     public override int? ShownAs(int node) => Deepest(node)?.Node;
 
@@ -125,7 +117,7 @@ public sealed class TiledSurface : ExploreSurface
     public override MapFrame? Locate(int node) =>
         Viewport is { } viewport
             ? TreemapLayout.Locate(Tree, Root, Width, Height, Limits, _beside, viewport, node)
-            : ShownAs(node) == node ? FrameOf(node) : null;
+            : Deepest(node) is { } shape && shape.Node == node ? shape.FrameIn(Width, Height) : null;
 
     protected override IReadOnlyList<MapShape> FindShapes(int? folder) =>
         Viewport is { } viewport
@@ -164,7 +156,6 @@ public sealed class TiledSurface : ExploreSurface
             return shapes;
         }
 
-        const float Rounding = 1f / 64;
         var outer = _tiles[holder];
 
         for (var i = 0; i < _tiles.Count; i++)
@@ -172,11 +163,9 @@ public sealed class TiledSurface : ExploreSurface
             var tile = _tiles[i];
 
             if (tile.Depth == outer.Depth + 1
-                && (tile.IsNode
-                    ? Tree.ParentOf(tile.Node) == folder
-                    : tile.X >= outer.X - Rounding && tile.X + tile.Width <= outer.X + outer.Width + Rounding))
+                && (tile.IsNode ? Tree.ParentOf(tile.Node) == folder : Across(tile, outer)))
             {
-                shapes.Add(MapShape.Of(tile.Node, tile.Bytes, new MapFrame(tile.X / (double)Width, tile.Y / (double)Height, tile.Width / (double)Width, tile.Height / (double)Height)));
+                shapes.Add(MapShape.Of(tile.Node, tile.Bytes, tile.FrameIn(Width, Height)));
             }
         }
 
@@ -280,8 +269,10 @@ public sealed class TiledSurface : ExploreSurface
         var shapes = new List<MorphShape>();
         var found = new HashSet<int>();
 
-        foreach (var tile in _tiles)
+        for (var i = 0; i < _tiles.Count; i++)
         {
+            var tile = _tiles[i];
+
             if (tile.IsNode && nodes.Contains(tile.Node) && found.Add(tile.Node))
             {
                 var colour = ColourOf(tile);
@@ -306,128 +297,19 @@ public sealed class TiledSurface : ExploreSurface
         ]);
     }
 
-    /// <summary>
-    /// Whether <paramref name="inner"/> lies inside <paramref name="outer"/>, to within the rounding of
-    /// single precision: a folder drawn with no room round what it holds ends where its last shape does,
-    /// by a sum that need not round the same way twice.
-    /// </summary>
-    internal static bool Inside(ExploreTile inner, ExploreTile outer)
-    {
-        const float Rounding = 1f / 64;
-
-        return inner.X >= outer.X - Rounding && inner.Y >= outer.Y - Rounding
-            && inner.X + inner.Width <= outer.X + outer.Width + Rounding
+    /// <summary>Whether <paramref name="inner"/> lies inside <paramref name="outer"/>, to within <see cref="Rounding"/>.</summary>
+    internal static bool Inside(ExploreTile inner, ExploreTile outer) =>
+        Across(inner, outer)
+            && inner.Y >= outer.Y - Rounding
             && inner.Y + inner.Height <= outer.Y + outer.Height + Rounding;
-    }
 
     /// <summary>
-    /// Lay the labels over the finished bitmap: each framed folder's name in the band along its top,
-    /// and a name inside each shape with nothing drawn in it.
-    ///
-    /// <para>A shape that has children drawn inside it and no band gets no label. Its children are
-    /// inset by a pixel or two, so its label and its first child's would land within a few pixels of
-    /// each other and overprint into an unreadable stack. The band is what makes a folder's own name
-    /// affordable, because nothing is drawn in it.</para>
-    ///
-    /// <para>The largest shapes are named first, in both kinds. The layout emits shapes depth first,
-    /// so taking them in that order would spend the whole allowance on the first branch and leave
-    /// the largest folder elsewhere unnamed.</para>
-    ///
-    /// <para>Every one of those decisions is made on the part of a shape that is on the canvas. A
-    /// zoomed treemap's shapes run off its edges, and a name placed at a shape's own left edge would
-    /// be off the canvas with it, or a shape judged by its whole size would be named in a sliver too
-    /// small to read. So a folder whose band runs off the left is named where the band comes on, and
-    /// a band that is off the canvas altogether is not named.</para>
+    /// Whether <paramref name="inner"/> lies within <paramref name="outer"/>'s width, to within
+    /// <see cref="Rounding"/>: all an icicle's row below a folder needs, which sits under it rather
+    /// than inside it.
     /// </summary>
-    private IReadOnlyList<ExploreLabel> BuildLabels()
-    {
-        // Which nodes had a rectangle drawn inside them. The layouts emit a parent before its
-        // children, so this is complete for every tile by the time the second pass reaches it.
-        //
-        // Both passes are indexed rather than foreached. A treemap of a real volume is tens of
-        // thousands of rectangles, and enumerating an IReadOnlyList boxes the list's own struct
-        // enumerator and dispatches every step through the interface — the same cost TileHitTest
-        // dropped its iterator to avoid, on the same list and once per repaint (G5).
-        var covered = new HashSet<int>();
-
-        for (var i = 0; i < _tiles.Count; i++)
-        {
-            var tile = _tiles[i];
-
-            if (tile.IsNode && tile.Node != Root)
-            {
-                covered.Add(Tree.ParentOf(tile.Node));
-            }
-        }
-
-        var headers = new List<int>();
-        var insides = new List<int>();
-
-        for (var i = 0; i < _tiles.Count; i++)
-        {
-            var tile = _tiles[i];
-            var shown = OnCanvas(tile);
-
-            if (tile.Header > 0)
-            {
-                // A name wide, as the layout asked of the whole band before it gave one. A band cut
-                // to a sliver by the canvas's edge is not named, and a name narrower than its own
-                // padding would come out with a negative width.
-                if (tile.Y + tile.Header > 0 && tile.Y < Height && shown.Width >= Limits.MinimumLabelWidth)
-                {
-                    headers.Add(i);
-                }
-            }
-            else if (Style.ShapeNames
-                && !tile.IsAggregate
-                && (tile.IsFreeSpace || (tile.Node != Root && !covered.Contains(tile.Node)))
-                && shown.HasRoomForALabel(Limits))
-            {
-                insides.Add(i);
-            }
-        }
-
-        var labels = new List<ExploreLabel>();
-
-        foreach (var i in Largest(headers, MaximumHeaders))
-        {
-            var tile = _tiles[i];
-            var shown = OnCanvas(tile);
-
-            // Centred in the band, which is one line of text with the gap shared above and below it.
-            // Along the band from where it comes on the canvas, and down from the band's own top,
-            // which moves with the folder as a zoom scrolls it away.
-            labels.Add(new ExploreLabel(
-                tile.Node,
-                shown.X + Limits.LabelPadding,
-                tile.Y + ((tile.Header - Limits.MinimumLabelHeight) / 2),
-                shown.Width - (Limits.LabelPadding * 2),
-                Rotation: 0,
-                Centred: false,
-                TextColourFor(tile.Node, tile.Depth, tile.Framed),
-                tile.Bytes,
-                new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Header)));
-        }
-
-        foreach (var i in Largest(insides, MaximumLabels))
-        {
-            var tile = _tiles[i];
-            var shown = OnCanvas(tile);
-
-            labels.Add(new ExploreLabel(
-                tile.Node,
-                shown.X + Limits.LabelPadding,
-                shown.Y + (Limits.LabelPadding / 2),
-                shown.Width - (Limits.LabelPadding * 2),
-                Rotation: 0,
-                Centred: false,
-                TextColourFor(tile.Node, tile.Depth, tile.Framed),
-                tile.Bytes,
-                new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Height)));
-        }
-
-        return labels;
-    }
+    private static bool Across(ExploreTile inner, ExploreTile outer) =>
+        inner.X >= outer.X - Rounding && inner.X + inner.Width <= outer.X + outer.Width + Rounding;
 
     /// <summary>
     /// How many times more the picture has to be magnified for everything in view to be drawn one by
@@ -455,40 +337,5 @@ public sealed class TiledSurface : ExploreSurface
         }
 
         return deeper;
-    }
-
-    /// <summary>At most <paramref name="count"/> of <paramref name="indices"/>, largest shape first.</summary>
-    private List<int> Largest(List<int> indices, int count)
-    {
-        indices.Sort((a, b) => Area(OnCanvas(_tiles[b])).CompareTo(Area(OnCanvas(_tiles[a]))));
-
-        if (indices.Count > count)
-        {
-            indices.RemoveRange(count, indices.Count - count);
-        }
-
-        return indices;
-    }
-
-    private static float Area(ExploreTile tile) => tile.Width * tile.Height;
-
-    /// <summary>
-    /// The part of <paramref name="tile"/> on the canvas, which is all of it unless the picture is
-    /// zoomed. Empty where none of it is.
-    /// </summary>
-    private ExploreTile OnCanvas(ExploreTile tile)
-    {
-        var left = Math.Max(0, tile.X);
-        var top = Math.Max(0, tile.Y);
-        var right = Math.Min(Width, tile.X + tile.Width);
-        var bottom = Math.Min(Height, tile.Y + tile.Height);
-
-        return tile with
-        {
-            X = left,
-            Y = top,
-            Width = Math.Max(0, right - left),
-            Height = Math.Max(0, bottom - top),
-        };
     }
 }

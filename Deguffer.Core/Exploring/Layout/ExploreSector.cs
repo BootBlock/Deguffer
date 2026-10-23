@@ -60,6 +60,12 @@ public readonly record struct ExploreSector(
 
     /// <summary>Half way round the sector, which is the direction a label sits in.</summary>
     public float MidAngle => StartAngle + (SweepAngle / 2);
+
+    /// <summary>
+    /// Where step <paramref name="step"/> of <paramref name="steps"/> falls across the sweep, for
+    /// tracing an arc a step at a time: the start at none, and the end at all of them.
+    /// </summary>
+    public float AngleAt(int step, int steps) => StartAngle + (SweepAngle * step / steps);
 }
 
 /// <summary>

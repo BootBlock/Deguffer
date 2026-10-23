@@ -64,13 +64,13 @@ public static class ShapeChanges
         foreach (var index in Cut(later, laterTiles))
         {
             var tile = later.Tiles[index];
-            var to = FrameOf(tile, later);
+            var to = tile.FrameIn(later.Width, later.Height);
 
             if ((tile.IsNode ? back(tile.Node) : tile.Node) is { } was && earlierTiles.TryGetValue(was, out var from))
             {
                 stayed.Add(was);
 
-                var moved = FrameOf(earlier.Tiles[from], earlier);
+                var moved = earlier.Tiles[from].FrameIn(earlier.Width, earlier.Height);
 
                 if (!Same(moved, to, later))
                 {
@@ -95,7 +95,7 @@ public static class ShapeChanges
                 continue;
             }
 
-            var from = FrameOf(tile, earlier);
+            var from = tile.FrameIn(earlier.Width, earlier.Height);
 
             changes.Add(new ShapeChange(ShapeChangeKind.Disappeared, tile.Node, from, Point(from)));
         }
@@ -215,9 +215,6 @@ public static class ShapeChanges
 
         return null;
     }
-
-    private static MapFrame FrameOf(ExploreTile tile, ExploreSurface drawing) =>
-        new(tile.X / (double)drawing.Width, tile.Y / (double)drawing.Height, tile.Width / (double)drawing.Width, tile.Height / (double)drawing.Height);
 
     private static MapFrame Point(MapFrame frame)
     {

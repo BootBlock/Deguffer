@@ -35,7 +35,6 @@ public readonly record struct MapViewport
     /// <summary>Where the screen's top edge falls, as a fraction of the whole picture's height.</summary>
     public double Top { get; }
 
-    /// <summary>Whether this shows the whole picture.</summary>
     public bool IsWhole => _beyond == 0;
 
     /// <summary>

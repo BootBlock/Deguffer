@@ -53,10 +53,11 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     /// <summary>
     /// A scanner of the machine <paramref name="environment"/> describes: its volumes' tables, and
-    /// sizes remembered where it keeps its application data.
+    /// sizes remembered where it keeps its application data, in the one cache of that machine
+    /// (<see cref="ScanEstimateCache.For"/>).
     /// </summary>
     public static DirectoryScanner CreateDefault(IUserEnvironment environment, ScanTuner? tuning = null) =>
-        new(environment.VolumeTables, new ScanEstimateCache(environment), tuning: tuning);
+        new(environment.VolumeTables, ScanEstimateCache.For(environment), tuning: tuning);
 
     /// <summary>
     /// The scanner a provider or a planner given only <paramref name="environment"/> measures with.
@@ -122,6 +123,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     {
         ThrowIfAnyPathIsBlank(asked);
 
+        using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
+
         var results = await MeasureFreshAsync(asked, [keep], progress: null, ct).ConfigureAwait(false);
 
         for (var i = 0; i < asked.Count; i++)
@@ -158,6 +161,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     public async ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default)
     {
         ThrowIfAnyPathIsBlank(asked);
+
+        using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
 
         var results = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
@@ -485,8 +490,9 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// Keep the volume indexes for the pass. Remembered estimates are not held, because they are
-    /// meant to outlast it, as <see cref="Invalidate"/> says.
+    /// Keep the volume indexes for the pass, and the remembered estimates' changes in memory until it
+    /// ends, when they are written once. The estimates themselves outlast the pass, as
+    /// <see cref="Invalidate"/> says: only their writing waits for it.
     /// </summary>
-    public PassHold Hold() => _volumes.Hold();
+    public PassHold Hold() => PassHold.Joined(_volumes.Hold(), _estimates?.Hold() ?? PassHold.Nothing);
 }

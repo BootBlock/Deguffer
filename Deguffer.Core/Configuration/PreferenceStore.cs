@@ -23,13 +23,11 @@ public sealed class PreferenceStore
         RespectNullableAnnotations = true,
     };
 
-    private readonly string _directory;
     private readonly string _file;
 
     public PreferenceStore(IUserEnvironment environment)
     {
-        _directory = Path.Combine(environment.LocalAppData, "Deguffer");
-        _file = Path.Combine(_directory, "preferences.json");
+        _file = Path.Combine(environment.LocalAppData, "Deguffer", "preferences.json");
     }
 
     /// <summary>
@@ -62,8 +60,7 @@ public sealed class PreferenceStore
     {
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(_directory));
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(preferences, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(preferences, SerializerOptions));
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

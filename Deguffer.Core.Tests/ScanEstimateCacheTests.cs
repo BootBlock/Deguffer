@@ -99,8 +99,8 @@ public class ScanEstimateCacheTests
     }
 
     /// <summary>
-    /// The file is rewritten on every measurement, so an interrupted process can leave it
-    /// truncated. A cache that cannot be read is a miss, never a failed scan.
+    /// A file damaged by hand or by the disk. A cache that cannot be read is a miss, never a failed
+    /// scan.
     /// </summary>
     [Fact]
     public async Task ToleratesACorruptCacheFile()

@@ -22,5 +22,18 @@ public sealed class PassHold : IDisposable
         _release = release;
     }
 
+    /// <summary>One hold of both <paramref name="first"/> and <paramref name="second"/>, given back in that order.</summary>
+    public static PassHold Joined(PassHold first, PassHold second) => new(() =>
+    {
+        try
+        {
+            first.Dispose();
+        }
+        finally
+        {
+            second.Dispose();
+        }
+    });
+
     public void Dispose() => Interlocked.Exchange(ref _release, null)?.Invoke();
 }
