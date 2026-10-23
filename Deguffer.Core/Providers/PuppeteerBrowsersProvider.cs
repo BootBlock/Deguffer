@@ -197,9 +197,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             notes.Add(held);
         }
 
-        if (LiveTreeVeto.IncompleteNote(
-                live.Complete,
-                "Close any Puppeteer script or test run before you clean.") is { } incomplete)
+        if (LiveTreeVeto.UncheckedNote(live.Unchecked.Count) is { } incomplete)
         {
             notes.Add(incomplete);
         }
@@ -239,11 +237,11 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(root, survey, live.Vetoed),
+            ProtectedPaths = BuildProtectedPaths(root, survey, live),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = survey.Unreadable,
-            WasNotExamined = targets.Count == 0 && (survey.Declined.Count > 0 || live.Vetoed.Count > 0),
+            WasNotExamined = targets.Count == 0 && (survey.Declined.Count > 0 || live.Held.Count > 0),
         };
     }
 
@@ -261,7 +259,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         string root,
         PuppeteerCacheSurvey survey,
-        IReadOnlyList<LiveTree> vetoed)
+        LiveTreeVetoResult live)
     {
         var survivors = new List<(string Path, string Reason)>
         {
@@ -283,7 +281,8 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
         }
 
         survivors.AddRange(survey.Declined);
-        survivors.AddRange(vetoed.Select(v => (v.Directory, InUseReason)));
+        survivors.AddRange(live.Vetoed.Select(v => (v.Directory, InUseReason)));
+        survivors.AddRange(live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)));
 
         return Protect([.. survivors]);
     }

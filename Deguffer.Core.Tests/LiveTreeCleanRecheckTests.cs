@@ -116,11 +116,12 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     }
 
     /// <summary>
-    /// A plan made on a partial answer offered the directory and said so in a note. The same answer at
-    /// the clean is no new reason to refuse it, and the project around it survives.
+    /// The preview keeps the clean's rule: a partial answer is not permission there either. A plan
+    /// made on one offers the directory nothing, so the run that follows it leaves the directory
+    /// standing, and proves so under §5.6.
     /// </summary>
     [Fact]
-    public async Task ABuildDirectoryOfferedOnAPartialAnswerIsRemovedOnTheSameAnswer()
+    public async Task ABuildDirectoryIsNotOfferedOnAPartialAnswerAndSurvivesTheRun()
     {
         var root = ApproveRoot();
         var project = Path.Combine(root, "Game");
@@ -131,13 +132,12 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = ProviderFor(Toolchain.Unity);
         var plan = await provider.PlanAsync();
 
-        AssertOffered(plan, directory);
+        Assert.DoesNotContain(directory, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.False(Directory.Exists(directory), "a build directory the preview offered on a partial answer was kept on the same answer");
-        Assert.True(Directory.Exists(project), "the project around a removed build directory was removed");
-        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.True(Directory.Exists(directory), "a build directory nothing could check was removed");
+        AssertProvedStanding(result, directory);
     }
 
     /// <summary>

@@ -38,6 +38,11 @@ namespace Deguffer.Core.Providers;
 /// and not declared here, because asking about a lock file means naming its directory first, which
 /// is the walk. Nor does it find a project a solution names where the solution could not be read,
 /// because there is nothing to name it by. The plan still holds both back.</para>
+///
+/// <para><b>A candidate the veto could not ask about is declared as well</b>, as the plan withholds
+/// it. Where the process table itself could not be read, the candidates are only those near the
+/// places it did yield, and the plan, which walks every root, withholds more than Explore
+/// refuses.</para>
 /// </summary>
 internal static class InUseBuildDirectories
 {
@@ -145,6 +150,7 @@ internal static class InUseBuildDirectories
         return
         [
             .. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false)),
+            .. live.Unchecked.Select(candidate => new ToolRoot(candidate, LiveTreeVeto.UncheckedReason, static _ => false)),
             .. unreached.Select(candidate => new ToolRoot(candidate, UnreachedReason, static _ => false)),
         ];
     }

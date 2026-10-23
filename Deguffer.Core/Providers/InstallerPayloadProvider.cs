@@ -196,8 +196,9 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
 
         // Counted as a link is: a payload held back is something real left out, and a plan whose only
         // payload is in use would otherwise read "Already clear" beside a warning saying it is not.
-        var held = live.Vetoed.Count;
+        var held = live.Held.Count;
         survivors.AddRange(live.Vetoed.Select(vetoed => (vetoed.Directory, InUseReason)));
+        survivors.AddRange(live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)));
 
         var payloads = found.ToDictionary(p => p.Path, StringComparer.OrdinalIgnoreCase);
 
@@ -206,7 +207,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
             notes.Add(inUse);
         }
 
-        if (LiveTreeVeto.IncompleteNote(live.Complete, "Finish any installation before you clean.") is { } incomplete)
+        if (LiveTreeVeto.UncheckedNote(live.Unchecked.Count) is { } incomplete)
         {
             notes.Add(incomplete);
         }
@@ -323,18 +324,23 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §7.1: Explore refuses a payload the plan holds back as in use, with the same reason. Found
-    /// exactly as the plan finds them, walk and link rule included, so the two cannot disagree about
-    /// which folders are payloads.
+    /// §7.1: Explore refuses a payload the plan holds back as in use, or as unchecked, with the same
+    /// reason. Found exactly as the plan finds them, walk and link rule included, so the two cannot
+    /// disagree about which folders are payloads.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ToolRoot>>(
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        var live = Veto(Recognised(ct), ct);
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
-            .. Veto(Recognised(ct), ct).Vetoed.Select(vetoed => new ToolRoot(
+            .. live.Vetoed.Select(vetoed => new ToolRoot(
                 vetoed.Directory,
                 InUseReason + (vetoed.Holders.Count > 0 ? $" ({string.Join("; ", vetoed.Holders)})" : string.Empty),
                 static _ => false)),
+            .. live.Unchecked.Select(path => new ToolRoot(path, LiveTreeVeto.UncheckedReason, static _ => false)),
         ]);
+    }
 
     /// <summary>
     /// Every payload the rows recognise, found as the plan finds them, whether or not it is empty or in

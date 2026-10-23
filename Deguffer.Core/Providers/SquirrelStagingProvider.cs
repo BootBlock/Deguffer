@@ -234,6 +234,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
                 + "folder, so removing it now breaks somebody else's update. It can go once that has "
                 + "finished.",
                 static _ => false)),
+            .. live.Unchecked.Select(path => new ToolRoot(path, LiveTreeVeto.UncheckedReason, static _ => false)),
         ]);
     }
 
@@ -464,10 +465,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
 
         var live = LiveTreeVeto.Apply(_liveTrees, candidates, lockFiles: [], ct);
 
-        foreach (var vetoed in live.Vetoed)
-        {
-            survivors.Add((vetoed.Directory, LiveTreeVeto.ProtectedReason));
-        }
+        survivors.AddRange(live.Survivors);
 
         if (live.Vetoed.Count > 0)
         {
@@ -480,13 +478,9 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
                 + " right now. Every Squirrel application shares this folder."));
         }
 
-        if (!live.Complete)
+        if (LiveTreeVeto.UncheckedNote(live.Unchecked.Count) is { } incomplete)
         {
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Warning,
-                "Deguffer could not check whether an application is installing or updating right "
-                + "now. Every Squirrel application shares this folder, so finish any install "
-                + "before cleaning it."));
+            notes.Add(incomplete);
         }
 
         return new Collected(
@@ -503,7 +497,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             // — the single-directory machine, which is the ordinary one — produces no steps and no
             // declines, so the row renders as "Already clear" and the plan carries a sentence saying
             // the updater left nothing behind, beside the warning saying the opposite.
-            declined + live.Vetoed.Count);
+            declined + live.Held.Count);
     }
 
     private IReadOnlyList<ToolRoot> Declare()

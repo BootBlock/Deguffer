@@ -180,7 +180,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             examination.Notes.Add(held);
         }
 
-        if (LiveTreeVeto.IncompleteNote(live.Complete, "Close Capture One before you clean.") is { } incomplete)
+        if (LiveTreeVeto.UncheckedNote(live.Unchecked.Count) is { } incomplete)
         {
             examination.Notes.Add(incomplete);
         }
@@ -208,7 +208,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         if (steps.Count == 0
             && examination.Declined.Count == 0
             && examination.Disconnected.Count == 0
-            && live.Vetoed.Count == 0
+            && live.Held.Count == 0
             && !examination.Unreadable
             && documents.IsComplete)
         {
@@ -237,7 +237,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             [
                 .. examination.Survivors,
                 .. examination.Declined,
-                .. live.Vetoed.Select(vetoed => (vetoed.Directory, LiveTreeVeto.ProtectedReason)),
+                .. live.Survivors,
             ]),
             Notes = examination.Notes,
             Fallback = measured.Fallback,

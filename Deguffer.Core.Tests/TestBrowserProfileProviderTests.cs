@@ -243,17 +243,26 @@ public sealed class TestBrowserProfileProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A check that could not run must not look like one that found nothing, so the row says so.
+    /// "Could not tell" is not permission. A browser a test started names its profile only on its
+    /// command line, so with the command lines unread nothing says a profile is abandoned: none is
+    /// offered, Explore refuses each, and the row says why it is short.
     /// </summary>
     [Fact]
-    public async Task SaysSoWhenItCouldNotTellWhatIsRunning()
+    public async Task OffersNoProfileWhenItCouldNotTellWhatIsRunning()
     {
-        AbandonedProfile("playwright_chromiumdev_profile-q7R8s9");
+        var profile = AbandonedProfile("playwright_chromiumdev_profile-q7R8s9");
 
-        var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
+        var provider = CreateProvider(FakeLiveTreeInspector.CannotTell);
+        var plan = await provider.PlanAsync();
 
+        Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("could not check whether anything is using these", StringComparison.Ordinal));
+            && n.Message.Contains("could not check whether anything is using one of these", StringComparison.Ordinal));
+
+        var declared = Assert.Single(await provider.DiscoverToolRootsAsync());
+
+        Assert.Equal(profile, declared.Path, ignoreCase: true);
+        Assert.Equal(LiveTreeVeto.UncheckedReason, declared.Reason);
     }
 
     /// <summary>

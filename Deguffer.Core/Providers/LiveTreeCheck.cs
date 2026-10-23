@@ -13,8 +13,7 @@ namespace Deguffer.Core.Providers;
 /// removed under a live editor or a build in flight breaks the work in progress, which is why the
 /// veto refuses rather than warns, and a refusal made at the preview says nothing about the clean.</para>
 ///
-/// <para>An answer that could not be had in full holds the step back where the plan's was whole, and
-/// lets it run where the plan offered it on the same partial answer. See
+/// <para>An answer that could not be had in full holds the step back. See
 /// <see cref="LiveTreeVeto.AtClean"/>.</para>
 ///
 /// <para>The directory asked about need not be the step's. A superseded Squirrel build is held by the
@@ -29,12 +28,10 @@ namespace Deguffer.Core.Providers;
 /// while a program is in it and only for the projects the solution names now, and Visual Studio
 /// opened after the preview, or a project added to its solution since, is the one this is for.
 /// </param>
-/// <param name="planComplete">Whether the veto's answer the plan offered the directory on was whole.</param>
 internal sealed class LiveTreeCheck(
     ILiveTreeInspector inspector,
     RecognisedBuildDirectory directory,
-    Func<CancellationToken, LiveTreeQuestion> questions,
-    bool planComplete) : IUseCheck
+    Func<CancellationToken, LiveTreeQuestion> questions) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
@@ -53,6 +50,6 @@ internal sealed class LiveTreeCheck(
                 .Select(tree => new InUseNow(step.Path, string.Join("; ", tree.Holders))),
         ];
 
-        return LiveTreeVeto.AtClean(step, live, findings.Complete, planComplete);
+        return LiveTreeVeto.AtClean(step, live, findings.Complete);
     }
 }

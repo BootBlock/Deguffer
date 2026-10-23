@@ -48,16 +48,34 @@ internal sealed record LiveTreeQuestion(Func<RecognisedBuildDirectory, LiveTreeQ
         new(candidate => new LiveTreeQuery(candidate.Path, candidate.Project, lockFilesOf(candidate)));
 }
 
-/// <param name="Cleared">The directories a plan may go on to target.</param>
-/// <param name="Vetoed">The directories something is using, and what is using each.</param>
-/// <param name="Complete">
-/// False where liveness could not be established at all, so <see cref="Cleared"/> holds directories
-/// nothing has vouched for.
+/// <param name="Cleared">
+/// The directories a plan may go on to target. Empty where the answer was not whole: a directory the
+/// veto could not ask about is not one it found unused.
 /// </param>
+/// <param name="Vetoed">The directories something is using, and what is using each.</param>
+/// <param name="Unchecked">
+/// The directories held back because the answer was not whole, among those it did not find in use.
+/// </param>
+/// <param name="Complete">False where liveness could not be established in full.</param>
 public sealed record LiveTreeVetoResult(
     IReadOnlyList<ClearedBuildDirectory> Cleared,
     IReadOnlyList<LiveTree> Vetoed,
-    bool Complete);
+    IReadOnlyList<string> Unchecked,
+    bool Complete)
+{
+    /// <summary>
+    /// Every directory the veto held back, with why, for the §5.6 report: the ones in use and the ones
+    /// it could not ask about. One list, so a provider cannot assert the first and forget the second.
+    /// </summary>
+    public IReadOnlyList<(string Path, string Reason)> Survivors =>
+    [
+        .. Vetoed.Select(vetoed => (vetoed.Directory, LiveTreeVeto.ProtectedReason)),
+        .. Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)),
+    ];
+
+    /// <summary>Every directory the veto held back, for a caller that leaves them out by path.</summary>
+    public IReadOnlyList<string> Held => [.. Vetoed.Select(vetoed => vetoed.Directory), .. Unchecked];
+}
 
 /// <summary>
 /// §5.3 applied to a source tree: a directory something is using is never a target.
@@ -67,6 +85,13 @@ public sealed record LiveTreeVetoResult(
 /// where it should refuse — and the difference between those two is the whole reason this exists.
 /// A cache a tool is still writing to costs a slower next use. A build directory removed under a
 /// live editor breaks the work in progress.</para>
+///
+/// <para><b>An answer that is not whole offers nothing.</b> "Could not tell" and "nothing is using
+/// it" are different answers, and only the second is permission: §3 puts whatever the tool cannot
+/// prove idle in Tier 4. The likely cause lasts rather than passes: the process table is read at
+/// offsets a Windows update could move, which turns the working-directory signal off on that machine
+/// for good, so offering under a warning would offer every directory there on no evidence at all. The
+/// check at the clean keeps the same rule (<see cref="AtClean"/>).</para>
 /// </summary>
 internal static class LiveTreeVeto
 {
@@ -78,6 +103,9 @@ internal static class LiveTreeVeto
     /// <see cref="InUseNow.Reason"/>.
     /// </summary>
     public const string CannotTell = "Deguffer could not tell whether a running program is using this";
+
+    /// <summary>Why a place held back on an answer that was not whole is listed as a survivor.</summary>
+    public const string UncheckedReason = CannotTell + ", so it is left alone.";
 
     public static LiveTreeVetoResult Apply(
         ILiveTreeInspector inspector,
@@ -98,7 +126,7 @@ internal static class LiveTreeVeto
         Func<CancellationToken, LiveTreeQuestion> questions,
         CancellationToken ct = default) =>
         candidates.Count == 0
-            ? new LiveTreeVetoResult([], [], Complete: true)
+            ? Nothing
             : Apply(inspector, candidates, questions(ct), questions, ct);
 
     /// <param name="question">
@@ -115,23 +143,26 @@ internal static class LiveTreeVeto
     {
         if (candidates.Count == 0)
         {
-            return new LiveTreeVetoResult([], [], Complete: true);
+            return Nothing;
         }
 
         var findings = inspector.FindLive([.. candidates.Select(question.Ask)], ct);
+        var unused = candidates.Where(c => !findings.IsLive(c.Path)).ToList();
 
         // The same rule for the question, not the question it produced, because the question is read
         // from the project and the machine, and an editor opened after the preview changes both.
         return new LiveTreeVetoResult(
             [
-                .. candidates.Where(c => !findings.IsLive(c.Path)).Select(c => new ClearedBuildDirectory(
-                    c.Path,
-                    c.Project,
-                    new LiveTreeCheck(inspector, c, questions, findings.Complete))),
+                .. unused
+                    .Where(c => findings.IsAnswered(c.Path))
+                    .Select(c => new ClearedBuildDirectory(c.Path, c.Project, new LiveTreeCheck(inspector, c, questions))),
             ],
             findings.Live,
+            [.. unused.Where(c => !findings.IsAnswered(c.Path)).Select(c => c.Path)],
             findings.Complete);
     }
+
+    private static readonly LiveTreeVetoResult Nothing = new([], [], [], Complete: true);
 
     /// <summary>
     /// What the user is told about the directories that were held back, or null if none were.
@@ -180,22 +211,16 @@ internal static class LiveTreeVeto
     /// <summary>
     /// What a check at the clean answers for <paramref name="step"/>, from what it found in use now.
     ///
-    /// <para><b>Held back on a partial answer only where the plan's was whole.</b> A plan made on a
-    /// partial answer offered the step and said so in a note, so the same answer at the clean is no
-    /// new reason to refuse it. A plan made on a whole answer offered the step on evidence the clean
-    /// no longer has, and a question that could not be asked is not a clear answer: a preview that read
-    /// every program can be followed by a clean that cannot, and running the step then would rest on an
-    /// answer the user was never shown.</para>
+    /// <para><b>Held back on any answer that is not whole.</b> A plan offers a step only on a whole
+    /// answer, so a partial one at the clean leaves the step on evidence the clean no longer has, and a
+    /// question that could not be asked is not a clear answer. A preview that read every program can
+    /// be followed by a clean that cannot, and running the step then would rest on an answer the user
+    /// was never shown.</para>
     /// </summary>
     /// <param name="live">The places found in use now.</param>
     /// <param name="complete">Whether the answer now is whole.</param>
-    /// <param name="planComplete">Whether the answer the plan offered the step on was whole.</param>
-    public static IReadOnlyList<InUseNow> AtClean(
-        DeleteStep step,
-        IReadOnlyList<InUseNow> live,
-        bool complete,
-        bool planComplete) =>
-        complete || !planComplete ? live : [.. live, new InUseNow(step.Path, CannotTell)];
+    public static IReadOnlyList<InUseNow> AtClean(DeleteStep step, IReadOnlyList<InUseNow> live, bool complete) =>
+        complete ? live : [.. live, new InUseNow(step.Path, CannotTell)];
 
     private static string Name(string path) => Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
 
@@ -203,20 +228,21 @@ internal static class LiveTreeVeto
         Path.GetDirectoryName(path.TrimEnd(Path.DirectorySeparatorChar)) ?? string.Empty;
 
     /// <summary>
-    /// The note for a check that could not run, or null where it could.
+    /// The note for the places held back because the check could not run in full, or null where none
+    /// were.
     ///
     /// §5.5 makes a measurement fallback observable for the same reason this is said out loud: a
-    /// safeguard that could not run must not look like a safeguard that found nothing.
+    /// safeguard that could not run must not look like a safeguard that found nothing, and a row that
+    /// leaves out what the disk holds must say why.
     /// </summary>
-    /// <param name="advice">
-    /// What the user is told to do about it, which is the half that belongs to the subject. "Close
-    /// any editor or build" is the answer for a source tree and means nothing on a scratch folder,
-    /// where there is no project and no build. The sentence in front of it is the same either way,
-    /// so it stays here.
-    /// </param>
-    public static PlanNote? IncompleteNote(bool complete, string advice) => complete
+    /// <param name="count">How many places were held back for it.</param>
+    public static PlanNote? UncheckedNote(int count) => count == 0
         ? null
         : new PlanNote(
             PlanNoteSeverity.Warning,
-            $"Deguffer could not check whether anything is using these. {advice}");
+            count == 1
+                ? "Deguffer could not check whether anything is using one of these, so it left it alone. "
+                  + "Scan again to include it."
+                : $"Deguffer could not check whether anything is using {count} of these, so it left them "
+                  + "alone. Scan again to include them.");
 }

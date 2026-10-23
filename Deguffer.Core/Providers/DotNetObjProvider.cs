@@ -340,6 +340,6 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             };
         }),
         .. declined.Select(path => (path, "Not recognised as .NET intermediate build output, so it is left alone.")),
-        .. live.Vetoed.Select(v => (v.Directory, LiveTreeVeto.ProtectedReason)),
+        .. live.Survivors,
     ]);
 }

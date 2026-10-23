@@ -254,7 +254,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     ///
     /// <para><b>A folder Windows would not describe is refused whole</b>, because nothing could ask
     /// which of its entries is in use. The plan names it as unreached, and a declaration only ever
-    /// narrows what Explore allows.</para>
+    /// narrows what Explore allows. A folder whose question could not be asked in full is refused
+    /// whole for the same reason, as the plan withholds it.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
@@ -268,6 +269,12 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 "Windows would not say what is in this temporary folder, so Deguffer cannot tell whether a "
                 + "running program is working in it. A temporary folder holds live working files among "
                 + "abandoned ones, so Deguffer leaves all of it alone.",
+                static _ => false)),
+            .. folders.Present.Where(folder => !live.IsAnswered(folder)).Select(folder => new ToolRoot(
+                folder,
+                "Deguffer could not tell whether a running program is working in this temporary folder. "
+                + "A temporary folder holds live working files among abandoned ones, so Deguffer leaves "
+                + "all of it alone.",
                 static _ => false)),
             .. live.Live.Select(held => new ToolRoot(
                 held.Directory,
@@ -322,9 +329,11 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         var live = _liveTrees.FindLiveChildren(folders, ct);
         var owned = await OwnedElsewhereAsync(folders, ct).ConfigureAwait(false);
         // The live entries above are the preview's. Each folder carries the same question to the
-        // clean, which spares whatever a program has taken up since, and whether this answer was whole.
-        var stillUnused = new LiveChildrenCheck(_liveTrees, live.Complete);
-        var (targets, spared) = Spare(scan.Targets, live, owned);
+        // clean, which spares whatever a program has taken up since. A folder whose question could
+        // not be asked in full is not offered: no entry in it can be spared on an answer that names none.
+        var stillUnused = new LiveChildrenCheck(_liveTrees);
+        var withheld = scan.Targets.Where(target => !live.IsAnswered(target.Path)).ToList();
+        var (targets, spared) = Spare([.. scan.Targets.Except(withheld)], live, owned);
         var (steps, measured) = await PlanDeletionsAsync(
             [.. targets.Select(target => target with { UseCheck = stillUnused })],
             effective,
@@ -377,8 +386,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             notes.Add(busy);
         }
 
-        if (LiveTreeVeto.IncompleteNote(
-            live.Complete, "Close whatever is working in them before cleaning.") is { } incomplete)
+        if (LiveTreeVeto.UncheckedNote(withheld.Count) is { } incomplete)
         {
             notes.Add(incomplete);
         }
@@ -395,7 +403,14 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected, .. spared]),
+            ProtectedPaths = Protect(
+            [
+                // First, because the first reason for a path is the one kept, and a folder withheld
+                // whole is also one the scan protects.
+                .. withheld.Select(target => (target.Path, LiveTreeVeto.UncheckedReason)),
+                .. scan.Protected,
+                .. spared,
+            ]),
             Notes = notes,
 
             // §5.3's floor travels on the plan, so the removal applies exactly the cut-off the

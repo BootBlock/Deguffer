@@ -163,6 +163,9 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
                 $"A running browser is using this test profile ({string.Join("; ", held.Holders)}). "
                 + "Deguffer leaves it alone until the browser has closed.",
                 static _ => false)),
+            .. Profiles()
+                .Where(profile => !live.IsLive(profile.Path) && !IsAnswered(live, profile))
+                .Select(profile => new ToolRoot(profile.Path, LiveTreeVeto.UncheckedReason, static _ => false)),
         ]);
     }
 
@@ -217,8 +220,9 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
         }
 
         var live = FindLive(profiles, ct);
-        var stillUnused = new LiveChildrenCheck(_liveTrees, live.Complete);
+        var stillUnused = new LiveChildrenCheck(_liveTrees);
         var targets = new List<DeletionTarget>();
+        var withheld = 0;
 
         foreach (var profile in profiles)
         {
@@ -226,6 +230,12 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
 
             if (live.IsLive(profile.Path))
             {
+                continue;
+            }
+
+            if (!IsAnswered(live, profile))
+            {
+                withheld++;
                 continue;
             }
 
@@ -281,8 +291,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
             notes.Add(busy);
         }
 
-        if (LiveTreeVeto.IncompleteNote(
-            live.Complete, "Close any browser a test started before cleaning.") is { } incomplete)
+        if (LiveTreeVeto.UncheckedNote(withheld) is { } incomplete)
         {
             notes.Add(incomplete);
         }
@@ -304,7 +313,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            // A profile the preview held back as live or recent is deliberately absent. Its test
+            // A profile the preview held back as live, unchecked or recent is deliberately absent. Its test
             // runner deletes it the moment its browser closes, which is usually seconds, so asserting
             // across an indefinite preview that it survived would raise §5.6's alarm on an ordinary
             // run and teach the reader to ignore it. One the clean holds back is asserted by the run.
@@ -426,6 +435,10 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
 
         return children with { Live = [.. children.Live.Where(l => named.Contains(l.Directory))] };
     }
+
+    /// <summary>Whether the question about the folder holding <paramref name="profile"/> was asked in full.</summary>
+    private static bool IsAnswered(LiveTreeFindings live, Profile profile) =>
+        Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(profile.Path)) is { } folder && live.IsAnswered(folder);
 
     private sealed record FolderScan(string Folder, bool RequiresElevation, ChildDirectoryScan Children);
 

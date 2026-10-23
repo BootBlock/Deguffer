@@ -410,18 +410,20 @@ public sealed class PuppeteerBrowsersProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A check that could not run must not look like one that found nothing. The builds are still
-    /// offered, as every other row offers on a partial answer, and the plan says so.
+    /// "Could not tell" is not permission. A build nothing could check is not offered, it is asserted
+    /// to survive, and the plan says why the row is short rather than calling it clear.
     /// </summary>
     [Fact]
-    public async Task SaysSoWhenItCannotTellWhetherABuildIsInUse()
+    public async Task OffersNoBuildWhenItCannotTellWhetherABuildIsInUse()
     {
-        CreateRoot(@"chrome\win64-127.0.6533.88");
+        var build = Path.Combine(CreateRoot(@"chrome\win64-127.0.6533.88"), @"chrome\win64-127.0.6533.88");
 
         var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
 
-        Assert.Single(plan.TargetedPaths);
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined, "a row holding its only build back read as already clear");
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == build && p.Reason == LiveTreeVeto.UncheckedReason);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("could not check whether anything is using these", StringComparison.Ordinal));
+            && n.Message.Contains("could not check whether anything is using one of these", StringComparison.Ordinal));
     }
 }

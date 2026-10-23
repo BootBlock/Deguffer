@@ -265,7 +265,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
              // what every entry named here shares is only that it is the project's own.
              $"{marker} is part of the project, not its build output.")))),
         .. declined.Select(path => (path, $"Not recognised as {Subject}, so it is left alone.")),
-        .. live.Vetoed.Select(vetoed => (vetoed.Directory, LiveTreeVeto.ProtectedReason)),
+        .. live.Survivors,
     ]);
 
     /// <summary>

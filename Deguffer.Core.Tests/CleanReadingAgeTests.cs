@@ -123,7 +123,7 @@ public sealed class CleanReadingAgeTests : IDisposable
     }
 
     private static DeleteDirectoryStep Removal(string folder, ILiveTreeInspector inspector) =>
-        new(folder, "A scratch entry") { UseCheck = new LiveChildrenCheck(inspector, planComplete: true) };
+        new(folder, "A scratch entry") { UseCheck = new LiveChildrenCheck(inspector) };
 
     private string Populate(params string[] parts)
     {

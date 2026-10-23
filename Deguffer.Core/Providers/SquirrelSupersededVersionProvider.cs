@@ -159,6 +159,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
 
         var held = new HashSet<string>(
             live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
+        var unsure = new HashSet<string>(live.Unchecked, StringComparer.OrdinalIgnoreCase);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
@@ -172,6 +173,11 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                    + "alone: an application that has just updated may still be reading the folder "
                    + "beside the one it started from. Close it and this can go.",
                    static _ => false),
+            .. from installation in installations
+               where unsure.Contains(installation.Root)
+               from version in installation.Superseded
+               where !version.IsLink
+               select new ToolRoot(version.Path, UncheckedBuildReason(installation), static _ => false),
         ]);
     }
 
@@ -284,8 +290,9 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             lockFiles: [],
             ct);
 
-        var held = new HashSet<string>(
-            live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
+        var held = new HashSet<string>(live.Held, StringComparer.OrdinalIgnoreCase);
+        var running = new HashSet<string>(live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
+        var unsure = new HashSet<string>(live.Unchecked, StringComparer.OrdinalIgnoreCase);
 
         // The installation's question, carried by every build removed from it: an application started
         // after the preview holds its old builds back as one running at the preview would have.
@@ -309,7 +316,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Left the older builds of {Join([.. installations.Where(i => held.Contains(i.Root)).Select(i => i.Name)])} "
+                $"Left the older builds of {Join([.. installations.Where(i => running.Contains(i.Root)).Select(i => i.Name)])} "
                 + "alone: "
                 + (live.Vetoed.Count == 1 ? "it is" : "they are")
                 + " running. Close "
@@ -317,12 +324,14 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                 + " and scan again to include the builds."));
         }
 
-        if (!live.Complete)
+        if (unsure.Count > 0)
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                "Deguffer could not check whether these applications are running. Close them before "
-                + "removing an older build."));
+                $"Left the older builds of {Join([.. installations.Where(i => unsure.Contains(i.Root)).Select(i => i.Name)])} "
+                + "alone: Deguffer could not check whether "
+                + (unsure.Count == 1 ? "it is" : "they are")
+                + " running. Scan again to include the builds."));
         }
 
         var targets =
@@ -366,7 +375,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         }
 
         if (targets.Count == 0
-            && live.Vetoed.Count == 0
+            && held.Count == 0
             && unordered.Count == 0
             && linked.Count == 0
             && !unreadable)
@@ -404,9 +413,15 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             // link are all cases where something real was left unexamined, so the shell must not
             // call a row with no steps clear.
             WasNotExamined = targets.Count == 0
-                && (live.Vetoed.Count > 0 || unordered.Count > 0 || linked.Count > 0),
+                && (held.Count > 0 || unordered.Count > 0 || linked.Count > 0),
         };
     }
+
+    /// <summary>Why Explore refuses a build of an installation nothing could check was not running.</summary>
+    private static string UncheckedBuildReason(SquirrelInstallation installation) =>
+        $"Deguffer could not tell whether {installation.Name} is running, so it is leaving the build it "
+        + "replaced alone: an application that has just updated may still be reading the folder beside "
+        + "the one it started from.";
 
     /// <summary>
     /// §5.6 for one installation: the folder, the updater, the packages beside them, and

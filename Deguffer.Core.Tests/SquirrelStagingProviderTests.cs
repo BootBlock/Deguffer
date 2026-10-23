@@ -468,13 +468,23 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     /// applied to a safeguard rather than a measurement).
     /// </summary>
     [Fact]
-    public async Task AMachineWhereLivenessCannotBeEstablishedSaysSo()
+    public async Task AMachineWhereLivenessCannotBeEstablishedOffersNothingAndSaysSo()
     {
-        Populate(Path.Combine(StagingRoot, "tempa"));
+        var staging = Populate(Path.Combine(StagingRoot, "tempa"));
 
-        var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
+        var provider = CreateProvider(FakeLiveTreeInspector.CannotTell);
+        var plan = await provider.PlanAsync();
 
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == staging && p.Reason == LiveTreeVeto.UncheckedReason);
         Assert.Contains(plan.Notes, n => n.Message.Contains("could not check", StringComparison.Ordinal));
+
+        // §7.1: Explore refuses what the plan withholds, though the name-shaped declaration
+        // recognises it.
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
+
+        Assert.False(policy.MayRemove(staging).IsAllowed);
     }
 
     /// <summary>
