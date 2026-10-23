@@ -13,16 +13,20 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// <param name="X">The canvas column under the light.</param>
 /// <param name="Y">The canvas row under the light.</param>
 /// <param name="Reach">How far from that point the light still adds anything, in canvas pixels.</param>
-public readonly record struct PointerLight(float X, float Y, float Reach)
+/// <param name="Strength">
+/// How much the light adds, at most, to a surface facing it straight on, as a fraction of the colour:
+/// the reader's choice (<see cref="Configuration.MapPointerLight.Amount"/>).
+/// </param>
+public readonly record struct PointerLight(float X, float Y, float Reach, float Strength = PointerLight.StandardStrength)
 {
     /// <summary>How far the light reaches, in device-independent pixels, so it covers a few shapes of a crowded picture.</summary>
     public const float ReachInDips = 160;
 
     /// <summary>
-    /// How much the light adds, at most, to a surface facing it straight on, as a fraction of the
-    /// colour: enough to see, and short of washing a pale colour out to white.
+    /// The strength the light has always had: enough to see, and short of washing a pale colour out
+    /// to white.
     /// </summary>
-    public const float Strength = 0.35f;
+    public const float StandardStrength = 0.35f;
 
     /// <summary>
     /// How high above the canvas the light is, as a fraction of its reach. Low enough that a cushion's
@@ -30,8 +34,12 @@ public readonly record struct PointerLight(float X, float Y, float Reach)
     /// </summary>
     public const float Height = 0.5f;
 
-    /// <summary>The light over canvas point <paramref name="x"/>, <paramref name="y"/>, on a display at <paramref name="scale"/>.</summary>
-    public static PointerLight At(float x, float y, double scale) => new(x, y, (float)(ReachInDips * scale));
+    /// <summary>
+    /// The light over canvas point <paramref name="x"/>, <paramref name="y"/>, on a display at
+    /// <paramref name="scale"/>, adding at most <paramref name="strength"/>.
+    /// </summary>
+    public static PointerLight At(float x, float y, double scale, float strength) =>
+        new(x, y, (float)(ReachInDips * scale), strength);
 
     /// <summary>
     /// The part of a canvas <paramref name="width"/> by <paramref name="height"/> the light adds to,

@@ -168,10 +168,11 @@ public sealed class CushionRendererTests : IDisposable
     }
 
     /// <summary>
-    /// Every finish the style can ask for is shaded as it is painted: flat, bevelled, lined round each
-    /// block or each folder, light or dark, thin or thick, and cushions at every depth, with a line round
-    /// them or none. A finish with no cushion in it is whole numbers on both routes,
-    /// so it is the same picture exactly; one with a cushion is held to the cushions' tolerance.
+    /// Every finish the style can ask for is shaded as it is painted: flat, bevelled, lit by a sheen,
+    /// lined round each block or each folder, light or dark, thin, thick or heavy, and cushions at every
+    /// depth, with a line round them or none. A finish with no cushion in it is whole numbers on both
+    /// routes, a sheen included, so it is the same picture exactly; one with a cushion is held to the
+    /// cushions' tolerance.
     /// </summary>
     [Theory]
     [MemberData(nameof(Finishes))]
@@ -180,7 +181,9 @@ public sealed class CushionRendererTests : IDisposable
         var picture = Picture(MapViewport.Seen(zoom: 1.6, left: 0.2, top: 0.3), style: style);
         var finish = picture.Quads()!.Finish;
 
-        Assert.True(finish.Borders.Width > 0 || finish.Bevel.Width > 0 || style.Relief != MapStyle.Default.Relief, $"{name} draws nothing the shipped cushion does not");
+        Assert.True(
+            finish.Borders.Width > 0 || finish.Bevel.Width > 0 || style.Relief != MapStyle.Default.Relief || style.Shading == MapShading.Gradient,
+            $"{name} draws nothing the shipped cushion does not");
 
         if (style.Shading == MapShading.Cushion)
         {
@@ -202,18 +205,26 @@ public sealed class CushionRendererTests : IDisposable
         { "deep cushions, no lines", MapPreset.WizTree.Style },
         { "cushions with lines", new MapStyle(MapShading.Cushion, MapRelief.Subtle, MapBorder.Medium, MapBorder.Strong) },
         { "flat without bands or names", MapPreset.Outlined.Style with { FolderNames = false } },
+        { "deep cushions", new MapStyle(MapShading.Cushion, MapRelief.Deep) },
+        { "deep bevel, medium lines", new MapStyle(MapShading.Bevel, MapRelief.Deep, MapBorder.Medium, MapBorder.Strong) },
+        { "flat, heavy light lines, grey folders", new MapStyle(MapShading.Flat, BlockBorders: MapBorder.Strong, FolderBorders: MapBorder.Solid, BorderWidth: MapBorderWidth.Heavy, BorderTone: MapBorderTone.Light, FolderFill: MapFolderFill.Grey) },
+        { "sheen, no lines", new MapStyle(MapShading.Gradient) },
+        { "sheen, faint lines, tinted folders", new MapStyle(MapShading.Gradient, BlockBorders: MapBorder.Faint, FolderBorders: MapBorder.Medium, FolderFill: MapFolderFill.Tinted) },
+        { "deep sheen, heavy light lines, no bands", new MapStyle(MapShading.Gradient, MapRelief.Deep, MapBorder.Faint, MapBorder.Strong, MapBorderWidth.Heavy, MapBorderTone.Light, FolderNames: false) },
     };
 
     /// <summary>
-    /// On a flat picture the pointer's light brightens what is round it and leaves the rest as it was,
-    /// pixel for pixel. A line takes none of it: within the light, the inside of each file brightens and
-    /// the line round it does not. The lines are a mid tone, which a light could brighten, so a line left
-    /// alone is the shader's choice and not black that no light can change.
+    /// On a flat picture, or one lit by a sheen, the pointer's light brightens what is round it and leaves
+    /// the rest as it was, pixel for pixel. A line takes none of it: within the light, the inside of each
+    /// file brightens and the line round it does not. The lines are a mid tone, which a light could
+    /// brighten, so a line left alone is the shader's choice and not black that no light can change.
     /// </summary>
-    [Fact]
-    public void ThePointerLightBrightensAFlatPictureWithinItsReachButNotItsLines()
+    [Theory]
+    [InlineData(MapShading.Flat)]
+    [InlineData(MapShading.Gradient)]
+    public void ThePointerLightBrightensAFlatPictureWithinItsReachButNotItsLines(MapShading shading)
     {
-        var picture = Picture(MapViewport.Whole, style: new MapStyle(MapShading.Flat, BlockBorders: MapBorder.Medium, BorderWidth: MapBorderWidth.Thick));
+        var picture = Picture(MapViewport.Whole, style: new MapStyle(shading, BlockBorders: MapBorder.Medium, BorderWidth: MapBorderWidth.Thick));
         var quads = picture.Quads()!;
         var light = new PointerLight(400, 300, 160);
         var unlit = Shaded(quads);

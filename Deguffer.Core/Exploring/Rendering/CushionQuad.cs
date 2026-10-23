@@ -52,7 +52,7 @@ public readonly record struct CushionQuad(
 
     /// <summary>
     /// How far <paramref name="tile"/>'s surface tilts at its edges, or zero where it is drawn flat. A
-    /// bevel reads only whether it is above zero.
+    /// bevel and a sheen read only whether it is above zero.
     /// </summary>
     private static float RidgeOf(ExploreTile tile, ShapeFinish finish)
     {
@@ -66,9 +66,11 @@ public readonly record struct CushionQuad(
         // A folder with a band has its name written across its top edge, where a cushion is at its
         // brightest on the left and its darkest on the right, so text chosen to contrast with the
         // folder's colour would be chosen against a colour the band is not. The band and the gap
-        // already say where the folder is, which is the job the cushion was doing. A bevel leaves the
-        // band flat behind the name, so a folder keeps its bevel.
-        if (tile.Header > 0 && finish.Shading == MapShading.Cushion)
+        // already say where the folder is, which is the job the cushion was doing. A sheen is at its
+        // lightest along the top, where the band is, and at a deep relief a third lighter than the
+        // colour the text was chosen against, so a banded folder is flat under a sheen too. A bevel
+        // leaves the band flat behind the name, so a folder keeps its bevel.
+        if (tile.Header > 0 && finish.Shading is MapShading.Cushion or MapShading.Gradient)
         {
             return 0;
         }

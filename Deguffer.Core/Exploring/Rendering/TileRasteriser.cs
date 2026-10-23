@@ -75,7 +75,7 @@ public sealed class TileRasteriser : CanvasPainter
     /// <summary>
     /// Paint one quad, finished as <paramref name="finish"/> says, into whichever of
     /// <paramref name="claimed"/>'s pixels are still free: its line inside its sides, then its bevel
-    /// inside that, then its cushion or its own colour across the rest.
+    /// inside that, then its cushion, its sheen or its own colour across the rest.
     ///
     /// <para>A side off the canvas is not drawn, nor its line or its bevel: the shape goes on past it.
     /// Where two sides meet, the bevel's lit side is the top or the left only where it is nearer than
@@ -111,6 +111,8 @@ public sealed class TileRasteriser : CanvasPainter
         var lit = bevelled ? finish.Lit(quad.Colour) : default;
         var shaded = bevelled ? finish.Shaded(quad.Colour) : default;
         var cushioned = finish.Shading == MapShading.Cushion;
+        var sheened = finish.Shading == MapShading.Gradient && quad.Ridge > 0;
+        var slope = sheened ? GradientShading.SlopeAt(finish.Relief) : 0;
 
         var ridge = (double)quad.Ridge;
         var spanWidth = quad.Right - quad.Left;
@@ -122,6 +124,7 @@ public sealed class TileRasteriser : CanvasPainter
             var fromBottom = quad.Bottom - 1 - y;
             var v = spanHeight <= 1 ? 0.5 : (double)fromTop / (spanHeight - 1);
             var ny = ridge * ((2 * v) - 1);
+            var sheen = sheened ? GradientShading.Lit(quad.Colour, GradientShading.LightAt(slope, fromTop, spanHeight - 1)) : default;
             var offset = ((y * width) + left) * 4;
 
             for (var x = left; x < right; x++)
@@ -146,6 +149,10 @@ public sealed class TileRasteriser : CanvasPainter
                         var nx = ridge * ((2 * u) - 1);
 
                         CushionShading.Write(pixels, offset, quad.Colour, CushionShading.LightAt(nx, ny));
+                    }
+                    else if (sheened)
+                    {
+                        PixelBuffer.Write(pixels, offset, sheen);
                     }
                     else
                     {

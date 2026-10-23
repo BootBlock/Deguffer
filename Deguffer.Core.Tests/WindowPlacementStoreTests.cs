@@ -8,16 +8,16 @@ namespace Deguffer.Core.Tests;
 /// the ones worth the test. Each has to land on remembering nothing, which is the framework-default
 /// placement the app opened with before it remembered anything.
 /// </summary>
-public sealed class WindowMetricsStoreTests : IDisposable
+public sealed class WindowPlacementStoreTests : IDisposable
 {
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
 
-    public WindowMetricsStoreTests() => _environment = new FakeUserEnvironment(_temp.Path);
+    public WindowPlacementStoreTests() => _environment = new FakeUserEnvironment(_temp.Path);
 
     public void Dispose() => _temp.Dispose();
 
-    private WindowMetricsStore CreateStore() => new(_environment);
+    private WindowPlacementStore<WindowMetrics> CreateStore() => new(_environment, "window.json");
 
     private string StoreFile => Path.Combine(_environment.LocalAppData, "Deguffer", "window.json");
 
@@ -130,5 +130,32 @@ public sealed class WindowMetricsStoreTests : IDisposable
         CreateStore().Save(new WindowMetrics(new WindowBounds(-9000, -9000, 1000, 700), IsMaximized: false));
 
         Assert.Equal(new WindowBounds(-9000, -9000, 1000, 700), CreateStore().Load()?.Bounds);
+    }
+
+    /// <summary>
+    /// A tool window's placement reads back with whether it was open, and in a file of its own: the
+    /// main window's file is left as it was, so neither window's close can move the other.
+    /// </summary>
+    [Fact]
+    public void AToolWindowKeepsItsOwnPlacementAndWhetherItWasOpen()
+    {
+        var tools = new WindowPlacementStore<ToolWindowMetrics>(_environment, "map-appearance-window.json");
+
+        CreateStore().Save(new WindowMetrics(new WindowBounds(412, 96, 1000, 700), IsMaximized: false));
+        Assert.True(tools.Save(new ToolWindowMetrics(new WindowBounds(1420, 96, 520, 820), IsOpen: true)));
+
+        Assert.Equal(new ToolWindowMetrics(new WindowBounds(1420, 96, 520, 820), IsOpen: true), tools.Load());
+        Assert.Equal(new WindowBounds(412, 96, 1000, 700), CreateStore().Load()?.Bounds);
+        Assert.DoesNotContain("IsUsable", File.ReadAllText(Path.Combine(_environment.LocalAppData, "Deguffer", "map-appearance-window.json")));
+    }
+
+    /// <summary>A tool window of no size is nothing remembered, as a main window of no size is, so it opens beside its owner.</summary>
+    [Fact]
+    public void AToolWindowOfNoSizeIsNothingRemembered()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(StoreFile)!);
+        File.WriteAllText(Path.Combine(_environment.LocalAppData, "Deguffer", "map-appearance-window.json"), """{ "IsOpen": true }""");
+
+        Assert.Null(new WindowPlacementStore<ToolWindowMetrics>(_environment, "map-appearance-window.json").Load());
     }
 }

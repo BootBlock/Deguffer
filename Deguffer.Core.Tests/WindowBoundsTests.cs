@@ -132,4 +132,49 @@ public sealed class WindowBoundsTests
 
         Assert.Equal(new WindowBounds(0, 0, 1920, 1032), placed);
     }
+
+    /// <summary>A tool window opens to the right of its owner where the display has room for it, level with its top.</summary>
+    [Fact]
+    public void AToolWindowOpensToTheRightWhereThereIsRoom()
+    {
+        var owner = new WindowBounds(100, 50, 1000, 700);
+
+        Assert.Equal(new WindowBounds(1108, 50, 520, 820), owner.Beside(Work, 520, 820, gap: 8, drop: 96));
+    }
+
+    /// <summary>To the left where only that side has room.</summary>
+    [Fact]
+    public void AToolWindowOpensToTheLeftWhereOnlyThatSideHasRoom()
+    {
+        var owner = new WindowBounds(800, 50, 1000, 700);
+
+        Assert.Equal(new WindowBounds(272, 50, 520, 820), owner.Beside(Work, 520, 820, gap: 8, drop: 96));
+    }
+
+    /// <summary>
+    /// Over the owner's right-hand edge, below its toolbar, where neither side has room: a maximised
+    /// owner, which is where most readers keep the map.
+    /// </summary>
+    [Fact]
+    public void AToolWindowOverlapsAMaximisedOwnerBelowItsToolbar()
+    {
+        Assert.Equal(new WindowBounds(1376, 96, 520, 820), Work.Beside(Work, 520, 820, gap: 8, drop: 96));
+    }
+
+    /// <summary>
+    /// Never past the display, at any edge. An owner low on the screen would put the window's bottom
+    /// off it, and a display too small for the window gives a smaller window rather than one whose
+    /// title bar cannot be reached.
+    /// </summary>
+    [Fact]
+    public void AToolWindowStaysOnTheDisplay()
+    {
+        var low = new WindowBounds(100, 600, 1000, 400).Beside(Work, 520, 820, gap: 8, drop: 96);
+
+        Assert.Equal(new WindowBounds(1108, 212, 520, 820), low);
+
+        var small = new WindowBounds(0, 0, 800, 600);
+
+        Assert.Equal(new WindowBounds(0, 0, 800, 600), small.Beside(small, 1000, 900, gap: 8, drop: 96));
+    }
 }

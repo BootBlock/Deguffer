@@ -4,7 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Deguffer.App.ViewModels"
-    xmlns:config="using:Deguffer.Core.Configuration"
+    xmlns:views="using:Deguffer.App.Views"
     xmlns:controls="using:Deguffer.App.Controls">
 
     <!--
@@ -13,61 +13,147 @@
         sits on the toolbar over the top of the picture. This one opens beside the main window where
         the screen has room, and the reader can move it wherever it is out of the way.
 
-        On a solid ground rather than a backdrop, so it reads the same with the backdrop off (§6.5).
+        On the §6.5 material, with the window's own ground under everything for when the material is
+        not there: every surface sits on a layer brush, so it reads the same either way.
 
-        The choices are in tabs by what they change, with the preview above them all, so whichever tab
-        is open the reader sees what a choice does. Every box is indexed against the enum it sets, in
-        the enum's order.
+        The preview is above every section, so whichever section is open the reader sees what a choice
+        does. Each section is a column of rows shaped as the Settings page's are, and every box is
+        indexed against the enum it sets, in the enum's order.
     -->
-    <Grid x:Name="Root"
-          Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-          Padding="20,16,20,20"
-          RowSpacing="8"
-          RowDefinitions="Auto,*,Auto,Auto">
+    <Grid x:Name="Root" RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <!-- The ground WindowBackdrop fades in where the material is not. -->
+        <Border x:Name="Ground"
+                Grid.RowSpan="5"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+
+        <!-- The drag region, carrying nothing but the window's name, as the main window's does. -->
+        <Border x:Name="TitleBar" Grid.Row="0" Height="40" Padding="16,0">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE790;"
+                          FontSize="15"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                          AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock Text="Map appearance"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            </StackPanel>
+        </Border>
 
         <!-- What each choice below does, drawn as it is made, from an invented picture that names no
              folder on the machine. The map itself can be behind this window or on another page. -->
-        <controls:MapPreview x:Name="Preview" Grid.Row="0" Height="160" />
+        <Border Grid.Row="1" Margin="16,0,16,12" Style="{StaticResource CardStyle}" Padding="12,10,12,12">
+            <Grid RowSpacing="8" RowDefinitions="Auto,Auto">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="Preview"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Text="{x:Bind ViewModel.PreviewCaption, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               VerticalAlignment="Center" />
+                </Grid>
 
-        <Pivot Grid.Row="1" IsHeaderItemsCarouselEnabled="False" AutomationProperties.Name="Map appearance">
+                <Border Grid.Row="1" CornerRadius="4" Height="168">
+                    <controls:MapPreview x:Name="Preview" />
+                </Border>
+            </Grid>
+        </Border>
 
-            <!-- The headers at a body size rather than the Pivot's own display size, and in a
-                 fixed order rather than turning to put the open one first, so all five fit
-                 across the tool window in the same place each time. -->
-            <Pivot.Resources>
-                <x:Double x:Key="PivotHeaderItemFontSize">15</x:Double>
-            </Pivot.Resources>
+        <!-- One section at a time, named by what it changes, in the order a reader shapes a look:
+             a starting point, then its colours, its shapes, its lines and its layout. -->
+        <SelectorBar x:Name="Sections"
+                     Grid.Row="2"
+                     Margin="12,0,12,4"
+                     SelectionChanged="OnSectionChanged"
+                     AutomationProperties.Name="Sections">
+            <SelectorBarItem x:Name="PresetsItem" Text="Presets" IsSelected="True">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xE771;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="ColoursItem" Text="Colours">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xE790;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="ShapesItem" Text="Shapes">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xE706;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="LinesItem" Text="Lines">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xED5E;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="LayoutItem" Text="Layout">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xECA5;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+        </SelectorBar>
 
-            <!-- A preset sets the shading, the lines, the folders and the spacing at once, and for a
-                 look whose colours are part of it, the page's Colour box as well. -->
-            <PivotItem Header="Presets">
-                <Grid RowSpacing="8" RowDefinitions="Auto,*">
-                    <TextBlock Text="{x:Bind ViewModel.PresetSummary, Mode=OneWay}"
-                               TextWrapping="Wrap"
-                               Style="{StaticResource SecondaryText}" />
+        <ScrollViewer x:Name="SectionScroller" Grid.Row="3" Padding="16,8,16,16">
+            <Grid>
 
-                    <ListView Grid.Row="1"
-                              SelectionMode="Single"
+                <!-- A preset sets the shading, the lines, the folders and the spacing at once, and
+                     for a look whose colours are part of it, the page's Colour box as well. -->
+                <StackPanel x:Name="PresetsSection" Spacing="12">
+                    <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{x:Bind ViewModel.PresetSummary, Mode=OneWay}"
+                                   Style="{StaticResource SecondaryText}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Content="Restore the default look"
+                                Click="OnRestoreClicked"
+                                ToolTipService.ToolTip="The Deguffer preset, standard colours for every picture, and the light as the map is shipped" />
+                    </Grid>
+
+                    <GridView SelectionMode="Single"
                               ItemsSource="{x:Bind ViewModel.Presets}"
                               SelectedIndex="{x:Bind ViewModel.PresetIndex, Mode=TwoWay}"
                               AutomationProperties.Name="Presets">
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="config:MapPreset">
-                                <StackPanel Padding="0,8"
-                                            Spacing="2"
-                                            AutomationProperties.Name="{x:Bind Name}"
-                                            AutomationProperties.HelpText="{x:Bind Description}">
-                                    <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="{x:Bind Description}" TextWrapping="Wrap" Style="{StaticResource SecondaryText}" />
-                                </StackPanel>
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem" BasedOn="{StaticResource DefaultGridViewItemStyle}">
+                                <Setter Property="Margin" Value="0,0,8,8" />
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MapPresetOption">
+                                <Border Width="236"
+                                        Height="148"
+                                        Padding="14,12"
+                                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource CardCorner}"
+                                        AutomationProperties.Name="{x:Bind Spoken}">
+                                    <Grid RowSpacing="4" RowDefinitions="Auto,*,Auto">
+                                        <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Grid.Row="1"
+                                                   Text="{x:Bind Description}"
+                                                   Style="{StaticResource SecondaryText}"
+                                                   FontSize="12"
+                                                   MaxLines="3"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Row="2"
+                                                   Text="{x:Bind Traits}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   AutomationProperties.AccessibilityView="Raw" />
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </Grid>
-            </PivotItem>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                </StackPanel>
 
-            <PivotItem Header="Colours">
-                <Grid RowSpacing="8" RowDefinitions="Auto,*,Auto">
+                <StackPanel x:Name="ColoursSection" Spacing="8" Visibility="Collapsed">
 
                     <!-- Which picture the list below changes. One list serves all three, so the
                          heading is what tells the reader that choosing here leaves the other two as
@@ -75,9 +161,7 @@
                     <TextBlock Text="{x:Bind ViewModel.SchemeHeading, Mode=OneWay}"
                                Style="{StaticResource BodyStrongTextBlockStyle}" />
 
-                    <ListView x:Name="SchemeList"
-                              Grid.Row="1"
-                              SelectionMode="Single"
+                    <ListView SelectionMode="Single"
                               ItemsSource="{x:Bind ViewModel.Schemes}"
                               SelectedIndex="{x:Bind ViewModel.SchemeIndex, Mode=TwoWay}"
                               AutomationProperties.Name="{x:Bind ViewModel.SchemeHeading, Mode=OneWay}">
@@ -131,119 +215,207 @@
                         </ListView.ItemTemplate>
                     </ListView>
 
-                    <ComboBox Grid.Row="2"
-                              MinWidth="200"
-                              Header="Folders drawn round what they hold"
-                              SelectedIndex="{x:Bind ViewModel.FolderFillIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="In their own colour" />
-                        <ComboBoxItem Content="In dark grey" />
-                    </ComboBox>
-                </Grid>
-            </PivotItem>
+                    <views:SettingsRow Glyph="&#xE8B7;"
+                                       Title="Folders drawn round what they hold"
+                                       Description="The band along a treemap folder's top and the gap round what it holds.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="168"
+                                      SelectedIndex="{x:Bind ViewModel.FolderFillIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Folders drawn round what they hold">
+                                <ComboBoxItem Content="In their own colour" />
+                                <ComboBoxItem Content="In dark grey" />
+                                <ComboBoxItem Content="Tinted towards grey" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
+                </StackPanel>
 
-            <PivotItem Header="Shading">
-                <ScrollViewer>
-                    <StackPanel Spacing="16" Padding="0,8,0,0">
-                        <ComboBox MinWidth="200"
-                                  Header="How each shape is lit"
-                                  SelectedIndex="{x:Bind ViewModel.ShadingIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="Cushion" />
-                            <ComboBoxItem Content="Bevel" />
-                            <ComboBoxItem Content="Flat" />
-                        </ComboBox>
+                <StackPanel x:Name="ShapesSection" Spacing="8" Visibility="Collapsed">
+                    <views:SettingsRow Glyph="&#xE81E;"
+                                       Title="Shading"
+                                       Description="A cushion rises to the middle of each shape. A bevel is flat, lighter along the top and left edges and darker along the bottom and right. Flat is each shape in its own colour alone. A sheen is lit from above, lighter along the top and darker along the bottom.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.ShadingIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Shading">
+                                <ComboBoxItem Content="Cushion" />
+                                <ComboBoxItem Content="Bevel" />
+                                <ComboBoxItem Content="Flat" />
+                                <ComboBoxItem Content="Sheen" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-                        <TextBlock TextWrapping="Wrap"
-                                   Style="{StaticResource SecondaryText}"
-                                   Text="A cushion rises to the middle of each shape and falls away to its edges. A bevel is flat, lighter along the top and left edges and darker along the bottom and right. Flat is each shape in its own colour, with no cushion and no bevel." />
+                    <views:SettingsRow Glyph="&#xE9D2;"
+                                       Title="Depth"
+                                       Description="How far a cushion rises, a bevel stands out, or a sheen runs from light to dark.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.ReliefIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Depth of a cushion or a bevel">
+                                <ComboBoxItem Content="Subtle" />
+                                <ComboBoxItem Content="Standard" />
+                                <ComboBoxItem Content="Strong" />
+                                <ComboBoxItem Content="Deep" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-                        <ComboBox MinWidth="200"
-                                  Header="Depth of a cushion or a bevel"
-                                  SelectedIndex="{x:Bind ViewModel.ReliefIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="Subtle" />
-                            <ComboBoxItem Content="Standard" />
-                            <ComboBoxItem Content="Strong" />
-                        </ComboBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </PivotItem>
+                    <TextBlock Text="Pointer light"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               Margin="0,12,0,0" />
 
-            <PivotItem Header="Borders">
-                <ScrollViewer>
-                    <StackPanel Spacing="16" Padding="0,8,0,0">
-                        <ComboBox MinWidth="200"
-                                  Header="Line round each file and block"
-                                  SelectedIndex="{x:Bind ViewModel.BlockBordersIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="None" />
-                            <ComboBoxItem Content="Faint" />
-                            <ComboBoxItem Content="Medium" />
-                            <ComboBoxItem Content="Strong" />
-                            <ComboBoxItem Content="Solid" />
-                        </ComboBox>
+                    <!-- Off, the shape under the pointer is still named under the map and outlined
+                         when it is picked: the light is decoration, never the only sign of where the
+                         pointer is. -->
+                    <views:SettingsRow Glyph="&#xE706;"
+                                       Title="Light under the pointer"
+                                       Description="A soft light over the shapes near the pointer, which shows their slopes as it moves.">
+                        <views:SettingsRow.Control>
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.PointerLightShown, Mode=TwoWay}"
+                                          OnContent="On"
+                                          OffContent="Off"
+                                          AutomationProperties.Name="Light under the pointer" />
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-                        <ComboBox MinWidth="200"
-                                  Header="Line round each folder"
-                                  SelectedIndex="{x:Bind ViewModel.FolderBordersIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="None" />
-                            <ComboBoxItem Content="Faint" />
-                            <ComboBoxItem Content="Medium" />
-                            <ComboBoxItem Content="Strong" />
-                            <ComboBoxItem Content="Solid" />
-                        </ComboBox>
+                    <views:SettingsRow Glyph="&#xE793;"
+                                       Title="Brightness"
+                                       Description="How much the light adds to the shapes under it.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.LightStrengthIndex, Mode=TwoWay}"
+                                      IsEnabled="{x:Bind ViewModel.PointerLightShown, Mode=OneWay}"
+                                      AutomationProperties.Name="Brightness of the light under the pointer">
+                                <ComboBoxItem Content="Soft" />
+                                <ComboBoxItem Content="Standard" />
+                                <ComboBoxItem Content="Bright" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
+                </StackPanel>
 
-                        <TextBlock TextWrapping="Wrap"
-                                   Style="{StaticResource SecondaryText}"
-                                   Text="A folder's line is drawn round a treemap folder that has what it holds drawn inside it. Every shape of the icicle and the sunburst takes the line for files." />
+                <StackPanel x:Name="LinesSection" Spacing="8" Visibility="Collapsed">
+                    <views:SettingsRow Glyph="&#xE8A9;"
+                                       Title="Line round each file"
+                                       Description="Round every file and block, and every shape of the icicle and the sunburst.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.BlockBordersIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Line round each file and block">
+                                <ComboBoxItem Content="None" />
+                                <ComboBoxItem Content="Faint" />
+                                <ComboBoxItem Content="Medium" />
+                                <ComboBoxItem Content="Strong" />
+                                <ComboBoxItem Content="Solid" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-                        <ComboBox MinWidth="200"
-                                  Header="Line width"
-                                  SelectedIndex="{x:Bind ViewModel.BorderWidthIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="Thin" />
-                            <ComboBoxItem Content="Thick" />
-                        </ComboBox>
+                    <views:SettingsRow Glyph="&#xE8B7;"
+                                       Title="Line round each folder"
+                                       Description="Round a treemap folder that has what it holds drawn inside it.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.FolderBordersIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Line round each folder">
+                                <ComboBoxItem Content="None" />
+                                <ComboBoxItem Content="Faint" />
+                                <ComboBoxItem Content="Medium" />
+                                <ComboBoxItem Content="Strong" />
+                                <ComboBoxItem Content="Solid" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-                        <ComboBox MinWidth="200"
-                                  Header="Line colour"
-                                  SelectedIndex="{x:Bind ViewModel.BorderToneIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="Darker than the shape" />
-                            <ComboBoxItem Content="Lighter than the shape" />
-                        </ComboBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </PivotItem>
+                    <views:SettingsRow Glyph="&#xED5E;"
+                                       Title="Line width"
+                                       Description="How wide either line is, at the display's scale.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.BorderWidthIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Line width">
+                                <ComboBoxItem Content="Thin" />
+                                <ComboBoxItem Content="Thick" />
+                                <ComboBoxItem Content="Heavy" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-            <PivotItem Header="Layout">
-                <ScrollViewer>
-                    <StackPanel Spacing="16" Padding="0,8,0,0">
+                    <views:SettingsRow Glyph="&#xE790;"
+                                       Title="Line colour"
+                                       Description="What a line is mixed towards from the colour of its shape.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.BorderToneIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Line colour">
+                                <ComboBoxItem Content="Darker" />
+                                <ComboBoxItem Content="Lighter" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
+                </StackPanel>
 
-                        <!-- Indexed against ExploreSpacing, like the same box on the Settings page.
-                             The two write one setting, which the Memory page's treemap follows as
-                             well. -->
-                        <ComboBox MinWidth="200"
-                                  Header="Room round each folder in the treemap"
-                                  SelectedIndex="{x:Bind ViewModel.SpacingIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="Dense" />
-                            <ComboBoxItem Content="Comfortable" />
-                            <ComboBoxItem Content="Spacious" />
-                        </ComboBox>
+                <StackPanel x:Name="LayoutSection" Spacing="8" Visibility="Collapsed">
 
-                        <ToggleSwitch Header="Name each folder in a band along its top"
-                                      IsOn="{x:Bind ViewModel.FolderNames, Mode=TwoWay}" />
+                    <!-- Indexed against ExploreSpacing, like the same box on the Settings page. The
+                         two write one setting, which the Memory page's treemap follows as well. -->
+                    <views:SettingsRow Glyph="&#xECA5;"
+                                       Title="Room round each folder"
+                                       Description="The gap a treemap leaves round what each folder holds.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.SpacingIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Room round each folder in the treemap">
+                                <ComboBoxItem Content="Dense" />
+                                <ComboBoxItem Content="Comfortable" />
+                                <ComboBoxItem Content="Spacious" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-                        <ToggleSwitch Header="Write names and sizes inside shapes"
-                                      IsOn="{x:Bind ViewModel.ShapeNames, Mode=TwoWay}" />
-                    </StackPanel>
-                </ScrollViewer>
-            </PivotItem>
-        </Pivot>
+                    <views:SettingsRow Glyph="&#xE8D2;"
+                                       Title="Folder names"
+                                       Description="Name each treemap folder in a band along its top. Without the bands, folders give that room to what they hold.">
+                        <views:SettingsRow.Control>
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.FolderNames, Mode=TwoWay}"
+                                          OnContent="On"
+                                          OffContent="Off"
+                                          AutomationProperties.Name="Name each folder in a band along its top" />
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
 
-        <TextBlock Grid.Row="2"
-                   TextWrapping="Wrap"
-                   Text="Changes show on the map as you make them. Each view keeps its own colours, and the Memory page's map uses this look too."
-                   Style="{StaticResource SecondaryText}" />
+                    <views:SettingsRow Glyph="&#xE8C1;"
+                                       Title="Names inside shapes"
+                                       Description="Write the name and size inside each shape with room for them.">
+                        <views:SettingsRow.Control>
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.ShapeNames, Mode=TwoWay}"
+                                          OnContent="On"
+                                          OffContent="Off"
+                                          AutomationProperties.Name="Write names and sizes inside shapes" />
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
 
-        <Button Grid.Row="3"
-                HorizontalAlignment="Right"
-                Content="Close"
-                Click="OnCloseClicked" />
+        <!-- On a layer of its own along the bottom, so the one way out is in the same place whichever
+             section is open. -->
+        <Border Grid.Row="4"
+                Padding="16,12"
+                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid ColumnSpacing="16" ColumnDefinitions="*,Auto">
+                <TextBlock Text="Changes show on the map as you make them. Each picture keeps its own colours, and the Memory page's map uses this look too."
+                           Style="{StaticResource SecondaryText}"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1"
+                        MinWidth="96"
+                        Content="Close"
+                        Click="OnCloseClicked" />
+            </Grid>
+        </Border>
     </Grid>
 </Window>

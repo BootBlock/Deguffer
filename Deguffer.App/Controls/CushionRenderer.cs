@@ -384,7 +384,7 @@ internal sealed class CushionRenderer : IDisposable
             region.Right,
             region.Bottom,
             shining.Reach,
-            light is null ? 0 : PointerLight.Strength,
+            light is null ? 0 : shining.Strength,
             shining.Reach * PointerLight.Height,
             finish.Borders.Width,
             finish.Borders.Tone.Red,
@@ -396,7 +396,7 @@ internal sealed class CushionRenderer : IDisposable
             finish.Bevel.Width,
             finish.Bevel.Highlight,
             finish.Bevel.Shadow,
-            0,
+            GradientShading.SlopeAt(finish.Relief),
             0,
             0,
         ];

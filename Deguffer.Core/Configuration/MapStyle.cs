@@ -12,7 +12,10 @@ namespace Deguffer.Core.Configuration;
 /// file written before it existed reads with every value at the look the map always had.</para>
 /// </summary>
 /// <param name="Shading">How the inside of each shape is lit.</param>
-/// <param name="Relief">How strongly a cushion rises or a bevel stands out. Nothing for a flat shape.</param>
+/// <param name="Relief">
+/// How strongly a cushion rises, a bevel stands out or a sheen runs from light to dark. Nothing for a
+/// flat shape.
+/// </param>
 /// <param name="BlockBorders">
 /// How prominent the line round each block is: a file, a folder drawn as one block, and every shape
 /// of an icicle or a sunburst, whose folders sit beside what they hold rather than round it.
@@ -83,17 +86,27 @@ public enum MapShading
 
     /// <summary>Each shape in its own colour and nothing else: no cushion and no bevel. The pointer's light still falls on it.</summary>
     Flat = 2,
+
+    /// <summary>
+    /// Flat across, with a soft sheen from top to bottom: lighter along its top and darker along its
+    /// bottom, as though lit from above, with none of a cushion's rise to the middle. A sunburst's runs
+    /// along the radius instead, lighter at a ring's inner edge than at its outer.
+    /// </summary>
+    Gradient = 3,
 }
 
 /// <summary>
-/// How strongly a cushion rises or a bevel stands out. The values are ordinal, and the appearance
-/// window lists them in this order.
+/// How strongly a cushion rises, a bevel stands out or a sheen runs from light to dark. The values are
+/// ordinal, and the appearance window lists them in this order.
 /// </summary>
 public enum MapRelief
 {
     Subtle = 0,
     Standard = 1,
     Strong = 2,
+
+    /// <summary>Further than strong: steep cushions, a sheen about a third lighter at its lit edge and a third darker at the far one, and a bevel cut deep.</summary>
+    Deep = 3,
 }
 
 /// <summary>
@@ -118,6 +131,9 @@ public enum MapBorderWidth
 
     /// <summary>Two pixels at 100%.</summary>
     Thick = 1,
+
+    /// <summary>Three pixels at 100%, for a look drawn as a diagram rather than a picture.</summary>
+    Heavy = 2,
 }
 
 /// <summary>What a line round a shape is mixed towards. Ordinal, as the others are.</summary>
@@ -141,4 +157,10 @@ public enum MapFolderFill
     /// folders read as the containers round them.
     /// </summary>
     Grey = 1,
+
+    /// <summary>
+    /// The folder's own colour mixed half way towards the neutral grey, so the folders recede behind
+    /// what they hold, as grey ones do, and still say which branch each is.
+    /// </summary>
+    Tinted = 2,
 }

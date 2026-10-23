@@ -1,5 +1,6 @@
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
@@ -7,7 +8,8 @@ using Microsoft.UI.Xaml.Media;
 namespace Deguffer.App.Shell;
 
 /// <summary>
-/// Applies the §6.5 Acrylic backdrop, and takes it away again when it would harm legibility.
+/// Applies the §6.5 backdrop, and takes it away again when it would harm legibility: Acrylic, or
+/// Mica where the system cannot draw Acrylic (<see cref="BackdropChoice"/>).
 ///
 /// Windows already drops the material under battery saver, with transparency effects off, and
 /// over Remote Desktop — that fallback is the system's job, and the UI is built to read on the
@@ -25,8 +27,16 @@ internal sealed class WindowBackdrop
     private readonly Window _window;
     private readonly Visual _ground;
     private readonly IMotionPolicy _motion;
+    /// <summary>
+    /// Whether the system can draw each material in this process, asked once: neither answer changes
+    /// while the process runs, and the main window and the map appearance window both ask.
+    /// </summary>
+    private static readonly Lazy<(bool Acrylic, bool Mica)> Supported =
+        new(() => (DesktopAcrylicController.IsSupported(), MicaController.IsSupported()));
+
     private readonly DesktopAcrylicBackdrop _acrylic = new();
-    private bool? _applied;
+    private MicaBackdrop? _mica;
+    private BackdropMaterial? _applied;
     private bool _requested = true;
 
     /// <param name="ground">The solid layer under the window's content, shown wherever the material is not.</param>
@@ -62,7 +72,9 @@ internal sealed class WindowBackdrop
 
     public void Apply()
     {
-        var wanted = _requested && !HighContrast.IsEnabled();
+        var (acrylic, mica) = Supported.Value;
+        var wanted = BackdropChoice.For(_requested, HighContrast.IsEnabled(), acrylic, mica);
+
         if (_applied == wanted)
         {
             return;
@@ -74,14 +86,14 @@ internal sealed class WindowBackdrop
 
         if (first)
         {
-            _window.SystemBackdrop = wanted ? _acrylic : null;
-            _ground.Opacity = wanted ? 0 : 1;
+            _window.SystemBackdrop = MaterialFor(wanted);
+            _ground.Opacity = wanted == BackdropMaterial.Solid ? 1 : 0;
             return;
         }
 
-        if (wanted)
+        if (wanted != BackdropMaterial.Solid)
         {
-            _window.SystemBackdrop = _acrylic;
+            _window.SystemBackdrop = MaterialFor(wanted);
             FadeGround(0, null);
         }
         else
@@ -90,13 +102,23 @@ internal sealed class WindowBackdrop
             // while the ground was still on its way in.
             FadeGround(1, () =>
             {
-                if (_applied == false)
+                if (_applied == BackdropMaterial.Solid)
                 {
                     _window.SystemBackdrop = null;
                 }
             });
         }
     }
+
+    /// <summary>The system backdrop that draws <paramref name="material"/>, or none for the ground alone.</summary>
+    private SystemBackdrop? MaterialFor(BackdropMaterial material) => material switch
+    {
+        BackdropMaterial.Acrylic => _acrylic,
+
+        // Made only where it is used, which is only where Acrylic cannot be drawn.
+        BackdropMaterial.Mica => _mica ??= new MicaBackdrop(),
+        _ => null,
+    };
 
     /// <summary>Fade the ground to <paramref name="opacity"/>, from wherever it is, then do <paramref name="landed"/>.</summary>
     private void FadeGround(float opacity, Action? landed)

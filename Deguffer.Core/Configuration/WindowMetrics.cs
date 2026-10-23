@@ -39,12 +39,42 @@ public readonly record struct WindowBounds(int X, int Y, int Width, int Height)
             width,
             height);
     }
+
+    /// <summary>
+    /// A window <paramref name="width"/> by <paramref name="height"/> beside these bounds, which are the
+    /// window it belongs to, where it covers as little of them as <paramref name="work"/> allows, with
+    /// <paramref name="gap"/> pixels between the two.
+    ///
+    /// <para>To the right where the work area has room, then to the left, level with the owner's top.
+    /// Only where neither side has room (the owner maximised, most often) over the owner's right-hand
+    /// edge, three gaps in and <paramref name="drop"/> pixels down from its top, below its title bar and
+    /// toolbar. That last place does cover some of the owner, and the reader can move the window from
+    /// there. Always wholly inside <paramref name="work"/>, as <see cref="Within"/> holds.</para>
+    /// </summary>
+    public WindowBounds Beside(WindowBounds work, int width, int height, int gap, int drop)
+    {
+        width = Math.Min(width, work.Width);
+        height = Math.Min(height, work.Height);
+
+        var right = X + Width + gap;
+        var left = X - gap - width;
+
+        var (x, y) = right + width <= work.X + work.Width ? (right, Y)
+            : left >= work.X ? (left, Y)
+            : (X + Width - width - (gap * 3), Y + drop);
+
+        return new WindowBounds(
+            Math.Clamp(x, work.X, work.X + work.Width - width),
+            Math.Clamp(y, work.Y, work.Y + work.Height - height),
+            width,
+            height);
+    }
 }
 
 /// <summary>
 /// Where the main window was left, so the next launch opens where the last one closed.
 ///
-/// <para>A fourth file under <c>%LOCALAPPDATA%\Deguffer</c> rather than a field on
+/// <para>A file under <c>%LOCALAPPDATA%\Deguffer</c> rather than a field on
 /// <see cref="AppPreferences"/>, for the reason <see cref="SourceRootStore"/> and
 /// <see cref="SelectionStore"/> both give: that record is a set of choices the user made on the
 /// Settings page, and this is not a choice at all. Nobody decides to put a window at 412, 96. It is
@@ -62,7 +92,7 @@ public readonly record struct WindowBounds(int X, int Y, int Width, int Height)
 /// remembered as minimised would open with nothing on screen, and the user asked for the
 /// application.
 /// </param>
-public sealed record WindowMetrics(WindowBounds Bounds, bool IsMaximized)
+public sealed record WindowMetrics(WindowBounds Bounds, bool IsMaximized) : IWindowPlacement
 {
     /// <summary>
     /// Whether this describes a window at all. A zero or negative extent is not a small window, so

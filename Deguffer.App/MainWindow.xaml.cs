@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
     private readonly WindowSizing _sizing;
     private readonly CloseGuard _closeGuard = new(App.Running);
     private readonly TaskbarButton _taskbarButton;
+    private readonly MapAppearanceOpener _mapAppearance;
 
     public MainWindow()
     {
@@ -31,12 +32,21 @@ public sealed partial class MainWindow : Window
 
         _backdrop = new WindowBackdrop(this, Ground, SystemMotion.Current);
         _crossfade = new WindowCrossfade((FrameworkElement)Content, SystemMotion.Current);
-        _sizing = new WindowSizing(this, new WindowMetricsStore(UserEnvironment.Current));
+        _sizing = new WindowSizing(this, new WindowPlacementStore<WindowMetrics>(UserEnvironment.Current, "window.json"));
         SystemMotion.Current.Follow(this);
         _taskbarButton = new TaskbarButton(this, new TaskbarIndicator(App.Work, TaskbarButton.UserIsHere));
+        _mapAppearance = new MapAppearanceOpener(
+            this,
+            App.MapAppearance,
+            new WindowPlacementStore<ToolWindowMetrics>(UserEnvironment.Current, "map-appearance-window.json"));
 
-        // Where the window ends up is the user's, so it outlives the session that produced it.
-        Closed += (_, _) => _sizing.Remember();
+        // Where the window ends up is the user's, so it outlives the session that produced it. The map
+        // appearance window is remembered as open here, before this window goes and takes it along.
+        Closed += (_, _) =>
+        {
+            _sizing.Remember();
+            _mapAppearance.Leave();
+        };
 
         // Closing the window ends the process, and with it any clean or removal still running on a
         // page the user has left. That run's §5.6 verification and its report would go with it.
@@ -84,7 +94,23 @@ public sealed partial class MainWindow : Window
     /// Write the window's placement to disk without waiting for it to close. See
     /// <see cref="App.RememberWindowPlacement"/> for the one caller that needs that.
     /// </summary>
-    public void RememberPlacement() => _sizing.Remember();
+    public void RememberPlacement()
+    {
+        _sizing.Remember();
+        _mapAppearance.Remember();
+    }
+
+    /// <summary>
+    /// The application is going: take the windows it owns closing from here on as its own going, so
+    /// one left open is open again at the next launch. See <see cref="MapAppearanceOpener.Leave"/>.
+    /// </summary>
+    public void Leave() => _mapAppearance.Leave();
+
+    /// <summary>Open the map appearance window, or bring forward the one already open.</summary>
+    public void ShowMapAppearance() => _mapAppearance.Show();
+
+    /// <summary>Open again the tool windows the last session closed with open. Once, after this window is first shown.</summary>
+    public void ReopenToolWindows() => _mapAppearance.Reopen();
 
     /// <summary>
     /// Close once nothing is running, through the same guard the close button goes through, so a

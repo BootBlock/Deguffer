@@ -97,8 +97,73 @@ public sealed record MapPreset(
         ExploreSpacing.Comfortable,
         Colouring: null);
 
+    /// <summary>Low cushions with faint pale lines and room round every folder, for a calm picture of a crowded drive.</summary>
+    public static readonly MapPreset Soft = new(
+        "Soft",
+        "Low cushions with a faint pale line round each shape, and room round every folder.",
+        new MapStyle(
+            Shading: MapShading.Cushion,
+            Relief: MapRelief.Subtle,
+            BlockBorders: MapBorder.Faint,
+            FolderBorders: MapBorder.Faint,
+            BorderTone: MapBorderTone.Light),
+        ExploreSpacing.Spacious,
+        Colouring: null);
+
+    /// <summary>A sheen over every shape, with folders tinted towards grey so the files carry the colour.</summary>
+    public static readonly MapPreset Sheen = new(
+        "Sheen",
+        "Shapes lit from above, lighter along the top, inside folders tinted towards grey.",
+        new MapStyle(
+            Shading: MapShading.Gradient,
+            Relief: MapRelief.Standard,
+            BlockBorders: MapBorder.Faint,
+            FolderBorders: MapBorder.Medium,
+            FolderFill: MapFolderFill.Tinted),
+        ExploreSpacing.Comfortable,
+        Colouring: null);
+
+    /// <summary>A deep bevel with firm dark lines, so every shape stands out from the one beside it.</summary>
+    public static readonly MapPreset Embossed = new(
+        "Embossed",
+        "A deep bevel round every shape, a firm line round each and a strong one round each folder.",
+        new MapStyle(
+            Shading: MapShading.Bevel,
+            Relief: MapRelief.Deep,
+            BlockBorders: MapBorder.Medium,
+            FolderBorders: MapBorder.Strong),
+        ExploreSpacing.Comfortable,
+        Colouring: null);
+
+    /// <summary>A plan drawn in pale lines over dark grey folders, with the shapes left unnamed.</summary>
+    public static readonly MapPreset Blueprint = new(
+        "Blueprint",
+        "Flat shapes drawn in heavy pale lines, the folders in dark grey, with only the folders named.",
+        new MapStyle(
+            Shading: MapShading.Flat,
+            BlockBorders: MapBorder.Strong,
+            FolderBorders: MapBorder.Solid,
+            BorderWidth: MapBorderWidth.Heavy,
+            BorderTone: MapBorderTone.Light,
+            FolderFill: MapFolderFill.Grey,
+            ShapeNames: false),
+        ExploreSpacing.Comfortable,
+        Colouring: null);
+
+    /// <summary>Colour and nothing else: no shading, no lines, no bands and no names, packed close.</summary>
+    public static readonly MapPreset Minimal = new(
+        "Minimal",
+        "Flat colour packed close, with no lines, no folder bands and no names.",
+        new MapStyle(
+            Shading: MapShading.Flat,
+            FolderNames: false,
+            ShapeNames: false),
+        ExploreSpacing.Dense,
+        Colouring: null);
+
     /// <summary>Every preset, in the order the appearance window lists them.</summary>
-    public static IReadOnlyList<MapPreset> All { get; } = [Standard, SpaceMonger, WizTree, Flat, Outlined];
+    public static IReadOnlyList<MapPreset> All { get; } =
+        [Standard, SpaceMonger, WizTree, Flat, Outlined, Soft, Sheen, Embossed, Blueprint, Minimal];
 
     /// <summary>
     /// The preset <paramref name="look"/> is drawn as (see <see cref="Describes"/>), or null for a look

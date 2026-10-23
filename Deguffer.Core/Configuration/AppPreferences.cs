@@ -420,6 +420,13 @@ public sealed record AppPreferences(
     public MapStyle MapStyle { get; init; } = MapStyle.Default;
 
     /// <summary>
+    /// The light every map shines under the pointer. A property for the reason <see cref="MapStyle"/>
+    /// is one, and a settings file written before it existed reads with the light the map always had.
+    /// See <see cref="Configuration.MapPointerLight"/>.
+    /// </summary>
+    public MapPointerLight MapPointerLight { get; init; } = MapPointerLight.Default;
+
+    /// <summary>
     /// How a scan reads the disk. Read by Core when a scan starts, and it changes how fast a scan
     /// is, never what it finds or what a plan may remove. See <see cref="ScanPreferences"/>.
     ///

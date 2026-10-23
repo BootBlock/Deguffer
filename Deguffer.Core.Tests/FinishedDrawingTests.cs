@@ -7,8 +7,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// A map drawn in a <see cref="MapStyle"/>, pixel by pixel: flat shapes in their own colours, a bevel
-/// lit along the top and the left, a line inside each block and each folder as the style asks for each,
-/// folders filled grey, bands and names left out. Every route a shape takes to the screen is held to it:
+/// lit along the top and the left, a sheen from top to bottom, a line inside each block and each folder
+/// as the style asks for each, folders filled grey or tinted, bands and names left out. Every route a shape takes to the screen is held to it:
 /// the treemap's quads, the tiles a zoom shows, the sunburst's sectors and the shapes a change of view
 /// carries. That the GPU draws the same is <c>CushionRendererTests</c>'.
 /// </summary>
@@ -121,33 +121,41 @@ public sealed class FinishedDrawingTests
         }
     }
 
-    /// <summary>A thick line is two pixels at 100%, inside the shape's sides.</summary>
-    [Fact]
-    public void AThickLineIsTwoPixelsInsideTheShape()
+    /// <summary>A thick line is two pixels at 100%, and a heavy one three, inside the shape's sides.</summary>
+    [Theory]
+    [InlineData(MapBorderWidth.Thick, 2)]
+    [InlineData(MapBorderWidth.Heavy, 3)]
+    public void AWideLineIsDrawnInsideTheShape(MapBorderWidth width, int pixels)
     {
         var drawing = Drawn(
             ExploreView.Treemap,
-            MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Solid, BorderWidth = MapBorderWidth.Thick });
-        var pixels = Paint(drawing);
+            MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Solid, BorderWidth = width });
+        var painted = Paint(drawing);
+        var leaves = Leaves(drawing);
 
-        foreach (var (quad, colour) in Leaves(drawing))
+        Assert.NotEmpty(leaves);
+
+        foreach (var (quad, colour) in leaves)
         {
             var middleY = (quad.Top + quad.Bottom) / 2;
 
-            Assert.Equal(Black, ColourAt(pixels, quad.Left + 1, middleY));
-            Assert.Equal(colour, ColourAt(pixels, quad.Left + 2, middleY));
+            Assert.Equal(Black, ColourAt(painted, quad.Left + pixels - 1, middleY));
+            Assert.Equal(Black, ColourAt(painted, quad.Right - pixels, middleY));
+            Assert.Equal(colour, ColourAt(painted, quad.Left + pixels, middleY));
+            Assert.Equal(colour, ColourAt(painted, quad.Right - pixels - 1, middleY));
         }
     }
 
     /// <summary>
     /// The relief scales every cushion's rise, a flat style rises nowhere, and a bevel keeps the bevel
-    /// of a folder with a band, which a cushion leaves flat behind the name.
+    /// of a folder with a band, which a cushion and a sheen leave flat behind the name.
     /// </summary>
     [Fact]
     public void TheReliefScalesTheRiseAndAFlatStyleRisesNowhere()
     {
         var standard = Drawn(ExploreView.Treemap, MapStyle.Default).Quads()!.Quads.ToArray();
         var strong = Drawn(ExploreView.Treemap, MapStyle.Default with { Relief = MapRelief.Strong }).Quads()!.Quads.ToArray();
+        var deep = Drawn(ExploreView.Treemap, MapStyle.Default with { Relief = MapRelief.Deep }).Quads()!.Quads.ToArray();
         var flat = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Flat }).Quads()!.Quads.ToArray();
         var bevelled = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Bevel });
 
@@ -157,11 +165,112 @@ public sealed class FinishedDrawingTests
         for (var i = 0; i < standard.Length; i++)
         {
             Assert.Equal(standard[i].Ridge * 1.5f, strong[i].Ridge, 5);
+            Assert.Equal(standard[i].Ridge * 2.2f, deep[i].Ridge, 5);
         }
 
         Assert.All(flat, quad => Assert.Equal(0, quad.Ridge));
         Assert.Equal(0, Banded(Drawn(ExploreView.Treemap, MapStyle.Default)).Quad.Ridge);
         Assert.True(Banded(bevelled).Quad.Ridge > 0);
+        Assert.Equal(0, Banded(Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Gradient })).Quad.Ridge);
+    }
+
+    /// <summary>
+    /// A sheen lights each file from its top row down: brighter than its colour along the top, darker
+    /// along the bottom, by <see cref="GradientShading.LightAt"/> at every row between, and the same all
+    /// the way along each row. A folder with a band stays its own colour behind its name, which was
+    /// chosen against that colour.
+    /// </summary>
+    [Theory]
+    [InlineData(MapRelief.Subtle)]
+    [InlineData(MapRelief.Standard)]
+    [InlineData(MapRelief.Deep)]
+    public void ASheenIsLighterAlongTheTopAndDarkerAlongTheBottom(MapRelief relief)
+    {
+        var drawing = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Gradient, Relief = relief });
+        var pixels = Paint(drawing);
+        var slope = GradientShading.SlopeAt(drawing.Finish.Relief);
+        var leaves = Leaves(drawing);
+
+        Assert.NotEmpty(leaves);
+
+        foreach (var (quad, colour) in leaves)
+        {
+            for (var y = quad.Top; y < quad.Bottom; y++)
+            {
+                var lit = GradientShading.Lit(colour, GradientShading.LightAt(slope, y - quad.Top, quad.Bottom - quad.Top - 1));
+
+                Assert.Equal(lit, ColourAt(pixels, quad.Left, y));
+                Assert.Equal(lit, ColourAt(pixels, quad.Right - 1, y));
+            }
+
+            Assert.True(Brightness(ColourAt(pixels, quad.Left, quad.Top)) > Brightness(colour));
+            Assert.True(Brightness(ColourAt(pixels, quad.Left, quad.Bottom - 1)) < Brightness(colour));
+        }
+
+        var band = Banded(drawing);
+
+        Assert.Equal(band.Colour, ColourAt(pixels, band.Quad.Left + 8, band.Quad.Top + 1));
+    }
+
+    /// <summary>
+    /// A sunburst's sheen runs along the radius: the disc in the middle is lighter than its colour at its
+    /// centre and darker just inside its rim, the same at the top of the rim as at the bottom, and an
+    /// aggregate stays flat, as it does under a cushion.
+    /// </summary>
+    [Fact]
+    public void ASunburstsSheenRunsOutwardsFromTheMiddle()
+    {
+        var drawing = Drawn(ExploreView.Sunburst, MapStyle.Default with { Shading = MapShading.Gradient });
+        var root = ExploreTreeBuilder.RootNode;
+        var disc = drawing.MorphShapes(new HashSet<int> { root }).Single();
+        var column = Width / 2;
+        var pixels = Paint(drawing);
+        var inside = Enumerable.Range(0, Height).Where(row => drawing.At(column + 0.5f, row + 0.5f)?.Node == root).ToList();
+        var (top, bottom) = (inside[0], inside[^1]);
+
+        Assert.True(Brightness(ColourAt(pixels, column, Height / 2)) > Brightness(disc.Colour));
+        Assert.True(Brightness(ColourAt(pixels, column, top)) < Brightness(disc.Colour));
+        Assert.Equal(ColourAt(pixels, column, top), ColourAt(pixels, column, bottom));
+    }
+
+    /// <summary>
+    /// An aggregate is flat under a sheen, as it is under a cushion: it is not a thing on the disk. Drawn
+    /// from a ring whose tail of small files is too narrow to draw one by one and wide enough together to
+    /// fill a broad wedge.
+    /// </summary>
+    [Fact]
+    public void ASunburstsAggregateIsFlatUnderASheen()
+    {
+        var builder = new ExploreTreeBuilder("Tail");
+
+        builder.AddChildren(
+            ExploreTreeBuilder.RootNode,
+            [
+                new ExploreChild("big", IsDirectory: false, IsLink: false, Size: 1_000_000),
+                .. Enumerable.Range(0, 400).Select(i => new ExploreChild($"small{i}", IsDirectory: false, IsLink: false, Size: 2_000)),
+            ]);
+
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        var drawing = ExploreSurface.Create(
+            tree, ExploreTreeBuilder.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
+            style: MapStyle.Default with { Shading = MapShading.Gradient });
+        var pixels = Paint(drawing);
+        var aggregated = 0;
+
+        for (var y = 0; y < Height; y++)
+        {
+            for (var x = 0; x < Width; x++)
+            {
+                if (drawing.At(x + 0.5f, y + 0.5f)?.Node == ExploreTile.Aggregated)
+                {
+                    Assert.Equal(TilePalette.Aggregate, ColourAt(pixels, x, y));
+                    aggregated++;
+                }
+            }
+        }
+
+        Assert.True(aggregated > 1000, $"only {aggregated} pixels of aggregate drawn, too few to say anything");
     }
 
     /// <summary>
@@ -225,15 +334,44 @@ public sealed class FinishedDrawingTests
         Assert.Equal(TilePalette.FolderFrame.ContrastingText, band.Colour);
     }
 
-    /// <summary>A high contrast theme's two colours stand in place of the style, grey frames and all.</summary>
+    /// <summary>
+    /// Tinted frames fill every folder drawn round what it holds with its own colour mixed half way
+    /// towards the frame grey, so the folders keep their hues apart from each other, and the name in its
+    /// band is chosen against the tint. Nothing else changes colour.
+    /// </summary>
     [Fact]
-    public void AHighContrastThemeReplacesTheStyle()
+    public void TintedFramesMixEveryFolderHalfWayTowardsTheGrey()
+    {
+        var coloured = Drawn(ExploreView.Treemap, MapStyle.Default);
+        var tinted = Drawn(ExploreView.Treemap, MapStyle.Default with { FolderFill = MapFolderFill.Tinted });
+        var quads = coloured.Quads()!.Quads.ToArray();
+        var tintedQuads = tinted.Quads()!.Quads.ToArray();
+
+        Assert.True(tintedQuads.Where(quad => quad.Framed).Select(quad => quad.Colour).Distinct().Count() > 1, "every folder was tinted alike");
+
+        for (var i = 0; i < quads.Length; i++)
+        {
+            Assert.Equal(quads[i].Framed ? ShapeFinish.Mix(quads[i].Colour, TilePalette.FolderFrame, 128) : quads[i].Colour, tintedQuads[i].Colour);
+        }
+
+        var band = tinted.Labels.First(label => tinted.Tiles.Any(tile => tile.Node == label.Node && tile.Header > 0));
+        var folder = tinted.MorphShapes(new HashSet<int> { band.Node }).Single().Colour;
+
+        Assert.Equal(ShapeFinish.Mix(coloured.MorphShapes(new HashSet<int> { band.Node }).Single().Colour, TilePalette.FolderFrame, 128), folder);
+        Assert.Equal(folder.ContrastingText, band.Colour);
+    }
+
+    /// <summary>A high contrast theme's two colours stand in place of the style, grey or tinted frames and all.</summary>
+    [Theory]
+    [InlineData(MapFolderFill.Grey)]
+    [InlineData(MapFolderFill.Tinted)]
+    public void AHighContrastThemeReplacesTheStyle(MapFolderFill fill)
     {
         var window = new TileColour(0, 0, 0);
         var text = new TileColour(255, 255, 0);
         var drawing = Drawn(
             ExploreView.Treemap,
-            MapPreset.SpaceMonger.Style with { FolderFill = MapFolderFill.Grey },
+            MapPreset.SpaceMonger.Style with { FolderFill = fill },
             ShapeColours.Contrasted(new ContrastColours(window, text)));
 
         Assert.Equal(ShapeFinish.Contrasted(new ContrastColours(window, text), 1), drawing.Finish);
@@ -392,6 +530,8 @@ public sealed class FinishedDrawingTests
             yield return new TileColour(pixels[offset + 2], pixels[offset + 1], pixels[offset]);
         }
     }
+
+    private static int Brightness(TileColour colour) => colour.Red + colour.Green + colour.Blue;
 
     private static TileColour ColourAt(byte[] pixels, int x, int y)
     {

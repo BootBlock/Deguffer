@@ -2184,16 +2184,18 @@ public sealed class ExploreMap : UserControl
     ///
     /// <para>Only on the drawing at rest on screen, where it was shaded on the GPU, and only while effects
     /// are fast. Not on a tile, which a move shows for a moment, nor on a drawing on its way in, and not in
-    /// high contrast, where the picture is the theme's and nothing is added to it (§6.5).</para>
+    /// high contrast, where the picture is the theme's and nothing is added to it (§6.5). Not where the
+    /// reader turned it off, and as bright as they chose where they did not (<see cref="MapPointerLight"/>).</para>
     /// </summary>
     private void Shine(MapLocation? spot)
     {
         if (spot is { Tile: null } found
+            && _look.Light.Shown
             && ReferenceEquals(found.Drawing, _drawing)
             && _graphics.Shades
             && !HighContrast.IsEnabled())
         {
-            _pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _scale));
+            _pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _scale, _look.Light.Amount));
         }
         else
         {
