@@ -19,11 +19,13 @@ internal static class Timing
         // figure leaves out what each thread has not yet handed back.
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var fullBefore = GC.CollectionCount(2);
+        var processorBefore = Environment.CpuUsage.TotalTime;
         var clock = Stopwatch.StartNew();
 
         var tally = run(ct);
 
         clock.Stop();
+        var processor = Environment.CpuUsage.TotalTime - processorBefore;
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
         var full = GC.CollectionCount(2) - fullBefore;
 
@@ -44,6 +46,6 @@ internal static class Timing
             tally = tally with { Kept = null };
         }
 
-        return new RunSample(clock.Elapsed, tally, allocated, full, peak, keptBytes);
+        return new RunSample(clock.Elapsed, tally, allocated, full, peak, processor, keptBytes);
     }
 }
