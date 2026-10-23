@@ -50,9 +50,9 @@ internal sealed class ExploreTreeCapture
     /// The tree, ordering each node's children by <paramref name="childOrder"/>. Each call makes
     /// arrays of its own, because <see cref="ExploreTree.Create"/> totals each subtree into them.
     ///
-    /// <para>Every slot was filled by the builder, so every one is present — the distinction
-    /// <see cref="ExploreTree.Create"/> needs exists for the file table, which leaves free and
-    /// unreadable records empty.</para>
+    /// <para>Every slot was filled by the builder, so every one is marked
+    /// <see cref="ExploreNodeFlags.Present"/> — the distinction <see cref="ExploreTree.Create"/>
+    /// needs exists for the file table, which leaves free and unreadable records empty.</para>
     /// </summary>
     /// <param name="ct">
     /// Asked every so many nodes and between the passes, so a snapshot of a walk that has ended or
@@ -68,9 +68,7 @@ internal sealed class ExploreTreeCapture
         var sizes = new long[count];
         var lengths = new long[count];
         var storage = new FileStorage[count];
-        var isDirectory = new bool[count];
-        var isLink = new bool[count];
-        var sizeUnknown = new bool[count];
+        var flags = new ExploreNodeFlags[count];
         var created = new ExploreTimestamp[count];
         var modified = new ExploreTimestamp[count];
         var visibility = new FileVisibility[count];
@@ -92,9 +90,10 @@ internal sealed class ExploreTreeCapture
             sizes[i] = node.Size;
             lengths[i] = node.Length;
             storage[i] = node.Storage;
-            isDirectory[i] = node.IsDirectory;
-            isLink[i] = node.IsLink;
-            sizeUnknown[i] = node.SizeUnknown;
+            flags[i] = ExploreNodeFlags.Present
+                | (node.IsDirectory ? ExploreNodeFlags.Directory : ExploreNodeFlags.None)
+                | (node.IsLink ? ExploreNodeFlags.Link : ExploreNodeFlags.None)
+                | (node.SizeUnknown ? ExploreNodeFlags.SizeUnknown : ExploreNodeFlags.None);
             created[i] = node.Created;
             modified[i] = node.Modified;
             visibility[i] = node.Visibility;
@@ -102,16 +101,13 @@ internal sealed class ExploreTreeCapture
 
         foreach (var node in _sizeUnknown)
         {
-            sizeUnknown[node] = true;
+            flags[node] |= ExploreNodeFlags.SizeUnknown;
         }
 
         if (_listedTwice.Length > 0)
         {
             RankAcrossCalls(_listedTwice, parents, nameNumbers, _names, nameRanks);
         }
-
-        var present = new bool[count];
-        Array.Fill(present, true);
 
         return ExploreTree.Create(
             _rootPath,
@@ -122,13 +118,10 @@ internal sealed class ExploreTreeCapture
             sizes,
             lengths,
             storage,
-            isDirectory,
-            isLink,
-            sizeUnknown,
+            flags,
             created,
             modified,
             visibility,
-            present,
             childOrder,
             _listingRefused,
             nameRanks,
