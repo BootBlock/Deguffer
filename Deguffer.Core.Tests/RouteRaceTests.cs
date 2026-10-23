@@ -188,6 +188,12 @@ public class RouteRaceTests
         var racing = Race(table, walk);
 
         table.Fail(new InvalidOperationException("the table is broken"));
+
+        // As in the decline above: the failure reaches the race on the thread pool, so a walk answering
+        // at once could be seen first under load, and the table, stopped by then, would never have
+        // failed as far as the race knows. The race sees the failure first once the task it was handed
+        // has faulted.
+        await Task.WhenAny(table.Running!);
         walk.Answer(new Answer("walk"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => racing);

@@ -106,8 +106,12 @@ public sealed class LinkCountRouteTests : IDisposable
 
     /// <summary>
     /// The scan's figure is the same whichever route its file system leaves it, and a walk of several
-    /// files asks by name once before it turns to handles. §6.3 by the form of each path: both
-    /// routes are given it extended.
+    /// files stops asking by name once it is declined. §6.3 by the form of each path: both routes are
+    /// given it extended.
+    ///
+    /// <para>The walk reads its folders on several threads, so a thread that asked before another's
+    /// answer was in may ask once too. One folder's files are read in turn on one thread, so no folder
+    /// asks twice: <c>b</c> holds two files, and only its first is asked.</para>
     /// </summary>
     [Fact]
     public async Task AScanMeasuresTheSameFigureByEitherRoute()
@@ -127,10 +131,11 @@ public sealed class LinkCountRouteTests : IDisposable
 
         Assert.Equal(14_096, byName.Size.Logical);
         Assert.Equal(byName.Size, byHandle.Size);
-        Assert.Single(_askedByName);
+        Assert.NotEmpty(_askedByName);
+        Assert.All(_askedByName.GroupBy(Path.GetDirectoryName), folder => Assert.Single(folder));
         Assert.Equal(3, _opened.Count);
         Assert.All(_opened, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
-        Assert.StartsWith(@"\\?\", _askedByName[0], StringComparison.Ordinal);
+        Assert.All(_askedByName, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
     }
 
     /// <summary>A single named file is read by the same route, and falls back the same way.</summary>
