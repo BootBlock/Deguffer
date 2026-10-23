@@ -20,8 +20,12 @@ public static class CushionShading
 {
     private const double RidgeHeight = 0.38;
     private const double DepthScale = 0.91;
-    private const double Ambient = 0.13;
-    private const double Diffuse = 0.87;
+
+    /// <summary>The light every point has, facing the light or not. Public, as the light's other terms are, because the GPU's shader is compiled with them.</summary>
+    public const double Ambient = 0.13;
+
+    /// <summary>The most a point facing the light straight on has on top of <see cref="Ambient"/>.</summary>
+    public const double Diffuse = 0.87;
 
     // Van Wijk's light, l = [1, 2, 10] normalised, with the two lateral components negated because
     // a bitmap's y axis runs downwards and the paper's does not. Negating both puts the key light
@@ -31,9 +35,15 @@ public static class CushionShading
     // The model is ambient plus Lambertian diffuse, and nothing else. There is no specular term:
     // the paper is explicit that "a simple model, i.e. diffuse reflection, suffices", and a
     // highlight would read as a material rather than as a shape.
-    private const double LightX = -0.09759;
-    private const double LightY = -0.19518;
-    private const double LightZ = 0.9759;
+
+    /// <summary>The light's direction across the canvas: negative, from the left.</summary>
+    public const double LightX = -0.09759;
+
+    /// <summary>The light's direction down the canvas: negative, from above.</summary>
+    public const double LightY = -0.19518;
+
+    /// <summary>The light's direction out of the canvas, towards the reader.</summary>
+    public const double LightZ = 0.9759;
 
     /// <summary>
     /// The ridge height at every depth a real tree reaches, worked out once.

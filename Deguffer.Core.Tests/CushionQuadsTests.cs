@@ -80,22 +80,38 @@ public sealed class CushionQuadsTests
     }
 
     /// <summary>
-    /// The GPU reads an array of quads as it stands, as four integers, a float, three bytes of colour and
-    /// a byte saying whether the quad is a folder's frame, so the layout is part of what a quad is. A
-    /// field moved or widened shades garbage, with no error.
+    /// The GPU reads an array of quads as it stands, from the size and the field offsets the renderer
+    /// takes from the type (<see cref="Unsafe.SizeOf{T}"/> and <see cref="Marshal.OffsetOf{T}(string)"/>):
+    /// the four edges as one vector from <see cref="CushionQuad.Left"/>, the ridge, and the colour's three
+    /// bytes with <see cref="CushionQuad.Framed"/> read as a fourth. Those report the layout a quad is
+    /// marshalled with, and the bytes handed over are the quad in memory, so the two have to be one
+    /// layout; a field moved or widened out of that shades garbage, with no error.
     /// </summary>
     [Fact]
-    public void AQuadIsLaidOutAsTheGpuReadsIt()
+    public void AQuadIsInMemoryWhereItsLayoutSaysTheGpuReadsIt()
     {
-        Assert.Equal(24, Unsafe.SizeOf<CushionQuad>());
-        Assert.Equal(24, Marshal.SizeOf<CushionQuad>());
+        CushionQuad[] quads =
+        [
+            new(1, 2, 3, 4, 0.5f, new TileColour(5, 6, 7), Framed: true),
+            new(8, 9, 10, 11, 1.5f, new TileColour(12, 13, 14)),
+        ];
+        var bytes = MemoryMarshal.AsBytes(quads.AsSpan());
+        var stride = Unsafe.SizeOf<CushionQuad>();
+        var edges = Offset(nameof(CushionQuad.Left));
+        var colour = Offset(nameof(CushionQuad.Colour));
 
-        var quad = new CushionQuad(1, 2, 3, 4, 0.5f, new TileColour(5, 6, 7), Framed: true);
-        var bytes = MemoryMarshal.AsBytes(new ReadOnlySpan<CushionQuad>(in quad));
+        Assert.Equal(Marshal.SizeOf<CushionQuad>(), stride);
+        Assert.Equal(
+            [edges + 4, edges + 8, edges + 12, colour + 3],
+            [Offset(nameof(CushionQuad.Top)), Offset(nameof(CushionQuad.Right)), Offset(nameof(CushionQuad.Bottom)), Offset(nameof(CushionQuad.Framed))]);
 
-        Assert.Equal([1, 2, 3, 4], MemoryMarshal.Cast<byte, int>(bytes[..16]).ToArray());
-        Assert.Equal(0.5f, MemoryMarshal.Read<float>(bytes[16..20]));
-        Assert.Equal([5, 6, 7, 1], bytes[20..24].ToArray());
+        Assert.Equal([1, 2, 3, 4], MemoryMarshal.Cast<byte, int>(bytes[edges..(edges + 16)]).ToArray());
+        Assert.Equal(0.5f, MemoryMarshal.Read<float>(bytes[Offset(nameof(CushionQuad.Ridge))..]));
+        Assert.Equal([5, 6, 7, 1], bytes[colour..(colour + 4)].ToArray());
+        Assert.Equal([8, 9, 10, 11], MemoryMarshal.Cast<byte, int>(bytes[(stride + edges)..(stride + edges + 16)]).ToArray());
+        Assert.Equal([12, 13, 14, 0], bytes[(stride + colour)..(stride + colour + 4)].ToArray());
+
+        static int Offset(string field) => (int)Marshal.OffsetOf<CushionQuad>(field);
     }
 
     private static CushionQuad[] Quads(params ExploreTile[] tiles) =>

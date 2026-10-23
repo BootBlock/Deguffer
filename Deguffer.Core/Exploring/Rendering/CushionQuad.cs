@@ -9,9 +9,11 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// its colour. The one place a laid-out shape becomes something to shade, so the CPU and the GPU shade
 /// the same shapes from the same edges (see <see cref="CushionQuads"/>).
 ///
-/// <para>Sequential, and 24 bytes, because the GPU reads an array of these as it stands: four edges
-/// as integers, the ridge as a float, the colour's three bytes, and a byte saying whether the quad is
-/// a folder drawn round what it holds, which the GPU reads as the colour's fourth.</para>
+/// <para>Sequential, because the GPU reads an array of these as it stands: four edges as integers,
+/// the ridge as a float, the colour's three bytes, and a byte saying whether the quad is a folder
+/// drawn round what it holds, which the GPU reads as the colour's fourth. Fields rather than
+/// properties, so the renderer takes the size and the offsets it hands the GPU from this type, by
+/// name, rather than restating them.</para>
 /// </summary>
 /// <param name="Left">The first column covered.</param>
 /// <param name="Top">The first row covered.</param>
@@ -31,8 +33,23 @@ public readonly record struct CushionQuad(
     int Bottom,
     float Ridge,
     TileColour Colour,
-    [field: MarshalAs(UnmanagedType.U1)] bool Framed = false)
+    bool Framed = false)
 {
+    public readonly int Left = Left;
+
+    public readonly int Top = Top;
+
+    public readonly int Right = Right;
+
+    public readonly int Bottom = Bottom;
+
+    public readonly float Ridge = Ridge;
+
+    public readonly TileColour Colour = Colour;
+
+    [MarshalAs(UnmanagedType.U1)]
+    public readonly bool Framed = Framed;
+
     /// <summary>
     /// <paramref name="tile"/> as the pixels it covers, with no colour yet: a colour climbs a node's
     /// ancestors, so it is asked for only once the quad is known to show (see <see cref="CushionQuads"/>).
@@ -77,6 +94,9 @@ public readonly record struct CushionQuad(
 
         return (float)CushionShading.RidgeAt(tile.Depth) * finish.Relief;
     }
+
+    /// <summary>This quad in <paramref name="colour"/>.</summary>
+    public CushionQuad Coloured(TileColour colour) => new(Left, Top, Right, Bottom, Ridge, colour, Framed);
 
     /// <summary>Whether the quad covers any pixel of a canvas <paramref name="width"/> by <paramref name="height"/>.</summary>
     public bool Reaches(int width, int height) =>
