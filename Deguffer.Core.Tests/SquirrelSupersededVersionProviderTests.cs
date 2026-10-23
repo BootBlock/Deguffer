@@ -324,13 +324,29 @@ public sealed class SquirrelSupersededVersionProviderTests : IDisposable
     /// applied to a safeguard rather than a measurement).
     /// </summary>
     [Fact]
-    public async Task AMachineWhereLivenessCannotBeEstablishedSaysSo()
+    public async Task AMachineWhereLivenessCannotBeEstablishedOffersNothingAndSaysSo()
     {
-        CreateApplication("Chatterbox", "3.6.3", "3.6.4");
+        var root = CreateApplication("Chatterbox", "3.6.3", "3.6.4");
+        var superseded = Path.Combine(root, "app-3.6.3");
 
-        var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
+        var provider = CreateProvider(FakeLiveTreeInspector.CannotTell);
+        var plan = await provider.PlanAsync();
 
-        Assert.Contains(plan.Notes, n => n.Message.Contains("could not check", StringComparison.Ordinal));
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined, "a row holding its only build back read as already clear");
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == superseded);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("Chatterbox", StringComparison.Ordinal)
+            && n.Message.Contains("could not check", StringComparison.Ordinal));
+
+        // §7.1: Explore refuses the build the plan withholds, at the build, where the declaration over
+        // the installation cannot outvote it.
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
+        var refusal = policy.MayRemove(superseded);
+
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("could not tell whether Chatterbox is running", refusal.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>

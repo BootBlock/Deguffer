@@ -761,20 +761,49 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
-    /// "Could not tell" is not permission. The check failing has to reach the user, for the same
-    /// reason §5.5 makes the measurement fallback observable.
+    /// "Could not tell" is not permission (§3 puts what cannot be proved idle in Tier 4). Where the
+    /// check could not run, no <c>obj</c> is offered, each is asserted to survive, and the user is
+    /// told why the row is short, for the same reason §5.5 makes the measurement fallback observable.
     /// </summary>
     [Fact]
-    public async Task SaysSoWhenItCouldNotCheckWhetherAProjectIsInUse()
+    public async Task OffersNothingWhenItCouldNotCheckWhetherAProjectIsInUse()
     {
         var root = ApproveRoot();
-        ProjectFixture.CreateProject(Path.Combine(root, "Example"), "Example");
+        var obj = ProjectFixture.CreateProject(Path.Combine(root, "Example"), "Example");
 
         var plan = await CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell).PlanAsync();
 
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == obj && p.Reason == LiveTreeVeto.UncheckedReason);
         Assert.Contains(plan.Notes, n =>
-            n.Message.Contains("could not check whether anything is using these", StringComparison.Ordinal)
-            && n.Message.Contains("Close any editor or build", StringComparison.Ordinal));
+            n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("could not check whether anything is using one of these", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The question that could not be asked holds back its own project and no other. A lock file the
+    /// Restart Manager refuses in one project says nothing about the next one, and a veto that read
+    /// it as the whole answer failing would empty the row for one long path.
+    /// </summary>
+    [Fact]
+    public async Task AProjectThatCouldNotBeCheckedSurvivesTheRunAndTheOthersAreCleaned()
+    {
+        var root = ApproveRoot();
+        var unsure = ProjectFixture.CreateProject(Path.Combine(root, "Unsure"), "Unsure");
+        var idle = ProjectFixture.CreateProject(Path.Combine(root, "Dormant"), "Dormant");
+
+        var provider = CreateProvider(liveTrees: new FakeLiveTreeInspector().WithUnanswered(unsure));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([idle], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == unsure && p.Reason == LiveTreeVeto.UncheckedReason);
+
+        // §5.6's negative: the two are the same shape, in the same tree, separated only by whether
+        // the question about them could be asked.
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.False(LongPath.DirectoryExists(idle));
+        Assert.True(LongPath.DirectoryExists(unsure));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
     /// <summary>

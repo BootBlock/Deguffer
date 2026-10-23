@@ -259,6 +259,7 @@ public static class TempMarkerSurvey
                 .DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
             var vetoed = new HashSet<string>(live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
+            var unsure = new HashSet<string>(live.Unchecked, StringComparer.OrdinalIgnoreCase);
 
             foreach (var held in live.Vetoed)
             {
@@ -275,7 +276,7 @@ public static class TempMarkerSurvey
                 _notes.Add(busy);
             }
 
-            if (LiveTreeVeto.IncompleteNote(live.Complete, "Close the tools that wrote them before cleaning.") is { } incomplete)
+            if (LiveTreeVeto.UncheckedNote(live.Unchecked.Count) is { } incomplete)
             {
                 _notes.Add(incomplete);
             }
@@ -295,11 +296,11 @@ public static class TempMarkerSurvey
                     _survivors.Add((path, $"{marker.Tool} writes into this folder, so it stays and only what is inside it goes."));
                 }
 
-                // An unrecognised live check leaves nothing to decide on: with the process table
-                // unread, a directory is held back rather than offered.
-                if (!live.Complete && marker.Kind is not TargetKind.File)
+                // A live check that could not be asked leaves nothing to decide on, so the veto held
+                // the directory back rather than offering it.
+                if (unsure.Contains(path))
                 {
-                    _survivors.Add((path, $"{LiveTreeVeto.CannotTell}, so it is left alone."));
+                    _survivors.Add((path, LiveTreeVeto.UncheckedReason));
                     _heldBack.Add(path);
                     _declined++;
                     continue;
@@ -358,8 +359,8 @@ public static class TempMarkerSurvey
         /// under, in their order, for the clean to ask again. Null for an entry offered on none of them.
         ///
         /// <para>A directory carries the question the veto handed out with it, which holds it back where
-        /// the answer is partial, because the survey refused every directory on a partial answer rather
-        /// than offering it with a note.</para>
+        /// the answer at the clean is partial. The survey offers a directory only on an answer that was
+        /// whole for it, so a partial one at the clean is evidence the preview never had.</para>
         /// </summary>
         /// <param name="directoryCheck">The veto's question, or null for a file, which the veto was never asked about.</param>
         private IUseCheck? Recheck(TempMarker marker, string path, IUseCheck? directoryCheck)

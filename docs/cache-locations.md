@@ -4618,12 +4618,13 @@ here because a safeguard whose limits are unwritten gets trusted past them:
 - **A solution outside every folder you approved.** Deguffer reads nothing outside them, so Visual
   Studio open on such a solution holds back only a project in the solution's own folder.
 - A project whose path is longer than 260 characters, for the lock-file signal only. Windows'
-  Restart Manager refuses a path that long, so Unity's lockfile cannot be asked about there. The
-  other signals are unaffected, and the scan says the check could not run rather than
-  reporting the project idle.
+  Restart Manager refuses a path that long, so Unity's lockfile cannot be asked about there. That
+  project is left alone and the scan says the check could not run, rather than reporting the
+  project idle. Other projects are checked as usual.
 
-Where a check cannot run at all, the scan says so rather than staying quiet — "could not tell"
-and "nothing is using it" are different answers, and only the second is permission. The age column
+Where a check cannot run, the scan leaves what it could not check alone and says so — "could not
+tell" and "nothing is using it" are different answers, and only the second is permission. Scan
+again to include them once the check can run. The age column
 beside each row carries the rest of the decision: a project nobody has touched in a year is where the
 space actually is.
 

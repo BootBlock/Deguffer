@@ -19,11 +19,10 @@ namespace Deguffer.Core.Providers;
 /// application running from its own install folder, is not seen, and its caches are offered as they
 /// were before, under the running-process warning.</para>
 ///
-/// <para>A check that could not read every program's command line holds the step back where the plan's
-/// answer was whole. See <see cref="LiveTreeVeto.AtClean"/>.</para>
+/// <para>An answer that could not read every program's command line offers none of the folder's
+/// caches, and holds back a step at the clean. See <see cref="LiveTreeVeto.AtClean"/>.</para>
 /// </summary>
-/// <param name="planComplete">Whether the answer the plan offered the folder's caches on was whole.</param>
-internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string userData, bool planComplete) : IUseCheck
+internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string userData) : IUseCheck
 {
     /// <summary>Which of <paramref name="folders"/> a running program is using.</summary>
     public static LiveTreeFindings Find(
@@ -37,16 +36,22 @@ internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string u
         }
 
         var parents = folders
-            .Select(folder => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(folder)))
+            .Select(ParentOf)
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var named = folders.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var children = inspector.FindLiveChildren(parents, ct);
+        IReadOnlyList<LiveTree> live = [.. children.Live.Where(live => named.Contains(live.Directory))];
 
-        return children with { Live = [.. children.Live.Where(live => named.Contains(live.Directory))] };
+        // A parent left unanswered leaves every folder below it unanswered, and no other.
+        return children.Complete || children.Unanswered.Count == 0
+            ? children with { Live = live }
+            : LiveTreeFindings.Partly(live, [.. folders.Where(folder => ParentOf(folder) is { } parent && !children.IsAnswered(parent))]);
     }
+
+    private static string? ParentOf(string folder) => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(folder));
 
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
@@ -61,6 +66,6 @@ internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string u
             .. findings.Live.Select(live => new InUseNow(step.Path, string.Join("; ", live.Holders))),
         ];
 
-        return LiveTreeVeto.AtClean(step, inUse, findings.Complete, planComplete);
+        return LiveTreeVeto.AtClean(step, inUse, findings.Complete);
     }
 }

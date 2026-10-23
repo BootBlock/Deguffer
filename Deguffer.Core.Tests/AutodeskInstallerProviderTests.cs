@@ -378,18 +378,28 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Where Deguffer cannot tell whether anything is running from a payload, the user is told so
-    /// rather than the plan implying it checked.
+    /// Where Deguffer cannot tell whether anything is running from a payload, the payload is not
+    /// offered, it is asserted to survive, Explore refuses it, and the user is told why the row is
+    /// short rather than the plan implying it checked.
     /// </summary>
     [Fact]
-    public async Task SaysSoWhenItCannotTellWhetherAnInstallerIsRunning()
+    public async Task OffersNoPayloadWhenItCannotTellWhetherAnInstallerIsRunning()
     {
-        Extracted("AutoCAD_2024_English_Win_64bit_dlm");
+        var payload = Extracted("AutoCAD_2024_English_Win_64bit_dlm");
 
-        var plan = await CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell).PlanAsync();
+        var provider = CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell);
+        var plan = await provider.PlanAsync();
 
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined, "a row holding its only payload back read as already clear");
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == payload && p.Reason == LiveTreeVeto.UncheckedReason);
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning && n.Message.Contains("could not check", StringComparison.Ordinal));
+
+        var declared = Assert.Single(await provider.DiscoverToolRootsAsync());
+
+        Assert.Equal(payload, declared.Path);
+        Assert.Equal(LiveTreeVeto.UncheckedReason, declared.Reason);
     }
 
     /// <summary>§7.1: Explore refuses a payload the plan holds back as in use, and allows the rest.</summary>

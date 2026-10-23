@@ -365,11 +365,24 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         using var holder = File.Open(LongPath.Extended(lockFile), FileMode.Open, FileAccess.Read, FileShare.None);
 
+        // A second project at an ordinary depth, whose lock file the Restart Manager can be asked
+        // about, so the failure is shown to belong to the deep one alone.
+        var shallow = _temp.CreateDirectory("shallow");
+        var shallowLibrary = _temp.CreateDirectory("shallow", "Library");
+        File.WriteAllText(Path.Combine(shallowLibrary, "UnityLockfile"), string.Empty);
+
         var findings = new LiveTreeInspector().FindLive(
-            [new LiveTreeQuery(library, deep, ["UnityLockfile"])]);
+            [
+                new LiveTreeQuery(library, deep, ["UnityLockfile"]),
+                new LiveTreeQuery(shallowLibrary, shallow, ["UnityLockfile"]),
+            ]);
 
         Assert.False(findings.Complete);
         Assert.False(findings.IsLive(library));
+        Assert.False(findings.IsAnswered(library));
+
+        // One long path says nothing about another project, so it must not hold that one back too.
+        Assert.True(findings.IsAnswered(shallowLibrary));
     }
 
     /// <summary>

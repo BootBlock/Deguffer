@@ -36,7 +36,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
         var (table, match) = Snapshot(ct);
         var live = new List<LiveTree>();
-        var complete = table.ImagePathsReadable && table.CurrentDirectoriesReadable;
+        var unanswered = new List<string>();
 
         foreach (var candidate in candidates)
         {
@@ -53,20 +53,13 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             }
 
             var locks = ExistingLockFiles(candidate, out var anyRefused);
-
-            if (anyRefused)
-            {
-                complete = false;
-            }
+            var answered = !anyRefused;
 
             if (locks.Count > 0)
             {
                 var held = RestartManager.Query(locks, ct);
 
-                if (!held.Answered)
-                {
-                    complete = false;
-                }
+                answered &= held.Answered;
 
                 foreach (var holder in held.Holders)
                 {
@@ -78,9 +71,16 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             {
                 live.Add(new LiveTree(candidate.Directory, holders));
             }
+
+            if (!answered)
+            {
+                unanswered.Add(candidate.Directory);
+            }
         }
 
-        return new LiveTreeFindings(live, complete);
+        return table.ImagePathsReadable && table.CurrentDirectoriesReadable
+            ? LiveTreeFindings.Partly(live, unanswered)
+            : new LiveTreeFindings(live, Complete: false);
     }
 
     public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default)
@@ -126,8 +126,8 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
         // Every path read from the process table is canonical already. A folder asked about that
         // cannot be made so is still compared as well as it can be, and the answer says it may have
-        // missed something.
-        var foldersWhole = directories.All(asked => LongPath.Canonical(asked) is not null);
+        // missed something about that folder.
+        IReadOnlyList<string> unanswered = [.. directories.Where(asked => LongPath.Canonical(asked) is null)];
         var occupied = FindOccupiedDirectories(ct);
         var (table, match) = Snapshot(ct);
 
@@ -158,7 +158,11 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             }
         }
 
-        return Findings(holders, occupied.Complete && table.CommandLinesReadable && foldersWhole);
+        IReadOnlyList<LiveTree> live = [.. holders.Select(entry => new LiveTree(entry.Key, entry.Value))];
+
+        return occupied.Complete && table.CommandLinesReadable
+            ? LiveTreeFindings.Partly(live, unanswered)
+            : new LiveTreeFindings(live, Complete: false);
     }
 
     /// <summary>

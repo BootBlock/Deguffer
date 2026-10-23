@@ -886,21 +886,62 @@ public sealed class TempDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A check that could not run must not look like a check that found nothing. The user is told,
-    /// because a scratch folder cleaned while the check was blind is the one case where the age
-    /// filter is carrying the whole decision on its own.
+    /// "Could not tell" is not permission. A scratch folder cleaned while the check was blind would
+    /// leave the age filter carrying the whole decision on its own, and nothing in the folder can be
+    /// spared on an answer that names nothing, so the folder is not offered. It is asserted to
+    /// survive, and the row says why it is short.
     /// </summary>
     [Fact]
-    public async Task SaysSoWhenItCouldNotTellWhetherAnythingWasInUse()
+    public async Task OffersNoFolderWhenItCouldNotTellWhetherAnythingWasInUse()
     {
         Abandoned(1024, "temp", "old.tmp");
 
         var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
 
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(UserTemp, StringComparison.OrdinalIgnoreCase) && p.Reason == LiveTreeVeto.UncheckedReason);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("could not check", StringComparison.Ordinal)
-            && n.Message.Contains("working in them", StringComparison.Ordinal)
-            && !n.Message.Contains("project", StringComparison.OrdinalIgnoreCase));
+            && n.Message.Contains("could not check whether anything is using", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A folder whose own question could not be asked is withheld, and the other folder is still
+    /// cleaned: the failure is that folder's, not the machine's. §5.6's negative on the folder held back.
+    /// </summary>
+    [Fact]
+    public async Task AFolderThatCouldNotBeCheckedSurvivesAndTheOtherIsCleaned()
+    {
+        var kept = Abandoned(2048, "Windows", "Temp", "older.tmp");
+        var gone = Abandoned(1024, "temp", "old.tmp");
+
+        var provider = CreateProvider(new FakeLiveTreeInspector().WithUnanswered(MachineTemp));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([UserTemp], plan.Steps.OfType<ClearDirectoryStep>().Select(s => s.Path));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(gone));
+        Assert.True(File.Exists(kept), "a folder nothing could check was emptied");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// §7.1: Explore refuses a temporary folder whole where its question could not be asked, as the
+    /// plan withholds it, and leaves the other folder to the ordinary rules.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAFolderThatCouldNotBeChecked()
+    {
+        Abandoned(2048, "Windows", "Temp", "older.tmp");
+        Abandoned(1024, "temp", "old.tmp");
+
+        var declared = Assert.Single(
+            await CreateProvider(new FakeLiveTreeInspector().WithUnanswered(MachineTemp)).DiscoverToolRootsAsync());
+
+        Assert.Equal(MachineTemp, declared.Path, ignoreCase: true);
+        Assert.Contains("could not tell whether a running program is working in", declared.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>

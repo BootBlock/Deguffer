@@ -516,28 +516,6 @@ public sealed class ChromiumWebView2Tests : IDisposable
     }
 
     /// <summary>
-    /// A plan made on a partial answer offered the cache and said so in a note. The same answer at the
-    /// clean is no new reason to refuse it.
-    /// </summary>
-    [Fact]
-    public async Task TheCleanRemovesACacheOfferedOnTheSamePartialAnswer()
-    {
-        var userData = CreateWebView2(Path.Combine(_environment.LocalAppData, "Vendor"));
-        var cache = CreateDirectory(Path.Combine(userData, "Default", "Code Cache"));
-
-        var provider = CreateProvider(FakeLiveTreeInspector.CannotTell);
-        var plan = await provider.PlanAsync();
-
-        Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-
-        var result = await provider.ExecuteAsync(plan);
-
-        Assert.False(Directory.Exists(cache), "a cache the preview offered on a partial answer was kept on the same answer.");
-        Assert.True(File.Exists(Path.Combine(userData, "Local State")));
-        Assert.True(result.Verification!.Passed, result.Verification.Summary);
-    }
-
-    /// <summary>
     /// A planning pass must see the machine as it is now, so dropping this provider's caches drops
     /// the process table its veto reads as well.
     /// </summary>
@@ -551,17 +529,23 @@ public sealed class ChromiumWebView2Tests : IDisposable
         Assert.Equal(1, liveTrees.InvalidateCount);
     }
 
-    /// <summary>A check that could not run must not look like one that found nothing.</summary>
+    /// <summary>
+    /// "Could not tell" is not permission: a WebView2 host's engine is seen only on its command line,
+    /// so with the command lines unread nothing says the folder is unused. Its caches are not offered,
+    /// the folder is asserted to survive, and the row says why it is short.
+    /// </summary>
     [Fact]
-    public async Task SaysSoWhenItCouldNotTellWhatIsRunning()
+    public async Task OffersNoCacheWhenItCouldNotTellWhatIsRunning()
     {
         var userData = CreateWebView2(Path.Combine(_environment.LocalAppData, "Vendor"));
-        var cache = CreateDirectory(Path.Combine(userData, "Default", "Code Cache"));
+        CreateDirectory(Path.Combine(userData, "Default", "Code Cache"));
 
         var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
 
-        Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(userData, StringComparison.OrdinalIgnoreCase) && p.Reason == LiveTreeVeto.UncheckedReason);
         Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("could not check whether anything is using these", StringComparison.Ordinal));
+            && n.Message.Contains("could not check whether anything is using one of these", StringComparison.Ordinal));
     }
 }

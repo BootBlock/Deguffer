@@ -75,6 +75,36 @@ public sealed record LiveTreeFindings(IReadOnlyList<LiveTree> Live, bool Complet
 {
     public static readonly LiveTreeFindings Nothing = new([], Complete: true);
 
+    /// <summary>
+    /// The directories asked about whose own question could not be asked in full, where the rest of
+    /// the answer was whole: a declared lock file Windows would not describe, a Restart Manager query
+    /// that did not answer, or a folder that could not be put in a form that compares. Empty where
+    /// the failure was the process table's, which leaves every directory unanswered.
+    ///
+    /// <para>Kept per directory because the failure is. One Unity project whose path the Restart
+    /// Manager refuses says nothing about a <c>node_modules</c> in another project, and an answer that
+    /// folded the two together would hold back every build directory on the disk for one long
+    /// path.</para>
+    /// </summary>
+    public IReadOnlyList<string> Unanswered { get; private init; } = [];
+
+    /// <summary>
+    /// An answer whose process table was read in full, and whose questions about
+    /// <paramref name="unanswered"/> alone could not be asked.
+    /// </summary>
+    public static LiveTreeFindings Partly(IReadOnlyList<LiveTree> live, IReadOnlyList<string> unanswered) =>
+        new(live, Complete: unanswered.Count == 0) { Unanswered = unanswered };
+
+    /// <summary>
+    /// Whether the question about <paramref name="directory"/> was asked in full, so that its absence
+    /// from <see cref="Live"/> is evidence that nothing is using it.
+    /// </summary>
+    public bool IsAnswered(string directory) =>
+        Complete
+        || (Unanswered.Count > 0
+            && !Unanswered.Any(u => Path.TrimEndingDirectorySeparator(u).Equals(
+                Path.TrimEndingDirectorySeparator(directory), StringComparison.OrdinalIgnoreCase)));
+
     /// <summary>Whether <paramref name="directory"/> was found to be in use.</summary>
     public bool IsLive(string directory) =>
         Live.Any(l => l.Directory.Equals(directory, StringComparison.OrdinalIgnoreCase));
@@ -115,6 +145,10 @@ public interface ILiveTreeInspector
     /// <summary>
     /// Which of <paramref name="candidates"/> are in use. Batched because the process table is read
     /// once for the whole set — asking per directory would walk it once per project.
+    ///
+    /// <para>A candidate whose declared lock file Windows would not describe, or whose Restart Manager
+    /// query did not answer, is named in <see cref="LiveTreeFindings.Unanswered"/>, and the rest of the
+    /// answer stands. A process table that could not be read leaves every candidate unanswered.</para>
     /// </summary>
     LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default);
 
@@ -181,7 +215,8 @@ public interface ILiveTreeInspector
     /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories or command
     /// lines could not be read at all, where one 32-bit process's working directory could not be
     /// checked, or where a path a program holds, or one of <paramref name="directories"/>, could
-    /// not be put in canonical form. The same limits apply as to <see cref="FindLive"/>: every
+    /// not be put in canonical form. Only the last of those is about one folder, so only it names the
+    /// folder in <see cref="LiveTreeFindings.Unanswered"/> and leaves the rest of the answer whole. The same limits apply as to <see cref="FindLive"/>: every
     /// signal is positive evidence, and an elevated program or one belonging to another account
     /// cannot be inspected at all.</para>
     /// </summary>

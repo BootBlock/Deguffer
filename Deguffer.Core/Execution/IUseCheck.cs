@@ -55,12 +55,10 @@ public interface IUseCheck
     /// entry where the step empties a folder in place, and holds the whole step back otherwise,
     /// because a tree something is working in cannot be removed around it.</para>
     ///
-    /// <para>Where the question cannot be asked in full now and the plan's answer was whole, the answer
-    /// names the step's own path with that reason: a question that could not be asked is not a clear
-    /// answer, and the step was offered on one that could. A check whose question can come back partial
-    /// remembers which answer its plan had, because only the check can. Where the plan's answer was
-    /// partial too, it offered the step on that answer and said so in a note, and the step runs as
-    /// planned.</para>
+    /// <para>Where the question cannot be asked in full now, the answer names the step's own path with
+    /// that reason: a question that could not be asked is not a clear answer. A plan offers a step only
+    /// on an answer that was whole, and holds back what a partial one leaves unanswered, so the clean
+    /// keeps to the same rule as the preview.</para>
     /// </summary>
     IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct);
 }

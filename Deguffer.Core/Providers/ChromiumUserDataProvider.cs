@@ -308,6 +308,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         }
 
         var live = ChromiumFolderInUse.Find(_liveTrees, [.. applications.Select(a => a.Path)], ct);
+        var withheld = 0;
 
         foreach (var application in applications)
         {
@@ -319,7 +320,14 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 continue;
             }
 
-            var stillUnused = new ChromiumFolderInUse(_liveTrees, application.Path, live.Complete);
+            if (!live.IsAnswered(application.Path))
+            {
+                survivors.Add((application.Path, LiveTreeVeto.UncheckedReason));
+                withheld++;
+                continue;
+            }
+
+            var stillUnused = new ChromiumFolderInUse(_liveTrees, application.Path);
 
             if (application.ProfilesIncomplete)
             {
@@ -390,8 +398,8 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         // Reaching here means HasRecognisedChild already found a directory on disk by full name, and
         // a full path resolves through a directory the account may not list. So the sentence below
         // would deny what this same row established one method earlier. A folder held back as in use
-        // has its caches too.
-        if (targets.Count == 0 && declined.Count == 0 && !unreadable && live.Live.Count == 0)
+        // has its caches too, and so does one held back because nothing could say whether it is.
+        if (targets.Count == 0 && declined.Count == 0 && !unreadable && live.Live.Count == 0 && withheld == 0)
         {
             return EmptyPlan(NothingFound);
         }
@@ -402,7 +410,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
             notes.Add(inUse);
         }
 
-        if (LiveTreeVeto.IncompleteNote(live.Complete, "Close the applications before you clean.") is { } incomplete)
+        if (LiveTreeVeto.UncheckedNote(withheld) is { } incomplete)
         {
             notes.Add(incomplete);
         }

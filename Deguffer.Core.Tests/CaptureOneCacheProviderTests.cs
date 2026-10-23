@@ -287,6 +287,28 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A session whose open file could not be asked about is left alone as one Capture One has open
+    /// is: "could not tell" is not "nothing is using it". The row says why it is short rather than
+    /// calling the session empty of previews.
+    /// </summary>
+    [Fact]
+    public async Task ASessionNothingCouldCheckIsLeftAlone()
+    {
+        var session = Session("Studio");
+        List(Path.Combine(session, "Studio.cosessiondb"));
+        var cache = CacheOf(Path.Combine(session, "Capture", "CaptureOne"));
+
+        var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase) && p.Reason == LiveTreeVeto.UncheckedReason);
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains("could not check", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("holds any previews", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A session whose only folder of images is a link is not "Already clear": nothing behind the link
     /// was examined.
     /// </summary>

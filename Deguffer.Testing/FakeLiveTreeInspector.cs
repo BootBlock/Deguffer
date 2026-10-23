@@ -14,6 +14,7 @@ namespace Deguffer.Testing;
 public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 {
     private readonly HashSet<string> _live;
+    private readonly HashSet<string> _unanswered = new(StringComparer.OrdinalIgnoreCase);
     private bool _complete;
     private readonly List<RunningProgram> _programs = [];
     private readonly List<TimeSpan> _ageLimits = [];
@@ -45,6 +46,17 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public FakeLiveTreeInspector CannotTellFromNow()
     {
         _complete = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Answer "could not tell" about <paramref name="directories"/> alone, as the real inspector does for a
+    /// lock file Windows would not describe or a folder it could not put in canonical form, while the
+    /// process table is read in full.
+    /// </summary>
+    public FakeLiveTreeInspector WithUnanswered(params string[] directories)
+    {
+        _unanswered.UnionWith(directories);
         return this;
     }
 
@@ -105,11 +117,11 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     {
         Asked = candidates;
 
-        return new LiveTreeFindings(
+        return Answer(
             [.. candidates
                 .Select(c => new LiveTree(c.Directory, HoldersOf(c)))
                 .Where(tree => tree.Holders.Count > 0)],
-            _complete);
+            [.. candidates.Select(c => c.Directory)]);
     }
 
     public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
@@ -167,7 +179,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public LiveTreeFindings FindLiveChildren(
         IReadOnlyList<string> directories,
         CancellationToken ct = default) =>
-        new(
+        Answer(
             [
                 .. _live
                     .Where(child => directories.Any(root => IsImmediateChild(root, child)))
@@ -182,7 +194,16 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                         .OfType<string>()
                         .Select(child => new LiveTree(child, [$"{program.Name} was started with it"]))),
             ],
-            _complete);
+            directories);
+
+    /// <summary>
+    /// What the real inspector answers: nothing whole where the table could not be read, and otherwise
+    /// a whole answer but for the directories asked about that a test made unanswerable.
+    /// </summary>
+    private LiveTreeFindings Answer(IReadOnlyList<LiveTree> live, IReadOnlyList<string> asked) =>
+        _complete
+            ? LiveTreeFindings.Partly(live, [.. asked.Where(_unanswered.Contains)])
+            : new LiveTreeFindings(live, Complete: false);
 
     private static bool IsImmediateChild(string root, string child) =>
         Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(child)) is { } parent

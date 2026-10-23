@@ -1762,7 +1762,11 @@ written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
    the process environment block at offsets Windows does not promise to keep. A layout that moved
    would produce nonsense matching nothing, which reads as "dormant" — the dangerous direction. The
    offsets are therefore checked against Deguffer's own process, whose working directory is already
-   known, and a mismatch turns the mechanism off and reports incomplete rather than empty.
+   known, and a mismatch turns the mechanism off and reports incomplete rather than empty. An
+   incomplete answer offers nothing: what it could not check is held back at the preview and at the
+   clean alike, because a mismatch that lasts would otherwise offer every directory on that machine
+   under a warning. A failure that belongs to one directory, such as a lock file the Restart Manager
+   refuses, holds back that directory alone.
 3. ~~**Is the pending-reboot check reliable enough to ship?**~~ **Answered, as three checks rather
    than one.** Microsoft's own Configuration Manager treats `Component Based Servicing\RebootPending`
    and `WindowsUpdate\Auto Update\RebootRequired` as a restart owed, and both are readable

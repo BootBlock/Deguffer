@@ -38,6 +38,12 @@ namespace Deguffer.Core.Providers;
 /// and not declared here, because asking about a lock file means naming its directory first, which
 /// is the walk. Nor does it find a project a solution names where the solution could not be read,
 /// because there is nothing to name it by. The plan still holds both back.</para>
+///
+/// <para><b>A candidate the veto could not ask about is declared as well</b>, as the plan withholds
+/// it. But only a candidate is asked about, and the plan walks every root, so the plan withholds two
+/// kinds of directory that Explore does not refuse: every build directory away from where a program
+/// is when the process table itself could not be read, and one whose own lock file could not be
+/// asked about, such as a Unity project past <c>MAX_PATH</c>, when no program is near it.</para>
 /// </summary>
 internal static class InUseBuildDirectories
 {
@@ -145,6 +151,7 @@ internal static class InUseBuildDirectories
         return
         [
             .. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false)),
+            .. live.Unchecked.Select(candidate => new ToolRoot(candidate, LiveTreeVeto.UncheckedReason, static _ => false)),
             .. unreached.Select(candidate => new ToolRoot(candidate, UnreachedReason, static _ => false)),
         ];
     }

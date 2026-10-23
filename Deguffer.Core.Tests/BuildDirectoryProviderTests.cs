@@ -577,22 +577,23 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
     /// <summary>
     /// "Nothing is using this" and "we could not tell" are different answers, and only the first is
-    /// permission. A check that could not run says so, for the same reason §5.5 makes the
-    /// measurement fallback observable — a safeguard that could not run must not look like one that
-    /// found nothing.
+    /// permission. A veto that could not run offers nothing, asserts what it held back, and says so,
+    /// for the same reason §5.5 makes the measurement fallback observable — a safeguard that could
+    /// not run must not look like one that found nothing.
     /// </summary>
     [Fact]
-    public async Task AVetoThatCouldNotRunIsSaidOutLoud()
+    public async Task AVetoThatCouldNotRunOffersNothingAndSaysSo()
     {
         var root = ApproveRoot();
-        BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Game"));
+        var library = BuildDirectoryFixture.CreateUnityProject(Path.Combine(root, "Game"));
 
         var plan = await PlanWith(Unity, liveTrees: FakeLiveTreeInspector.CannotTell);
 
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == library && p.Reason == LiveTreeVeto.UncheckedReason);
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains("could not check whether anything is using these", StringComparison.Ordinal)
-            && n.Message.Contains("Close any editor or build", StringComparison.Ordinal));
+            && n.Message.Contains("could not check whether anything is using one of these", StringComparison.Ordinal));
     }
 
     // ---- §7.1: Explore refuses what the veto holds back ----------------------------------------
@@ -661,6 +662,37 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Assert.Contains("editor is working in Busy", refusal.Reason, StringComparison.Ordinal);
         Assert.False(policy.MayRemove(Directory.EnumerateFileSystemEntries(busy).First()).IsAllowed);
         Assert.False(policy.MayRemove(project).IsAllowed);
+    }
+
+    /// <summary>
+    /// §7.1 over a build directory the plan withholds because the question about it could not be
+    /// asked. A program started from the project's own <c>tools</c> folder and working elsewhere makes
+    /// it a candidate without making it live, so the same machine with the question answered allows
+    /// it: that is the premise that the refusal below is the withholding and nothing else.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesABuildDirectoryThePlanCouldNotCheck()
+    {
+        var root = ApproveRootInProfile();
+        var project = Path.Combine(root, "Game");
+        var library = BuildDirectoryFixture.CreateUnityProject(project);
+        var tools = Directory.CreateDirectory(Path.Combine(project, "tools")).FullName;
+
+        FakeLiveTreeInspector Machine() =>
+            new FakeLiveTreeInspector().WithProgram("helper", Path.Combine(tools, "helper.exe"), _temp.Path);
+
+        Assert.Empty(await Unity(live: Machine()).DiscoverToolRootsAsync());
+
+        var provider = Unity(live: Machine().WithUnanswered(library));
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == library && p.Reason == LiveTreeVeto.UncheckedReason);
+
+        var refusal = (await ExplorePolicy(provider)).MayRemove(library);
+
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("could not tell whether a running program is using this", refusal.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>

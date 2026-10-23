@@ -190,11 +190,11 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
     }
 
     /// <summary>
-    /// A plan made on a partial answer offered the folder's entries and said so in a note. The same
-    /// answer at the clean is no new reason to refuse them.
+    /// The preview keeps the clean's rule: a partial answer is not permission there either. A plan
+    /// made on one does not offer the folder, so the run that follows it leaves every entry standing.
     /// </summary>
     [Fact]
-    public async Task AFolderOfferedOnAPartialAnswerIsEmptiedOnTheSameAnswer()
+    public async Task AFolderIsNotOfferedOnAPartialAnswerAndKeepsItsEntriesThroughTheRun()
     {
         var abandonedFile = Abandoned(1024, "abandoned.tmp");
 
@@ -203,13 +203,12 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
         var provider = TemporaryFilesRow();
         var plan = await provider.PlanAsync();
 
-        Assert.Contains(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+        Assert.DoesNotContain(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
 
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.False(File.Exists(abandonedFile), "an entry the preview offered on a partial answer was kept on the same answer");
-        Assert.True(Directory.Exists(UserTemp), "the temporary folder itself was removed");
-        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.True(File.Exists(abandonedFile), "an entry of a folder nothing could check was removed");
+        AssertProvedStanding(result, UserTemp);
     }
 
     /// <summary>
@@ -240,11 +239,11 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
     }
 
     /// <summary>
-    /// The same for a profile the plan offered on a partial answer, which the same answer at the clean
-    /// does not refuse. The temporary folder holding it survives.
+    /// The same for a test browser's profile: a plan made on a partial answer does not offer it, and
+    /// the run that follows leaves it standing.
     /// </summary>
     [Fact]
-    public async Task AProfileOfferedOnAPartialAnswerIsRemovedOnTheSameAnswer()
+    public async Task AProfileIsNotOfferedOnAPartialAnswerAndSurvivesTheRun()
     {
         var profile = AbandonedProfile("playwright_chromiumdev_profile-a1B2c3");
 
@@ -253,12 +252,11 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
         var provider = TestProfilesRow();
         var plan = await provider.PlanAsync();
 
-        Assert.Contains(profile, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(profile, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.False(Directory.Exists(profile), "a profile the preview offered on a partial answer was kept on the same answer");
-        Assert.True(Directory.Exists(UserTemp), "the temporary folder holding a removed profile was removed");
+        Assert.True(Directory.Exists(profile), "a profile nothing could check was removed");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
