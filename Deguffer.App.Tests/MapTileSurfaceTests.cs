@@ -13,8 +13,8 @@ namespace Deguffer.App.Tests;
 ///
 /// <para>Through the device the map draws through, on a compositor of its own, because what refused
 /// the write was the compositor: the first write into a plain surface has to cover all of it. Each tile
-/// in the last row was written into a whole square, and each was refused as an invalid argument while
-/// the map was first drawn.</para>
+/// in the last column or row was written into a whole square, and each was refused as an invalid
+/// argument while the map was first drawn.</para>
 /// </summary>
 public sealed class MapTileSurfaceTests
 {
@@ -43,21 +43,26 @@ public sealed class MapTileSurfaceTests
         Assert.InRange(Tiling.PixelsOf(Key(0, LastRow)).Height, 1, MapTiling.Size - 1);
     }
 
+    /// <summary>
+    /// Shaded, and not skipped: <see cref="MapGraphics.Shade(CompositionDrawingSurface, CushionQuads, TileColour)"/>
+    /// draws nothing on a device that cannot run the shaders, so the canvas it shaded is asked for too.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Tiles))]
     public void ATileIsShadedWholeIntoANewSurfaceOfItsSize(long column, long row)
     {
         var (width, height) = Tiling.PixelsOf(Key(column, row));
 
-        var size = On(graphics =>
+        var (size, shaded) = On(graphics =>
         {
             var surface = graphics.TileSurface(null, width, height);
 
             graphics.Shade(surface, Quads(width, height), Ground);
 
-            return surface.SizeInt32;
+            return (surface.SizeInt32, graphics.ShrinkShaded(null, width, height, new SizeInt32(1, 1)) is not null);
         });
 
+        Assert.True(shaded);
         Assert.Equal(new SizeInt32(width, height), size);
     }
 
