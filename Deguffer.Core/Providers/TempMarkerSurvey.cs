@@ -91,9 +91,7 @@ public sealed record TempMarkerFindings(
                     continue;
                 }
 
-                var place = places.FirstOrDefault(place =>
-                    relative.Equals(place, StringComparison.OrdinalIgnoreCase)
-                    || relative.StartsWith(place + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+                var place = places.FirstOrDefault(place => LongPath.Contains(place, relative));
 
                 claimed.Add(Path.Combine(root, place ?? relative.Split(Path.DirectorySeparatorChar, 2)[0]));
             }

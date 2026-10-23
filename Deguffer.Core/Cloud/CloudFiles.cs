@@ -153,8 +153,8 @@ public sealed class CloudFiles : ICloudFiles
 
     public PlaceholderReading Read(string path)
     {
-        // The open is the presence probe: its failure is classified as the attribute probe classifies
-        // its own, so asking that probe first only read the attributes once more for every entry.
+        // The open is the presence probe, its failure classified as the attribute probe classifies its
+        // own, so a walk of a hundred thousand placeholders reads no attributes for them.
         using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Describe);
 
         if (handle.IsInvalid)
@@ -275,11 +275,11 @@ public sealed class CloudFiles : ICloudFiles
     private static string Comparable(string path) => Path.TrimEndingDirectorySeparator(LongPath.Display(path));
 
     /// <summary>
-    /// Why a handle would not open, in the probe's own three answers and on the probe's own set of
-    /// errors that say nothing is there.
+    /// Why a handle would not open, in the probe's own three answers and on the probe's own reading of
+    /// which errors say nothing is there.
     /// </summary>
     private static PlaceholderReading Unopened() =>
-        LongPath.SaysNothingIsThere(Marshal.GetLastPInvokeError())
+        LongPath.OpenSaysNothingIsThere(Marshal.GetLastPInvokeError())
             ? PlaceholderReading.Absent
             : PlaceholderReading.Refused;
 }

@@ -30,8 +30,8 @@ internal sealed class RegionTable
     public RegionTable(IEnumerable<ProtectedRegion> regions, IVolumeInventory volumes)
     {
         // A region whose path will not resolve is dropped, not kept with the value it arrived
-        // with. An empty one is the case that matters: LongPath.Contains("", candidate) builds the
-        // prefix "\\" and so matches every UNC path, which would refuse a whole network share with a
+        // with. An empty one is the case that matters: LongPath.Contains("", candidate) reads the
+        // candidate's first separator as the boundary and so matches every UNC path, which would refuse a whole network share with a
         // sentence naming no directory at all. A path that names nothing protects nothing, and
         // %ProgramFiles(x86)% is genuinely empty on a 32-bit Windows.
         _regions =

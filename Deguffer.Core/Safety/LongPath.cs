@@ -96,9 +96,8 @@ public static partial class LongPath
             return true;
         }
 
-        // Compared in place rather than against the ancestor with a separator appended: the live-tree
-        // check asks this of every candidate against every process, and the appended prefix was a
-        // string for each of those.
+        // Compared in place, with no prefix built: the live-tree check asks this of every candidate
+        // against every process.
         var atBoundary = candidate.Length > ancestor.Length
             && (EndsWithSeparator(ancestor) || candidate[ancestor.Length] == Path.DirectorySeparatorChar);
 
@@ -272,8 +271,14 @@ public static partial class LongPath
     /// <para>That is deliberately not <see cref="IsReparsePoint"/>'s shape, which fails closed
     /// because it has no way to say "I could not tell". This one has two.</para>
     /// </summary>
-    public static PathPresence ProbeDirectory(string path, out bool? isLink) =>
-        Probe(path, EntryKind.Directory, out isLink);
+    public static PathPresence ProbeDirectory(string path, out bool? isLink)
+    {
+        var presence = Probe(path, EntryKind.Directory, out var described);
+
+        isLink = described?.HasFlag(FileAttributes.ReparsePoint);
+
+        return presence;
+    }
 
     /// <summary>
     /// The same three-state answer for a file. See <see cref="ProbeDirectory"/>.
@@ -286,11 +291,24 @@ public static partial class LongPath
     /// <c>FileExists || DirectoryExists</c> is true, so it answers everything that pair answers and
     /// keeps a refusal apart from an absence as well.
     ///
-    /// <para>One attribute read answers for either kind. Asking the directory probe and then the file
-    /// probe read a file's attributes twice, and the cloud walk and the planner ask this of every
-    /// entry they hold.</para>
+    /// <para>One attribute read answers for either kind, because planning asks this of every
+    /// candidate it holds.</para>
     /// </summary>
     public static PathPresence ProbeEntry(string path) => Probe(path, EntryKind.Either, out _);
+
+    /// <summary>
+    /// The same answer, with which kind the entry is taken from the same attribute read, for a caller
+    /// that treats a file and a directory differently. Null where Windows described nothing, as
+    /// <see cref="ProbeDirectory(string, out bool?)"/> gives its link answer.
+    /// </summary>
+    public static PathPresence ProbeEntry(string path, out bool? isDirectory)
+    {
+        var presence = Probe(path, EntryKind.Either, out var described);
+
+        isDirectory = described?.HasFlag(FileAttributes.Directory);
+
+        return presence;
+    }
 
     /// <summary>
     /// Whether a directory may be at <paramref name="path"/>: true unless Windows said nothing is.
@@ -338,6 +356,12 @@ public static partial class LongPath
     public static bool FileExists(string path) => ProbeFile(path) is PathPresence.Present;
 
     /// <summary>
+    /// Whether a file or a directory exists, tolerating paths beyond MAX_PATH: <see cref="FileExists"/>
+    /// or <see cref="DirectoryExists"/>, from one attribute read.
+    /// </summary>
+    public static bool EntryExists(string path) => ProbeEntry(path) is PathPresence.Present;
+
+    /// <summary>
     /// The Win32 errors <see cref="Directory.Exists"/> itself treats as "nothing is there", taken
     /// from .NET's own <c>FillAttributeInfo</c> exclusion list.
     ///
@@ -353,11 +377,8 @@ public static partial class LongPath
     /// there — and folding one of those into a refusal would put a warning about somebody's disk on
     /// an unplugged card reader. That is the mirror image of the defect this whole probe exists to
     /// end.</para>
-    ///
-    /// <para>A caller that asks by opening a handle rather than by reading attributes classifies the
-    /// failure here too, so the two routes give one answer for the same path.</para>
     /// </summary>
-    internal static bool SaysNothingIsThere(int win32Error) => win32Error is
+    private static bool SaysNothingIsThere(int win32Error) => win32Error is
         2 or      // ERROR_FILE_NOT_FOUND
         3 or      // ERROR_PATH_NOT_FOUND
         6 or      // ERROR_INVALID_HANDLE
@@ -372,14 +393,30 @@ public static partial class LongPath
         206 or    // ERROR_FILENAME_EXCED_RANGE
         1231;     // ERROR_NETWORK_UNREACHABLE
 
+    /// <summary>
+    /// Whether a handle that would not open on <paramref name="extendedPath"/>, failing with
+    /// <paramref name="win32Error"/>, says nothing is there: the answer <see cref="ProbeEntry"/> gives
+    /// for the same path, for a caller whose open is its presence probe.
+    ///
+    /// <para><b>One error more than the attribute read's set.</b> A file named with a trailing
+    /// separator is absent to the probe, which settles it before reading, and an open of it fails
+    /// with <c>ERROR_DIRECTORY</c>. Read as a refusal, that would be the probe's answer reversed.
+    /// </para>
+    /// </summary>
+    private const int ErrorDirectory = 267;
+
+    internal static bool OpenSaysNothingIsThere(int win32Error) =>
+        SaysNothingIsThere(win32Error) || win32Error == ErrorDirectory;
+
     /// <param name="expected">
     /// Which kind the caller asked about. The other kind is <see cref="PathPresence.Absent"/> rather
     /// than present: a file where a directory was expected means there is no directory there, which
     /// is the question that was put.
     /// </param>
-    private static PathPresence Probe(string path, EntryKind expected, out bool? isLink)
+    /// <param name="described">What Windows described, or null for every answer but present.</param>
+    private static PathPresence Probe(string path, EntryKind expected, out FileAttributes? described)
     {
-        isLink = null;
+        described = null;
 
         // Exactly where the two-state form has always had it. A value Windows will not accept at all
         // throws from here, as it did before, rather than being reported as something about the
@@ -419,7 +456,7 @@ public static partial class LongPath
             return PathPresence.Absent;
         }
 
-        isLink = attributes.HasFlag(FileAttributes.ReparsePoint);
+        described = attributes;
 
         return PathPresence.Present;
     }

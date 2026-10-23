@@ -6,8 +6,8 @@ namespace Deguffer.Core.Tests;
 /// No product code reads a refusal as absence except where that reading was judged.
 ///
 /// <para><b>Read from the source, because the danger compiles.</b>
-/// <c>LongPath.FileExists</c> and <c>LongPath.DirectoryExists</c> are true only for
-/// <c>PathPresence.Present</c>, so a path Windows will not describe reads as "not there". That is
+/// <c>LongPath.FileExists</c>, <c>LongPath.DirectoryExists</c> and <c>LongPath.EntryExists</c> are
+/// true only for <c>PathPresence.Present</c>, so a path Windows will not describe reads as "not there". That is
 /// right where the probe decides what a location <em>is</em>, such as a marker file, because a
 /// refusal is no evidence for the classification. It is wrong where the probe decides whether a tool
 /// is present, whether a settings file exists to be read, or whether a guard runs. Nothing in the
@@ -53,7 +53,7 @@ public sealed partial class PresenceProbeSweepTests
         ["Deguffer.Core/Providers/SteamShaderCacheProvider.cs"] = 2,
         ["Deguffer.Core/Providers/VcpkgDiscovery.cs"] = 1,
         ["Deguffer.Core/Providers/VsCodeUserDataDiscovery.cs"] = 2,
-        ["Deguffer.Core/Safety/BuildDirectorySignature.cs"] = 2,
+        ["Deguffer.Core/Safety/BuildDirectorySignature.cs"] = 1,
         ["Deguffer.Core/Safety/DotNetIntermediateSignature.cs"] = 3,
         ["Deguffer.Core/Scanning/ScanEstimateCache.cs"] = 1,
     };
@@ -99,6 +99,6 @@ public sealed partial class PresenceProbeSweepTests
         || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A call or a method group, which <c>FirstOrDefault(LongPath.FileExists)</c> is.</summary>
-    [GeneratedRegex(@"\bLongPath\s*\.\s*(?:FileExists|DirectoryExists)\b")]
+    [GeneratedRegex(@"\bLongPath\s*\.\s*(?:FileExists|DirectoryExists|EntryExists)\b")]
     private static partial Regex TwoStateProbe();
 }

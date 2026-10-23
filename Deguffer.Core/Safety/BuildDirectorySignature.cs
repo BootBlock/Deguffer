@@ -120,5 +120,5 @@ public static class BuildDirectorySignature
     /// toolchain has been here, and a toolchain that changed one to the other would be reported
     /// unrecognised for a reason nobody could act on.
     /// </summary>
-    private static bool Exists(string path) => LongPath.FileExists(path) || LongPath.DirectoryExists(path);
+    private static bool Exists(string path) => LongPath.EntryExists(path);
 }

@@ -177,19 +177,24 @@ public sealed class CloudFilesTests : IDisposable
 
     /// <summary>
     /// The handle a read opens is its presence probe, so where none opens it gives the attribute
-    /// probe's answer: a name no entry can have is absent, as that probe says, and a file Windows
-    /// will not describe is refused rather than gone.
+    /// probe's answer: a name no entry can have is absent, as that probe says, and so is a file named
+    /// with a trailing separator, whose open fails differently. A file Windows will not describe is
+    /// refused rather than gone.
     /// </summary>
-    [Fact]
-    public void AReadThatOpensNothingAnswersAsTheAttributeProbeDoes()
+    [Theory]
+    [InlineData("a<b.bin")]
+    [InlineData(@"plain.bin\")]
+    public void AReadThatOpensNothingAnswersAsTheAttributeProbeDoes(string name)
     {
-        var unnamable = _root.At("a<b.bin");
+        _root.PlainFile("plain.bin", 10);
         var refused = _root.PlainFile("refused.bin", 10);
         _root.Disconnect();
 
-        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(unnamable));
-        Assert.Equal(PathPresence.Absent, _cloud.Read(unnamable).Presence);
-        Assert.Equal(ReleaseResult.Gone, _cloud.Release(unnamable, unnamable, _ => true).Result);
+        var unopened = _root.Path + Path.DirectorySeparatorChar + name;
+
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(unopened));
+        Assert.Equal(PathPresence.Absent, _cloud.Read(unopened).Presence);
+        Assert.Equal(ReleaseResult.Gone, _cloud.Release(unopened, unopened, _ => true).Result);
 
         using var denied = DeniedDirectory.WithUnreadableFile(refused);
 
