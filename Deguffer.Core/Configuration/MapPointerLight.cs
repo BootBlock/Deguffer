@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Deguffer.Core.Configuration;
 
 /// <summary>
@@ -24,7 +26,11 @@ public sealed record MapPointerLight(bool Shown = true, MapLightStrength Strengt
     /// How much the light adds, at most, to a surface facing it straight on, as a fraction of the
     /// colour, or zero where it is not shown. Standard is the strength the map always had: enough to
     /// see, and short of washing a pale colour out to white.
+    ///
+    /// <para>Kept out of the file: a value derived from the two beside it would read, to anyone editing
+    /// the file by hand, as a third thing they can set.</para>
     /// </summary>
+    [JsonIgnore]
     public float Amount => !Shown ? 0 : Strength switch
     {
         MapLightStrength.Soft => 0.2f,

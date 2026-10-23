@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Testing;
@@ -62,6 +63,24 @@ public sealed class MapPointerLightTests
     [Fact]
     public void AStrengthNoMemberNamesIsReadAsTheDefault() =>
         Assert.Equal(MapPointerLight.Default, new MapPointerLight(Strength: (MapLightStrength)9).Defined());
+
+    /// <summary>The file holds the two choices and nothing derived from them, which a hand-editor would take for a third.</summary>
+    [Fact]
+    public void TheFileHoldsOnlyTheChoices()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var store = new PreferenceStore(environment);
+
+        Assert.True(store.Save(AppPreferences.Default with { MapPointerLight = new MapPointerLight(Shown: false, MapLightStrength.Soft) }));
+
+        using var written = JsonDocument.Parse(File.ReadAllText(Path.Combine(environment.LocalAppData, "Deguffer", "preferences.json")));
+
+        Assert.Equal(
+            ["Shown", "Strength"],
+            written.RootElement.GetProperty("MapPointerLight").EnumerateObject().Select(property => property.Name));
+        Assert.Equal(new MapPointerLight(Shown: false, MapLightStrength.Soft), store.Load().MapPointerLight);
+    }
 
     private static AppPreferences LoadWritten(string json)
     {
