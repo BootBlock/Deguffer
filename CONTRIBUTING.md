@@ -94,7 +94,9 @@ questions. The walk's first run lists folders from the drive, and later runs lis
 the Windows file cache. The file table is read without the cache, so its later runs mostly measure
 the drive again. The peak working set for the later runs is the highest the process reached. The
 Explore routes also report what the finished tree keeps: the managed heap with the tree held, less
-the heap once it is let go, which the peak working set cannot show.
+the heap once it is let go, which the peak working set cannot show. "Processors busy" is the
+process's processor time over the elapsed time: a run that waits on the drive keeps few busy, and
+one that waits on its own work keeps about as many busy as it has threads doing that work.
 
 To report a result, open an issue and paste the output as it stands. It names the drive letter and
 the file system, and never a path, a volume label, a user or a machine. Add the kind of drive
