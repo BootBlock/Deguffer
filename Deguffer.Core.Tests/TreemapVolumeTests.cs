@@ -3,6 +3,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -276,6 +277,20 @@ public sealed class TreemapVolumeTests
     }
 
     /// <summary>
+    /// The page remeasures as a removal reports, on the window's thread, so it asks the one volume
+    /// and never the list. A fresh list there waits on every device the machine has, a share's
+    /// included, and a remembered one still holds the space as it was before the removal.
+    /// </summary>
+    [Fact]
+    public void AVolumeIsRemeasuredByAskingItAndNotTheList()
+    {
+        var scanned = new VolumeSpace(900, 500);
+        var volumes = new ListUnread(new FakeVolumeInventory().With(@"D:\", totalBytes: 900, freeBytes: 650));
+
+        Assert.Equal(scanned with { FreeBytes = 650 }, scanned.Remeasured(volumes, @"D:\"));
+    }
+
+    /// <summary>
     /// Nothing is drawn beside a scan of a folder, and nothing is after a removal from it either; and a
     /// volume that no longer states its figures has nothing to draw, rather than the old ones.
     /// </summary>
@@ -410,5 +425,24 @@ public sealed class TreemapVolumeTests
                 new ExploreChild($"file{i}", IsDirectory: false, IsLink: false, Size: 1000))]);
 
         return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    /// <summary>An inventory whose remembered list fails the test if anything reads it, and whose live questions <paramref name="machine"/> answers.</summary>
+    private sealed class ListUnread(IVolumeInventory machine) : IVolumeInventory
+    {
+        public IReadOnlyList<LocalVolume> Volumes => throw new InvalidOperationException("The volume list was read.");
+
+        public string? MountPointOf(string path) => machine.MountPointOf(path);
+
+        public IReadOnlyList<string> MountPointsOf(string mountPoint) => machine.MountPointsOf(mountPoint);
+
+        public string? SubstituteOf(string driveRoot) => machine.SubstituteOf(driveRoot);
+
+        public (long Total, long Free)? SpaceOf(string path) => machine.SpaceOf(path);
+
+        public void Invalidate() => throw new InvalidOperationException("The volume list was dropped.");
+
+        public Task<IReadOnlyList<LocalVolume>> RefreshAsync(CancellationToken ct) =>
+            throw new InvalidOperationException("The volume list was read.");
     }
 }

@@ -124,15 +124,18 @@ public sealed class DriveListTests
         var release = volumes.HoldRefreshes();
 
         var first = drives.ReadAsync(CancellationToken.None);
-        var second = await drives.ReadAsync(CancellationToken.None);
+        var second = drives.ReadAsync(CancellationToken.None);
 
+        // Asked before the release, so a second reading that started would be held and fail here
+        // rather than leave the test waiting on it.
         Assert.False(first.IsCompleted, "The first reading was meant to be under way.");
-        Assert.Null(second);
+        Assert.True(second.IsCompleted, "A second reading was started while the first ran.");
+        Assert.Null(await second);
+        Assert.Equal(1, volumes.RefreshCount);
 
         release();
 
         Assert.NotNull(await first);
-        Assert.Equal(1, volumes.RefreshCount);
     }
 
     /// <summary>A reading that was stopped read nothing, so it does not stand for a minute.</summary>

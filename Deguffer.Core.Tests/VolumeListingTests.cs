@@ -53,8 +53,11 @@ public sealed class VolumeListingTests
         machine.Hold();
         var refreshing = inventory.RefreshAsync(CancellationToken.None);
 
+        // The reading is held until released below, so a call that came back while the machine
+        // had already answered is one that waited for it on this thread.
+        Assert.False(machine.HeldReadingAnswered, "The refresh came back only once the machine had answered.");
         Assert.True(machine.WaitUntilHeld(Patience), "The machine was never read.");
-        Assert.False(refreshing.IsCompleted, "The refresh came back only once the machine had answered.");
+        Assert.False(refreshing.IsCompleted);
         Assert.Same(before, inventory.Volumes);
 
         machine.Letter(@"D:\", DriveType.Fixed);
@@ -126,8 +129,14 @@ public sealed class VolumeListingTests
             return this;
         }
 
+        /// <summary>Whether a reading made while held has returned its letters, which only <see cref="Release"/> or running out of patience lets it do.</summary>
+        public bool HeldReadingAnswered => _answered;
+
+        private volatile bool _answered;
+
         public void Hold()
         {
+            _answered = false;
             _held.Reset();
             _released.Reset();
         }
@@ -158,7 +167,14 @@ public sealed class VolumeListingTests
             // Taken before the hold, so what this reading returns is the machine as it was when
             // the reading began.
             _held.Set();
+
+            var wasHeld = !_released.IsSet;
             _released.Wait(Patience);
+
+            if (wasHeld)
+            {
+                _answered = true;
+            }
 
             return letters;
         }
