@@ -275,12 +275,12 @@ public sealed class PlanExecutor(
 
     /// <summary>
     /// Why <paramref name="step"/> must not run because Windows is now in the middle of an update, or
-    /// null where nothing says it is. The process table is read afresh rather than from the snapshot
-    /// the planning pass took, for the reason the step is asked about at all.
+    /// null where nothing says it is. The process table is read again where the snapshot is past
+    /// <see cref="IUseCheck.ReadingLimit"/>, for the reason the step is asked about at all.
     /// </summary>
     private string? StillUpdating(CleanupStep step)
     {
-        _inspector.Invalidate();
+        _inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
         if (UnfinishedUpdate.HoldsEverything(_servicing, _inspector, (step as RunCommandStep)?.ServicingCalls) is { } everything)
         {
@@ -326,11 +326,12 @@ public sealed class PlanExecutor(
         // reports that axis.
         var before = (step.MeasuredBefore ?? step.Estimated).Reclaimable;
 
-        // Asked of the process table afresh rather than of the snapshot the planning pass took: the
-        // user can close the program while the preview is on screen, and the tool would then start it.
+        // Asked of a process table within the use checks' limit rather than of the snapshot the
+        // planning pass took: the user can close the program while the preview is on screen, and the
+        // tool would then start it.
         if (step.RunsOnlyWhile.Count > 0)
         {
-            _inspector.Invalidate();
+            _inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
             if (_inspector.FindRunning(step.RunsOnlyWhile).Count == 0)
             {
