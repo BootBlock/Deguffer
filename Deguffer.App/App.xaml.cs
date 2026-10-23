@@ -8,6 +8,7 @@ using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
+using Deguffer.Core.Startup;
 using Deguffer.Core.Working;
 using Microsoft.UI.Xaml;
 
@@ -143,6 +144,9 @@ public partial class App : Application
     /// <see cref="Deguffer.App.MainWindow.Leave"/>.
     /// </summary>
     internal static void Leaving() => _shell?.Leave();
+
+    /// <summary>Open Startup on one entry, for the link Memory shows beside a program Windows starts at sign-in (§7.5).</summary>
+    internal static void ShowStartupEntry(StartupKey entry) => _shell?.ShowStartupEntry(entry);
 
     /// <summary>Open the map appearance window, or bring forward the one already open.</summary>
     internal static void ShowMapAppearance() => _shell?.ShowMapAppearance();

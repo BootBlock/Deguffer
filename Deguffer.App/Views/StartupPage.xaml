@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="Deguffer.App.Views.StartupPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    Background="Transparent">
+
+    <Page.Resources>
+        <!-- One row, two lines high: the name with its badges, then the entry's own name, who made it
+             and where it comes from, with what its program holds now beside both. §7.5 puts the
+             reason on every row: the badge opens it, and the row's help text carries it for a screen
+             reader. The memory figure is a fact about the program, never a reason to change it. -->
+        <DataTemplate x:Key="EntryTemplate" x:DataType="vm:StartupRow">
+            <Grid Padding="0,8" ColumnSpacing="12"
+                  BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                  AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
+                  AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" MinWidth="96" />
+                </Grid.ColumnDefinitions>
+
+                <Grid ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xEA18;" FontSize="14" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                  Visibility="{x:Bind HasShield, Mode=OneWay}"
+                                  ToolTipService.ToolTip="{x:Bind Shield, Mode=OneWay}"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <ContentControl Content="Program missing" Style="{StaticResource StandingChipUnproven}"
+                                        Visibility="{x:Bind IsMissing, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind Missing, Mode=OneWay}"
+                                        AutomationProperties.Name="Program missing" />
+                        <!-- The row's disclosure (§7): a button, so a keyboard reaches it with Tab and a
+                             finger with a tap, opening every sentence about the row. -->
+                        <Button Padding="0" MinWidth="0" MinHeight="0" Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="{x:Bind StateReason, Mode=OneWay}"
+                                AutomationProperties.Name="{x:Bind State, Mode=OneWay}"
+                                AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}">
+                            <ContentControl Content="{x:Bind State, Mode=OneWay}"
+                                            Style="{x:Bind StateKind, Mode=OneWay, Converter={StaticResource StartupChipStyle}}" />
+                            <Button.Flyout>
+                                <Flyout>
+                                    <StackPanel MaxWidth="440" Spacing="8">
+                                        <TextBlock Text="{x:Bind StateReason, Mode=OneWay}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{x:Bind Runs, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Style="{StaticResource SecondaryText}" IsTextSelectionEnabled="True" />
+                                        <TextBlock Text="{x:Bind Missing, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Visibility="{x:Bind IsMissing, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind Shield, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Visibility="{x:Bind HasShield, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind MemoryNote, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Style="{StaticResource SecondaryText}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{x:Bind Detail, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}" TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
+
+                <!-- A figure where the program runs, and a quiet sentence where it does not, so a column
+                     of programs that are not running does not read as a column of numbers. -->
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
+                           Text="{x:Bind Memory, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="20"
+                           Visibility="{x:Bind HasMemory, Mode=OneWay}"
+                           ToolTipService.ToolTip="{x:Bind MemoryNote, Mode=OneWay}"
+                           AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
+                           Text="Not running" Style="{StaticResource SecondaryText}"
+                           Visibility="{x:Bind IsNotRunning, Mode=OneWay}"
+                           AutomationProperties.AccessibilityView="Raw" />
+            </Grid>
+        </DataTemplate>
+
+        <Style x:Key="EntryContainer" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+    </Page.Resources>
+
+    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Startup" Style="{StaticResource SubtitleTextBlockStyle}" />
+                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
+                           Style="{StaticResource SecondaryText}" />
+            </StackPanel>
+
+            <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
+                          Width="20" Height="20" VerticalAlignment="Center" />
+
+            <Button Grid.Column="2" Content="Open Startup apps in Settings" VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.OpenSettingsCommand}"
+                    ToolTipService.ToolTip="Windows' own Startup page, where a packaged app's startup task can be changed too." />
+
+            <Button Grid.Column="3" Content="Reopen as administrator" VerticalAlignment="Center"
+                    Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                    Command="{x:Bind ViewModel.ElevateCommand}"
+                    ToolTipService.ToolTip="Entries that start for every user can be changed only with administrator rights." />
+
+            <Button Grid.Column="4" Content="Refresh" VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.RefreshCommand}" />
+        </Grid>
+
+        <TextBlock Grid.Row="1" TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
+                   Text="What Windows starts when you sign in, from the places Task Manager lists. Disabling an entry records that it should not start, as Task Manager does, and leaves the entry itself alone. The memory beside each one is what its program holds now. Publishers come from each program's own version information." />
+
+        <InfoBar Grid.Row="2"
+                 IsOpen="{x:Bind ViewModel.HasReport, Mode=OneWay}"
+                 Severity="{x:Bind ViewModel.ReportSeverity, Mode=OneWay}"
+                 Message="{x:Bind ViewModel.Report, Mode=OneWay}"
+                 CloseButtonClick="OnReportClosed" />
+
+        <ListView x:Name="EntryList" Grid.Row="3"
+                  AutomationProperties.Name="What starts at sign-in"
+                  SelectionMode="Single"
+                  SelectionChanged="OnSelectionChanged"
+                  ItemsSource="{x:Bind ViewModel.Rows}"
+                  ItemTemplate="{StaticResource EntryTemplate}"
+                  ItemContainerStyle="{StaticResource EntryContainer}" />
+
+        <Grid Grid.Row="4" ColumnSpacing="12" ColumnDefinitions="*,Auto">
+            <TextBlock Text="{x:Bind ViewModel.Note, Mode=OneWay}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+            <Button Grid.Column="1" Content="{x:Bind ViewModel.ChangeLabel, Mode=OneWay}"
+                    Command="{x:Bind ViewModel.ChangeCommand}"
+                    AutomationProperties.Name="{x:Bind ViewModel.ChangeLabel, Mode=OneWay}" />
+        </Grid>
+    </Grid>
+</Page>

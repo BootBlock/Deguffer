@@ -92,6 +92,15 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
+                <!-- Startup answers "what put it there at sign-in", beside Memory because a program
+                     closed there comes back at the next sign-in if Windows starts it. It stops an
+                     entry starting the way Task Manager does, and removes nothing (§7.5). -->
+                <NavigationViewItem x:Name="StartupItem" Content="Startup" Tag="Startup">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEC4A;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
                 <!-- Installed apps answers "what does Windows list that is not there", and runs a
                      program's own uninstaller for one that is (§7.3). -->
                 <NavigationViewItem x:Name="InstalledAppsItem" Content="Installed apps" Tag="InstalledApps">

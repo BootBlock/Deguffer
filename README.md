@@ -40,11 +40,14 @@ under the MIT licence. Download the zip for your processor from the
   uninstaller when you ask it to.
 - **Memory** shows where physical memory goes, by application, by service and to Windows itself, and
   can ask one program you choose to close.
+- **Startup** lists what Windows starts when you sign in, with what each program holds in memory now,
+  and stops an entry starting the way Task Manager does, without removing it.
 
 Deguffer starts without administrator rights. Storage, Explore and Duplicates can restart it as
 administrator, so that it reads a drive's file table directly, which makes a scan much faster, and
 so that Storage can run the Windows cleanup steps that need those rights. Installed apps can do the
-same to remove entries that belong to every account.
+same to remove entries that belong to every account, and Startup to change entries that start for
+every account.
 
 ## Why it exists
 
@@ -285,6 +288,20 @@ any question about unsaved work comes from the program itself. Deguffer asks you
 close, naming the program and how many of its windows will be asked. It never ends a process, closes
 a service host, touches a program in another session or under another account, or asks for more
 rights to reach one.
+
+## Startup
+
+A program you close from the Memory page comes back after the next restart if Windows starts it when
+you sign in. The Startup page lists those entries from the places Task Manager reads: the `Run` keys
+for you and for every user, both Startup folders, and packaged apps' startup tasks. Each one shows its
+program, its publisher and, if it is running, the memory it holds now. The Memory page says when a
+program you pick is one of them, and links to it.
+
+Disabling an entry records that it should not start, in the same place and the same form Task Manager
+uses, so Task Manager and Settings show the change too. The entry itself, its shortcut and its program
+are left alone, and Enable undoes it. Deguffer changes only a record in a form it has seen Windows
+write. A packaged app's startup task can be changed only by the app itself or in Settings, so the page
+offers Settings' own Startup page for those. Nothing is suggested because of the memory a program uses.
 
 ## Building
 

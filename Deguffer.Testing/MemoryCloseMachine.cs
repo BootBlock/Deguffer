@@ -22,6 +22,9 @@ internal sealed class MemoryCloseMachine
 
     public const long TargetCreated = 5;
 
+    /// <summary>The program the target runs, invented, for §7.5's link from Memory.</summary>
+    public const string TargetImage = @"C:\Program Files\Editor\editor.exe";
+
     private const long ShellCreated = 1;
     private const long OwnCreated = 2;
 
@@ -30,7 +33,7 @@ internal sealed class MemoryCloseMachine
 
     public MemoryCloseMachine()
     {
-        Target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
+        Target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated, Image = TargetImage };
 
         Processes = new FakeProcessCalls()
             .With(Target)

@@ -12,8 +12,9 @@ wasted disk space, with a safety model good enough to trust unattended. It recog
 locations on a disk actually are, reports what each one costs to lose, and leaves the decision with
 the user. It also shows where the machine's memory goes, and its one action there is to ask a program
 to close itself (§7.2), it clears Windows' list of installed programs of entries for programs that
-are gone (§7.3), and it finds the files that are on the disk more than once and removes the copies a
-user marks, never the last one (§7.4).
+are gone (§7.3), it finds the files that are on the disk more than once and removes the copies a
+user marks, never the last one (§7.4), and it lists what starts at sign-in and stops an entry
+starting the way Task Manager does, without removing it (§7.5).
 
 ## The name
 
@@ -75,12 +76,18 @@ in a few minutes, without touching a single piece of user data.
 - **Find the files that are there twice**, across one drive or several, matched on the criteria the
   user chooses, and remove the copies the user marks while at least one copy of every file stays.
   See §7.4.
+- **Show what starts at sign-in**, beside the memory each program uses now, and stop an entry
+  starting the way Task Manager does, by recording the user's choice and leaving the entry alone.
+  See §7.5.
 
 **Non-goals**
 
 - Not an uninstaller. Installed apps (§7.3) removes entries Windows lists for programs that are
   gone, and for a program that is still there it runs that program's own uninstaller. Deguffer
   itself removes no program's files.
+- Not a startup cleaner. Startup (§7.5) stops an entry starting by recording the user's choice
+  where Task Manager does, and it never removes an entry, a shortcut or a registry key, or suggests
+  stopping anything because of the memory it uses.
 - Not a similarity finder. Duplicates (§7.4) finds files that are the same, byte for byte, or that
   share the name, size or date the user chose to match on. It never judges two photographs, two
   recordings or two documents to be "the same" because they look or sound alike.
@@ -1211,6 +1218,126 @@ on: what the established duplicate finders do, and the ways their users have los
 - No search of a network drive or share, or of a drive whose content is kept in the cloud.
 - No reading of a file that is not on this device, and no removal of a cloud-only file.
 - No removal of the last copy that can be kept, or of a reference copy, under any rule or preference.
+
+### 7.5 Startup — what starts at sign-in
+
+Memory answers **"where is the memory going"** for what runs now. It does not say what put a
+program there, so a program closed from Memory comes back after the next restart if Windows starts
+it at sign-in. **Startup lists what Windows starts at sign-in, from the places Task Manager's Startup
+apps page reads, and it stops an entry starting the way Task Manager does: by recording that the user
+disabled it, with the entry left as it was.** [startup-apps.md](startup-apps.md) is the investigation
+behind every rule here, with what was measured and what was not.
+
+As with the rest of this document, what follows is the target rather than a description of the
+code.
+
+**What is read**
+
+- **Six sources, and no others.** The `Run` key under `HKEY_CURRENT_USER`, the `Run` key under
+  `HKEY_LOCAL_MACHINE` in both registry views, asked for by name as §7.3 asks for the `Uninstall`
+  key, this user's Startup folder, the Startup folder for every user, and the startup tasks that
+  packaged applications installed for this user declare. `RunOnce`, the policy `Run` keys, Winlogon,
+  scheduled tasks that run at log-on and services are not read. Task Manager lists none of them as a
+  startup app, and §2 rules out service control, which this section does not reopen.
+- **A packaged application's startup tasks come from its own manifest**, found through the packages
+  Windows lists for this user. Both are documented: `PackageManager.FindPackagesForUser` and the
+  `windows.startupTask` extension.
+- **Every entry is listed once, under the source it came from.** A Startup folder's `desktop.ini` is
+  the folder's own settings, not an entry. A `StartupApproved` value naming no entry is not listed,
+  as Task Manager does not list one.
+- **Each entry shows its program, its publisher, whether it starts, and the memory its program uses
+  now if it is running.**
+  - The program is the executable a `Run` value's command names, read as §7.3 reads an uninstall
+    command, the target of a Startup folder shortcut, the Startup folder item itself where it is not
+    a shortcut, and the executable a packaged task names inside its package. A program Windows says
+    is not there is reported missing. One Windows would not say about is not reported missing.
+  - The publisher is the program's own version information, or the package's publisher. Windows does
+    not document where Task Manager's comes from, so the page says where Deguffer's does.
+  - The memory is the private working set of every running process whose image is that program,
+    compared by full path, from one reading of the process table taken with the list. It is §7.2's
+    figure with §7.2's caveat: a lower bound. Only a process whose image *name* matches an entry's
+    program is opened, once per reading, to read its full path, because the process table holds the
+    name alone. Where §7.2 turned the figure off, the row says so, and it never shows zero in its
+    place.
+- **The list is in name order, and in no other.** Nothing is ordered, marked or offered by how much
+  memory it uses (§2). The memory figure answers "what is this costing now", which is Memory's
+  question, and it is never a reason the page gives to stop anything starting.
+
+**Whether an entry starts**
+
+- **Windows records the user's choice beside the entry, not in it.** Task Manager and Settings write a
+  value under `Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved`, in the entry's
+  hive: under `Run` for a `Run` value in the 64-bit view, `Run32` for one in the 32-bit view, and
+  `StartupFolder` for a Startup folder item, named by the value's name or the item's file name. **None
+  of it is documented**, so Deguffer reads it on the footing the investigation measured: 12 bytes of
+  `REG_BINARY`, a four-byte state and the FILETIME at which the entry was disabled.
+- **The low bit of the state says the entry is disabled**, and no value at all says it starts. A value
+  of any other length or type says nothing, and the entry's state is shown as unknown, never guessed.
+- **A packaged task's state is the `State` value Windows keeps for this user**, whose numbers are
+  `StartupTaskState`'s documented ones. Where it keeps it is not documented, so a value that is not one
+  of those numbers, or no value, is shown as unknown.
+
+**The one action: stop an entry starting, or let it start again**
+
+- **Disabling writes the state `3` and the current time, and enabling writes the state `2` and a
+  zero time.** These are the two values Task Manager was measured writing, so an entry Deguffer
+  switched reads afterwards exactly as Task Manager would have left it. Nothing else is written: not
+  the `Run` value, not the Startup folder item, not any other `StartupApproved` value, and no key is
+  created but the `StartupApproved` subkey a first change needs, which Task Manager creates too.
+- **Only a value whose every bit Deguffer can account for is replaced**: no value, or the state 0, 1,
+  2 or 3 in 12 bytes of `REG_BINARY`. Settings writes 0 and 1, and Task Manager 2 and 3. Any other
+  value is Windows' or another program's record in a form nobody has explained, and replacing it would
+  throw away what it says. That entry is report-only, and its row says why.
+- **A packaged task is report-only.** Windows documents control of a startup task to the application
+  itself and to the user, through Settings and Task Manager, and the record beside `State` holds
+  values nothing documents. The page offers Windows' own Startup page in Settings
+  (`ms-settings:startupapps`), which is the documented route, for every entry and for these in
+  particular.
+- **A machine-wide entry needs administrator rights.** Unelevated, its row says so before anything is
+  tried, the page offers to reopen as administrator as Installed apps does, and nothing is attempted.
+- **Every refusal is decided twice.** `StartupChangePolicy` decides when the user selects a row, so the
+  reason is on screen before they try anything, and `StartupSwitcher` reads the entry and its value
+  again immediately before it writes. An entry that has gone, or whose command, file or value changed
+  since the list was read, is refused, and the result says so.
+- **One entry at a time, chosen by hand.** No bulk change, no pre-selection and no suggestion. A
+  refusal is a sentence on the row, never a disabled button (§7.1).
+- **No confirmation dialog.** The change removes nothing and the same page undoes it in one step, and
+  the result says how. The confirmation §7 asks for exists because a deletion cannot be undone, and
+  this is not one.
+
+**§5.6, for one value**
+
+After the write, three things are read back, and each is exact:
+
+1. **What Deguffer wrote.** The value reads back as the bytes written, and nothing but that one value
+   in that one key was written at all.
+2. **That the entry is unchanged.** The `Run` value's data and type, or the Startup folder item's
+   presence, size and last-write time, match what was read before the write.
+3. **That every other value under the same `StartupApproved` key is unchanged**, by name, type and
+   bytes.
+
+A change's evidence is shown on the §5.6 surface the other pages use, keyed by the entry's name and
+where it is.
+
+**A link from Memory**
+
+- **A program picked on Memory says whether it starts at sign-in.** The facts §7.2.1 reads for the
+  picked process include its image path, read through the same held handle, and where that path is
+  the program of a startup entry, the selection says so and links to the entry on Startup. Nothing
+  more is asked of Windows for the link, and nothing is asked for a row nobody picked.
+- **The startup list Memory compares against is read once each time the page is opened**, not at the
+  page's two-second cadence. An entry added while the page is open shows on the next visit.
+- **The link states a fact and recommends nothing.** It never says that a program should not start,
+  for the reason §7.2 never says that one should close.
+
+**What this section does not authorise**
+
+- No removal of an entry, a file, a shortcut or a registry key. Disabling only.
+- No change to `RunOnce`, a policy key, Winlogon, a scheduled task or a service.
+- No write to a packaged application's startup state.
+- No replacement of a `StartupApproved` value in a form not measured.
+- Nothing ordered, offered or recommended by memory use (§2).
+- No elevation asked for to read the list. Unelevated, every source here reads.
 
 ---
 

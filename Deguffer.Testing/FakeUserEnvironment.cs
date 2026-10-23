@@ -67,6 +67,9 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 
     public string TempPath { get; private set; }
 
+    /// <summary>Where Windows puts it in a profile. Named but not created, as <see cref="Videos"/> is.</summary>
+    public string? StartupFolder => Path.Combine(RoamingAppData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup");
+
     /// <summary>
     /// Pretend this process resolves its temporary folder somewhere other than the profile's own.
     ///

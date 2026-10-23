@@ -21,6 +21,13 @@ namespace Deguffer.Core.Memory.Acting;
 /// </param>
 public sealed record MemoryVerdict(bool IsAllowed, string Reason, IReadOnlyList<ProcessWindow> Windows)
 {
+    /// <summary>
+    /// The program the picked process runs, read with the facts this verdict was decided from, or null
+    /// where Windows would not say or the process was not the one picked. Not part of the decision:
+    /// Memory says whether Windows starts that program at sign-in (§7.5).
+    /// </summary>
+    public string? ImagePath { get; init; }
+
     public static MemoryVerdict Refuse(string reason) => new(IsAllowed: false, reason, []);
 
     public static MemoryVerdict Allow(IReadOnlyList<ProcessWindow> windows) => new(
