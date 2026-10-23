@@ -1641,7 +1641,7 @@ public sealed class ExploreMap : UserControl
         var window = SystemSettings.UIElementColor(UIElementType.Window);
         var text = SystemSettings.UIElementColor(UIElementType.WindowText);
 
-        return new ContrastColours(new TileColour(window.R, window.G, window.B), new TileColour(text.R, text.G, text.B));
+        return new ContrastColours(window.ToTile(), text.ToTile());
     }
 
     /// <summary>

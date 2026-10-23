@@ -1,8 +1,8 @@
 using System.Numerics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
-using Windows.UI;
 
 namespace Deguffer.App.Controls;
 
@@ -44,8 +44,6 @@ internal sealed class ExploreMorph
     /// <summary>The move under way, until its animations have finished; null while there is none.</summary>
     private CompositionScopedBatch? _moving;
 
-    private CompositionEasingFunction? _ease;
-
     public ExploreMorph(Compositor compositor, MapGeometry geometry, MapCamera camera)
     {
         _compositor = compositor;
@@ -73,10 +71,7 @@ internal sealed class ExploreMorph
     {
         Finish();
 
-        _placed.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
-        _placed.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
-
-        _ease ??= _compositor.CreateCubicBezierEasingFunction(Motion.EaseControlPoints.First, Motion.EaseControlPoints.Second);
+        _placed.Place(placed);
 
         var moving = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         var shapes = _compositor.CreateShapeVisual();
@@ -143,18 +138,18 @@ internal sealed class ExploreMorph
         var to = _geometry.Figure(morph.To);
         var geometry = _compositor.CreatePathGeometry(from);
         var shape = _compositor.CreateSpriteShape(geometry);
-        shape.FillBrush = _compositor.CreateColorBrush(Color.FromArgb(255, morph.Colour.Red, morph.Colour.Green, morph.Colour.Blue));
+        shape.FillBrush = _compositor.CreateColorBrush(morph.Colour.ToColor());
 
         // In a high contrast theme's colours the fill is the ground's, and the edge is what travels.
         if (morph.Edges is { } edges)
         {
-            shape.StrokeBrush = _compositor.CreateColorBrush(Color.FromArgb(255, edges.Colour.Red, edges.Colour.Green, edges.Colour.Blue));
+            shape.StrokeBrush = _compositor.CreateColorBrush(edges.Colour.ToColor());
             shape.StrokeThickness = edges.Width;
         }
 
         var travel = _compositor.CreatePathKeyFrameAnimation();
         travel.InsertKeyFrame(0, from);
-        travel.InsertKeyFrame(1, to, _ease);
+        travel.InsertKeyFrame(1, to, _compositor.MotionEase());
         travel.Duration = motion.Duration;
         geometry.StartAnimation(nameof(CompositionPathGeometry.Path), travel);
 

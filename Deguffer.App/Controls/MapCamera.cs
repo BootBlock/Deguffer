@@ -1,4 +1,5 @@
 using System.Numerics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
@@ -36,6 +37,9 @@ internal sealed class MapCamera
 
     /// <summary>How far the picture can be magnified while the drawing on screen is (see <see cref="MapCeiling"/>).</summary>
     private const string Ceiling = "Ceiling";
+
+    /// <summary>The least magnification <see cref="Unmagnified"/> divides by, so a picture shrunk to nothing divides by no zero.</summary>
+    private const string LeastMagnification = "0.0001";
 
     private readonly Compositor _compositor;
 
@@ -175,8 +179,7 @@ internal sealed class MapCamera
     {
         Properties.StopAnimation(nameof(Visual.Scale));
         Properties.StopAnimation(nameof(Visual.Offset));
-        Properties.InsertVector3(nameof(Visual.Scale), new Vector3((float)camera.ScaleX, (float)camera.ScaleY, 1));
-        Properties.InsertVector3(nameof(Visual.Offset), new Vector3((float)camera.X, (float)camera.Y, 0));
+        Properties.Place(camera);
     }
 
     /// <summary>
@@ -191,6 +194,35 @@ internal sealed class MapCamera
         -Camera($"Offset.{axis}"),
         Camera($"Scale.{axis}"),
         Camera($"Size.{axis}"));
+
+    /// <summary>
+    /// An animation of <paramref name="length"/> device-independent pixels on screen, for a length
+    /// inside a canvas that <paramref name="placed"/> places in the picture, whatever the camera and
+    /// that placement magnify it by: divided by both, at every frame of a move.
+    ///
+    /// <para>Divided by the larger of the two axes, which makes the length an upper bound: the two
+    /// differ only while a resize settles, and an outline briefly a shade thin reads better than one
+    /// briefly heavy, which is what swamps a shape a few pixels across.</para>
+    /// </summary>
+    public ExpressionAnimation Unmagnified(float length, CompositionObject placed) =>
+        Unmagnifying($"Length / Max({LeastMagnification}, Max(camera.Scale.X * placed.Scale.X, camera.Scale.Y * placed.Scale.Y))", length, placed);
+
+    /// <summary>
+    /// As <see cref="Unmagnified"/>, for a move <paramref name="length"/> straight down the screen: a
+    /// <c>Vector3</c>, divided by the magnification down alone.
+    /// </summary>
+    public ExpressionAnimation UnmagnifiedDown(float length, CompositionObject placed) =>
+        Unmagnifying($"Vector3(0, Length / Max({LeastMagnification}, camera.Scale.Y * placed.Scale.Y), 0)", length, placed);
+
+    private ExpressionAnimation Unmagnifying(string expression, float length, CompositionObject placed)
+    {
+        var animation = _compositor.CreateExpressionAnimation(expression);
+        animation.SetScalarParameter("Length", length);
+        animation.SetReferenceParameter("camera", Properties);
+        animation.SetReferenceParameter("placed", placed);
+
+        return animation;
+    }
 
     /// <summary>The tracker's own scale, unheld.</summary>
     private static ExpressionScalar TrackerScale => new("tracker.Scale");
@@ -218,9 +250,8 @@ internal sealed class MapCamera
     /// </summary>
     public void SpringBack(Motion motion, Action done)
     {
-        var (first, second) = Motion.EaseControlPoints;
         var back = _compositor.CreateVector3KeyFrameAnimation();
-        back.InsertKeyFrame(1, Vector3.Zero, _compositor.CreateCubicBezierEasingFunction(first, second));
+        back.InsertKeyFrame(1, Vector3.Zero, _compositor.MotionEase());
         back.Duration = motion.Duration;
 
         var batch = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
@@ -268,8 +299,7 @@ internal sealed class MapCamera
         visual.StopAnimation(nameof(Visual.Scale));
         visual.StopAnimation(nameof(Visual.Offset));
 
-        visual.Scale = new Vector3((float)camera.ScaleX, (float)camera.ScaleY, 1);
-        visual.Offset = new Vector3((float)camera.X, (float)camera.Y, 0);
+        visual.Place(camera);
     }
 
     private ExpressionAnimation Expression(string expression, InteractionTracker tracker)

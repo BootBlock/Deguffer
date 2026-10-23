@@ -36,6 +36,18 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class ExploreLabels : Canvas
 {
+    /// <summary>A name's properties, which the expressions below read: where in its drawing it is anchored.</summary>
+    private const string Anchor = "Anchor";
+
+    /// <summary>How far left of its anchor the text starts, so a centred name is centred on it.</summary>
+    private const string Shift = "Shift";
+
+    /// <summary>The magnifications it fades between, across then down: see <see cref="ExploreLabel.Fade"/>.</summary>
+    private const string Fade = "Fade";
+
+    /// <summary>How far it has arrived, from 0 to 1.</summary>
+    private const string Arrival = "Arrival";
+
     /// <summary>
     /// Where a name's anchor is on the screen, as the composition of where its drawing lies in the
     /// picture, where the camera puts the picture, and where a folder opening carries it: each a
@@ -43,8 +55,8 @@ internal sealed class ExploreLabels : Canvas
     /// </summary>
     private const string PlacementExpression =
         "Vector3("
-        + "((((label.Anchor.X * placed.Scale.X) + placed.Offset.X) * camera.Scale.X) + camera.Offset.X) * carried.Scale.X + carried.Offset.X - label.Shift, "
-        + "((((label.Anchor.Y * placed.Scale.Y) + placed.Offset.Y) * camera.Scale.Y) + camera.Offset.Y) * carried.Scale.Y + carried.Offset.Y, "
+        + $"((((label.{Anchor}.X * placed.Scale.X) + placed.Offset.X) * camera.Scale.X) + camera.Offset.X) * carried.Scale.X + carried.Offset.X - label.{Shift}, "
+        + $"((((label.{Anchor}.Y * placed.Scale.Y) + placed.Offset.Y) * camera.Scale.Y) + camera.Offset.Y) * carried.Scale.Y + carried.Offset.Y, "
         + "0)";
 
     /// <summary>
@@ -53,9 +65,9 @@ internal sealed class ExploreLabels : Canvas
     /// </summary>
     private const string OpacityExpression =
         "Clamp(Min("
-        + "((placed.Scale.X * camera.Scale.X * carried.Scale.X) - label.Fade.X) / (label.Fade.Y - label.Fade.X), "
-        + "((placed.Scale.Y * camera.Scale.Y * carried.Scale.Y) - label.Fade.Z) / (label.Fade.W - label.Fade.Z)), 0, 1)"
-        + " * label.Arrival * carried.Opacity";
+        + $"((placed.Scale.X * camera.Scale.X * carried.Scale.X) - label.{Fade}.X) / (label.{Fade}.Y - label.{Fade}.X), "
+        + $"((placed.Scale.Y * camera.Scale.Y * carried.Scale.Y) - label.{Fade}.Z) / (label.{Fade}.W - label.{Fade}.Z)), 0, 1)"
+        + $" * label.{Arrival} * carried.Opacity";
 
     private readonly Compositor _compositor;
 
@@ -86,8 +98,6 @@ internal sealed class ExploreLabels : Canvas
     /// <summary>What a folder opening carries the picture by: the visual over the drawings the names follow.</summary>
     private Visual _carried;
 
-    private CompositionEasingFunction? _ease;
-
     /// <summary>
     /// Names that move with <paramref name="camera"/>, wherever <see cref="Place"/> puts them in the
     /// picture, and with <paramref name="carried"/> as a folder opening carries the picture.
@@ -112,11 +122,7 @@ internal sealed class ExploreLabels : Canvas
     /// Put the names where <paramref name="placed"/> says one device-independent pixel of the drawing
     /// they name lies in the picture.
     /// </summary>
-    public void Place(MapTransform placed)
-    {
-        _placed.InsertVector3(nameof(Visual.Scale), new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1));
-        _placed.InsertVector3(nameof(Visual.Offset), new Vector3((float)placed.X, (float)placed.Y, 0));
-    }
+    public void Place(MapTransform placed) => _placed.Place(placed);
 
     /// <summary>
     /// Follow <paramref name="carried"/> as a folder opening carries the picture, for the set of
@@ -190,8 +196,7 @@ internal sealed class ExploreLabels : Canvas
             text.Text = caption(label);
             text.MaxWidth = label.Width / scale;
 
-            ((SolidColorBrush)text.Foreground).Color = Color.FromArgb(
-                255, label.Colour.Red, label.Colour.Green, label.Colour.Blue);
+            ((SolidColorBrush)text.Foreground).Color = label.Colour.ToColor();
 
             ((RotateTransform)text.RenderTransform).Angle = label.Rotation;
 
@@ -204,9 +209,9 @@ internal sealed class ExploreLabels : Canvas
             var (across, down) = label.Fade((float)(measured.Width * scale), (float)(measured.Height * scale));
             var (anchorX, anchorY) = label.Anchor;
 
-            name.Properties.InsertVector2("Anchor", new Vector2((float)(anchorX / scale), (float)(anchorY / scale)));
-            name.Properties.InsertScalar("Shift", label.Centred ? (float)(measured.Width / 2) : 0);
-            name.Properties.InsertVector4("Fade", new Vector4(across.Gone, across.Whole, down.Gone, down.Whole));
+            name.Properties.InsertVector2(Anchor, new Vector2((float)(anchorX / scale), (float)(anchorY / scale)));
+            name.Properties.InsertScalar(Shift, label.Centred ? (float)(measured.Width / 2) : 0);
+            name.Properties.InsertVector4(Fade, new Vector4(across.Gone, across.Whole, down.Gone, down.Whole));
 
             if (!sameTree || _named.Contains(label.Node))
             {
@@ -218,9 +223,7 @@ internal sealed class ExploreLabels : Canvas
             }
             else
             {
-                name.Enter(arrival, _ease ??= _compositor.CreateCubicBezierEasingFunction(
-                    Motion.EaseControlPoints.First,
-                    Motion.EaseControlPoints.Second));
+                name.Enter(arrival, _compositor.MotionEase());
             }
 
             name.Node = label.Node;
@@ -291,10 +294,10 @@ internal sealed class ExploreLabels : Canvas
             AutomationProperties.SetAccessibilityView(Text, AccessibilityView.Raw);
 
             Properties = compositor.CreatePropertySet();
-            Properties.InsertVector2("Anchor", Vector2.Zero);
-            Properties.InsertScalar("Shift", 0);
-            Properties.InsertVector4("Fade", new Vector4(0, 1, 0, 1));
-            Properties.InsertScalar("Arrival", 1);
+            Properties.InsertVector2(Anchor, Vector2.Zero);
+            Properties.InsertScalar(Shift, 0);
+            Properties.InsertVector4(Fade, new Vector4(0, 1, 0, 1));
+            Properties.InsertScalar(Arrival, 1);
 
             _placement = compositor.CreateExpressionAnimation(PlacementExpression);
             _opacity = compositor.CreateExpressionAnimation(OpacityExpression);
@@ -338,8 +341,8 @@ internal sealed class ExploreLabels : Canvas
         /// <summary>Be there at once.</summary>
         public void Arrive()
         {
-            Properties.StopAnimation("Arrival");
-            Properties.InsertScalar("Arrival", 1);
+            Properties.StopAnimation(Arrival);
+            Properties.InsertScalar(Arrival, 1);
         }
 
         /// <summary>Fade in, as <paramref name="played"/> says, along <paramref name="ease"/>.</summary>
@@ -356,7 +359,7 @@ internal sealed class ExploreLabels : Canvas
             fade.InsertKeyFrame(1, 1, ease);
             fade.Duration = played.Duration;
 
-            Properties.StartAnimation("Arrival", fade);
+            Properties.StartAnimation(Arrival, fade);
         }
     }
 }
