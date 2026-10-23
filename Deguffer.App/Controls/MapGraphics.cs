@@ -114,14 +114,34 @@ internal sealed class MapGraphics
             DirectXAlphaMode.Premultiplied);
 
     /// <summary>
-    /// A surface for one tile of a moving map (see <see cref="MapTiling"/>), written whole each time it
-    /// is used. A plain surface rather than a virtual one, because a tile is never written in part.
+    /// A surface for one tile of a moving map (see <see cref="MapTiling"/>), <paramref name="width"/> by
+    /// <paramref name="height"/> and written whole each time it is used: <paramref name="spare"/>, resized
+    /// to the tile, where there is one, rather than a surface made again (G5). A plain surface rather than
+    /// a virtual one, because a tile is never written in part.
+    ///
+    /// <para>The tile's own size, never <see cref="MapTiling.Size"/> square. The first write into a plain
+    /// surface has to cover all of it, and a tile in the last column or row of the picture is smaller:
+    /// written into a whole square, it was refused as an invalid argument.</para>
     /// </summary>
-    public CompositionDrawingSurface CreateTileSurface() =>
-        _graphics.CreateDrawingSurface2(
-            new SizeInt32(MapTiling.Size, MapTiling.Size),
-            DirectXPixelFormat.B8G8R8A8UIntNormalized,
-            DirectXAlphaMode.Premultiplied);
+    public CompositionDrawingSurface TileSurface(CompositionDrawingSurface? spare, int width, int height)
+    {
+        var size = new SizeInt32(width, height);
+
+        if (spare is null)
+        {
+            return _graphics.CreateDrawingSurface2(
+                size,
+                DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                DirectXAlphaMode.Premultiplied);
+        }
+
+        if (spare.SizeInt32 != size)
+        {
+            spare.Resize(size);
+        }
+
+        return spare;
+    }
 
     /// <summary>
     /// Let go of everything written into <paramref name="surface"/>, which shows nothing until it is
