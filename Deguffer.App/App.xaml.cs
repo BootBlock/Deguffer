@@ -131,6 +131,13 @@ public partial class App : Application
     internal static void RememberWindowPlacement() => _shell?.RememberPlacement();
 
     /// <summary>
+    /// Get the sizes measured so far onto disk now. A planning pass writes them as it ends, and one
+    /// still under way when this process goes does not end in it: the window closing mid-preview, or
+    /// <see cref="ElevatedRelaunch"/>, whose replacement opens on them as it starts.
+    /// </summary>
+    internal static void RememberScanEstimates() => ScanEstimateCache.For(UserEnvironment.Current).Save();
+
+    /// <summary>
     /// This instance has been replaced and is about to exit, so the windows closing with it are the
     /// application's going rather than the reader closing them. See
     /// <see cref="Deguffer.App.MainWindow.Leave"/>.
@@ -153,7 +160,11 @@ public partial class App : Application
         // Closing the only window ends the session rather than leaving the process resident. This
         // is explicit because a dialog dismissed at the wrong moment has been enough to leave a
         // WinUI message loop running with no UI attached to it.
-        _shell.Closed += (_, _) => Exit();
+        _shell.Closed += (_, _) =>
+        {
+            RememberScanEstimates();
+            Exit();
+        };
 
         _shell.Activate();
 

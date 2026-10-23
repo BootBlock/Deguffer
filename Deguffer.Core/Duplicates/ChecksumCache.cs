@@ -171,20 +171,9 @@ public sealed class ChecksumCache
             }
         }
 
-        var written = _file + ".tmp";
-
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(_file)!));
-
-            using (var stream = new FileStream(LongPath.Extended(written), FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                ChecksumStoreFormat.Write(stream, kept);
-            }
-
-            // Written beside and moved over, so an interrupted save leaves the last whole store, never
-            // a torn one.
-            File.Move(LongPath.Extended(written), LongPath.Extended(_file), overwrite: true);
+            StoreFile.Replace(_file, stream => ChecksumStoreFormat.Write(stream, kept));
 
             return true;
         }
@@ -193,7 +182,6 @@ public sealed class ChecksumCache
             // A full disk, a folder refused, or another copy of Deguffer writing the store. Kept as
             // changed, so the next search tries again.
             Volatile.Write(ref _changed, 1);
-            TryDelete(written);
 
             return false;
         }
@@ -219,18 +207,6 @@ public sealed class ChecksumCache
         {
             // Not written yet, refused, or cut short as it was read: nothing remembered.
             return new();
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(LongPath.Extended(path));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Left for the next save to write over: it is this store's own name, never read.
         }
     }
 }

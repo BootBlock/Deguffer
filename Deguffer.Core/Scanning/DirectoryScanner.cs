@@ -53,10 +53,11 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     /// <summary>
     /// A scanner of the machine <paramref name="environment"/> describes: its volumes' tables, and
-    /// sizes remembered where it keeps its application data.
+    /// sizes remembered where it keeps its application data, in the one cache of that machine
+    /// (<see cref="ScanEstimateCache.For"/>).
     /// </summary>
     public static DirectoryScanner CreateDefault(IUserEnvironment environment, ScanTuner? tuning = null) =>
-        new(environment.VolumeTables, new ScanEstimateCache(environment), tuning: tuning);
+        new(environment.VolumeTables, ScanEstimateCache.For(environment), tuning: tuning);
 
     /// <summary>
     /// The scanner a provider or a planner given only <paramref name="environment"/> measures with.
@@ -75,6 +76,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        using var remembering = HoldEstimates();
 
         // §5.5's "re-opening the tool is instant": show last run's figure straight away, then
         // correct it. Only ever reported through progress — the returned result is always freshly
@@ -101,6 +104,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        using var remembering = HoldEstimates();
+
         var asked = new ScanRequest(path);
         var keeps = AgedScan.Keeps(age);
         var readings = (await MeasureFreshAsync([asked], keeps, progress: null, ct).ConfigureAwait(false))[0];
@@ -121,6 +126,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
         CancellationToken ct = default)
     {
         ThrowIfAnyPathIsBlank(asked);
+
+        using var remembering = HoldEstimates();
 
         var results = await MeasureFreshAsync(asked, [keep], progress: null, ct).ConfigureAwait(false);
 
@@ -159,6 +166,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     {
         ThrowIfAnyPathIsBlank(asked);
 
+        using var remembering = HoldEstimates();
+
         var results = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
             .MeasureManyAsync(asked, MinimumAge.Off, ct)
@@ -171,6 +180,12 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         return results;
     }
+
+    /// <summary>
+    /// Held for the length of each measurement call, so the figures one call remembers are written
+    /// once when it ends, or with the pass's when a pass holds the cache. See <see cref="ScanEstimateCache"/>.
+    /// </summary>
+    private PassHold HoldEstimates() => _estimates?.Hold() ?? PassHold.Nothing;
 
     private static void ThrowIfAnyPathIsBlank(IReadOnlyList<ScanRequest> asked)
     {
@@ -485,8 +500,25 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// Keep the volume indexes for the pass. Remembered estimates are not held, because they are
-    /// meant to outlast it, as <see cref="Invalidate"/> says.
+    /// Keep the volume indexes for the pass, and the remembered estimates' changes in memory until it
+    /// ends, when they are written once. The estimates themselves outlast the pass, as
+    /// <see cref="Invalidate"/> says: only their writing waits for it.
     /// </summary>
-    public PassHold Hold() => _volumes.Hold();
+    public PassHold Hold()
+    {
+        var volumes = _volumes.Hold();
+        var estimates = HoldEstimates();
+
+        return new PassHold(() =>
+        {
+            try
+            {
+                volumes.Dispose();
+            }
+            finally
+            {
+                estimates.Dispose();
+            }
+        });
+    }
 }

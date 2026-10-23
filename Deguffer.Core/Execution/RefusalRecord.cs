@@ -225,12 +225,7 @@ public sealed class RefusalRecord
     {
         try
         {
-            if (Path.GetDirectoryName(_file) is { } directory)
-            {
-                Directory.CreateDirectory(LongPath.Extended(directory));
-            }
-
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(_entries, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(_entries, SerializerOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -33,15 +33,13 @@ public sealed class SourceRootStore
 
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
-    private readonly string _directory;
     private readonly string _file;
 
     public SourceRootStore(IUserEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
-        _directory = Path.Combine(environment.LocalAppData, "Deguffer");
-        _file = Path.Combine(_directory, "source-roots.json");
+        _file = Path.Combine(environment.LocalAppData, "Deguffer", "source-roots.json");
     }
 
     /// <summary>
@@ -91,9 +89,8 @@ public sealed class SourceRootStore
 
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(_directory));
-            File.WriteAllText(
-                LongPath.Extended(_file),
+            StoreFile.Replace(
+                _file,
                 JsonSerializer.Serialize(
                     stored.Select(root => new StoredRoot(root.Path, root.RemoteStorageApproved)),
                     SerializerOptions));
