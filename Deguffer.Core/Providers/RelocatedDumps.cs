@@ -5,7 +5,10 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>What the places this machine's settings move crash dumps to turned out to hold.</summary>
 /// <param name="Targets">Each dump found there, by name. Never a folder.</param>
-/// <param name="Protected">What §5.6 asserts survived: each folder a dump was found in, and each link met.</param>
+/// <param name="Protected">
+/// What §5.6 asserts survived: each moved folder that was read, the folder holding each moved dump
+/// file, each link met, and each place Windows would not describe.
+/// </param>
 /// <param name="Notes">One sentence for each moved place, saying where it is and what was done there.</param>
 /// <param name="Unreachable">Paths Windows would not describe, so nothing here says what is in them.</param>
 /// <param name="LeftUnexamined">

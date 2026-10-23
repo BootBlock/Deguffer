@@ -25,9 +25,14 @@ namespace Deguffer.Core.Providers;
 /// as survivors on top of that, so a run produces evidence that a rule reaching in here did not
 /// reach <c>WinSxS</c> or <c>Windows\Installer</c>.</para>
 ///
+/// <para><b>A place this machine's settings move dumps to is the one thing listed.</b> It can be
+/// any folder, so it is never a target: only the dumps directly inside it are, each by name and
+/// only where its header is a dump's. See <see cref="RelocatedDumps"/>.</para>
+///
 /// <para><b>Most of this needs administrator rights, and the plan says so rather than finding out
-/// during execution.</b> Only <c>%LOCALAPPDATA%\CrashDumps</c> is removable by the signed-in user.
-/// A step under <c>C:\Windows</c> or <c>%PROGRAMDATA%</c> carries
+/// during execution.</b> Only the folders under <c>%LOCALAPPDATA%</c>, and application dumps a
+/// setting moves elsewhere, are removable by the signed-in user. A step under <c>C:\Windows</c> or
+/// <c>%PROGRAMDATA%</c>, or a kernel dump a setting moves elsewhere, carries
 /// <see cref="CleanupStep.RequiresElevation"/>, which is a different claim from
 /// <see cref="FallbackReason.NotElevated"/>: that one says a size was walked for rather than read,
 /// and this one says the removal cannot happen. Silently failing at execution time and quietly
@@ -50,13 +55,13 @@ namespace Deguffer.Core.Providers;
 /// files sit among dead ones and look identical; here nothing is live except a dump still being
 /// written, and that one is held open and skipped. So each step carries the newest write inside it,
 /// Tier 3 keeps it unselected and confirmed before it runs, and the decision stays theirs. A
-/// filter would take it away and would also have to change the grain from one directory to one
-/// dump, which §7's age column is not asking for.</para>
+/// filter would take it away, and §7's age column is not asking for one.</para>
 /// </summary>
 public sealed class CrashDumpProvider : CleanupProviderBase
 {
     private readonly IReadOnlyList<DeclaredRoot> _roots;
     private readonly ISystemDirectories _system;
+    private readonly PassMemo<RelocatedDumpScan> _relocated = new();
 
     public CrashDumpProvider(
         IUserEnvironment? environment = null,
@@ -212,18 +217,25 @@ public sealed class CrashDumpProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// The places this machine's settings move dumps to, examined afresh. Not memoised: the settings
-    /// and the dumps both change while the app is open, and each read is a handful of registry values
-    /// and the top level of each moved folder.
+    /// The places this machine's settings move dumps to, examined once per planning pass (G4).
+    /// Presence, planning and Explore's refusals all ask the same question of the same settings, and
+    /// each look opens every dump it meets to read its header.
     /// </summary>
-    private RelocatedDumpScan ExamineRelocated(CancellationToken ct) =>
+    private RelocatedDumpScan ExamineRelocated(CancellationToken ct) => _relocated.Get(() =>
         RelocatedDumps.Examine(
             CrashDumpSettings.Read(Environment),
             [.. DeclaredPaths().Select(declared => declared.Path)],
             Environment,
             _system,
             Volumes,
-            ct);
+            ct));
+
+    public override void InvalidateCaches()
+    {
+        _relocated.Forget();
+        Volumes.Invalidate();
+        base.InvalidateCaches();
+    }
 
     /// <summary>
     /// The eight locations, and the §9 exclusions that must be shown to survive a rule reaching into

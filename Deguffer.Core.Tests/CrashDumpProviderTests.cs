@@ -178,6 +178,7 @@ public sealed class CrashDumpProviderTests : IDisposable
     {
         var minidump = Populate(Path.Combine(Windows, "Minidump"));
         Populate(Path.Combine(WerFolder, "ReportQueue"));
+        var userQueue = Populate(Path.Combine(UserWerFolder, "ReportQueue"));
 
         var winSxS = Populate(Path.Combine(Windows, "WinSxS"), name: "component.manifest");
         var installer = Populate(Path.Combine(Windows, "Installer"), name: "patch.msp");
@@ -194,12 +195,13 @@ public sealed class CrashDumpProviderTests : IDisposable
         // directory the table does not mention is never reached at all.
         var unnamed = Populate(Path.Combine(Windows, "SoftwareDistribution"), name: "download.cab");
         var werTemp = Populate(Path.Combine(WerFolder, "Temp"), name: "partial.wer");
+        var userWerTemp = Populate(Path.Combine(UserWerFolder, "Temp"), name: "partial.wer");
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
         string[] mustSurvive =
-            [Windows, ProgramData, winSxS, installer, packageCache, payloads, unnamed, werTemp];
+            [Windows, ProgramData, winSxS, installer, packageCache, payloads, unnamed, werTemp, UserWerFolder, userWerTemp];
 
         foreach (var spared in mustSurvive)
         {
@@ -219,6 +221,7 @@ public sealed class CrashDumpProviderTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.False(Directory.Exists(minidump));
+        Assert.False(Directory.Exists(userQueue));
 
         foreach (var spared in mustSurvive)
         {

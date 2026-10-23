@@ -10,9 +10,9 @@ namespace Deguffer.Core.Tests;
 /// The crash dump row against a machine whose settings send dumps somewhere other than the defaults.
 ///
 /// <para>A moved folder can be any folder on the machine, so the negative is the assertion that
-/// matters in every test here: the folder, its other files, a file named like a dump that is not one,
-/// and anything below it are all still there after a run. Each setting is moved through the registry
-/// seam, one test each, because each is read from its own key.</para>
+/// matters in every test here that runs a plan: the folder, its other files, a file named like a dump
+/// that is not one, and anything below it are all still there afterwards. Each setting is moved
+/// through the registry seam, one test each, because each is read from its own key.</para>
 /// </summary>
 public sealed class RelocatedCrashDumpTests : IDisposable
 {
