@@ -126,7 +126,7 @@ public sealed class CleanupProviderBaseTests : IDisposable
         var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
         Directory.CreateDirectory(Path.Combine(cache, "_cacache", "content-v2"));
         File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
-        var archive = Path.Combine(cache, "archive.pst");
+        var archive = Path.Combine(cache, "_cacache", "archive.pst");
         File.WriteAllBytes(archive, new byte[4096]);
 
         _environment.WithExecutable("npm");

@@ -67,7 +67,7 @@ public sealed class NpmCacheProviderTests : IDisposable
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
         Assert.Equal(Npm, command.FileName);
-        Assert.Equal([relocated], command.MeasuredPaths);
+        Assert.Equal([Path.Combine(relocated, "_cacache")], command.MeasuredPaths);
         Assert.True(command.EstimatedBytes >= 2048);
     }
 
@@ -77,7 +77,84 @@ public sealed class NpmCacheProviderTests : IDisposable
         var plan = await PlanWithPopulatedCache(cacheQueryExitCode: 1);
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
-        Assert.Equal([Path.Combine(_environment.LocalAppData, "npm-cache")], command.MeasuredPaths);
+        Assert.Equal([Path.Combine(_environment.LocalAppData, "npm-cache", "_cacache")], command.MeasuredPaths);
+    }
+
+    /// <summary>
+    /// <c>npm cache clean</c> removes <c>_cacache</c> and leaves <c>_npx</c> and <c>_logs</c> beside
+    /// it, so the row offers what the command frees rather than what the folder holds.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresOnlyThePackageCacheNpmsCleanRemoves()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+        WriteFile(8192, cache, "_npx", "0123abcd", "node_modules", "tool.js");
+        WriteFile(1024, cache, "_logs", "debug-0.log");
+
+        var plan = await PlanWithPopulatedCache();
+        var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+
+        Assert.Equal([Path.Combine(cache, "_cacache")], command.MeasuredPaths);
+        Assert.Equal(4096, command.EstimatedBytes);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(cache, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ReadsAsAlreadyClearWhenTheCacheHoldsOnlyWhatNpmsCleanLeaves()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+        WriteFile(8192, cache, "_npx", "0123abcd", "node_modules", "tool.js");
+        WriteFile(1024, cache, "_logs", "debug-0.log");
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", cache);
+        var plan = await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.Equal(0, plan.EstimatedBytes);
+    }
+
+    /// <summary>
+    /// §5.6: run as npm runs it, the clean takes <c>_cacache</c>, and the verification proves the
+    /// cache folder and the packages npx ran outlived it. The logs are not protected, because npm
+    /// prunes them itself on every run, so the test checks them directly.
+    /// </summary>
+    [Fact]
+    public async Task VerifiesWhatNpmsCleanLeavesBesideThePackageCacheSurvived()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+        var npx = Path.Combine(cache, "_npx");
+        var npxPackage = WriteFile(8192, cache, "_npx", "0123abcd", "node_modules", "tool.js");
+        var log = WriteFile(1024, cache, "_logs", "debug-0.log");
+        Directory.CreateDirectory(Path.Combine(cache, "_cacache", "content-v2"));
+        File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner()
+            .Responding(Npm, "config get cache", cache)
+            .Replying(Npm, arguments =>
+            {
+                if (arguments != "cache clean --force")
+                {
+                    return null;
+                }
+
+                Directory.Delete(Path.Combine(cache, "_cacache"), recursive: true);
+                return new CommandOutcome(0, string.Empty, string.Empty);
+            });
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        var plan = await provider.PlanAsync();
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(cache, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(npx, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+        var verification = await provider.VerifyAsync(plan);
+
+        Assert.Equal(4096, result.BytesReclaimed);
+        Assert.True(verification.Passed);
+        Assert.True(File.Exists(npxPackage));
+        Assert.True(File.Exists(log));
     }
 
     [Fact]
@@ -163,17 +240,17 @@ public sealed class NpmCacheProviderTests : IDisposable
         // Both paths are deliberately away from DefaultCacheDirectory, so the first assertion
         // proves npm was asked rather than passing on the fallback by coincidence.
         var first = _temp.CreateDirectory("configured", "npm-cache");
-        File.WriteAllBytes(Path.Combine(first, "payload.bin"), new byte[4096]);
+        _temp.CreateFile(4096, "configured", "npm-cache", "_cacache", "payload.bin");
 
         var moved = _temp.CreateDirectory("elsewhere", "npm-cache");
-        File.WriteAllBytes(Path.Combine(moved, "payload.bin"), new byte[2048]);
+        _temp.CreateFile(2048, "elsewhere", "npm-cache", "_cacache", "payload.bin");
 
         _environment.WithExecutable("npm");
         var runner = new FakeProcessRunner().Responding(Npm, "config get cache", first);
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         var before = await provider.PlanAsync();
-        Assert.Contains(before.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
+        Assert.Contains(before.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(Path.Combine(first, "_cacache")));
 
         // npm's cache config moved between scans; the planner invalidates before replanning.
         runner.Responding(Npm, "config get cache", moved);
@@ -181,8 +258,8 @@ public sealed class NpmCacheProviderTests : IDisposable
 
         var after = await provider.PlanAsync();
 
-        Assert.Contains(after.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(moved));
-        Assert.DoesNotContain(after.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(first));
+        Assert.Contains(after.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(Path.Combine(moved, "_cacache")));
+        Assert.DoesNotContain(after.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(Path.Combine(first, "_cacache")));
     }
 
     [Fact]
@@ -211,6 +288,14 @@ public sealed class NpmCacheProviderTests : IDisposable
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+    }
+
+    private static string WriteFile(int bytes, string folder, params string[] segments)
+    {
+        var path = Path.Combine([folder, .. segments]);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, new byte[bytes]);
+        return path;
     }
 
     private async Task<CleanupPlan> PlanWithPopulatedCache(

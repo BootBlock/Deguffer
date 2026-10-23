@@ -8,11 +8,21 @@ namespace Deguffer.Core.Providers;
 /// The npm content-addressable cache (~2.4 GB on the audited machine).
 ///
 /// §5.1: npm has an official eviction command, so the plan calls it rather than deleting the
-/// cache directory. The directory is measured only to report a size and to attribute what the
-/// command reclaimed.
+/// cache directory. What the command removes is measured only to report a size and to attribute
+/// what it reclaimed.
+///
+/// <para><c>npm cache clean</c> removes <c>_cacache</c> inside the cache directory and nothing else.
+/// The same directory holds <c>_npx</c>, the packages <c>npx</c> ran, <c>_logs</c> and more, and
+/// the command leaves them all, so measuring the whole directory would offer bytes no run frees.</para>
 /// </summary>
 public sealed class NpmCacheProvider : CleanupProviderBase
 {
+    /// <summary>The folder in the cache directory that <c>npm cache clean</c> removes.</summary>
+    private const string ContentCacheName = "_cacache";
+
+    /// <summary>Where npx keeps the packages it ran. No npm command evicts it.</summary>
+    private const string NpxCacheName = "_npx";
+
     private readonly PassMemo<Task<string>> _resolvedCacheDirectory = new();
 
     public NpmCacheProvider(
@@ -88,9 +98,9 @@ public sealed class NpmCacheProvider : CleanupProviderBase
         Task.FromResult(Environment.FindExecutable("npm") is not null);
 
     /// <summary>
-    /// The cache <c>npm cache clean</c> is sent to: the one npm reports, and the documented default
-    /// as well, because configuration can move the cache back to it after a duplicate search has
-    /// asked.
+    /// What <c>npm cache clean</c> removes: <c>_cacache</c> in the cache npm reports, and in the
+    /// documented default as well, because configuration can move the cache back to it after a
+    /// duplicate search has asked.
     /// </summary>
     public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
     {
@@ -98,12 +108,12 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         if (npm is null)
         {
-            return [CleanedPlace.Whole(DefaultCacheDirectory)];
+            return [CleanedPlace.Whole(ContentCacheIn(DefaultCacheDirectory))];
         }
 
         var reported = await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false);
 
-        return [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(reported)];
+        return [CleanedPlace.Whole(ContentCacheIn(DefaultCacheDirectory)), CleanedPlace.Whole(ContentCacheIn(reported))];
     }
 
     /// <summary>
@@ -136,17 +146,27 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             return nothing;
         }
 
-        var measured = await MeasureAllAsync([cacheDirectory], ct).ConfigureAwait(false);
+        var contentCache = ContentCacheIn(cacheDirectory);
+
+        if (NothingToPlanFor(
+                contentCache,
+                $"npm's cache holds nothing its clean command removes ({contentCache} does not exist).") is { } clear)
+        {
+            return clear;
+        }
+
+        var measured = await MeasureAllAsync([contentCache], ct).ConfigureAwait(false);
 
         steps.Add(new RunCommandStep(npm, "cache clean --force", "Clear the npm cache using npm's own command")
         {
             Estimated = measured.Total,
-            MeasuredPaths = [cacheDirectory],
+            MeasuredPaths = [contentCache],
         });
 
         notes.Add(new PlanNote(
             PlanNoteSeverity.Information,
-            $"npm reports its cache directory as {cacheDirectory}."));
+            $"npm reports its cache directory as {cacheDirectory}. Its clean command removes {ContentCacheName} "
+            + "there, and leaves everything else, such as the packages npx ran and npm's logs."));
 
         if (measured.Note is { } scanNote)
         {
@@ -165,7 +185,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(),
+            ProtectedPaths = BuildProtectedPaths(cacheDirectory),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -173,11 +193,16 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// §5.6. <c>.npmrc</c> holds registry auth tokens, and <c>%APPDATA%\npm</c> holds globally
-    /// installed tools — neither is cache, and both sit close enough to be worth proving.
+    /// installed tools — neither is cache, and both sit close enough to be worth proving. The cache
+    /// directory and its <c>_npx</c> sit beside what the command removes, and both must outlive it.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
+    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string cacheDirectory) => Protect(
         (Path.Combine(Environment.UserProfile, ".npmrc"), "User npm configuration, which may hold registry auth tokens."),
-        (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."));
+        (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."),
+        (cacheDirectory, "npm's cache directory must survive — only the package cache within it is cleared."),
+        (Path.Combine(cacheDirectory, NpxCacheName), "Packages npx ran, which npm's clean command leaves."));
+
+    private static string ContentCacheIn(string cacheDirectory) => Path.Combine(cacheDirectory, ContentCacheName);
 
     private Task<string> ResolveCacheDirectoryAsync(string npm, CancellationToken ct) =>
         _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(npm, ct));
