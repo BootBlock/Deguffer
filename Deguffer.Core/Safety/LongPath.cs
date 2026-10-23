@@ -393,7 +393,8 @@ public static partial class LongPath
         206 or    // ERROR_FILENAME_EXCED_RANGE
         1231;     // ERROR_NETWORK_UNREACHABLE
 
-    private const int ErrorDirectory = 267;
+    /// <summary><c>ERROR_DIRECTORY</c>: what an open of a file named with a trailing separator fails with.</summary>
+    internal const int ErrorDirectory = 267;
 
     /// <summary>
     /// Whether a handle that would not open on a path, failing with <paramref name="win32Error"/>,
@@ -402,7 +403,8 @@ public static partial class LongPath
     ///
     /// <para><b>One error more than the attribute read's set.</b> A file named with a trailing
     /// separator is absent to the probe, which settles it before reading, and an open of it fails
-    /// with <c>ERROR_DIRECTORY</c>. Read as a refusal, that would be the probe's answer reversed.
+    /// with <c>ERROR_DIRECTORY</c>, every time once <see cref="FileInformation.AsNamed"/> has seen to
+    /// it. Read as a refusal, that would be the probe's answer reversed.
     /// </para>
     /// </summary>
     internal static bool OpenSaysNothingIsThere(int win32Error) =>
@@ -461,7 +463,7 @@ public static partial class LongPath
         return PathPresence.Present;
     }
 
-    private static bool EndsWithSeparator(string path) =>
+    internal static bool EndsWithSeparator(string path) =>
         path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
 
     /// <summary>The kind of entry a probe asks about.</summary>
