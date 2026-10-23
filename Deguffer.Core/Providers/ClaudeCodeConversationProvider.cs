@@ -171,7 +171,9 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
             return nothing;
         }
 
-        var survey = Look(ct)!;
+        // On a thread of its own, as the declaration reads it (DeclaredRoots): the look reads every
+        // conversation it might offer, and each read holds the thread that makes it.
+        var survey = (await WorkerThreads.Shared.RunAsync(() => Look(ct), ct).ConfigureAwait(false))!;
         var found = survey.Conversations;
 
         // §5.3's floor travels on the plan as well as into the preview: a session resumed between the two

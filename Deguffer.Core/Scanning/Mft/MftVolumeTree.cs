@@ -13,6 +13,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <para>Filled from several threads at once, one record each. Every array slot belongs to one
 /// record, so no two threads write the same one. The mail-store names are the one thing records
 /// share, and they are kept in a structure safe to share.</para>
+///
+/// <para>A record's flags are one byte, written in one store by <see cref="Set"/>. A
+/// read-modify-write of that byte would be safe only while one thread owns the record, and a
+/// single store needs no such argument.</para>
 /// </summary>
 public sealed class MftVolumeTree(int count)
 {
@@ -24,21 +28,23 @@ public sealed class MftVolumeTree(int count)
 
     public long[] Logical { get; } = new long[count];
 
-    public bool[] IsDirectory { get; } = new bool[count];
+    private readonly MftRecordFlags[] _flags = new MftRecordFlags[count];
+
+    public bool IsDirectory(long number) => Has(number, MftRecordFlags.Directory);
 
     /// <summary>
-    /// Records whose size the table did not establish. One of these anywhere in a subtree makes
-    /// that subtree unmeasurable — the alternative is a total that is short by an unknown amount
-    /// and indistinguishable from a correct one.
+    /// Whether the table did not establish this record's size. One of these anywhere in a subtree
+    /// makes that subtree unmeasurable — the alternative is a total that is short by an unknown
+    /// amount and indistinguishable from a correct one.
     /// </summary>
-    public bool[] SizeUnknown { get; } = new bool[count];
+    public bool SizeUnknown(long number) => Has(number, MftRecordFlags.SizeUnknown);
 
     /// <summary>
-    /// Entries that are links to somewhere else. The walk never enters one, so neither may
+    /// Whether this entry is a link to somewhere else. The walk never enters one, so neither may
     /// anything derived from this tree — and a link's own subtree here is empty, which would
     /// otherwise total a populated directory as clear.
     /// </summary>
-    public bool[] IsReparsePoint { get; } = new bool[count];
+    public bool IsReparsePoint(long number) => Has(number, MftRecordFlags.ReparsePoint);
 
     /// <summary>
     /// The newer of each record's creation and last-write times, as a FILETIME, for
@@ -73,14 +79,14 @@ public sealed class MftVolumeTree(int count)
     public string?[] Names { get; } = new string?[count];
 
     /// <summary>
-    /// The records that are Outlook mail stores, which no total may include (§9). A flag per record
-    /// rather than a lookup, because a subtree total asks it of every file it sums.
+    /// Whether this record is an Outlook mail store, which no total may include (§9). A flag per
+    /// record rather than a lookup, because a subtree total asks it of every file it sums.
     ///
     /// <para>Decided while the table is read, because it is the only moment a file's name is in
     /// hand: <see cref="Names"/> keeps no file names, so nothing afterwards could tell a store from
     /// any other file. See <see cref="MailStore"/>.</para>
     /// </summary>
-    public bool[] IsMailStore { get; } = new bool[count];
+    public bool IsMailStore(long number) => Has(number, MftRecordFlags.MailStore);
 
     /// <summary>
     /// The name of each mail store, and of no other file. A store's path has to be rebuilt so the
@@ -90,11 +96,14 @@ public sealed class MftVolumeTree(int count)
     public IReadOnlyDictionary<uint, string> MailStoreNames => _mailStoreNames;
 
     /// <summary>
-    /// Which records the table actually described. Records not present are neither summed nor
-    /// linked: without this a free or sparse region reads as a forest of record-zero children,
+    /// Whether the table actually described this record. Records not present are neither summed
+    /// nor linked: without this a free or sparse region reads as a forest of record-zero children,
     /// which would attach the whole volume to the root a second time.
+    ///
+    /// <para>Read only while the child links are built, and kept after for nothing: as a bit of a
+    /// byte every record has anyway, it costs nothing to keep.</para>
     /// </summary>
-    public bool[] Present { get; } = new bool[count];
+    public bool IsPresent(long number) => Has(number, MftRecordFlags.Present);
 
     /// <param name="name">The record's name, copied only where it is kept.</param>
     public void Set(long number, in MftRecord record, ReadOnlySpan<char> name)
@@ -102,11 +111,12 @@ public sealed class MftVolumeTree(int count)
         Parent[number] = record.ParentRecordNumber;
         Allocated[number] = record.Size?.Allocated ?? 0;
         Logical[number] = record.Size?.Logical ?? 0;
-        SizeUnknown[number] = record.Size is null;
-        IsDirectory[number] = record.IsDirectory;
-        IsReparsePoint[number] = record.IsReparsePoint;
         Newest[number] = MinimumAge.NewestFileTimeOf(record.CreatedFileTime, record.LastWrittenFileTime);
-        Present[number] = true;
+
+        var flags = MftRecordFlags.Present
+            | (record.Size is null ? MftRecordFlags.SizeUnknown : MftRecordFlags.None)
+            | (record.IsDirectory ? MftRecordFlags.Directory : MftRecordFlags.None)
+            | (record.IsReparsePoint ? MftRecordFlags.ReparsePoint : MftRecordFlags.None);
 
         if (record.IsDirectory)
         {
@@ -114,16 +124,20 @@ public sealed class MftVolumeTree(int count)
         }
         else if (MailStore.Is(name))
         {
-            IsMailStore[number] = true;
+            flags |= MftRecordFlags.MailStore;
             _mailStoreNames[(uint)number] = name.ToString();
         }
+
+        _flags[number] = flags;
     }
 
     /// <summary>
     /// Whether this record should become a child of its parent. The root is its own parent, so
     /// linking it would make the tree cyclic and a walk from the root would never terminate.
     /// </summary>
-    public bool IsLinkable(int number) => Present[number] && number != MftRecord.RootRecordNumber;
+    public bool IsLinkable(int number) => IsPresent(number) && number != MftRecord.RootRecordNumber;
+
+    private bool Has(long number, MftRecordFlags flag) => (_flags[number] & flag) != 0;
 }
 
 /// <summary>

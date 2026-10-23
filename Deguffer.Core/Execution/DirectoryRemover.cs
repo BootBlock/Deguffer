@@ -202,13 +202,7 @@ public static class DirectoryRemover
         var total = Math.Max(inventory.Files.Count, 1);
         var refused = new RefusalCounter();
         var refusedAt = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
-
-        var options = new ParallelOptions
-        {
-            CancellationToken = ct,
-            MaxDegreeOfParallelism = MostAtOnce,
-        };
-
+        var files = inventory.Files;
         var directories = inventory.Directories;
 
         // What became of each directory, by its place in the inventory, and null until it is tried. The
@@ -219,8 +213,11 @@ public static class DirectoryRemover
 
         try
         {
-            Parallel.ForEach(inventory.Files, options, file =>
+            // On threads of the removal's own, never the pool's, so it deletes MostAtOnce at a time from
+            // the first file. See ListWorkers.
+            ListWorkers.Run(files.Count, MostAtOnce, index =>
             {
+                var file = files[index];
                 var filePath = file.FullName;
 
                 if (TryDeleteFile(filePath, file.Attributes, fs) is { } reason)
@@ -235,13 +232,13 @@ public static class DirectoryRemover
                 }
 
                 var completed = Interlocked.Increment(ref done);
-                if (completed % 256 == 0 || completed == inventory.Files.Count)
+                if (completed % 256 == 0 || completed == files.Count)
                 {
                     progress?.Report((double)completed / total);
                 }
-            });
+            }, ct);
 
-            RemoveDirectories(directories, bounds.KeepRoot, attempts, fs, options);
+            RemoveDirectories(directories, bounds.KeepRoot, attempts, fs, ct);
 
             progress?.Report(1.0);
         }
@@ -333,7 +330,7 @@ public static class DirectoryRemover
         bool keepRoot,
         Attempt?[] attempts,
         IFileSystem fs,
-        ParallelOptions options)
+        CancellationToken ct)
     {
         var outstanding = new int[directories.Count];
         foreach (var directory in directories)
@@ -353,13 +350,14 @@ public static class DirectoryRemover
             }
         }
 
-        // Balanced as it goes, because a climb is as long as the chain of last children above its leaf,
-        // and a split made up front could leave one thread with every long climb.
-        Parallel.ForEach(Partitioner.Create(leaves, loadBalance: true), options, leaf =>
+        // Each thread takes the next leaf as it finishes a climb, because a climb is as long as the chain
+        // of last children above its leaf, and a split made up front could leave one thread with every
+        // long climb.
+        ListWorkers.Run(leaves.Count, MostAtOnce, next =>
         {
-            for (var index = leaf; ; index = directories[index].Parent)
+            for (var index = leaves[next]; ; index = directories[index].Parent)
             {
-                options.CancellationToken.ThrowIfCancellationRequested();
+                ct.ThrowIfCancellationRequested();
 
                 var directory = directories[index];
 
@@ -376,7 +374,7 @@ public static class DirectoryRemover
                     return;
                 }
             }
-        });
+        }, ct);
     }
 
     /// <summary>A removal stopped before it deleted anything.</summary>

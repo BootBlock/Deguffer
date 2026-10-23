@@ -10,8 +10,8 @@ namespace Deguffer.Core.Scanning;
 /// the pool's either.
 ///
 /// <para>The walk (<see cref="WalkWorkers{TState}"/>), the read of the file table
-/// (<see cref="Mft.MftReadPass"/>) and the reading of a duplicate search's files
-/// (<see cref="Duplicates.LaneReaders{T}"/>) differ in what their work is and in when they are
+/// (<see cref="Mft.MftReadPass"/>) and the work through a list of files that blocks on the disk
+/// (<see cref="ListWorkers"/>) differ in what their work is and in when they are
 /// over. They agree in how a helper starts, ends, fails and is waited for, which is what this
 /// holds.</para>
 ///

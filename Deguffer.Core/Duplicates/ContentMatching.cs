@@ -21,7 +21,7 @@ internal delegate ContentReading ReadContent(DuplicateCandidate file, ContentPar
 /// search runs. Nothing is passed on once the search is stopped.</para>
 ///
 /// <para><b>Read in lanes, one a disk</b> (<see cref="ReadingLanes"/>), each bounded, all at once,
-/// each on threads of its own (<see cref="LaneReaders{T}"/>) rather than the pool's. A file that
+/// each on threads of its own (<see cref="ListWorkers"/>) rather than the pool's. A file that
 /// could not be read, or was not the identified file by the time it was, is left out and counted;
 /// an error never makes two files the same.</para>
 /// </summary>
@@ -104,9 +104,9 @@ internal sealed class ContentMatching
 
         try
         {
-            void ReadOne((int Group, int File) item, CancellationToken token)
+            void ReadOne((int Group, int File) item)
             {
-                checksums[item.Group][item.File] = Read(groups[item.Group][item.File], part, algorithm, idle, token);
+                checksums[item.Group][item.File] = Read(groups[item.Group][item.File], part, algorithm, idle, ct);
 
                 var finished = Interlocked.Increment(ref done);
                 var now = Environment.TickCount64;
@@ -126,7 +126,7 @@ internal sealed class ContentMatching
             await Task.WhenAll(lanes.Select(lane => WorkerThreads.Shared.RunAsync(
                 () =>
                 {
-                    LaneReaders<(int Group, int File)>.Read(lane, ReadOne, ct);
+                    ListWorkers.Run(lane.Files.Count, lane.Readers, file => ReadOne(lane.Files[file]), ct);
                     return true;
                 },
                 ct))).ConfigureAwait(false);

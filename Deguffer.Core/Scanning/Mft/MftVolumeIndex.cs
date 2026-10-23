@@ -81,12 +81,12 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             return null;
         }
 
-        if (tree.IsDirectory[record])
+        if (tree.IsDirectory(record))
         {
             return SumSubtree(record, keep, keepRoot, leftOut, out withheldRecent, out mailStores);
         }
 
-        if (tree.SizeUnknown[record])
+        if (tree.SizeUnknown(record))
         {
             return null;
         }
@@ -181,7 +181,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // table is ever asked to rebuild. A store at the leaf is the one entry allowed to carry a
             // reparse point, because it is a file no path passes through, and the removal leaves it
             // whatever mark it carries.
-            if ((tree.IsReparsePoint[current] && !(depth == 0 && tree.IsMailStore[current]))
+            if ((tree.IsReparsePoint(current) && !(depth == 0 && tree.IsMailStore(current)))
                 || (tree.Names[current] ?? tree.MailStoreNames.GetValueOrDefault(current)) is not { } component)
             {
                 return null;
@@ -221,8 +221,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // populated cache as clear. The walk follows the link and is right, so the answer is to
             // send the caller there. Tested at every level rather than only the last, so that the
             // rule holds whatever the table turns out to contain.
-            if (tree.IsReparsePoint[current]
-                || !tree.IsDirectory[current]
+            if (tree.IsReparsePoint(current)
+                || !tree.IsDirectory(current)
                 || TryFindChild(current, component) is not { } next)
             {
                 return null;
@@ -231,7 +231,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             current = next;
         }
 
-        return tree.IsReparsePoint[current] ? null : current;
+        return tree.IsReparsePoint(current) ? null : current;
     }
 
     /// <summary>
@@ -336,7 +336,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // Next, as the removal asks it: the store stays whatever its age and
             // whatever reparse point it carries. The removal does not read which kind of mark a file
             // has, so a store the table calls a link is still left, and is named here to agree.
-            if (tree.IsMailStore[node])
+            if (tree.IsMailStore(node))
             {
                 if (TryBuildPath(node) is not { } components)
                 {
@@ -353,9 +353,9 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // place in the table, and the walk does not enter one either. A link to a folder is still
             // an entry, removed as a link, and the walk counts it by its own timestamp; a link to a
             // file is one the walk never sees, so it is not counted here either.
-            if (tree.IsReparsePoint[node])
+            if (tree.IsReparsePoint(node))
             {
-                if (tree.IsDirectory[node])
+                if (tree.IsDirectory(node))
                 {
                     CountOrKeep(node, item.Holder);
                 }
@@ -363,7 +363,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                 continue;
             }
 
-            if (tree.SizeUnknown[node])
+            if (tree.SizeUnknown(node))
             {
                 withheldRecent = false;
                 return null;
@@ -374,7 +374,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // `continue` here would drop a whole subtree of stale files because one recent thing was
             // written beside them. The guard is about files, and a folder stays only while something
             // inside it does.
-            if (tree.IsDirectory[node])
+            if (tree.IsDirectory(node))
             {
                 // A folder emptied in place is never among what its removal takes, so it starts out
                 // standing, and nothing above it needs marking.
