@@ -5,9 +5,11 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Memory;
+using Deguffer.Core.Startup;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
@@ -63,6 +65,9 @@ public sealed partial class MemoryPage : Page
     /// </summary>
     private bool _pointerDown;
 
+    /// <summary>Ends the startup read begun as the page opened, when the page is left before it lands.</summary>
+    private CancellationTokenSource? _startupRead;
+
     public MemoryPage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -90,6 +95,8 @@ public sealed partial class MemoryPage : Page
             // doing, however long it takes to arrive. See IsUserSelecting.
             Settled();
         };
+
+        ViewModel.Selection.StartupEntryRequested += (_, entry) => App.ShowStartupEntry(entry);
 
         ViewModel.Selection.PropertyChanged += (_, changed) =>
         {
@@ -202,7 +209,42 @@ public sealed partial class MemoryPage : Page
         }
 
         WatchWhileAnyoneCanSeeThis();
+
+        _ = KnowStartupAsync();
     }
+
+    /// <summary>
+    /// Read what Windows starts at sign-in, once each time the page is opened rather than at the
+    /// page's cadence (§7.5), off the window's thread because it reads the registry, two folders and
+    /// every package's manifest.
+    /// </summary>
+    private async Task KnowStartupAsync()
+    {
+        _startupRead?.Cancel();
+        using var read = new CancellationTokenSource();
+        _startupRead = read;
+
+        try
+        {
+            var reading = await Task.Run(() => StartupReader.Default.Read(read.Token), read.Token);
+
+            ViewModel.Selection.KnowStartup(reading);
+        }
+        catch (OperationCanceledException) when (read.IsCancellationRequested)
+        {
+            // The page was left, or opened again, before the list arrived: the next visit reads it.
+        }
+        finally
+        {
+            if (ReferenceEquals(_startupRead, read))
+            {
+                _startupRead = null;
+            }
+        }
+    }
+
+    private void OnStartupLinkClick(Hyperlink sender, HyperlinkClickEventArgs args) =>
+        ViewModel.Selection.ShowStartupCommand.Execute(null);
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -220,6 +262,8 @@ public sealed partial class MemoryPage : Page
         // One of §7.2.1's three ends of a watch. The close itself is not called off — the messages
         // have gone — and what it comes to is still written to the report.
         ViewModel.Selection.Leave();
+
+        _startupRead?.Cancel();
     }
 
     /// <summary>

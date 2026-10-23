@@ -350,6 +350,26 @@ public sealed class ProcessFactSourceTests
         Assert.Equal(Answer.No, facts.OwnsConsoleWindow);
     }
 
+    /// <summary>
+    /// The program it runs is read through the same handle as everything else, so it is the picked
+    /// process's and never a successor's (§7.5's link from Memory).
+    /// </summary>
+    [Fact]
+    public void TheProgramThePickedProcessRunsIsRead()
+    {
+        var facts = Read(new FakeProcessCalls().With(new FakeProcess { ProcessId = Picked, Image = @"C:\Program Files\Tool\tool.exe" }));
+
+        Assert.Equal(@"C:\Program Files\Tool\tool.exe", facts.ImagePath);
+    }
+
+    [Fact]
+    public void TheProgramOfAProcessThatHasGoneIsNotRead()
+    {
+        var process = new FakeProcess { ProcessId = Picked, Image = @"C:\Program Files\Tool\tool.exe", CreatedAt = FakeProcess.Created + 1 };
+
+        Assert.Null(Read(new FakeProcessCalls().With(process)).ImagePath);
+    }
+
     private static ProcessFacts Read(FakeProcessCalls processes, FakeWindowCalls? windows = null) =>
         new ProcessFactSource(processes, windows ?? new FakeWindowCalls())
             .Read(Picked, FakeProcess.Created, CancellationToken.None);

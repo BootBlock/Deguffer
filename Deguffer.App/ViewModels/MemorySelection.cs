@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Memory.Acting;
+using Deguffer.Core.Startup;
 
 namespace Deguffer.App.ViewModels;
 
@@ -71,6 +72,14 @@ public sealed partial class MemorySelection : ObservableObject
 
     private bool _closing;
 
+    /// <summary>What Windows starts at sign-in, as last read for this page (§7.5).</summary>
+    private StartupReading _startup = StartupReading.Empty;
+
+    /// <summary>The program the picked process runs, as its verdict read it, or null.</summary>
+    private string? _image;
+
+    private StartupLink? _link;
+
     /// <param name="faults">
     /// Where a question Windows would not answer is recorded, beside the sentence the page shows:
     /// the sentence says it went unanswered, and the log says which call failed and how.
@@ -123,6 +132,29 @@ public sealed partial class MemorySelection : ObservableObject
     public bool HasNote => Note.Length > 0;
 
     public bool HasSelection => _pick is not null;
+
+    /// <summary>
+    /// Whether Windows starts the picked program at sign-in, and from which entry, or empty. A fact
+    /// with a link, never a suggestion (§7.5).
+    /// </summary>
+    public string StartupNote => _link?.Sentence ?? string.Empty;
+
+    public bool HasStartupLink => _link is not null;
+
+    /// <summary>Raised when the reader follows the link, with the entry to open Startup on.</summary>
+    public event EventHandler<StartupKey>? StartupEntryRequested;
+
+    /// <summary>
+    /// What Windows starts at sign-in, read when the page is opened rather than at its cadence (§7.5),
+    /// so a pick already made says whether its program is one of them as soon as the list arrives.
+    /// </summary>
+    public void KnowStartup(StartupReading reading)
+    {
+        ArgumentNullException.ThrowIfNull(reading);
+
+        _startup = reading;
+        Link();
+    }
 
     /// <summary>
     /// Move to the tree now on screen, keeping the pick where <see cref="MemoryPick.After"/> carries
@@ -180,6 +212,9 @@ public sealed partial class MemorySelection : ObservableObject
         _verdict = _pick?.Settled;
 
         Note = _pick is { Target: not null } ? Asking : _verdict?.Reason ?? string.Empty;
+
+        _image = null;
+        Link();
 
         Restate();
 
@@ -322,6 +357,9 @@ public sealed partial class MemorySelection : ObservableObject
             _verdict = verdict;
             Note = verdict.Reason;
 
+            _image = verdict.ImagePath;
+            Link();
+
             Restate();
         }
         catch (OperationCanceledException)
@@ -383,6 +421,24 @@ public sealed partial class MemorySelection : ObservableObject
     {
         _watching?.Cancel();
         _watching = null;
+    }
+
+    [RelayCommand]
+    private void ShowStartup()
+    {
+        if (_link is { } link)
+        {
+            StartupEntryRequested?.Invoke(this, link.Entry.Key);
+        }
+    }
+
+    /// <summary>Whether the picked program is one Windows starts at sign-in, from what is known now.</summary>
+    private void Link()
+    {
+        _link = StartupLink.For(_image, _startup);
+
+        OnPropertyChanged(nameof(StartupNote));
+        OnPropertyChanged(nameof(HasStartupLink));
     }
 
     private void Restate()

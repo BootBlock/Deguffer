@@ -47,6 +47,12 @@ public interface ISystemDirectories
     /// than the real one, for the reason <see cref="WindowsDirectory"/> is.</para>
     /// </summary>
     string SystemDrive { get; }
+
+    /// <summary>
+    /// The Startup folder every account shares, ordinarily under <see cref="ProgramData"/>, or null
+    /// when Windows will not say. Windows starts what it holds when any account signs in (§7.5).
+    /// </summary>
+    string? CommonStartupFolder { get; }
 }
 
 /// <inheritdoc />
@@ -71,6 +77,9 @@ public sealed class SystemDirectories : ISystemDirectories
     /// that drive's current directory rather than to its root.
     /// </summary>
     public string SystemDrive => Path.GetPathRoot(WindowsDirectory) ?? string.Empty;
+
+    public string? CommonStartupFolder { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup) is { Length: > 0 } startup ? startup : null;
 
     /// <summary>
     /// The 64-bit program directory, from the environment rather than from

@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.InstalledApps;
 
 /// <summary>
@@ -53,12 +55,5 @@ public sealed class UninstallValues
     /// </summary>
     public bool SameAs(UninstallValues other) =>
         _values.Count == other._values.Count
-        && _values.All(pair => other._values.TryGetValue(pair.Key, out var value) && Same(pair.Value, value));
-
-    private static bool Same(object left, object right) => (left, right) switch
-    {
-        (byte[] a, byte[] b) => a.AsSpan().SequenceEqual(b),
-        (string[] a, string[] b) => a.SequenceEqual(b, StringComparer.Ordinal),
-        _ => Equals(left, right),
-    };
+        && _values.All(pair => other._values.TryGetValue(pair.Key, out var value) && RegistryData.Same(pair.Value, value));
 }

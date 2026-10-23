@@ -85,6 +85,11 @@ public sealed record ProcessWindow(nint Handle, string ClassName);
 /// them. <b>Empty where none qualifies, and null where the set could not be read</b>: a process whose
 /// windows Windows would not describe is not a process with no windows.
 /// </param>
+/// <param name="ImagePath">
+/// The full path of the program it runs, or null where Windows would not say. Read through the same
+/// handle as the rest, so it is this process's and no successor's. Not one of §7.2.1's refusals: §7.5
+/// compares it with the programs Windows starts at sign-in.
+/// </param>
 public sealed record ProcessFacts(
     Answer Present,
     Answer InOwnSession,
@@ -93,7 +98,8 @@ public sealed record ProcessFacts(
     Answer Critical,
     PackageAnswer Package,
     Answer OwnsConsoleWindow,
-    IReadOnlyList<ProcessWindow>? Windows)
+    IReadOnlyList<ProcessWindow>? Windows,
+    string? ImagePath = null)
 {
     /// <summary>
     /// Nothing was read, because <paramref name="present"/> says there was nothing to read it from.

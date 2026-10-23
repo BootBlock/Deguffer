@@ -30,6 +30,9 @@ public abstract record ElevationRequest
     /// <summary>Open on the Installed apps page and read the entries again. Stateless, as <see cref="Preview"/> is.</summary>
     public static ElevationRequest InstalledApps { get; } = new InstalledAppsRequest();
 
+    /// <summary>Open on the Startup page and read the entries again. Stateless, as <see cref="Preview"/> is.</summary>
+    public static ElevationRequest Startup { get; } = new StartupRequest();
+
     /// <summary>The arguments that ask a replacement instance to do this.</summary>
     public abstract IReadOnlyList<string> ToArguments();
 
@@ -47,6 +50,7 @@ public abstract record ElevationRequest
         var preview = false;
         List<string> chosen = [];
         var installedApps = false;
+        var startup = false;
         var duplicates = false;
         List<SearchLocation> locations = [];
         string? drive = null;
@@ -79,6 +83,10 @@ public abstract record ElevationRequest
             {
                 duplicates = true;
             }
+            else if (argument.Equals(StartupSwitch, StringComparison.OrdinalIgnoreCase))
+            {
+                startup = true;
+            }
             else if (argument.StartsWith(SearchPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 AddLocation(ValueOf(argument, SearchPrefix), LocationRole.Search);
@@ -99,10 +107,11 @@ public abstract record ElevationRequest
 
         // Explore wins where both are somehow present: it is the more specific request, and nothing
         // writes the two together. The alternative silently starts a whole-machine preview the user
-        // did not ask for. Duplicates and Installed apps come before a preview for the same reason.
+        // did not ask for. Duplicates, Installed apps and Startup come before a preview for the same reason.
         return explore ? new ExploreRequest(drive, folder)
             : duplicates ? new DuplicatesRequest(locations)
             : installedApps ? InstalledApps
+            : startup ? Startup
             : preview ? chosen.Count > 0 ? new PreviewRequest(new ProviderChoice { Ids = chosen }) : Preview
             : null;
 
@@ -129,6 +138,8 @@ public abstract record ElevationRequest
     private protected const string InstalledAppsSwitch = "--installed-apps";
 
     private protected const string DuplicatesSwitch = "--duplicates";
+
+    private protected const string StartupSwitch = "--startup";
 
     private protected const string SearchPrefix = "--duplicates-search=";
 
@@ -157,6 +168,12 @@ public abstract record ElevationRequest
 public sealed record InstalledAppsRequest : ElevationRequest
 {
     public override IReadOnlyList<string> ToArguments() => [InstalledAppsSwitch];
+}
+
+/// <summary>Open on the Startup page. See <see cref="ElevationRequest.Startup"/>.</summary>
+public sealed record StartupRequest : ElevationRequest
+{
+    public override IReadOnlyList<string> ToArguments() => [StartupSwitch];
 }
 
 /// <summary>
