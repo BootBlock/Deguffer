@@ -19,7 +19,7 @@ namespace Deguffer.Core.Safety;
 /// <para><b>§5.3: nothing throws.</b> Every failure is read as the Win32 error its <c>NTSTATUS</c> maps
 /// to, which is the error <c>CreateFileW</c> and the runtime's read reported, so
 /// <see cref="ListingEnd.Failed"/> gives each the answer it gave before. A file where a directory was
-/// expected is <c>STATUS_NOT_A_DIRECTORY</c>, refused.</para>
+/// expected is <c>STATUS_NOT_A_DIRECTORY</c>, refused as <see cref="ListingRefusal.NotADirectory"/>.</para>
 ///
 /// <para><b>A directory the walk descended into is opened as itself</b>
 /// (<see cref="ListingRequest.FollowsLink"/>). Its parent's listing said it was no link, and a junction
@@ -49,7 +49,7 @@ internal static unsafe partial class DirectoryQuery
     private const int StatusNoSuchFile = unchecked((int)0xC000_000F);
 
     /// <summary>A name too long for the native string, refused before anything is opened.</summary>
-    private static readonly ListingEnd NameTooLong = new(PathPresence.Refused, Denied: false, WhileReading: false);
+    private static readonly ListingEnd NameTooLong = new(PathPresence.Refused, ListingRefusal.Other, WhileReading: false);
 
     /// <param name="directory">
     /// In the extended form (§6.3). Every entry carries this string as its directory.

@@ -23,6 +23,11 @@ namespace Deguffer.Core.Execution;
 /// look" reads as "might", and the removal does not run. The measurement behind the plan skipped the
 /// same folder (§5.3), which is why the plan could not have said so first.</para>
 ///
+/// <para><b>So does a file standing where a folder was.</b> Windows lists nothing there, but it
+/// refused nothing either, so the path is named apart from a folder it would not list: the removal
+/// would take a file the preview never showed, and saying Windows would not let Deguffer look
+/// blames a refusal that did not happen.</para>
+///
 /// <para><b>What it costs is a walk of the folder, and it is paid only where it has to be.</b> It
 /// reads names alone, and it never opens a file. The folder asked about is listed as it stands, link or
 /// not, because that is what the removal it stands in front of will act on. No folder below it is
@@ -33,7 +38,12 @@ namespace Deguffer.Core.Execution;
 /// <param name="Stores">Every Outlook data file found, in display form.</param>
 /// <param name="Recent">Whether anything inside changed within the guard, where one is on.</param>
 /// <param name="Unlisted">Every folder Windows would not list, in display form.</param>
-public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IReadOnlyList<string> Unlisted)
+/// <param name="NotFolders">Every path listed as a folder where something else now stands, in display form.</param>
+public sealed record WholeTreeLook(
+    IReadOnlyList<string> Stores,
+    bool Recent,
+    IReadOnlyList<string> Unlisted,
+    IReadOnlyList<string> NotFolders)
 {
     /// <summary>
     /// Look inside every one of <paramref name="paths"/> now, off the calling thread: the trees can
@@ -61,6 +71,7 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         // same however their work interleaved.
         var stores = new ConcurrentQueue<string>();
         var unlisted = new ConcurrentQueue<string>();
+        var notFolders = new ConcurrentQueue<string>();
         var recent = 0;
 
         // On the walk every scan takes, which lists with several workers and never recurses: these are
@@ -79,7 +90,11 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
                 // Gone since the plan was made, or never there: nothing inside it can be lost. A refusal
                 // part-way still looks at what was listed, since every finding stops the removal and the
                 // folder is named as unlisted either way.
-                if (contents.Presence is PathPresence.Refused)
+                if (contents.End.Refusal is ListingRefusal.NotADirectory)
+                {
+                    notFolders.Enqueue(LongPath.Display(contents.Directory));
+                }
+                else if (contents.Presence is PathPresence.Refused)
                 {
                     unlisted.Enqueue(LongPath.Display(contents.Directory));
                 }
@@ -117,7 +132,8 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         return new WholeTreeLook(
             InOneOrder(stores),
             Volatile.Read(ref recent) == 1,
-            InOneOrder(unlisted));
+            InOneOrder(unlisted),
+            InOneOrder(notFolders));
 
         // Ordered before the duplicates go, so the spelling kept is the same however the work interleaved.
         static IReadOnlyList<string> InOneOrder(IEnumerable<string> paths) =>
@@ -154,6 +170,10 @@ public sealed record WholeTreeLook(IReadOnlyList<string> Stores, bool Recent, IR
         { Unlisted.Count: > 0 } =>
             $"{lead}: Windows would not let Deguffer look inside {MailStorePlan.Name(Unlisted)}, "
             + $"so it cannot tell whether an Outlook data file is there. {how}.",
+
+        { NotFolders.Count: > 0 } =>
+            $"{lead}: a file now stands where the folder {MailStorePlan.Name(NotFolders)} was, "
+            + $"so this is not what the preview showed. {how}.",
 
         { Recent: true } =>
             $"{lead}: something inside {keep.DescribeChange()}, which this plan "

@@ -410,6 +410,18 @@ public static class ExploreRemover
                         + $"could not check '{Path.GetFileName(item.Path)}' for an Outlook data file. Deguffer never "
                         + "removes one, so it left the folder alone.");
                 }
+
+                // The probe above reads a file where the folder was as no folder, never a refusal, so
+                // the look meets it, and names it apart from a folder Windows would not list.
+                if (look.NotFolders.Count > 0)
+                {
+                    return new ExploreItemOutcome(
+                        item.Path,
+                        Removed: false,
+                        Bytes: 0,
+                        $"Not moved to the Recycle Bin: a file now stands where the folder {MailStorePlan.Name(look.NotFolders)} "
+                        + "was, and Deguffer left it alone.");
+                }
             }
 
             var recycled = bin.Recycle(BinPath(item));

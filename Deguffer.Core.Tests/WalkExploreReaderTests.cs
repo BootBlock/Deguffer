@@ -479,7 +479,7 @@ public sealed class WalkExploreReaderTests : IDisposable
         [.. entries.Where(e => !e.IsReparsePoint)],
         [],
         [.. entries.Where(e => e.IsReparsePoint)],
-        PathPresence.Present);
+        ListingEnd.Listed);
 
     /// <summary>
     /// The listing as the walk records it. What <see cref="WalkExploreReader.Describe"/> adds up is

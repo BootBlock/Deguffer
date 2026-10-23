@@ -136,6 +136,33 @@ public sealed class WholeTreeLookTests : IDisposable
     }
 
     /// <summary>
+    /// A file that has taken the name of the folder asked about lists nothing, but Windows refused
+    /// nothing either. It is named apart from a folder Windows would not list, which is still named as
+    /// one beside it, and the sentence says what is there rather than blaming a refusal.
+    /// </summary>
+    [Fact]
+    public void NamesAFileWhereTheFolderAskedAboutWasApartFromAFolderItCouldNotList()
+    {
+        var file = _temp.CreateFile(16, "cache");
+        var other = _temp.CreateDirectory("other");
+        var locked = _temp.CreateDirectory("other", "locked");
+
+        var look = WholeTreeLook.Take(
+            [file, other], MinimumAge.Off, new UnlistableFileSystem(WindowsFileSystem.Default, locked), default);
+
+        Assert.Empty(look.Stores);
+        Assert.Equal([file], look.NotFolders);
+        Assert.Equal([locked], look.Unlisted);
+
+        var alone = WholeTreeLook.Take([file], MinimumAge.Off, WindowsFileSystem.Default, default);
+
+        Assert.Empty(alone.Unlisted);
+        Assert.Equal(
+            $"Not run: a file now stands where the folder {file} was, so this is not what the preview showed. It goes whole.",
+            alone.WhyNot("Not run", "It goes whole", MinimumAge.Off));
+    }
+
+    /// <summary>
     /// A command's measured paths can nest, and a folder walked twice would name its store twice, so
     /// a run would say it held back two files where there is one. The folder inside is listed once,
     /// where the walk of the outer one meets it, whichever order the paths come in.

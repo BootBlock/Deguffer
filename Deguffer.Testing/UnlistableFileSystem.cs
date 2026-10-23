@@ -27,7 +27,7 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IF
     /// </summary>
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         LongPath.Display(directory).Equals(refused, StringComparison.OrdinalIgnoreCase)
-            ? new ListingEnd(PathPresence.Refused, Denied: true, WhileReading: false)
+            ? new ListingEnd(PathPresence.Refused, ListingRefusal.Denied, WhileReading: false)
             : inner.ListEntries(directory, request, into);
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);

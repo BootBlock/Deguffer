@@ -598,7 +598,7 @@ public class RouteAgreementTests
             ],
             [],
             [],
-            PathPresence.Present);
+            ListingEnd.Listed);
 
         var probe = new FakeOccupancyProbe()
             .Occupying("film.mkv", 0)

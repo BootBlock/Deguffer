@@ -3,21 +3,23 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Scanning;
 
 /// <summary>How a listing ended.</summary>
-/// <param name="Denied">
-/// Whether a refusal was the account not being allowed to read the directory, which no retry changes.
+/// <param name="Refusal">
+/// Why Windows would not list the directory: <see cref="ListingRefusal.None"/> unless
+/// <paramref name="Presence"/> is <see cref="PathPresence.Refused"/>.
 /// </param>
 /// <param name="WhileReading">
 /// Whether the listing failed after the directory was opened, while its entries were read: the only
 /// failure a different buffer can change. False for a listing that did not fail.
 /// </param>
-public readonly record struct ListingEnd(PathPresence Presence, bool Denied, bool WhileReading)
+public readonly record struct ListingEnd(PathPresence Presence, ListingRefusal Refusal, bool WhileReading)
 {
     private const int ErrorFileNotFound = 2;
     private const int ErrorPathNotFound = 3;
     private const int ErrorAccessDenied = 5;
+    private const int ErrorDirectory = 267;
 
     /// <summary>A directory listed to the end.</summary>
-    public static ListingEnd Listed => new(PathPresence.Present, Denied: false, WhileReading: false);
+    public static ListingEnd Listed => new(PathPresence.Present, ListingRefusal.None, WhileReading: false);
 
     /// <summary>
     /// How a listing that failed with the Win32 error <paramref name="error"/> ended. A directory that
@@ -25,11 +27,19 @@ public readonly record struct ListingEnd(PathPresence Presence, bool Denied, boo
     /// <see cref="DirectoryNotFoundException"/>. Every other failure, access denied included, is
     /// <see cref="PathPresence.Refused"/>, which is what catching <see cref="UnauthorizedAccessException"/>
     /// and <see cref="IOException"/> made of it.
+    ///
+    /// <para>A file at the path is <c>ERROR_DIRECTORY</c> in every listing here: the runtime's
+    /// enumerator reports it, and <c>STATUS_NOT_A_DIRECTORY</c> maps to it. It stays refused, because
+    /// something nobody listed is there, and is told apart here so that every walk gives it the same
+    /// answer.</para>
     /// </summary>
-    public static ListingEnd Failed(int error, bool whileReading) => new(
-        error is ErrorFileNotFound or ErrorPathNotFound ? PathPresence.Absent : PathPresence.Refused,
-        Denied: error == ErrorAccessDenied,
-        whileReading);
+    public static ListingEnd Failed(int error, bool whileReading) => error switch
+    {
+        ErrorFileNotFound or ErrorPathNotFound => new(PathPresence.Absent, ListingRefusal.None, whileReading),
+        ErrorAccessDenied => new(PathPresence.Refused, ListingRefusal.Denied, whileReading),
+        ErrorDirectory => new(PathPresence.Refused, ListingRefusal.NotADirectory, whileReading),
+        _ => new(PathPresence.Refused, ListingRefusal.Other, whileReading),
+    };
 }
 
 /// <summary>
@@ -89,7 +99,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
         SetReparsePointsApart();
 
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
-        return new DirectoryContents(directory, _entries, _links, _reparseFiles, end.Presence);
+        return new DirectoryContents(directory, _entries, _links, _reparseFiles, end);
     }
 
     public void Dispose() => _memory.Dispose();
