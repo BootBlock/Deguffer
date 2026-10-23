@@ -77,14 +77,11 @@ public sealed partial class ExplorePage : Page
     private readonly Thickness _rowsMargin;
 
     /// <summary>
-    /// How the maps look: each picture's colours and the treemap's spacing. Held for the page's
-    /// life, and shared with the appearance window whenever that is open, so the window changes the
-    /// same value the map is drawn from.
+    /// How the maps look: each picture's colours, the treemap's spacing, the finish and the light. The
+    /// application's one, shared with the appearance window, so the window changes the same value the
+    /// map is drawn from.
     /// </summary>
-    private readonly MapAppearanceViewModel _appearance;
-
-    /// <summary>The appearance window while it is open, so the gear brings it forward rather than opening a second.</summary>
-    private MapAppearanceWindow? _appearanceWindow;
+    private readonly MapAppearanceViewModel _appearance = App.MapAppearance;
 
     /// <summary>The cards beside the map, joined to it. See <see cref="ExploreCards"/>.</summary>
     private readonly ExploreCards _cards;
@@ -239,7 +236,6 @@ public sealed partial class ExplorePage : Page
         Map.OverviewHiddenChanged += (_, _) =>
             App.Preferences.Update(current => current with { ExploreOverviewHidden = Map.OverviewHidden });
 
-        _appearance = new MapAppearanceViewModel(MapLook.From(preferences), App.Preferences);
         _appearance.Changed += (_, _) =>
         {
             ViewModel.SelectedScheme = _appearance.Look.SchemeFor(ViewModel.SelectedView);
@@ -250,15 +246,12 @@ public sealed partial class ExplorePage : Page
         // the colouring as a choice made in it does.
         _appearance.ColouringChosen += (_, colouring) => ColourAs(colouring);
 
-        // The spacing is chosen on the Settings page, so it can change while this page is away.
-        Loaded += (_, _) => FollowSpacing();
-
         // The colouring first, because ShowAs draws the map and the map has to be told what its
-        // colours mean before it paints rather than after.
-        var choice = ExploreChoice.From(preferences);
-
-        ColourAs(choice.Colouring);
-        ShowAs(choice.View);
+        // colours mean before it paints rather than after. Both as the appearance holds them, which
+        // read them from the preferences and holds a colouring a preset chose before this page was
+        // built, written or not.
+        ColourAs(_appearance.Colouring);
+        ShowAs(_appearance.View);
 
         // A scan of a full drive takes long enough that throwing it away on a trip to Settings and
         // back would be its own defect.
@@ -280,33 +273,13 @@ public sealed partial class ExplorePage : Page
     public ExploreViewModel ViewModel { get; }
 
     /// <summary>
-    /// Draw again if the treemap spacing changed while this page was away.
-    ///
-    /// <para>Re-read on every visit, unlike the view, the colouring and the colour schemes. Those are
-    /// set on this page or in its appearance window and applied before they are persisted, so
-    /// re-reading them would undo a choice whose write to disk had failed. The spacing can also be
-    /// set on the Settings page, which persists first and applies second, so
-    /// <see cref="Shell.PreferenceService.Current"/> holds what took effect there.</para>
-    /// </summary>
-    private void FollowSpacing() => _appearance.Follow(App.Preferences.Current.TreemapSpacing);
-
-    /// <summary>
     /// Open the appearance window, or bring it forward where it is already open.
     ///
     /// <para>Its own window rather than a dialog on this page, because the reader has to see the map
     /// change as they choose: a dialog covers the page it belongs to. See
     /// <see cref="MapAppearanceWindow"/>.</para>
     /// </summary>
-    private void OnAppearanceClicked(object sender, RoutedEventArgs e)
-    {
-        if (_appearanceWindow is null && App.MainWindow is { } owner)
-        {
-            _appearanceWindow = new MapAppearanceWindow(_appearance, owner);
-            _appearanceWindow.Closed += (_, _) => _appearanceWindow = null;
-        }
-
-        _appearanceWindow?.Activate();
-    }
+    private void OnAppearanceClicked(object sender, RoutedEventArgs e) => App.ShowMapAppearance();
 
     /// <summary>
     /// Draw the page in <paramref name="view"/>, one of <see cref="ExploreChoice.Views"/>, and leave

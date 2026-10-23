@@ -35,8 +35,6 @@ public sealed class WindowSizing
 
     private const int GwlpWndProc = -4;
     private const uint WmGetMinMaxInfo = 0x0024;
-    private const uint MonitorDefaultToNearest = 0x0002;
-    private const int EffectiveDpi = 0;
 
     // The delegate is what the OS holds a raw pointer to. Letting it be collected while the window
     // is alive is an immediate crash on the next message, so it is rooted here for the window's
@@ -44,7 +42,7 @@ public sealed class WindowSizing
     private readonly WndProc _replacement;
     private readonly nint _original;
     private readonly nint _hwnd;
-    private readonly WindowMetricsStore _store;
+    private readonly WindowPlacementStore<WindowMetrics> _store;
 
     /// <summary>
     /// The window's restored rectangle, tracked as it moves rather than read once at close.
@@ -57,7 +55,7 @@ public sealed class WindowSizing
 
     private bool _maximized;
 
-    public WindowSizing(Window window, WindowMetricsStore store)
+    public WindowSizing(Window window, WindowPlacementStore<WindowMetrics> store)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(store);
@@ -88,11 +86,12 @@ public sealed class WindowSizing
         var area = display.WorkArea;
         var work = new WindowBounds(area.X, area.Y, area.Width, area.Height);
 
-        var scale = ScaleOf(work);
+        // The display the placement is on, not the one WinUI opened the window on: see DisplayScale.
+        var scale = DisplayScale.Of(work, _hwnd);
 
-        var wanted = stored?.Bounds ?? Centred(work, Scale(DefaultWidth, scale), Scale(DefaultHeight, scale));
+        var wanted = stored?.Bounds ?? Centred(work, DisplayScale.Scale(DefaultWidth, scale), DisplayScale.Scale(DefaultHeight, scale));
 
-        _restored = wanted.Within(work, Scale(MinimumWidth, scale), Scale(MinimumHeight, scale));
+        _restored = wanted.Within(work, DisplayScale.Scale(MinimumWidth, scale), DisplayScale.Scale(MinimumHeight, scale));
         _maximized = stored?.IsMaximized ?? false;
 
         appWindow.MoveAndResize(
@@ -116,29 +115,6 @@ public sealed class WindowSizing
     /// the close that follows would leave the two instances racing over it.
     /// </summary>
     public void Remember() => _store.Save(new WindowMetrics(_restored, _maximized));
-
-    /// <summary>
-    /// The scale factor of the display <paramref name="work"/> belongs to.
-    ///
-    /// Not <c>GetDpiForWindow</c>: the window has not moved yet, so that reports the display WinUI
-    /// opened it on. A placement left on a second display would then be sized against the first
-    /// display's scale, and on a desktop that mixes scale factors the floor for a 200% display
-    /// raises a 1000x700 window on a 100% one to 1760x1040. That is not self-correcting — the
-    /// inflated rectangle is what the close writes back, so the size the user chose is gone.
-    ///
-    /// The window's own display where the DPI cannot be read, which restores the behaviour this
-    /// replaced.
-    /// </summary>
-    private double ScaleOf(WindowBounds work)
-    {
-        // The work area's own corner is on the display it describes, and MONITOR_DEFAULTTONEAREST
-        // is the same fallback DisplayArea was asked for above.
-        var monitor = MonitorFromPoint(new Point { X = work.X, Y = work.Y }, MonitorDefaultToNearest);
-
-        return GetDpiForMonitor(monitor, EffectiveDpi, out var dpi, out _) == 0
-            ? dpi / 96.0
-            : GetDpiForWindow(_hwnd) / 96.0;
-    }
 
     /// <summary>
     /// Follow the window as the user moves, resizes and maximises it.
@@ -191,19 +167,17 @@ public sealed class WindowSizing
         {
             // MINMAXINFO is in physical pixels, so the floor scales with the display the window
             // is currently on — dragging to a 200% monitor must not shrink the usable layout.
-            var scale = GetDpiForWindow(hwnd) / 96.0;
+            var scale = DisplayScale.Of(hwnd);
             var info = Marshal.PtrToStructure<MinMaxInfo>(lParam);
 
-            info.MinTrackSize.X = Scale(MinimumWidth, scale);
-            info.MinTrackSize.Y = Scale(MinimumHeight, scale);
+            info.MinTrackSize.X = DisplayScale.Scale(MinimumWidth, scale);
+            info.MinTrackSize.Y = DisplayScale.Scale(MinimumHeight, scale);
 
             Marshal.StructureToPtr(info, lParam, false);
         }
 
         return CallWindowProc(_original, hwnd, message, wParam, lParam);
     }
-
-    private static int Scale(int value, double scale) => (int)Math.Round(value * scale);
 
     private delegate nint WndProc(nint hwnd, uint message, nint wParam, nint lParam);
 
@@ -230,13 +204,4 @@ public sealed class WindowSizing
     // AllowUnsafeBlocks across the whole project, which is a large blast radius for these calls.
     [DllImport("user32.dll", EntryPoint = "CallWindowProcW")]
     private static extern nint CallWindowProc(nint previous, nint hWnd, uint message, nint wParam, nint lParam);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(nint hWnd);
-
-    [DllImport("user32.dll")]
-    private static extern nint MonitorFromPoint(Point point, uint flags);
-
-    [DllImport("Shcore.dll")]
-    private static extern int GetDpiForMonitor(nint monitor, int type, out uint dpiX, out uint dpiY);
 }

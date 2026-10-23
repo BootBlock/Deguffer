@@ -1,4 +1,5 @@
 using Deguffer.App.Shell;
+using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Duplicates;
@@ -36,6 +37,13 @@ public partial class App : Application
     /// </summary>
     public static PreferenceService Preferences { get; } =
         new(new PreferenceStore(UserEnvironment.Current));
+
+    /// <summary>
+    /// How the maps look, shared by the Explore page, which draws from it, and the map appearance
+    /// window, which changes it and can open before that page has been built. Declared after
+    /// <see cref="Preferences"/>, which it is read from.
+    /// </summary>
+    public static MapAppearanceViewModel MapAppearance { get; } = new(Preferences);
 
     /// <summary>
     /// What each volume's disks are, asked of each device once for the life of the app, and shared
@@ -123,6 +131,16 @@ public partial class App : Application
     internal static void RememberWindowPlacement() => _shell?.RememberPlacement();
 
     /// <summary>
+    /// This instance has been replaced and is about to exit, so the windows closing with it are the
+    /// application's going rather than the reader closing them. See
+    /// <see cref="Deguffer.App.MainWindow.Leave"/>.
+    /// </summary>
+    internal static void Leaving() => _shell?.Leave();
+
+    /// <summary>Open the map appearance window, or bring forward the one already open.</summary>
+    internal static void ShowMapAppearance() => _shell?.ShowMapAppearance();
+
+    /// <summary>
     /// Close the window as its own close button does once nothing is running, without asking: the
     /// user has already chosen it. See <see cref="Deguffer.App.MainWindow.CloseWhenIdle"/>.
     /// </summary>
@@ -138,5 +156,8 @@ public partial class App : Application
         _shell.Closed += (_, _) => Exit();
 
         _shell.Activate();
+
+        // After the main window is on screen, because a tool window opens beside it and stays above it.
+        _shell.ReopenToolWindows();
     }
 }

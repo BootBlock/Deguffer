@@ -6,12 +6,16 @@ namespace Deguffer.App.ViewModels;
 
 /// <summary>
 /// What the map appearance window shows and changes: the colours the picture on screen is drawn in,
-/// how much room a treemap leaves round each folder, how every shape is finished, and the presets
-/// that set all of those at once.
+/// how much room a treemap leaves round each folder, how every shape is finished, the light under the
+/// pointer, and the presets that set the finish and the spacing at once.
 ///
 /// <para>It holds the look rather than reading it from the preferences each time, and applies a
 /// change before it writes it. See <see cref="MapLook"/> for why that order: somebody trying colours
 /// wants each one on the map as they pick it.</para>
+///
+/// <para>One for the life of the application rather than one per page, because the window can open
+/// before the Explore page has been built: it reopens with the application where the reader left it
+/// open. The Explore page draws from this look, and tells it which view and colouring it shows.</para>
 /// </summary>
 public sealed partial class MapAppearanceViewModel : ObservableObject
 {
@@ -29,6 +33,8 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         nameof(FolderFillIndex),
         nameof(FolderNames),
         nameof(ShapeNames),
+        nameof(PointerLightShown),
+        nameof(LightStrengthIndex),
         nameof(PresetIndex),
         nameof(PresetSummary),
     ];
@@ -44,29 +50,37 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     /// </summary>
     private ExploreSpacing _storedSpacing;
 
-    /// <param name="look">
-    /// The look the page is drawing, read from <paramref name="preferences"/> once, when the page was
-    /// built. Not read again here, for the reason the page reads it once: re-reading would undo a
-    /// choice whose write failed.
+    /// <param name="preferences">
+    /// Where the look, the view and the colouring are read from, once, and where a change is written,
+    /// one setting at a time. The look is not read again, because re-reading would undo a choice whose
+    /// write failed. Only a spacing chosen on the Settings page is followed (see <see cref="Follow"/>).
     /// </param>
-    /// <param name="preferences">Where a change is written, one setting at a time.</param>
-    public MapAppearanceViewModel(MapLook look, PreferenceService preferences)
+    public MapAppearanceViewModel(PreferenceService preferences)
     {
-        ArgumentNullException.ThrowIfNull(look);
         ArgumentNullException.ThrowIfNull(preferences);
 
-        _look = look;
-        _storedSpacing = look.Spacing;
+        var current = preferences.Current;
+        var choice = ExploreChoice.From(current);
+
+        _look = MapLook.From(current);
+        _storedSpacing = _look.Spacing;
         _preferences = preferences;
+
+        View = choice.View;
+        Colouring = choice.Colouring;
+
+        // Heard for as long as the preferences last, which is as long as this does.
+        preferences.Changed += (_, _) => Follow(preferences.Current.TreemapSpacing);
     }
 
     /// <summary>The look changed. Whoever draws a map draws it again.</summary>
     public event EventHandler? Changed;
 
     /// <summary>
-    /// A preset whose look is part of what its colours say was chosen, and the page is to colour its
-    /// map by this. The page applies and writes it as it does a choice in its own Colour box, which is
-    /// where that choice belongs.
+    /// A preset whose look is part of what its colours say was chosen, and the Explore page is to
+    /// colour its map by this and move its Colour box to it. Raised before the colouring is written,
+    /// and the colouring is written whether or not the page has been built yet, so it is what the page
+    /// opens with.
     /// </summary>
     public event EventHandler<ExploreColouring>? ColouringChosen;
 
@@ -77,22 +91,24 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     public IReadOnlyList<MapSchemeOption> Schemes => MapSchemeOption.All;
 
     /// <summary>Every preset, in the order the window lists them.</summary>
-    public IReadOnlyList<MapPreset> Presets => MapPreset.All;
+    public IReadOnlyList<MapPresetOption> Presets => MapPresetOption.All;
 
     /// <summary>
-    /// The view the page is showing, which is the one the scheme picker speaks for. Set by the page
-    /// whenever its View box moves.
+    /// The view the Explore page is showing, which is the one the scheme picker speaks for. Set by the
+    /// page whenever its View box moves, and the stored view until the page is built.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SchemeHeading))]
     [NotifyPropertyChangedFor(nameof(SchemeIndex))]
+    [NotifyPropertyChangedFor(nameof(PreviewCaption))]
     public partial ExploreView View { get; set; }
 
     /// <summary>
-    /// What the colours on the page's map say, which the preview is coloured by as near as it can be.
-    /// Set by the page whenever its Colour box moves.
+    /// What the colours on the Explore page's map say, which the preview is coloured by as near as it
+    /// can be. Set by the page whenever its Colour box moves, and by a preset with a colouring of its own.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreviewCaption))]
     public partial ExploreColouring Colouring { get; set; }
 
     /// <summary>Which picture the scheme picker changes, said in words because the picker is one list for three views.</summary>
@@ -101,6 +117,14 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         ExploreView.Icicle => "Colours for the icicle",
         ExploreView.Sunburst => "Colours for the sunburst",
         _ => "Colours for the treemap",
+    };
+
+    /// <summary>What the preview shows, in words: the picture it draws and what its colours say.</summary>
+    public string PreviewCaption => MapLook.Drawn(View) switch
+    {
+        ExploreView.Icicle => $"Icicle, {ColouredBy(Colouring)}",
+        ExploreView.Sunburst => $"Sunburst, {ColouredBy(Colouring)}",
+        _ => $"Treemap, {ColouredBy(Colouring)}",
     };
 
     /// <summary>Index into the scheme list, ordered to match <see cref="ExploreScheme"/>.</summary>
@@ -203,18 +227,40 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         set => Restyle(style => style with { ShapeNames = value });
     }
 
+    /// <summary>Whether the map shines a soft light over the point under the pointer.</summary>
+    public bool PointerLightShown
+    {
+        get => _look.Light.Shown;
+        set => Relight(light => light with { Shown = value });
+    }
+
+    /// <summary>Index into the light's strength list, ordered to match <see cref="MapLightStrength"/>.</summary>
+    public int LightStrengthIndex
+    {
+        get => (int)_look.Light.Strength;
+        set
+        {
+            if (value >= 0)
+            {
+                Relight(light => light with { Strength = (MapLightStrength)value });
+            }
+        }
+    }
+
     /// <summary>
     /// Index into the preset list of the preset the look is drawn as, or -1 for a look of the reader's
     /// own. Set to apply that preset.
     /// </summary>
     public int PresetIndex
     {
-        get => MapPreset.Of(_look) is { } preset ? MapPreset.All.Index().First(entry => entry.Item == preset).Index : -1;
+        get => MapPreset.Of(_look) is { } preset
+            ? MapPresetOption.All.Index().First(entry => entry.Item.Preset == preset).Index
+            : -1;
         set
         {
-            if (value >= 0 && value < MapPreset.All.Count)
+            if (value >= 0 && value < MapPresetOption.All.Count)
             {
-                Choose(MapPreset.All[value]);
+                Choose(MapPresetOption.All[value].Preset);
             }
         }
     }
@@ -224,15 +270,41 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         ? $"The map is drawn as the {preset.Name} preset."
         : "The map is drawn in a look of your own. Choose a preset to start again from it.";
 
+    /// <summary>What a map coloured by <paramref name="colouring"/> shows, in a few words.</summary>
+    public static string ColouredBy(ExploreColouring colouring) => colouring switch
+    {
+        ExploreColouring.Age => "coloured by age",
+        ExploreColouring.Growth => "coloured by growth",
+        ExploreColouring.Type => "coloured by type",
+        ExploreColouring.Depth => "coloured by depth",
+        _ => "coloured by branch",
+    };
+
     /// <summary>
-    /// Take up a spacing chosen on the Settings page while the Explore page was away. Not written
-    /// back, because the Settings page has already written it.
+    /// Put every part of the look back as the map is shipped: the Deguffer preset, each picture's
+    /// standard colours and the light as it always was, with the preset's colouring handed to the page
+    /// as choosing the preset hands it.
+    /// </summary>
+    public void RestoreDefaults()
+    {
+        if (Apply(MapLook.Default, MapLook.Default.Into))
+        {
+            _storedSpacing = MapLook.Default.Spacing;
+        }
+
+        HandOver(MapPreset.Standard.Colouring);
+    }
+
+    /// <summary>
+    /// Take up a spacing chosen on the Settings page, which writes it while this window can be open.
+    /// Heard on every change to the preferences, and not written back, because the Settings page has
+    /// already written it.
     ///
     /// <para>Only a spacing that moved in the preferences since this last heard from them. One this
     /// window chose and could not write leaves the preferences where they were, and following them
-    /// back would undo the reader's choice on the next visit.</para>
+    /// back on the next change to any other setting would undo the reader's choice.</para>
     /// </summary>
-    public void Follow(ExploreSpacing stored)
+    private void Follow(ExploreSpacing stored)
     {
         if (stored == _storedSpacing)
         {
@@ -263,10 +335,24 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
             _storedSpacing = preset.Spacing;
         }
 
-        if (preset.Colouring is { } colouring)
+        HandOver(preset.Colouring);
+    }
+
+    /// <summary>
+    /// Colour the map by <paramref name="colouring"/> where there is one: shown in the preview and on
+    /// the page first, then written, in the order every other choice here takes.
+    /// </summary>
+    private void HandOver(ExploreColouring? colouring)
+    {
+        if (colouring is not { } chosen)
         {
-            ColouringChosen?.Invoke(this, colouring);
+            return;
         }
+
+        Colouring = chosen;
+        ColouringChosen?.Invoke(this, chosen);
+
+        _preferences.Update(current => current with { ExploreColours = chosen });
     }
 
     /// <summary>Change one part of the style, where <paramref name="index"/> is a choice. See <see cref="SchemeIndex"/> for -1.</summary>
@@ -286,6 +372,12 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         Apply(
             _look with { Style = change(_look.Style) },
             current => current with { MapStyle = change(current.MapStyle.Defined()) });
+
+    /// <summary>Change one part of the pointer's light, on screen and in the preferences, as <see cref="Restyle(Func{MapStyle, MapStyle})"/> changes the style.</summary>
+    private void Relight(Func<MapPointerLight, MapPointerLight> change) =>
+        Apply(
+            _look with { Light = change(_look.Light) },
+            current => current with { MapPointerLight = change(current.MapPointerLight.Defined()) });
 
     /// <summary>
     /// Show <paramref name="look"/>, then write the settings that changed through

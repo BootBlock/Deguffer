@@ -33,7 +33,7 @@ public sealed partial class MemoryPage : Page
     private bool _onScreen;
 
     /// <summary>The look the map was last drawn in. See <see cref="FollowLook"/>.</summary>
-    private MapLook _look = MapLook.From(App.Preferences.Current);
+    private MapLook _look = App.MapAppearance.Look;
 
     /// <summary>Whether the page is writing the list's own selection. See <see cref="IsUserSelecting"/>.</summary>
     private bool _showingSelectedRow;
@@ -194,7 +194,7 @@ public sealed partial class MemoryPage : Page
         _onScreen = true;
 
         FollowLook();
-        App.Preferences.Changed += OnPreferencesChanged;
+        App.MapAppearance.Changed += OnLookChanged;
 
         if (XamlRoot is { } root)
         {
@@ -208,7 +208,7 @@ public sealed partial class MemoryPage : Page
     {
         _onScreen = false;
 
-        App.Preferences.Changed -= OnPreferencesChanged;
+        App.MapAppearance.Changed -= OnLookChanged;
 
         if (XamlRoot is { } root)
         {
@@ -297,14 +297,17 @@ public sealed partial class MemoryPage : Page
     }
 
     /// <summary>
-    /// Draw again if the colours, the treemap spacing or the finish of the shapes changed. Re-read on
-    /// every visit, because all of them are chosen elsewhere — the spacing on the Settings page, and
-    /// all of them in the Explore page's appearance window, which can stay open while this page is on
-    /// screen.
+    /// Draw again if the colours, the treemap spacing, the finish of the shapes or the light changed.
+    /// Asked on every visit and at every change while the page is on screen, because all of them are
+    /// chosen elsewhere: in the map appearance window, which can stay open while this page is on
+    /// screen, and the spacing on the Settings page as well, which the appearance follows.
+    ///
+    /// <para>The application's look rather than the preferences file's, so a choice whose write
+    /// failed is drawn here as it is on the Explore page.</para>
     /// </summary>
     private void FollowLook()
     {
-        var look = MapLook.From(App.Preferences.Current);
+        var look = App.MapAppearance.Look;
 
         if (look != _look)
         {
@@ -313,7 +316,7 @@ public sealed partial class MemoryPage : Page
         }
     }
 
-    private void OnPreferencesChanged(object? sender, EventArgs e) => FollowLook();
+    private void OnLookChanged(object? sender, EventArgs e) => FollowLook();
 
     /// <summary>
     /// Draw the current node.

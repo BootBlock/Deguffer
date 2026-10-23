@@ -71,6 +71,10 @@ public static class ElevatedRelaunch
         {
             Process.Start(start);
 
+            // The replacement is on its way, and this instance exits once the page hears so: the
+            // windows that close with it are not the reader closing them.
+            App.Leaving();
+
             return true;
         }
         catch (Win32Exception e) when (e.NativeErrorCode == ErrorCancelled)

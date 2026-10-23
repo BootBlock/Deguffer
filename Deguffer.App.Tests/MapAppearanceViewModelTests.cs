@@ -37,8 +37,8 @@ public sealed class MapAppearanceViewModelTests : IDisposable
 
     private string PreferencesFile => Path.Combine(_environment.LocalAppData, "Deguffer", "preferences.json");
 
-    /// <summary>The window as the Explore page builds it: from the preferences as they stood when the page was built.</summary>
-    private MapAppearanceViewModel Window() => new(MapLook.From(_preferences.Current), _preferences);
+    /// <summary>The look as the application builds it at launch: from the preferences as they stood then.</summary>
+    private MapAppearanceViewModel Window() => new(_preferences);
 
     /// <summary>
     /// Every write from here refused, as a locked profile refuses it: a folder where the file goes, or
@@ -55,6 +55,23 @@ public sealed class MapAppearanceViewModelTests : IDisposable
             Directory.CreateDirectory(PreferencesFile);
         }
     }
+
+    /// <summary>Writes allowed again, as a profile that was locked for a moment allows them.</summary>
+    private void AllowWrites()
+    {
+        if (Directory.Exists(PreferencesFile))
+        {
+            Directory.Delete(PreferencesFile);
+        }
+        else if (File.Exists(PreferencesFile))
+        {
+            File.SetAttributes(PreferencesFile, FileAttributes.Normal);
+        }
+    }
+
+    /// <summary>Another setting chosen on the Settings page, which is the next time this hears from the preferences.</summary>
+    private void ChooseAnotherSetting() =>
+        Assert.True(_preferences.Update(current => current with { Theme = current.Theme == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark }));
 
     /// <summary>A list with nothing selected reports -1 while it rebuilds, which is not a choice.</summary>
     [Fact]
@@ -128,40 +145,45 @@ public sealed class MapAppearanceViewModelTests : IDisposable
 
     /// <summary>
     /// A spacing this window chose and could not write leaves the preferences where they were, and
-    /// following them back on the next visit would undo the reader's choice.
+    /// following them back on the next change to any other setting would undo the reader's choice.
     /// </summary>
     [Fact]
-    public void ASpacingThatCouldNotBeWrittenIsNotUndoneOnTheNextVisit()
+    public void ASpacingThatCouldNotBeWrittenIsNotUndoneByTheNextChange()
     {
         var window = Window();
         RefuseWrites();
 
         window.SpacingIndex = (int)ExploreSpacing.Dense;
-        window.Follow(_preferences.Current.TreemapSpacing);
+        AllowWrites();
+        ChooseAnotherSetting();
 
         Assert.Equal(ExploreSpacing.Comfortable, _preferences.Current.TreemapSpacing);
         Assert.Equal(ExploreSpacing.Dense, window.Look.Spacing);
     }
 
     /// <summary>
-    /// A spacing this window wrote is what it last heard the preferences hold, so a visit that finds
-    /// them unchanged since is not taken for a choice made on the Settings page.
+    /// A spacing this window wrote is what it last heard the preferences hold, so a change to another
+    /// setting that finds it unchanged since is not taken for a spacing chosen on the Settings page.
     /// </summary>
     [Fact]
-    public void ASpacingThatWasWrittenIsWhatTheNextVisitExpects()
+    public void ASpacingThatWasWrittenIsWhatTheNextChangeExpects()
     {
         var window = Window();
         var changes = 0;
 
         window.SpacingIndex = (int)ExploreSpacing.Dense;
         window.Changed += (_, _) => changes++;
-        window.Follow(ExploreSpacing.Dense);
+        ChooseAnotherSetting();
 
         Assert.Equal(0, changes);
         Assert.Equal(ExploreSpacing.Dense, _preferences.Current.TreemapSpacing);
+        Assert.Equal(ExploreSpacing.Dense, window.Look.Spacing);
     }
 
-    /// <summary>A spacing chosen on the Settings page while the Explore page was away is taken up, and not written back.</summary>
+    /// <summary>
+    /// A spacing chosen on the Settings page is taken up as it is written, so the window and the maps
+    /// show it while the window stays open, and every box is told.
+    /// </summary>
     [Fact]
     public void ASpacingChosenOnTheSettingsPageIsTakenUp()
     {
@@ -171,12 +193,11 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         var raised = new List<string?>();
         window.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
 
-        window.Follow(ExploreSpacing.Spacious);
+        Assert.True(_preferences.Update(current => current with { TreemapSpacing = ExploreSpacing.Spacious }));
 
         Assert.Equal(1, changes);
         Assert.Equal(ExploreSpacing.Spacious, window.Look.Spacing);
         Assert.Contains(nameof(MapAppearanceViewModel.SpacingIndex), raised);
-        Assert.Equal(ExploreSpacing.Comfortable, _preferences.Current.TreemapSpacing);
     }
 
     /// <summary>
@@ -298,11 +319,12 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         Assert.Equal(MapPreset.All.ToList().IndexOf(MapPreset.WizTree), window.PresetIndex);
         Assert.Contains("WizTree", window.PresetSummary, StringComparison.Ordinal);
 
-        // Its spacing is what the next visit expects, as a spacing chosen in its own box is: a spacing
-        // chosen after it and not written is not undone by the file still holding the preset's.
+        // Its spacing is what the next change expects, as a spacing chosen in its own box is: a
+        // spacing chosen after it and not written is not undone by the file still holding the preset's.
         RefuseWrites();
         window.SpacingIndex = (int)ExploreSpacing.Spacious;
-        window.Follow(_preferences.Current.TreemapSpacing);
+        AllowWrites();
+        ChooseAnotherSetting();
 
         Assert.Equal(ExploreSpacing.Dense, _preferences.Current.TreemapSpacing);
         Assert.Equal(ExploreSpacing.Spacious, window.Look.Spacing);
@@ -360,8 +382,9 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         Assert.Equal(MapPreset.WizTree.Style, window.Look.Style);
         Assert.Equal(MapStyle.Default, _preferences.Current.MapStyle);
 
-        // Its spacing did not reach the file, so the next visit does not take the file's back over it.
-        window.Follow(_preferences.Current.TreemapSpacing);
+        // Its spacing did not reach the file, so the next change does not take the file's back over it.
+        AllowWrites();
+        ChooseAnotherSetting();
         Assert.Equal(ExploreSpacing.Comfortable, _preferences.Current.TreemapSpacing);
         Assert.Equal(MapPreset.WizTree.Spacing, window.Look.Spacing);
     }
@@ -384,5 +407,126 @@ public sealed class MapAppearanceViewModelTests : IDisposable
 
         Assert.Equal((byte)255, swatch.Colour.A);
         Assert.Equal((12, 34, 56), (swatch.Colour.R, swatch.Colour.G, swatch.Colour.B));
+    }
+
+    /// <summary>
+    /// The look opens on the view and the colouring the Explore page was left on, because the window
+    /// can open with the application before that page has been built, and speaks for that picture.
+    /// </summary>
+    [Fact]
+    public void TheLookOpensOnTheViewAndColouringThePageWasLeftOn()
+    {
+        Assert.True(_preferences.Update(current => current with { Explore = ExploreView.Sunburst, ExploreColours = ExploreColouring.Age }));
+
+        var window = Window();
+
+        Assert.Equal(ExploreView.Sunburst, window.View);
+        Assert.Equal(ExploreColouring.Age, window.Colouring);
+        Assert.Equal("Colours for the sunburst", window.SchemeHeading);
+        Assert.Equal("Sunburst, coloured by age", window.PreviewCaption);
+    }
+
+    /// <summary>
+    /// A preset's colouring is written as well as handed over, so a page built after it opens coloured
+    /// as the preset says, and the preview is coloured by it at once.
+    /// </summary>
+    [Fact]
+    public void APresetsColouringIsWrittenForAPageNotYetBuilt()
+    {
+        var window = Window();
+        var raised = new List<string?>();
+        window.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        window.PresetIndex = MapPreset.All.ToList().IndexOf(MapPreset.SpaceMonger);
+
+        Assert.Equal(ExploreColouring.Depth, window.Colouring);
+        Assert.Equal(ExploreColouring.Depth, _preferences.Current.ExploreColours);
+        Assert.Contains(nameof(MapAppearanceViewModel.Colouring), raised);
+        Assert.Equal("Treemap, coloured by depth", window.PreviewCaption);
+    }
+
+    /// <summary>
+    /// The light under the pointer is turned off and on, and made brighter, each as its own change:
+    /// shown at once, written as its own setting, and leaving the style and every other setting alone.
+    /// A preset does not bring it back, because it is how the map answers the pointer, not its finish.
+    /// </summary>
+    [Fact]
+    public void TheLightIsShownAndWrittenOnItsOwnAndAPresetLeavesIt()
+    {
+        var window = Window();
+        var changes = 0;
+        window.Changed += (_, _) => changes++;
+        window.BorderToneIndex = (int)MapBorderTone.Light;
+
+        window.PointerLightShown = false;
+
+        Assert.Equal(2, changes);
+        Assert.False(window.Look.Light.Shown);
+        Assert.Equal(new MapPointerLight(Shown: false), _preferences.Current.MapPointerLight);
+        Assert.Equal(MapBorderTone.Light, _preferences.Current.MapStyle.BorderTone);
+
+        window.LightStrengthIndex = (int)MapLightStrength.Bright;
+        window.PointerLightShown = true;
+
+        Assert.Equal(new MapPointerLight(Shown: true, MapLightStrength.Bright), window.Look.Light);
+        Assert.Equal(new MapPointerLight(Shown: true, MapLightStrength.Bright), _preferences.Current.MapPointerLight);
+
+        window.PointerLightShown = false;
+        window.PresetIndex = MapPreset.All.ToList().IndexOf(MapPreset.WizTree);
+
+        Assert.False(window.Look.Light.Shown);
+        Assert.False(_preferences.Current.MapPointerLight.Shown);
+        Assert.Equal(MapPreset.All.ToList().IndexOf(MapPreset.WizTree), window.PresetIndex);
+    }
+
+    /// <summary>A strength box with nothing selected reports -1 while it rebuilds, which is not a choice.</summary>
+    [Fact]
+    public void AStrengthBoxWithNothingSelectedChangesNothing()
+    {
+        var window = Window();
+
+        window.LightStrengthIndex = -1;
+
+        Assert.Equal(MapPointerLight.Default, window.Look.Light);
+        Assert.Equal(AppPreferences.Default, _preferences.Current);
+    }
+
+    /// <summary>
+    /// Restoring the default look puts every part of it back as shipped, each picture's colours and the
+    /// light included, and colours the map as the Deguffer preset does, and touches no other setting.
+    /// </summary>
+    [Fact]
+    public void RestoringTheDefaultLookPutsEveryPartBack()
+    {
+        var window = Window();
+        var colourings = new List<ExploreColouring>();
+        window.ColouringChosen += (_, colouring) => colourings.Add(colouring);
+        Assert.True(_preferences.Update(current => current with { ConfirmBeforeCleaning = false }));
+
+        window.PresetIndex = MapPreset.All.ToList().IndexOf(MapPreset.WizTree);
+        window.View = ExploreView.Icicle;
+        window.SchemeIndex = (int)ExploreScheme.Vivid;
+        window.PointerLightShown = false;
+
+        window.RestoreDefaults();
+
+        Assert.Equal(MapLook.Default, window.Look);
+        Assert.Equal(MapLook.Default, MapLook.From(_preferences.Current));
+        Assert.Equal([ExploreColouring.Type, ExploreColouring.Branch], colourings);
+        Assert.Equal(ExploreColouring.Branch, _preferences.Current.ExploreColours);
+        Assert.False(_preferences.Current.ConfirmBeforeCleaning);
+        Assert.Equal(0, window.PresetIndex);
+    }
+
+    /// <summary>Each preset card names what its preset sets, so two presets read apart before either is tried.</summary>
+    [Fact]
+    public void EachPresetCardSaysWhatItSets()
+    {
+        var window = Window();
+
+        Assert.Equal(MapPreset.All, window.Presets.Select(option => option.Preset));
+        Assert.Equal(window.Presets.Count, window.Presets.Select(option => option.Traits).Distinct().Count());
+        Assert.Equal("Bevelled · lines round every shape · comfortable · coloured by depth", window.Presets[1].Traits);
+        Assert.Contains(window.Presets[0].Description, window.Presets[0].Spoken, StringComparison.Ordinal);
     }
 }
