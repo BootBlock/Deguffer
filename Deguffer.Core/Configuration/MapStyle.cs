@@ -105,7 +105,7 @@ public enum MapRelief
     Standard = 1,
     Strong = 2,
 
-    /// <summary>Further than strong: steep cushions, a sheen from near white to near shadow, and a bevel cut deep.</summary>
+    /// <summary>Further than strong: steep cushions, a sheen about a third lighter at its lit edge and a third darker at the far one, and a bevel cut deep.</summary>
     Deep = 3,
 }
 

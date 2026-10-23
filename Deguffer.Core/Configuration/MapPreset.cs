@@ -138,7 +138,7 @@ public sealed record MapPreset(
     /// <summary>A plan drawn in pale lines over dark grey folders, with the shapes left unnamed.</summary>
     public static readonly MapPreset Blueprint = new(
         "Blueprint",
-        "Flat shapes drawn in pale lines, heavy round each dark grey folder, with only the folders named.",
+        "Flat shapes drawn in heavy pale lines, the folders in dark grey, with only the folders named.",
         new MapStyle(
             Shading: MapShading.Flat,
             BlockBorders: MapBorder.Strong,

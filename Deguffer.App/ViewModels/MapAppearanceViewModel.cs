@@ -297,8 +297,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
     /// <summary>
     /// Take up a spacing chosen on the Settings page, which writes it while this window can be open.
-    /// Heard on every change to the preferences, and not written back, because the Settings page has
-    /// already written it.
+    /// Heard on every change to the preferences, so the spacing taken up is one already in the file.
     ///
     /// <para>Only a spacing that moved in the preferences since this last heard from them. One this
     /// window chose and could not write leaves the preferences where they were, and following them
