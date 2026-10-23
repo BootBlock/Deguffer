@@ -631,7 +631,8 @@ public abstract class ExploreSurface
     ///
     /// <para>A folder drawn round what it holds is the neutral frame grey where the style asks for
     /// grey frames, whatever the colouring says of it, so the colours on the picture are what the
-    /// folders hold.</para>
+    /// folders hold. Where the style asks for tinted frames it is its own colour mixed half way towards
+    /// that grey, so it recedes as a grey one does and still says which branch it is.</para>
     /// </summary>
     /// <param name="framed">Whether the shape is a folder drawn round what it holds.</param>
     protected TileColour ColourFor(int node, int depth, bool framed = false) => _colours.Contrast is { } contrast
@@ -644,6 +645,8 @@ public abstract class ExploreSurface
             ExploreTile.ShadowCopies => TilePalette.ShadowCopies,
             ExploreTile.ReservedStorage => TilePalette.ReservedStorage,
             _ when framed && Style.FolderFill == MapFolderFill.Grey => TilePalette.FolderFrame,
+            _ when framed && Style.FolderFill == MapFolderFill.Tinted =>
+                ShapeFinish.Mix(_colours.For(this, node, depth), TilePalette.FolderFrame, ShapeFinish.Whole / 2),
             _ => _colours.For(this, node, depth),
         };
 

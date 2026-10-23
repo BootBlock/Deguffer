@@ -16,7 +16,10 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// siblings that share an edge draw a line twice as wide between them.</para>
 /// </summary>
 /// <param name="Shading">How the inside of each shape is lit.</param>
-/// <param name="Relief">What a cushion's ridge is multiplied by: one for the standard rise.</param>
+/// <param name="Relief">
+/// What a cushion's ridge and a sheen's slope (<see cref="GradientShading.SlopeAt"/>) are multiplied by:
+/// one for the standard rise.
+/// </param>
 /// <param name="Bevel">The bevel along each shape's edges, where <paramref name="Shading"/> is a bevel.</param>
 /// <param name="Borders">The line round each shape.</param>
 public readonly record struct ShapeFinish(MapShading Shading, float Relief, ShapeBevel Bevel, ShapeBorders Borders)
@@ -47,6 +50,7 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
                 // quarter of the way to black along the bottom and the right.
                 MapRelief.Subtle => new ShapeBevel(pixel, Highlight: 64, Shadow: 32),
                 MapRelief.Strong => new ShapeBevel(pixel, Highlight: 192, Shadow: 112),
+                MapRelief.Deep => new ShapeBevel(pixel, Highlight: 224, Shadow: 160),
                 _ => new ShapeBevel(pixel, Highlight: 128, Shadow: 64),
             }
             : default;
@@ -57,7 +61,12 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
             ? default
             : new ShapeBorders(
                 style.BorderTone == MapBorderTone.Light ? White : Black,
-                style.BorderWidth == MapBorderWidth.Thick ? pixel * 2 : pixel,
+                style.BorderWidth switch
+                {
+                    MapBorderWidth.Thick => pixel * 2,
+                    MapBorderWidth.Heavy => pixel * 3,
+                    _ => pixel,
+                },
                 blocks,
                 folders);
 
@@ -65,6 +74,7 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
         {
             MapRelief.Subtle => 0.6f,
             MapRelief.Strong => 1.5f,
+            MapRelief.Deep => 2.2f,
             _ => 1f,
         };
 

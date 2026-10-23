@@ -4,10 +4,11 @@
 // rasteriser's.
 //
 // The light is CushionShading's, and has to stay it: ambient plus Lambertian diffuse from van Wijk's
-// light, the same constants, the same flat shapes. The finish is ShapeFinish's, decided pixel by pixel
-// by the rule TileRasteriser decides it by, with its colours mixed in the same whole numbers out of
-// 256. CushionRenderer's test compares this picture with the rasteriser's, pixel by pixel. The
-// pointer's light (PointerLight) is added to it, and adds nothing past its reach.
+// light, the same constants, the same flat shapes. A sheen is GradientShading's, in its whole numbers.
+// The finish is ShapeFinish's, decided pixel by pixel by the rule TileRasteriser decides it by, with
+// its colours mixed in the same whole numbers out of 256. CushionRenderer's test compares this picture
+// with the rasteriser's, pixel by pixel. The pointer's light (PointerLight) is added to it, and adds
+// nothing past its reach.
 
 cbuffer Canvas : register(b0)
 {
@@ -29,15 +30,17 @@ cbuffer Canvas : register(b0)
     // How many pixels wide the line inside each quad's sides is drawn; zero for none.
     float lineWidth;
 
-    // The line's tone: red, green and blue from 0 to 255; and the shading: 0 for cushions, 1 for a
-    // bevel, 2 for flat.
+    // The line's tone: red, green and blue from 0 to 255; and the shading, as MapShading numbers it: 0
+    // for cushions, 1 for a bevel, 2 for flat, 3 for a sheen.
     float4 tone;
 
     // How far a block's line and a folder's are mixed towards the tone, out of 256; how many pixels
     // wide the bevel is; and how far its lit side is mixed towards white, out of 256.
     float4 finish;
 
-    // How far the bevel's shaded side is mixed towards black, out of 256, and three values nothing reads.
+    // How far the bevel's shaded side is mixed towards black, out of 256; how far a sheen's light falls
+    // from a quad's top row to its middle, out of 256 (GradientShading.SlopeAt); and two values nothing
+    // reads.
     float4 bevel;
 };
 
@@ -120,7 +123,7 @@ float4 ps(Pixel pixel) : SV_Target
 
     // Flat inside, or the bevel along the edges: the lit side is the top or the left only where it is
     // nearer than both the bottom and the right, as TileRasteriser decides it.
-    if (tone.w != 0)
+    if (tone.w == 1 || tone.w == 2)
     {
         uint3 flat = colour;
 
@@ -139,6 +142,20 @@ float4 ps(Pixel pixel) : SV_Target
     float u = spanX <= 1 ? 0.5 : (at.x - pixel.edges.x) / (spanX - 1);
     float v = spanY <= 1 ? 0.5 : (at.y - pixel.edges.y) / (spanY - 1);
     float ridge = pixel.shade.x;
+
+    // A sheen: GradientShading.LightAt down the quad, in whole numbers out of 256, on a surface that
+    // faces straight up, so the pointer's light falls on it as it does on a flat one. A quad that does
+    // not rise has none. Without the pointer's light, the product is whole and the division by 256 is
+    // exact, so the floor is GradientShading.Lit's shift.
+    if (tone.w == 3)
+    {
+        uint slope = ridge > 0 ? (uint)bevel.y : 0;
+        uint length = spanY <= 1 ? 0 : (uint)(spanY - 1);
+        uint sheen = length == 0 ? 256 : 256 - slope + ((2 * slope * (length - (uint)fromTop)) / length);
+
+        return float4(floor(clamp(float3(colour) * ((sheen / 256.0) + pointer(at, 0, 0)), 0, 255)) / 255, 1);
+    }
+
     float nx = ridge * ((2 * u) - 1);
     float ny = ridge * ((2 * v) - 1);
 

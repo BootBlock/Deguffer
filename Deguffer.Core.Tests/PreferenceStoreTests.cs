@@ -425,6 +425,27 @@ public class PreferenceStoreTests
         Assert.True(loaded.MapStyle.ShapeNames);
     }
 
+    /// <summary>
+    /// The style is stored by name, so the names are what a file written today says. Each later choice
+    /// reads by its own name, and a file naming them keeps them through <see cref="MapStyle.Defined"/>.
+    /// </summary>
+    [Fact]
+    public void TheLaterStyleChoicesReadByName()
+    {
+        var loaded = LoadWritten(
+            """{ "Theme": "Dark", "MapStyle": { "Shading": "Gradient", "Relief": "Deep", "BorderWidth": "Heavy", "FolderFill": "Tinted" } }""");
+        var expected = MapStyle.Default with
+        {
+            Shading = MapShading.Gradient,
+            Relief = MapRelief.Deep,
+            BorderWidth = MapBorderWidth.Heavy,
+            FolderFill = MapFolderFill.Tinted,
+        };
+
+        Assert.Equal(expected, loaded.MapStyle);
+        Assert.Equal(expected, loaded.MapStyle.Defined());
+    }
+
     /// <summary>A hand-edited null where the map's style belongs is a corrupt file, as one where the scan settings belong is.</summary>
     [Fact]
     public void ANullWhereTheMapStyleBelongsIsACorruptFile() =>
