@@ -1,5 +1,6 @@
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
@@ -78,6 +79,7 @@ public class ItemGroupsTests
     {
         var runtime = new RunCommandStep("lms.exe", "runtime remove --yes llama.cpp-win-x86_64-avx2@2.13.0", "Remove a runtime")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = ScanSize.FromLengths(10),
             Group = "llama.cpp-win-x86_64-avx2",
         };

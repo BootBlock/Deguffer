@@ -318,7 +318,7 @@ public sealed class PlanVerifierTests : IDisposable
         var tree = _temp.CreateDirectory("gopath", "bin");
         var vanished = _temp.CreateDirectory("gopath", "bin", "tools");
         var plan = Plan(
-            [new RunCommandStep("go.exe", "clean -modcache", "Clear the module cache")],
+            [new RunCommandStep("go.exe", "clean -modcache", "Clear the module cache") { WhenCancelled = CancelledCommand.Ended }],
             Protect(vanished));
 
         Directory.Delete(tree, recursive: true);
@@ -711,7 +711,7 @@ public sealed class PlanVerifierTests : IDisposable
 
     /// <summary>A tool's own eviction command, sent to clear <paramref name="cache"/>.</summary>
     private static RunCommandStep Evict(string cache) =>
-        new("tool.exe", "cache clean", "Clear the cache using the tool's own command") { MeasuredPaths = [cache] };
+        new("tool.exe", "cache clean", "Clear the cache using the tool's own command") { WhenCancelled = CancelledCommand.Ended, MeasuredPaths = [cache] };
 
     /// <summary>
     /// A protected path spelled with a trailing separator, which a provider's own Path.Combine can

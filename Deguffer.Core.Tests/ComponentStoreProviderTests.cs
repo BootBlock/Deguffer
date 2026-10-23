@@ -463,6 +463,40 @@ public sealed class ComponentStoreProviderTests : IDisposable
             _runner.Invocations.Select(call => IsAnalysis(call.Arguments) ? "analyse" : "clean"));
     }
 
+    /// <summary>
+    /// DISM ended mid-servicing risks the component store, so a cleanup the user cancels is left to
+    /// finish and reported as run, and the analysis after it, which only measures, is not started. The
+    /// plan is not interrupted, because its only step ran to its end. The
+    /// analyses themselves only read, so they are ended when a scan is cancelled, and given far longer
+    /// than an ordinary query because they take minutes.
+    /// </summary>
+    [Fact]
+    public async Task ACancelledCleanLeavesDismsCleanupToFinishAndEndsOnlyItsAnalyses()
+    {
+        using var cts = new CancellationTokenSource();
+        Analyses(_ => cts.Cancel(), 21 * Gigabyte, 20 * Gigabyte, 18 * Gigabyte);
+
+        var provider = Cleanup();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync(), ct: cts.Token);
+
+        var step = Assert.Single(result.Steps);
+        Assert.True(step.Succeeded);
+        Assert.False(step.Interrupted);
+        Assert.Contains("it was left to finish", step.Message, StringComparison.Ordinal);
+
+        Assert.Equal(
+            [
+                ("analyse", CancelledCommand.Ended),
+                ("analyse", CancelledCommand.Ended),
+                ("clean", CancelledCommand.Finishes),
+            ],
+            _runner.Invocations.Select(call => (IsAnalysis(call.Arguments) ? "analyse" : "clean", call.Run.WhenCancelled)));
+
+        Assert.All(
+            _runner.Invocations.Where(call => IsAnalysis(call.Arguments)),
+            call => Assert.True(call.Run.Limit > ToolRun.QueryLimit, "DISM's analysis was given an ordinary query's time."));
+    }
+
     /// <summary>Both rows in one clean count each gigabyte once, although both were planned from one figure.</summary>
     [Fact]
     public async Task CleaningAndResettingInOneCleanCountEachReclaimOnce()

@@ -99,12 +99,14 @@ public sealed class MailStorePlanTests
     {
         var npm = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
         {
+            WhenCancelled = CancelledCommand.Ended,
             MeasuredPaths = [@"C:\Users\testuser\AppData\Local\npm-cache"],
             MailStores = [Mailbox],
         };
 
         var go = new RunCommandStep("go.exe", "clean -cache", "Clear the Go build cache")
         {
+            WhenCancelled = CancelledCommand.Ended,
             MeasuredPaths = [@"C:\Users\testuser\AppData\Local\go-build"],
         };
 
@@ -167,6 +169,7 @@ public sealed class MailStorePlanTests
 
         var npm = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
         {
+            WhenCancelled = CancelledCommand.Ended,
             MeasuredPaths = [@"C:\Users\testuser\AppData\Local\npm-cache"],
             MailStores = [Mailbox, secondMailbox],
         };

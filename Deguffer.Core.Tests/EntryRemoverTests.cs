@@ -92,7 +92,7 @@ public sealed partial class EntryRemoverTests : IDisposable
 
         await Remove(backUp: true, isElevated: true, gone);
 
-        var (_, arguments) = Assert.Single(_runner.Invocations);
+        var (_, arguments, _) = Assert.Single(_runner.Invocations);
         Assert.StartsWith(@"export ""HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Gone"" ", arguments, StringComparison.Ordinal);
         Assert.EndsWith(" /y /reg:64", arguments, StringComparison.Ordinal);
     }

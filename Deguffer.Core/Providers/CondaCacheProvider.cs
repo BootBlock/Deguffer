@@ -212,7 +212,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         var packageCaches = caches.Present;
 
         var outcome = await Runner
-            .RunAsync(conda, CleanCategories + " --dry-run --json", ct)
+            .RunAsync(conda, CleanCategories + " --dry-run --json", ToolRun.Query, ct)
             .ConfigureAwait(false);
 
         // The report is the authority rather than the exit code: a conda dry run ends by raising
@@ -286,6 +286,9 @@ public sealed class CondaCacheProvider : CleanupProviderBase
                     CleanCategories + " --yes",
                     "Remove unused packages, tarballs and the channel index cache using conda's own command")
                 {
+                    // conda reads a package folder's info directory as the package being there, so a clean ended
+                    // part-way could leave a half-removed package it still links environments from. Left to finish.
+                    WhenCancelled = CancelledCommand.Finishes,
                     Estimated = estimated,
                     MeasuredPaths = packageCaches,
                     MeasuredBefore = probed.TotalOf(..packageCaches.Count),
@@ -380,7 +383,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     private async Task<CondaInstallation?> AskInstallationAsync(string conda, CancellationToken ct)
     {
-        var outcome = await Runner.RunAsync(conda, "info --json", ct).ConfigureAwait(false);
+        var outcome = await Runner.RunAsync(conda, "info --json", ToolRun.Query, ct).ConfigureAwait(false);
 
         return outcome.Succeeded
             ? CondaReport.TryReadInstallation(outcome.StandardOutput)

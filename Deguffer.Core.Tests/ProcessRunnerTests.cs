@@ -35,7 +35,7 @@ public sealed class ProcessRunnerTests : IDisposable
         var folder = Path.Combine(_temp.Path, "not yet made");
         Assert.NotEqual(folder, Environment.CurrentDirectory, StringComparer.OrdinalIgnoreCase);
 
-        var outcome = await new ProcessRunner(folder).RunAsync(Cmd, "/d /c cd", CancellationToken.None);
+        var outcome = await new ProcessRunner(folder).RunAsync(Cmd, "/d /c cd", ToolRun.Query, CancellationToken.None);
 
         Assert.True(outcome.Succeeded, outcome.Message);
         Assert.Equal(folder, outcome.StandardOutput.Trim(), StringComparer.OrdinalIgnoreCase);
@@ -50,7 +50,7 @@ public sealed class ProcessRunnerTests : IDisposable
         File.WriteAllText(shim, "@echo %CD%\r\n");
         var folder = Path.Combine(_temp.Path, "tools");
 
-        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, CancellationToken.None);
+        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, ToolRun.Query, CancellationToken.None);
 
         Assert.True(outcome.Succeeded, outcome.Message);
         Assert.Equal(folder, outcome.StandardOutput.Trim(), StringComparer.OrdinalIgnoreCase);
@@ -69,7 +69,7 @@ public sealed class ProcessRunnerTests : IDisposable
         var folder = Path.Combine(occupied, "tools");
         var refusal = Assert.Throws<IOException>(() => Directory.CreateDirectory(LongPath.Extended(folder)));
 
-        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, CancellationToken.None);
+        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, ToolRun.Query, CancellationToken.None);
 
         Assert.Equal(-1, outcome.ExitCode);
         Assert.False(File.Exists(marker), "The tool ran in a directory other than the one it was given.");
@@ -90,7 +90,7 @@ public sealed class ProcessRunnerTests : IDisposable
         var shim = Path.Combine(_temp.CreateDirectory("bin"), "tool.cmd");
         File.WriteAllText(shim, $"@echo ran> \"{marker}\"\r\n");
 
-        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, CancellationToken.None);
+        var outcome = await new ProcessRunner(folder).RunAsync(shim, string.Empty, ToolRun.Query, CancellationToken.None);
 
         Assert.Equal(-1, outcome.ExitCode);
         Assert.False(File.Exists(marker), "The tool ran in a folder resolved against Deguffer's own directory.");

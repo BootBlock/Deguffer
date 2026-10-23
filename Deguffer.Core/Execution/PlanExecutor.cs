@@ -378,9 +378,25 @@ public sealed class PlanExecutor(
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
         }
 
+        var run = ToolRun.Command(step.WhenCancelled);
+
         var outcome = step.ServicingCalls is { } calls
-            ? await calls.MakeAsync(() => runner.RunAsync(step.FileName, step.Arguments, ct)).ConfigureAwait(false)
-            : await runner.RunAsync(step.FileName, step.Arguments, ct).ConfigureAwait(false);
+            ? await calls.MakeAsync(() => runner.RunAsync(step.FileName, step.Arguments, run, ct)).ConfigureAwait(false)
+            : await runner.RunAsync(step.FileName, step.Arguments, run, ct).ConfigureAwait(false);
+
+        // A command that returned has run to its end, whether it was left to finish or ended just as the
+        // clean was cancelled, so it is reported as run rather than as stopped. What it freed is not
+        // measured, because the measurement is more work the user asked to stop, and a tool's own
+        // measurement can take minutes.
+        if (ct.IsCancellationRequested)
+        {
+            var why = step.WhenCancelled is CancelledCommand.Finishes
+                ? "the clean was cancelled while this command ran, and it was left to finish because stopping it part-way could do harm"
+                : "the clean was cancelled as this command finished";
+
+            return new StepOutcome(
+                step.Description, outcome.Succeeded, BytesReclaimed: 0, Refusals.None, $"{outcome.Message} ({why}, so what it freed is not counted)");
+        }
 
         if (outcome.Succeeded && step is { Removes: { } item, Scheduled: { } scheduled })
         {

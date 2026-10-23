@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Tests;
 
@@ -50,9 +51,9 @@ public class SelectionKeyTests
     public void KeysACommandWithoutWhereTheToolIsInstalled()
     {
         var before = new RunCommandStep(
-            @"C:\Program Files\nodejs\npm.cmd", "cache clean --force", "Clear the npm cache");
+            @"C:\Program Files\nodejs\npm.cmd", "cache clean --force", "Clear the npm cache") { WhenCancelled = CancelledCommand.Ended };
         var after = new RunCommandStep(
-            @"C:\Users\testuser\AppData\Roaming\nvm\v22.0.0\npm.cmd", "cache clean --force", "Clear the npm cache");
+            @"C:\Users\testuser\AppData\Roaming\nvm\v22.0.0\npm.cmd", "cache clean --force", "Clear the npm cache") { WhenCancelled = CancelledCommand.Ended };
 
         Assert.Equal("npm.cmd cache clean --force", before.SelectionKey);
         Assert.Equal(before.SelectionKey, after.SelectionKey);
@@ -62,7 +63,7 @@ public class SelectionKeyTests
     public void KeepsTwoCommandsOfOneToolApart()
     {
         Assert.NotEqual(
-            new RunCommandStep("dotnet.exe", "nuget locals http-cache --clear", "Clear the HTTP cache").SelectionKey,
-            new RunCommandStep("dotnet.exe", "nuget locals temp --clear", "Clear the temporary files").SelectionKey);
+            new RunCommandStep("dotnet.exe", "nuget locals http-cache --clear", "Clear the HTTP cache") { WhenCancelled = CancelledCommand.Ended }.SelectionKey,
+            new RunCommandStep("dotnet.exe", "nuget locals temp --clear", "Clear the temporary files") { WhenCancelled = CancelledCommand.Ended }.SelectionKey);
     }
 }

@@ -136,6 +136,8 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             [
                 new RunCommandStep(_analysis.Dism, $"/Online /English /Cleanup-Image {CleanupArguments}", What)
                 {
+                    // DISM ended mid-servicing risks the component store, so a started cleanup is left to finish.
+                    WhenCancelled = CancelledCommand.Finishes,
                     // The most a cleanup could free, which Windows does not narrow down further, and which
                     // counts switched-off features no cleanup removes. The reclaim is measured, not taken
                     // from this.

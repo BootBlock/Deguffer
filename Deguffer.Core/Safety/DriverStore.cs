@@ -28,7 +28,7 @@ public sealed partial class DriverStore : IDriverStore
 
     public async Task<DriverStoreListing> ListAsync(CancellationToken ct)
     {
-        var outcome = await _runner.RunAsync(_pnpUtil, PnpUtilDriverList.Arguments, ct).ConfigureAwait(false);
+        var outcome = await _runner.RunAsync(_pnpUtil, PnpUtilDriverList.Arguments, ToolRun.Query, ct).ConfigureAwait(false);
 
         if (!outcome.Succeeded)
         {
