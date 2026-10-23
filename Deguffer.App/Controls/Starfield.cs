@@ -312,7 +312,7 @@ public sealed partial class Starfield : Grid
     private void Animate(string name, IReadOnlyList<StarPose> samples, Func<StarPose, float> value)
     {
         var animation = _compositor.CreateScalarKeyFrameAnimation();
-        var linear = _compositor.CreateLinearEasingFunction();
+        var linear = _compositor.LinearEase();
 
         for (var i = 0; i < samples.Count; i++)
         {

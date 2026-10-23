@@ -773,7 +773,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         if (MapTracking.Pivot(Shown, target, _size.Width, _size.Height) is { } pivot)
         {
-            var linear = compositor.CreateLinearEasingFunction();
+            var linear = compositor.LinearEase();
             var zoom = compositor.CreateScalarKeyFrameAnimation();
 
             // From wherever the tracker is when the move starts, which a report on its way may not

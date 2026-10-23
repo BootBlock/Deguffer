@@ -5,13 +5,13 @@ using Microsoft.UI.Composition;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// Every move the compositor plays eases by one curve, made once per compositor: a wheel notch, a key
-/// press and a row's entrance each used to make their own.
+/// The compositor's easing functions are made once per compositor and shared, so a zoom's glide, a
+/// wheel notch and a row's entrance take no new one each time they play.
 /// </summary>
 public sealed class CompositorEasingTests
 {
     [Fact]
-    public void TheEaseIsMotionsCurve()
+    public void TheMotionEaseIsMotionsCurve()
     {
         var (first, second) = CompositionThread.Run(() =>
         {
@@ -24,22 +24,30 @@ public sealed class CompositorEasingTests
         Assert.Equal(Motion.EaseControlPoints.Second, second);
     }
 
+    [Fact]
+    public void TheLinearEaseEasesNothing() =>
+        CompositionThread.Run(() => Assert.IsType<LinearEasingFunction>(CompositionThread.Compositor.LinearEase()));
+
     /// <summary>
-    /// Asked for again, and through a visual's compositor as the controls reach it, it is the same
-    /// curve rather than another one.
+    /// Asked for again, and through a visual's compositor as the controls reach it, each is the same
+    /// function rather than another one.
     /// </summary>
     [Fact]
-    public void TheEaseIsMadeOncePerCompositor()
+    public void EachEaseIsMadeOncePerCompositor()
     {
-        var (first, again, throughVisual) = CompositionThread.Run(() =>
+        var (motion, linear) = CompositionThread.Run(() =>
         {
             var compositor = CompositionThread.Compositor;
-            var visual = compositor.CreateContainerVisual();
+            var throughVisual = compositor.CreateContainerVisual().Compositor;
 
-            return (compositor.MotionEase(), compositor.MotionEase(), visual.Compositor.MotionEase());
+            return (
+                (compositor.MotionEase(), compositor.MotionEase(), throughVisual.MotionEase()),
+                (compositor.LinearEase(), compositor.LinearEase(), throughVisual.LinearEase()));
         });
 
-        Assert.Same(first, again);
-        Assert.Same(first, throughVisual);
+        Assert.Same(motion.Item1, motion.Item2);
+        Assert.Same(motion.Item1, motion.Item3);
+        Assert.Same(linear.Item1, linear.Item2);
+        Assert.Same(linear.Item1, linear.Item3);
     }
 }

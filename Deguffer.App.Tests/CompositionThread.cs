@@ -11,20 +11,35 @@ namespace Deguffer.App.Tests;
 ///
 /// <para>The Windows App SDK's classes are found through the app's manifest, which names the library
 /// each is in. The test host has none of its own, so the app's, embedded in Deguffer.App.exe beside the
-/// tests, is made the thread's activation context before the first of them is asked for.</para>
+/// tests, is made the activation context of every thread that hands the compositor work, before its
+/// first piece.</para>
+///
+/// <para>Of every such thread, not only the one that started the compositor: a test that handed it work
+/// from another thread, as a test class run beside the first does, or an async test resumed on one,
+/// left the map's device unable to make its <c>CompositionCapabilities</c> ("ClassFactory cannot
+/// supply requested class") for every test after it.</para>
 /// </summary>
 internal static class CompositionThread
 {
     private static readonly Lazy<(DispatcherQueue Queue, Compositor Compositor)> Shared = new(Start);
 
+    /// <summary>Whether this thread has the app's manifest as its activation context.</summary>
+    [ThreadStatic]
+    private static bool _activated;
+
     public static Compositor Compositor => Shared.Value.Compositor;
 
     /// <summary>Run <paramref name="work"/> on the compositor's thread, and return what it returns or rethrow what it threw.</summary>
-    public static T Run<T>(Func<T> work) => Run(Shared.Value.Queue, work);
+    public static T Run<T>(Func<T> work)
+    {
+        Activate();
+
+        return Run(Shared.Value.Queue, work);
+    }
 
     private static (DispatcherQueue, Compositor) Start()
     {
-        ActivateAppManifest();
+        Activate();
 
         // The thread takes the activation context of the one that starts it.
         var queue = DispatcherQueueController.CreateOnDedicatedThread().DispatcherQueue;
@@ -55,7 +70,25 @@ internal static class CompositionThread
         return done.Task.GetAwaiter().GetResult();
     }
 
-    private static void ActivateAppManifest()
+    /// <summary>Make the app's manifest this thread's activation context, unless it is already.</summary>
+    private static void Activate()
+    {
+        if (_activated)
+        {
+            return;
+        }
+
+        if (!ActivateActCtx(AppManifest.Value, out _))
+        {
+            throw new InvalidOperationException(
+                $"The app's manifest could not be made the activation context: error {Marshal.GetLastPInvokeError()}.");
+        }
+
+        _activated = true;
+    }
+
+    /// <summary>The activation context of the app's manifest, made once and activated on each thread that needs it.</summary>
+    private static readonly Lazy<nint> AppManifest = new(() =>
     {
         var context = new ActivationContext
         {
@@ -68,12 +101,11 @@ internal static class CompositionThread
 
         var handle = CreateActCtxW(ref context);
 
-        if (handle == InvalidHandle || !ActivateActCtx(handle, out _))
-        {
-            throw new InvalidOperationException(
-                $"The app's manifest could not be made the activation context: error {Marshal.GetLastPInvokeError()}.");
-        }
-    }
+        return handle != InvalidHandle
+            ? handle
+            : throw new InvalidOperationException(
+                $"The app's manifest could not be read as an activation context: error {Marshal.GetLastPInvokeError()}.");
+    });
 
     private const uint AssemblyDirectoryValid = 0x004;
 

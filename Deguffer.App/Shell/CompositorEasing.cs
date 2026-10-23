@@ -5,21 +5,33 @@ using Microsoft.UI.Composition;
 namespace Deguffer.App.Shell;
 
 /// <summary>
-/// The curve every move the compositor plays eases by: <see cref="Motion.Ease"/>'s, as the cubic
-/// Bézier <see cref="Motion.EaseControlPoints"/> gives, so a move the compositor clocks lands as one
-/// the app clocks does.
+/// The easing functions the compositor's animations are played through, each made once per
+/// compositor rather than per animation or per control (G5).
 ///
-/// <para>Made once per compositor rather than per move or per control (G5): an easing function
-/// belongs to the compositor that made it, and is never changed once made, so every animation on that
-/// compositor can share the one. Held weakly, so a compositor that goes takes its curve with it.</para>
+/// <para>An easing function belongs to the compositor that made it and never changes once made, so
+/// every animation on that compositor can share the one. Each is held weakly, so a compositor that
+/// goes takes its functions with it.</para>
 /// </summary>
 internal static class CompositorEasing
 {
-    private static readonly ConditionalWeakTable<Compositor, CompositionEasingFunction> Eases = [];
+    private static readonly ConditionalWeakTable<Compositor, CompositionEasingFunction> Motions = [];
 
-    /// <summary>The standard ease on <paramref name="compositor"/>, made the first time it is asked for.</summary>
+    private static readonly ConditionalWeakTable<Compositor, CompositionEasingFunction> Linears = [];
+
+    /// <summary>
+    /// The curve every eased move on <paramref name="compositor"/> takes: <see cref="Motion.Ease"/>'s,
+    /// as the cubic Bézier <see cref="Motion.EaseControlPoints"/> gives, so a move the compositor
+    /// clocks lands as one the app clocks does.
+    /// </summary>
     public static CompositionEasingFunction MotionEase(this Compositor compositor) =>
-        Eases.GetValue(
+        Motions.GetValue(
             compositor,
             static owner => owner.CreateCubicBezierEasingFunction(Motion.EaseControlPoints.First, Motion.EaseControlPoints.Second));
+
+    /// <summary>
+    /// No easing at all on <paramref name="compositor"/>, for key frames whose own values already
+    /// trace the curve, as a zoom's glide and the starfield's loop do.
+    /// </summary>
+    public static CompositionEasingFunction LinearEase(this Compositor compositor) =>
+        Linears.GetValue(compositor, static owner => owner.CreateLinearEasingFunction());
 }
