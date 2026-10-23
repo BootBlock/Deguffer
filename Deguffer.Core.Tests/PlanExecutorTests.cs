@@ -217,6 +217,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = new ScanSize(4096, 4096),
             MeasuredPaths = [cache],
         };
@@ -339,6 +340,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear the npm cache")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = new ScanSize(4096, 4096),
             MeasuredPaths = [cache],
         };
@@ -691,6 +693,7 @@ public sealed class PlanExecutorTests : IDisposable
             [
                 new RunCommandStep("tool", "clean", "Clear the cache with the tool's own command")
                 {
+                    WhenCancelled = CancelledCommand.Ended,
                     Estimated = planTime.Size,
                     MeasuredPaths = [cache],
                 },
@@ -746,6 +749,7 @@ public sealed class PlanExecutorTests : IDisposable
             [
                 new RunCommandStep("tool", "clean", "Clear the cache with the tool's own command")
                 {
+                    WhenCancelled = CancelledCommand.Ended,
                     Estimated = planTime.Size,
                     MeasuredPaths = [cache],
                 },
@@ -797,6 +801,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var command = new RunCommandStep("go.exe", "clean -cache -modcache", "Clear the Go caches")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = new ScanSize(10240, 10240),
             MeasuredPaths = [build, module, download],
         };
@@ -835,6 +840,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         var command = new RunCommandStep("tool.exe", "clean", "Clear the tool's caches")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = new ScanSize(12288, 12288),
             MeasuredPaths = [reached, first, second],
         };
@@ -962,10 +968,12 @@ public sealed class PlanExecutorTests : IDisposable
             [
                 new RunCommandStep("tool", "clean", "The big one")
                 {
+                    WhenCancelled = CancelledCommand.Ended,
                     Estimated = new ScanSize(9_000, 9_000),
                 },
                 new RunCommandStep("tool", "clean", "The small one")
                 {
+                    WhenCancelled = CancelledCommand.Ended,
                     Estimated = new ScanSize(1_000, 1_000),
                 },
             ],
@@ -988,14 +996,14 @@ public sealed class PlanExecutorTests : IDisposable
     [Fact]
     public async Task RunsACommandStepWithTheProgramItNamesUnchanged()
     {
-        var step = new RunCommandStep(@"C:\Program Files\Example Tool\example.exe", "cache clean --force", "Clear the cache");
+        var step = new RunCommandStep(@"C:\Program Files\Example Tool\example.exe", "cache clean --force", "Clear the cache") { WhenCancelled = CancelledCommand.Ended };
         var runner = new FakeProcessRunner().Responding(step.FileName, step.Arguments, string.Empty);
 
         var result = await new PlanExecutor(runner, new FakeDirectoryScanner(), RefusalLog)
             .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, ct: default);
 
         Assert.True(Assert.Single(result.Steps).Succeeded);
-        Assert.Equal([(step.FileName, step.Arguments)], runner.Invocations);
+        Assert.Equal([(step.FileName, step.Arguments)], runner.Invocations.Select(i => (i.FileName, i.Arguments)));
     }
 
     /// <summary>

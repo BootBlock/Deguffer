@@ -154,6 +154,8 @@ public sealed class PipCacheProvider : CleanupProviderBase
         {
             new RunCommandStep(pip, "cache purge", "Clear the pip cache using pip's own command")
             {
+                // Each entry in pip's cache is one file, so a purge ended part-way leaves whole entries or none.
+                WhenCancelled = CancelledCommand.Ended,
                 Estimated = measured.Total,
                 MeasuredPaths = [cacheDirectory],
             },
@@ -226,7 +228,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
     {
         // --no-color because pip colourises output when it believes it is writing to a terminal,
         // and the escape sequences would land inside the parsed path.
-        var outcome = await Runner.RunAsync(pip, "cache dir --no-color", ct).ConfigureAwait(false);
+        var outcome = await Runner.RunAsync(pip, "cache dir --no-color", ToolRun.Query, ct).ConfigureAwait(false);
 
         var reported = outcome.Succeeded
             ? outcome.StandardOutput

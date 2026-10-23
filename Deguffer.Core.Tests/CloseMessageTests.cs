@@ -23,12 +23,16 @@ public sealed partial class CloseMessageTests
     /// <para><c>ExitWindowsEx</c> is not here: §7 lets the user choose to log off, restart or shut
     /// down once a clean has finished. It is held to one file and to Windows asking every program to
     /// close, by <see cref="TheOnlySessionEndIsAskedOfWindowsAndNeverForced"/>.</para>
+    ///
+    /// <para>Nor is <c>TerminateJobObject</c>: a tool Deguffer started itself is ended through the job
+    /// it was started in, which is held to jobs Deguffer made by
+    /// <see cref="TheOnlyJobEndedIsOneDegufferMadeForItsOwnTools"/>.</para>
     /// </summary>
     private static readonly string[] NeverDeclared =
     [
         "SendMessage", "SendMessageW", "SendMessageTimeout", "SendMessageTimeoutW", "SendNotifyMessage",
         "SendNotifyMessageW", "PostThreadMessage", "PostThreadMessageW", "SendInput", "keybd_event",
-        "mouse_event", "EndTask", "TerminateProcess", "NtTerminateProcess", "TerminateJobObject",
+        "mouse_event", "EndTask", "TerminateProcess", "NtTerminateProcess",
         "InitiateShutdown", "InitiateShutdownW", "InitiateSystemShutdown", "InitiateSystemShutdownW",
         "InitiateSystemShutdownEx", "InitiateSystemShutdownExW", "GenerateConsoleCtrlEvent", "AttachConsole",
         "RmShutdown", "RmRestart", "EmptyWorkingSet", "SetProcessWorkingSetSize",
@@ -40,6 +44,9 @@ public sealed partial class CloseMessageTests
 
     /// <summary>The one call that ends the Windows session, which the user chooses to follow a clean.</summary>
     private const string TheOnlySessionEnd = "ExitWindowsEx";
+
+    /// <summary>The one call that ends processes, all of them tools Deguffer started.</summary>
+    private const string TheOnlyJobEnd = "TerminateJobObject";
 
     [Fact]
     public void NoCallThatEndsOrCommandsAnotherProgramIsDeclared()
@@ -117,6 +124,33 @@ public sealed partial class CloseMessageTests
                 .Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// A job is ended by one declaration, called from one type, and that type's jobs come only from
+    /// Windows making a new one. A job made empty holds nothing but what Deguffer starts in it, so
+    /// ending one can reach no program the user runs. A job opened by name, or a handle taken from
+    /// elsewhere, is how that would stop being true, and both would be a second way into the type.
+    /// </summary>
+    [Fact]
+    public void TheOnlyJobEndedIsOneDegufferMadeForItsOwnTools()
+    {
+        var declared = Imports();
+
+        Assert.Equal(Path.Combine("Deguffer.Core", "Safety", "ToolProcessNative.cs"), Assert.Single(declared[TheOnlyJobEnd]));
+        Assert.False(declared.Contains("OpenJobObjectW") || declared.Contains("OpenJobObject"), "A job is opened rather than made.");
+
+        var callers = Sources
+            .Where(file => TerminateCall().IsMatch(File.ReadAllText(file)))
+            .Select(file => Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file));
+
+        Assert.Equal(Path.Combine("Deguffer.Core", "Safety", "ToolJob.cs"), Assert.Single(callers));
+
+        var job = File.ReadAllText(Path.Combine(Core, "Safety", "ToolJob.cs"));
+
+        Assert.Contains("private ToolJob(SafeJobHandle handle)", job, StringComparison.Ordinal);
+        Assert.Single(NewJob().Matches(job));
+        Assert.Contains("var handle = ToolProcessNative.CreateJobObject(0, 0);", job, StringComparison.Ordinal);
+    }
+
     private static string Core =>
         Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core");
 
@@ -179,4 +213,11 @@ public sealed partial class CloseMessageTests
 
     [GeneratedRegex(@"\bExitWindowsEx\b")]
     private static partial Regex SessionEndMention();
+
+    /// <summary>A call, which the declaration's <c>bool</c> before the name tells apart from it.</summary>
+    [GeneratedRegex(@"(?<!\bbool\s+)\bTerminateJobObject\s*\(")]
+    private static partial Regex TerminateCall();
+
+    [GeneratedRegex(@"\bnew\s+ToolJob\s*\(")]
+    private static partial Regex NewJob();
 }

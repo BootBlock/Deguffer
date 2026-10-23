@@ -26,7 +26,7 @@ public sealed class DriverStoreTests : IDisposable
 
         var listing = await new DriverStore(runner, _system).ListAsync(CancellationToken.None);
 
-        var (fileName, arguments) = Assert.Single(runner.Invocations);
+        var (fileName, arguments, _) = Assert.Single(runner.Invocations);
         Assert.Equal(Path.Combine(_system.WindowsDirectory, "System32", "pnputil.exe"), fileName);
         Assert.Equal(PnpUtilDriverList.Arguments, arguments);
         Assert.Null(listing.Failure);

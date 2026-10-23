@@ -1067,7 +1067,7 @@ public sealed class CleanupPlannerTests
                 (_, _, { } path) =>
                     [new DeleteDirectoryStep(path, "Output") { Estimated = new ScanSize(bytes, bytes) }],
 
-                _ => [new RunCommandStep("tool", "clear", "Clear") { Estimated = new ScanSize(bytes, bytes) }],
+                _ => [new RunCommandStep("tool", "clear", "Clear") { WhenCancelled = CancelledCommand.Ended, Estimated = new ScanSize(bytes, bytes) }],
             },
             ProtectedPaths = protects is null
                 ? []

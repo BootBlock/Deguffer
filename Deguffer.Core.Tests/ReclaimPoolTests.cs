@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
@@ -12,7 +13,7 @@ public sealed class ReclaimPoolTests
     private static readonly ReclaimPool Store = new("store");
 
     private static RunCommandStep Step(long bytes, ReclaimPool? pool = null) =>
-        new("tool.exe", $"--free {bytes}", "Free space") { Estimated = ScanSize.FromLengths(bytes), SharesReclaim = pool };
+        new("tool.exe", $"--free {bytes}", "Free space") { WhenCancelled = CancelledCommand.Ended, Estimated = ScanSize.FromLengths(bytes), SharesReclaim = pool };
 
     [Fact]
     public void StepsOutsideAPoolAreSummed() =>

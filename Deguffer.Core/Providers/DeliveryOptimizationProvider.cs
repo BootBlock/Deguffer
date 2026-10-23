@@ -142,6 +142,9 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
                     DeliveryOptimizationCache.ClearArguments,
                     "Clear the Delivery Optimization cache using Windows' own command")
                 {
+                    // The Delivery Optimization service owns this cache, and nothing documents what a clear ended
+                    // part-way leaves in it, so a started clear is left to finish.
+                    WhenCancelled = CancelledCommand.Finishes,
                     Estimated = ScanSize.FromLengths(bytes),
                     MeasuredBy = _cache,
                 },

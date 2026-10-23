@@ -227,6 +227,9 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
             [
                 new RunCommandStep(pnpm, "store prune", "Remove packages no project uses, using pnpm's own command")
                 {
+                    // pnpm's store checks every file against its hash, so a prune ended part-way leaves misses,
+                    // never a wrong package.
+                    WhenCancelled = CancelledCommand.Ended,
                     Estimated = measured.Total,
                     MeasuredPaths = [store],
                 },
@@ -268,7 +271,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
 
     private async Task<string?> AskStoreAsync(string pnpm, CancellationToken ct)
     {
-        var outcome = await Runner.RunAsync(pnpm, "store path", ct).ConfigureAwait(false);
+        var outcome = await Runner.RunAsync(pnpm, "store path", ToolRun.Query, ct).ConfigureAwait(false);
         if (!outcome.Succeeded)
         {
             return null;

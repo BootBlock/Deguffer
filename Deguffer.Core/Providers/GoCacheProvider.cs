@@ -255,6 +255,9 @@ public sealed class GoCacheProvider : CleanupProviderBase
         var steps = locations
             .Zip(measured.Sizes, (location, size) => (CleanupStep)new RunCommandStep(go, location.Arguments, location.What)
             {
+                // Go reads an extracted module folder as complete, so a clean ended part-way could leave a
+                // half-removed module a build then uses. Left to finish.
+                WhenCancelled = CancelledCommand.Finishes,
                 Estimated = size,
                 MeasuredPaths = [location.Path],
             })
@@ -327,7 +330,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
     private async Task<GoLocations> AskLocationsAsync(string go, CancellationToken ct)
     {
         var outcome = await Runner
-            .RunAsync(go, "env " + string.Join(' ', QueriedVariables), ct)
+            .RunAsync(go, "env " + string.Join(' ', QueriedVariables), ToolRun.Query, ct)
             .ConfigureAwait(false);
 
         var reported = outcome.Succeeded

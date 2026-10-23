@@ -291,6 +291,15 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// </summary>
     public OwnServicingCalls? ServicingCalls { get; init; }
 
+    /// <summary>
+    /// Whether a clean cancelled while the command runs ends the tool, or lets it finish. Required,
+    /// because only the provider knows what the tool leaves behind when it is stopped part-way: npm's
+    /// hash-checked cache is only smaller, while a NuGet package folder or Windows' component store can
+    /// be left damaged.
+    /// See <see cref="CancelledCommand"/>.
+    /// </summary>
+    public required CancelledCommand WhenCancelled { get; init; }
+
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
 
     /// <summary>

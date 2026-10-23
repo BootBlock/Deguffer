@@ -66,6 +66,12 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
     /// </summary>
     private const int LongestFile = 4 * 1024 * 1024;
 
+    /// <summary>
+    /// A restore is left to finish once it has started: ended part-way, it would leave the entry
+    /// neither as it was nor as it is, which is worse than either.
+    /// </summary>
+    private static readonly ToolRun ImportRun = ToolRun.Command(CancelledCommand.Finishes);
+
     public static RegistryBackups For(IUserEnvironment environment, ISystemDirectories directories, IProcessRunner runner) =>
         new(
             runner,
@@ -102,7 +108,7 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
         }
 
         // /y always: without it reg.exe waits on an overwrite prompt that nothing will answer.
-        var outcome = await runner.RunAsync(regExe, $"export \"{keyPath}\" \"{file}\" /y /reg:64", ct).ConfigureAwait(false);
+        var outcome = await runner.RunAsync(regExe, $"export \"{keyPath}\" \"{file}\" /y /reg:64", ToolRun.Query, ct).ConfigureAwait(false);
 
         if (outcome.Succeeded && new FileInfo(LongPath.Extended(file)) is { Exists: true, Length: > 0 })
         {
@@ -162,7 +168,7 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
                     "The copy of the backup changed before it was imported, so Deguffer did not import it.");
             }
 
-            var outcome = await runner.RunAsync(regExe, $"import \"{copy}\" /reg:64", ct).ConfigureAwait(false);
+            var outcome = await runner.RunAsync(regExe, $"import \"{copy}\" /reg:64", ImportRun, ct).ConfigureAwait(false);
 
             return outcome.Succeeded
                 ? new BackupOutcome(true, backup.Path, $"Restored from {backup.Path}.")

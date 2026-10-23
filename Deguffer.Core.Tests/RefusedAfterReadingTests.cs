@@ -40,6 +40,7 @@ public sealed class RefusedAfterReadingTests : IDisposable
 
         var command = new RunCommandStep("tool", "clean", "Clear the cache with the tool's own command")
         {
+            WhenCancelled = CancelledCommand.Ended,
             Estimated = new ScanSize(4096, 4096),
             MeasuredPaths = [cache],
         };

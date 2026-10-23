@@ -275,6 +275,9 @@ public sealed class FileHistoryProvider : CleanupProviderBase
                     $"-cleanup {days} -quiet",
                     $"Drop File History versions older than {days} days using Windows' own command")
                 {
+                    // File History keeps a catalogue of the versions it holds, and nothing documents what a
+                    // cleanup ended part-way leaves in it, so a started cleanup is left to finish.
+                    WhenCancelled = CancelledCommand.Finishes,
                     Estimated = ScanSize.Approximate(aged.Total.Reclaimable),
                     MeasuredPaths = [target.DataDirectory],
                     MeasuredBefore = probed.Total,

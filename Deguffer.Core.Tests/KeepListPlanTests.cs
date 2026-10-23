@@ -241,7 +241,7 @@ public sealed class KeepListPlanTests : IDisposable
                     new DeleteDirectoryStep(KeptPath, "Kept") { Identity = new ItemIdentity("kept", "Kept") },
                     new DeleteDirectoryStep(OfferedPath, "Offered") { Identity = new ItemIdentity("offered", "Offered") },
                     new DeleteDirectoryStep(AnonymousPath, "Anonymous"),
-                    new RunCommandStep("tool", "clear", "Clear"),
+                    new RunCommandStep("tool", "clear", "Clear") { WhenCancelled = CancelledCommand.Ended },
                 ],
                 ProtectedPaths =
                 [

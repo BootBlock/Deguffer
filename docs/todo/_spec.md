@@ -203,6 +203,21 @@ npm, uv, Poetry and PlatformIO read project configuration from the directory the
 parents. Run from a shortcut's "Start in" folder or a terminal inside a repository, a row described
 as the profile's cache would measure, clean and protect a project's or another drive's instead.
 
+Every tool Deguffer starts has a stated lifetime. A query only reads, so it has a time limit (two
+minutes, DISM's analysis thirty), and a cancelled scan or a limit reached ends it and everything it
+started, before the scan moves on. An eviction command has no limit, and each one says what a
+cancelled clean does to it. It is ended only where a clean stopped part-way leaves nothing worse than
+misses: npm's and pnpm's stores check every entry against its hash, pip's entries are single files,
+and `lms` only asks LM Studio to remove a runtime later. Everything else is left to finish, because
+ended part-way it could leave damage rather than a smaller cache: DISM's servicing, `pnputil`'s
+driver removal, File History's cleanup, Delivery Optimization's clear and a registry restore in
+Windows' own stores, and NuGet, conda, PlatformIO, Go, uv and Poetry, which can take a half-removed
+package for an installed one. A clean cancelled during such a command reports it as run, and counts
+nothing for it. Every tool that may be ended runs in a job object Deguffer holds for its whole
+life, so nothing it started outlives Deguffer. A tool is started by full path only, with nothing on
+its standard input, so a tool that stops to ask a question reads the end of its input instead of
+waiting.
+
 ### 5.2 Config lives next to cache — target subfolders, never roots
 
 - `%USERPROFILE%\.gradle` contains `caches` and `wrapper` (disposable) alongside
@@ -448,7 +463,10 @@ Deliberate points, and the traps that come with them:
   or failed, or one whose §5.6 verification failed, because that verdict must be read before the next
   run. Logging off, restarting and shutting down ask Windows to do it, which asks every program to
   close and lets any of them refuse. Deguffer never forces it. That is the one call outside §7.2.1
-  that ends other programs, and a test holds it to that one file and to those flags.
+  that ends other programs, and a test holds it to that one file and to those flags. The tools
+  Deguffer starts itself (§5.1) are not other programs: ending one ends a job object Deguffer made
+  for it, which holds that tool and what it started and nothing else, and a test holds that call to
+  the one type that makes such jobs.
 - **The taskbar button says when Deguffer is working.** While a scan, a search, a clean or a removal
   runs on any page, the button shows a bar: filled where the work can say how far it has got, and
   moving where it cannot. The bar goes when the page's own busy indicator does, however the work

@@ -48,7 +48,7 @@ public sealed class DockerInsideFigure(IUserEnvironment environment, IProcessRun
                 + "could not be asked how much of the disk is reclaimable inside.");
         }
 
-        var outcome = await runner.RunAsync(docker, Arguments, ct).ConfigureAwait(false);
+        var outcome = await runner.RunAsync(docker, Arguments, ToolRun.Query, ct).ConfigureAwait(false);
 
         if (!outcome.Succeeded)
         {

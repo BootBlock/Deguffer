@@ -59,14 +59,14 @@ public sealed class LeftoverStepTests : IDisposable
     /// </summary>
     [Fact]
     public void ACommandIsChosenOnWhatItFreesAlone() =>
-        Assert.False(new RunCommandStep("tool", "clean", "Clean") { Estimated = new ScanSize(0, 0, Entries: 500) }
+        Assert.False(new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended, Estimated = new ScanSize(0, 0, Entries: 500) }
             .RemovesSomething);
 
     [Fact]
     public void AnythingThatFreesBytesIsWorthChoosing()
     {
         Assert.True(new DeleteDirectoryStep(SomeFolder, "A cache") { Estimated = ScanSize.FromLengths(1) }.RemovesSomething);
-        Assert.True(new RunCommandStep("tool", "clean", "Clean") { Estimated = ScanSize.FromLengths(1) }.RemovesSomething);
+        Assert.True(new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended, Estimated = ScanSize.FromLengths(1) }.RemovesSomething);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public sealed class LeftoverStepTests : IDisposable
 
         Assert.Equal(30, new DeleteDirectoryStep(SomeFolder, "A leftover") { Estimated = measured, IsLeftover = true }.Reclaim.Entries);
         Assert.Equal(0, new DeleteDirectoryStep(SomeFolder, "A cache") { Estimated = measured }.Reclaim.Entries);
-        Assert.Equal(0, new RunCommandStep("tool", "clean", "Clean") { Estimated = measured }.Reclaim.Entries);
+        Assert.Equal(0, new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended, Estimated = measured }.Reclaim.Entries);
         Assert.Equal(4096, new DeleteDirectoryStep(SomeFolder, "A cache") { Estimated = measured }.Reclaim.Reclaimable);
     }
 

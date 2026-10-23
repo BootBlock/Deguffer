@@ -284,6 +284,9 @@ public sealed class DriverStoreProvider : CleanupProviderBase
                 $"Remove {Described(superseded.Package)}, which version {superseded.Newest.Version} of "
                 + $"{superseded.Newest.Date:d MMMM yyyy} replaces, using Windows' own command")
             {
+                // The driver store is Windows' own, and nothing documents what a removal ended part-way
+                // leaves in it, so a started removal is left to finish.
+                WhenCancelled = CancelledCommand.Finishes,
                 Removes = superseded.Package.Folder,
                 MeasuredPaths = [superseded.Package.Folder!],
                 Estimated = measured.Sizes[i],

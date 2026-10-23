@@ -236,6 +236,9 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             [
                 new RunCommandStep(dotnet, "nuget locals all --clear", "Clear all NuGet caches using NuGet's own command")
                 {
+                    // NuGet takes a package folder holding its .nupkg.metadata as installed, so a clear ended
+                    // part-way could leave a half-removed package that a restore then trusts. Left to finish.
+                    WhenCancelled = CancelledCommand.Finishes,
                     Estimated = measured.Total,
                     MeasuredPaths = present,
                 },
@@ -312,7 +315,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// </summary>
     private async Task<IReadOnlyList<string>> ListLocalsAsync(string dotnet, CancellationToken ct)
     {
-        var outcome = await Runner.RunAsync(dotnet, "nuget locals all --list", ct).ConfigureAwait(false);
+        var outcome = await Runner.RunAsync(dotnet, "nuget locals all --list", ToolRun.Query, ct).ConfigureAwait(false);
 
         var parsed = new List<string>();
         if (outcome.Succeeded)
