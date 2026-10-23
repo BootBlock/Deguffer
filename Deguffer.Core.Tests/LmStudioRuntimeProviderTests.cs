@@ -570,7 +570,6 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         _inspector.WithoutRunning("LM Studio");
-        var asked = _inspector.InvalidateCount;
         var result = await provider.ExecuteAsync(plan);
 
         var outcome = Assert.Single(result.Steps);
@@ -579,8 +578,9 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         Assert.DoesNotContain(_runner.Invocations, call => call.Arguments.StartsWith("runtime remove", StringComparison.Ordinal));
 
         // The real inspector answers from a snapshot of the process table, so the run has to discard
-        // it to see a program closed since the preview. This fake has no snapshot to go stale.
-        Assert.True(_inspector.InvalidateCount > asked);
+        // one past the use checks' limit to see a program closed since the preview. This fake has no
+        // snapshot to go stale.
+        Assert.Contains(IUseCheck.ReadingLimit, _inspector.AgeLimits);
     }
 
     /// <summary>A tool that removes the runtime at once after all is reported as having freed it.</summary>

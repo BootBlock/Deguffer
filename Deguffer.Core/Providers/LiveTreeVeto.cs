@@ -25,8 +25,9 @@ public sealed record ClearedBuildDirectory(string Path, string Project, IUseChec
 /// What a provider asks the veto about each directory, built from one reading of the machine.
 ///
 /// <para>Built again for every reading rather than kept, because what it holds is read from the
-/// machine as well as from the project: the check at the clean reads the process table afresh, and a
-/// question built from the preview's reading would ask about the preview's machine. A provider hands
+/// machine as well as from the project: the check at the clean reads the process table again once
+/// the preview's is past <see cref="IUseCheck.ReadingLimit"/>, and a question built from the
+/// preview's reading would ask about the preview's machine. A provider hands
 /// the veto the rule that builds one, never one already built.</para>
 /// </summary>
 /// <param name="Ask">The query for one directory.</param>
