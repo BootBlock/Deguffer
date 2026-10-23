@@ -1,6 +1,7 @@
 using System.Globalization;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -287,16 +288,20 @@ internal static class ClaudeCodeConversations
         return (latest, folders);
     }
 
-    /// <summary>Every candidate's conversation read at once, bounded (G4), in the candidates' order.</summary>
+    /// <summary>
+    /// Every candidate's conversation read at once, bounded (G4), in the candidates' order, on threads
+    /// of the read's own rather than the pool's: each read blocks its thread on the disk. See
+    /// <see cref="ListWorkers"/>.
+    /// </summary>
     private static ClaudeCodeConversation?[] Describe(List<Candidate> candidates, CancellationToken ct)
     {
         var described = new ClaudeCodeConversation?[candidates.Count];
 
-        Parallel.For(
-            0,
+        ListWorkers.Run(
             candidates.Count,
-            new ParallelOptions { MaxDegreeOfParallelism = ReadParallelism, CancellationToken = ct },
-            index => described[index] = ClaudeCodeTranscriptReader.Read(candidates[index].Session.Transcript.Path, ct));
+            ReadParallelism,
+            index => described[index] = ClaudeCodeTranscriptReader.Read(candidates[index].Session.Transcript.Path, ct),
+            ct);
 
         return described;
     }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -35,6 +36,12 @@ internal sealed record RefusalFinding(
 internal static class RefusalCheck
 {
     private static readonly RefusalFinding Nothing = new(Refusals.None, [], Standing: 0, Undescribed: []);
+
+    /// <summary>
+    /// The most files opened at once. Each open is a short wait on the disk rather than work for a
+    /// processor, so it runs two to a processor, up to a ceiling.
+    /// </summary>
+    private static readonly int MostAtOnce = Math.Min(Environment.ProcessorCount * 2, 16);
 
     /// <param name="recorded">
     /// The places <see cref="RefusalRecord"/> holds for <paramref name="step"/>, in display form.
@@ -97,12 +104,6 @@ internal static class RefusalCheck
             ? new RemovalBounds(KeepRoot: false, clear.Spared, clear.OwnedElsewhere)
             : RemovalBounds.None;
 
-        var options = new ParallelOptions
-        {
-            CancellationToken = ct,
-            MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 2, 16),
-        };
-
         var refused = Refusals.None;
         var places = new List<(string, Refusals)>();
         var undescribed = new List<string>();
@@ -124,7 +125,7 @@ internal static class RefusalCheck
                 continue;
             }
 
-            var found = Check(extended, keep, bounds, fs, options, ct);
+            var found = Check(extended, keep, bounds, fs, ct);
 
             if (found.Undescribed)
             {
@@ -187,7 +188,6 @@ internal static class RefusalCheck
         MinimumAge keep,
         RemovalBounds bounds,
         IFileSystem fs,
-        ParallelOptions options,
         CancellationToken ct)
     {
         // Kind-agnostic, although it is the directory probe: a refusal is decided before the kind is
@@ -210,9 +210,13 @@ internal static class RefusalCheck
             var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
             var counter = new RefusalCounter();
             var files = new ConcurrentBag<string>();
+            var candidates = inventory.Files;
 
-            Parallel.ForEach(inventory.Files, options, file =>
+            // On threads of the check's own, never the pool's: each open blocks its thread on the disk.
+            // See ListWorkers.
+            ListWorkers.Run(candidates.Count, MostAtOnce, index =>
             {
+                var file = candidates[index];
                 var path = file.FullName;
 
                 if (fs.ProbeRemoval(path) is { } reason)
@@ -220,7 +224,7 @@ internal static class RefusalCheck
                     counter.Add(reason, file.Length);
                     files.Add(path);
                 }
-            });
+            }, ct);
 
             return new PlaceCheck(counter.Total, files);
         }
