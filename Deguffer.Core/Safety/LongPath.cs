@@ -393,18 +393,18 @@ public static partial class LongPath
         206 or    // ERROR_FILENAME_EXCED_RANGE
         1231;     // ERROR_NETWORK_UNREACHABLE
 
+    private const int ErrorDirectory = 267;
+
     /// <summary>
-    /// Whether a handle that would not open on <paramref name="extendedPath"/>, failing with
-    /// <paramref name="win32Error"/>, says nothing is there: the answer <see cref="ProbeEntry"/> gives
-    /// for the same path, for a caller whose open is its presence probe.
+    /// Whether a handle that would not open on a path, failing with <paramref name="win32Error"/>,
+    /// says nothing is there: the answer <see cref="ProbeEntry(string)"/> gives for the same path,
+    /// for a caller whose open is its presence probe.
     ///
     /// <para><b>One error more than the attribute read's set.</b> A file named with a trailing
     /// separator is absent to the probe, which settles it before reading, and an open of it fails
     /// with <c>ERROR_DIRECTORY</c>. Read as a refusal, that would be the probe's answer reversed.
     /// </para>
     /// </summary>
-    private const int ErrorDirectory = 267;
-
     internal static bool OpenSaysNothingIsThere(int win32Error) =>
         SaysNothingIsThere(win32Error) || win32Error == ErrorDirectory;
 

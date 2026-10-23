@@ -83,7 +83,7 @@ public sealed partial class PresenceProbeSweepTests
 
     /// <summary>
     /// Every C# file in a product project, found by name so a project added later is covered the
-    /// moment it exists. <c>LongPath</c> itself is left out, because it defines the two.
+    /// moment it exists. <c>LongPath</c> itself is left out, because it defines the three.
     /// </summary>
     private static IEnumerable<string> ProductSources() =>
         Directory.EnumerateDirectories(MarkdownGuide.RepositoryRoot, "Deguffer.*")

@@ -154,7 +154,7 @@ public sealed class CloudFiles : ICloudFiles
     public PlaceholderReading Read(string path)
     {
         // The open is the presence probe, its failure classified as the attribute probe classifies its
-        // own, so a walk of a hundred thousand placeholders reads no attributes for them.
+        // own, so no attribute read by name comes before it for each placeholder a walk holds.
         using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Describe);
 
         if (handle.IsInvalid)
