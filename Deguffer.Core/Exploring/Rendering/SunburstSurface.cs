@@ -287,9 +287,10 @@ public sealed class SunburstSurface : ExploreSurface
     }
 
     /// <summary>
-    /// How many steps an arc of <paramref name="sector"/> is traced in: one per degree of sweep. At the
-    /// radii a sunburst is drawn at that is a hundredth of a pixel from the true arc, which is far below
-    /// what a stroke a pixel or two wide can show.
+    /// How many steps an arc of <paramref name="sector"/> is traced in: one per degree of sweep. A step
+    /// cuts inside the true arc by under four hundred-thousandths of its radius, which at the radii a
+    /// sunburst is drawn at is a few hundredths of a pixel: far below what a stroke a pixel or two wide
+    /// can show.
     /// </summary>
     private static int StepsOf(ExploreSector sector) =>
         Math.Clamp((int)MathF.Ceiling(sector.SweepAngle / (MathF.PI / 180)), 2, 360);

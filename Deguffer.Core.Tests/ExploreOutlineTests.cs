@@ -259,13 +259,14 @@ public sealed class ExploreOutlineTests
     [Fact]
     public void AnArcIsTracedCloseEnoughThatItsCornersDoNotShow()
     {
-        var tree = RingTree();
+        var tree = ChainTree();
         var sunburst = SunburstLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
-        var ring = sunburst.Sectors.Single(s => s.Depth == 1);
+        var ring = sunburst.Sectors.MaxBy(s => s.Depth);
         var outer = Sunburst(tree).Outlines(new HashSet<int> { ring.Node })
             .MaxBy(outline => outline.Points.Average(p => Radius(sunburst, p)))!;
 
-        Assert.True(ring.OuterRadius > 100, "the fixture's ring is too small for a coarse trace to show");
+        Assert.True(ring.IsWholeCircle, "the fixture's outermost shape is not a whole circle");
+        Assert.True(ring.OuterRadius >= sunburst.Radius, "the fixture's outermost shape is not at the outside of the picture");
 
         var points = outer.Points;
 
@@ -320,6 +321,25 @@ public sealed class ExploreOutlineTests
         builder.AddChildren(
             only,
             [new ExploreChild("leaf", IsDirectory: false, IsLink: false, Size: 1000)]);
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    /// <summary>
+    /// One folder inside another, as deep as a sunburst draws, ending in one file: a ring at every
+    /// level, the last at the outside of the picture.
+    /// </summary>
+    private static ExploreTree ChainTree()
+    {
+        var builder = new ExploreTreeBuilder(@"C:");
+        var folder = ExploreTreeBuilder.RootNode;
+
+        for (var depth = 1; depth < LayoutLimits.Default.MaximumDepth; depth++)
+        {
+            folder = builder.AddChildren(folder, [new ExploreChild($"level{depth}", IsDirectory: true, IsLink: false, Size: 0)]);
+        }
+
+        builder.AddChildren(folder, [new ExploreChild("leaf", IsDirectory: false, IsLink: false, Size: 1000)]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }
