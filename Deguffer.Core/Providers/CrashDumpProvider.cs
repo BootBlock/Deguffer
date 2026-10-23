@@ -56,20 +56,24 @@ namespace Deguffer.Core.Providers;
 public sealed class CrashDumpProvider : CleanupProviderBase
 {
     private readonly IReadOnlyList<DeclaredRoot> _roots;
+    private readonly ISystemDirectories _system;
 
     public CrashDumpProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner)
+            scanner,
+            volumes: volumes)
     {
-        _roots = Declare(system ?? SystemDirectories.Current);
+        _system = system ?? SystemDirectories.Current;
+        _roots = Declare(_system);
     }
 
     public override string Id => "crash-dumps";
@@ -112,33 +116,49 @@ public sealed class CrashDumpProvider : CleanupProviderBase
     protected override IReadOnlyList<string> ConflictingProcessNames => ["WerFault", "WerFaultSecure"];
 
     /// <summary>
-    /// Presence is a declared path actually being there. Every one of these roots exists on every
-    /// Windows machine, so reading a root as a hit would report this source everywhere and then plan
-    /// nothing on a machine that has never crashed.
+    /// Presence is a declared path actually being there, or a dump in a place this machine's settings
+    /// move dumps to. Every one of these roots exists on every Windows machine, so reading a root as
+    /// a hit would report this source everywhere and then plan nothing on a machine that has never
+    /// crashed.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(DeclaredPaths().Any(p =>
-            p.IsFile ? LongPath.FileMayExist(p.Path) : LongPath.DirectoryMayExist(p.Path)));
+        Task.FromResult(
+            DeclaredPaths().Any(p => p.IsFile ? LongPath.FileMayExist(p.Path) : LongPath.DirectoryMayExist(p.Path))
+            || ExamineRelocated(ct).FoundAnything);
 
     /// <summary>
     /// Each declared dump folder, and the kernel's full dump file, whole: everything in them is a
-    /// record this row offers, and the folders holding them are not this row's.
+    /// record this row offers, and the folders holding them are not this row's. In a place a setting
+    /// moves dumps to, only each dump is this row's.
     /// </summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. DeclaredPaths().Select(declared => CleanedPlace.Whole(declared.Path))]);
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+        [
+            .. DeclaredPaths().Select(declared => CleanedPlace.Whole(declared.Path)),
+            .. ExamineRelocated(ct).Targets.Select(dump => CleanedPlace.Whole(dump.Path)),
+        ]);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var scan = DeclaredLocations.Examine(_roots, ct);
+        var relocated = ExamineRelocated(ct);
 
-        if (scan.FoundNothing)
+        if (scan.FoundNothing && relocated.Targets.Count == 0)
         {
-            return EmptyPlan("Windows has written no crash dumps or error reports on this machine.");
+            return NothingFound(relocated);
         }
 
         var notes = new List<PlanNote>(scan.Notes);
+        notes.AddRange(relocated.Notes);
 
-        var (steps, measured) = await PlanDeletionsAsync(scan.Targets, keep, ct).ConfigureAwait(false);
+        if (!scan.Targets.Any(t => t.RequiresElevation) && relocated.Targets.Any(t => t.RequiresElevation))
+        {
+            notes.Add(DeclaredLocations.ElevationNote);
+        }
+
+        IReadOnlyList<DeletionTarget> targets = [.. scan.Targets, .. relocated.Targets];
+
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
@@ -157,16 +177,56 @@ public sealed class CrashDumpProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected]),
+            ProtectedPaths = Protect([.. scan.Protected, .. relocated.Protected]),
             Notes = notes,
             Fallback = measured.Fallback,
-            WasNotExamined = scan.NothingWasExamined,
-            HasUnreadableRoot = scan.CouldNotBeReached,
+            WasNotExamined = targets.Count == 0 && (scan.Declined.Count > 0 || relocated.LeftUnexamined),
+            HasUnreadableRoot = scan.CouldNotBeReached || relocated.Unreachable.Count > 0,
         };
     }
 
     /// <summary>
-    /// The five locations, and the §9 exclusions that must be shown to survive a rule reaching into
+    /// The plan when no declared location is there and no moved place holds a dump to offer.
+    ///
+    /// <para>"Already clear" is a claim about every place Windows writes these, so it is made only
+    /// where every one was looked at. A moved place Windows would not describe, or one Deguffer
+    /// would not look into, leaves the row saying so instead.</para>
+    /// </summary>
+    private CleanupPlan NothingFound(RelocatedDumpScan relocated)
+    {
+        var plan = relocated.Unreachable.Count > 0
+            ? UnreadableRootPlan(relocated.Unreachable)
+            : relocated.LeftUnexamined
+                ? UnexaminedPlan(
+                    "None of the places Deguffer could look in holds a crash dump or error report, and "
+                    + "it could not look in all of them.")
+                : EmptyPlan(
+                    "None of the places Windows is set to write crash dumps and error reports to holds any.");
+
+        // An unreachable place's own warning is already in the plan, so only the other sentences are
+        // added: each moved place is named whatever was found there.
+        return plan with
+        {
+            Notes = [.. plan.Notes, .. relocated.Notes.Where(note => !plan.Notes.Contains(note))],
+        };
+    }
+
+    /// <summary>
+    /// The places this machine's settings move dumps to, examined afresh. Not memoised: the settings
+    /// and the dumps both change while the app is open, and each read is a handful of registry values
+    /// and the top level of each moved folder.
+    /// </summary>
+    private RelocatedDumpScan ExamineRelocated(CancellationToken ct) =>
+        RelocatedDumps.Examine(
+            CrashDumpSettings.Read(Environment),
+            [.. DeclaredPaths().Select(declared => declared.Path)],
+            Environment,
+            _system,
+            Volumes,
+            ct);
+
+    /// <summary>
+    /// The eight locations, and the §9 exclusions that must be shown to survive a rule reaching into
     /// the same directory.
     ///
     /// <c>%PROGRAMDATA%</c> is declared as the root rather than the <c>WER</c> folder inside it, so
@@ -179,14 +239,22 @@ public sealed class CrashDumpProvider : CleanupProviderBase
     [
         new DeclaredRoot(
             Environment.LocalAppData,
-            "The profile's local application data must survive — only the crash dump folder inside "
-            + "it is removed.",
+            "The profile's local application data must survive — only the crash dump and error "
+            + "report folders inside it are removed.",
             RequiresElevation: false,
             [
                 new DeclaredLocation(
                     "CrashDumps",
                     "Dumps written when an application crashed. Each one is the record of a single "
                     + "failure and nothing re-creates it."),
+                new DeclaredLocation(
+                    Path.Combine("Microsoft", "Windows", "WER", "ReportArchive"),
+                    "Error reports Windows has already sent for this account's applications. The "
+                    + "archive is this machine's own copy and is not fetched back."),
+                new DeclaredLocation(
+                    Path.Combine("Microsoft", "Windows", "WER", "ReportQueue"),
+                    "Error reports gathered for this account's applications but not yet sent. "
+                    + "Removing one means it is never sent."),
             ],
             []),
 

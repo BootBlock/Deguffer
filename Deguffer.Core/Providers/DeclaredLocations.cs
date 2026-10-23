@@ -83,6 +83,15 @@ public static class DeclaredLocations
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
 
+    /// <summary>
+    /// The sentence a plan carries when any target in it needs administrator rights. Shared, so a
+    /// provider that adds targets of its own beside a declared scan states it once and in these words.
+    /// </summary>
+    public static readonly PlanNote ElevationNote = new(
+        PlanNoteSeverity.Information,
+        "Some of these sit in directories only an administrator may change. Deguffer lists "
+        + "them either way, and can remove them only while it is running as administrator.");
+
     private static readonly char[] Separators =
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
@@ -136,10 +145,7 @@ public static class DeclaredLocations
             // locations rather than about the run. Showing the sentence only when it applies would
             // need Core to know the process token, and a plan that described the disk differently
             // depending on who asked would be a worse thing to have.
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                "Some of these sit in directories only an administrator may change. Deguffer lists "
-                + "them either way, and can remove them only while it is running as administrator."));
+            notes.Add(ElevationNote);
         }
 
         return new DeclaredLocationScan(targets, Deduplicate(protectedPaths), declined, notes)
