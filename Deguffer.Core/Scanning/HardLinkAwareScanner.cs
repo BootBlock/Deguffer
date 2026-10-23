@@ -108,17 +108,12 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
             ct.ThrowIfCancellationRequested();
 
             var path = asked[i].Path;
-            var presence = LongPath.ProbeDirectory(path);
+            var presence = LongPath.ProbeEntry(path, out var isDirectory);
 
-            if (presence is PathPresence.Present)
+            if (isDirectory is true)
             {
                 directories.Add(i);
                 continue;
-            }
-
-            if (presence is PathPresence.Absent)
-            {
-                presence = LongPath.ProbeFile(path);
             }
 
             if (presence is PathPresence.Present)
