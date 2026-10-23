@@ -56,7 +56,10 @@ public sealed class ToolLifetimeTests : IDisposable
         var child = await ChildAsync(pidFile, run);
 
         await cts.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+
+        // Bounded, because a child left running holds the shim, and the call would otherwise return,
+        // late, once the child finished on its own.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(ExitWait));
 
         // Exited rather than exiting: the next scan starts as soon as this returns, and a child still
         // at work would run beside the one that scan starts.
