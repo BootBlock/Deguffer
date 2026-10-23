@@ -117,13 +117,15 @@ internal static class AutoTuning
     /// The medians of the later runs of the <c>table</c> route were 3.16 to 3.66 s on one thread,
     /// 2.97 to 3.12 s on two, 2.84 to 3.05 s on four, 2.99 to 3.04 s on eight and 2.82 to 3.13 s on
     /// sixteen, and the <c>index</c> route 2.96 to 3.28 s on one, 2.94 to 3.19 s on two, 2.88 to
-    /// 3.12 s on four and 2.91 to 3.08 s on sixteen. Every round at eight was slowed by the disk's
-    /// other work. The pass kept 0.3 to 0.6 processors busy at every count, so the parse is not what
-    /// sets its pace: the drive is. A second thread likely pays because a buffer waiting to be
-    /// parsed is not free for a read. The <c>explore</c> route took 3.24 to 3.97 s at every count,
-    /// about one processor busy, so its pace is set by building the tree rather than by the parse.
-    /// The 1.8 TB volume, timed in the same rounds, took 160 to 178 ms from four threads to sixteen,
-    /// 169 to 209 ms on two and 164 to 313 ms on one. Nothing measured earns more than four.</para>
+    /// 3.12 s on four and 2.91 to 3.08 s on sixteen. The index at eight took 3.60 to 5.29 s in every
+    /// round, with the disk reading more than the pass in only one of them, so why is not known; at
+    /// sixteen it was level with four. The table and the index kept 0.3 to 0.6 processors busy at
+    /// every count, so the parse is not what sets their pace: the drive is. A second thread likely
+    /// pays because a buffer waiting to be parsed is not free for a read. The <c>explore</c> route
+    /// took 3.24 to 3.97 s at every count, with 0.6 to 1.1 processors busy, so more threads did not
+    /// pay there either. The 1.8 TB volume, timed in the same rounds, took 160 to 178 ms from four
+    /// threads to sixteen, 169 to 209 ms on two and 164 to 313 ms on one. Nothing measured earns
+    /// more than four.</para>
     /// </summary>
     public static int TableParseThreads() => Math.Min(Environment.ProcessorCount, 4);
 }
