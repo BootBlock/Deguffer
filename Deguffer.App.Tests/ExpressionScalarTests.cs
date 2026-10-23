@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Numerics;
 using Deguffer.App.Controls;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.Interactions;
 
 namespace Deguffer.App.Tests;
@@ -53,27 +55,38 @@ public sealed class ExpressionScalarTests
     }
 
     /// <summary>
-    /// The compositor reads every expression the camera builds from Core's rules: one it cannot read is
-    /// refused as the animation starts, and the picture would stay where it was.
+    /// The compositor reads every expression the camera and the overview build from Core's rules: one it
+    /// cannot read is refused as the animation starts, and the picture, or the overview's rectangle,
+    /// would stay where it was.
     /// </summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void TheCompositorReadsTheCamerasExpressions(bool elastic) =>
+    public void TheCompositorReadsTheCameraAndOverviewExpressions(bool elastic) =>
         CompositionThread.Run(() =>
         {
             var compositor = CompositionThread.Compositor;
             var camera = new MapCamera(compositor);
             var tracker = InteractionTracker.Create(compositor);
+            var overview = compositor.CreatePropertySet();
             var frame = compositor.CreateRectangleGeometry();
 
             camera.Track(tracker, elastic);
             camera.Bound(tracker);
 
-            var shown = compositor.CreateExpressionAnimation($"Vector2({MapCamera.ShownEdge("X")}, {MapCamera.ShownEdge("Y")})");
-            shown.SetReferenceParameter("camera", camera.Properties);
-            frame.StartAnimation(nameof(frame.Offset), shown);
+            overview.InsertVector2(OverviewFrame.Picture, Vector2.Zero);
+            frame.StartAnimation(nameof(frame.Offset), Expression(OverviewFrame.Offset));
+            frame.StartAnimation(nameof(frame.Size), Expression(OverviewFrame.Size));
 
             return true;
+
+            ExpressionAnimation Expression(string expression)
+            {
+                var animation = compositor.CreateExpressionAnimation(expression);
+                animation.SetReferenceParameter("camera", camera.Properties);
+                animation.SetReferenceParameter("overview", overview);
+
+                return animation;
+            }
         });
 }

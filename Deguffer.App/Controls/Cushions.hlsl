@@ -3,12 +3,12 @@
 // the order of the primitives of one draw, which is what makes this the same picture as the
 // rasteriser's.
 //
-// The light is CushionShading's, and has to stay it: ambient plus Lambertian diffuse from van Wijk's
-// light, the same constants, the same flat shapes. A sheen is GradientShading's, in its whole numbers.
-// The finish is ShapeFinish's, decided pixel by pixel by the rule TileRasteriser decides it by, with
-// its colours mixed in the same whole numbers out of ShapeFinish.Whole. CushionRenderer's test compares this picture
-// with the rasteriser's, pixel by pixel. The pointer's light (PointerLight) is added to it, and adds
-// nothing past its reach.
+// The light is CushionShading's: ambient plus Lambertian diffuse from van Wijk's light, on the same
+// flat shapes. A sheen is GradientShading's, in its whole numbers. The finish is ShapeFinish's, decided
+// pixel by pixel by the rule TileRasteriser decides it by, with its colours mixed in the same whole
+// numbers. The formulas are restated here, and CushionRenderer's test compares this picture with the
+// rasteriser's, pixel by pixel. The pointer's light (PointerLight) is added to it, and adds nothing
+// past its reach.
 
 // Every number here that is also Core's comes in as a macro named for the member it is read from
 // (CushionMacros), and so does the constant buffer's layout, from CushionConstants's fields, so

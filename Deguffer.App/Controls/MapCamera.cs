@@ -122,7 +122,7 @@ internal sealed class MapCamera
     /// <summary>
     /// Keep <paramref name="tracker"/> inside the picture from now on, at whatever scale it is: its
     /// position goes from the picture's near edges to where its far edges meet the screen's, measured
-    /// from the camera's origin (<see cref="MapOrigin.Across"/>).
+    /// from the camera's origin, by <see cref="MapOrigin.Least{T}"/> and <see cref="MapOrigin.Most{T}"/>.
     ///
     /// <para>While the origin moves the bounds take in both the old origin's and the new one's, so the
     /// tracker is inside them whichever of the two it is measured from at that moment: the bounds and
