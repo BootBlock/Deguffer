@@ -70,49 +70,63 @@ public sealed class MftBitmap
     }
 
     /// <summary>
-    /// The last record in use from <paramref name="from"/> up to <paramref name="end"/>, or
-    /// <paramref name="from"/> less one where none is.
+    /// The first free record from <paramref name="from"/> up to <paramref name="end"/>, or
+    /// <paramref name="end"/> where none is.
     /// </summary>
-    public long LastInUse(long from, long end)
+    public long NextFree(long from, long end)
     {
-        if (end <= from)
-        {
-            return from - 1;
-        }
+        var record = from;
 
-        if (end > Known)
+        while (record < end && record < Known && (record & 7) != 0)
         {
-            return end - 1;
-        }
-
-        var record = end - 1;
-
-        while (record >= from && (record & 7) != 7)
-        {
-            if (IsInUse(record))
+            if (!IsInUse(record))
             {
                 return record;
             }
 
-            record--;
+            record++;
         }
 
-        if (record < from)
+        // Every record past the bits is in use, so none from there on is free.
+        if (record >= end || record >= Known)
         {
-            return from - 1;
+            return end;
         }
 
-        var first = (int)(from >> 3);
-        var at = _bits.AsSpan(first, (int)(record >> 3) - first + 1).LastIndexOfAnyExcept((byte)0);
+        // A byte at a time from here, which is what a long run of records in use is made of.
+        var limit = Math.Min(end, Known);
+        var first = (int)(record >> 3);
+        var at = _bits.AsSpan(first, (int)((limit - 1) >> 3) - first + 1).IndexOfAnyExcept(byte.MaxValue);
 
         if (at < 0)
         {
-            return from - 1;
+            return end;
         }
 
-        // The highest bit set in the last byte holding one. Where even that lies before the range,
-        // so does every other.
-        var found = ((long)(first + at) << 3) + (31 - BitOperations.LeadingZeroCount((uint)_bits[first + at]));
-        return found >= from ? found : from - 1;
+        var found = ((long)(first + at) << 3) + BitOperations.TrailingZeroCount(~_bits[first + at]);
+        return found < limit ? found : end;
+    }
+
+    /// <summary>How many of records <c>0</c> up to <paramref name="end"/> are in use.</summary>
+    public long CountInUse(long end)
+    {
+        var known = Math.Min(end, Known);
+        var whole = (int)(known >> 3);
+        var count = 0L;
+
+        foreach (var bits in _bits.AsSpan(0, whole))
+        {
+            count += BitOperations.PopCount(bits);
+        }
+
+        for (var record = (long)whole << 3; record < known; record++)
+        {
+            if (IsInUse(record))
+            {
+                count++;
+            }
+        }
+
+        return count + Math.Max(0, end - Known);
     }
 }

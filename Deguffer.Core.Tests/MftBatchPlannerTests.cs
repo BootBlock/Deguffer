@@ -11,6 +11,9 @@ public sealed class MftBatchPlannerTests
 {
     private const int Records = 40;
 
+    /// <summary>A table long enough to hold a run of free records longer than the gap inside one read.</summary>
+    private const int LongTable = 160;
+
     [Fact]
     public void WithoutABitmapReadsEveryRecordInReadsOfTheSizeGiven()
     {
@@ -43,6 +46,40 @@ public sealed class MftBatchPlannerTests
     }
 
     /// <summary>
+    /// A run of free records as long as the gap, sixty-four of these records, is still read across,
+    /// however large the read: records 1 to 64 are free, and record 65 is reached in the same read.
+    /// </summary>
+    [Fact]
+    public void ReadsARunOfFreeRecordsAsLongAsTheGapInsideARead()
+    {
+        Assert.Equal(64, MftReadGap.Records(MftRecordBytes.BytesPerRecord));
+        Assert.Equal([new(0, 68, 0)], Plan(capacity: 128, BitsOf(LongTable, 0, 65), out _, LongTable));
+    }
+
+    /// <summary>
+    /// A run one record longer than the gap ends the read before it, though one read could reach
+    /// past it, and the next read starts on the sector holding the next record in use. The free
+    /// records between are skipped, not read.
+    /// </summary>
+    [Fact]
+    public void EndsAReadBeforeARunOfFreeRecordsLongerThanTheGap()
+    {
+        Assert.Equal([new(0, 4, 0), new(64, 68, Skipped: 60)], Plan(capacity: 128, BitsOf(LongTable, 0, 66), out _, LongTable));
+    }
+
+    /// <summary>
+    /// A short run before a long one is read across, and the read ends at the long one: the read
+    /// does not stop at the first free record it meets.
+    /// </summary>
+    [Fact]
+    public void ReadsAcrossAShortRunAndEndsAtALongerOne()
+    {
+        Assert.Equal(
+            [new(0, 12, 0), new(80, 84, Skipped: 68)],
+            Plan(capacity: 128, BitsOf(LongTable, 0, 1, 2, 9, 10, 82), out _, LongTable));
+    }
+
+    /// <summary>
     /// A record read alone, where no whole-sector read can serve it, can hold nothing in use even
     /// where a record after it in the same sector does. It is passed over, not read.
     /// </summary>
@@ -70,10 +107,10 @@ public sealed class MftBatchPlannerTests
         Assert.False(planner.TryNext(out _));
     }
 
-    private static List<MftBatch> Plan(int capacity, MftBitmap? bitmap, out long skippedAtEnd)
+    private static List<MftBatch> Plan(int capacity, MftBitmap? bitmap, out long skippedAtEnd, int records = Records)
     {
-        using var source = new MftFixture().AddUnused(Records - 1).WithoutBitmap().Build();
-        var planner = new MftBatchPlanner(source, Records, capacity, bitmap);
+        using var source = new MftFixture().AddUnused((uint)records - 1).WithoutBitmap().Build();
+        var planner = new MftBatchPlanner(source, records, capacity, bitmap);
         var batches = new List<MftBatch>();
         MftBatch batch;
 
@@ -86,9 +123,11 @@ public sealed class MftBatchPlannerTests
         return batches;
     }
 
-    private static MftBitmap Bits(params int[] inUse)
+    private static MftBitmap Bits(params int[] inUse) => BitsOf(Records, inUse);
+
+    private static MftBitmap BitsOf(int records, params int[] inUse)
     {
-        var bits = new byte[Records / 8];
+        var bits = new byte[records / 8];
 
         foreach (var record in inUse)
         {

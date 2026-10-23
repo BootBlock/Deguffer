@@ -81,6 +81,36 @@ public sealed class ReportTests
     }
 
     /// <summary>
+    /// A table route says how many reads it made, how many records the table holds in use, and what
+    /// it read beyond them, which is what it read of free records for nothing.
+    /// </summary>
+    [Fact]
+    public void ATableRouteReportsItsReadsAndTheFreeRecordsItRead()
+    {
+        var census = new TableCensus(RecordsInUse: 1_000, BytesPerRecord: 1024);
+        var text = Render(census, Route.Table, Run(1, items: 3_048, reads: 40), Run(1, items: 2_024, reads: 60), Run(1, items: 1_000, reads: 80));
+
+        Assert.Equal("records in use     1,000", Line(text, "records in use"));
+        Assert.Equal("reads              40              70 (60 to 80)", Line(text, "reads"));
+        Assert.Equal("free records read  2.0 MiB         0.5 MiB (0.0 MiB to 1.0 MiB)", Line(text, "free records read"));
+    }
+
+    /// <summary>
+    /// Without the bitmap the table cannot say how many records are in use, so the report says so
+    /// rather than calling every record read a free one. The walk reads no table and says neither.
+    /// </summary>
+    [Fact]
+    public void ATableRouteWithoutACensusSaysTheRecordsInUseAreUnknown()
+    {
+        var text = Render(Route.Index, Run(1));
+
+        Assert.Equal("records in use     unknown: the bitmap could not be read", Line(text, "records in use"));
+        Assert.DoesNotContain("free records read", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("records in use", Render(Route.Walk, Run(1)), StringComparison.Ordinal);
+        Assert.DoesNotContain("reads ", Render(Route.Walk, Run(1)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// How many processors a run kept busy is its processor time over its elapsed time, so a run held
     /// up by the drive shows as one that used little of the machine.
     /// </summary>
@@ -172,10 +202,20 @@ public sealed class ReportTests
 
     private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, [Place], Machine, runs);
 
+    private static string Render(TableCensus census, Route route, params RunSample[] runs) =>
+        Report.Render(route, Tuning, [Place], Machine, runs, census);
+
     private static RunSample Run(
-        double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0, long kept = 0, double processorSeconds = 0) =>
+        double seconds,
+        long items = 100,
+        long bytes = 0,
+        bool complete = true,
+        int peak = 0,
+        long kept = 0,
+        double processorSeconds = 0,
+        long reads = 0) =>
         new(
-            TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, FullCollections: 0,
+            TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak, Reads: reads), AllocatedBytes: 1 << 20, FullCollections: 0,
             PeakWorkingSet: 64 << 20, TimeSpan.FromSeconds(processorSeconds), kept);
 
     private static string Line(string text, string label) =>
