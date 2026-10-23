@@ -11,6 +11,11 @@ namespace Deguffer.Benchmark;
 /// process, so after the first run this is the highest any run has reached rather than this run's
 /// own.
 /// </param>
+/// <param name="ProcessorTime">
+/// The processor time every thread of the process spent while the run was timed, in user and kernel
+/// mode. Against the elapsed time it says how many processors the run kept busy, which tells a run
+/// held up by the drive from one held up by its own work.
+/// </param>
 /// <param name="KeptBytes">
 /// The managed heap the route's result holds: the heap after a full collection with the result
 /// still referenced, less the heap after one without it. What a scan keeps for as long as it is shown,
@@ -18,11 +23,20 @@ namespace Deguffer.Benchmark;
 /// that keeps nothing.
 /// </param>
 internal readonly record struct RunSample(
-    TimeSpan Elapsed, RunTally Tally, long AllocatedBytes, int FullCollections, long PeakWorkingSet, long KeptBytes = 0)
+    TimeSpan Elapsed,
+    RunTally Tally,
+    long AllocatedBytes,
+    int FullCollections,
+    long PeakWorkingSet,
+    TimeSpan ProcessorTime,
+    long KeptBytes = 0)
 {
     public double ItemsPerSecond => Tally.Items / Seconds;
 
     public double MegabytesPerSecond => Tally.BytesRead / (1024.0 * 1024.0) / Seconds;
+
+    /// <summary>How many processors the run kept busy on average: its processor time over its elapsed time.</summary>
+    public double ProcessorsBusy => ProcessorTime.TotalSeconds / Seconds;
 
     /// <summary>Never zero, so a run too short for the clock to see gives a large rate, not infinity.</summary>
     private double Seconds => Math.Max(Elapsed.TotalSeconds, 1e-9);

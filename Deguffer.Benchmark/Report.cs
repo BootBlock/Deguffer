@@ -58,6 +58,7 @@ internal static class Report
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
         }
 
+        Row(text, "processors busy", Share(first.ProcessorsBusy), Over(later, r => r.ProcessorsBusy, Share));
         Row(text, "allocated", Bytes(first.AllocatedBytes), Over(later, r => r.AllocatedBytes, Bytes));
 
         if (route.KeepsResult())
@@ -95,6 +96,8 @@ internal static class Report
         : string.Create(Invariant, $"{seconds:N3} s");
 
     private static string Count(double value) => string.Create(Invariant, $"{value:N0}");
+
+    private static string Share(double processors) => string.Create(Invariant, $"{processors:N2}");
 
     private static string Rate(double value) => string.Create(Invariant, $"{value:N1}");
 

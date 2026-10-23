@@ -80,6 +80,19 @@ public sealed class ReportTests
         Assert.Equal("MiB/s read         500.0", Line(text, "MiB/s read"));
     }
 
+    /// <summary>
+    /// How many processors a run kept busy is its processor time over its elapsed time, so a run held
+    /// up by the drive shows as one that used little of the machine.
+    /// </summary>
+    [Fact]
+    public void ProcessorsBusyIsTheProcessorTimeOverTheElapsedTime()
+    {
+        var text = Render(
+            Route.Table, Run(2, processorSeconds: 1), Run(2, processorSeconds: 6), Run(2, processorSeconds: 2), Run(4, processorSeconds: 1));
+
+        Assert.Equal("processors busy    0.50            1.00 (0.25 to 3.00)", Line(text, "processors busy"));
+    }
+
     /// <summary>A run that gave up is faster for the wrong reason, so it is counted where it shows.</summary>
     [Fact]
     public void ARunThatDidNotFinishIsCounted()
@@ -159,10 +172,11 @@ public sealed class ReportTests
 
     private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, [Place], Machine, runs);
 
-    private static RunSample Run(double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0, long kept = 0) =>
+    private static RunSample Run(
+        double seconds, long items = 100, long bytes = 0, bool complete = true, int peak = 0, long kept = 0, double processorSeconds = 0) =>
         new(
             TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak), AllocatedBytes: 1 << 20, FullCollections: 0,
-            PeakWorkingSet: 64 << 20, kept);
+            PeakWorkingSet: 64 << 20, TimeSpan.FromSeconds(processorSeconds), kept);
 
     private static string Line(string text, string label) =>
         text.Split('\n').Single(line => line.StartsWith(label + " ", StringComparison.Ordinal));
