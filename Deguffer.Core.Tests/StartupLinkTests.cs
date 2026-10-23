@@ -1,4 +1,5 @@
 using Deguffer.Core.Startup;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -33,6 +34,22 @@ public sealed class StartupLinkTests
     [Fact]
     public void TheLongPathFormOfTheProgramIsTheSameProgram() =>
         Assert.NotNull(StartupLink.For(@"\\?\" + Tool.ToUpperInvariant(), new StartupReading([Entry("Tool", StartupState.Starts)], [])));
+
+    /// <summary>
+    /// A <c>Run</c> value often names its program by its 8.3 alias, and Windows reports a running
+    /// process by its long name, so the two have to meet.
+    /// </summary>
+    [Fact]
+    public void AShortAliasNamesTheSameProgramAsTheLongName()
+    {
+        using var temp = new TempDirectory();
+        var program = temp.CreateFile(1, "Long Program Folder", "Long Program Name.exe");
+        var asNamed = ShortPath.Of(program) ?? program;
+        var entry = new StartupEntry(
+            new StartupKey(StartupSource.UserRun, "Tool"), "Tool", asNamed, asNamed, ProgramStanding.Present, null, StartupState.Starts, Approval.None);
+
+        Assert.NotNull(StartupLink.For(program, new StartupReading([entry], [])));
+    }
 
     [Fact]
     public void AProgramNoEntryStartsHasNoLink()

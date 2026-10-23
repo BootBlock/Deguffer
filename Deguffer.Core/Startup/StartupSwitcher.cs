@@ -18,9 +18,6 @@ public sealed record StartupChangeReport(
     public bool IsComplete => Changed && Verification.Passed;
 
     public string Summary => Verification.Checks.Count == 0 ? Message : $"{Message} {Verification.Summary}";
-
-    /// <summary>One line for each §5.6 check that did not pass.</summary>
-    public IReadOnlyList<string> Details => [.. Verification.Unpassed.Select(c => $"{c.Subject}: {c.Detail}")];
 }
 
 /// <summary>
@@ -64,8 +61,6 @@ public sealed class StartupSwitcher(IStartupRegistry registry, StartupFolderRead
         }
 
         var value = change is StartupChange.Disable ? Approval.DisabledOn(time.GetUtcNow()) : Approval.Starting();
-        string message;
-        var changed = false;
 
         try
         {
@@ -73,24 +68,18 @@ public sealed class StartupSwitcher(IStartupRegistry registry, StartupFolderRead
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException or IOException)
         {
-            return new StartupChangeReport(chosen, change, false, $"Windows refused the change: {ex.Message}", Verify(chosen, before, null));
+            return new StartupChangeReport(chosen, change, false, $"Windows refused the change: {ex.Message}", Verify(chosen, before, attempted: null));
         }
 
         var after = registry.ReadApprovals(source);
+        var changed = after.Find(name) is { } written && written.SameAs(value);
 
-        if (after.Find(name) is { } written && written.SameAs(value))
-        {
-            changed = true;
-            message = change is StartupChange.Disable
+        var message = !changed ? "Windows accepted the change, but the value does not read back as the one Deguffer wrote."
+            : change is StartupChange.Disable
                 ? $"'{chosen.Title}' will not start at sign-in. The entry itself is unchanged, and Enable lets it start again."
-                : $"'{chosen.Title}' will start at sign-in again.";
-        }
-        else
-        {
-            message = "Windows accepted the change, but the value does not read back as the one Deguffer wrote.";
-        }
+                : $"'{chosen.Title}' will start at sign-in again. Disable stops it starting again.";
 
-        return new StartupChangeReport(chosen, change, changed, message, Verify(chosen, before, changed ? value : null, after));
+        return new StartupChangeReport(chosen, change, changed, message, Verify(chosen, before, value, after));
     }
 
     /// <summary>
@@ -131,30 +120,34 @@ public sealed class StartupSwitcher(IStartupRegistry registry, StartupFolderRead
     }
 
     /// <summary>
-    /// §5.6 for one value: what was written reads back as written, the entry is as it was, and every
-    /// other value beside it is as it was. Each is exact, and each is one check, so the summary counts
-    /// what was asserted.
+    /// §5.6 for one value: what was written reads back as written and nothing else appeared beside it,
+    /// the entry is as it was, and every other value beside it is as it was. Each is exact, and each is
+    /// one check, so the summary counts what was asserted.
     /// </summary>
-    /// <param name="written">The value written, where it read back as written, or null where nothing was.</param>
+    /// <param name="attempted">The value written, or null where Windows refused the write.</param>
     /// <param name="after">The <c>StartupApproved</c> key read after the write, or null to read it here.</param>
-    private VerificationResult Verify(StartupEntry chosen, KeyValues before, StoredValue? written, KeyValues? after = null)
+    private VerificationResult Verify(StartupEntry chosen, KeyValues before, StoredValue? attempted, KeyValues? after = null)
     {
-        var source = chosen.Key.Source;
-        var approvals = source.ApprovalLocation();
+        var approvals = chosen.Key.Source.ApprovalLocation();
         var checks = new List<VerificationCheck>();
 
-        if (written is not null)
+        after ??= registry.ReadApprovals(chosen.Key.Source);
+
+        if (attempted is not null)
         {
-            checks.Add(new VerificationCheck(
-                $@"{approvals}\{chosen.Key.Name}",
-                "The one value Deguffer wrote",
-                VerificationOutcome.Sent,
-                "Reads back as written."));
+            const string written = "The one value Deguffer wrote";
+            var subject = $@"{approvals}\{chosen.Key.Name}";
+
+            checks.Add(after.Find(chosen.Key.Name) is { } now && now.SameAs(attempted)
+                ? new VerificationCheck(subject, written, VerificationOutcome.Sent, "Reads back as written.")
+                : after.Presence is PathPresence.Refused
+                    ? new VerificationCheck(subject, written, VerificationOutcome.Unverified, "Windows would not open the key to check.")
+                    : new VerificationCheck(subject, written, VerificationOutcome.Failed, "It does not read back as written."));
         }
 
         checks.Add(EntryCheck(chosen));
 
-        after ??= registry.ReadApprovals(source);
+        const string beside = "A value beside the one Deguffer wrote";
 
         foreach (var (name, value) in before.Values)
         {
@@ -164,13 +157,21 @@ public sealed class StartupSwitcher(IStartupRegistry registry, StartupFolderRead
             }
 
             var subject = $@"{approvals}\{name}";
-            const string reason = "A value beside the one Deguffer wrote";
 
-            checks.Add(after.Presence is not PathPresence.Present
-                ? new VerificationCheck(subject, reason, VerificationOutcome.Unverified, "Windows would not open the key to check.")
-                : after.Find(name) is not { } now ? new VerificationCheck(subject, reason, VerificationOutcome.Failed, "It is gone.")
-                : now.SameAs(value) ? new VerificationCheck(subject, reason, VerificationOutcome.Survived, "Unchanged.")
-                : new VerificationCheck(subject, reason, VerificationOutcome.Failed, "It changed."));
+            checks.Add(after.Presence is PathPresence.Refused
+                ? new VerificationCheck(subject, beside, VerificationOutcome.Unverified, "Windows would not open the key to check.")
+                : after.Find(name) is not { } now ? new VerificationCheck(subject, beside, VerificationOutcome.Failed, "It is gone.")
+                : now.SameAs(value) ? new VerificationCheck(subject, beside, VerificationOutcome.Survived, "Unchanged.")
+                : new VerificationCheck(subject, beside, VerificationOutcome.Failed, "It changed."));
+        }
+
+        // Nothing but the one value was to be written, so any other value that appeared is the alarm.
+        foreach (var name in after.Values.Keys)
+        {
+            if (!string.Equals(name, chosen.Key.Name, StringComparison.OrdinalIgnoreCase) && before.Find(name) is null)
+            {
+                checks.Add(new VerificationCheck($@"{approvals}\{name}", beside, VerificationOutcome.Failed, "It appeared during the change."));
+            }
         }
 
         return new VerificationResult { Checks = checks };
@@ -184,10 +185,10 @@ public sealed class StartupSwitcher(IStartupRegistry registry, StartupFolderRead
 
         if (source is StartupSource.UserRun or StartupSource.MachineRun or StartupSource.MachineRun32)
         {
-            var subject = $@"{source.Location(null)}\{chosen.Key.Name}";
+            var subject = $@"{source.RunLocation()}\{chosen.Key.Name}";
             var run = registry.ReadRun(source);
 
-            return run.Presence is not PathPresence.Present
+            return run.Presence is PathPresence.Refused
                 ? new VerificationCheck(subject, reason, VerificationOutcome.Unverified, "Windows would not open the key to check.")
                 : run.Find(chosen.Key.Name) is not { } now ? new VerificationCheck(subject, reason, VerificationOutcome.Failed, "It is gone.")
                 : now.SameAs(chosen.RunValue) ? new VerificationCheck(subject, reason, VerificationOutcome.Survived, "Unchanged.")

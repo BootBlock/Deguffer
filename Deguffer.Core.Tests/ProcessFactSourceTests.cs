@@ -357,15 +357,15 @@ public sealed class ProcessFactSourceTests
     [Fact]
     public void TheProgramThePickedProcessRunsIsRead()
     {
-        var facts = Read(new FakeProcessCalls().With(new FakeProcess { ProcessId = Picked, Image = @"C:\Program Files\Tool	ool.exe" }));
+        var facts = Read(new FakeProcessCalls().With(new FakeProcess { ProcessId = Picked, Image = @"C:\Program Files\Tool\tool.exe" }));
 
-        Assert.Equal(@"C:\Program Files\Tool	ool.exe", facts.ImagePath);
+        Assert.Equal(@"C:\Program Files\Tool\tool.exe", facts.ImagePath);
     }
 
     [Fact]
     public void TheProgramOfAProcessThatHasGoneIsNotRead()
     {
-        var process = new FakeProcess { ProcessId = Picked, Image = @"C:\Program Files\Tool	ool.exe", CreatedAt = FakeProcess.Created + 1 };
+        var process = new FakeProcess { ProcessId = Picked, Image = @"C:\Program Files\Tool\tool.exe", CreatedAt = FakeProcess.Created + 1 };
 
         Assert.Null(Read(new FakeProcessCalls().With(process)).ImagePath);
     }

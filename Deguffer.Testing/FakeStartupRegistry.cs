@@ -28,9 +28,15 @@ public sealed class FakeStartupRegistry : IStartupRegistry
     public Action<FakeStartupRegistry>? AfterWrite { get; set; }
 
     /// <summary>A <c>REG_SZ</c> command under <paramref name="source"/>'s <c>Run</c> key.</summary>
-    public FakeStartupRegistry WithRun(StartupSource source, string name, string command, RegistryValueKind kind = RegistryValueKind.String)
+    /// <param name="expanded">What the registry would expand a <c>REG_EXPAND_SZ</c> command to, which a test states.</param>
+    public FakeStartupRegistry WithRun(
+        StartupSource source,
+        string name,
+        string command,
+        RegistryValueKind kind = RegistryValueKind.String,
+        string? expanded = null)
     {
-        Values(_run, source)[name] = new StoredValue(kind, command);
+        Values(_run, source)[name] = new StoredValue(kind, command, expanded);
         return this;
     }
 
@@ -53,6 +59,13 @@ public sealed class FakeStartupRegistry : IStartupRegistry
     public FakeStartupRegistry WithApprovalValue(StartupSource source, string name, StoredValue value)
     {
         Values(_approvals, source)[name] = value;
+        return this;
+    }
+
+    /// <summary>Remove a source's <c>Run</c> key altogether, as an uninstaller removing it would.</summary>
+    public FakeStartupRegistry WithoutRunKey(StartupSource source)
+    {
+        _run.Remove(source);
         return this;
     }
 

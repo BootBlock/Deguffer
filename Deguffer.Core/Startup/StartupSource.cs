@@ -88,18 +88,13 @@ public static class StartupSources
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
 
-    /// <summary>
-    /// The place itself, for a reader who wants to find it: the key's full path, or the folder's.
-    /// A packaged task's place is its package, which the entry names.
-    /// </summary>
-    public static string Location(this StartupSource source, string? folder) => source switch
+    /// <summary>A <c>Run</c> key's full path, for a reader who wants to find it.</summary>
+    public static string RunLocation(this StartupSource source) => source switch
     {
         StartupSource.UserRun => @"HKEY_CURRENT_USER\" + RunKeyPath,
         StartupSource.MachineRun => @"HKEY_LOCAL_MACHINE\" + RunKeyPath,
         StartupSource.MachineRun32 => @"HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
-        StartupSource.UserStartupFolder or StartupSource.CommonStartupFolder => folder ?? string.Empty,
-        StartupSource.PackagedTask => string.Empty,
-        _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
+        _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Not a Run key."),
     };
 
     /// <summary>The <c>StartupApproved</c> key that holds an entry's value, as its full path.</summary>

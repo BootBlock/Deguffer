@@ -1258,7 +1258,9 @@ code.
     figure with §7.2's caveat: a lower bound. Only a process whose image *name* matches an entry's
     program is opened, once per reading, to read its full path, because the process table holds the
     name alone. Where §7.2 turned the figure off, the row says so, and it never shows zero in its
-    place.
+    place. A process of that name that will not say which program it runs is never read as "not
+    this one": where no process is confirmed, whether the program runs is unknown, and where some
+    are, the row says there may be more.
 - **The list is in name order, and in no other.** Nothing is ordered, marked or offered by how much
   memory it uses (§2). The memory figure answers "what is this costing now", which is Memory's
   question, and it is never a reason the page gives to stop anything starting.

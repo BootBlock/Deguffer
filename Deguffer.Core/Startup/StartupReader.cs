@@ -1,5 +1,4 @@
 using Deguffer.Core.Safety;
-using Microsoft.Win32;
 
 namespace Deguffer.Core.Startup;
 
@@ -57,7 +56,7 @@ public sealed class StartupReader(
 
         if (run.Presence is PathPresence.Refused)
         {
-            notes.Add($"Windows would not open {source.Location(null)}, so the entries it holds are not listed.");
+            notes.Add($"Windows would not open {source.RunLocation()}, so the entries it holds are not listed.");
             return;
         }
 
@@ -65,11 +64,8 @@ public sealed class StartupReader(
 
         foreach (var (name, value) in run.Values)
         {
-            // Windows runs the expansion of a REG_EXPAND_SZ, against the environment the shell has,
-            // which is the one this process started with.
-            var command = value.Kind is RegistryValueKind.ExpandString && value.Text is { } text
-                ? Environment.ExpandEnvironmentVariables(text)
-                : value.Text;
+            // Windows runs the expansion of a REG_EXPAND_SZ.
+            var command = value.Expanded ?? value.Text;
 
             var line = CommandLine.Read(command, programs.Probe);
             var program = line?.Presence is not null ? line.Executable : null;

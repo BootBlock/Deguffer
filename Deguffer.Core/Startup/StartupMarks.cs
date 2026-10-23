@@ -41,7 +41,7 @@ public sealed record StartupMarks(
                 : null,
             ShieldFor(entry, isElevated),
             running is { IsRunning: true, PrivateWorkingSet: { } bytes } ? bytes : null,
-            entry.Program is null || figures is not ProcessFigures.Checked ? null : running?.IsRunning,
+            entry.Program is null || figures is not ProcessFigures.Checked || running is { IsRunning: false, Unconfirmed: true } ? null : running?.IsRunning,
             MemoryNoteFor(entry, running, figures));
     }
 
@@ -97,12 +97,17 @@ public sealed record StartupMarks(
             return "Deguffer could not check this machine's per-process figures, so it does not say what any program holds now.";
         }
 
+        const string unconfirmed = "Windows would not say which program a process of this name runs";
+
         return running switch
         {
             null => "Deguffer did not read what this program holds now.",
+            { IsRunning: false, Unconfirmed: true } => $"{unconfirmed}, so whether this one runs now is unknown.",
             { IsRunning: false } => "Not running now.",
-            { Processes: 1 } => "Its private working set now: memory no other process can use. A lower bound.",
-            { Processes: var count } => $"The private working set of the {count} processes running it now: memory no other process can use. A lower bound.",
+            { Processes: 1, Unconfirmed: var more } => "Its private working set now: memory no other process can use. A lower bound."
+                + (more ? $" {unconfirmed}, so more of it may be running." : string.Empty),
+            { Processes: var count, Unconfirmed: var more } => $"The private working set of the {count} processes running it now: memory no other process can use. A lower bound."
+                + (more ? $" {unconfirmed}, so more of it may be running." : string.Empty),
         };
     }
 }

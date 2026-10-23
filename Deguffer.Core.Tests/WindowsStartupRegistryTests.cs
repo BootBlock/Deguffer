@@ -45,6 +45,9 @@ public sealed class WindowsStartupRegistryTests : IDisposable
 
         Assert.Equal(RegistryValueKind.ExpandString, value.Kind);
         Assert.Equal(@"%SystemRoot%\tool.exe", value.Text);
+
+        // And beside it, what Windows runs, which is the expansion.
+        Assert.Equal(Environment.ExpandEnvironmentVariables(@"%SystemRoot%\tool.exe"), value.Expanded);
     }
 
     [Fact]

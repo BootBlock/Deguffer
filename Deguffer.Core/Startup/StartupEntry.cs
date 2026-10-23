@@ -85,16 +85,15 @@ public sealed record StartupReading(IReadOnlyList<StartupEntry> Entries, IReadOn
         [.. Entries.Where(e => e.Program is { } program && SamePath(program, imagePath))];
 
     /// <summary>
-    /// Whether two full paths name one file. Windows compares paths without case, and the
-    /// <c>\\?\</c> form names the same file as the plain one.
+    /// Whether two full paths name one file. Windows compares paths without case, any device form
+    /// names the same file as the plain one, and a <c>Run</c> value often names its program by its
+    /// 8.3 alias where Windows reports the long name, so both sides are put in the form
+    /// <see cref="LongPath"/> compares by.
     /// </summary>
     public static bool SamePath(string one, string other) =>
-        string.Equals(Plain(one), Plain(other), StringComparison.OrdinalIgnoreCase);
+        string.Equals(Compared(one), Compared(other), StringComparison.OrdinalIgnoreCase);
 
-    private static string Plain(string path) =>
-        path.StartsWith(@"\\?\UNC\", StringComparison.Ordinal) ? @"\\" + path[8..]
-        : path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path[4..]
-        : path;
+    private static string Compared(string path) => LongPath.Unaliased(LongPath.Display(path));
 
     /// <summary>The entry <paramref name="key"/> names, or null where this reading has none.</summary>
     public StartupEntry? Find(StartupKey key) => Entries.FirstOrDefault(e => e.Key.Equals(key));

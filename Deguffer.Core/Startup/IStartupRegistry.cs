@@ -91,7 +91,11 @@ public sealed class WindowsStartupRegistry : IStartupRegistry
                 // expansion, and the entry reader expands it for that.
                 if (key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is { } data)
                 {
-                    values[name] = new StoredValue(key.GetValueKind(name), data);
+                    var kind = key.GetValueKind(name);
+
+                    // Expanded against this process's environment, which is what the registry does on
+                    // an ordinary read and what Windows does when it runs the command.
+                    values[name] = new StoredValue(kind, data, kind is RegistryValueKind.ExpandString ? key.GetValue(name) as string : null);
                 }
             }
 

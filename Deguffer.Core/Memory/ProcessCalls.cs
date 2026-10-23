@@ -202,26 +202,7 @@ internal sealed partial class ProcessCalls : IProcessCalls
 
         public bool? IsFrozen() => ProcessSnapshot.IsFrozen(handle);
 
-        /// <summary>
-        /// In the Win32 form rather than the device form, so it compares with a path a registry value
-        /// or a shortcut names. The buffer is the longest path Windows has, so no image is cut short.
-        /// </summary>
-        public string? ImagePath()
-        {
-            const int characters = 32_768;
-            var buffer = Marshal.AllocHGlobal(characters * sizeof(char));
-
-            try
-            {
-                var size = (uint)characters;
-
-                return QueryFullProcessImageName(handle, 0, buffer, ref size) ? Marshal.PtrToStringUni(buffer, (int)size) : null;
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(buffer);
-            }
-        }
+        public string? ImagePath() => Safety.ProcessImagePath.Of(handle);
 
         public void Dispose() => CloseHandle(handle);
     }
@@ -250,10 +231,6 @@ internal sealed partial class ProcessCalls : IProcessCalls
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool IsProcessCritical(nint process, [MarshalAs(UnmanagedType.Bool)] out bool critical);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool QueryFullProcessImageName(nint process, uint flags, nint buffer, ref uint size);
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetPackageFullName")]
     private static partial int GetPackageFullName(nint process, ref uint length, nint name);

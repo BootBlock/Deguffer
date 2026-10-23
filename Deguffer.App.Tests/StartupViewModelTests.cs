@@ -77,6 +77,8 @@ public sealed class StartupViewModelTests : IDisposable
 
         Assert.Equal(1, _switches);
         Assert.Equal(InfoBarSeverity.Success, page.ReportSeverity);
+        Assert.True(page.HasReportChecks);
+        Assert.Contains(page.ReportChecks, c => c.Outcome is VerificationOutcome.Sent);
         Assert.Same(row, Assert.Single(page.Rows));
         Assert.Equal("Disabled", row.State);
         Assert.Equal("Enable", page.ChangeLabel);
@@ -117,6 +119,42 @@ public sealed class StartupViewModelTests : IDisposable
         await page.RefreshAsync();
 
         Assert.Equal("Other", page.SelectedRow?.Key.Name);
+    });
+
+    /// <summary>
+    /// A link that has not landed must never move a pick the user made by hand afterwards (§7.5), even
+    /// when a later reading holds the entry it named.
+    /// </summary>
+    [Fact]
+    public void APickByHandEndsALinksWait() => UiThread.Run(async () =>
+    {
+        _registry.WithRun(StartupSource.UserRun, "ToolTray", Tool);
+        var page = Page();
+        await page.RefreshAsync();
+
+        page.Reveal(new StartupKey(StartupSource.UserRun, "Later"));
+        await Eventually.HoldsAsync(() => !page.IsReading, "the read the link asked for");
+        page.SelectedRow = page.Rows[0];
+        _registry.WithRun(StartupSource.UserRun, "Later", Tool);
+
+        await page.RefreshAsync();
+
+        Assert.Equal("ToolTray", page.SelectedRow?.Key.Name);
+    });
+
+    /// <summary>A link from a newer reading than the page's reads the list again, so an entry added since is found.</summary>
+    [Fact]
+    public void ALinkToAnEntryTheListLacksReadsTheListAgain() => UiThread.Run(async () =>
+    {
+        _registry.WithRun(StartupSource.UserRun, "ToolTray", Tool);
+        var page = Page();
+        await page.RefreshAsync();
+        _registry.WithRun(StartupSource.UserRun, "Later", Tool);
+
+        page.Reveal(new StartupKey(StartupSource.UserRun, "Later"));
+        await Eventually.HoldsAsync(() => page.SelectedRow is not null, "the entry picked");
+
+        Assert.Equal("Later", page.SelectedRow!.Key.Name);
     });
 
     [Fact]
@@ -174,6 +212,6 @@ public sealed class StartupViewModelTests : IDisposable
     /// <summary>Every process asked about runs <paramref name="image"/>.</summary>
     private sealed class Images(string image) : IProcessImages
     {
-        public string? ImagePathOf(int processId, long creationTime) => image;
+        public ProcessImage ImageOf(int processId, long creationTime) => ProcessImage.Of(image);
     }
 }

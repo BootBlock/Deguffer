@@ -94,19 +94,41 @@ public sealed partial class StartupViewModel : ObservableObject
     public partial InfoBarSeverity ReportSeverity { get; private set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReportChecks))]
     public partial bool HasReport { get; private set; }
+
+    /// <summary>The last change's §5.6 checks, each by the value or entry it is about, on the surface the other pages use.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReportChecks))]
+    public partial IReadOnlyList<VerificationCheck> ReportChecks { get; private set; } = [];
+
+    public bool HasReportChecks => HasReport && ReportChecks.Count > 0;
 
     /// <summary>Raised when an elevated replacement has started, so the page can close this one.</summary>
     public event EventHandler? ReplacedByElevatedInstance;
 
-    /// <summary>Pick <paramref name="key"/>'s entry, now if the list holds it and otherwise once a reading does.</summary>
+    /// <summary>
+    /// Pick <paramref name="key"/>'s entry, now if the list holds it and otherwise once a reading does.
+    /// A list read before the entry existed is read again, since the link came from a newer reading.
+    /// </summary>
     public void Reveal(StartupKey key)
     {
         _wanted = key;
         PickWanted();
+
+        if (_wanted is not null && !IsReading)
+        {
+            _ = RefreshAsync();
+        }
     }
 
-    partial void OnSelectedRowChanged(StartupRow? value) => Decide();
+    partial void OnSelectedRowChanged(StartupRow? value)
+    {
+        // A pick the user makes, or the one a link asked for, ends that link's wait: an entry the
+        // link named that arrives later must never move a pick made by hand (§7.5).
+        _wanted = null;
+        Decide();
+    }
 
     /// <summary>Read every entry again. A read already running is abandoned for this one.</summary>
     [RelayCommand]
@@ -178,10 +200,11 @@ public sealed partial class StartupViewModel : ObservableObject
             var report = await Task.Run(() => _switch(chosen));
 
             Show(
-                string.Join(Environment.NewLine, [report.Summary, .. report.Details]),
+                report.Summary,
                 report.IsComplete ? InfoBarSeverity.Success
                     : report.Verification.Passed ? InfoBarSeverity.Warning
-                    : InfoBarSeverity.Error);
+                    : InfoBarSeverity.Error,
+                report.Verification.Checks);
 
             if (!report.Verification.Passed)
             {
@@ -223,6 +246,7 @@ public sealed partial class StartupViewModel : ObservableObject
     {
         HasReport = false;
         Report = string.Empty;
+        ReportChecks = [];
     }
 
     private void ShowRows()
@@ -271,10 +295,11 @@ public sealed partial class StartupViewModel : ObservableObject
         }
     }
 
-    private void Show(string report, InfoBarSeverity severity)
+    private void Show(string report, InfoBarSeverity severity, IReadOnlyList<VerificationCheck>? checks = null)
     {
         Report = report;
         ReportSeverity = severity;
         HasReport = true;
+        ReportChecks = checks ?? [];
     }
 }

@@ -65,6 +65,9 @@ public sealed partial class MemoryPage : Page
     /// </summary>
     private bool _pointerDown;
 
+    /// <summary>Ends the startup read begun as the page opened, when the page is left before it lands.</summary>
+    private CancellationTokenSource? _startupRead;
+
     public MemoryPage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -217,9 +220,27 @@ public sealed partial class MemoryPage : Page
     /// </summary>
     private async Task KnowStartupAsync()
     {
-        var reading = await Task.Run(() => StartupReader.Default.Read(CancellationToken.None));
+        _startupRead?.Cancel();
+        using var read = new CancellationTokenSource();
+        _startupRead = read;
 
-        ViewModel.Selection.KnowStartup(reading);
+        try
+        {
+            var reading = await Task.Run(() => StartupReader.Default.Read(read.Token), read.Token);
+
+            ViewModel.Selection.KnowStartup(reading);
+        }
+        catch (OperationCanceledException) when (read.IsCancellationRequested)
+        {
+            // The page was left, or opened again, before the list arrived: the next visit reads it.
+        }
+        finally
+        {
+            if (ReferenceEquals(_startupRead, read))
+            {
+                _startupRead = null;
+            }
+        }
     }
 
     private void OnStartupLinkClick(Hyperlink sender, HyperlinkClickEventArgs args) =>
@@ -241,6 +262,8 @@ public sealed partial class MemoryPage : Page
         // One of §7.2.1's three ends of a watch. The close itself is not called off — the messages
         // have gone — and what it comes to is still written to the report.
         ViewModel.Selection.Leave();
+
+        _startupRead?.Cancel();
     }
 
     /// <summary>

@@ -104,6 +104,48 @@ public sealed class StartupSwitcherTests : IDisposable
         Assert.EndsWith(@"\Other", failure.Subject, StringComparison.Ordinal);
     }
 
+    /// <summary>A value that does not read back as written is the change failing, and the check says so rather than passing.</summary>
+    [Fact]
+    public void AValueThatDoesNotReadBackAsWrittenFailsTheCheck()
+    {
+        _registry.WithRun(StartupSource.UserRun, "Tool", Tool);
+        _registry.AfterWrite = registry => registry.WithApproval(StartupSource.UserRun, "Tool", 2);
+
+        var report = Switcher().Switch(Entry("Tool"), isElevated: false);
+
+        Assert.False(report.Changed);
+        Assert.False(report.Verification.Passed);
+        Assert.Equal("The one value Deguffer wrote", Assert.Single(report.Verification.Failures).Reason);
+    }
+
+    /// <summary>§7.5: nothing but the one value is written, so a value that appeared beside it is the alarm.</summary>
+    [Fact]
+    public void AValueThatAppearedDuringTheChangeFailsTheCheck()
+    {
+        _registry.WithRun(StartupSource.UserRun, "Tool", Tool);
+        _registry.AfterWrite = registry => registry.WithApproval(StartupSource.UserRun, "Stranger", 3);
+
+        var report = Switcher().Switch(Entry("Tool"), isElevated: false);
+
+        Assert.True(report.Changed);
+        var failure = Assert.Single(report.Verification.Failures);
+        Assert.EndsWith(@"\Stranger", failure.Subject, StringComparison.Ordinal);
+        Assert.Equal("It appeared during the change.", failure.Detail);
+    }
+
+    /// <summary>A key that has gone is the alarm, and is never reported as one Windows would not open.</summary>
+    [Fact]
+    public void AnEntryWhoseKeyWentDuringTheChangeIsReportedGone()
+    {
+        _registry.WithRun(StartupSource.UserRun, "Tool", Tool);
+        _registry.AfterWrite = registry => registry.WithoutRunKey(StartupSource.UserRun);
+
+        var report = Switcher().Switch(Entry("Tool"), isElevated: false);
+
+        var failure = Assert.Single(report.Verification.Failures);
+        Assert.Equal(("The entry itself", "It is gone."), (failure.Reason, failure.Detail));
+    }
+
     [Fact]
     public void AnEntryThatChangedDuringTheChangeFailsTheCheck()
     {

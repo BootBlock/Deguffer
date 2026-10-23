@@ -122,7 +122,9 @@ disabled. It did not list one task whose state was 2. Why was not established.
 ## 5. Limits that stay open
 
 - Nothing here was measured on any other Windows build. A build that changed the format would show
-  as values Deguffer does not recognise, which leaves the entries report-only rather than misread.
+  as values Deguffer does not recognise. A value of another length or type is shown as unknown, and
+  a state with a bit nobody explained is shown by its low bit, as Task Manager showed one, and never
+  replaced. Either way the entry is report-only.
 - The publisher Task Manager shows was blank for every non-packaged entry on the measured machine,
   so where its publisher comes from was not established. Deguffer reads the program's own version
   information and says so.

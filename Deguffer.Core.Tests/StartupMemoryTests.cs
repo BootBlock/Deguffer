@@ -57,6 +57,38 @@ public sealed class StartupMemoryTests
         Assert.Null(StartupMarks.For(Reading(Tool).Entries[0], memory.For(Key), memory.Figures, isElevated: false).IsRunning);
     }
 
+    /// <summary>
+    /// A process that will not say which program it runs may be running this one, so it is never read
+    /// as "not this one": with nothing confirmed, whether the program runs is unknown.
+    /// </summary>
+    [Fact]
+    public void AProcessThatWillNotSayWhatItRunsLeavesTheProgramUnknownRatherThanNotRunning()
+    {
+        var calls = new FakeProcessCalls().With(new FakeProcess { ProcessId = 10, OpenRefused = true });
+
+        var memory = StartupMemory.Match(Reading(Tool), Table(Process(10, "tool.exe", 100)), new ProcessImages(calls));
+        var marks = StartupMarks.For(Reading(Tool).Entries[0], memory.For(Key), memory.Figures, isElevated: false);
+
+        Assert.Equal(new RunningProgram(0, null, Unconfirmed: true), memory.For(Key));
+        Assert.Null(marks.IsRunning);
+        Assert.Contains("unknown", marks.MemoryNote, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AProcessThatWillNotSayBesideOneThatDoesLeavesTheFigureMarkedShort()
+    {
+        var calls = new FakeProcessCalls()
+            .With(new FakeProcess { ProcessId = 10, Image = Tool })
+            .With(new FakeProcess { ProcessId = 11, Image = Tool, Exited = null });
+
+        var memory = StartupMemory.Match(Reading(Tool), Table(Process(10, "tool.exe", 100), Process(11, "tool.exe", 50)), new ProcessImages(calls));
+        var marks = StartupMarks.For(Reading(Tool).Entries[0], memory.For(Key), memory.Figures, isElevated: false);
+
+        Assert.Equal(new RunningProgram(1, 100, Unconfirmed: true), memory.For(Key));
+        Assert.True(marks.IsRunning);
+        Assert.Contains("more of it may be running", marks.MemoryNote, StringComparison.Ordinal);
+    }
+
     /// <summary>The identifier now belongs to a later process, so its program says nothing about the one the table named.</summary>
     [Fact]
     public void AProcessWhoseIdentifierPassedToAnotherIsNotCounted()

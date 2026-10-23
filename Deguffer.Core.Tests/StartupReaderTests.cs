@@ -158,16 +158,15 @@ public sealed class StartupReaderTests : IDisposable
         var reading = Reader().Read(CancellationToken.None);
 
         Assert.Empty(reading.Entries);
-        Assert.Contains(reading.Notes, n => n.Contains(StartupSource.MachineRun.Location(null), StringComparison.Ordinal));
+        Assert.Contains(reading.Notes, n => n.Contains(StartupSource.MachineRun.RunLocation(), StringComparison.Ordinal));
     }
 
     /// <summary>Windows runs the expansion of a <c>REG_EXPAND_SZ</c>, so its program is the expanded path.</summary>
     [Fact]
     public void AnExpandableCommandNamesTheProgramWindowsRuns()
     {
-        var windows = Environment.GetEnvironmentVariable("SystemRoot")!;
-        var program = Path.Combine(windows, "System32", "tool.exe");
-        _registry.WithRun(StartupSource.UserRun, "Tool", @"%SystemRoot%\System32\tool.exe /start", RegistryValueKind.ExpandString);
+        const string program = @"C:\Windows\System32\tool.exe";
+        _registry.WithRun(StartupSource.UserRun, "Tool", @"%SystemRoot%\System32\tool.exe /start", RegistryValueKind.ExpandString, expanded: program + " /start");
         _programs.With(program);
 
         var entry = Assert.Single(Reader().Read(CancellationToken.None).Entries);
@@ -193,7 +192,7 @@ public sealed class StartupReaderTests : IDisposable
     {
         var reading = Reader(PackagedTasksRead.Unreadable).Read(CancellationToken.None);
 
-        Assert.Single(reading.Notes);
+        Assert.Contains("packaged apps' startup tasks may be missing", Assert.Single(reading.Notes), StringComparison.Ordinal);
     }
 
     private StartupReader Reader(PackagedTasksRead? packaged = null) => new(

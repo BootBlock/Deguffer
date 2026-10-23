@@ -7,7 +7,11 @@ namespace Deguffer.Core.Startup;
 /// The sum over those processes, a lower bound for §7.2's reasons, or null where none runs. Never zero
 /// in place of a figure.
 /// </param>
-public sealed record RunningProgram(int Processes, long? PrivateWorkingSet)
+/// <param name="Unconfirmed">
+/// True where a process with the program's name would not say which program it runs. It may be this
+/// one, so a count of none is not "not running", and a count of some may be short.
+/// </param>
+public sealed record RunningProgram(int Processes, long? PrivateWorkingSet, bool Unconfirmed = false)
 {
     public static RunningProgram NotRunning { get; } = new(0, null);
 
@@ -52,27 +56,42 @@ public static class StartupMemory
         }
 
         var names = named.Select(e => Path.GetFileName(e.Program!)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var counts = named.ToDictionary(e => e.Key, _ => (Processes: 0, Bytes: 0L));
+        var counts = named.ToDictionary(e => e.Key, _ => (Processes: 0, Bytes: 0L, Unconfirmed: false));
 
         foreach (var process in table.Processes)
         {
-            if (!names.Contains(process.Name) || process.CreationTime is not { } created
-                || images.ImagePathOf(process.ProcessId, created) is not { } image)
+            if (!names.Contains(process.Name) || process.CreationTime is not { } created)
             {
                 continue;
             }
 
-            foreach (var entry in named.Where(e => StartupReading.SamePath(e.Program!, image)))
+            var image = images.ImageOf(process.ProcessId, created);
+
+            if (image.Path is { } path)
             {
-                var (processes, bytes) = counts[entry.Key];
-                counts[entry.Key] = (processes + 1, bytes + (process.PrivateWorkingSet ?? 0));
+                foreach (var entry in named.Where(e => StartupReading.SamePath(e.Program!, path)))
+                {
+                    var (processes, bytes, unconfirmed) = counts[entry.Key];
+                    counts[entry.Key] = (processes + 1, bytes + (process.PrivateWorkingSet ?? 0), unconfirmed);
+                }
+            }
+            else if (image.Refused)
+            {
+                // Windows would not say which program it runs, so it may run any entry's program that
+                // has its name. A refusal is never read as "not this one" (§7.5).
+                foreach (var entry in named.Where(e => string.Equals(Path.GetFileName(e.Program!), process.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    counts[entry.Key] = counts[entry.Key] with { Unconfirmed = true };
+                }
             }
         }
 
         return new StartupMemoryReading(
             counts.ToDictionary(
                 pair => pair.Key,
-                pair => pair.Value.Processes == 0 ? RunningProgram.NotRunning : new RunningProgram(pair.Value.Processes, pair.Value.Bytes)),
+                pair => pair.Value.Processes == 0 && !pair.Value.Unconfirmed
+                    ? RunningProgram.NotRunning
+                    : new RunningProgram(pair.Value.Processes, pair.Value.Processes == 0 ? null : pair.Value.Bytes, pair.Value.Unconfirmed)),
             table.Figures,
             table.Complete);
     }

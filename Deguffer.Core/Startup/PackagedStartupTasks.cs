@@ -57,12 +57,14 @@ public sealed class WindowsPackagedStartupTasks : IPackagedStartupTasks
 
     public PackagedTasksRead Read(CancellationToken ct)
     {
-        IEnumerable<Windows.ApplicationModel.Package> packages;
+        List<Windows.ApplicationModel.Package> packages;
 
         try
         {
             // The empty user is the calling user, which is the one whose tasks start at its sign-in.
-            packages = new PackageManager().FindPackagesForUserWithPackageTypes(string.Empty, PackageTypes.Main);
+            // Listed here rather than as the loop runs, because the list is fetched as it is walked
+            // and a refusal part-way is a refusal of the list.
+            packages = [.. new PackageManager().FindPackagesForUserWithPackageTypes(string.Empty, PackageTypes.Main)];
         }
         catch (Exception ex) when (ex is COMException or UnauthorizedAccessException)
         {
@@ -72,7 +74,8 @@ public sealed class WindowsPackagedStartupTasks : IPackagedStartupTasks
         var tasks = new List<PackagedTask>();
         var complete = true;
 
-        using var states = Registry.CurrentUser.OpenSubKey(StateKey);
+        // A key Windows would not open leaves every state unread, which each row shows as unknown.
+        using var states = OpenStates();
 
         foreach (var package in packages)
         {
@@ -87,9 +90,18 @@ public sealed class WindowsPackagedStartupTasks : IPackagedStartupTasks
 
                 var manifest = Path.Combine(folder, "AppxManifest.xml");
 
-                if (LongPath.ProbeFile(manifest) is not PathPresence.Present)
+                switch (LongPath.ProbeFile(manifest))
                 {
-                    continue;
+                    case PathPresence.Absent:
+                        continue;
+
+                    case PathPresence.Present:
+                        break;
+
+                    default:
+                        // Windows would not say, so this package may declare a task the list lacks.
+                        complete = false;
+                        continue;
                 }
 
                 var declared = StartupTaskManifest.Read(File.ReadAllText(LongPath.Extended(manifest)));
@@ -135,6 +147,18 @@ public sealed class WindowsPackagedStartupTasks : IPackagedStartupTasks
             return package.InstalledLocation.Path;
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    private static RegistryKey? OpenStates()
+    {
+        try
+        {
+            return Registry.CurrentUser.OpenSubKey(StateKey);
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
             return null;
         }
