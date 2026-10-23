@@ -119,11 +119,7 @@ public sealed class MapTile
                 continue;
             }
 
-            var inDrawing = placed.OnScreen(new MapFrame(
-                shape.X / (double)Picture.Width,
-                shape.Y / (double)Picture.Height,
-                shape.Width / (double)Picture.Width,
-                shape.Height / (double)Picture.Height));
+            var inDrawing = placed.OnScreen(shape.FrameIn(Picture.Width, Picture.Height));
 
             var left = (float)(inDrawing.X * width);
             var top = (float)(inDrawing.Y * height);

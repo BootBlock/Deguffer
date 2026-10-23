@@ -25,6 +25,18 @@ public sealed class MapFrameTests
         Assert.Equal(0, clipped.Width);
     }
 
+    /// <summary>
+    /// A shape's frame is divided in double precision, as the layout divides the frames it measures
+    /// itself. A third divided in single precision is a different number, so the same shape handed
+    /// over by two members would come out as two frames.
+    /// </summary>
+    [Fact]
+    public void AShapesFrameIsItsRectangleInFractionsOfItsCanvas()
+    {
+        var frame = new ExploreTile(Node: 0, Depth: 0, Bytes: 0, X: 1, Y: 30, Width: 2, Height: 15).FrameIn(3, 60);
+
+        Assert.Equal(new MapFrame(1.0 / 3, 0.5, 2.0 / 3, 0.25), frame);
+    }
 
     private static void AssertClose(MapFrame expected, MapFrame actual)
     {

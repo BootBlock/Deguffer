@@ -243,7 +243,7 @@ public static class TreemapLayout
         // A block is placed in single precision once cut (see Tile), which is as near as one needs.
         foreach (var block in blocks)
         {
-            shapes.Add(MapShape.Of(block.Node, block.Bytes, new MapFrame(block.X / width, block.Y / height, block.Width / width, block.Height / height)));
+            shapes.Add(MapShape.Of(block.Node, block.Bytes, block.FrameIn(width, height)));
         }
 
         return shapes;

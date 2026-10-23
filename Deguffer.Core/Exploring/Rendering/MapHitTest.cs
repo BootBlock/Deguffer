@@ -41,11 +41,7 @@ public readonly record struct MapLocation(
 
             // The whole picture is a viewport at no zoom, so its placement puts a part of the picture
             // where it is on the screen.
-            return shown.PlacementOf(MapViewport.Whole).OnScreen(tile.Frame.Inside(new MapFrame(
-                inTile.X / (double)tile.Width,
-                inTile.Y / (double)tile.Height,
-                inTile.Width / (double)tile.Width,
-                inTile.Height / (double)tile.Height)));
+            return shown.PlacementOf(MapViewport.Whole).OnScreen(tile.Frame.Inside(inTile.FrameIn(tile.Width, tile.Height)));
         }
 
         if (Drawing.TileAt(X, Y) is not { } shape)
@@ -53,11 +49,7 @@ public readonly record struct MapLocation(
             return null;
         }
 
-        return shown.PlacementOf(Viewport).OnScreen(new MapFrame(
-            shape.X / (double)Drawing.Width,
-            shape.Y / (double)Drawing.Height,
-            shape.Width / (double)Drawing.Width,
-            shape.Height / (double)Drawing.Height));
+        return shown.PlacementOf(Viewport).OnScreen(shape.FrameIn(Drawing.Width, Drawing.Height));
     }
 }
 
