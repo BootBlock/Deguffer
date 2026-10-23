@@ -229,6 +229,7 @@ public class ExploreTreeTests
         // no reader filled, which is what a free record looks like.
         var names = new NamePool();
         int[] nameNumbers = [.. new[] { "testuser", "cache", "a.tgz", "orphan", "orphan-parent", "" }.Select(name => names.Intern(name))];
+        const ExploreNodeFlags folder = ExploreNodeFlags.Directory | ExploreNodeFlags.Present;
 
         var tree = ExploreTree.Create(
             Root,
@@ -239,13 +240,10 @@ public class ExploreTreeTests
             sizes: [0, 0, 100, 500, 700, 900],
             lengths: [0, 0, 150, 500, 700, 900],
             storage: new FileStorage[6],
-            isDirectory: [true, true, false, true, true, false],
-            isLink: [false, false, false, false, false, false],
-            sizeUnknown: [false, false, false, false, false, false],
+            flags: [folder, folder, ExploreNodeFlags.Present, folder, folder, ExploreNodeFlags.None],
             created: new ExploreTimestamp[6],
             modified: new ExploreTimestamp[6],
             visibility: new FileVisibility[6],
-            present: [true, true, true, true, true, false],
             childOrder: ExploreChildOrder.BySize);
 
         Assert.Equal(100, tree.TotalBytes);
@@ -491,8 +489,42 @@ public class ExploreTreeTests
     }
 
     /// <summary>
+    /// A tree that leaves nodes out keeps a copy of every column for the nodes it keeps, and that copy
+    /// is what an Explore tree costs for as long as it is shown. The file table's reader always
+    /// leaves nodes out, because it sizes its arrays to the whole volume.
+    ///
+    /// <para>The copies are the name number, parent, created and modified times at four bytes each,
+    /// the size and length at eight, and the storage, visibility and flags at a byte each: 35. The
+    /// child links are copied at eight, and the renumbering's two maps are eight more. The links and
+    /// order made before anything is left out are the twelve that
+    /// <see cref="AssemblingATreeAllocatesNothingThatGrowsOrRepeatsPerDirectory"/> counts, for 63 in
+    /// all, and the bound leaves one for the key buffer and the tree itself as that test does. A
+    /// <c>bool[]</c> for each flag was two bytes a node more.</para>
+    /// </summary>
+    [Fact]
+    public void ATreeThatLeavesNodesOutKeepsOneByteOfFlagsANode()
+    {
+        const int folders = 1_000;
+        const int filesInEach = 100;
+        const int reached = 1 + folders + (folders * filesInEach);
+
+        new FoldersOfFiles(folders, filesInEach, unreached: 1).Assemble(ExploreChildOrder.BySize);
+
+        var fixture = new FoldersOfFiles(folders, filesInEach, unreached: 1);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var tree = fixture.Assemble(ExploreChildOrder.BySize);
+        var perNode = (GC.GetAllocatedBytesForCurrentThread() - before) / reached;
+
+        Assert.Equal(reached, tree.NodeCount);
+        Assert.Equal(folders * filesInEach, tree.TotalBytes);
+        Assert.InRange(perNode, 63, 64);
+    }
+
+    /// <summary>
     /// A root holding <c>folders</c> folders of <c>filesInEach</c> one-byte files each, as the arrays
-    /// a reader hands to <see cref="ExploreTree.Create"/>, made before anything is measured.
+    /// a reader hands to <see cref="ExploreTree.Create"/>, made before anything is measured. The
+    /// <c>unreached</c> nodes after them are present but each its own parent, as a record the file
+    /// table holds outside the scan's root is.
     /// </summary>
     private sealed class FoldersOfFiles
     {
@@ -501,34 +533,34 @@ public class ExploreTreeTests
         private readonly int[] _parents;
         private readonly int[] _nameRanks;
         private readonly long[] _sizes;
-        private readonly bool[] _isDirectory;
-        private readonly bool[] _present;
+        private readonly ExploreNodeFlags[] _flags;
         private readonly long[] _lengths;
         private readonly FileStorage[] _storage;
-        private readonly bool[] _isLink;
-        private readonly bool[] _sizeUnknown;
         private readonly ExploreTimestamp[] _created;
         private readonly ExploreTimestamp[] _modified;
         private readonly FileVisibility[] _visibility;
 
-        public FoldersOfFiles(int folders, int filesInEach)
+        public FoldersOfFiles(int folders, int filesInEach, int unreached = 0)
         {
-            var count = 1 + folders + (folders * filesInEach);
+            var reached = 1 + folders + (folders * filesInEach);
+            var count = reached + unreached;
             _nameNumbers = new int[count];
             _parents = new int[count];
             _nameRanks = new int[count];
             _sizes = new long[count];
-            _isDirectory = new bool[count];
-            _present = new bool[count];
+            _flags = new ExploreNodeFlags[count];
             _lengths = new long[count];
             _storage = new FileStorage[count];
-            _isLink = new bool[count];
-            _sizeUnknown = new bool[count];
             _created = new ExploreTimestamp[count];
             _modified = new ExploreTimestamp[count];
             _visibility = new FileVisibility[count];
 
-            Array.Fill(_present, true);
+            Array.Fill(_flags, ExploreNodeFlags.Present);
+
+            for (var node = reached; node < count; node++)
+            {
+                _parents[node] = node;
+            }
 
             var names = new NamePool();
             Array.Fill(_nameNumbers, names.Intern("f"));
@@ -538,7 +570,7 @@ public class ExploreTreeTests
             {
                 var node = 1 + folder;
                 _nameRanks[node] = folder;
-                _isDirectory[node] = true;
+                _flags[node] |= ExploreNodeFlags.Directory;
 
                 for (var file = 0; file < filesInEach; file++)
                 {
@@ -553,8 +585,8 @@ public class ExploreTreeTests
         /// <summary>Once only: assembling totals each subtree into the arrays.</summary>
         public ExploreTree Assemble(ExploreChildOrder order) =>
             ExploreTree.Create(
-                Root, 0, _nameNumbers, _names, _parents, _sizes, _lengths, _storage, _isDirectory, _isLink, _sizeUnknown,
-                _created, _modified, _visibility, _present, order,
+                Root, 0, _nameNumbers, _names, _parents, _sizes, _lengths, _storage, _flags,
+                _created, _modified, _visibility, order,
                 nameRanks: order is ExploreChildOrder.ByName ? _nameRanks : null);
     }
 

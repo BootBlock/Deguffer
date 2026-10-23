@@ -100,9 +100,11 @@ internal static class MftExploreReader
         // to a reader who would otherwise take the gap for a fault in the scan.
         var lengths = new long[count];
         var storage = new FileStorage[count];
-        var isDirectory = new bool[count];
-        var isLink = new bool[count];
-        var sizeUnknown = new bool[count];
+
+        // One byte a record for every flag, set in one store per record below. Each record is
+        // handed on once, to one thread, and those held back for their extension records one at a
+        // time after the parse threads have finished, so no two threads ever write one byte.
+        var flags = new ExploreNodeFlags[count];
 
         // Four bytes per node each, not eight. This route sizes every array to the whole record
         // count before it reads one — 2.4M on an ordinary system volume — so a pair of DateTime
@@ -114,8 +116,6 @@ internal static class MftExploreReader
         // A byte a record, which is the whole cost: the attributes come from the
         // $STANDARD_INFORMATION the dates are already read from.
         var visibility = new FileVisibility[count];
-
-        var present = new bool[count];
 
         // Written from several parse threads at once, and only ever to true, so no write can undo
         // another. The stream has finished with every thread before it returns, which is when this
@@ -177,13 +177,13 @@ internal static class MftExploreReader
                 sizes[number] = record.Size?.Allocated ?? 0;
                 lengths[number] = record.Size?.Logical ?? 0;
                 storage[number] = record.Storage;
-                isDirectory[number] = record.IsDirectory;
-                isLink[number] = record.IsReparsePoint;
-                sizeUnknown[number] = record.Size is null;
+                flags[number] = ExploreNodeFlags.Present
+                    | (record.IsDirectory ? ExploreNodeFlags.Directory : ExploreNodeFlags.None)
+                    | (record.IsReparsePoint ? ExploreNodeFlags.Link : ExploreNodeFlags.None)
+                    | (record.Size is null ? ExploreNodeFlags.SizeUnknown : ExploreNodeFlags.None);
                 created[number] = ExploreTimestamp.FromFileTime(record.CreatedFileTime);
                 modified[number] = ExploreTimestamp.FromFileTime(record.LastWrittenFileTime);
                 visibility[number] = record.Visibility;
-                present[number] = true;
 
                 return true;
             },
@@ -195,10 +195,9 @@ internal static class MftExploreReader
         // would otherwise leave the whole disk unreachable — a full drive drawn as empty, from one
         // record.
         parents[volumeRoot] = volumeRoot;
-        isDirectory[volumeRoot] = true;
-        present[volumeRoot] = true;
+        flags[volumeRoot] |= ExploreNodeFlags.Directory | ExploreNodeFlags.Present;
 
-        var resolved = Resolve(components, nameNumbers, names.Freeze(), parents, isDirectory, isLink, present, count);
+        var resolved = Resolve(components, nameNumbers, names.Freeze(), parents, flags, count);
         if (resolved.Node is not { } root)
         {
             return new MftExploreRead(
@@ -219,15 +218,18 @@ internal static class MftExploreReader
         // A record the pass could not place might have been anywhere, this folder included, so the
         // caveat lands on whatever the scan is rooted at. Attributing it only to the volume's root
         // would let a scoped scan report a total as exact on the strength of a record it never read.
-        sizeUnknown[root] |= couldNotReadWholeTable || sawUnreadableRecord;
+        if (couldNotReadWholeTable || sawUnreadableRecord)
+        {
+            flags[root] |= ExploreNodeFlags.SizeUnknown;
+        }
 
         // By size, and there is no choice to make here: this route inverts the parent links once,
         // after the whole table has been read, so it never publishes a partial tree that a growing
         // size could rearrange.
         return new MftExploreRead(
             ExploreTree.Create(
-                rootPath, root, nameNumbers, names.Freeze(), parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
-                created, modified, visibility, present, ExploreChildOrder.BySize, ct: ct),
+                rootPath, root, nameNumbers, names.Freeze(), parents, sizes, lengths, storage, flags,
+                created, modified, visibility, ExploreChildOrder.BySize, ct: ct),
             FallbackReason.None,
             !couldNotReadWholeTable,
             !couldNotReadWholeTable && !sawUnreadableRecord);
@@ -249,16 +251,14 @@ internal static class MftExploreReader
         int[] nameNumbers,
         NamePool.Frozen names,
         int[] parents,
-        bool[] isDirectory,
-        bool[] isLink,
-        bool[] present,
+        ExploreNodeFlags[] flags,
         int count) =>
         Descend(
             components,
             (int)MftRecord.RootRecordNumber,
-            node => isLink[node],
-            node => isDirectory[node],
-            (directory, name) => FindChild(directory, name, nameNumbers, names, parents, present, count));
+            node => (flags[node] & ExploreNodeFlags.Link) != 0,
+            node => (flags[node] & ExploreNodeFlags.Directory) != 0,
+            (directory, name) => FindChild(directory, name, nameNumbers, names, parents, flags, count));
 
     /// <summary>
     /// The node of <paramref name="tree"/>, a tree rooted at its volume's top, that holds the folder
@@ -360,13 +360,13 @@ internal static class MftExploreReader
     /// a node the tree then declines to link.</para>
     /// </summary>
     private static int? FindChild(
-        int directory, string name, int[] nameNumbers, NamePool.Frozen names, int[] parents, bool[] present, int count)
+        int directory, string name, int[] nameNumbers, NamePool.Frozen names, int[] parents, ExploreNodeFlags[] flags, int count)
     {
         int? differingInCase = null;
 
         for (var i = 0; i < count; i++)
         {
-            if (!present[i] || parents[i] != directory || i == directory)
+            if ((flags[i] & ExploreNodeFlags.Present) == 0 || parents[i] != directory || i == directory)
             {
                 continue;
             }

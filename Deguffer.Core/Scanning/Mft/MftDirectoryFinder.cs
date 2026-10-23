@@ -56,7 +56,7 @@ internal sealed class MftDirectoryFinder(
 
             var node = item.Node;
 
-            if (tree.IsReparsePoint[node] || tree.Names[node] is not { } name)
+            if (tree.IsReparsePoint(node) || tree.Names[node] is not { } name)
             {
                 continue;
             }

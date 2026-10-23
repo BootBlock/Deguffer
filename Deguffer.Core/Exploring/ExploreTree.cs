@@ -30,9 +30,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
     private readonly long[] _sizes;
     private readonly long[] _lengths;
     private readonly FileStorage[] _storage;
-    private readonly bool[] _isDirectory;
-    private readonly bool[] _isLink;
-    private readonly bool[] _sizeUnknown;
+    private readonly ExploreNodeFlags[] _flags;
     private readonly ExploreTimestamp[] _created;
     private readonly ExploreTimestamp[] _modified;
     private readonly FileVisibility[] _visibility;
@@ -52,9 +50,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         long[] sizes,
         long[] lengths,
         FileStorage[] storage,
-        bool[] isDirectory,
-        bool[] isLink,
-        bool[] sizeUnknown,
+        ExploreNodeFlags[] flags,
         ExploreTimestamp[] created,
         ExploreTimestamp[] modified,
         FileVisibility[] visibility,
@@ -72,9 +68,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         _sizes = sizes;
         _lengths = lengths;
         _storage = storage;
-        _isDirectory = isDirectory;
-        _isLink = isLink;
-        _sizeUnknown = sizeUnknown;
+        _flags = flags;
         _created = created;
         _modified = modified;
         _visibility = visibility;
@@ -99,9 +93,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         _sizes = scanned._sizes;
         _lengths = scanned._lengths;
         _storage = scanned._storage;
-        _isDirectory = scanned._isDirectory;
-        _isLink = scanned._isLink;
-        _sizeUnknown = scanned._sizeUnknown;
+        _flags = scanned._flags;
         _created = scanned._created;
         _modified = scanned._modified;
         _visibility = scanned._visibility;
@@ -162,7 +154,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// deletion, so the trade goes the other way: a picture complete apart from a handful of
     /// records, saying so, beats no picture at all.</para>
     /// </summary>
-    public bool HasUnknownSizes => _sizeUnknown[RootNode];
+    public bool HasUnknownSizes => HasUnknownSizeBelow(RootNode);
 
     public int NodeCount => _nameNumbers.Length;
 
@@ -213,7 +205,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// </summary>
     public FileStorage StorageOf(int node) => _storage[node];
 
-    public bool IsDirectory(int node) => _isDirectory[node];
+    public bool IsDirectory(int node) => (_flags[node] & ExploreNodeFlags.Directory) != 0;
 
     /// <summary>
     /// What a layout descends into. A directory is one even when it is empty, which is what keeps an
@@ -225,10 +217,10 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// Whether this node is a junction, a symbolic link or another name surrogate. Its target keeps
     /// its own place in the tree, so a link holds nothing here however much its path appears to.
     /// </summary>
-    public bool IsLink(int node) => _isLink[node];
+    public bool IsLink(int node) => (_flags[node] & ExploreNodeFlags.Link) != 0;
 
     /// <summary>Whether <see cref="SizeOf"/> for this node is a lower bound.</summary>
-    public bool HasUnknownSizeBelow(int node) => _sizeUnknown[node];
+    public bool HasUnknownSizeBelow(int node) => (_flags[node] & ExploreNodeFlags.SizeUnknown) != 0;
 
     /// <summary>
     /// When this node was made, as the filesystem recorded it, or
@@ -395,9 +387,10 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// scans of one place can have two numbers, and is found in the other by its path
     /// (<see cref="ExploreCounterparts"/>). Nothing for the walk, whose every node is reached.</para>
     ///
-    /// <paramref name="present"/> says which slots the reader actually filled. The walk fills every
-    /// one; the table leaves free and unreadable records empty, and without this those read as a
-    /// forest of node-zero children that would attach the whole volume to the root a second time.
+    /// <paramref name="flags"/> says, by <see cref="ExploreNodeFlags.Present"/>, which slots the reader
+    /// actually filled. The walk fills every one; the table leaves free and unreadable records empty,
+    /// and without this those read as a forest of node-zero children that would attach the whole
+    /// volume to the root a second time.
     ///
     /// <paramref name="childOrder"/> settles the last of the three. See
     /// <see cref="ExploreChildOrder"/> for why a tree still being filled in wants a different one
@@ -426,13 +419,10 @@ public sealed class ExploreTree : Layout.ITrackedTree
         long[] sizes,
         long[] lengths,
         FileStorage[] storage,
-        bool[] isDirectory,
-        bool[] isLink,
-        bool[] sizeUnknown,
+        ExploreNodeFlags[] flags,
         ExploreTimestamp[] created,
         ExploreTimestamp[] modified,
         FileVisibility[] visibility,
-        bool[] present,
         ExploreChildOrder childOrder,
         IReadOnlyCollection<int>? listingRefused = null,
         int[]? nameRanks = null,
@@ -443,7 +433,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
             throw new ArgumentNullException(nameof(nameRanks), "A tree in name order is placed by its name ranks.");
         }
 
-        var (childStart, children) = InvertParentLinks(parents, present, nameRanks);
+        var (childStart, children) = InvertParentLinks(parents, flags, nameRanks);
         ct.ThrowIfCancellationRequested();
 
         var order = TopDownOrder(childStart, children, rootNode);
@@ -459,9 +449,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
             sizes = reached.Keep(sizes);
             lengths = reached.Keep(lengths);
             storage = reached.Keep(storage);
-            isDirectory = reached.Keep(isDirectory);
-            isLink = reached.Keep(isLink);
-            sizeUnknown = reached.Keep(sizeUnknown);
+            flags = reached.Keep(flags);
             created = reached.Keep(created);
             modified = reached.Keep(modified);
             visibility = reached.Keep(visibility);
@@ -472,7 +460,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
             ct.ThrowIfCancellationRequested();
         }
 
-        RollUp(order, parents, sizes, lengths, storage, sizeUnknown, modified, rootNode);
+        RollUp(order, parents, sizes, lengths, storage, flags, modified, rootNode);
         ct.ThrowIfCancellationRequested();
 
         if (childOrder is ExploreChildOrder.BySize)
@@ -481,7 +469,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         }
 
         return new ExploreTree(
-            rootPath, rootNode, nameNumbers, names, parents, sizes, lengths, storage, isDirectory, isLink, sizeUnknown,
+            rootPath, rootNode, nameNumbers, names, parents, sizes, lengths, storage, flags,
             created, modified, visibility, childStart, children, childOrder,
             listingRefused is { Count: > 0 } ? listingRefused.ToFrozenSet() : FrozenSet<int>.Empty);
     }
@@ -497,22 +485,24 @@ public sealed class ExploreTree : Layout.ITrackedTree
     /// Without, each parent's own start is the cursor that places its children, and the starts are
     /// moved back afterwards: one pass rather than a cursor array the size of the tree.</para>
     /// </summary>
-    private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, bool[] present, int[]? nameRanks)
+    private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, ExploreNodeFlags[] flags, int[]? nameRanks)
     {
         var count = parents.Length;
         var start = new int[count + 1];
 
+        // A node that is its own parent is not linked to anything, because linking it would make
+        // the tree cyclic and the walk below would never terminate. Every reader marks its scan root
+        // that way, so this is how the root stays out of its own child list.
+        //
+        // Stated as the shape rather than as "is it the root", because a scan rooted at a folder
+        // leaves the volume's own root somewhere above it — still present, still its own parent, and
+        // still unreachable from the scan's root. Testing the node number alone would link that one
+        // under itself.
+        bool IsLinked(int node) => (flags[node] & ExploreNodeFlags.Present) != 0 && parents[node] != node;
+
         for (var i = 0; i < count; i++)
         {
-            // A node that is its own parent is not linked to anything, because linking it would
-            // make the tree cyclic and the walk below would never terminate. Every reader marks its
-            // scan root that way, so this is how the root stays out of its own child list.
-            //
-            // Stated as the shape rather than as "is it the root", because a scan rooted at a
-            // folder leaves the volume's own root somewhere above it — still present, still its own
-            // parent, and still unreachable from the scan's root. Testing the node number alone
-            // would link that one under itself.
-            if (present[i] && parents[i] != i)
+            if (IsLinked(i))
             {
                 start[parents[i] + 1]++;
             }
@@ -529,7 +519,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         {
             for (var i = 0; i < count; i++)
             {
-                if (present[i] && parents[i] != i)
+                if (IsLinked(i))
                 {
                     children[start[parents[i]] + nameRanks[i]] = i;
                 }
@@ -540,7 +530,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
 
         for (var i = 0; i < count; i++)
         {
-            if (present[i] && parents[i] != i)
+            if (IsLinked(i))
             {
                 children[start[parents[i]]++] = i;
             }
@@ -614,7 +604,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
         long[] sizes,
         long[] lengths,
         FileStorage[] storage,
-        bool[] sizeUnknown,
+        ExploreNodeFlags[] flags,
         ExploreTimestamp[] modified,
         int rootNode)
     {
@@ -630,7 +620,7 @@ public sealed class ExploreTree : Layout.ITrackedTree
             sizes[parent] += sizes[node];
             lengths[parent] += lengths[node];
             storage[parent] |= storage[node];
-            sizeUnknown[parent] |= sizeUnknown[node];
+            flags[parent] |= flags[node] & ExploreNodeFlags.SizeUnknown;
 
             // Unknown is zero, so it loses to every real date without a case of its own — which is
             // the answer that is wanted. A directory holding one file it could not date and one it
