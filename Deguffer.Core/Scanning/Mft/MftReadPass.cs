@@ -63,6 +63,9 @@ internal sealed class MftReadPass : IDisposable
     // Only ever set, so read and written without the lock.
     private bool _planned;
 
+    // Only ever lowered, and only by compare-exchange in StopAt. Read with Volatile.Read, which is
+    // atomic for a long on every target: Interlocked.Read is a locked compare-exchange on x64, and
+    // every parse thread reads this once a record, so it would take the cache line each time.
     private long _stopAt = long.MaxValue;
     private bool _abandoned;
 
@@ -139,7 +142,7 @@ internal sealed class MftReadPass : IDisposable
         // calling thread, so no report comes after this returns.
         _progress.Advance(_skippedAtEnd);
 
-        var stopAt = Interlocked.Read(ref _stopAt);
+        var stopAt = Volatile.Read(ref _stopAt);
 
         return new MftFirstPass(
             WholeTable: stopAt == long.MaxValue,
@@ -262,7 +265,7 @@ internal sealed class MftReadPass : IDisposable
         // can be.
         while (_again.TryDequeue(out var again))
         {
-            again.ReadCount = again.Position < Interlocked.Read(ref _stopAt)
+            again.ReadCount = again.Position < Volatile.Read(ref _stopAt)
                 ? _source.BatchLength(again.Position, (int)(again.End - again.Position))
                 : 0;
 
@@ -380,7 +383,7 @@ internal sealed class MftReadPass : IDisposable
                 // Only a read the pass still wants fails it. One made before the pass stopped, of
                 // records past where it stopped, is a read a pass one at a time would never have
                 // made, and one cancelled because the pass is stopping is not a second failure.
-                if (!Stopping && slot.Position < Interlocked.Read(ref _stopAt))
+                if (!Stopping && slot.Position < Volatile.Read(ref _stopAt))
                 {
                     Fail(failure);
                 }
@@ -430,7 +433,7 @@ internal sealed class MftReadPass : IDisposable
         {
             var number = first + i;
 
-            if (number >= Interlocked.Read(ref _stopAt) || Stopping)
+            if (number >= Volatile.Read(ref _stopAt) || Stopping)
             {
                 return;
             }
@@ -455,7 +458,7 @@ internal sealed class MftReadPass : IDisposable
     /// </summary>
     private void StopAt(long record)
     {
-        var current = Interlocked.Read(ref _stopAt);
+        var current = Volatile.Read(ref _stopAt);
 
         while (record < current)
         {
