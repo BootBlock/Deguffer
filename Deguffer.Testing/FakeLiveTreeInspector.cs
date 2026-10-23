@@ -16,6 +16,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     private readonly HashSet<string> _live;
     private bool _complete;
     private readonly List<RunningProgram> _programs = [];
+    private readonly List<TimeSpan> _ageLimits = [];
     private readonly Dictionary<string, string> _heldFiles = new(StringComparer.OrdinalIgnoreCase);
     private LiveTreeMatch _match = new(new FakeVolumeInventory());
 
@@ -33,6 +34,9 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public static FakeLiveTreeInspector CannotTell => new(complete: false);
 
     public int InvalidateCount { get; private set; }
+
+    /// <summary>The age each <see cref="DiscardOlderThan"/> was asked with, in order.</summary>
+    public IReadOnlyList<TimeSpan> AgeLimits => _ageLimits;
 
     /// <summary>
     /// Answer "could not tell" from now on, so a test can have the process table become unreadable
@@ -188,6 +192,12 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public ReachedFolder Reach(string path) => _match.Reach(path);
 
     public void Invalidate() => InvalidateCount++;
+
+    /// <summary>
+    /// Recorded rather than acted on: this fake has no snapshot to go stale, and answers every
+    /// question as the test last declared the machine.
+    /// </summary>
+    public void DiscardOlderThan(TimeSpan maxAge) => _ageLimits.Add(maxAge);
 
     private sealed record RunningProgram(
         string Name,

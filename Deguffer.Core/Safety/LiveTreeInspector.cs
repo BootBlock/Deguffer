@@ -8,7 +8,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     private readonly IProcessTableCalls _calls;
     private readonly IVolumeInventory _volumes;
     private readonly Lock _gate = new();
-    private ProcessTable? _snapshot;
+    private readonly TimedReading<ProcessTable> _snapshot;
     private LiveTreeMatch? _match;
 
     public LiveTreeInspector()
@@ -17,10 +17,12 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     }
 
     /// <param name="volumes">Asked every other path a program's place and a directory are reachable at.</param>
-    internal LiveTreeInspector(IProcessTableCalls calls, IVolumeInventory volumes)
+    /// <param name="time">What a snapshot's age is measured by. Defaulted to the system clock.</param>
+    internal LiveTreeInspector(IProcessTableCalls calls, IVolumeInventory volumes, TimeProvider? time = null)
     {
         _calls = calls;
         _volumes = volumes;
+        _snapshot = new(time ?? TimeProvider.System);
     }
 
     public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
@@ -190,8 +192,21 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     {
         lock (_gate)
         {
-            _snapshot = null;
+            _snapshot.Forget();
             _match = null;
+        }
+    }
+
+    public void DiscardOlderThan(TimeSpan maxAge)
+    {
+        lock (_gate)
+        {
+            // The rule that matches the table goes with it, as Invalidate drops both, so where a path
+            // is reachable is never older than the reading it is compared with.
+            if (_snapshot.ForgetOlderThan(maxAge))
+            {
+                _match = null;
+            }
         }
     }
 
@@ -215,7 +230,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     {
         lock (_gate)
         {
-            return (_snapshot ??= Filtered(RunningProcessTable.Read(_calls, ct)), _match ??= new LiveTreeMatch(_volumes));
+            return (_snapshot.Get(() => Filtered(RunningProcessTable.Read(_calls, ct))), _match ??= new LiveTreeMatch(_volumes));
         }
     }
 

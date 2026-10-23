@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
@@ -133,7 +134,7 @@ public sealed class ExploreSelectionTests : IDisposable
     }
 
     [Fact]
-    public void TheNoteSaysWhyTheSelectionWillNotBeRemoved()
+    public void TheNoteSaysWhyTheSelectionWillNotBeRemoved() => UiThread.Run(async () =>
     {
         var (tree, _, file) = Scanned();
         _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(file)));
@@ -141,9 +142,140 @@ public sealed class ExploreSelectionTests : IDisposable
 
         selection.Select([file]);
 
-        Assert.Equal("Kept for a reason.", selection.Note);
+        await Eventually.HoldsAsync(() => selection.Note == "Kept for a reason.", "the refusal stated");
         Assert.True(selection.HasNote);
-    }
+    });
+
+    /// <summary>
+    /// The policy is asked off the window's thread, because each path is a question to the machine
+    /// and a list selects any number of rows at once: a few thousand held the window for seconds.
+    /// </summary>
+    [Fact]
+    public void TheSelectionIsAskedAboutOffTheWindowsThread() => UiThread.Run(async () =>
+    {
+        var (tree, folder, file) = Scanned();
+        var threads = new ConcurrentBag<int>();
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(file)));
+        var selection = Selection(tree);
+
+        // After the policy is built, which follows each of its own rules to where it is mounted.
+        _explore.Volumes.Asked = _ => threads.Add(Environment.CurrentManagedThreadId);
+        selection.Select([folder, file]);
+
+        await Eventually.HoldsAsync(() => selection.HasNote, "the refusal stated");
+        Assert.NotEmpty(threads);
+        Assert.DoesNotContain(Environment.CurrentManagedThreadId, threads);
+    });
+
+    /// <summary>
+    /// An answer that takes a moment says that it is being worked out, rather than leaving the note
+    /// blank, which reads as nothing standing in the way — and is then replaced by the answer.
+    /// </summary>
+    [Fact]
+    public void ASlowAnswerSaysItIsBeingWorkedOutUntilItArrives() => UiThread.Run(async () =>
+    {
+        var (tree, _, file) = Scanned();
+        using var held = new ManualResetEventSlim();
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(file)));
+        var selection = Selection(tree);
+
+        _explore.Volumes.Asked = path => Hold(held, path, "keep.bin");
+        selection.Select([file]);
+
+        await Eventually.HoldsAsync(() => selection.Note == ExploreRefusalNote.Asking(1), "the note says it is asking");
+
+        held.Set();
+
+        await Eventually.HoldsAsync(() => selection.Note == "Kept for a reason.", "the refusal stated");
+    });
+
+    /// <summary>
+    /// An answer that arrives after something else was selected is about a selection that has gone,
+    /// and is never shown against the one that replaced it, even where it had already been worked
+    /// out by then.
+    /// </summary>
+    [Fact]
+    public void AnAnswerForAnEarlierSelectionIsNeverShown() => UiThread.Run(async () =>
+    {
+        var (tree, folder, file) = Scanned();
+        using var held = new ManualResetEventSlim();
+        var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var notes = new List<string?>();
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(file)));
+        var selection = Selection(tree);
+
+        var asking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _explore.Volumes.Asked = path =>
+        {
+            if (!path.EndsWith("keep.bin", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            asking.TrySetResult();
+            Hold(held, path, "keep.bin");
+            released.TrySetResult();
+        };
+
+        selection.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ExploreSelection.Note))
+            {
+                notes.Add(selection.Note);
+            }
+        };
+
+        selection.Select([file]);
+        await asking.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        // Released while this thread is held, so the first answer is finished, and waiting to be
+        // shown behind this thread, when the second pick is made. Calling the question off is then
+        // too late, and only knowing which question is current keeps that answer off the note.
+        held.Set();
+        Assert.True(released.Task.Wait(TimeSpan.FromSeconds(30)));
+        Thread.Sleep(TimeSpan.FromMilliseconds(500));
+
+        selection.Select([folder]);
+
+        await Eventually.HoldsAsync(() => notes.Count > 0, "the folder answered");
+
+        Assert.All(notes, Assert.Null);
+        Assert.Null(selection.Note);
+    });
+
+    /// <summary>
+    /// A snapshot arriving mid-scan that still names everything selected changes only the sizes, so
+    /// the note stands and is not asked for again: the page carries a selection through a snapshot
+    /// every second or so.
+    /// </summary>
+    [Fact]
+    public void CarryingWhatStillNamesTheSameThingsLeavesTheNoteAlone() => UiThread.Run(async () =>
+    {
+        var (tree, folder, file) = Scanned();
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(file)));
+        var selection = Selection(tree);
+
+        selection.Select([folder, file]);
+
+        await Eventually.HoldsAsync(
+            () => selection.Note == "One of these 2 items will not be removed: Kept for a reason.", "the refusal stated");
+
+        var builder = new ExploreTreeBuilder(tree.PathOf(tree.RootNode));
+        var grown = builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("old"), ExploreFixture.File("keep.bin", 7)]);
+        builder.AddChildren(grown, [ExploreFixture.File("a.bin", 20)]);
+        var snapshot = builder.Build(ExploreChildOrder.BySize);
+        var raised = new List<string?>();
+
+        selection.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        selection.Carry(snapshot);
+
+        Assert.Equal(FreeSpace.Format(27), selection.Figures);
+        Assert.Contains(nameof(ExploreSelection.Figures), raised);
+        Assert.DoesNotContain(nameof(ExploreSelection.Note), raised);
+        Assert.Equal("One of these 2 items will not be removed: Kept for a reason.", selection.Note);
+        Assert.Equal(["old", "keep.bin"], selection.Nodes.Select(snapshot.NameOf));
+    });
 
     /// <summary>
     /// The refusal is the one thing on the page whose answer arrives late. A selection made while
@@ -399,6 +531,19 @@ public sealed class ExploreSelectionTests : IDisposable
     {
         removed.Add(from);
         selection.Carry(from.Left);
+    }
+
+    /// <summary>
+    /// Hold the policy's question about a path ending in <paramref name="name"/> until
+    /// <paramref name="held"/> is set, as a slow volume would. Bounded, so a test that never sets it
+    /// fails rather than hanging.
+    /// </summary>
+    private static void Hold(ManualResetEventSlim held, string path, string name)
+    {
+        if (path.EndsWith(name, StringComparison.OrdinalIgnoreCase))
+        {
+            held.Wait(TimeSpan.FromSeconds(30));
+        }
     }
 
     /// <summary>A folder holding one file, beside a file, all on the disk so a removal has something to remove.</summary>

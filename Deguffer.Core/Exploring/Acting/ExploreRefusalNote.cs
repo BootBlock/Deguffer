@@ -41,4 +41,13 @@ public static class ExploreRefusalNote
                               + "one at a time to see why.",
         };
     }
+
+    /// <summary>
+    /// The sentence while the answer for <paramref name="count"/> items is still being worked out,
+    /// which a large selection takes long enough over to be seen waiting. Said rather than left
+    /// blank, because a blank note reads as nothing standing in the way.
+    /// </summary>
+    public static string Asking(int count) => count == 1
+        ? "Deguffer is working out whether it may remove this."
+        : $"Deguffer is working out which of these {count} items it may remove.";
 }

@@ -50,8 +50,9 @@ internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string u
 
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
-        // The inspector keeps one process table for a planning pass. That table is the preview's.
-        inspector.Invalidate();
+        // The inspector keeps one process table for a planning pass, and the preview's may be past
+        // the limit.
+        inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
         var findings = Find(inspector, [userData], ct);
 
