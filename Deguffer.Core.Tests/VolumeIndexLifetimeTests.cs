@@ -108,6 +108,32 @@ public sealed class VolumeIndexLifetimeTests
     }
 
     /// <summary>
+    /// The same for a build stopped while it reads a file's attribute list kept outside the table. That
+    /// read stops on a token of its own, linked to the scan's, so what it throws names the wrong token
+    /// for the build's task to end cancelled on.
+    /// </summary>
+    [Fact]
+    public async Task ABuildStoppedReadingAnAttributeListEndsCancelledNotFaulted()
+    {
+        const long ListCluster = 900;
+        var letter = DriveLetters.Unused();
+        var sources = new ListHeldOpen(
+            new MftFixture().AddFileWhoseListOutsideTheTableNamesRecords(16, ListCluster, firstNamed: 1_000, count: 4),
+            ListCluster);
+        var cache = new MftVolumeIndexCache(sources, ScanTuner.Shipped);
+
+        var hold = cache.Hold();
+        var building = cache.Get(letter);
+        await sources.ListReadStarted.WaitAsync(TimeSpan.FromSeconds(30));
+        hold.Dispose();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => building.WaitAsync(TimeSpan.FromSeconds(30)));
+
+        Assert.True(building.IsCanceled, $"The stopped build ended {building.Status}.");
+        Assert.Equal(1, sources.CloseCount);
+    }
+
+    /// <summary>
     /// The whole route: a provider measures through the scanner during a pass, and once the pass has
     /// ended the scanner keeps no index, though nothing invalidated it.
     /// </summary>
@@ -142,6 +168,66 @@ public sealed class VolumeIndexLifetimeTests
 
         Assert.Equal(1, scanner.HoldsTaken);
         Assert.Equal(0, scanner.HoldsStanding);
+    }
+
+    /// <summary>
+    /// A volume whose table reads at once, but whose read of the cluster holding a file's attribute list
+    /// waits until it is cancelled.
+    /// </summary>
+    private sealed class ListHeldOpen(MftFixture fixture, long listCluster) : IMftSourceFactory
+    {
+        private readonly TaskCompletionSource _listReadStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly long _listCluster = listCluster;
+        private int _closed;
+
+        public Task ListReadStarted => _listReadStarted.Task;
+
+        public int CloseCount => Volatile.Read(ref _closed);
+
+        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+        {
+            reason = FallbackReason.None;
+
+            return new Held(fixture.Build(), this);
+        }
+
+        private sealed class Held(IMftSource table, ListHeldOpen owner) : IMftSource
+        {
+            public int BytesPerRecord => table.BytesPerRecord;
+
+            public long RecordCount => table.RecordCount;
+
+            public MftBitmapPlacement? Bitmap => table.Bitmap;
+
+            public int BytesPerCluster => table.BytesPerCluster;
+
+            public int BatchLength(long firstRecord, int capacity) => table.BatchLength(firstRecord, capacity);
+
+            public int ReadBatch(long firstRecord, Span<byte> destination) => table.ReadBatch(firstRecord, destination);
+
+            public ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct) =>
+                table.ReadBatchAsync(firstRecord, destination, ct);
+
+            public bool TryReadClusters(long firstCluster, Span<byte> destination) => table.TryReadClusters(firstCluster, destination);
+
+            public async ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct)
+            {
+                if (firstCluster == owner._listCluster)
+                {
+                    owner._listReadStarted.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+                }
+
+                return await table.TryReadClustersAsync(firstCluster, destination, ct).ConfigureAwait(false);
+            }
+
+            public void Dispose()
+            {
+                table.Dispose();
+                Interlocked.Increment(ref owner._closed);
+            }
+        }
+
     }
 
     /// <summary>Measures one path twice through its scanner, as several rows of one pass would, and plans nothing.</summary>

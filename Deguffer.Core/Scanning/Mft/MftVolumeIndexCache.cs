@@ -140,6 +140,13 @@ public sealed class MftVolumeIndexCache
             // volume takes the slow route; neither should take the preview down.
             return new Built(null, FallbackReason.MasterFileTableIncomplete);
         }
+        catch (OperationCanceledException stopped) when (scan.IsCancellationRequested && stopped.CancellationToken != scan)
+        {
+            // A read inside the build stops on a token of its own, linked to the scan's, and the thread
+            // the build runs on ends its task cancelled only for the scan's token. Stated again on that
+            // token, so a build stops cancelled at whatever stage it was stopped in.
+            throw new OperationCanceledException(stopped.Message, stopped, scan);
+        }
     }
 
     /// <summary>
