@@ -46,7 +46,7 @@ public sealed partial class MainWindow : Window
         // pages still to hear about that ending would be updating controls in a closed window. Asked
         // again when it runs, because an action can begin in between, and then the close waits for
         // that one too.
-        _closeGuard.ReadyToClose += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        _closeGuard.ReadyToClose += (_, _) => DispatcherQueue.TryEnqueueGuarded(() =>
         {
             if (_closeGuard.MayClose)
             {

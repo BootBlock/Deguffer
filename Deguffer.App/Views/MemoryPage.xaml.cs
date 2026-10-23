@@ -456,7 +456,7 @@ public sealed partial class MemoryPage : Page
         // its own report.
         if (!_showingSelectedRow && !ViewModel.IsShowingRows)
         {
-            DispatcherQueue.TryEnqueue(() =>
+            DispatcherQueue.TryEnqueueGuarded(() =>
             {
                 // Asked again on arrival. A ListView commits a pointer selection on the release, so
                 // a press can land between the two and take the list back; this repair is then

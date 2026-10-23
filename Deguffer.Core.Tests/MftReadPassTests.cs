@@ -512,6 +512,11 @@ public sealed class MftReadPassTests
     /// Records are parsed on the calling thread and on up to as many more at once as the parse
     /// threads allow, never more. The handler takes a moment over each record, so reads arrive
     /// faster than one thread parses them and a second thread has work.
+    ///
+    /// <para>Where more than one thread is allowed, the first record is held until a second record
+    /// is being parsed alongside it. A moment's work alone is a race with the start of the second
+    /// thread, which a loaded machine can lose with nothing wrong: every record then parses on one
+    /// thread. Only a second thread that never starts at all runs out the wait.</para>
     /// </summary>
     [Theory]
     [InlineData(1)]
@@ -519,10 +524,12 @@ public sealed class MftReadPassTests
     public void ParsesOnAsManyThreadsAtOnceAsAllowed(int parseThreads)
     {
         using var source = LargeTable().Build();
+        using var overlapped = new ManualResetEventSlim();
         var caller = Environment.CurrentManagedThreadId;
         var threads = new ConcurrentDictionary<int, bool>();
         var parsing = 0;
         var mostAtOnce = 0;
+        var held = 0;
 
         MftRecordStream.TryReadAll(
             source,
@@ -536,6 +543,15 @@ public sealed class MftReadPassTests
                 for (var most = Volatile.Read(ref mostAtOnce); now > most; most = Volatile.Read(ref mostAtOnce))
                 {
                     Interlocked.CompareExchange(ref mostAtOnce, now, most);
+                }
+
+                if (now > 1)
+                {
+                    overlapped.Set();
+                }
+                else if (parseThreads > 1 && Interlocked.Exchange(ref held, 1) == 0)
+                {
+                    overlapped.Wait(TimeSpan.FromSeconds(20));
                 }
 
                 Thread.SpinWait(50_000);

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.UI.Composition;
@@ -174,7 +175,7 @@ internal sealed class ExploreLayer
 
     /// <summary>Ask the compositor for <paramref name="commit"/>, and shade the light it settles once it is done.</summary>
     private void AfterCommit(int commit) =>
-        _compositor.RequestCommitAsync().Completed = (_, _) => _dispatcher.TryEnqueue(() =>
+        _compositor.RequestCommitAsync().Completed = (_, _) => _dispatcher.TryEnqueueGuarded(() =>
         {
             if (_light.Committed(commit) is { } shading)
             {

@@ -13,6 +13,8 @@ public sealed class ListingHookFileSystem(IFileSystem inner, string directory, A
 
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
+    public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
+
     public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
 
     public ListingEnd ListEntries(string path, ListingRequest request, List<WalkEntry> into)

@@ -36,13 +36,6 @@ namespace Deguffer.App.Views;
 /// </summary>
 public sealed partial class ExplorePage : Page
 {
-    /// <summary>
-    /// The views the View box offers, in its order: the box's index into this is the view. The tree
-    /// is the Memory page's alone, so the box and <see cref="ExploreView"/> do not line up by number.
-    /// </summary>
-    private static readonly ExploreView[] Views =
-        [ExploreView.Treemap, ExploreView.Icicle, ExploreView.Sunburst, ExploreView.List, ExploreView.Files];
-
     /// <summary>Whether <see cref="ShowSelectedRows"/> is writing the list's selection.</summary>
     private bool _showingSelectedRows;
 
@@ -262,8 +255,10 @@ public sealed partial class ExplorePage : Page
 
         // The colouring first, because ShowAs draws the map and the map has to be told what its
         // colours mean before it paints rather than after.
-        ColourAs(preferences.ExploreColours);
-        ShowAs(preferences.Explore);
+        var choice = ExploreChoice.From(preferences);
+
+        ColourAs(choice.Colouring);
+        ShowAs(choice.View);
 
         // A scan of a full drive takes long enough that throwing it away on a trip to Settings and
         // back would be its own defect.
@@ -314,8 +309,8 @@ public sealed partial class ExplorePage : Page
     }
 
     /// <summary>
-    /// Draw the page in <paramref name="view"/>, and leave the selector agreeing with what is on
-    /// screen.
+    /// Draw the page in <paramref name="view"/>, one of <see cref="ExploreChoice.Views"/>, and leave
+    /// the selector agreeing with what is on screen.
     ///
     /// Safe to call from the selector's own change handler: the first call moves the index off -1
     /// and re-enters that handler once, which lands back here with the index it now holds, and
@@ -323,15 +318,8 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void ShowAs(ExploreView view)
     {
-        // A view the box does not offer, which only a hand-edited preferences file can ask for, is
-        // read as the shipped one rather than left with the box naming nothing.
-        if (Array.IndexOf(Views, view) < 0)
-        {
-            view = ExploreView.Treemap;
-        }
-
         ViewModel.SelectedView = view;
-        ViewSelector.SelectedIndex = Array.IndexOf(Views, view);
+        ViewSelector.SelectedIndex = ExploreChoice.IndexOf(view);
 
         // Each picture keeps its own colours, so a change of view is a change of scheme as well, and
         // the appearance window's picker moves to speak for the new one.
@@ -585,12 +573,12 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ViewSelector.SelectedIndex is not (>= 0 and var index) || index >= Views.Length)
+        if (ViewSelector.SelectedIndex is not (>= 0 and var index) || index >= ExploreChoice.Views.Count)
         {
             return;
         }
 
-        var view = Views[index];
+        var view = ExploreChoice.Views[index];
 
         ShowAs(view);
         App.Preferences.Update(current => current with { Explore = view });
@@ -702,7 +690,7 @@ public sealed partial class ExplorePage : Page
         // from inside its own report.
         if (!_showingSelectedRows && !_swappingRows && !ViewModel.IsShowingRows)
         {
-            DispatcherQueue.TryEnqueue(() =>
+            DispatcherQueue.TryEnqueueGuarded(() =>
             {
                 // Asked again on arrival. A ListView commits a pointer selection on the release, so
                 // a press can land between the two and take the list back; this repair is then

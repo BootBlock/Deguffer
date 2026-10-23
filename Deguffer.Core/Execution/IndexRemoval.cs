@@ -23,6 +23,10 @@ namespace Deguffer.Core.Execution;
 /// as well, because a removal takes its root last and a cancelled one never reaches it: what is left of
 /// the index still points into the directory, which then must not be touched.
 /// </param>
+/// <param name="NotADirectory">
+/// Whether a file stood where an index directory was meant to be. Never <paramref name="Complete"/> as
+/// well: nothing shows the index went, so the directory it indexes is left alone.
+/// </param>
 internal sealed record IndexRemoval(
     bool Complete,
     long BytesReclaimed,
@@ -31,7 +35,8 @@ internal sealed record IndexRemoval(
     long EntriesRemoved,
     int Kept,
     int MailStores,
-    bool Interrupted = false)
+    bool Interrupted = false,
+    bool NotADirectory = false)
 {
     /// <summary>
     /// Remove every index directory of <paramref name="step"/> in turn, recording what each left, and
@@ -68,7 +73,8 @@ internal sealed record IndexRemoval(
                 total.EntriesRemoved + removal.EntriesRemoved,
                 total.Kept + removal.Kept,
                 total.MailStores + removal.MailStores.Count,
-                removal.Interrupted);
+                removal.Interrupted,
+                removal.NotADirectory);
 
             if (!complete)
             {
@@ -88,13 +94,23 @@ internal sealed record IndexRemoval(
         Succeeded: !Interrupted && (BytesReclaimed > 0 || EntriesRemoved > 0),
         BytesReclaimed,
         Refused,
-        Interrupted
-            ? $"Stopped when the clean was cancelled, with {LongPath.Display(step.Path)} not yet touched"
-              + $"{LeftInPlace.Clauses(Refused, RefusedFolders, Kept, mailStores: MailStores)}. "
-              + "Part of its index may already be gone, and what is left of it still points into it."
-            : $"Left {LongPath.Display(step.Path)} alone: part of its index could not be removed"
-              + $"{LeftInPlace.Clauses(Refused, RefusedFolders, Kept, mailStores: MailStores)}, "
-              + "and what is left of the index still points into it.",
+        (Interrupted, NotADirectory) switch
+        {
+            (true, _) =>
+                $"Stopped when the clean was cancelled, with {LongPath.Display(step.Path)} not yet touched"
+                + $"{LeftInPlace.Clauses(Refused, RefusedFolders, Kept, mailStores: MailStores)}. "
+                + "Part of its index may already be gone, and what is left of it still points into it.",
+
+            (_, true) =>
+                $"Left {LongPath.Display(step.Path)} alone: a file now stands where part of its index was"
+                + $"{LeftInPlace.Clauses(Refused, RefusedFolders, Kept, mailStores: MailStores)}, "
+                + "so nothing shows the index is gone.",
+
+            _ =>
+                $"Left {LongPath.Display(step.Path)} alone: part of its index could not be removed"
+                + $"{LeftInPlace.Clauses(Refused, RefusedFolders, Kept, mailStores: MailStores)}, "
+                + "and what is left of the index still points into it.",
+        },
         Kept,
         EntriesRemoved: EntriesRemoved,
         RefusedFolders: RefusedFolders,

@@ -496,7 +496,8 @@ public sealed class PlanExecutor(
 
         while (true)
         {
-            if (LongPath.ProbeDirectory(item) is PathPresence.Absent)
+            // The entry probe, because the directory probe answers Absent for a file at the path too.
+            if (LongPath.ProbeEntry(item) is PathPresence.Absent)
             {
                 return Marking.Removed;
             }
@@ -707,6 +708,17 @@ public sealed class PlanExecutor(
             Kept = removal.Kept + index.Kept,
         };
 
+        var stores = removal.MailStores.Count + index.MailStores;
+
+        return removal.Interrupted ? Stopped(step, removal, stores) : Deleted(step, removal, stores);
+    }
+
+    /// <summary>
+    /// What a directory step that ran to its end reports, from its removal with its index's figures
+    /// already added.
+    /// </summary>
+    internal static StepOutcome Deleted(DeleteDirectoryStep step, RemovalOutcome removal, int stores)
+    {
         // A refusal is not a failure (§5.3). The step only fails if the directory survived intact
         // and nothing at all was reclaimed — that is, we achieved nothing.
         //
@@ -718,19 +730,20 @@ public sealed class PlanExecutor(
         // it reclaims no bytes.
         // An Outlook mail store left where it was is something achieved for the same reason: it is the
         // outcome §9 requires, and a folder holding nothing else would otherwise read as a failure.
-        var stores = removal.MailStores.Count + index.MailStores;
-
-        if (removal.Interrupted)
-        {
-            return Stopped(step, removal, stores);
-        }
-
         var succeeded = removal.RootRemoved || removal.BytesReclaimed > 0 || removal.Kept > 0
             || removal.EntriesRemoved > 0 || stores > 0;
 
         var message = succeeded switch
         {
+            false when removal.NotADirectory => LeftInPlace.NotAFolder,
+
             false => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
+
+            // Whatever came out was the index, which went whole before the folder was looked at: a
+            // removal that met a file at the folder's path takes nothing. "Removed" alone would claim
+            // the folder.
+            _ when removal.NotADirectory =>
+                "Removed its index, and left alone a file that now stands where this folder was.",
 
             // Nothing came out and the folder is still standing, which is the guard's own case: it
             // held back everything this step named. Saying "Removed" here would be a false statement
@@ -801,13 +814,18 @@ public sealed class PlanExecutor(
             return Stopped(step, removal, stores);
         }
 
-        var succeeded = removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
-            || removal.Spared > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty);
+        // A file standing where the folder was is not a folder that held nothing, which is what a clear
+        // that met no refusal otherwise reports.
+        var succeeded = !removal.NotADirectory
+            && (removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
+                || removal.Spared > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty));
 
         // Asked of the entries as well as the bytes: a folder holding only empty folders reclaims no
         // bytes, and it was still cleared.
         var message = (succeeded, removal.BytesReclaimed, removal.EntriesRemoved) switch
         {
+            (false, _, _) when removal.NotADirectory => LeftInPlace.NotAFolder,
+
             (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to
