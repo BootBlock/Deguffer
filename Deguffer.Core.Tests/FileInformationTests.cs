@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
 using Microsoft.Win32.SafeHandles;
@@ -229,5 +230,41 @@ public sealed class FileInformationTests
         Assert.Null(FileInformation.StreamsWhereRefused(InvalidParameter, FatFlags | NamedStreams));
         Assert.Null(FileInformation.StreamsWhereRefused(InvalidParameter, volumeFlags: null));
         Assert.Null(FileInformation.StreamsWhereRefused(error: 5, FatFlags));
+    }
+
+    /// <summary>
+    /// Windows sometimes opens a file just written through its name with a separator after it, so the
+    /// handle given here is the one it opens then: the file's own, handed over as the answer for the
+    /// name no file can have. Which handle Windows gives is out of the test's hands, and what is
+    /// answered for it is the code's alone.
+    /// </summary>
+    [Fact]
+    public void AFileOpenedThroughATrailingSeparatorIsAnsweredAsNotADirectory()
+    {
+        using var temp = new TempDirectory();
+        var file = LongPath.Extended(temp.CreateFile(10, "plain.bin"));
+        var opened = FileInformation.Open(file, HandleUse.Describe);
+        Assert.False(opened.IsInvalid);
+
+        using var answered = FileInformation.AsNamed(file + Path.DirectorySeparatorChar, opened);
+
+        Assert.True(answered.IsInvalid);
+        Assert.Equal(LongPath.ErrorDirectory, Marshal.GetLastPInvokeError());
+        Assert.True(opened.IsClosed);
+    }
+
+    /// <summary>A directory can be named with a trailing separator, and a file without one is its name.</summary>
+    [Fact]
+    public void ADirectoryThroughATrailingSeparatorAndAFileWithoutOneKeepTheirHandles()
+    {
+        using var temp = new TempDirectory();
+        var directory = LongPath.Extended(temp.CreateDirectory("Folder"));
+        var file = LongPath.Extended(temp.CreateFile(10, "plain.bin"));
+        using var openedDirectory = FileInformation.Open(directory, HandleUse.Describe);
+        using var openedFile = FileInformation.Open(file, HandleUse.Describe);
+
+        Assert.Same(openedDirectory, FileInformation.AsNamed(directory + Path.DirectorySeparatorChar, openedDirectory));
+        Assert.Same(openedFile, FileInformation.AsNamed(file, openedFile));
+        Assert.False(openedDirectory.IsClosed || openedFile.IsClosed);
     }
 }
