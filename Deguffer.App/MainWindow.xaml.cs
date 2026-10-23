@@ -3,6 +3,7 @@ using Deguffer.App.Views;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Startup;
 using Deguffer.Core.Working;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -142,6 +143,7 @@ public sealed partial class MainWindow : Window
             ExploreRequest => (typeof(ExplorePage), ExploreItem),
             DuplicatesRequest => (typeof(DuplicatesPage), DuplicatesItem),
             InstalledAppsRequest => (typeof(InstalledAppsPage), InstalledAppsItem),
+            StartupRequest => (typeof(StartupPage), StartupItem),
             _ => (typeof(CleanPage), StorageItem),
         };
 
@@ -184,10 +186,22 @@ public sealed partial class MainWindow : Window
     };
 
     /// <summary>
-    /// Show <paramref name="page"/> with the entrance <see cref="PageArrival"/> plays, in place of the
-    /// frame's own transition, which would slide the page in under it.
+    /// Open Startup on <paramref name="entry"/>, for Memory's link to it (§7.5). The page first, then
+    /// the rail, in the order <see cref="OpenWhereTheLaunchAsked"/> gives and for its reason.
     /// </summary>
-    private void Go(Type page) => ContentFrame.Navigate(page, null, new SuppressNavigationTransitionInfo());
+    public void ShowStartupEntry(StartupKey entry)
+    {
+        Go(typeof(StartupPage), entry);
+        Navigation.SelectedItem = StartupItem;
+    }
+
+    /// <summary>
+    /// Show <paramref name="page"/> with the entrance <see cref="PageArrival"/> plays, in place of the
+    /// frame's own transition, which would slide the page in under it. A cached page is handed
+    /// <paramref name="parameter"/> again on every arrival.
+    /// </summary>
+    private void Go(Type page, object? parameter = null) =>
+        ContentFrame.Navigate(page, parameter, new SuppressNavigationTransitionInfo());
 
     private async void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
@@ -233,6 +247,7 @@ public sealed partial class MainWindow : Window
             "Duplicates" => typeof(DuplicatesPage),
             "Memory" => typeof(MemoryPage),
             "InstalledApps" => typeof(InstalledAppsPage),
+            "Startup" => typeof(StartupPage),
             _ => typeof(CleanPage),
         };
 

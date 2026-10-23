@@ -2,6 +2,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Memory.Acting;
+using Deguffer.Core.Startup;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -96,6 +97,74 @@ public sealed class MemorySelectionTests : IDisposable
         Assert.Equal(MemoryVerdict.Allow([]).Reason, selection.Note);
         Assert.Equal(1, _facts.Asked);
     });
+
+    /// <summary>
+    /// §7.5: a picked program Windows starts at sign-in says so, and the link names its entry. The
+    /// program comes from the same question the verdict asked, so nothing more is asked for it.
+    /// </summary>
+    [Fact]
+    public void AProgramWindowsStartsAtSignInSaysSoAndLinksToItsEntry() => UiThread.Run(async () =>
+    {
+        var selection = Selection();
+        var entry = StartupEntryFor(MemoryCloseMachine.TargetImage);
+        selection.KnowStartup(new StartupReading([entry], []));
+        StartupKey? followed = null;
+        selection.StartupEntryRequested += (_, key) => followed = key;
+
+        selection.Select(TargetNode);
+        await Eventually.HoldsAsync(() => selection.HasStartupLink, "the link appeared");
+
+        Assert.StartsWith("Windows starts this program at sign-in", selection.StartupNote, StringComparison.Ordinal);
+        Assert.Equal(1, _facts.Asked);
+
+        selection.ShowStartupCommand.Execute(null);
+
+        Assert.Equal(entry.Key, followed);
+    });
+
+    /// <summary>The list is read when the page opens, so it can land after the pick's answer, and the pick takes it up then.</summary>
+    [Fact]
+    public void AStartupListArrivingAfterThePicksAnswerStillLinks() => UiThread.Run(async () =>
+    {
+        var selection = Selection();
+        selection.Select(TargetNode);
+        await Eventually.HoldsAsync(() => selection.Note != "Deguffer is asking Windows about this program.", "the answer landed");
+
+        Assert.False(selection.HasStartupLink);
+
+        selection.KnowStartup(new StartupReading([StartupEntryFor(MemoryCloseMachine.TargetImage)], []));
+
+        Assert.True(selection.HasStartupLink);
+    });
+
+    [Fact]
+    public void PickingSomethingElseDropsTheLink() => UiThread.Run(async () =>
+    {
+        var selection = Selection();
+        selection.KnowStartup(new StartupReading([StartupEntryFor(MemoryCloseMachine.TargetImage)], []));
+        selection.Select(TargetNode);
+        await Eventually.HoldsAsync(() => selection.HasStartupLink, "the link appeared");
+
+        selection.Select(PartNode);
+
+        Assert.False(selection.HasStartupLink);
+        Assert.Empty(selection.StartupNote);
+    });
+
+    [Fact]
+    public void AProgramNoEntryStartsHasNoLink() => UiThread.Run(async () =>
+    {
+        var selection = Selection();
+        selection.KnowStartup(new StartupReading([StartupEntryFor(@"C:\Program Files\Other\other.exe")], []));
+
+        selection.Select(TargetNode);
+        await Eventually.HoldsAsync(() => selection.Note != "Deguffer is asking Windows about this program.", "the answer landed");
+
+        Assert.False(selection.HasStartupLink);
+    });
+
+    private static StartupEntry StartupEntryFor(string program) => new(
+        new StartupKey(StartupSource.UserRun, "Editor"), "Editor", program, program, ProgramStanding.Present, null, StartupState.Starts, Approval.None);
 
     /// <summary>§7.2.1: nothing is asked of Windows for a node that is not a program.</summary>
     [Fact]

@@ -18,6 +18,7 @@
             <converters:TierChipStyleConverter x:Key="TierChipStyle" />
             <converters:RunStatementStyleConverter x:Key="RunStatementStyle" />
             <converters:StandingChipStyleConverter x:Key="StandingChipStyle" />
+            <converters:StartupChipStyleConverter x:Key="StartupChipStyle" />
 
             <!--
                 §7's "colour by tier". These are Styles rather than loose brushes so the colours

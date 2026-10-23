@@ -20,15 +20,38 @@ public sealed class MftRecordNameTests
     /// <para>Measured against a record whose one name is a single letter rather than against zero,
     /// so that what a parse allocates for anything other than its names, which an unoptimised build
     /// does, is not counted against them.</para>
+    ///
+    /// <para>The two are parsed in turn and compared round by round, and the median difference is
+    /// what must be zero. The count is of everything the test's thread allocates, and the runtime now
+    /// and then allocates a few bytes on it during a parse that are not the parse's own: sixteen,
+    /// once in 200,000 parses, when measured. Compared as two totals, one such allocation in either
+    /// loop fails the test. A string per name lands in every round.</para>
     /// </summary>
     [Fact]
     public void ParsingAFileAllocatesNothingForItsNames()
     {
-        var bare = RecordOf(new MftFixture().AddFile(Number, MftRecord.RootRecordNumber, "a", allocated: 4096, logical: 4000));
-        var named = RecordOf(new MftFixture().AddFileWithAnAlias(
-            Number, MftRecord.RootRecordNumber, "a long file name.bin", "ALONGF~1.BIN", allocated: 4096, logical: 4000));
+        const int rounds = 1_000;
 
-        Assert.Equal(AllocatedParsing(bare, "a"), AllocatedParsing(named, "a long file name.bin"));
+        var bare = new RepeatedParse(
+            RecordOf(new MftFixture().AddFile(Number, MftRecord.RootRecordNumber, "a", allocated: 4096, logical: 4000)),
+            "a");
+        var named = new RepeatedParse(
+            RecordOf(new MftFixture().AddFileWithAnAlias(
+                Number, MftRecord.RootRecordNumber, "a long file name.bin", "ALONGF~1.BIN", allocated: 4096, logical: 4000)),
+            "a long file name.bin");
+        var differences = new long[rounds];
+
+        // Once each first, so that compiling them is not measured.
+        bare.Allocated();
+        named.Allocated();
+
+        for (var i = 0; i < rounds; i++)
+        {
+            differences[i] = named.Allocated() - bare.Allocated();
+        }
+
+        Array.Sort(differences);
+        Assert.Equal(0, differences[rounds / 2]);
     }
 
     /// <summary>
@@ -46,32 +69,24 @@ public sealed class MftRecordNameTests
         Assert.Equal(name, handed.ToString());
     }
 
-    /// <summary>
-    /// What a thousand parses of <paramref name="stored"/> allocate, after one to compile them, each
-    /// of which must hand on <paramref name="name"/>.
-    /// </summary>
-    private static long AllocatedParsing(byte[] stored, string name)
+    /// <summary>One record parsed over and over, each time into a fresh copy of what it stored.</summary>
+    private sealed class RepeatedParse(byte[] stored, string name)
     {
-        const int parses = 1_000;
-        var record = new byte[stored.Length];
+        private readonly byte[] _record = new byte[stored.Length];
 
-        Assert.True(Parsed(stored, record, out _));
-
-        var handedOn = 0;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var i = 0; i < parses; i++)
+        /// <summary>
+        /// What one parse allocates on this thread, which must hand on the record's name.
+        /// </summary>
+        public long Allocated()
         {
-            if (Parsed(stored, record, out var handed) && handed.SequenceEqual(name))
-            {
-                handedOn++;
-            }
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var parsed = Parsed(stored, _record, out var handed);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.True(parsed);
+            Assert.True(handed.SequenceEqual(name));
+            return allocated;
         }
-
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        Assert.Equal(parses, handedOn);
-        return allocated;
     }
 
     /// <summary>The bytes of record <see cref="Number"/> in <paramref name="fixture"/>'s table.</summary>

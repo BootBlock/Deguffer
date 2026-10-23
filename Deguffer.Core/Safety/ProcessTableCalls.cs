@@ -128,24 +128,7 @@ internal sealed partial class ProcessTableCalls : IProcessTableCalls
     {
         public IProcessMemory? Memory => readable ? this : null;
 
-        public string? ImagePath()
-        {
-            const int characters = 1024;
-            var buffer = Marshal.AllocHGlobal(characters * sizeof(char));
-
-            try
-            {
-                var size = (uint)characters;
-
-                return QueryFullProcessImageName(handle, 0, buffer, ref size)
-                    ? Marshal.PtrToStringUni(buffer, (int)size)
-                    : null;
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(buffer);
-            }
-        }
+        public string? ImagePath() => ProcessImagePath.Of(handle);
 
         public string? CommandLine()
         {
@@ -222,10 +205,6 @@ internal sealed partial class ProcessTableCalls : IProcessTableCalls
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool ReadProcessMemory(nint process, nint address, Span<byte> buffer, nint size, out nint read);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool QueryFullProcessImageName(nint process, uint flags, nint buffer, ref uint size);
 
     [LibraryImport("ntdll.dll")]
     private static partial int NtQueryInformationProcess(

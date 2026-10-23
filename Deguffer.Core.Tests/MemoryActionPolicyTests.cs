@@ -70,6 +70,32 @@ public sealed class MemoryActionPolicyTests
     }
 
     /// <summary>
+    /// The verdict carries the program the picked process runs, for Memory's link to Startup (§7.5),
+    /// whether or not the close is allowed: the link is a fact about the program, not about the close.
+    /// </summary>
+    [Fact]
+    public void TheVerdictCarriesTheProgramThePickedProcessRuns()
+    {
+        var snapshot = Snapshot();
+        var facts = Allowed() with { ImagePath = @"C:\Program Files\Editor\editor.exe", Critical = Answer.Yes };
+
+        var verdict = Policy(facts).For(snapshot, Process(snapshot, TargetId));
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Equal(@"C:\Program Files\Editor\editor.exe", verdict.ImagePath);
+    }
+
+    /// <summary>A process that is not the one picked names no program, so the link cannot describe a stranger.</summary>
+    [Fact]
+    public void AProcessThatIsNoLongerTheOnePickedNamesNoProgram()
+    {
+        var snapshot = Snapshot();
+        var facts = Allowed() with { Present = Answer.No, ImagePath = @"C:\Program Files\Editor\editor.exe" };
+
+        Assert.Null(Policy(facts).For(snapshot, Process(snapshot, TargetId)).ImagePath);
+    }
+
+    /// <summary>
     /// The identity check §7.2.1 puts before the table: an identifier is not an identity, so a
     /// creation time that no longer matches means the process the user picked has gone.
     /// </summary>

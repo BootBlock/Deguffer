@@ -40,6 +40,20 @@ public sealed class ElevationRequestTests
     }
 
     [Fact]
+    public void AStartupRequestComesBackAsOne()
+    {
+        Assert.Equal(["--startup"], ElevationRequest.Startup.ToArguments());
+        Assert.IsType<StartupRequest>(ElevationRequest.From(ElevationRequest.Startup.ToArguments()));
+    }
+
+    [Fact]
+    public void StartupWinsOverAPreviewAndLosesToInstalledApps()
+    {
+        Assert.IsType<StartupRequest>(ElevationRequest.From(["--rescan", "--startup"]));
+        Assert.IsType<InstalledAppsRequest>(ElevationRequest.From(["--startup", "--installed-apps"]));
+    }
+
+    [Fact]
     public void InstalledAppsWinsOverAPreviewAndLosesToExplore()
     {
         Assert.IsType<InstalledAppsRequest>(ElevationRequest.From(["--rescan", "--installed-apps"]));

@@ -431,6 +431,8 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
         public string ProgramFilesX86 => located.ProgramFilesX86;
 
         public string SystemDrive => string.Empty;
+
+        public string? CommonStartupFolder => located.CommonStartupFolder;
     }
 
     /// <summary>§7.1: Explore refuses what a plan protects, because it is told the same rule.</summary>

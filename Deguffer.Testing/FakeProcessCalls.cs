@@ -86,6 +86,9 @@ internal sealed class FakeProcess : IOpenProcess
 
     public bool? Frozen { get; init; }
 
+    /// <summary>The program it runs, or null where Windows would not say.</summary>
+    public string? Image { get; init; }
+
     /// <summary>How many facts beyond its identity were read, which a process that has gone must not reach.</summary>
     public int FactsRead { get; private set; }
 
@@ -123,6 +126,12 @@ internal sealed class FakeProcess : IOpenProcess
     {
         FactsRead++;
         return Frozen;
+    }
+
+    public string? ImagePath()
+    {
+        FactsRead++;
+        return Image;
     }
 
     public void Dispose() => Disposed = true;

@@ -100,6 +100,12 @@ internal interface IOpenProcess : IDisposable
 
     /// <summary>Whether Windows has frozen it, which is how a suspended packaged application reads.</summary>
     bool? IsFrozen();
+
+    /// <summary>
+    /// The full path of the program it runs, or null where Windows would not say. Documented to need
+    /// only <c>PROCESS_QUERY_LIMITED_INFORMATION</c>, which the handle holds.
+    /// </summary>
+    string? ImagePath();
 }
 
 /// <inheritdoc />
@@ -195,6 +201,8 @@ internal sealed partial class ProcessCalls : IProcessCalls
         }
 
         public bool? IsFrozen() => ProcessSnapshot.IsFrozen(handle);
+
+        public string? ImagePath() => Safety.ProcessImagePath.Of(handle);
 
         public void Dispose() => CloseHandle(handle);
     }
