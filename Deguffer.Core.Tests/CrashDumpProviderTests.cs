@@ -36,8 +36,10 @@ public sealed class CrashDumpProviderTests : IDisposable
 
     private string WerFolder => Path.Combine(ProgramData, "Microsoft", "Windows", "WER");
 
+    private string UserWerFolder => Path.Combine(_environment.LocalAppData, "Microsoft", "Windows", "WER");
+
     private CrashDumpProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system);
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system, volumes: new FakeVolumeInventory());
 
     /// <summary>
     /// The plan names <c>%LOCALAPPDATA%</c> as the root its user dumps are declared under, and §7.1
@@ -97,6 +99,8 @@ public sealed class CrashDumpProviderTests : IDisposable
     public async Task PlansOneStepPerDeclaredLocationThatIsThere()
     {
         var crashDumps = Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
+        var userArchive = Populate(Path.Combine(UserWerFolder, "ReportArchive"));
+        var userQueue = Populate(Path.Combine(UserWerFolder, "ReportQueue"));
         var archive = Populate(Path.Combine(WerFolder, "ReportArchive"));
         var queue = Populate(Path.Combine(WerFolder, "ReportQueue"));
         var minidump = Populate(Path.Combine(Windows, "Minidump"));
@@ -111,7 +115,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
-            new[] { crashDumps, archive, queue, live, minidump, memoryDump }.Order(StringComparer.OrdinalIgnoreCase),
+            new[] { crashDumps, userArchive, userQueue, archive, queue, live, minidump, memoryDump }.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
 
         Assert.Equal(SafetyTier.UserData, plan.Tier);
@@ -122,6 +126,8 @@ public sealed class CrashDumpProviderTests : IDisposable
     public async Task CleanedPlacesCoverEveryPathThePlanCleans()
     {
         Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
+        Populate(Path.Combine(UserWerFolder, "ReportArchive"));
+        Populate(Path.Combine(UserWerFolder, "ReportQueue"));
         Populate(Path.Combine(WerFolder, "ReportArchive"));
         Populate(Path.Combine(WerFolder, "ReportQueue"));
         Populate(Path.Combine(Windows, "Minidump"));
@@ -172,6 +178,7 @@ public sealed class CrashDumpProviderTests : IDisposable
     {
         var minidump = Populate(Path.Combine(Windows, "Minidump"));
         Populate(Path.Combine(WerFolder, "ReportQueue"));
+        var userQueue = Populate(Path.Combine(UserWerFolder, "ReportQueue"));
 
         var winSxS = Populate(Path.Combine(Windows, "WinSxS"), name: "component.manifest");
         var installer = Populate(Path.Combine(Windows, "Installer"), name: "patch.msp");
@@ -188,12 +195,13 @@ public sealed class CrashDumpProviderTests : IDisposable
         // directory the table does not mention is never reached at all.
         var unnamed = Populate(Path.Combine(Windows, "SoftwareDistribution"), name: "download.cab");
         var werTemp = Populate(Path.Combine(WerFolder, "Temp"), name: "partial.wer");
+        var userWerTemp = Populate(Path.Combine(UserWerFolder, "Temp"), name: "partial.wer");
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
         string[] mustSurvive =
-            [Windows, ProgramData, winSxS, installer, packageCache, payloads, unnamed, werTemp];
+            [Windows, ProgramData, winSxS, installer, packageCache, payloads, unnamed, werTemp, UserWerFolder, userWerTemp];
 
         foreach (var spared in mustSurvive)
         {
@@ -213,6 +221,7 @@ public sealed class CrashDumpProviderTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.False(Directory.Exists(minidump));
+        Assert.False(Directory.Exists(userQueue));
 
         foreach (var spared in mustSurvive)
         {
@@ -257,7 +266,7 @@ public sealed class CrashDumpProviderTests : IDisposable
 
     /// <summary>
     /// The claim that is not <see cref="FallbackReason.NotElevated"/>: this one is about whether the
-    /// removal can happen at all. Only the profile's own folder is the user's to clear, and a plan
+    /// removal can happen at all. Only the profile's own folders are the user's to clear, and a plan
     /// that failed to distinguish the two would either fail silently during execution or drop the
     /// locations from an unelevated preview altogether.
     /// </summary>
@@ -265,6 +274,7 @@ public sealed class CrashDumpProviderTests : IDisposable
     public async Task OnlyTheProfilesOwnFolderCanBeClearedWithoutAdministratorRights()
     {
         var crashDumps = Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
+        var userQueue = Populate(Path.Combine(UserWerFolder, "ReportQueue"));
         Populate(Path.Combine(WerFolder, "ReportArchive"));
         Populate(Path.Combine(Windows, "Minidump"));
 
@@ -274,9 +284,10 @@ public sealed class CrashDumpProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("administrator", StringComparison.OrdinalIgnoreCase));
 
         var steps = plan.Steps.OfType<DeleteStep>().ToDictionary(s => s.Path, s => s.RequiresElevation);
+        string[] own = [crashDumps, userQueue];
 
-        Assert.False(steps[crashDumps]);
-        Assert.All(steps.Where(s => s.Key != crashDumps), s => Assert.True(s.Value));
+        Assert.All(own, path => Assert.False(steps[path]));
+        Assert.All(steps.Where(s => !own.Contains(s.Key)), s => Assert.True(s.Value));
 
         // The offer is what turns the claim into something the user can act on, and it must fire
         // for this reason alone rather than only for a slow measurement.
@@ -429,18 +440,20 @@ public sealed class CrashDumpProviderTests : IDisposable
     ///
     /// Asserting that a root is absent from its own targets proves nothing: a target is built by
     /// combining the root with a relative path, so only an empty relative path could make the two
-    /// equal. What has to hold is that the declared set is exactly these six, since a seventh entry
+    /// equal. What has to hold is that the declared set is exactly these eight, since a ninth entry
     /// added without a test is a path nobody decided to delete — and that only <c>MEMORY.DMP</c> is
     /// a file, since a directory declared as a file would be measured and removed by the wrong code.
     /// </summary>
     [Fact]
-    public void TheDeclarationIsTheSixPathsAndNothingElse()
+    public void TheDeclarationIsTheEightPathsAndNothingElse()
     {
         var provider = CreateProvider();
 
         Assert.Equal(
             [
                 Path.Combine(_environment.LocalAppData, "CrashDumps"),
+                Path.Combine(UserWerFolder, "ReportArchive"),
+                Path.Combine(UserWerFolder, "ReportQueue"),
                 Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportArchive"),
                 Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportQueue"),
                 Path.Combine(Windows, "LiveKernelReports"),

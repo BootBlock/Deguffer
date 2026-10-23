@@ -215,6 +215,18 @@ public interface IUserEnvironment
     string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view);
 
     /// <summary>
+    /// The names of the keys directly under a key in <c>HKEY_LOCAL_MACHINE</c>, in the named registry
+    /// view, or none when the key or the permission to read it is missing.
+    ///
+    /// <para>Exists because Windows Error Reporting reads a dump folder for each application from a
+    /// key named after that application's executable, under its machine-wide <c>LocalDumps</c> key.
+    /// Nothing else lists which applications have one.</para>
+    /// </summary>
+    /// <param name="keyPath">The key, relative to <c>HKEY_LOCAL_MACHINE</c>.</param>
+    /// <param name="view">The view the program that reads the key reads it in.</param>
+    IReadOnlyList<string> ReadLocalMachineRegistrySubKeyNames(string keyPath, RegistryView view);
+
+    /// <summary>
     /// Discard what was read from the machine, so the next look sees the environment as it now
     /// stands. Called at the start of a planning pass, and implicit in the fresh instance each
     /// Explore policy build constructs, so a toolchain installed while the app was open is picked
@@ -472,6 +484,28 @@ public sealed partial class UserEnvironment : IUserEnvironment
             // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
             // thing: nothing said where the tool is.
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Not memoised, for the reason <see cref="ReadLocalMachineRegistryValue"/> is not.
+    /// </summary>
+    public IReadOnlyList<string> ReadLocalMachineRegistrySubKeyNames(string keyPath, RegistryView view)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
+
+        try
+        {
+            using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+            using var key = hive.OpenSubKey(keyPath);
+
+            return key?.GetSubKeyNames() ?? [];
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // thing: the machine did not say.
+            return [];
         }
     }
 

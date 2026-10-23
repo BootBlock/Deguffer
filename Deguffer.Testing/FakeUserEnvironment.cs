@@ -257,6 +257,28 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return _machineRegistry.TryGetValue(MachineKey(keyPath, valueName, view), out var value) ? value : null;
     }
 
+    /// <summary>
+    /// Every key a recorded machine value sits under, one level below <paramref name="keyPath"/> in
+    /// <paramref name="view"/>, read as <see cref="ReadCurrentUserRegistrySubKeyNames"/> reads the
+    /// user's.
+    /// </summary>
+    public IReadOnlyList<string> ReadLocalMachineRegistrySubKeyNames(string keyPath, RegistryView view)
+    {
+        RegistryReads++;
+
+        var prefix = $"{view}:{keyPath}\\";
+
+        return
+        [
+            .. _machineRegistry.Keys
+                .Where(entry => entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry[prefix.Length..].Split('\\'))
+                .Where(segments => segments.Length > 1)
+                .Select(segments => segments[0])
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+        ];
+    }
+
     private static string MachineKey(string keyPath, string valueName, RegistryView view) =>
         $"{view}:{keyPath}\\{valueName}";
 

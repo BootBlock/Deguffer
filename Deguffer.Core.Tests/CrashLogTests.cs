@@ -199,6 +199,8 @@ public class CrashLogTests
 
         public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, Microsoft.Win32.RegistryView view) => null;
 
+        public IReadOnlyList<string> ReadLocalMachineRegistrySubKeyNames(string keyPath, Microsoft.Win32.RegistryView view) => [];
+
         public void Invalidate()
         {
         }
