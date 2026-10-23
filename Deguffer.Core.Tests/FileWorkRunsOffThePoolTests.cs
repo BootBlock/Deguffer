@@ -14,8 +14,11 @@ namespace Deguffer.Core.Tests;
 /// On the pool each would run below its bound until the pool grew, and hold the threads the rest of
 /// the process's pool work waits for.
 ///
-/// <para>Each asserts on the items themselves, not on a crew: the walk before a removal already runs
-/// on a crew, so a crew being made off the pool says nothing about the deletions after it.</para>
+/// <para>The removal and the refusal check are asserted on the items themselves, not on a crew: the
+/// walk before each already runs on a crew, so a crew being made off the pool says nothing about the
+/// deletions or the opens after it. The conversations' reads have no seam to watch, so that test pins
+/// the one crew the plan makes off the pool, and <see cref="ListWorkersTests"/> pins that a crew's
+/// items run on no pool thread.</para>
 /// </summary>
 public sealed class FileWorkRunsOffThePoolTests : IDisposable
 {

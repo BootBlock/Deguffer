@@ -10,12 +10,13 @@ namespace Deguffer.Core.Tests;
 public sealed class ListWorkersTests
 {
     /// <summary>
-    /// Past the pool's minimum on any machine of fewer processors, so a run on the pool would reach it
-    /// only as the pool grew, about one thread every half second.
+    /// Past the pool's minimum, one thread a processor, on every machine. A run on the pool would
+    /// reach it only as the pool grew, about one thread every half second, so it would take longer
+    /// than <see cref="GatherAtMost"/>.
     /// </summary>
-    private const int Threads = 32;
+    private static readonly int Threads = Environment.ProcessorCount + 32;
 
-    private static readonly TimeSpan GatherAtMost = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan GatherAtMost = TimeSpan.FromSeconds(5);
 
     [Fact]
     public void WorksEveryItemOnce()
