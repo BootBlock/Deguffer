@@ -23,8 +23,9 @@ namespace Deguffer.Core.Execution;
 public interface IUseCheck
 {
     /// <summary>
-    /// The oldest a reading of the running programs may be when a check answers from it, measured
-    /// from when the reading began.
+    /// The oldest a reading of the running programs may be when a check asks for it, measured from
+    /// when the reading began. The reading may be the preview's own, where the preview's began less
+    /// than this long before the check.
     ///
     /// <para><b>Why a bound rather than a reading per check.</b> A clean of a thousand build
     /// directories is a thousand steps, each with its check, and one reading of the process table
@@ -36,8 +37,9 @@ public interface IUseCheck
     /// <para><b>Why a second is fresh enough.</b> The check is a look at one moment, and the removal
     /// after it takes as long as the tree takes: a program started a moment after the look is missed
     /// however fresh the look was. A second widens that by less than the removal of one large tree
-    /// already does, and no one can open an editor on a project or start a build in it between
-    /// pressing Clean and a removal that began less than a second later.</para>
+    /// already does. The preview's reading began before the preview finished, so to start a program
+    /// that a check answering from it misses, someone has to read the preview, open an editor or
+    /// start a build, and press Clean, all within a second of that reading.</para>
     ///
     /// <para><b>What the bound applies to.</b> Every change to the programs running, a program a command
     /// step started included. No step that removes a folder starts or ends a program, so a removal
