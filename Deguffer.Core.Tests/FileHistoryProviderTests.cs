@@ -27,24 +27,31 @@ public sealed class FileHistoryProviderTests : IDisposable
 
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
+    private readonly FakeSystemDirectories _system;
     private readonly FakeProcessRunner _runner = new();
 
     public FileHistoryProviderTests()
     {
-        _environment = new FakeUserEnvironment(_temp.Path).WithExecutable("FhManagew");
+        _environment = new FakeUserEnvironment(_temp.Path);
+        _system = new FakeSystemDirectories(_temp.Path);
+        _temp.CreateFile(64, "Windows", "System32", "FhManagew.exe");
     }
 
     public void Dispose() => _temp.Dispose();
 
-    /// <summary>Where the fake environment puts Windows' File History command.</summary>
-    private string Manager => _environment.FindExecutable("FhManagew")!;
+    /// <summary>
+    /// Windows' File History command, where Windows ships it, written out rather than read from the
+    /// provider so a provider that ran another file is caught: the fake answers no other program.
+    /// </summary>
+    private string Manager => Path.Combine(_system.WindowsDirectory, "System32", "FhManagew.exe");
 
     private FileHistoryProvider CreateProvider(AppPreferences? preferences = null, FakeDirectoryScanner? scanner = null) => new(
         _environment,
         _runner,
         FakeProcessInspector.NothingRunning,
         scanner ?? new FakeDirectoryScanner(),
-        new FakePreferences(preferences ?? AppPreferences.Default));
+        new FakePreferences(preferences ?? AppPreferences.Default),
+        _system);
 
     /// <summary>A drive root under the scratch tree, standing in for a backup disk.</summary>
     private string CreateDrive(string name = "E") => _temp.CreateDirectory("drives", name);
@@ -639,18 +646,72 @@ public sealed class FileHistoryProviderTests : IDisposable
     public async Task OffersNothingWhenWindowsOwnCommandIsMissing()
     {
         CreateConfiguredDrive();
+        File.Delete(Manager);
 
-        var provider = new FileHistoryProvider(
-            new FakeUserEnvironment(_temp.Path),
-            _runner,
-            FakeProcessInspector.NothingRunning,
-            new FakeDirectoryScanner());
-
-        var plan = await provider.PlanAsync();
+        var plan = await CreateProvider().PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.True(plan.WasNotExamined);
+        Assert.False(plan.HasUnreadableRoot);
         Assert.Empty(_runner.Invocations);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"command is not at {Manager}", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The command is found where Windows ships it, never on <c>PATH</c>. A <c>PATH</c> can put a
+    /// writable folder ahead of <c>System32</c>, and a file planted there would otherwise be run for a
+    /// Tier 3 command, possibly elevated. A <c>PATH</c> that lost <c>System32</c> must not hide it
+    /// either, which the fixture's environment, knowing no command at all, already is.
+    /// </summary>
+    [Fact]
+    public async Task RunsTheCommandWindowsShipsRatherThanOneOnPath()
+    {
+        CreateConfiguredDrive();
+        var planted = _temp.CreateFile(64, "writable", "FhManagew.exe");
+        _environment.WithExecutable("FhManagew", planted);
+
+        var step = Assert.IsType<RunCommandStep>(Assert.Single((await CreateProvider().PlanAsync()).Steps));
+
+        Assert.Equal(Manager, step.FileName);
+    }
+
+    /// <summary>
+    /// A command found only on <c>PATH</c> is not Windows' own, so it is not offered in its place.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingFromACommandFoundOnlyOnPath()
+    {
+        CreateConfiguredDrive();
+        File.Delete(Manager);
+        _environment.WithExecutable("FhManagew", _temp.CreateFile(64, "writable", "FhManagew.exe"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.True(plan.WasNotExamined);
+        Assert.Empty(plan.Steps);
+    }
+
+    /// <summary>
+    /// A command Windows will not describe is not said to be missing, which nothing established, and
+    /// a file nobody could look at is not run for a Tier 3 command.
+    /// </summary>
+    [Fact]
+    public async Task ACommandWindowsWillNotDescribeIsNotSaidToBeMissing()
+    {
+        CreateConfiguredDrive();
+
+        CleanupPlan plan;
+        using (DeniedDirectory.WithUnreadableFile(Manager))
+        {
+            plan = await CreateProvider().PlanAsync();
+        }
+
+        Assert.Empty(plan.Steps);
+        Assert.Empty(_runner.Invocations);
+        Assert.True(plan.WasNotExamined);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, note => note.Message.StartsWith("Windows would not say whether its own File History command", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, note => note.Message.Contains("command is not at", StringComparison.Ordinal));
     }
 
     /// <summary>
