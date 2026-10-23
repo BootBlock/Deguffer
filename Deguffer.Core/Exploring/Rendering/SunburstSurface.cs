@@ -78,8 +78,10 @@ public sealed class SunburstSurface : ExploreSurface
 
         const float Rounding = 1e-4f;
 
-        foreach (var sector in sectors)
+        for (var i = 0; i < sectors.Count; i++)
         {
+            var sector = sectors[i];
+
             if (sector.Depth == outer.Depth + 1
                 && (sector.IsAggregate
                     ? sector.StartAngle >= outer.StartAngle - Rounding
@@ -108,15 +110,15 @@ public sealed class SunburstSurface : ExploreSurface
         return outlines;
     }
 
-    /// <summary>The box round <paramref name="sector"/>, in fractions of the canvas, measured round its arcs a degree at a time.</summary>
+    /// <summary>The box round <paramref name="sector"/>, in fractions of the canvas, measured round its arcs as they are traced.</summary>
     private MapFrame BoxOf(Sunburst sunburst, ExploreSector sector)
     {
-        var steps = Math.Clamp((int)MathF.Ceiling(sector.SweepAngle / (MathF.PI / 180)), 2, 360);
+        var steps = StepsOf(sector);
         var (left, top, right, bottom) = (float.MaxValue, float.MaxValue, float.MinValue, float.MinValue);
 
         for (var step = 0; step <= steps; step++)
         {
-            var angle = sector.StartAngle + (sector.SweepAngle * step / steps);
+            var angle = sector.AngleAt(step, steps);
 
             foreach (var radius in (ReadOnlySpan<float>)[sector.InnerRadius, sector.OuterRadius])
             {
@@ -178,10 +180,13 @@ public sealed class SunburstSurface : ExploreSurface
         ArgumentNullException.ThrowIfNull(nodes);
 
         var sunburst = _hits.Sunburst;
+        var sectors = sunburst.Sectors;
         var shapes = new List<MorphShape>();
 
-        foreach (var sector in sunburst.Sectors)
+        for (var i = 0; i < sectors.Count; i++)
         {
+            var sector = sectors[i];
+
             if (!sector.IsAggregate && nodes.Contains(sector.Node))
             {
                 var colour = ColourFor(sector.Node, sector.Depth);
@@ -228,9 +233,7 @@ public sealed class SunburstSurface : ExploreSurface
     /// </summary>
     private static void Trace(Sunburst sunburst, ExploreSector sector, List<ExploreOutline> outlines)
     {
-        // One point per degree of sweep. At the radii a sunburst is drawn at that is a hundredth of
-        // a pixel from the true arc, which is far below what a stroke a pixel or two wide can show.
-        var steps = Math.Clamp((int)MathF.Ceiling(sector.SweepAngle / (MathF.PI / 180)), 2, 360);
+        var steps = StepsOf(sector);
 
         if (sector.IsWholeCircle)
         {
@@ -248,7 +251,7 @@ public sealed class SunburstSurface : ExploreSurface
 
         for (var i = 0; i <= steps; i++)
         {
-            points.Add(sunburst.PointAt(sector.OuterRadius, Angle(sector, i, steps)));
+            points.Add(sunburst.PointAt(sector.OuterRadius, sector.AngleAt(i, steps)));
         }
 
         if (sector.InnerRadius <= 0)
@@ -259,7 +262,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             for (var i = steps; i >= 0; i--)
             {
-                points.Add(sunburst.PointAt(sector.InnerRadius, Angle(sector, i, steps)));
+                points.Add(sunburst.PointAt(sector.InnerRadius, sector.AngleAt(i, steps)));
             }
         }
 
@@ -277,15 +280,19 @@ public sealed class SunburstSurface : ExploreSurface
 
         for (var i = 0; i < steps; i++)
         {
-            points.Add(sunburst.PointAt(radius, Angle(sector, i, steps)));
+            points.Add(sunburst.PointAt(radius, sector.AngleAt(i, steps)));
         }
 
         return points;
     }
 
-    /// <summary>Where step <paramref name="step"/> of <paramref name="steps"/> falls across the sweep.</summary>
-    private static float Angle(ExploreSector sector, int step, int steps) =>
-        sector.StartAngle + (sector.SweepAngle * step / steps);
+    /// <summary>
+    /// How many steps an arc of <paramref name="sector"/> is traced in: one per degree of sweep. At the
+    /// radii a sunburst is drawn at that is a hundredth of a pixel from the true arc, which is far below
+    /// what a stroke a pixel or two wide can show.
+    /// </summary>
+    private static int StepsOf(ExploreSector sector) =>
+        Math.Clamp((int)MathF.Ceiling(sector.SweepAngle / (MathF.PI / 180)), 2, 360);
 
     /// <summary>
     /// Put each label along its own ring, turned so it lies with the sector rather than across it.
@@ -317,12 +324,11 @@ public sealed class SunburstSurface : ExploreSurface
             return labels;
         }
 
-        foreach (var sector in sunburst.Sectors)
+        var sectors = sunburst.Sectors;
+
+        for (var i = 0; i < sectors.Count && labels.Count < MaximumLabels; i++)
         {
-            if (labels.Count >= MaximumLabels)
-            {
-                break;
-            }
+            var sector = sectors[i];
 
             // The disc in the middle is the node the page is already showing, and the breadcrumb
             // above the picture names it.

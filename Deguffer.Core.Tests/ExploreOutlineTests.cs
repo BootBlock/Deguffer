@@ -251,6 +251,35 @@ public sealed class ExploreOutlineTests
                 "the outline crossed into the ring's hole"));
     }
 
+    /// <summary>
+    /// An arc is traced finely enough that the line between two of its points stays within a tenth of
+    /// a pixel of the true arc, on the widest arc a sunburst draws: a whole circle at the outside of
+    /// the picture. Traced in a tenth as many steps, it is a polygon a stroke shows the corners of.
+    /// </summary>
+    [Fact]
+    public void AnArcIsTracedCloseEnoughThatItsCornersDoNotShow()
+    {
+        var tree = RingTree();
+        var sunburst = SunburstLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default);
+        var ring = sunburst.Sectors.Single(s => s.Depth == 1);
+        var outer = Sunburst(tree).Outlines(new HashSet<int> { ring.Node })
+            .MaxBy(outline => outline.Points.Average(p => Radius(sunburst, p)))!;
+
+        Assert.True(ring.OuterRadius > 100, "the fixture's ring is too small for a coarse trace to show");
+
+        var points = outer.Points;
+
+        for (var i = 0; i < points.Count; i++)
+        {
+            var (from, to) = (points[i], points[(i + 1) % points.Count]);
+            var middle = new ExplorePoint((from.X + to.X) / 2, (from.Y + to.Y) / 2);
+
+            Assert.True(
+                ring.OuterRadius - Radius(sunburst, middle) < 0.1,
+                $"the trace cut {ring.OuterRadius - Radius(sunburst, middle):F3} pixels inside the arc");
+        }
+    }
+
     private static double Radius(Sunburst sunburst, ExplorePoint point) => MathF.Sqrt(
         ((point.X - sunburst.CentreX) * (point.X - sunburst.CentreX))
         + ((point.Y - sunburst.CentreY) * (point.Y - sunburst.CentreY)));
