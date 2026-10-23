@@ -108,6 +108,34 @@ public sealed class MftRecordStreamTests
     }
 
     /// <summary>
+    /// The second pass ends a read at the gap the first pass ends one at: a run of unwanted records
+    /// as long as <see cref="MftReadGap"/>, sixty-four records here, is read across, and one record
+    /// more ends the read.
+    /// </summary>
+    [Theory]
+    [InlineData(64, 1)]
+    [InlineData(65, 2)]
+    public void EndsAReadOfTheRecordsPastWhereTheFirstPassStoppedAtTheSameGap(int unwanted, int reads)
+    {
+        var second = (uint)(1_000 + unwanted + 1);
+
+        using var table = new MftFixture()
+            .AddFileWithDataInAnExtensionRecord(20, MftRecord.RootRecordNumber, "a.tgz", allocated: 8192, logical: 8000, extension: 1_000)
+            .AddFileWithDataInAnExtensionRecord(21, MftRecord.RootRecordNumber, "b.tgz", allocated: 8192, logical: 7000, extension: second)
+            .WithoutBitmap()
+            .Build();
+        using var source = new RecordedReads(table, unreadableFrom: 500, unreadableTo: 600);
+
+        var handed = ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, 4, 2), out _);
+
+        Assert.Equal(64, MftReadGap.Records(source.BytesPerRecord));
+        (long First, int Records)[] expected = reads == 1 ? [(1_000L, unwanted + 2)] : [(1_000L, 1), (second, 1)];
+        Assert.Equal(expected, source.Reads);
+        Assert.Equal(8000, handed[20].Record.Size?.Logical);
+        Assert.Equal(7000, handed[21].Record.Size?.Logical);
+    }
+
+    /// <summary>
     /// Two files whose lists name one extension record, which only a damaged table holds. It is the
     /// first file's, so the first gets its size from it, and the second loses its size and keeps its
     /// place. What the first pass kept of it serves both, and neither changes it for the other.

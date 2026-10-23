@@ -20,9 +20,25 @@ internal static class TableRoutes
     /// Open the volume, or say why it cannot be. Asked once before any run is timed, so a run
     /// without administrator rights stops with the reason rather than with a timing of nothing.
     /// </summary>
-    public static FallbackReason Probe(IMftSourceFactory volumes, char drive)
+    /// <param name="census">
+    /// How many records are in use, or null where the volume cannot be opened or its bitmap read.
+    /// </param>
+    public static FallbackReason Probe(IMftSourceFactory volumes, char drive, out TableCensus? census)
     {
         using var source = volumes.TryOpen(drive, out var reason);
+
+        census = null;
+
+        if (source is not null)
+        {
+            var count = Count(source);
+
+            if (MftBitmapReader.TryRead(source, count) is { } bitmap)
+            {
+                census = new TableCensus(bitmap.CountInUse(count), source.BytesPerRecord);
+            }
+        }
+
         return reason;
     }
 
@@ -46,11 +62,9 @@ internal static class TableRoutes
             volumes.TryOpen(place.DriveLetter, out var reason)
             ?? throw new IOException($"The volume could not be opened again: {reason}."));
 
-        var count = (int)Math.Min(source.RecordCount, int.MaxValue);
-
         return route switch
         {
-            Route.Table => Tally(source, ReadOnly(source, count, tuning, ct)),
+            Route.Table => Tally(source, ReadOnly(source, Count(source), tuning, ct)),
             Route.Index => Tally(source, MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct)),
             Route.Explore => Explore(source, $"{place.DriveLetter}:\\", [], tuning, ct),
             Route.ExploreFolder => Explore(source, place.FullPath, place.Components, tuning, ct),
@@ -74,7 +88,10 @@ internal static class TableRoutes
     }
 
     private static RunTally Tally(CountingMftSource source, bool complete) =>
-        new(source.RecordsRead, source.BytesRead, complete);
+        new(source.RecordsRead, source.BytesRead, complete, Reads: source.Reads);
+
+    /// <summary>The records a pass reads: every record the table holds, as far as a pass can number them.</summary>
+    private static int Count(IMftSource source) => (int)Math.Min(source.RecordCount, int.MaxValue);
 
     /// <summary>
     /// Read and parse every record and keep none of them: the floor the two structures are built on.

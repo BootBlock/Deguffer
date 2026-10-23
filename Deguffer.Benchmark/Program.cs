@@ -15,9 +15,11 @@ if (request is null)
     return 1;
 }
 
+TableCensus? census = null;
+
 if (request.Route.ReadsTable())
 {
-    var reason = TableRoutes.Probe(VolumeMftSourceFactory.Default, request.Drive);
+    var reason = TableRoutes.Probe(VolumeMftSourceFactory.Default, request.Drive, out census);
     if (reason is not FallbackReason.None)
     {
         Console.Error.WriteLine(reason switch
@@ -85,5 +87,6 @@ Console.Out.Write(Report.Render(
     Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy),
     [.. request.Folders.Select(MeasuredPlace.Of).Distinct()],
     MachineFacts.Current,
-    runs));
+    runs,
+    census));
 return 0;

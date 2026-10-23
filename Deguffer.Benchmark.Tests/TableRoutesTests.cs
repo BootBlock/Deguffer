@@ -95,6 +95,32 @@ public sealed class TableRoutesTests
         Assert.True(tally.Complete);
         Assert.Equal(16 + 1, tally.Items);
         Assert.Equal((17 * BytesPerRecord) + 4096, tally.BytesRead);
+        Assert.Equal(2, tally.Reads);
+    }
+
+    /// <summary>
+    /// The probe counts the records in use from the bitmap, before any run, so what a run read beyond
+    /// them is what it read of free records. Here the root, records 12 to 17 and 4,100 are in use,
+    /// and the run reads nine free records with them: 4 and 6 to 11 round the root, 18 and 19 after.
+    /// </summary>
+    [Fact]
+    public void TheProbeCountsTheRecordsTheBitmapMarksInUse()
+    {
+        var volume = Volume().AddFile(4_100, 16, "far.bin", allocated: 4096, logical: 4000);
+
+        Assert.Equal(FallbackReason.None, TableRoutes.Probe(FakeMftSourceFactory.Serving(Drive, volume), Drive, out var census));
+        var counted = Assert.NotNull(census);
+        Assert.Equal(new TableCensus(8, BytesPerRecord), counted);
+        Assert.Equal(9 * BytesPerRecord, counted.FreeBytesRead(Run("Table", volume)));
+    }
+
+    /// <summary>A table read without its bitmap cannot say how many records are in use, so the probe says nothing.</summary>
+    [Fact]
+    public void TheProbeCountsNothingWithoutABitmap()
+    {
+        TableRoutes.Probe(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()), Drive, out var census);
+
+        Assert.Null(census);
     }
 
     [Fact]
@@ -110,7 +136,7 @@ public sealed class TableRoutesTests
     public void TheProbeGivesTheReasonAVolumeCannotBeRead() =>
         Assert.Equal(
             FallbackReason.NotElevated,
-            TableRoutes.Probe(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), Drive));
+            TableRoutes.Probe(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), Drive, out _));
 
     /// <summary>The reserved records, a folder under the root, and a file in it: records 0 to 17.</summary>
     private static MftFixture Volume() =>

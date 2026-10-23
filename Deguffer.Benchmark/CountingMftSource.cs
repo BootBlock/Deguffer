@@ -17,6 +17,7 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
 {
     private long _recordsRead;
     private long _bytesRead;
+    private long _reads;
 
     public int BytesPerRecord => inner.BytesPerRecord;
 
@@ -25,6 +26,13 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
     public MftBitmapPlacement? Bitmap => inner.Bitmap;
 
     public long RecordsRead => Interlocked.Read(ref _recordsRead);
+
+    /// <summary>
+    /// How many reads of records were asked for, including any that returned nothing. Against the
+    /// records read it says how large the reads were, which a pass that ends a read at a run of free
+    /// records makes smaller and more numerous.
+    /// </summary>
+    public long Reads => Interlocked.Read(ref _reads);
 
     /// <summary>
     /// Records and clusters both. A table whose files spill into extension records also reads the
@@ -52,6 +60,8 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
 
     private int Count(int read)
     {
+        Interlocked.Increment(ref _reads);
+
         if (read > 0)
         {
             Interlocked.Add(ref _recordsRead, read);

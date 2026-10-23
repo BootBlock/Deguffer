@@ -18,14 +18,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 internal static class MftExtensionReader
 {
-    /// <summary>
-    /// The longest run of unwanted records one read of the records the first pass never reached
-    /// reads across rather than making two reads: sixty-four of the usual 1,024-byte records. Reading
-    /// across a short gap saves a second read, and reading across a long one brings records nobody
-    /// wants.
-    /// </summary>
-    private const int GapBytes = 64 * 1024;
-
     private const MftAttributeKinds Everything =
         MftAttributeKinds.Name | MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint | MftAttributeKinds.WofDataStart;
 
@@ -159,7 +151,7 @@ internal static class MftExtensionReader
     {
         var bytesPerRecord = source.BytesPerRecord;
         var capacity = batch.Length / bytesPerRecord;
-        var gapRecords = Math.Max(1, GapBytes / bytesPerRecord);
+        var gap = MftReadGap.Records(bytesPerRecord);
 
         while (next < wanted.Count)
         {
@@ -168,13 +160,13 @@ internal static class MftExtensionReader
             var first = wanted[next].Segment.Record;
 
             // One read from the first wanted record to the furthest the batch can reach, so records
-            // close together cost one read rather than one each. Only while they are close: a gap
-            // longer than GapBytes ends the read, or a large buffer would read megabytes of records
-            // nobody wants to reach two that somebody does.
+            // close together cost one read rather than one each. Only while they are close: a run of
+            // unwanted records longer than MftReadGap ends the read, or a large buffer would read
+            // megabytes of records nobody wants to reach two that somebody does.
             var last = first;
 
             for (var i = next;
-                 i < wanted.Count && wanted[i].Segment.Record - first < capacity && wanted[i].Segment.Record - last <= gapRecords;
+                 i < wanted.Count && wanted[i].Segment.Record - first < capacity && wanted[i].Segment.Record - last - 1 <= gap;
                  i++)
             {
                 last = wanted[i].Segment.Record;

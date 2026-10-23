@@ -22,8 +22,17 @@ internal static class Report
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
     /// <param name="places">Every drive the route measured on, each once.</param>
+    /// <param name="census">
+    /// How many records the table holds in use, for a route that reads it, or null where its bitmap
+    /// could not be read.
+    /// </param>
     public static string Render(
-        Route route, string tuning, IReadOnlyList<MeasuredPlace> places, MachineFacts machine, IReadOnlyList<RunSample> runs)
+        Route route,
+        string tuning,
+        IReadOnlyList<MeasuredPlace> places,
+        MachineFacts machine,
+        IReadOnlyList<RunSample> runs,
+        TableCensus? census = null)
     {
         ArgumentOutOfRangeException.ThrowIfZero(runs.Count);
 
@@ -37,6 +46,11 @@ internal static class Report
         Field(text, "tuning", tuning);
         Field(text, "machine", Describe(machine));
         Field(text, "runs", $"{runs.Count} ({runs.Count(r => r.Tally.Complete)} complete)");
+
+        if (route.ReadsTable())
+        {
+            Field(text, "records in use", census is { } counted ? Count(counted.RecordsInUse) : "unknown: the bitmap could not be read");
+        }
 
         if (machine.DebugBuild)
         {
@@ -52,6 +66,12 @@ internal static class Report
         if (route.ReadsTable())
         {
             Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
+            Row(text, "reads", Count(first.Tally.Reads), Over(later, r => r.Tally.Reads, Count));
+
+            if (census is { } inUse)
+            {
+                Row(text, "free records read", Bytes(inUse.FreeBytesRead(first.Tally)), Over(later, r => inUse.FreeBytesRead(r.Tally), Bytes));
+            }
         }
         else
         {

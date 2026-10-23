@@ -53,6 +53,24 @@ public sealed class CountingMftSourceTests
         Assert.Equal(10, source.RecordCount);
     }
 
+    /// <summary>
+    /// Every read asked for is counted, a read that returned nothing too, so the count says how many
+    /// reads the pass made and not only how many found records.
+    /// </summary>
+    [Fact]
+    public async Task CountsEveryReadAskedFor()
+    {
+        using var source = new CountingMftSource(Table(records: 10, unreadableFrom: 6));
+        var buffer = new byte[4 * BytesPerRecord];
+
+        source.ReadBatch(0, buffer);
+        await source.ReadBatchAsync(4, buffer, CancellationToken.None);
+        await source.ReadBatchAsync(6, buffer, CancellationToken.None);
+        source.TryReadClusters(0, new byte[4096]);
+
+        Assert.Equal(3, source.Reads);
+    }
+
     private static FixtureMftSource Table(int records, long unreadableFrom) =>
         new(
             [.. Enumerable.Range(0, records).Select(_ => new byte[BytesPerRecord])],
