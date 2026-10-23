@@ -125,7 +125,7 @@
                         <GridView.ItemTemplate>
                             <DataTemplate x:DataType="vm:MapPresetOption">
                                 <Border Width="236"
-                                        Height="132"
+                                        Height="148"
                                         Padding="14,12"
                                         Background="{ThemeResource LayerFillColorDefaultBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"

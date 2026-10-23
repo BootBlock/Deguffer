@@ -97,8 +97,18 @@ public sealed partial class MapAppearanceWindow : Window
     /// <summary>Write where the window is to disk, and whether it is to open again with the application.</summary>
     public void Remember(bool isOpen) => _placement.Remember(isOpen);
 
-    /// <summary>Put the window on screen without moving the focus to it. See <see cref="MapAppearanceOpener.Reopen"/>.</summary>
-    public void ShowWithoutFocus() => AppWindow.Show(activateWindow: false);
+    /// <summary>
+    /// Put the window on screen without moving the focus to it. See <see cref="MapAppearanceOpener.Reopen"/>.
+    ///
+    /// <para>The bindings are started here, because a window's compiled bindings start on its first
+    /// activation, and a window shown without one would open with every bound box and line empty
+    /// until the reader first clicked into it.</para>
+    /// </summary>
+    public void ShowWithoutFocus()
+    {
+        Bindings.Initialize();
+        AppWindow.Show(activateWindow: false);
+    }
 
     private void FollowTheme(FrameworkElement sender, object? args) => Root.RequestedTheme = sender.ActualTheme;
 
