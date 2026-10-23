@@ -45,7 +45,7 @@ public sealed class CushionQuads
 
             if (quad.Reaches(width, height))
             {
-                quads[count++] = quad with { Colour = colourOf(tile) };
+                quads[count++] = quad.Coloured(colourOf(tile));
             }
         }
 

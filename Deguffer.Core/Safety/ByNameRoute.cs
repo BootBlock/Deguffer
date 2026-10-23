@@ -8,6 +8,10 @@ namespace Deguffer.Core.Safety;
 /// point, which is what a folder a volume is mounted at is. A file system that refused the class for
 /// one file refuses it for every other, and asking each of a million files again would cost the call
 /// that failed on top of the handle that answers.</para>
+///
+/// <para>The walk's threads are not held while one asks, so a thread that read the route before
+/// another declined it asks once more. A handful of asks at most, one for each thread then reading,
+/// and each still answered through a handle.</para>
 /// </summary>
 internal sealed class ByNameRoute
 {

@@ -47,17 +47,31 @@ public readonly record struct MapOrigin(double Left, double Top)
     public (double Least, double Most) Down(double scale, double height) => Range(Top, scale, height);
 
     /// <summary>
-    /// The edges from an origin <paramref name="corner"/> of the way across: the picture's near edge
-    /// is <paramref name="corner"/> of the magnified picture behind it, and its far edge is the rest of
-    /// the picture less a screen ahead. The far edge takes what is left of the picture first, in double
-    /// precision, because near the far edge that is small and the compositor multiplies it by the
-    /// scale in single precision (see the camera's expressions). At a scale of one the two edges are
-    /// the same position, and worked out apart they can round a hair the wrong way round.
+    /// The tracker's least position on an axis <paramref name="size"/> long at <paramref name="scale"/>,
+    /// from an origin <paramref name="near"/> of the way along: the picture's near edge is that much of
+    /// the magnified picture behind it.
+    ///
+    /// <para>The camera's expressions on the compositor are this same rule (see <see cref="IScalar{T}"/>).</para>
     /// </summary>
-    private static (double Least, double Most) Range(double corner, double scale, double size)
-    {
-        var least = -corner * scale * size;
+    public static T Least<T>(T near, T scale, T size)
+        where T : IScalar<T> =>
+        -near * scale * size;
 
-        return (least, Math.Max(least, (((1 - corner) * scale) - 1) * size));
-    }
+    /// <summary>
+    /// The tracker's greatest position on an axis <paramref name="size"/> long at
+    /// <paramref name="scale"/>, with <paramref name="far"/> of the picture left past an origin
+    /// <paramref name="near"/> of the way along: the rest of the picture less a screen ahead.
+    ///
+    /// <para>The caller works <paramref name="far"/> out in double precision, because near the far edge
+    /// it is small and the compositor multiplies it by the scale in single precision. Never below
+    /// <see cref="Least{T}"/>: at a scale of one the two are the same position, and worked out apart they
+    /// can round a hair the wrong way round.</para>
+    /// </summary>
+    public static T Most<T>(T near, T far, T scale, T size)
+        where T : IScalar<T> =>
+        T.Max(Least(near, scale, size), ((far * scale) - T.Of(1)) * size);
+
+    /// <summary>The edges from an origin <paramref name="corner"/> of the way across.</summary>
+    private static (double Least, double Most) Range(double corner, double scale, double size) =>
+        (Least<Real>(corner, scale, size).Value, Most<Real>(corner, 1 - corner, scale, size).Value);
 }

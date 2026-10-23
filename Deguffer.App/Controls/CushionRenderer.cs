@@ -24,19 +24,24 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class CushionRenderer : IDisposable
 {
-    private const int QuadSize = 24;
+    /// <summary>The bytes from one quad to the next, which is how the GPU reads an array of <see cref="CushionQuad"/>.</summary>
+    private static readonly uint QuadSize = (uint)Unsafe.SizeOf<CushionQuad>();
 
-    /// <summary>How many floats the shader's constant buffer holds: see <c>Cushions.hlsl</c>.</summary>
-    private const int CanvasConstants = 24;
+    /// <summary>The bytes of the shader's constant buffer, which <see cref="CushionConstants"/> fills.</summary>
+    private static readonly int ConstantsSize = ConstantBuffer.SizeOf<CushionConstants>();
 
     private static readonly Lazy<(byte[] Vertices, byte[] Pixels)> Shaders = new(Compile);
 
-    /// <summary>The names the shader's inputs go by. Made once, and never freed: every layout reads them.</summary>
+    /// <summary>
+    /// The shader's inputs, each read from where its field is in a quad: the four edges as one vector
+    /// from the first, and the colour's three bytes with <see cref="CushionQuad.Framed"/> after them as
+    /// a fourth. The names are made once, and never freed: every layout reads them.
+    /// </summary>
     private static readonly InputElement[] Inputs =
     [
-        Input("EDGES", FormatR32G32B32A32Sint, 0),
-        Input("RIDGE", FormatR32Float, 16),
-        Input("COLOUR", FormatR8G8B8A8Uint, 20),
+        Input("EDGES", FormatR32G32B32A32Sint, nameof(CushionQuad.Left)),
+        Input("RIDGE", FormatR32Float, nameof(CushionQuad.Ridge)),
+        Input("COLOUR", FormatR8G8B8A8Uint, nameof(CushionQuad.Colour)),
     ];
 
     private readonly CanvasDevice _device;
@@ -80,7 +85,7 @@ internal sealed class CushionRenderer : IDisposable
         Check(_direct3D.CreatePixelShader(pixels, (nuint)pixels.Length, 0, out _pixelShader));
         Check(_direct3D.CreateInputLayout(Inputs, (uint)Inputs.Length, vertices, (nuint)vertices.Length, out _layout));
         Check(_direct3D.CreateBuffer(
-            new BufferDescription { ByteWidth = CanvasConstants * sizeof(float), BindFlags = BindConstantBuffer },
+            new BufferDescription { ByteWidth = (uint)ConstantsSize, BindFlags = BindConstantBuffer },
             0,
             out _constants));
     }
@@ -206,8 +211,9 @@ internal sealed class CushionRenderer : IDisposable
     }
 
     /// <summary>
-    /// Compile the shaders once for the process: the code is the same on every device. A failure here
-    /// is a defect in the shader, raised with what the compiler said.
+    /// Compile the shaders once for the process, with <see cref="CushionMacros"/>: the code is the same
+    /// on every device. A failure here is a defect in the shader or in the macros, raised with what the
+    /// compiler said.
     /// </summary>
     private static (byte[] Vertices, byte[] Pixels) Compile()
     {
@@ -218,13 +224,31 @@ internal sealed class CushionRenderer : IDisposable
         stream.CopyTo(copy);
 
         var source = copy.ToArray();
+        var macros = new ShaderMacro[CushionMacros.All.Count + 1];
 
-        return (Compile(source, "vs", "vs_4_0"), Compile(source, "ps", "ps_4_0"));
+        try
+        {
+            for (var i = 0; i < CushionMacros.All.Count; i++)
+            {
+                var (name, definition) = CushionMacros.All[i];
+                macros[i] = new ShaderMacro { Name = Marshal.StringToHGlobalAnsi(name), Definition = Marshal.StringToHGlobalAnsi(definition) };
+            }
+
+            return (Compile(source, macros, "vs", "vs_4_0"), Compile(source, macros, "ps", "ps_4_0"));
+        }
+        finally
+        {
+            foreach (var macro in macros)
+            {
+                Marshal.FreeHGlobal(macro.Name);
+                Marshal.FreeHGlobal(macro.Definition);
+            }
+        }
     }
 
-    private static byte[] Compile(byte[] source, string entry, string target)
+    private static byte[] Compile(byte[] source, ShaderMacro[] macros, string entry, string target)
     {
-        var result = D3DCompile(source, (nuint)source.Length, "Cushions.hlsl", 0, 0, entry, target, CompileFlags, 0, out var code, out var errors);
+        var result = D3DCompile(source, (nuint)source.Length, "Cushions.hlsl", macros, 0, entry, target, CompileFlags, 0, out var code, out var errors);
 
         try
         {
@@ -257,11 +281,11 @@ internal sealed class CushionRenderer : IDisposable
         }
     }
 
-    private static InputElement Input(string name, uint format, uint offset) => new()
+    private static InputElement Input(string name, uint format, string field) => new()
     {
         SemanticName = Marshal.StringToHGlobalAnsi(name),
         Format = format,
-        AlignedByteOffset = offset,
+        AlignedByteOffset = (uint)Marshal.OffsetOf<CushionQuad>(field),
         InputSlotClass = PerInstance,
         InstanceDataStepRate = 1,
     };
@@ -345,7 +369,7 @@ internal sealed class CushionRenderer : IDisposable
             _capacity = Math.Max(shapes.Length, Math.Max(1024, _capacity * 2));
 
             Check(_direct3D.CreateBuffer(
-                new BufferDescription { ByteWidth = (uint)(_capacity * QuadSize), BindFlags = BindVertexBuffer },
+                new BufferDescription { ByteWidth = (uint)_capacity * QuadSize, BindFlags = BindVertexBuffer },
                 0,
                 out _quads));
 
@@ -371,35 +395,8 @@ internal sealed class CushionRenderer : IDisposable
     /// </summary>
     private void Draw(int width, int height, CanvasRegion region, PointerLight? light, ShapeFinish finish, int count)
     {
-        var shining = light ?? default;
-
-        Span<float> constants =
-        [
-            width,
-            height,
-            shining.X,
-            shining.Y,
-            region.X,
-            region.Y,
-            region.Right,
-            region.Bottom,
-            shining.Reach,
-            light is null ? 0 : shining.Strength,
-            shining.Reach * PointerLight.Height,
-            finish.Borders.Width,
-            finish.Borders.Tone.Red,
-            finish.Borders.Tone.Green,
-            finish.Borders.Tone.Blue,
-            (float)finish.Shading,
-            finish.Borders.Blocks,
-            finish.Borders.Folders,
-            finish.Bevel.Width,
-            finish.Bevel.Highlight,
-            finish.Bevel.Shadow,
-            GradientShading.SlopeAt(finish.Relief),
-            0,
-            0,
-        ];
+        Span<byte> constants = stackalloc byte[ConstantsSize];
+        MemoryMarshal.Write(constants, new CushionConstants(width, height, region, light, finish));
 
         // The whole buffer, with no box: Direct3D 11 refuses a box on a constant buffer, and drops the
         // update without an error, which left every quad at a size of zero.
@@ -407,7 +404,7 @@ internal sealed class CushionRenderer : IDisposable
             _constants,
             0,
             in Unsafe.NullRef<Box>(),
-            ref MemoryMarshal.GetReference(MemoryMarshal.AsBytes(constants)),
+            ref MemoryMarshal.GetReference(constants),
             0,
             0);
 
