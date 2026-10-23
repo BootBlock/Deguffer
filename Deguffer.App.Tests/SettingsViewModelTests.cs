@@ -193,16 +193,18 @@ public sealed class SettingsViewModelTests : IDisposable
 
     /// <summary>
     /// A cloud client that mounted itself since the last plan would be missing from a remembered
-    /// volume list, and the folder would be stored with no warning shown.
+    /// volume list, and the folder would be stored with no warning shown. The drives are read off
+    /// the window's thread, never by dropping the list for the window to read again.
     /// </summary>
     [Fact]
-    public void AskingAboutAFolderReadsTheDrivesAgain()
+    public async Task AskingAboutAFolderReadsTheDrivesAgain()
     {
         var (page, _) = Page();
 
-        page.ApprovalFor(Path.Combine(_temp.Path, "src"));
+        await page.ApprovalForAsync(Path.Combine(_temp.Path, "src"), CancellationToken.None);
 
-        Assert.Equal(1, _volumes.InvalidateCount);
+        Assert.Equal(1, _volumes.RefreshCount);
+        Assert.Equal(0, _volumes.InvalidateCount);
     }
 
     /// <summary>
@@ -210,17 +212,17 @@ public sealed class SettingsViewModelTests : IDisposable
     /// on a disk is chosen.
     /// </summary>
     [Fact]
-    public void ASourceFolderThatIsNotOnADiskIsNotApprovedAndTheRowSaysSo()
+    public async Task ASourceFolderThatIsNotOnADiskIsNotApprovedAndTheRowSaysSo()
     {
         var (page, _) = Page();
 
-        Assert.Null(page.ApprovalFor(string.Empty));
+        Assert.Null(await page.ApprovalForAsync(string.Empty, CancellationToken.None));
         Assert.True(page.SourceRootNotOnDisk);
         Assert.False(page.EmulatorFolderNotOnDisk);
 
         var folder = Path.Combine(_temp.Path, "src");
 
-        Assert.Equal(folder, page.ApprovalFor(folder)?.Path);
+        Assert.Equal(folder, (await page.ApprovalForAsync(folder, CancellationToken.None))?.Path);
         Assert.False(page.SourceRootNotOnDisk);
     }
 

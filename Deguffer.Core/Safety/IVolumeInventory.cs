@@ -28,9 +28,9 @@ public enum VolumeFeatures : uint
 }
 
 /// <summary>
-/// Whether a mounted volume can be read, and in which way it cannot.
+/// Whether a mounted volume can be read, in which way it cannot, or that it was not asked.
 ///
-/// <para>Three states rather than a flag, because the two ways of not being ready send the reader to
+/// <para>Several states rather than a flag, because the two ways of not being ready send the reader to
 /// different places. An empty drive has nothing to say, and a caller is right to pass over it. A
 /// volume Windows would not describe may hold anything, and a caller that passed over it in silence
 /// would leave out a drive the user can see in File Explorer. See <see cref="PathPresence"/>.</para>
@@ -51,6 +51,14 @@ public enum VolumeReadiness
     /// declines to follow. The volume may hold anything.
     /// </summary>
     Refused,
+
+    /// <summary>
+    /// Not asked: a letter standing for a share. Its root is read on the server, and a share that
+    /// is not there answers only once the redirector gives up on it, which a list read as a drive
+    /// picker opens cannot wait for. No caller asks whether a share is ready, so nothing is lost by
+    /// recording that it was never measured rather than inventing an answer.
+    /// </summary>
+    NotAsked,
 }
 
 /// <summary>
@@ -73,7 +81,7 @@ public enum VolumeReadiness
 /// <param name="Readiness">
 /// Whether the volume can be read at all. An optical drive with no disc and a card reader with no
 /// card are both mounted and both answer no, and a volume whose root Windows would not describe is
-/// told apart from them.
+/// told apart from them. A share is <see cref="VolumeReadiness.NotAsked"/>.
 /// </param>
 /// <param name="Label">
 /// What the volume is called, or null where it has no label, would not say, or was not asked. Null
@@ -282,8 +290,22 @@ public interface IVolumeInventory
     /// Discard the remembered list, so a drive mounted while the app was open is seen on the next
     /// preview. Called at the start of a planning pass, as <see cref="IUserEnvironment.Invalidate"/>
     /// is.
+    ///
+    /// <para>Not on the UI thread: the next read of <see cref="Volumes"/> then asks every device on
+    /// the machine, on whichever thread reads it. The window calls <see cref="RefreshAsync"/>.</para>
     /// </summary>
     void Invalidate();
+
+    /// <summary>
+    /// Read the volumes again off the calling thread, and put what was read in place of the
+    /// remembered list. Until then <see cref="Volumes"/> answers with the list as it was, so a
+    /// reader on the UI thread is never the one that waits on a device.
+    ///
+    /// <para>A list read across an <see cref="Invalidate"/> is not kept, because the caller that
+    /// invalidated asked for a reading taken after it. The machine is read again instead.</para>
+    /// </summary>
+    /// <returns>The list now remembered, so a caller on the UI thread need not read <see cref="Volumes"/> to see it.</returns>
+    Task<IReadOnlyList<LocalVolume>> RefreshAsync(CancellationToken ct);
 }
 
 /// <inheritdoc />
@@ -293,11 +315,24 @@ public sealed class VolumeInventory : IVolumeInventory
     /// The one instance the app runs with (G5). Stateless apart from the list it remembers, and
     /// that list describes the machine rather than any one caller.
     /// </summary>
-    public static readonly VolumeInventory Current = new();
+    public static readonly VolumeInventory Current = new(VolumeQueries.Machine);
+
+    private readonly IVolumeQueries _queries;
 
     private readonly Lock _gate = new();
 
     private IReadOnlyList<LocalVolume>? _volumes;
+
+    /// <summary>
+    /// Moved on by each <see cref="Invalidate"/> and by each list <see cref="RefreshAsync"/> puts in
+    /// place, so a reading can tell whether anything came between its start and its end.
+    /// </summary>
+    private long _generation;
+
+    internal VolumeInventory(IVolumeQueries queries)
+    {
+        _queries = queries;
+    }
 
     /// <summary>
     /// Memoised for the life of a planning pass. Enumerating volumes probes every mounted device,
@@ -336,6 +371,36 @@ public sealed class VolumeInventory : IVolumeInventory
         lock (_gate)
         {
             _volumes = null;
+            _generation++;
+        }
+    }
+
+    public async Task<IReadOnlyList<LocalVolume>> RefreshAsync(CancellationToken ct)
+    {
+        while (true)
+        {
+            long started;
+
+            lock (_gate)
+            {
+                started = _generation;
+            }
+
+            // Outside the lock, so a reader of Volumes is answered from the old list meanwhile.
+            var read = await Task.Run(Read, ct).ConfigureAwait(false);
+
+            lock (_gate)
+            {
+                if (_generation == started)
+                {
+                    _volumes = read;
+                    _generation++;
+
+                    return read;
+                }
+            }
+
+            ct.ThrowIfCancellationRequested();
         }
     }
 
@@ -354,14 +419,14 @@ public sealed class VolumeInventory : IVolumeInventory
     /// an API that would not start — every letter is unclaimed and the result is exactly the list
     /// this built before, rather than an empty one.</para>
     /// </summary>
-    private static IReadOnlyList<LocalVolume> Read()
+    private IReadOnlyList<LocalVolume> Read()
     {
         var volumes = new List<LocalVolume>();
         var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var name in VolumeCalls.Names())
+        foreach (var name in _queries.Names())
         {
-            var mountPoints = VolumeCalls.MountPointsOf(name);
+            var mountPoints = _queries.MountPointsOf(name);
 
             if (mountPoints.Count == 0)
             {
@@ -376,10 +441,10 @@ public sealed class VolumeInventory : IVolumeInventory
             volumes.Add(Describe(ordered) with { VolumeName = name });
         }
 
-        string[] letters;
+        IReadOnlyList<string> letters;
         try
         {
-            letters = Environment.GetLogicalDrives();
+            letters = _queries.Letters();
         }
         catch (IOException)
         {
@@ -419,28 +484,35 @@ public sealed class VolumeInventory : IVolumeInventory
     /// Whether the mount point can be read at all is the one thing that gates everything else here:
     /// an empty optical drive is mounted, answers no, and has no label, size or flags to give.
     ///
-    /// <para>A network volume is described by its mount point alone. The label and the two space
-    /// figures each cost a round trip to the server, <see cref="Volumes"/> is read under a lock and
-    /// on the UI thread, and no caller wants them for a share: the picker refuses network volumes
-    /// outright and <c>RecycleBinProvider</c> takes fixed ones only. This declines a cost, and
-    /// filters nothing — which kinds a caller may act on stays that caller's decision.</para>
+    /// <para>A network volume is described by its mount point and its kind alone, and its root is
+    /// not probed (<see cref="VolumeReadiness.NotAsked"/>). The probe, the label and the two space
+    /// figures each cost a round trip to the server, and a mapped share that is not there answers
+    /// the probe only once the redirector gives up on it. No caller wants any of it for a share: the
+    /// picker refuses network volumes outright and <c>RecycleBinProvider</c> takes fixed ones only.
+    /// This declines a cost, and filters nothing — which kinds a caller may act on stays that
+    /// caller's decision.</para>
     /// </summary>
-    internal static LocalVolume Describe(IReadOnlyList<string> mountPoints)
+    internal LocalVolume Describe(IReadOnlyList<string> mountPoints)
     {
         var root = mountPoints[0];
         var elsewhere = mountPoints.Count > 1 ? mountPoints.Skip(1).ToArray() : null;
-        var kind = VolumeCalls.KindOf(root);
+        var kind = _queries.KindOf(root);
+
+        if (kind == DriveType.Network)
+        {
+            return new LocalVolume(root, kind, VolumeReadiness.NotAsked, AlsoMountedAt: elsewhere);
+        }
 
         // An empty drive answers ERROR_NOT_READY, which the probe reads as absent, so only a refusal
         // is left to mean that Windows would not say.
-        var readiness = LongPath.ProbeDirectory(root) switch
+        var readiness = _queries.Probe(root) switch
         {
             PathPresence.Present => VolumeReadiness.Ready,
             PathPresence.Refused => VolumeReadiness.Refused,
             _ => VolumeReadiness.NoMedia,
         };
 
-        if (readiness is not VolumeReadiness.Ready || kind == DriveType.Network)
+        if (readiness is not VolumeReadiness.Ready)
         {
             return new LocalVolume(root, kind, readiness, AlsoMountedAt: elsewhere);
         }
@@ -450,8 +522,8 @@ public sealed class VolumeInventory : IVolumeInventory
         // reach StoresContentRemotely as "said nothing about remote storage" and so are walked — the
         // same answer a volume with no such driver gives — and as unanswered, so it is never taken
         // for a volume that said it cannot hold links.
-        var (label, features, fileSystem) = VolumeCalls.InformationOf(root);
-        var space = VolumeCalls.SpaceOf(root);
+        var (label, features, fileSystem) = _queries.InformationOf(root);
+        var space = _queries.SpaceOf(root);
 
         return new LocalVolume(
             root,

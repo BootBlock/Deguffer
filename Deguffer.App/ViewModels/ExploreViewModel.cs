@@ -109,7 +109,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <para>Two writers are not people. <see cref="Retarget"/> writes the drive and the folder one
     /// after the other, and the drive's handler would otherwise drop the folder it is about to set.
     /// And a picker whose selected entry stops being in the list where it was writes null back
-    /// through its two-way binding while <see cref="RefreshDrives"/> is reading the volumes, before
+    /// through its two-way binding while <see cref="RefreshDrivesAsync"/> is writing the rows, before
     /// this has put the selection back. Taken at face value that is the user choosing a different
     /// drive, so it drops the folder scope — and the refresh can happen as the picker opens, when
     /// somebody is only looking at the list. Rows are written over in place, so only a reading that
@@ -199,7 +199,8 @@ public sealed partial class ExploreViewModel : ObservableObject
             }
         };
 
-        RefreshDrives();
+        // The drives are not read here: a constructor cannot wait for a reading taken off the UI
+        // thread, and the page reads them as it is first shown (RefreshDrivesAsync).
 
         // Offered before anything has been scanned, so an elevated scan does not have to be reached
         // through the walked one it replaces.
@@ -774,8 +775,9 @@ public sealed partial class ExploreViewModel : ObservableObject
             scanned.TrySetResult(scan);
 
             // Read afresh and handed to Show, which is what draws the map, because the space figures
-            // the drive picker holds are from whenever it last opened.
-            _volumes.Invalidate();
+            // the drive picker holds are from whenever it last opened. Read off the UI thread, since
+            // the reading asks every device on the machine.
+            await _volumes.RefreshAsync(ct);
 
             var volume = await VolumeSpace.ReadAsync(_volumes, _hidden, target, scan.Tree, ct);
 
@@ -1399,8 +1401,6 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         var left = removed.Left;
 
-        _volumes.Invalidate();
-
         Show(left, _position.CarriedTo(removed.Tree, left), Volume.Remeasured(_volumes, left.RootPath));
     }
 
@@ -1500,28 +1500,31 @@ public sealed partial class ExploreViewModel : ObservableObject
     ///
     /// <para>The chosen volume keeps its row, because a row is written over rather than replaced.
     /// Only a volume that has gone takes the selection with it.</para>
+    ///
+    /// <para>The machine is read off the UI thread, and the rows are brought up to date on it once
+    /// the reading lands. A choice the user makes while the reading runs is theirs, so only the
+    /// writing of the rows is guarded.</para>
     /// </summary>
-    public void RefreshDrives()
+    public async Task RefreshDrivesAsync(CancellationToken ct)
     {
-        // Read before the volumes are, because the picker can write null over the selection while
+        if (await _drives.ReadAsync(ct) is not { } volumes)
+        {
+            return;
+        }
+
+        // Read before the rows change, because the picker can write null over the selection while
         // the list under it changes. See _retargeting.
         var standing = Target;
-        bool read;
 
         _retargeting = true;
 
         try
         {
-            read = _drives.Refresh();
+            _drives.Show(volumes);
         }
         finally
         {
             _retargeting = false;
-        }
-
-        if (!read)
-        {
-            return;
         }
 
         // Where the reading leaves the page, by DriveList.Choose and ExploreTarget.AfterReading.

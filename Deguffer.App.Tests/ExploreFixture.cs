@@ -72,7 +72,22 @@ internal sealed class ExploreFixture : IDisposable
     /// <summary>Whether a relaunch the page asks for starts, which is the user accepting the UAC prompt.</summary>
     public bool RelaunchStarts { get; set; }
 
-    public ExploreViewModel Page(bool isElevated = false) =>
+    /// <summary>
+    /// A page as the window shows it: built, then reading its drives as it is navigated to, which
+    /// the fake inventory answers at once.
+    /// </summary>
+    public ExploreViewModel Page(bool isElevated = false)
+    {
+        var page = Built(isElevated);
+        var shown = page.RefreshDrivesAsync(CancellationToken.None);
+
+        Assert.True(shown.IsCompleted, "The fake inventory answers at once, so the first reading finishes as the page is shown.");
+        shown.GetAwaiter().GetResult();
+
+        return page;
+    }
+
+    private ExploreViewModel Built(bool isElevated) =>
         new(
             Scanner,
             Volumes,

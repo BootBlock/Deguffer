@@ -86,6 +86,10 @@ public sealed class ScanTuner
     /// Each drive with a letter that is ready now, and its kind, in order of letter. For the Settings
     /// page, which says what Auto chose for the drives present. Asks each device the first time, so
     /// never call it on the UI thread.
+    ///
+    /// <para>A mapped share is listed without being ready: the inventory does not ask whether one
+    /// is (<see cref="VolumeReadiness.NotAsked"/>), and its kind is network whether or not the server
+    /// answers, so what Auto chose for it is true either way.</para>
     /// </summary>
     public IReadOnlyList<DriveKind> Drives(CancellationToken ct)
     {
@@ -97,7 +101,7 @@ public sealed class ScanTuner
         var drives = new List<DriveKind>();
 
         foreach (var volume in _volumes.Volumes
-            .Where(volume => volume.IsReady && VolumeRoot.IsDriveTop(volume.RootPath))
+            .Where(volume => volume is { IsReady: true } or { Kind: DriveType.Network } && VolumeRoot.IsDriveTop(volume.RootPath))
             .OrderBy(volume => volume.RootPath, StringComparer.OrdinalIgnoreCase))
         {
             // Between drives, because each first question about one waits on its device.

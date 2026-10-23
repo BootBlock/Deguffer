@@ -76,10 +76,15 @@ public readonly record struct VolumeSpace(
     /// space no folder accounts for is kept, because a removal through this page changes neither
     /// part of it. <see cref="None"/> where nothing is drawn beside
     /// the scan, or where the volume no longer states both figures.
+    ///
+    /// <para>Asked of that one volume through <see cref="IVolumeInventory.SpaceOf"/>, never by reading
+    /// the list again. The page shows what is left as the removal reports it, on the UI thread, and a
+    /// fresh list there would wait on every device on the machine (#181). That this space is not
+    /// <see cref="None"/> already says the scan covered the whole of the volume.</para>
     /// </summary>
     public VolumeSpace Remeasured(IVolumeInventory volumes, string scannedRoot) =>
-        this != None && Of(volumes, scannedRoot) is { } now && now != None
-            ? this with { TotalBytes = now.TotalBytes, FreeBytes = now.FreeBytes }
+        this != None && volumes.SpaceOf(scannedRoot) is { } now
+            ? this with { TotalBytes = now.Total, FreeBytes = now.Free }
             : None;
 
     /// <summary>

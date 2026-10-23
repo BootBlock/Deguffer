@@ -251,6 +251,24 @@ public sealed class ScanTuningTests
             tuner.Drives(CancellationToken.None));
     }
 
+    /// <summary>
+    /// A mapped share is listed as network although the inventory never asked whether it is ready:
+    /// asking is what froze the window, and its kind is network whether or not the server answers.
+    /// </summary>
+    [Fact]
+    public void AShareIsListedAsNetworkWithoutBeingAskedWhetherItIsReady()
+    {
+        var queries = new FakeStorageQueries().Volume(@"C:\", 1).Disk(1, Nvme, seekPenalty: false);
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"Z:\", DriveType.Network, VolumeReadiness.NotAsked);
+        var tuner = Tuner(new FakePreferences(AppPreferences.Default), queries, volumes);
+
+        Assert.Equal(
+            [new DriveKind("C:", StorageMedia.Nvme), new DriveKind("Z:", StorageMedia.Network)],
+            tuner.Drives(CancellationToken.None));
+    }
+
     /// <summary>Each drive's first answer waits on its device, so a listing nobody wants any more stops.</summary>
     [Fact]
     public void AListingOfDrivesStopsWhenCancelled()

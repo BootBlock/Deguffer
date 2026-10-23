@@ -560,19 +560,22 @@ public sealed partial class ExplorePage : Page
     /// <summary>
     /// Read the volumes again as the picker opens, where the last reading has gone stale, so its
     /// space figures describe the disk now rather than when the page was first shown. See
-    /// <see cref="ExploreViewModel.RefreshDrives"/>.
+    /// <see cref="ExploreViewModel.RefreshDrivesAsync"/>.
+    ///
+    /// <para>Not cancelled when the page is left. NavigationCacheMode keeps the page, so rows written
+    /// after it is left are the rows its next visit shows.</para>
     /// </summary>
-    private void OnDriveListOpened(object sender, object e) => ViewModel.RefreshDrives();
+    private async void OnDriveListOpened(object sender, object e) => await ViewModel.RefreshDrivesAsync(CancellationToken.None);
 
     /// <summary>
-    /// Read the volumes as the page is shown, on the same terms as the picker opening. The page is
-    /// kept alive by NavigationCacheMode, so its constructor's reading is the first visit's only.
+    /// Read the volumes as the page is shown, on the same terms as the picker opening, the first
+    /// visit included. The page is kept alive by NavigationCacheMode.
     /// </summary>
-    protected override void OnNavigatedTo(NavigationEventArgs e)
+    protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
 
-        ViewModel.RefreshDrives();
+        await ViewModel.RefreshDrivesAsync(CancellationToken.None);
     }
 
     /// <summary>Applied first and persisted second, for the reason above.</summary>
