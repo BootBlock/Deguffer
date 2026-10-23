@@ -678,15 +678,7 @@ internal sealed class ExploreLayers
         /// </summary>
         private void FadeIn(ExploreLayer layer)
         {
-            var compositor = layer.Sprite.Compositor;
-            var rise = compositor.CreateScalarKeyFrameAnimation();
-            rise.InsertKeyFrame(0, 0);
-            rise.InsertKeyFrame(1, 1);
-            rise.Duration = fade.Duration;
-
-            var fading = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-            layer.Sprite.StartAnimation(nameof(Visual.Opacity), rise);
-            fading.End();
+            var fading = layer.Sprite.FadeIn(fade.Duration);
             layers._fading++;
 
             var landed = layers._fadesLanded;

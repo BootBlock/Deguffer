@@ -1,3 +1,4 @@
+using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Rendering;
 using Windows.UI;
@@ -68,5 +69,5 @@ public sealed record MapSchemeOption(
 public sealed record MapSwatch(TileColour Tile)
 {
     /// <summary>The colour the window's template paints the swatch in. Opaque, as a tile is drawn.</summary>
-    public Color Colour => Color.FromArgb(255, Tile.Red, Tile.Green, Tile.Blue);
+    public Color Colour => Tile.ToColor();
 }

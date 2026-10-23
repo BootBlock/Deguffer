@@ -81,10 +81,8 @@ internal sealed class ExploreLift
 
         // The canvas is magnified by the camera and by its placement, so the shadow is divided by
         // both to stay the same size on screen, as the outlines' strokes are.
-        Unmagnified(compositor, camera, shadow, nameof(DropShadow.BlurRadius),
-            $"{ShadowBlur} / Max(0.0001, Max(camera.Scale.X * placed.Scale.X, camera.Scale.Y * placed.Scale.Y))");
-        Unmagnified(compositor, camera, shadow, nameof(DropShadow.Offset),
-            $"Vector3(0, {ShadowDrop} / Max(0.0001, camera.Scale.Y * placed.Scale.Y), 0)");
+        shadow.StartAnimation(nameof(DropShadow.BlurRadius), camera.Unmagnified(ShadowBlur, _placed));
+        shadow.StartAnimation(nameof(DropShadow.Offset), camera.UnmagnifiedDown(ShadowDrop, _placed));
     }
 
     /// <summary>The top of the lifted shape in the composition tree, under the camera.</summary>
@@ -108,19 +106,5 @@ internal sealed class ExploreLift
     }
 
     /// <summary>Lay it over a canvas that lies at <paramref name="placed"/> in the picture.</summary>
-    public void PlaceOver(MapTransform placed)
-    {
-        _placed.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
-        _placed.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
-    }
-
-
-    private void Unmagnified(Compositor compositor, MapCamera camera, CompositionObject target, string property, string expression)
-    {
-        var animation = compositor.CreateExpressionAnimation(expression);
-        animation.SetReferenceParameter("camera", camera.Properties);
-        animation.SetReferenceParameter("placed", _placed);
-
-        target.StartAnimation(property, animation);
-    }
+    public void PlaceOver(MapTransform placed) => _placed.Place(placed);
 }

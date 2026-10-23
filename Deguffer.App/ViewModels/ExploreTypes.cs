@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Rendering;
@@ -23,7 +24,7 @@ public sealed partial class ExploreTypeRow : ObservableObject
 
         Category = category;
         Label = FileCategories.Label(category);
-        Swatch = Color.FromArgb(255, colour.Red, colour.Green, colour.Blue);
+        Swatch = colour.ToColor();
     }
 
     public FileCategory Category { get; }

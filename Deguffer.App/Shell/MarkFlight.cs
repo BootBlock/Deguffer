@@ -36,7 +36,7 @@ internal static class MarkFlight
         var visual = ElementCompositionPreview.GetElementVisual(mark);
         var compositor = visual.Compositor;
         var size = mark.ActualSize;
-        var ease = compositor.CreateCubicBezierEasingFunction(Motion.EaseControlPoints.First, Motion.EaseControlPoints.Second);
+        var ease = compositor.MotionEase();
 
         var fade = compositor.CreateScalarKeyFrameAnimation();
         fade.InsertKeyFrame(0, 0);

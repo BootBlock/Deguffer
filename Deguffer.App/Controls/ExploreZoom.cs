@@ -790,14 +790,13 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return _tracker.TryUpdateScaleWithAnimation(zoom, new Vector3((float)pivot.X, (float)pivot.Y, 0));
         }
 
-        var (first, second) = Motion.EaseControlPoints;
         var tracking = MapTracking.Of(target, _size.Width, _size.Height, _origin);
         var pan = compositor.CreateVector3KeyFrameAnimation();
 
         pan.InsertKeyFrame(
             1,
             new Vector3((float)tracking.X, (float)tracking.Y, 0),
-            compositor.CreateCubicBezierEasingFunction(first, second));
+            compositor.MotionEase());
         pan.Duration = motion.Duration;
 
         return _tracker.TryUpdatePositionWithAnimation(pan);
