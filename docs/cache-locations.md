@@ -4847,7 +4847,7 @@ to type the words out.
 | | |
 | --- | --- |
 | **Location** | The drive File History is set to save to, under `FileHistory\<account>\<machine>\Data` |
-| **Method** | Run Windows' own `FhManagew.exe -cleanup <days>`. Nothing on the drive is ever deleted by Deguffer |
+| **Method** | Run Windows' own `FhManagew.exe -cleanup <days>`, from `System32` and never from `PATH`. Nothing on the drive is ever deleted by Deguffer |
 | **Typical size** | Whatever has accumulated. File History's shipped retention is *never delete*, so these targets routinely reach tens of gigabytes |
 
 ### What it is
