@@ -4978,8 +4978,8 @@ to type the words out.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\CrashDumps`, `%PROGRAMDATA%\Microsoft\Windows\WER\ReportArchive` and `ReportQueue`, `C:\Windows\LiveKernelReports`, `C:\Windows\Minidump`, and `C:\Windows\MEMORY.DMP` |
-| **Method** | Delete each of those six, one row each |
+| **Location** | `%LOCALAPPDATA%\CrashDumps`, `ReportArchive` and `ReportQueue` under both `%LOCALAPPDATA%\Microsoft\Windows\WER` and `%PROGRAMDATA%\Microsoft\Windows\WER`, `C:\Windows\LiveKernelReports`, `C:\Windows\Minidump`, and `C:\Windows\MEMORY.DMP`, plus wherever this machine's crash settings send dumps instead |
+| **Method** | Delete each of those eight, one row each, and each dump in a place the settings name, one file at a time |
 | **Typical size** | Usually tens of megabytes. `MEMORY.DMP` is the exception: on a machine set to write a complete dump it is the size of your installed memory, so one stop error leaves 32 or 64 GB behind |
 
 ### What it is
@@ -4989,15 +4989,32 @@ here and they come from different places:
 
 - **`CrashDumps`** in your own profile holds dumps of ordinary applications that stopped working.
 - **`WER`** — Windows Error Reporting — holds the reports Windows prepares to send to Microsoft.
-  `ReportQueue` is what has not been sent yet, and `ReportArchive` is the record of what has.
+  `ReportQueue` is what has not been sent yet, and `ReportArchive` is the record of what has. There
+  is one pair for the whole machine and one in your own profile.
 - **`Minidump`, `LiveKernelReports` and `MEMORY.DMP`** are the kernel's own. A minidump is written
   for each blue screen; a live kernel report is written when a driver was reset without stopping the
   machine; and `MEMORY.DMP` is the full dump from the most recent stop error.
 
 ### What Deguffer does
 
-It removes the six locations above, one row each, so you can clear the application dumps and keep
+It removes the eight locations above, one row each, so you can clear the application dumps and keep
 the kernel ones — or the reverse.
+
+**Windows can be told to write dumps somewhere else, and Deguffer reads where.** Three settings move
+them: `DumpFile` and `MinidumpDir` under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl`
+move the kernel's full dump and its minidumps, and `DumpFolder` under
+`HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps` moves application
+dumps, for every application or, in a key named after one, for that application alone. Moving the
+full dump to another drive is common when the system drive is small. Each moved place is named in
+the plan, whatever was found there.
+
+A moved folder is never offered as a folder, because it can be any folder: a drive root, Documents,
+anywhere. Deguffer offers only the files directly inside it that are named `*.dmp` and start the way
+a crash dump starts, each one by name, and everything else there stays. The file `DumpFile` names is
+offered by that name on the same test. Deguffer does not look into a moved folder at all where it is
+a drive root, one of your own folders, or another folder other rows remove things from, and it does
+not look through a link. A full kernel dump can be read only by an administrator, so without the
+**Elevate** button a moved one is named and left alone rather than offered on its name.
 
 **`C:\Windows` itself is never listed and never touched.** This is the strictest rule in Deguffer,
 and it works differently from every other location in this document. Elsewhere Deguffer looks inside
@@ -5018,7 +5035,8 @@ machine stopped.
 ### What is protected
 
 `C:\Windows`, `%PROGRAMDATA%`, your profile's local application data, and everything Deguffer never
-named — which is everything else in those folders. `WinSxS`, `Windows\Installer` and
+named — which is everything else in those folders. A folder the crash settings move dumps to is
+protected the same way: the folder and everything in it that is not a dump directly inside it. `WinSxS`, `Windows\Installer` and
 `%PROGRAMDATA%\Package Cache` are checked explicitly afterwards.
 
 Deguffer also refuses to delete through a link, at any level. If one of these folders, or any folder
