@@ -115,24 +115,14 @@ public sealed class ScanHistoryStore
         }
 
         var file = Path.Combine(folder, summary.TakenUtc.ToUniversalTime().ToString(Stamp, CultureInfo.InvariantCulture) + Extension);
-        var written = file + ".tmp";
-
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(folder));
-
-            using (var stream = File.Create(LongPath.Extended(written)))
-            {
-                ScanSummaryFormat.Write(stream, summary);
-            }
-
-            // Written beside and moved over, so an interrupted save leaves no torn summary behind
-            // under a name the listing would read.
-            File.Move(LongPath.Extended(written), LongPath.Extended(file), overwrite: true);
+            // Replaced whole, so an interrupted save leaves no torn summary behind under a name the
+            // listing would read.
+            StoreFile.Replace(file, stream => ScanSummaryFormat.Write(stream, summary));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            TryDelete(written);
             return false;
         }
 

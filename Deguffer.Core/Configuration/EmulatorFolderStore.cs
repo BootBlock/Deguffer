@@ -19,15 +19,13 @@ public sealed class EmulatorFolderStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
-    private readonly string _directory;
     private readonly string _file;
 
     public EmulatorFolderStore(IUserEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
-        _directory = Path.Combine(environment.LocalAppData, "Deguffer");
-        _file = Path.Combine(_directory, "emulator-folders.json");
+        _file = Path.Combine(environment.LocalAppData, "Deguffer", "emulator-folders.json");
     }
 
     public IReadOnlyList<string> Load()
@@ -66,8 +64,7 @@ public sealed class EmulatorFolderStore
 
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(_directory));
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(stored, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(stored, SerializerOptions));
 
             return true;
         }

@@ -36,15 +36,13 @@ public sealed class SelectionStore
     private static readonly IReadOnlyDictionary<string, bool> NoSteps =
         ReadOnlyDictionary<string, bool>.Empty;
 
-    private readonly string _directory;
     private readonly string _file;
 
     public SelectionStore(IUserEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
-        _directory = Path.Combine(environment.LocalAppData, "Deguffer");
-        _file = Path.Combine(_directory, "selection.json");
+        _file = Path.Combine(environment.LocalAppData, "Deguffer", "selection.json");
     }
 
     /// <summary>The remembered rows, or none where the file is missing, unreadable or corrupt.</summary>
@@ -108,8 +106,7 @@ public sealed class SelectionStore
 
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(_directory));
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(selections, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(selections, SerializerOptions));
 
             return true;
         }
