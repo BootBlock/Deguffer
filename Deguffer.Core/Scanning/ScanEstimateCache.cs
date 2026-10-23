@@ -18,6 +18,19 @@ namespace Deguffer.Core.Scanning;
 /// change without anything in it changing its own timestamp, so no cheap filesystem signal is a
 /// sound validator; the USN journal is the sound one, and it needs the same elevation the MFT does,
 /// which would leave the fallback path with no invalidation at all.
+///
+/// <para><b>Written once a pass, not once a measurement.</b> A pass measures its targets one after
+/// another, and on a first run nearly every figure is new, so writing the file for each would write
+/// it as often as there are targets and serialise every entry each time, with antivirus scanning
+/// each write. A changed figure only marks the cache changed while a <see cref="Hold"/> stands, and
+/// the last hold to end writes it once. A figure set with no hold standing is written straight
+/// away, because nothing will end to write it. The file is serialised from a copy taken under the
+/// lock and written outside it, so a measurement on another thread never waits on the disk for the
+/// lock.</para>
+///
+/// <para>One instance for each file. Two over the same file would each write back only what they
+/// had loaded and set, and the later write would take the other's figures away, so every scanner of
+/// this machine shares <see cref="For"/>'s.</para>
 /// </summary>
 public sealed class ScanEstimateCache
 {
@@ -32,14 +45,51 @@ public sealed class ScanEstimateCache
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
     private readonly string _file;
+    private readonly Action<string, string> _store;
+
+    /// <summary>Whether a figure has changed since the file was last written. Under <see cref="_gate"/>.</summary>
+    private bool _changed;
+
+    /// <summary>The holds standing. Under <see cref="_gate"/>.</summary>
+    private int _holds;
+
+    /// <summary>
+    /// Counts each copy taken for writing, under <see cref="_gate"/>, so a write that reaches the disk
+    /// after a later copy's write leaves the later one in place.
+    /// </summary>
+    private long _copied;
+
+    /// <summary>The newest copy written. Under <see cref="_writing"/>.</summary>
+    private long _written;
+
+    /// <summary>Taken for the write alone, so one write cannot interleave with another.</summary>
+    private readonly Lock _writing = new();
 
     public ScanEstimateCache(IUserEnvironment environment)
+        : this(environment, StoreFile.Replace)
+    {
+    }
+
+    /// <param name="store">Writes the file's whole text: the seam a test counts writes through.</param>
+    internal ScanEstimateCache(IUserEnvironment environment, Action<string, string> store)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
         _file = Path.Combine(environment.LocalAppData, "Deguffer", "scan-estimates.json");
+        _store = store;
         Load();
     }
+
+    /// <summary>
+    /// The cache of the machine <paramref name="environment"/> describes. One shared instance for this
+    /// machine, which every <see cref="UserEnvironment"/> describes, so there is one for its file, as
+    /// <see cref="DirectoryScanner.For"/> shares one scanner. Any other environment is a machine of its
+    /// caller's own and gets a cache of its own.
+    /// </summary>
+    public static ScanEstimateCache For(IUserEnvironment environment) =>
+        environment is UserEnvironment ? Machine : new ScanEstimateCache(environment);
+
+    private static ScanEstimateCache Machine { get; } = new(UserEnvironment.Current);
 
     /// <param name="Entries">
     /// Absent from a file written before the count existed, which then reads as nothing counted. The
@@ -96,9 +146,91 @@ public sealed class ScanEstimateCache
 
             _entries[key] = replacement;
 
-            if (!unchanged)
+            if (unchanged)
             {
-                Save();
+                return;
+            }
+
+            _changed = true;
+
+            if (_holds > 0)
+            {
+                return;
+            }
+        }
+
+        Save();
+    }
+
+    /// <summary>
+    /// Keep changed figures in memory until the hold ends, and write them once when the last hold
+    /// standing ends. Taken for each planning pass through <see cref="DirectoryScanner.Hold"/>, and
+    /// for each measurement call that remembers several figures, so it writes once however many.
+    /// </summary>
+    public PassHold Hold()
+    {
+        lock (_gate)
+        {
+            _holds++;
+        }
+
+        return new PassHold(Release);
+    }
+
+    private void Release()
+    {
+        lock (_gate)
+        {
+            if (--_holds > 0)
+            {
+                return;
+            }
+        }
+
+        Save();
+    }
+
+    /// <summary>
+    /// Write the file now where any figure changed since it was last written, holds standing or not.
+    /// For the app's exit and its relaunch, when a pass under way will not end in this process.
+    /// </summary>
+    public void Save()
+    {
+        KeyValuePair<string, Entry>[] copy;
+        long copied;
+
+        lock (_gate)
+        {
+            if (!_changed)
+            {
+                return;
+            }
+
+            _changed = false;
+            copy = [.. _entries];
+            copied = ++_copied;
+        }
+
+        lock (_writing)
+        {
+            if (copied < _written)
+            {
+                return;
+            }
+
+            try
+            {
+                _store(_file, JsonSerializer.Serialize(new Dictionary<string, Entry>(copy, StringComparer.OrdinalIgnoreCase), SerializerOptions));
+                _written = copied;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Kept as changed, so the next pass or the exit tries again. Losing the file costs a
+                // slower first paint next time and nothing else.
+                lock (_gate)
+                {
+                    _changed = true;
+                }
             }
         }
     }
@@ -153,27 +285,8 @@ public sealed class ScanEstimateCache
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            // A cache that cannot be read is a cache miss, not a failure. Corrupt content is
-            // expected here specifically because the file is written on every measurement and the
-            // process can be killed mid-write.
-        }
-    }
-
-    private void Save()
-    {
-        try
-        {
-            var directory = Path.GetDirectoryName(_file);
-            if (directory is not null)
-            {
-                Directory.CreateDirectory(LongPath.Extended(directory));
-            }
-
-            File.WriteAllText(LongPath.Extended(_file), JsonSerializer.Serialize(_entries, SerializerOptions));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Losing the cache costs a slower first paint next time and nothing else.
+            // A cache that cannot be read is a cache miss, not a failure. The file is replaced whole,
+            // so a stopped write cannot tear it, but a hand edit or a disk fault still can.
         }
     }
 }

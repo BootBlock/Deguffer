@@ -64,8 +64,10 @@ public static class ElevatedRelaunch
         }
 
         // Before the replacement exists, not after this instance closes: it reads the stored window
-        // placement as it opens, so a write left to the close that follows is one it can miss.
+        // placement and the remembered sizes as it opens, so a write left to the close that follows
+        // is one it can miss.
         App.RememberWindowPlacement();
+        App.RememberScanEstimates();
 
         try
         {

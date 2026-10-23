@@ -29,7 +29,6 @@ public sealed class KeepStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
 
-    private readonly string _directory;
     private readonly string _file;
 
     private bool _refusesToSave;
@@ -38,8 +37,7 @@ public sealed class KeepStore
     {
         ArgumentNullException.ThrowIfNull(environment);
 
-        _directory = Path.Combine(environment.LocalAppData, "Deguffer");
-        _file = Path.Combine(_directory, "keep.json");
+        _file = Path.Combine(environment.LocalAppData, "Deguffer", "keep.json");
     }
 
     /// <summary>The kept items, or none where the file is missing, unreadable or corrupt.</summary>
@@ -94,16 +92,9 @@ public sealed class KeepStore
             return false;
         }
 
-        var written = _file + ".tmp";
-
         try
         {
-            Directory.CreateDirectory(LongPath.Extended(_directory));
-
-            // Written beside the file and moved over it, so a save that is interrupted leaves the
-            // previous list whole rather than a truncated one the next launch cannot read.
-            File.WriteAllText(LongPath.Extended(written), JsonSerializer.Serialize(list.Items, SerializerOptions));
-            File.Move(LongPath.Extended(written), LongPath.Extended(_file), overwrite: true);
+            StoreFile.Replace(_file, JsonSerializer.Serialize(list.Items, SerializerOptions));
 
             return true;
         }
