@@ -56,6 +56,14 @@ public interface IProcessInspector
     /// its own full process-table walk.
     /// </summary>
     void Invalidate();
+
+    /// <summary>
+    /// Discard the snapshot where it began longer ago than <paramref name="maxAge"/>, for a question
+    /// that must see the machine as it is now to within a bound: a clean's use check, which passes
+    /// <see cref="Execution.IUseCheck.ReadingLimit"/>. A younger snapshot, the preview's own
+    /// included, answers it.
+    /// </summary>
+    void DiscardOlderThan(TimeSpan maxAge);
 }
 
 /// <inheritdoc />
@@ -64,7 +72,15 @@ public sealed class ProcessInspector : IProcessInspector
     public static readonly ProcessInspector Default = new();
 
     private readonly Lock _gate = new();
-    private Dictionary<string, List<int>>? _snapshot;
+    private readonly TimedReading<Dictionary<string, List<int>>> _snapshot;
+
+    public ProcessInspector()
+        : this(TimeProvider.System)
+    {
+    }
+
+    /// <param name="time">What a snapshot's age is measured by.</param>
+    internal ProcessInspector(TimeProvider time) => _snapshot = new(time);
 
     public IReadOnlyList<string> FindRunning(IEnumerable<string> names)
     {
@@ -97,7 +113,15 @@ public sealed class ProcessInspector : IProcessInspector
     {
         lock (_gate)
         {
-            _snapshot = null;
+            _snapshot.Forget();
+        }
+    }
+
+    public void DiscardOlderThan(TimeSpan maxAge)
+    {
+        lock (_gate)
+        {
+            _snapshot.ForgetOlderThan(maxAge);
         }
     }
 
@@ -109,38 +133,38 @@ public sealed class ProcessInspector : IProcessInspector
     {
         lock (_gate)
         {
-            if (_snapshot is not null)
-            {
-                return _snapshot;
-            }
-
-            var names = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var process in Process.GetProcesses())
-            {
-                try
-                {
-                    var name = process.ProcessName;
-
-                    if (!names.TryGetValue(name, out var ids))
-                    {
-                        names[name] = ids = [];
-                    }
-
-                    ids.Add(process.Id);
-                }
-                catch (InvalidOperationException)
-                {
-                    // Exited between enumeration and inspection. Normal; skip it.
-                }
-                finally
-                {
-                    process.Dispose();
-                }
-            }
-
-            return _snapshot = names;
+            return _snapshot.Get(Read);
         }
+    }
+
+    private static Dictionary<string, List<int>> Read()
+    {
+        var names = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                var name = process.ProcessName;
+
+                if (!names.TryGetValue(name, out var ids))
+                {
+                    names[name] = ids = [];
+                }
+
+                ids.Add(process.Id);
+            }
+            catch (InvalidOperationException)
+            {
+                // Exited between enumeration and inspection. Normal; skip it.
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return names;
     }
 }
 

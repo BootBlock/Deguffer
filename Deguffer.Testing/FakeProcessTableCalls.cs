@@ -31,7 +31,14 @@ internal sealed class FakeProcessTableCalls : IProcessTableCalls
         return this;
     }
 
-    public IReadOnlyList<ListedProcess> List() => [.. _processes.Select(p => new ListedProcess(p.Id, p.Name))];
+    /// <summary>How many times the process list was read, which is once for each reading of the table.</summary>
+    public int ListCount { get; private set; }
+
+    public IReadOnlyList<ListedProcess> List()
+    {
+        ListCount++;
+        return [.. _processes.Select(p => new ListedProcess(p.Id, p.Name))];
+    }
 
     public IOpenedProcess? Open(int processId, bool withMemory) =>
         _processes.FirstOrDefault(p => p.Id == processId) is { OpenRefused: false } process

@@ -38,9 +38,10 @@ internal sealed class LiveTreeCheck(
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
-        // The inspector keeps one process table for a planning pass. That table is the preview's,
-        // and it is dropped before the question is built, because building it can read the table.
-        inspector.Invalidate();
+        // The inspector keeps one process table for a planning pass. Where that table, the preview's
+        // or an earlier check's, is past the limit, it is dropped before the question is built,
+        // because building it can read the table.
+        inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
         var query = questions(ct).Ask(directory);
         var findings = inspector.FindLive([query], ct);

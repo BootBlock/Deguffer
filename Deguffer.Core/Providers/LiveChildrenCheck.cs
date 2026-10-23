@@ -31,8 +31,9 @@ internal sealed class LiveChildrenCheck(ILiveTreeInspector inspector, bool planC
             return [];
         }
 
-        // The inspector keeps one process table for a planning pass. That table is the preview's.
-        inspector.Invalidate();
+        // The inspector keeps one process table for a planning pass, and the preview's may be past
+        // the limit.
+        inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
         var elsewhere = step is ClearDirectoryStep clear ? clear.OwnedElsewhere : [];
         var findings = inspector.FindLiveChildren([folder], ct);

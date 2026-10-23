@@ -17,8 +17,9 @@ internal sealed class RunningProcessCheck(IProcessInspector inspector, IReadOnly
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
-        // The inspector keeps one snapshot for a planning pass. That snapshot is the preview's.
-        inspector.Invalidate();
+        // The inspector keeps one snapshot for a planning pass, and the preview's may be past the
+        // limit.
+        inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
         return inspector.FindRunning(names) is { Count: > 0 } running
             ? [new InUseNow(step.Path, $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running now")]
