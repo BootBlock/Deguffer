@@ -350,7 +350,7 @@
               ColumnSpacing="12"
               RowSpacing="4"
               ColumnDefinitions="*,Auto,Auto"
-              RowDefinitions="Auto,Auto"
+              RowDefinitions="Auto,Auto,Auto"
               Visibility="{x:Bind ViewModel.Selection.HasSelection, Mode=OneWay}">
 
             <TextBlock Grid.Row="0" Grid.Column="0"
@@ -382,6 +382,19 @@
                        Style="{StaticResource SecondaryText}"
                        IsTextSelectionEnabled="True"
                        AutomationProperties.LiveSetting="Polite" />
+
+            <!-- Whether Windows starts the program at sign-in, with a link to the entry (§7.5). A
+                 fact, never a suggestion: the page that can stop it starting is another page, and
+                 this one recommends nothing. -->
+            <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                       TextWrapping="Wrap"
+                       Style="{StaticResource SecondaryText}"
+                       Visibility="{x:Bind ViewModel.Selection.HasStartupLink, Mode=OneWay}"
+                       AutomationProperties.LiveSetting="Polite">
+                <Run Text="{x:Bind ViewModel.Selection.StartupNote, Mode=OneWay}" />
+                <Hyperlink Click="OnStartupLinkClick"
+                           AutomationProperties.Name="Show this program's startup entry on the Startup page">Show in Startup</Hyperlink>
+            </TextBlock>
         </Grid>
 
         <!--

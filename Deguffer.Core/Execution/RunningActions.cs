@@ -20,6 +20,9 @@ public enum RunningAction
 
     /// <summary>A removal of the copies marked on the Duplicates page.</summary>
     DuplicateRemoval,
+
+    /// <summary>A startup entry being disabled or enabled on the Startup page.</summary>
+    StartupChange,
 }
 
 /// <summary>

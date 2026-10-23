@@ -61,7 +61,12 @@ public sealed class MemoryActionPolicy
             return MemoryVerdict.Refuse(Unidentified);
         }
 
-        return Decide(snapshot, target, _source.Read(target.ProcessId, created, ct), _desktop.ShellWindowOwner());
+        var facts = _source.Read(target.ProcessId, created, ct);
+
+        return Decide(snapshot, target, facts, _desktop.ShellWindowOwner()) with
+        {
+            ImagePath = facts.Present is Answer.Yes ? facts.ImagePath : null,
+        };
     }
 
     /// <summary>

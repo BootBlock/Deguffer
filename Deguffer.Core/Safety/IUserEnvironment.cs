@@ -68,6 +68,12 @@ public interface IUserEnvironment
     /// </summary>
     IReadOnlyList<string> PersonalFolders { get; }
 
+    /// <summary>
+    /// This account's Startup folder, wherever it has been moved to, or null when Windows will not
+    /// say. Windows starts what it holds when this account signs in (§7.5).
+    /// </summary>
+    string? StartupFolder { get; }
+
     /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
     string TempPath { get; }
 
@@ -309,6 +315,9 @@ public sealed partial class UserEnvironment : IUserEnvironment
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) is { Length: > 0 } documents ? documents : null;
 
     public IReadOnlyList<string> PersonalFolders { get; } = ResolvePersonalFolders();
+
+    public string? StartupFolder { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.Startup) is { Length: > 0 } startup ? startup : null;
 
     /// <summary>
     /// Resolved as Windows resolves it — <c>TMP</c>, then <c>TEMP</c>, then whatever

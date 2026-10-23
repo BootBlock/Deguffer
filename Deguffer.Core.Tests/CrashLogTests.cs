@@ -173,6 +173,8 @@ public class CrashLogTests
 
         public IReadOnlyList<string> PersonalFolders => [];
 
+        public string? StartupFolder => null;
+
         public string TempPath => string.Empty;
 
         public string? UserSecurityIdentifier => null;

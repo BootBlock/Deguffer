@@ -36,4 +36,7 @@ public sealed class FakeSystemDirectories : ISystemDirectories
 
     /// <summary>The temp tree itself, which the other four sit at the top of as they do on a drive.</summary>
     public string SystemDrive { get; }
+
+    /// <summary>Where Windows puts it under <see cref="ProgramData"/>. Named but not created.</summary>
+    public string? CommonStartupFolder => Path.Combine(ProgramData, "Microsoft", "Windows", "Start Menu", "Programs", "StartUp");
 }

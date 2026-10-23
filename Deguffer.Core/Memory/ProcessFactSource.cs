@@ -81,7 +81,8 @@ public sealed class ProcessFactSource : IProcessFactSource
             Of(process.IsCritical()),
             Package(process),
             survey.OwnsConsoleWindow,
-            survey.Qualifying);
+            survey.Qualifying,
+            process.ImagePath());
     }
 
     /// <summary>

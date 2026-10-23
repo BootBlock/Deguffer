@@ -314,6 +314,8 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
         public string ProgramFilesX86 => located.ProgramFilesX86;
 
         public string SystemDrive => string.Empty;
+
+        public string? CommonStartupFolder => located.CommonStartupFolder;
     }
 
     /// <summary>

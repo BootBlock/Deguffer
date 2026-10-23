@@ -13,6 +13,8 @@ public sealed record FixedSystemDirectories(
     string ProgramFilesX86,
     string SystemDrive) : ISystemDirectories
 {
+    public string? CommonStartupFolder => Path.Combine(ProgramData, "Microsoft", "Windows", "Start Menu", "Programs", "StartUp");
+
     /// <summary>The layout of a 64-bit Windows installed on <c>C:\</c>.</summary>
     public static FixedSystemDirectories Standard { get; } = new(
         @"C:\Windows", @"C:\ProgramData", @"C:\Program Files", @"C:\Program Files (x86)", @"C:\");
