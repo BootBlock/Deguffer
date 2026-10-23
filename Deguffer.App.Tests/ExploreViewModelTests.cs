@@ -120,7 +120,7 @@ public sealed class ExploreViewModelTests : IDisposable
         page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         page.Selection.Select([Child(tree, "kept")]);
 
-        Assert.Equal("Kept for a reason.", page.Selection.Note);
+        await Eventually.HoldsAsync(() => page.Selection.Note == "Kept for a reason.", "the refusal stated");
         Assert.True(page.ShowsNotes);
 
         // The notes are the selection's as much as the page's, and the card follows the page.

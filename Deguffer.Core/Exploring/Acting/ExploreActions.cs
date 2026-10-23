@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
@@ -18,6 +19,11 @@ namespace Deguffer.Core.Exploring.Acting;
 /// the whole policy rather than acting on part of it. What may be removed is still
 /// <see cref="ExploreActionPolicy"/>'s, what the user is told is <see cref="ExploreRemovalPrompt"/>'s,
 /// and what happened is <see cref="ExploreRemovalReport.Summary"/>'s.</para>
+///
+/// <para>What the page is told about a path is kept for the life of the policy that answered it,
+/// because each answer asks the machine where the path's volume is mounted, and a page selects,
+/// lists and restates the same paths many times over. What a removal acts on is never read from
+/// that store: <see cref="RemoveAsync"/> asks the policy again, at the moment it acts.</para>
 /// </summary>
 public sealed class ExploreActions
 {
@@ -54,7 +60,14 @@ public sealed class ExploreActions
     private readonly RunningActions _running;
     private readonly IRecycleBin? _recycleBin;
 
-    private Task<ExploreActionPolicy>? _policy;
+    /// <summary>
+    /// How many paths <see cref="NoteAsync"/> asks about at once (G4). Measured rather than derived
+    /// from the processor count: each question waits on the volume manager, and a folder of a few
+    /// thousand entries is answered no faster by more than four.
+    /// </summary>
+    private const int Asking = 4;
+
+    private PolicyBuild? _current;
 
     /// <param name="build">
     /// How to assemble the policy for this machine, for what it will be asked about. A factory rather
@@ -123,7 +136,7 @@ public sealed class ExploreActions
     /// </summary>
     public void Prepare()
     {
-        if (_policy is null or { IsFaulted: true } or { IsCanceled: true })
+        if (_current?.Policy is null or { IsFaulted: true } or { IsCanceled: true })
         {
             Start(ProtectionScope.Everything);
         }
@@ -160,10 +173,92 @@ public sealed class ExploreActions
     /// <para>It starts nothing. The page opening, a scan and a removal each start a build, and a
     /// question that restarted a failed one would run every provider's probes again each time the
     /// selection changed.</para>
+    ///
+    /// <para>A path is asked about once for each build, and the answer is kept until the next build
+    /// replaces it. Safe to call from any thread, because the Files view lists its rows off the
+    /// page's.</para>
     /// </summary>
-    public ExploreVerdict Verdict(string path) => _policy switch
+    public ExploreVerdict Verdict(string path)
     {
-        { IsCompletedSuccessfully: true } built => built.Result.MayRemove(path),
+        var build = _current;
+
+        return Unbuilt(build) ?? build!.Ask(path);
+    }
+
+    /// <summary>
+    /// The sentence <see cref="ExploreRefusalNote"/> gives for <paramref name="items"/>, where it can
+    /// be given without asking the machine: while the policy is being built or has failed, or where
+    /// the current build has already answered for every item. False otherwise, and then
+    /// <see cref="NoteAsync"/> answers.
+    ///
+    /// <para>Separate from <see cref="NoteAsync"/> so a page can say at once what it already knows.
+    /// A selection carried through a scan, or picked again, is answered on the spot rather than
+    /// cleared and restated a moment later.</para>
+    /// </summary>
+    public bool TryNote(IReadOnlyList<ExploreItem> items, out string? note)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        // Read once, so every item is answered by the same build even if one finishes meanwhile.
+        var build = _current;
+
+        if (Unbuilt(build) is { } standing)
+        {
+            note = ExploreRefusalNote.For(items, _ => standing);
+            return true;
+        }
+
+        if (!items.All(item => build!.Knows(item.Path)))
+        {
+            note = null;
+            return false;
+        }
+
+        note = ExploreRefusalNote.For(items, build!.Ask);
+        return true;
+    }
+
+    /// <summary>
+    /// The sentence <see cref="ExploreRefusalNote"/> gives for <paramref name="items"/>, worked out
+    /// off the calling thread.
+    ///
+    /// <para>Off the thread because each path costs a question to the volume manager, and a list
+    /// selects any number of rows at once: a few thousand entries took seconds when they were asked
+    /// on the page's thread. Every item is answered by the build current when this is called, so a
+    /// build that finishes or is replaced meanwhile cannot leave half the sentence about each.</para>
+    /// </summary>
+    public Task<string?> NoteAsync(IReadOnlyList<ExploreItem> items, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        var build = _current;
+
+        if (Unbuilt(build) is { } standing)
+        {
+            return Task.FromResult(ExploreRefusalNote.For(items, _ => standing));
+        }
+
+        return Task.Run(
+            () =>
+            {
+                Parallel.ForEach(
+                    items,
+                    new ParallelOptions { MaxDegreeOfParallelism = Asking, CancellationToken = ct },
+                    item => build!.Ask(item.Path));
+
+                return ExploreRefusalNote.For(items, build!.Ask);
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// What every path is told where <paramref name="build"/> cannot answer for it:
+    /// <see cref="Working"/> while it is being built, and <see cref="Failed"/> once it has failed.
+    /// Null where it has been built.
+    /// </summary>
+    private static ExploreVerdict? Unbuilt(PolicyBuild? build) => build?.Policy switch
+    {
+        { IsCompletedSuccessfully: true } => null,
         { IsFaulted: true } or { IsCanceled: true } => Failed,
         _ => Working,
     };
@@ -201,7 +296,7 @@ public sealed class ExploreActions
         }
 
         // Everything, where the last build failed: the selection may be from any tree the page showed.
-        var building = _policy is { IsFaulted: false, IsCanceled: false } current ? current : Start(ProtectionScope.Everything);
+        var building = _current?.Policy is { IsFaulted: false, IsCanceled: false } current ? current : Start(ProtectionScope.Everything);
 
         // Waited for rather than awaited, so a build that fails reaches the user as a refusal of
         // what they picked rather than as an exception out of the command that deletes.
@@ -215,6 +310,8 @@ public sealed class ExploreActions
                 new VerificationResult());
         }
 
+        // Asked again rather than read from what the page was told, because this is the path that
+        // deletes, and a volume mounted since an answer was kept has changed what that answer is.
         var policy = building.Result;
         var (allowed, _) = ExploreRemover.Partition(items, policy);
 
@@ -269,7 +366,7 @@ public sealed class ExploreActions
     {
         var building = BuildAsync(scope);
 
-        _policy = building;
+        _current = new PolicyBuild(building);
         _ = AnnounceAsync(building);
 
         return building;
@@ -306,9 +403,30 @@ public sealed class ExploreActions
             _faults.Record("Building Explore's removal policy", failure);
         }
 
-        if (ReferenceEquals(building, _policy))
+        if (ReferenceEquals(building, _current?.Policy))
         {
             Ready?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// One build of the policy, with what it has said about each path the page asked about. Kept
+    /// together so a new build starts knowing nothing, and an answer is never read against a policy
+    /// other than the one that gave it.
+    /// </summary>
+    private sealed class PolicyBuild(Task<ExploreActionPolicy> policy)
+    {
+        // By the path's exact text: a folder can be case-sensitive, and two names differing only in
+        // case are then two things with two answers.
+        private readonly ConcurrentDictionary<string, ExploreVerdict> _verdicts = new(StringComparer.Ordinal);
+
+        public Task<ExploreActionPolicy> Policy { get; } = policy;
+
+        /// <summary>Whether <paramref name="path"/> has been answered. Only of a build that has finished.</summary>
+        public bool Knows(string path) => _verdicts.ContainsKey(path);
+
+        /// <summary>What the policy says about <paramref name="path"/>, asked once. Only of a build that has finished.</summary>
+        public ExploreVerdict Ask(string path) =>
+            _verdicts.GetOrAdd(path, static (path, policy) => policy.MayRemove(path), Policy.Result);
     }
 }

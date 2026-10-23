@@ -93,6 +93,13 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     public List<string> MountPointQueries { get; } = [];
 
     /// <summary>
+    /// Called with each path <see cref="MountPointOf"/> is asked about, on the asking thread, before
+    /// it answers: so a test can see which thread asked, or hold an answer back while it does
+    /// something else.
+    /// </summary>
+    public Action<string>? Asked { get; set; }
+
+    /// <summary>
     /// The longest mount point of any volume here that holds <paramref name="path"/>, which is how
     /// Windows answers for one volume mounted inside another, or null where none does — the answer
     /// the machine gives for a drive that is not there.
@@ -107,6 +114,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         {
             MountPointQueries.Add(path);
         }
+
+        Asked?.Invoke(path);
 
         if (_answer is { } answer)
         {

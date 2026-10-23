@@ -24,6 +24,14 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class ExploreSelection : ObservableObject
 {
+    /// <summary>
+    /// How long the note goes on saying what it said while the answer for a new selection is worked
+    /// out, before it says that it is being worked out. A path or two is answered well inside it,
+    /// and saying "working" for that long and then the answer would flash the note open and shut on
+    /// an ordinary click.
+    /// </summary>
+    private static readonly TimeSpan Patience = TimeSpan.FromMilliseconds(150);
+
     private readonly ExploreActions _actions;
     private readonly BusyWork _work;
 
@@ -33,6 +41,11 @@ public sealed partial class ExploreSelection : ObservableObject
     private string _label = string.Empty;
     private string _figures = string.Empty;
     private string? _note;
+
+    // Which question the note is waiting on. Bumped by every new one, so an answer that arrives
+    // after another question was asked is dropped rather than shown against the wrong selection.
+    private int _generation;
+    private CancellationTokenSource? _asking;
 
     public ExploreSelection(ExploreActions actions, BusyWork work)
     {
@@ -182,6 +195,10 @@ public sealed partial class ExploreSelection : ObservableObject
     /// standing. One that does not carry is dropped rather than replaced: §7.1 lets this act only on
     /// what the user picked out by hand, and putting something else in its place would be the tool
     /// choosing the target.</para>
+    ///
+    /// <para>Where everything carries, the selection still names the same paths, so what the note
+    /// says of them stands, and an answer still on its way is still the right one. Only the sizes
+    /// are measured again, which is all a snapshot arriving every second or so changes.</para>
     /// </summary>
     public void Carry(ExploreTree tree)
     {
@@ -193,7 +210,30 @@ public sealed partial class ExploreSelection : ObservableObject
 
         _tree = tree;
 
-        Select(kept);
+        if (carry is not null && kept.Length == _nodes.Count)
+        {
+            var renumbered = !kept.SequenceEqual(_nodes);
+
+            if (renumbered)
+            {
+                _nodes = kept;
+            }
+
+            Describe();
+
+            if (renumbered)
+            {
+                OnPropertyChanged(nameof(Nodes));
+            }
+
+            OnPropertyChanged(nameof(Label));
+            OnPropertyChanged(nameof(Figures));
+        }
+        else
+        {
+            Select(kept);
+        }
+
         Stale();
     }
 
@@ -219,26 +259,15 @@ public sealed partial class ExploreSelection : ObservableObject
         // again (§7.1).
         _nodes = [.. nodes.Where(n => _tree is null || _tree.Holds(n))];
 
-        // Worked out once, here, rather than on each read. Each of the three walks the selection
-        // rebuilding a path per node, and the note asks the policy for a verdict on top of that, so
-        // computing them lazily does the same work three times for every change — over a list view
-        // that selects any number of rows at once (G4).
-        var items = Items();
-
-        (_label, _figures) = items switch
-        {
-            [] => (string.Empty, string.Empty),
-            [var only] => ($"Selected: {only.Path}", FreeSpace.Format(only.Bytes)),
-            var many => ($"Selected: {many.Count} items", FreeSpace.Format(many.Sum(i => i.Bytes))),
-        };
-
-        _note = NoteFor(items);
+        // Worked out once, here, rather than on each read (G4): a list view selects any number of
+        // rows at once.
+        Describe();
 
         OnPropertyChanged(nameof(Nodes));
         OnPropertyChanged(nameof(Label));
         OnPropertyChanged(nameof(Figures));
-        OnPropertyChanged(nameof(Note));
-        OnPropertyChanged(nameof(HasNote));
+
+        Restate();
 
         DeleteCommand.NotifyCanExecuteChanged();
         DeletePermanentlyCommand.NotifyCanExecuteChanged();
@@ -364,24 +393,94 @@ public sealed partial class ExploreSelection : ObservableObject
             ? []
             : [.. _nodes.Select(n => new ExploreItem(tree.PathOf(n), tree.IsDirectory(n), tree.SizeOf(n)))];
 
+    /// <summary>What is selected, in <see cref="Label"/> and <see cref="Figures"/>. Raises nothing.</summary>
+    private void Describe() =>
+        (_label, _figures) = (_tree, _nodes) switch
+        {
+            (null, _) or (_, []) => (string.Empty, string.Empty),
+            ({ } tree, [var only]) => ($"Selected: {tree.PathOf(only)}", FreeSpace.Format(tree.SizeOf(only))),
+            ({ } tree, var many) => ($"Selected: {many.Count} items", FreeSpace.Format(many.Sum(tree.SizeOf))),
+        };
+
     /// <summary>
-    /// Ask the policy about the current selection again, and say so if the answer changed.
+    /// Ask the policy about the current selection again, and say what it answers.
     ///
     /// <para>The note is the one thing on this page whose answer arrives late. Everything else is
     /// derived from the tree, which is on screen before anything is selected; the refusal waits on
     /// the providers, and on a rebuild it waits on them again — so a selection made while
     /// <see cref="ExploreActions"/> was still asking is told what the answer turned out to be
     /// rather than left holding the answer that it is still being worked out.</para>
+    ///
+    /// <para>What is already known is said at once. The rest is asked off the window's thread,
+    /// because each path is a question to the machine and a list selects any number of rows at
+    /// once.</para>
     /// </summary>
     private void Restate()
     {
-        _note = NoteFor(Items());
+        var generation = ++_generation;
+
+        _asking?.Cancel();
+        _asking = null;
+
+        var items = Items();
+
+        if (_actions.TryNote(items, out var note))
+        {
+            ShowNote(note);
+            return;
+        }
+
+        _ = AskAsync(items, generation);
+    }
+
+    /// <summary>
+    /// Ask about <paramref name="items"/> off the window's thread and say what the answer is, unless
+    /// something else was asked meanwhile. Says that it is asking once that takes longer than
+    /// <see cref="Patience"/>.
+    /// </summary>
+    private async Task AskAsync(IReadOnlyList<ExploreItem> items, int generation)
+    {
+        using var asking = new CancellationTokenSource();
+
+        _asking = asking;
+
+        try
+        {
+            var answering = _actions.NoteAsync(items, asking.Token);
+
+            if (await Task.WhenAny(answering, Task.Delay(Patience, asking.Token)) != answering
+                && generation == _generation)
+            {
+                ShowNote(ExploreRefusalNote.Asking(items.Count));
+            }
+
+            var note = await answering;
+
+            if (generation == _generation)
+            {
+                ShowNote(note);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Something else was selected while this was asked about, and its answer is the one shown.
+        }
+        finally
+        {
+            if (ReferenceEquals(_asking, asking))
+            {
+                _asking = null;
+            }
+        }
+    }
+
+    private void ShowNote(string? note)
+    {
+        _note = note;
 
         OnPropertyChanged(nameof(Note));
         OnPropertyChanged(nameof(HasNote));
     }
-
-    private string? NoteFor(IReadOnlyList<ExploreItem> items) => ExploreRefusalNote.For(items, _actions.Verdict);
 
     /// <summary>
     /// What another program said went wrong, or nothing at all when it worked. A successful open

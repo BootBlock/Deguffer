@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
@@ -494,6 +495,127 @@ public sealed class ExploreActionsTests : IDisposable
     }
 
     /// <summary>
+    /// A path is asked about once for each build, because each answer asks the machine where the
+    /// path's volume is mounted and the page asks about the same paths many times over. A new build
+    /// knows nothing, because it is built to look at the machine afresh.
+    /// </summary>
+    [Fact]
+    public void APathIsAskedAboutOnceForEachBuild()
+    {
+        var file = _temp.CreateFile(8, "a.bin");
+        var volumes = new FakeVolumeInventory();
+        var actions = Actions(_ => Task.FromResult(Policy(volumes: volumes)));
+
+        actions.Prepare();
+
+        Assert.True(actions.Verdict(file).IsAllowed);
+
+        var asked = volumes.MountPointQueries.Count;
+
+        Assert.True(asked > 0, "the policy never asked the machine, so nothing here proves it was not asked again");
+
+        Assert.True(actions.Verdict(file).IsAllowed);
+        Assert.Equal(asked, volumes.MountPointQueries.Count);
+
+        actions.Reconsider(ProtectionScope.Everything);
+        actions.Verdict(file);
+
+        Assert.True(volumes.MountPointQueries.Count > asked);
+    }
+
+    /// <summary>
+    /// What the page was told is kept, and what a removal acts on is not: it asks the policy again.
+    /// A volume mounted at a folder after the page was told it may go makes that folder the top of a
+    /// volume, and removing it would remove the whole volume.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalAsksThePolicyAgainRatherThanReadingWhatThePageWasTold()
+    {
+        var folder = _temp.CreateDirectory("mounted");
+        var volumes = new FakeVolumeInventory();
+        var prompt = new FakeExploreConfirmation(answer: true);
+        var actions = Actions(_ => Task.FromResult(Policy(volumes: volumes)), prompt);
+
+        actions.Prepare();
+
+        Assert.True(actions.Verdict(folder).IsAllowed);
+
+        volumes.With(folder + Path.DirectorySeparatorChar);
+
+        Assert.True(actions.Verdict(folder).IsAllowed);
+
+        var report = await actions.RemoveAsync([new ExploreItem(folder, IsDirectory: true, Bytes: 0)], ExploreRemovalMode.Permanent);
+
+        Assert.Contains("whole drive", Assert.Single(report!.Refused).Message);
+        Assert.Empty(prompt.Asked);
+        Assert.True(Directory.Exists(folder));
+    }
+
+    /// <summary>
+    /// The note is given on the spot only where nothing has to be asked: while the policy is being
+    /// built, or for paths the build has already answered. Anything else is for
+    /// <see cref="ExploreActions.NoteAsync"/>, which answers what the build is asked once.
+    /// </summary>
+    [Fact]
+    public async Task TheNoteIsGivenOnTheSpotOnlyFromWhatIsAlreadyKnown()
+    {
+        var kept = _temp.CreateFile(8, "kept", "a.bin");
+        var loose = _temp.CreateFile(8, "loose.bin");
+        var building = new TaskCompletionSource<ExploreActionPolicy>();
+        var volumes = new FakeVolumeInventory();
+        var actions = Actions(_ => building.Task);
+        ExploreItem[] items = [Item(kept), Item(loose)];
+
+        actions.Prepare();
+
+        Assert.True(actions.TryNote([Item(loose)], out var working));
+        Assert.Contains("still working out what it has to protect", working);
+
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        actions.Ready += (_, _) => ready.TrySetResult();
+
+        building.SetResult(Policy(refusing: Path.GetDirectoryName(kept)!, volumes: volumes));
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        // The policy follows its own rules to where they are mounted as it is built.
+        var built = volumes.MountPointQueries.Count;
+
+        Assert.False(actions.TryNote(items, out _));
+        Assert.Equal(built, volumes.MountPointQueries.Count);
+
+        var asked = await actions.NoteAsync(items, CancellationToken.None);
+        var questions = volumes.MountPointQueries.Count;
+
+        Assert.Equal($"One of these 2 items will not be removed: {Reason}", asked);
+        Assert.True(actions.TryNote(items, out var known));
+        Assert.Equal(asked, known);
+        Assert.Equal(questions, volumes.MountPointQueries.Count);
+    }
+
+    /// <summary>
+    /// The note is worked out off the calling thread, which is the page's: a list selects any number
+    /// of rows at once, and each is a question to the machine.
+    /// </summary>
+    [Fact]
+    public async Task TheNoteIsWorkedOutOffTheCallingThread()
+    {
+        var file = _temp.CreateFile(8, "a.bin");
+        var volumes = new FakeVolumeInventory();
+        var threads = new ConcurrentBag<int>();
+        var actions = Actions(_ => Task.FromResult(Policy(volumes: volumes)));
+
+        volumes.Asked = _ => threads.Add(Environment.CurrentManagedThreadId);
+        actions.Prepare();
+
+        var caller = Environment.CurrentManagedThreadId;
+
+        await actions.NoteAsync([Item(file)], CancellationToken.None);
+
+        Assert.NotEmpty(threads);
+        Assert.DoesNotContain(caller, threads);
+    }
+
+    /// <summary>
     /// Run <paramref name="body"/> with no synchronisation context, so Ready is raised inline as the
     /// build completes rather than posted to the test runner's own context and heard later, on
     /// another thread, after the assertions have run.
@@ -517,11 +639,11 @@ public sealed class ExploreActionsTests : IDisposable
         Func<CancellationToken, Task<ExploreActionPolicy>> build, FakeExploreConfirmation? prompt = null) =>
         new((_, ct) => build(ct), () => prompt ?? new FakeExploreConfirmation(answer: false), _faults, _running, _recycleBin);
 
-    private static ExploreActionPolicy Policy(string? refusing = null) =>
+    private static ExploreActionPolicy Policy(string? refusing = null, FakeVolumeInventory? volumes = null) =>
         new(
             refusing is null ? [] : [ProtectedRegion.Refusing(refusing, RegionScope.PathAndBelow, Reason)],
             [],
-            new FakeVolumeInventory());
+            volumes ?? new FakeVolumeInventory());
 
     private static ExploreItem Item(string file) => new(file, IsDirectory: false, Bytes: new FileInfo(file).Length);
 }
