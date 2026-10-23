@@ -250,8 +250,8 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
-    /// The same file met on the way to the Recycle Bin, where the look before the move said Windows
-    /// would not let Deguffer look inside it. Nothing refused it, so the sentence says what stands
+    /// The same file met on the way to the Recycle Bin. The look before the move used to say Windows
+    /// would not let Deguffer look inside it, though nothing refused it. The sentence says what stands
     /// there, and nothing goes to the bin.
     /// </summary>
     [Fact]

@@ -518,8 +518,8 @@ public sealed class PlanExecutorTests : IDisposable
 
     /// <summary>
     /// The same file at the path of a step that goes whole or not at all meets the look before the
-    /// removal, which said Windows would not let Deguffer look inside it. Nothing was refused, so the
-    /// step says what stands there instead, and the file and what is beside it stay (§5.6).
+    /// removal, which used to say Windows would not let Deguffer look inside it, though nothing was
+    /// refused. The step says what stands there, and the file and what is beside it stay (§5.6).
     /// </summary>
     [Theory]
     [InlineData(false)]

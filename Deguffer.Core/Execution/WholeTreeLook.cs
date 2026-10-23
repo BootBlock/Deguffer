@@ -89,7 +89,7 @@ public sealed record WholeTreeLook(
             {
                 // Gone since the plan was made, or never there: nothing inside it can be lost. A refusal
                 // part-way still looks at what was listed, since every finding stops the removal and the
-                // folder is named as unlisted either way.
+                // folder is named either way: as no folder, or as unlisted.
                 if (contents.End.Refusal is ListingRefusal.NotADirectory)
                 {
                     notFolders.Enqueue(LongPath.Display(contents.Directory));
