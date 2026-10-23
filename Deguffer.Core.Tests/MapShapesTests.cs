@@ -165,6 +165,42 @@ public sealed class MapShapesTests
     }
 
     /// <summary>
+    /// A drawing that holds all of its picture locates a node only where the node has a shape of its own.
+    /// One inside its folder's block is shown as the folder, and a frame for it would be the folder's: a
+    /// zoom to it, or a mark on it, would land on a shape the reader did not ask for (§7.1).
+    /// </summary>
+    [Fact]
+    public void ANodeWithNoShapeOfItsOwnIsNotLocated()
+    {
+        var tree = Drawings.Tree();
+        var file = tree.ChildrenOf(tree.RootNode)[0];
+        var drawing = Drawings.Covering(tree, tree.RootNode);
+
+        Assert.Equal(tree.RootNode, drawing.ShownAs(file));
+        Assert.Equal(MapFrame.Whole, drawing.Locate(tree.RootNode));
+        Assert.Null(drawing.Locate(file));
+    }
+
+    /// <summary>
+    /// A shape is inside a folder to within the rounding of single precision on every side, so a shape
+    /// laid out at the folder's own edge by a sum that rounded the other way is still the folder's. A
+    /// pixel past the edge is not.
+    /// </summary>
+    [Fact]
+    public void AShapeIsInsideAFolderToWithinTheRounding()
+    {
+        var folder = new ExploreTile(Node: 0, Depth: 0, Bytes: 0, X: 100, Y: 100, Width: 200, Height: 200);
+        var hair = 1f / 128;
+
+        Assert.True(TiledSurface.Inside(folder with { X = 100 - hair, Width = 200 + (2 * hair) }, folder));
+        Assert.True(TiledSurface.Inside(folder with { Y = 100 - hair, Height = 200 + (2 * hair) }, folder));
+        Assert.False(TiledSurface.Inside(folder with { X = 99 }, folder));
+        Assert.False(TiledSurface.Inside(folder with { Width = 201 }, folder));
+        Assert.False(TiledSurface.Inside(folder with { Y = 99 }, folder));
+        Assert.False(TiledSurface.Inside(folder with { Height = 201 }, folder));
+    }
+
+    /// <summary>
     /// A sunburst's shapes are the wedges in the ring outside the folder's, each standing at a point that
     /// is in its own wedge, so a screen reader's point and the pointer agree on what is there.
     /// </summary>
