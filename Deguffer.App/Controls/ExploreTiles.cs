@@ -254,9 +254,12 @@ internal sealed class ExploreTiles
     /// <summary>Put <paramref name="tile"/> on screen, written into its surface by <paramref name="write"/>, and keep it.</summary>
     private void Show(MapTile tile, Action<CompositionDrawingSurface> write)
     {
-        var sprite = _spare.TryPop(out var spare) ? spare : new TileSprite(_compositor, _graphics.CreateTileSurface());
+        _spare.TryPop(out var spare);
 
-        write(sprite.Surface);
+        var surface = _graphics.TileSurface(spare?.Surface, tile.Width, tile.Height);
+        var sprite = spare ?? new TileSprite(_compositor, surface);
+
+        write(surface);
 
         sprite.Tile = tile;
         sprite.Answers = false;
