@@ -357,59 +357,9 @@ public static class ExploreRemover
     {
         if (mode == ExploreRemovalMode.RecycleBin)
         {
-            // §9 one level up. A folder is not a store, so the policy allows it, and the shell moves a
-            // folder whole: any store inside it would go along, one emptied bin from gone. The policy
-            // is asked about paths and cannot look inside, so the look is taken here, immediately
-            // before the shell is asked, and a refusal names the store. A link is moved as a link and
-            // takes nothing on its far side, so nothing is looked for through one.
-            //
-            // It is not said before the confirmation, and that is a stated boundary rather than an
-            // oversight: knowing it beforehand means a walk of the folder on every change of selection,
-            // and this look is the one that decides.
-            //
-            // A folder Windows will not describe is left where it is. The link question fails closed, so
-            // asked first it would read the refusal as "a link" and skip the look, and a folder nobody
-            // could classify would go to the shell unexamined. The permanent route's DirectoryRemover
-            // gives a root it cannot describe the same answer, and leaves it standing.
-            //
-            // A folder Windows describes but will not list, here or anywhere below, is left where it is
-            // too. The shell moves it without listing it, so "could not look" reads as "might hold one".
-            // See WholeTreeLook.
-            if (item.IsDirectory && fs.ProbeDirectory(LongPath.Extended(item.Path)) is PathPresence.Refused)
+            if (await RecycleBinLook.WhyItStaysAsync(item, fs, ct).ConfigureAwait(false) is { } stays)
             {
-                return new ExploreItemOutcome(
-                    item.Path,
-                    Removed: false,
-                    Bytes: 0,
-                    $"Windows would not say what is in '{Path.GetFileName(item.Path)}', so Deguffer could not "
-                    + "check it for an Outlook data file. Deguffer never removes one, so it left the folder alone.");
-            }
-
-            if (item.IsDirectory && !fs.IsReparsePoint(LongPath.Extended(item.Path)))
-            {
-                var look = await WorkerThreads.Shared.RunAsync(
-                    () => WholeTreeLook.Take([item.Path], MinimumAge.Off, fs, ct), ct).ConfigureAwait(false);
-
-                if (look.Stores.Count > 0)
-                {
-                    return new ExploreItemOutcome(
-                        item.Path,
-                        Removed: false,
-                        Bytes: 0,
-                        $"'{Path.GetFileName(item.Path)}' holds an Outlook data file, at {MailStorePlan.Name(look.Stores)}. "
-                        + "Moving the folder to the Recycle Bin would take it along, and Deguffer never removes one.");
-                }
-
-                if (look.Unlisted.Count > 0)
-                {
-                    return new ExploreItemOutcome(
-                        item.Path,
-                        Removed: false,
-                        Bytes: 0,
-                        $"Windows would not let Deguffer look inside {MailStorePlan.Name(look.Unlisted)}, so Deguffer "
-                        + $"could not check '{Path.GetFileName(item.Path)}' for an Outlook data file. Deguffer never "
-                        + "removes one, so it left the folder alone.");
-                }
+                return new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, stays);
             }
 
             var recycled = bin.Recycle(BinPath(item));

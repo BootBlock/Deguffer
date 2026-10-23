@@ -59,7 +59,7 @@ public sealed class WalkListingTests
     [Fact]
     public void ReportsAFolderItMayNotReadWithoutListingItAgain()
     {
-        var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, Denied: true, WhileReading: false) };
+        var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, ListingRefusal.Denied, WhileReading: false) };
 
         using var listing = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All);
         var contents = listing.Read(Folder, followsLink: true);
@@ -75,7 +75,7 @@ public sealed class WalkListingTests
     [Fact]
     public void ReportsAFolderItCouldNotOpenWithoutListingItAgain()
     {
-        var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, Denied: false, WhileReading: false) };
+        var server = new FakeServer { Answer = new ListingEnd(PathPresence.Refused, ListingRefusal.Other, WhileReading: false) };
 
         using var listing = new WalkListing(new ListingBuffer(Large), server.List, FileNames.All);
         var contents = listing.Read(Folder, followsLink: true);
@@ -161,7 +161,7 @@ public sealed class WalkListingTests
         /// which is no refusal of access. An answer from the open, or a refusal of access, comes at
         /// every size.
         /// </summary>
-        public ListingEnd Answer { get; init; } = new(PathPresence.Refused, Denied: false, WhileReading: true);
+        public ListingEnd Answer { get; init; } = new(PathPresence.Refused, ListingRefusal.Other, WhileReading: true);
 
         public bool FailsAtEverySize { get; init; }
 
@@ -171,7 +171,7 @@ public sealed class WalkListingTests
         {
             BuffersAskedFor.Add(request.BufferBytes);
 
-            if (FailsAtEverySize || request.BufferBytes > WalkTuning.MinimumListingBuffer || !Answer.WhileReading || Answer.Denied)
+            if (FailsAtEverySize || request.BufferBytes > WalkTuning.MinimumListingBuffer || !Answer.WhileReading || Answer.Refusal is ListingRefusal.Denied)
             {
                 into.Add(Entries[0]);
                 return Answer;

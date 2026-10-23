@@ -35,7 +35,7 @@ internal sealed class ListingBuffer
     /// The size to try a listing again with, or null where trying again cannot change how it ended.
     /// </summary>
     public int? RetryAfter(int used, ListingEnd end) =>
-        end is { Presence: PathPresence.Refused, WhileReading: true, Denied: false } && used > Smallest
+        end is { Presence: PathPresence.Refused, WhileReading: true, Refusal: not ListingRefusal.Denied } && used > Smallest
             ? Smallest
             : null;
 

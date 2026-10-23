@@ -181,7 +181,7 @@ public sealed class RootSetWalkTests
 
             if (!_folders.TryGetValue(directory, out var children))
             {
-                return new ListingEnd(PathPresence.Absent, Denied: false, WhileReading: false);
+                return new ListingEnd(PathPresence.Absent, ListingRefusal.None, WhileReading: false);
             }
 
             foreach (var (name, attributes) in children)

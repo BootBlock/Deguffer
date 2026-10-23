@@ -516,6 +516,37 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(result.Verification!.Passed);
     }
 
+    /// <summary>
+    /// The same file at the path of a step that goes whole or not at all meets the look before the
+    /// removal, which used to say Windows would not let Deguffer look inside it, though nothing was
+    /// refused. The step says what stands there, and the file and what is beside it stay (§5.6).
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SaysAFileStandsWhereAnAllOrNothingStepsFolderWas(bool indivisible)
+    {
+        var file = _temp.CreateFile(1024, "cache");
+        var sibling = _temp.CreateFile(16, "beside.bin");
+        var step = indivisible
+            ? new DeleteDirectoryStep(file, "A cache") { IsIndivisible = true }
+            : new DeleteDirectoryStep(file, "A cache") { IsAllOrNothing = true };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
+
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.StartsWith(
+            $"Nothing was removed: a file now stands where the folder {file} was, so this is not what the preview showed.",
+            outcome.Message!,
+            StringComparison.Ordinal);
+        Assert.Equal(1024, new FileInfo(file).Length);
+        Assert.True(File.Exists(sibling));
+        Assert.True(result.Verification!.Passed);
+    }
+
     [Fact]
     public async Task StillReportsAFolderThatWentBeforeTheRunAsRemoved()
     {
@@ -576,7 +607,11 @@ public sealed class PlanExecutorTests : IDisposable
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, default);
 
-        Assert.False(Assert.Single(result.Steps).Succeeded);
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.StartsWith(
+            $"Nothing was removed: a file now stands where the folder {index} was,", outcome.Message!, StringComparison.Ordinal);
         Assert.True(File.Exists(built));
         Assert.Equal(64, new FileInfo(index).Length);
     }

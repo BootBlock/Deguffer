@@ -91,7 +91,7 @@ public sealed class DirectoryQueryTests : IDisposable
 
         var end = DirectoryQuery.List(wrapsToAbove, Request(followsLink: true), into);
 
-        Assert.Equal(new ListingEnd(PathPresence.Refused, Denied: false, WhileReading: false), end);
+        Assert.Equal(new ListingEnd(PathPresence.Refused, ListingRefusal.Other, WhileReading: false), end);
         Assert.Empty(into);
     }
 
@@ -102,25 +102,26 @@ public sealed class DirectoryQueryTests : IDisposable
         var longest = Deeper(LongPath.Extended(_temp.Path), UnicodeString.LongestName - 1);
 
         Assert.Equal(
-            new ListingEnd(PathPresence.Absent, Denied: false, WhileReading: false),
+            new ListingEnd(PathPresence.Absent, ListingRefusal.None, WhileReading: false),
             DirectoryQuery.List(longest, Request(followsLink: true), []));
     }
 
     /// <summary>
     /// §5.3: each status ends the listing as the Win32 error it maps to ended the runtime's, so a
-    /// missing folder is absent, a refusal of access is denied, and anything else is refused.
+    /// missing folder is absent, a refusal of access is denied, a file at the path is no directory, and
+    /// anything else is refused.
     /// </summary>
     [Theory]
-    [InlineData(0xC000_0034u, PathPresence.Absent, false)] // STATUS_OBJECT_NAME_NOT_FOUND
-    [InlineData(0xC000_003Au, PathPresence.Absent, false)] // STATUS_OBJECT_PATH_NOT_FOUND
-    [InlineData(0xC000_0022u, PathPresence.Refused, true)] // STATUS_ACCESS_DENIED
-    [InlineData(0xC000_0043u, PathPresence.Refused, false)] // STATUS_SHARING_VIOLATION
-    [InlineData(0xC000_0103u, PathPresence.Refused, false)] // STATUS_NOT_A_DIRECTORY
-    [InlineData(0xC000_000Du, PathPresence.Refused, false)] // STATUS_INVALID_PARAMETER, a buffer a server rejects
-    public void EndsEachStatusAsTheWin32ErrorItMapsTo(uint status, PathPresence presence, bool denied)
+    [InlineData(0xC000_0034u, PathPresence.Absent, ListingRefusal.None)] // STATUS_OBJECT_NAME_NOT_FOUND
+    [InlineData(0xC000_003Au, PathPresence.Absent, ListingRefusal.None)] // STATUS_OBJECT_PATH_NOT_FOUND
+    [InlineData(0xC000_0022u, PathPresence.Refused, ListingRefusal.Denied)] // STATUS_ACCESS_DENIED
+    [InlineData(0xC000_0043u, PathPresence.Refused, ListingRefusal.Other)] // STATUS_SHARING_VIOLATION
+    [InlineData(0xC000_0103u, PathPresence.Refused, ListingRefusal.NotADirectory)] // STATUS_NOT_A_DIRECTORY
+    [InlineData(0xC000_000Du, PathPresence.Refused, ListingRefusal.Other)] // STATUS_INVALID_PARAMETER, a buffer a server rejects
+    public void EndsEachStatusAsTheWin32ErrorItMapsTo(uint status, PathPresence presence, ListingRefusal refusal)
     {
-        Assert.Equal(new ListingEnd(presence, denied, WhileReading: false), DirectoryQuery.Ended(unchecked((int)status), whileReading: false));
-        Assert.Equal(new ListingEnd(presence, denied, WhileReading: true), DirectoryQuery.Ended(unchecked((int)status), whileReading: true));
+        Assert.Equal(new ListingEnd(presence, refusal, WhileReading: false), DirectoryQuery.Ended(unchecked((int)status), whileReading: false));
+        Assert.Equal(new ListingEnd(presence, refusal, WhileReading: true), DirectoryQuery.Ended(unchecked((int)status), whileReading: true));
     }
 
     [Fact]
@@ -128,7 +129,7 @@ public sealed class DirectoryQueryTests : IDisposable
     {
         List(Path.Combine(_temp.Path, "nowhere"), followsLink: true, out var end);
 
-        Assert.Equal(new ListingEnd(PathPresence.Absent, Denied: false, WhileReading: false), end);
+        Assert.Equal(new ListingEnd(PathPresence.Absent, ListingRefusal.None, WhileReading: false), end);
     }
 
     /// <summary>
@@ -141,7 +142,7 @@ public sealed class DirectoryQueryTests : IDisposable
     {
         List(_temp.CreateFile(10, "a.bin"), followsLink: true, out var end);
 
-        Assert.Equal(new ListingEnd(PathPresence.Refused, Denied: false, WhileReading: false), end);
+        Assert.Equal(new ListingEnd(PathPresence.Refused, ListingRefusal.NotADirectory, WhileReading: false), end);
     }
 
     [Fact]
@@ -153,7 +154,7 @@ public sealed class DirectoryQueryTests : IDisposable
 
         var listed = List(folder, followsLink: true, out var end);
 
-        Assert.Equal(new ListingEnd(PathPresence.Refused, Denied: true, WhileReading: false), end);
+        Assert.Equal(new ListingEnd(PathPresence.Refused, ListingRefusal.Denied, WhileReading: false), end);
         Assert.Empty(listed);
     }
 
