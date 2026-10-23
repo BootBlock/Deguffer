@@ -19,6 +19,7 @@ public class LongPathTests
     [InlineData(@"C:\", @"C:\", true)]
     [InlineData(@"C:\Users\me", @"C:\Users\me\.m2", true)]
     [InlineData(@"C:\Users\me\", @"C:\Users\me\.m2", true)]
+    [InlineData(@"C:/Users/me/", @"C:/Users/me/.m2", true)]
     [InlineData(@"C:\Users\me", @"C:\Users\me", true)]
     [InlineData(@"C:\Users\me", @"C:\USERS\ME\.m2", true)]
     [InlineData(@"\\server\share", @"\\server\share\a", true)]
@@ -477,6 +478,24 @@ public class LongPathTests
         using var denied = DeniedDirectory.WithUnreadableAttributes(directory);
 
         Assert.Equal(PathPresence.Refused, LongPath.ProbeEntry(directory));
+    }
+
+    /// <summary>
+    /// One attribute read answers for either kind, so the trailing separator a file cannot be named
+    /// with is settled there too. Win32 answers for the file anyway, and a caller that opened what
+    /// this called present would meet <c>ERROR_DIRECTORY</c>.
+    /// </summary>
+    [Fact]
+    public void AnEntryNamedWithATrailingSeparatorIsPresentOnlyAsADirectory()
+    {
+        using var temp = new TempDirectory();
+
+        var directory = temp.CreateDirectory("cache");
+        var file = temp.CreateFile(1, "cache", "a.bin");
+
+        Assert.Equal(PathPresence.Present, LongPath.ProbeEntry(directory + Path.DirectorySeparatorChar));
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(file + Path.DirectorySeparatorChar));
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(file + Path.AltDirectorySeparatorChar));
     }
 
     /// <summary>
