@@ -203,4 +203,10 @@ public interface ILiveTreeInspector
     /// The same contract as <see cref="IProcessInspector.Invalidate"/>.
     /// </summary>
     void Invalidate();
+
+    /// <summary>
+    /// Discard the snapshot where it began longer ago than <paramref name="maxAge"/>. The same
+    /// contract as <see cref="IProcessInspector.DiscardOlderThan"/>.
+    /// </summary>
+    void DiscardOlderThan(TimeSpan maxAge);
 }

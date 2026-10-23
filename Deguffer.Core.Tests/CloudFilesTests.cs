@@ -175,6 +175,32 @@ public sealed class CloudFilesTests : IDisposable
         Assert.Equal(PathPresence.Absent, _cloud.Read(_root.At("missing.bin")).Presence);
     }
 
+    /// <summary>
+    /// The handle a read opens is its presence probe, so where none opens it gives the attribute
+    /// probe's answer: a name no entry can have is absent, as that probe says, and so is a file named
+    /// with a trailing separator, whose open fails differently. A file Windows will not describe is
+    /// refused rather than gone.
+    /// </summary>
+    [Theory]
+    [InlineData("a<b.bin")]
+    [InlineData(@"plain.bin\")]
+    public void AReadThatOpensNothingAnswersAsTheAttributeProbeDoes(string name)
+    {
+        _root.PlainFile("plain.bin", 10);
+        var refused = _root.PlainFile("refused.bin", 10);
+        _root.Disconnect();
+
+        var unopened = _root.Path + Path.DirectorySeparatorChar + name;
+
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(unopened));
+        Assert.Equal(PathPresence.Absent, _cloud.Read(unopened).Presence);
+        Assert.Equal(ReleaseResult.Gone, _cloud.Release(unopened, unopened, _ => true).Result);
+
+        using var denied = DeniedDirectory.WithUnreadableFile(refused);
+
+        Assert.Equal(PathPresence.Refused, _cloud.Read(refused).Presence);
+    }
+
     [Fact]
     public void ListsAnOnlineOnlyFileAsAPlaceholder()
     {

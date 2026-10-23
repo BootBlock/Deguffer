@@ -28,6 +28,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     private readonly FakeUserEnvironment _environment;
     private readonly SourceRootStore _roots;
     private readonly FakeLiveTreeInspector _liveTrees = FakeLiveTreeInspector.NothingLive;
+    private readonly ManualTimeProvider _clock = new();
 
     public LiveTreeCleanRecheckTests()
     {
@@ -254,13 +255,16 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            new SnapshottingLiveTrees(_liveTrees),
+            new SnapshottingLiveTrees(_liveTrees, _clock),
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             scanner);
 
         var plan = await provider.PlanAsync();
+
+        // The clean comes longer after the preview than a check's reading may be old.
+        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
 
         AssertOffered(plan, busy, idle);
 
@@ -292,13 +296,16 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            new SnapshottingLiveTrees(_liveTrees),
+            new SnapshottingLiveTrees(_liveTrees, _clock),
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             scanner);
 
         var plan = await provider.PlanAsync();
+
+        // The clean comes longer after the preview than a check's reading may be old.
+        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
 
         AssertOffered(plan, busy);
 
@@ -331,13 +338,16 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            new SnapshottingLiveTrees(_liveTrees),
+            new SnapshottingLiveTrees(_liveTrees, _clock),
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
             scanner);
 
         var plan = await provider.PlanAsync();
+
+        // The clean comes longer after the preview than a check's reading may be old.
+        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
 
         // The premise: the solution was read at the preview, and named only the open project.
         Assert.Equal([added], plan.TargetedPaths);
@@ -420,18 +430,19 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
     /// <summary>
     /// <see cref="FakeLiveTreeInspector"/> with the one property of the real inspector it lacks: where
-    /// programs are is read once and kept until <see cref="Invalidate"/>, as the real inspector keeps
-    /// its process table. A check that read before invalidating would see the preview's machine.
+    /// programs are is read once and kept until it is discarded, as the real inspector keeps its
+    /// process table. A check that read without discarding a reading past the limit would see the
+    /// preview's machine.
     /// </summary>
-    private sealed class SnapshottingLiveTrees(FakeLiveTreeInspector live) : ILiveTreeInspector
+    private sealed class SnapshottingLiveTrees(FakeLiveTreeInspector live, TimeProvider time) : ILiveTreeInspector
     {
-        private LiveTreeFindings? _occupied;
+        private readonly TimedReading<LiveTreeFindings> _occupied = new(time);
 
         public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default) =>
             live.FindLive(candidates, ct);
 
         public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
-            _occupied ??= live.FindOccupiedDirectories(ct);
+            _occupied.Get(() => live.FindOccupiedDirectories(ct));
 
         public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default) =>
             live.FindLiveChildren(directories, ct);
@@ -440,8 +451,14 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         public void Invalidate()
         {
-            _occupied = null;
+            _occupied.Forget();
             live.Invalidate();
+        }
+
+        public void DiscardOlderThan(TimeSpan maxAge)
+        {
+            _occupied.ForgetOlderThan(maxAge);
+            live.DiscardOlderThan(maxAge);
         }
     }
 

@@ -6,12 +6,16 @@ namespace Deguffer.Testing;
 public sealed class FakeProcessInspector(params string[] running) : IProcessInspector
 {
     private readonly Dictionary<int, ProcessLiveness> _processes = [];
+    private readonly List<TimeSpan> _ageLimits = [];
     private readonly List<string> _running = [.. running];
     private readonly List<StartedProcess> _started = [];
 
     public static FakeProcessInspector NothingRunning => new();
 
     public int InvalidateCount { get; private set; }
+
+    /// <summary>The age each <see cref="DiscardOlderThan"/> was asked with, in order.</summary>
+    public IReadOnlyList<TimeSpan> AgeLimits => _ageLimits;
 
     /// <summary>
     /// Declare what one id answers, so a provider reading a file that names a process can be shown
@@ -85,4 +89,10 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     }
 
     public void Invalidate() => InvalidateCount++;
+
+    /// <summary>
+    /// Recorded rather than acted on: this fake has no snapshot to go stale, and answers every
+    /// question as the test last declared the machine.
+    /// </summary>
+    public void DiscardOlderThan(TimeSpan maxAge) => _ageLimits.Add(maxAge);
 }
