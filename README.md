@@ -219,10 +219,13 @@ each file was written.
 
 The gear button beside the map opens *Map appearance*, where you can change how the map is drawn
 while you watch it change. Each view has its own colours. You can shade each shape as a cushion, a
-bevel or flat colour, draw a line of your chosen strength round each file and round each folder,
-fill folders with grey, and leave out the folder name bands or the names inside shapes. Presets set
-all of these at once, including looks like SpaceMonger's and WizTree's. Your choices are kept, and
-the Memory page's map uses them too.
+bevel, a sheen lit from above or flat colour, draw a line of your chosen strength and width round
+each file and round each folder, fill folders with grey or tint them towards it, and leave out the
+folder name bands or the names inside shapes. You can also turn off the soft light that follows the
+pointer over the map, or make it softer or brighter. Presets set the shapes, the lines and the
+spacing at once, including looks like SpaceMonger's and WizTree's. Your choices are kept, and the
+Memory page's map uses them too. The window stays above Deguffer's own window, opens where you left
+it, and opens again with Deguffer if you left it open.
 
 Two cards sit beside the map. *What grew* ranks folders by how much they grew since an earlier scan,
 and it can replay the change on the map from then to now. *What kind of files* breaks the folder

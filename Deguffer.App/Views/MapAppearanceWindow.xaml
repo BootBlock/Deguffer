@@ -224,6 +224,7 @@
                                       AutomationProperties.Name="Folders drawn round what they hold">
                                 <ComboBoxItem Content="In their own colour" />
                                 <ComboBoxItem Content="In dark grey" />
+                                <ComboBoxItem Content="Tinted towards grey" />
                             </ComboBox>
                         </views:SettingsRow.Control>
                     </views:SettingsRow>
@@ -232,7 +233,7 @@
                 <StackPanel x:Name="ShapesSection" Spacing="8" Visibility="Collapsed">
                     <views:SettingsRow Glyph="&#xE81E;"
                                        Title="Shading"
-                                       Description="A cushion rises to the middle of each shape. A bevel is flat, lighter along the top and left edges and darker along the bottom and right. Flat is each shape in its own colour alone.">
+                                       Description="A cushion rises to the middle of each shape. A bevel is flat, lighter along the top and left edges and darker along the bottom and right. Flat is each shape in its own colour alone. A sheen is lit from above, lighter along the top and darker along the bottom.">
                         <views:SettingsRow.Control>
                             <ComboBox MinWidth="140"
                                       SelectedIndex="{x:Bind ViewModel.ShadingIndex, Mode=TwoWay}"
@@ -240,13 +241,14 @@
                                 <ComboBoxItem Content="Cushion" />
                                 <ComboBoxItem Content="Bevel" />
                                 <ComboBoxItem Content="Flat" />
+                                <ComboBoxItem Content="Sheen" />
                             </ComboBox>
                         </views:SettingsRow.Control>
                     </views:SettingsRow>
 
                     <views:SettingsRow Glyph="&#xE9D2;"
                                        Title="Depth"
-                                       Description="How far a cushion rises or a bevel stands out.">
+                                       Description="How far a cushion rises, a bevel stands out, or a sheen runs from light to dark.">
                         <views:SettingsRow.Control>
                             <ComboBox MinWidth="140"
                                       SelectedIndex="{x:Bind ViewModel.ReliefIndex, Mode=TwoWay}"
@@ -254,6 +256,7 @@
                                 <ComboBoxItem Content="Subtle" />
                                 <ComboBoxItem Content="Standard" />
                                 <ComboBoxItem Content="Strong" />
+                                <ComboBoxItem Content="Deep" />
                             </ComboBox>
                         </views:SettingsRow.Control>
                     </views:SettingsRow>
@@ -334,6 +337,7 @@
                                       AutomationProperties.Name="Line width">
                                 <ComboBoxItem Content="Thin" />
                                 <ComboBoxItem Content="Thick" />
+                                <ComboBoxItem Content="Heavy" />
                             </ComboBox>
                         </views:SettingsRow.Control>
                     </views:SettingsRow>

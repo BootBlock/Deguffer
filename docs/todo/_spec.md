@@ -374,6 +374,10 @@ Deliberate points, and the traps that come with them:
   here. Two practical consequences follow: it costs more GPU/battery than Mica on a large always-open
   window, and it is the right call for this app's floor anyway, since `MicaBackdrop` requires
   Windows 11 while `DesktopAcrylicBackdrop` reaches back to Windows 10 1809 — matching §6.1.
+- **Mica is the fallback, not the choice.** Where the system cannot draw Acrylic in the process but
+  can draw Mica, a window takes `MicaBackdrop` rather than going straight to its solid ground. The
+  same rule serves every window, the main one and the map appearance window alike, and high
+  contrast still takes every material away.
 - **The backdrop will sometimes not be there.** Windows drops it under battery saver, with
   *Transparency effects* switched off, over Remote Desktop, and on some virtual machines. The system
   falls back to a solid colour on its own, but **the UI must stay fully legible with no translucency

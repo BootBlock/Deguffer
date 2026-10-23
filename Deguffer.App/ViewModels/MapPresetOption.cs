@@ -32,6 +32,7 @@ public sealed record MapPresetOption(MapPreset Preset, string Traits)
         {
             MapShading.Bevel => "Bevelled",
             MapShading.Flat => "Flat",
+            MapShading.Gradient => "Lit from above",
             _ => "Cushioned",
         };
 
@@ -39,6 +40,7 @@ public sealed record MapPresetOption(MapPreset Preset, string Traits)
         {
             (MapBorder.None, MapBorder.None) => "no lines",
             (MapBorder.None, _) => "lines round folders",
+            _ when style.BorderTone == MapBorderTone.Light => "pale lines round every shape",
             _ => "lines round every shape",
         };
 
