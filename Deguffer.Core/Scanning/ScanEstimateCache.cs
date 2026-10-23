@@ -25,7 +25,8 @@ namespace Deguffer.Core.Scanning;
 /// each write. A changed figure only marks the cache changed while a <see cref="Hold"/> stands, and
 /// the last hold to end writes it once. A figure set with no hold standing is written straight
 /// away, because nothing will end to write it. The file is serialised from a copy taken under the
-/// lock and written outside it, so a measurement never waits on the disk.</para>
+/// lock and written outside it, so a measurement on another thread never waits on the disk for the
+/// lock.</para>
 ///
 /// <para>One instance for each file. Two over the same file would each write back only what they
 /// had loaded and set, and the later write would take the other's figures away, so every scanner of
@@ -164,7 +165,7 @@ public sealed class ScanEstimateCache
     /// <summary>
     /// Keep changed figures in memory until the hold ends, and write them once when the last hold
     /// standing ends. Taken for each planning pass through <see cref="DirectoryScanner.Hold"/>, and
-    /// for each measurement call, so one call writes once however many paths it measured.
+    /// for each measurement call that remembers several figures, so it writes once however many.
     /// </summary>
     public PassHold Hold()
     {

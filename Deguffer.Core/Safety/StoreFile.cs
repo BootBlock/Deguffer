@@ -10,8 +10,8 @@ namespace Deguffer.Core.Safety;
 /// write or this one.</para>
 ///
 /// <para>The caller keeps its own policy for a write that fails: an <see cref="IOException"/> or an
-/// <see cref="UnauthorizedAccessException"/> reaches it unchanged, with the file as it was and no
-/// partial write left beside it.</para>
+/// <see cref="UnauthorizedAccessException"/> reaches it unchanged, with the file as it was, and the
+/// partial write beside it deleted wherever Windows allows.</para>
 /// </summary>
 public static class StoreFile
 {
