@@ -166,6 +166,9 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     {
     }
 
+    /// <summary>Nothing is retained between calls, so there is nothing to keep.</summary>
+    public PassHold Hold() => PassHold.Nothing;
+
     /// <summary>
     /// The walk of every directory in <paramref name="asked"/> Windows describes, at once, each to a
     /// figure of its own for each of <paramref name="keeps"/>. See <see cref="MeasureNow"/>.

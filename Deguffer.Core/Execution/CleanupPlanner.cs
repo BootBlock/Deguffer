@@ -394,6 +394,36 @@ public sealed class CleanupPlanner
 
         _declarations?.Invalidate();
 
+        // What the providers build for the pass is kept for exactly its length. A volume index is
+        // over a hundred megabytes on a system volume, nothing reads it once the pass is over, and
+        // the next pass drops it before it plans, so keeping it while the app sits idle buys nothing.
+        var holds = new List<PassHold>(providers.Count);
+
+        try
+        {
+            foreach (var provider in providers)
+            {
+                holds.Add(provider.HoldCaches());
+            }
+
+            return await PlanHeldAsync(providers, keep, status, found, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            foreach (var hold in holds)
+            {
+                hold.Dispose();
+            }
+        }
+    }
+
+    private static async Task<IReadOnlyList<Finding>> PlanHeldAsync(
+        IReadOnlyList<ICleanupProvider> providers,
+        MinimumAge keep,
+        IProgress<string>? status,
+        IProgress<Finding>? found,
+        CancellationToken ct)
+    {
         // In the providers' order, whatever order they finish in, so the sort below breaks a tie the
         // same way on every pass.
         var findings = new Finding[providers.Count];

@@ -73,9 +73,10 @@ public sealed class CleanupPlannerTests
 
         var findings = await planner.PlanAsync([third, first], MinimumAge.Off, status: null, found, CancellationToken.None);
 
-        // Planned together, so in no fixed order, but each only once its cache had gone.
-        Assert.Equal(["invalidate:third", "invalidate:first"], journal.Take(2));
-        Assert.Equal(["plan:first", "plan:third"], journal.Skip(2).Order());
+        // Planned together, so in no fixed order, but each only once its cache had gone and was held.
+        Assert.Equal(["invalidate:third", "invalidate:first", "hold:third", "hold:first"], journal.Take(4));
+        Assert.Equal(["plan:first", "plan:third"], journal.Skip(4).Take(2).Order());
+        Assert.Equal(["release:third", "release:first"], journal.Skip(6));
         Assert.Equal(["first", "third"], found.Reports.Select(f => f.Provider.Id).Order());
         Assert.Equal(["third", "first"], findings.Select(f => f.Provider.Id));
     }
@@ -510,8 +511,42 @@ public sealed class CleanupPlannerTests
 
         await planner.PlanAllAsync();
 
-        Assert.Equal(["invalidate:a", "invalidate:b"], journal.Take(2));
-        Assert.Equal(["plan:a", "plan:b"], journal.Skip(2).Order());
+        Assert.Equal(["invalidate:a", "invalidate:b", "hold:a", "hold:b"], journal.Take(4));
+        Assert.Equal(["plan:a", "plan:b"], journal.Skip(4).Take(2).Order());
+        Assert.Equal(["release:a", "release:b"], journal.Skip(6));
+    }
+
+    /// <summary>
+    /// What a pass builds is given back when the pass fails, as when it finishes. A volume index runs
+    /// to over a hundred megabytes, and a preview that failed would otherwise keep it while the app
+    /// sits idle.
+    /// </summary>
+    [Fact]
+    public async Task APassThatFailsGivesBackWhatItHeld()
+    {
+        List<string> journal = [];
+        var planner = new CleanupPlanner(
+        [
+            new StubProvider("a", 1, journal: journal),
+            new StubProvider("broken", 2, journal: journal, planFails: new InvalidOperationException("The plan failed.")),
+        ]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => planner.PlanAllAsync());
+
+        Assert.Equal(["release:a", "release:broken"], journal.Where(entry => entry.StartsWith("release:", StringComparison.Ordinal)));
+    }
+
+    /// <summary>The same for a pass cancelled before any provider planned.</summary>
+    [Fact]
+    public async Task APassThatIsCancelledGivesBackWhatItHeld()
+    {
+        List<string> journal = [];
+        var planner = new CleanupPlanner([new StubProvider("a", 1, journal: journal), new StubProvider("b", 2, journal: journal)]);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => planner.PlanAllAsync(ct: new CancellationToken(canceled: true)));
+
+        Assert.Equal(["invalidate:a", "invalidate:b", "hold:a", "hold:b", "release:a", "release:b"], journal);
     }
 
     /// <summary>
@@ -945,7 +980,8 @@ public sealed class CleanupPlannerTests
         string? protects = null,
         bool protectsByRule = false,
         IReadOnlyList<string>? leavesStanding = null,
-        Action? onExecute = null) : ICleanupProvider
+        Action? onExecute = null,
+        Exception? planFails = null) : ICleanupProvider
     {
         public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
@@ -966,6 +1002,13 @@ public sealed class CleanupPlannerTests
         public RunResidue? ResidueHandedOver { get; private set; }
 
         public void InvalidateCaches() => Note($"invalidate:{id}");
+
+        public PassHold HoldCaches()
+        {
+            Note($"hold:{id}");
+
+            return new PassHold(() => Note($"release:{id}"));
+        }
 
         public string Id => id;
 
@@ -1005,7 +1048,7 @@ public sealed class CleanupPlannerTests
         public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
         {
             Note($"plan:{id}");
-            return Task.FromResult(NewPlan());
+            return planFails is null ? Task.FromResult(NewPlan()) : Task.FromException<CleanupPlan>(planFails);
         }
 
         private CleanupPlan NewPlan() => new()

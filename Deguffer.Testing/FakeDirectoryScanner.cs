@@ -20,6 +20,8 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
 {
     private readonly ConcurrentQueue<string> _measured = new();
     private readonly ConcurrentQueue<(string Root, DirectorySearch Search)> _asked = new();
+    private int _holds;
+    private int _taken;
 
     /// <summary>How many times discovery asked the index. Zero proves a test drove the walk.</summary>
     public int FindCalls => _asked.Count;
@@ -120,4 +122,18 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     }
 
     public void Invalidate() => InvalidateCount++;
+
+    /// <summary>How many holds are standing, so a test can see that a pass gave back each one it took.</summary>
+    public int HoldsStanding => Volatile.Read(ref _holds);
+
+    /// <summary>How many holds were ever taken.</summary>
+    public int HoldsTaken => Volatile.Read(ref _taken);
+
+    public PassHold Hold()
+    {
+        Interlocked.Increment(ref _taken);
+        Interlocked.Increment(ref _holds);
+
+        return new PassHold(() => Interlocked.Decrement(ref _holds));
+    }
 }

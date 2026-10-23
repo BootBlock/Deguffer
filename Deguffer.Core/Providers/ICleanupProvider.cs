@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -67,6 +68,15 @@ public interface ICleanupProvider
     /// holding its own collaborators and invalidating those instead would only appear to work.
     /// </summary>
     void InvalidateCaches();
+
+    /// <summary>
+    /// Keep what this provider builds for a planning pass until the hold ends: the volume indexes
+    /// its scanner reads, which nothing reads once the pass is over. Taken by the planner after
+    /// <see cref="InvalidateCaches"/> and ended when the pass finishes, fails or is cancelled.
+    ///
+    /// The provider's for the reason <see cref="InvalidateCaches"/> is: it owns the collaborators.
+    /// </summary>
+    PassHold HoldCaches();
 
     /// <summary>
     /// Exact paths and commands, with sizes measured. Never executed here.

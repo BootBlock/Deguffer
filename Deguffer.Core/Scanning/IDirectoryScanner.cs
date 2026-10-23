@@ -155,4 +155,11 @@ public interface IDirectoryScanner
     /// providers drop theirs: a preview must describe the machine as it is now.
     /// </summary>
     void Invalidate();
+
+    /// <summary>
+    /// Keep what this scanner builds to answer a planning pass, its volume indexes, until the hold
+    /// ends, and give it back once no hold is left. Taken by the planner for the length of each
+    /// pass, so an index that nothing will read again is not kept while the app sits idle.
+    /// </summary>
+    PassHold Hold();
 }

@@ -1,7 +1,7 @@
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
-/// One built index per volume, for the life of a scan.
+/// One built index per volume, for the life of a planning pass.
 ///
 /// G4/G5: building the index is the whole cost of the fast path, and every provider asks about
 /// paths on the same volume. Building it per query would make the MFT route slower than the walk
@@ -19,6 +19,14 @@ namespace Deguffer.Core.Scanning.Mft;
 /// waiting, because the walk answered first, leaves the build running for the questions after it.
 /// <see cref="Invalidate"/> ends every build, because the next scan starts from the machine as it is
 /// then.</para>
+///
+/// <para><b>Kept only while a pass holds it.</b> An index costs about 49 bytes for every slot of the
+/// volume's table, so a system volume of a few million slots holds over a hundred megabytes. Nothing
+/// reads it once the pass that built it has ended, because the next pass starts with
+/// <see cref="Invalidate"/>. So the last <see cref="Hold"/> to end drops every index and ends every
+/// build, as <see cref="Invalidate"/> does. The holds are counted rather than paired, because every
+/// provider of a pass takes one on the scanner they share, and the first provider to give its hold
+/// back must not take the index from the rest.</para>
 /// </summary>
 public sealed class MftVolumeIndexCache
 {
@@ -27,6 +35,7 @@ public sealed class MftVolumeIndexCache
     private readonly Action<Action> _run;
     private readonly Dictionary<char, Lazy<Task<Built>>> _byVolume = [];
     private readonly Lock _gate = new();
+    private int _holds;
 
     // Cancelled and replaced, never disposed. A build links its token to this one when it starts,
     // and disposing it under a build starting at that moment would throw from the link. It owns no
@@ -88,8 +97,9 @@ public sealed class MftVolumeIndexCache
             return Task.FromResult(new Built(null, reason));
         }
 
-        // Never cancelled before it starts, so the volume handle is always closed by the build that
-        // owns it. A build Invalidate ends stops at its next check of the token, with the handle in hand.
+        // A build Invalidate or the last hold ends stops at its next check of the token, with the handle
+        // in hand, and ends cancelled rather than faulted. Its index is dropped by then, so nothing
+        // awaits it, and a fault nobody observes is reported as a crash when the collector finds it.
         // Not on the pool: the build holds its thread for the whole pass, and a preview can start one
         // for every volume at once.
         var ran = false;
@@ -104,11 +114,11 @@ public sealed class MftVolumeIndexCache
                     return Build(source, table, scan);
                 }
             },
-            CancellationToken.None);
+            scan);
 
-        // A thread the system would not start never ran the build, and the build is all that closes
-        // the handle. A build that ran and failed closed it on the way out.
-        if (built.IsFaulted && !Volatile.Read(ref ran))
+        // A thread the system would not start, or a scan ended before the build began, never ran the
+        // build, and the build is all that closes the handle. A build that ran closed it on the way out.
+        if ((built.IsFaulted || built.IsCanceled) && !Volatile.Read(ref ran))
         {
             source.Dispose();
         }
@@ -130,6 +140,38 @@ public sealed class MftVolumeIndexCache
             // volume takes the slow route; neither should take the preview down.
             return new Built(null, FallbackReason.MasterFileTableIncomplete);
         }
+        catch (OperationCanceledException stopped) when (scan.IsCancellationRequested && stopped.CancellationToken != scan)
+        {
+            // A read inside the build stops on a token of its own, linked to the scan's, and the thread
+            // the build runs on ends its task cancelled only for the scan's token. Stated again on that
+            // token, so a build stops cancelled at whatever stage it was stopped in.
+            throw new OperationCanceledException(stopped.Message, stopped, scan);
+        }
+    }
+
+    /// <summary>
+    /// Keep every index built from now until the hold ends, and drop them all when the last hold
+    /// still standing ends. See the class remarks.
+    /// </summary>
+    public PassHold Hold()
+    {
+        lock (_gate)
+        {
+            _holds++;
+        }
+
+        return new PassHold(Release);
+    }
+
+    private void Release()
+    {
+        lock (_gate)
+        {
+            if (--_holds == 0)
+            {
+                Drop();
+            }
+        }
     }
 
     /// <summary>
@@ -140,9 +182,14 @@ public sealed class MftVolumeIndexCache
     {
         lock (_gate)
         {
-            _scan.Cancel();
-            _scan = new CancellationTokenSource();
-            _byVolume.Clear();
+            Drop();
         }
+    }
+
+    private void Drop()
+    {
+        _scan.Cancel();
+        _scan = new CancellationTokenSource();
+        _byVolume.Clear();
     }
 }

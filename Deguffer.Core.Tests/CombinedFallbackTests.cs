@@ -83,6 +83,8 @@ public sealed class CombinedFallbackTests : IDisposable
         public void Invalidate()
         {
         }
+
+        public PassHold Hold() => PassHold.Nothing;
     }
 
     /// <summary>A provider that plans exactly the targets it is handed, measured by the given scanner.</summary>
