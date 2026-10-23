@@ -48,7 +48,7 @@ internal static class Direct3D
         byte[] source,
         nuint length,
         string name,
-        nint defines,
+        [In] ShaderMacro[] defines,
         nint include,
         string entry,
         string target,
@@ -85,6 +85,15 @@ internal static class Direct3D
         public uint BindFlags;
         public uint CpuAccessFlags;
         public uint MiscFlags;
+    }
+
+    /// <summary>D3D_SHADER_MACRO. An array of these ends with one whose name and definition are both null.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ShaderMacro
+    {
+        /// <summary>An ANSI string that outlives the compilation.</summary>
+        public nint Name;
+        public nint Definition;
     }
 
     [StructLayout(LayoutKind.Sequential)]

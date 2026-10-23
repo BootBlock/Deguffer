@@ -28,12 +28,6 @@ namespace Deguffer.App.Controls;
 /// </summary>
 public sealed partial class ExploreOverview
 {
-    /// <summary>The property holding the picture's size in the overview, in device-independent pixels.</summary>
-    private const string Size = "Size";
-
-    /// <summary>The property holding <see cref="MapOverview.LeastFrame"/>.</summary>
-    private const string Least = "Least";
-
     private readonly ExploreZoom _zoom;
 
     private readonly IMotionPolicy _motion;
@@ -84,8 +78,7 @@ public sealed partial class ExploreOverview
         var compositor = _visual.Compositor;
 
         _properties = compositor.CreatePropertySet();
-        _properties.InsertVector2(Size, Vector2.Zero);
-        _properties.InsertScalar(Least, (float)MapOverview.LeastFrame);
+        _properties.InsertVector2(OverviewFrame.Picture, Vector2.Zero);
 
         _brush = compositor.CreateSurfaceBrush();
         _brush.Stretch = CompositionStretch.Fill;
@@ -122,7 +115,7 @@ public sealed partial class ExploreOverview
         ElementCompositionPreview.SetElementChildVisual(Picture, root);
 
         Picture.SizeChanged += (_, e) =>
-            _properties.InsertVector2(Size, new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height));
+            _properties.InsertVector2(OverviewFrame.Picture, new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height));
 
         _visual.Opacity = 0;
         Visibility = Visibility.Collapsed;
@@ -282,18 +275,12 @@ public sealed partial class ExploreOverview
 
     /// <summary>
     /// Put the rectangle round the part of the picture on the screen, from the camera, on the
-    /// compositor: <see cref="MapOverview.Frame"/>'s arithmetic, which a press is resolved through, so
-    /// the two must stay the same.
+    /// compositor (see <see cref="OverviewFrame"/>).
     /// </summary>
     private void Follow(MapCamera camera, CompositionRectangleGeometry bounds)
     {
-        var across = $"Max(1 / camera.Scale.X, overview.{Least} / overview.{Size}.X)";
-        var down = $"Max(1 / camera.Scale.Y, overview.{Least} / overview.{Size}.Y)";
-        var left = $"({MapCamera.ShownEdge("X")} + (0.5 / camera.Scale.X) - ({across} / 2))";
-        var top = $"({MapCamera.ShownEdge("Y")} + (0.5 / camera.Scale.Y) - ({down} / 2))";
-
-        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Offset), Expression($"Vector2({left} * overview.{Size}.X, {top} * overview.{Size}.Y)"));
-        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Size), Expression($"Vector2({across} * overview.{Size}.X, {down} * overview.{Size}.Y)"));
+        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Offset), Expression(OverviewFrame.Offset));
+        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Size), Expression(OverviewFrame.Size));
 
         ExpressionAnimation Expression(string expression)
         {
