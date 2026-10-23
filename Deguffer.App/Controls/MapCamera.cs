@@ -92,22 +92,27 @@ internal sealed class MapCamera
     /// <para>Where the picture may not be stretched past its limits, because the reader has turned
     /// animation effects off, the camera follows the tracker held to them: the tracker itself still
     /// gives a little under a hand and settles back, and a camera following it as it is would show
-    /// that as a spring. The arithmetic is <see cref="MapTracking.Shown"/>'s, which is what a click is
-    /// resolved through, so the two must stay the same.</para>
+    /// that as a spring. Held by <see cref="MapTracking.HeldScale{T}"/> and
+    /// <see cref="MapTracking.HeldPosition{T}"/>, the rules <see cref="MapTracking.Shown"/> holds a
+    /// click's camera by.</para>
     /// </summary>
     public void Track(InteractionTracker tracker, bool elastic)
     {
-        var scale = elastic
-            ? "tracker.Scale"
-            : $"Clamp(tracker.Scale, 1, camera.{Ceiling})";
+        var scale = elastic ? TrackerScale : MapTracking.HeldScale(TrackerScale, Camera(Ceiling));
 
         var offset = elastic
             ? $"-tracker.Position + camera.{Stretched}"
-            : $"-Vector3(Clamp(tracker.Position.X, {Least("X", Near, scale)}, {Most("X", Near, Far, scale)}), "
-                + $"Clamp(tracker.Position.Y, {Least("Y", Near, scale)}, {Most("Y", Near, Far, scale)}), 0)";
+            : $"-Vector3({Held("X", scale)}, {Held("Y", scale)}, 0)";
 
         Properties.StartAnimation(nameof(Visual.Scale), Expression($"Vector3({scale}, {scale}, 1)", tracker));
         Properties.StartAnimation(nameof(Visual.Offset), Expression(offset, tracker));
+
+        static ExpressionScalar Held(string axis, ExpressionScalar scale) => MapTracking.HeldPosition(
+            new ExpressionScalar($"tracker.Position.{axis}"),
+            Camera($"{Near}.{axis}"),
+            Camera($"{Far}.{axis}"),
+            scale,
+            Camera($"Size.{axis}"));
     }
 
     /// <summary>
@@ -122,19 +127,19 @@ internal sealed class MapCamera
     /// </summary>
     public void Bound(InteractionTracker tracker)
     {
-        const string scale = "tracker.Scale";
-
-        var least = Expression(
-            $"Vector3(Min({Least("X", Near, scale)}, {Least("X", FormerNear, scale)}), "
-                + $"Min({Least("Y", Near, scale)}, {Least("Y", FormerNear, scale)}), 0)",
-            tracker);
-        var most = Expression(
-            $"Vector3(Max({Most("X", Near, Far, scale)}, {Most("X", FormerNear, FormerFar, scale)}), "
-                + $"Max({Most("Y", Near, Far, scale)}, {Most("Y", FormerNear, FormerFar, scale)}), 0)",
-            tracker);
+        var least = Expression($"Vector3({Least("X")}, {Least("Y")}, 0)", tracker);
+        var most = Expression($"Vector3({Most("X")}, {Most("Y")}, 0)", tracker);
 
         tracker.StartAnimation(nameof(InteractionTracker.MinPosition), least);
         tracker.StartAnimation(nameof(InteractionTracker.MaxPosition), most);
+
+        static ExpressionScalar Least(string axis) => ExpressionScalar.Min(
+            MapOrigin.Least(Camera($"{Near}.{axis}"), TrackerScale, Camera($"Size.{axis}")),
+            MapOrigin.Least(Camera($"{FormerNear}.{axis}"), TrackerScale, Camera($"Size.{axis}")));
+
+        static ExpressionScalar Most(string axis) => ExpressionScalar.Max(
+            MapOrigin.Most(Camera($"{Near}.{axis}"), Camera($"{Far}.{axis}"), TrackerScale, Camera($"Size.{axis}")),
+            MapOrigin.Most(Camera($"{FormerNear}.{axis}"), Camera($"{FormerFar}.{axis}"), TrackerScale, Camera($"Size.{axis}")));
     }
 
     /// <summary>
@@ -177,24 +182,21 @@ internal sealed class MapCamera
     /// <summary>
     /// An expression for where the screen's near edge on <paramref name="axis"/>, X or Y, falls in the
     /// whole picture, as a fraction of it, with these <see cref="Properties"/> as <c>camera</c>: the
-    /// camera read back as a viewport, as <see cref="MapTracking.Shown"/> reads the tracker. Measured
-    /// from the origin, which the camera's offset is, so it stays exact at any zoom.
+    /// camera read back as a viewport, by <see cref="MapTracking.ShownEdge{T}"/>, the rule
+    /// <see cref="MapTracking.Shown"/> reads the tracker by. The tracker's position is the camera's
+    /// offset negated, measured from the origin, so it stays exact at any zoom.
     /// </summary>
-    public static string ShownEdge(string axis) =>
-        $"(camera.{Near}.{axis} - (camera.Offset.{axis} / (camera.Scale.{axis} * camera.Size.{axis})))";
+    public static ExpressionScalar ShownEdge(string axis) => MapTracking.ShownEdge(
+        Camera($"{Near}.{axis}"),
+        -Camera($"Offset.{axis}"),
+        Camera($"Scale.{axis}"),
+        Camera($"Size.{axis}"));
 
-    /// <summary>The tracker's least position on <paramref name="axis"/> at <paramref name="scale"/>, from the origin in <paramref name="near"/>.</summary>
-    private static string Least(string axis, string near, string scale) =>
-        $"(-camera.{near}.{axis} * {scale} * camera.Size.{axis})";
+    /// <summary>The tracker's own scale, unheld.</summary>
+    private static ExpressionScalar TrackerScale => new("tracker.Scale");
 
-    /// <summary>
-    /// The tracker's greatest position on <paramref name="axis"/> at <paramref name="scale"/>, from the
-    /// picture left past the origin in <paramref name="far"/>. Never below the least position from the
-    /// origin in <paramref name="near"/>: at a scale of one the two are the same position, and worked
-    /// out apart they can round a hair the wrong way round. <see cref="MapOrigin.Across"/> does the same.
-    /// </summary>
-    private static string Most(string axis, string near, string far, string scale) =>
-        $"Max({Least(axis, near, scale)}, (((camera.{far}.{axis} * {scale}) - 1) * camera.Size.{axis}))";
+    /// <summary>A member of these <see cref="Properties"/>, read as <c>camera</c>.</summary>
+    private static ExpressionScalar Camera(string member) => new($"camera.{member}");
 
     /// <summary>
     /// Show the picture pulled (<paramref name="x"/>, <paramref name="y"/>) pixels further than the

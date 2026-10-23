@@ -47,8 +47,8 @@ public readonly record struct MapTracking(double X, double Y, double Scale, MapO
     /// included. Where it may not, because the reader has turned animation effects off and a spring
     /// back is movement, the camera follows the tracker held to its limits, the zoom first, up to
     /// <paramref name="ceiling"/>, and then the position at that zoom, and the screen shows that. The
-    /// camera's expressions on the compositor do the same arithmetic, and the two have to agree,
-    /// because a click is resolved through this (§7.1).</para>
+    /// camera's expressions on the compositor are built from the same rules, because a click is
+    /// resolved through this (§7.1).</para>
     /// </summary>
     public MapViewport Shown(double width, double height, bool elastic, double ceiling)
     {
@@ -56,9 +56,21 @@ public readonly record struct MapTracking(double X, double Y, double Scale, MapO
 
         return MapViewport.Seen(
             shown.Scale,
-            Origin.Left + (shown.X / (shown.Scale * width)),
-            Origin.Top + (shown.Y / (shown.Scale * height)));
+            ShownEdge<Real>(Origin.Left, shown.X, shown.Scale, width).Value,
+            ShownEdge<Real>(Origin.Top, shown.Y, shown.Scale, height).Value);
     }
+
+    /// <summary>
+    /// Where the screen's near edge on an axis <paramref name="size"/> long falls in the whole picture,
+    /// as a fraction of it, with the tracker at <paramref name="position"/> and <paramref name="scale"/>
+    /// from an origin <paramref name="origin"/> of the way along.
+    ///
+    /// <para>The camera's expressions on the compositor are this same rule (see <see cref="IScalar{T}"/>),
+    /// which keeps what a click is resolved through the picture the screen shows (§7.1).</para>
+    /// </summary>
+    public static T ShownEdge<T>(T origin, T position, T scale, T size)
+        where T : IScalar<T> =>
+        origin + (position / (scale * size));
 
     /// <summary>
     /// This held to the tracker's limits on a screen <paramref name="width"/> by
@@ -68,17 +80,39 @@ public readonly record struct MapTracking(double X, double Y, double Scale, MapO
     /// <para>Held here in pixels rather than by reading this back as a viewport and holding that,
     /// because the two differ for a scale past its limits: a viewport's edges are fractions of the
     /// picture at the scale it had, so holding the scale would move the position with it. The camera's
-    /// expression on the compositor holds the tracker's own pixels, as this does, and a click is
-    /// resolved through this, so the two must agree (§7.1).</para>
+    /// expression on the compositor holds the tracker's own pixels by the same rules
+    /// (<see cref="HeldScale{T}"/>, <see cref="HeldPosition{T}"/>), and a click is resolved through
+    /// this (§7.1).</para>
     /// </summary>
     public MapTracking Held(double width, double height, double ceiling)
     {
-        var scale = Math.Clamp(Scale, 1, ceiling);
-        var (left, right) = Origin.Across(scale, width);
-        var (top, bottom) = Origin.Down(scale, height);
+        var scale = HeldScale<Real>(Scale, ceiling);
 
-        return new MapTracking(Math.Clamp(X, left, right), Math.Clamp(Y, top, bottom), scale, Origin);
+        return new MapTracking(
+            HeldPosition(X, Origin.Left, 1 - Origin.Left, scale, width).Value,
+            HeldPosition(Y, Origin.Top, 1 - Origin.Top, scale, height).Value,
+            scale.Value,
+            Origin);
     }
+
+    /// <summary>
+    /// The tracker's <paramref name="scale"/> held to its limits: between 1 and
+    /// <paramref name="ceiling"/>. One rule with the camera's expression, as <see cref="ShownEdge{T}"/> is.
+    /// </summary>
+    public static T HeldScale<T>(T scale, T ceiling)
+        where T : IScalar<T> =>
+        T.Clamp(scale, T.Of(1), ceiling);
+
+    /// <summary>
+    /// The tracker's <paramref name="position"/> on an axis <paramref name="size"/> long held between the
+    /// picture's edges at <paramref name="scale"/>, from an origin <paramref name="near"/> of the way along
+    /// with <paramref name="far"/> of the picture past it (<see cref="MapOrigin.Least{T}"/>,
+    /// <see cref="MapOrigin.Most{T}"/>). One rule with the camera's expression, as
+    /// <see cref="ShownEdge{T}"/> is.
+    /// </summary>
+    public static T HeldPosition<T>(T position, T near, T far, T scale, T size)
+        where T : IScalar<T> =>
+        T.Clamp(position, MapOrigin.Least(near, scale, size), MapOrigin.Most(near, far, scale, size));
 
     /// <summary>
     /// The point on a screen <paramref name="width"/> by <paramref name="height"/>, in pixels, that

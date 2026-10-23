@@ -16,8 +16,9 @@ public enum MapCorner
 /// stands in, and where a press on it takes the camera.
 ///
 /// <para>In Core, as <see cref="MapViewport"/> is, so the rules are provable without a window (G8).
-/// The compositor works the rectangle out again from the camera at every frame, by the same
-/// arithmetic as <see cref="Frame"/>, and a press is resolved through this, so the two must agree.</para>
+/// The compositor works the rectangle out again from the camera at every frame, from the same rules as
+/// <see cref="Frame"/> (<see cref="FrameSpan{T}"/>, <see cref="FrameStart{T}"/>), and a press is
+/// resolved through this.</para>
 /// </summary>
 public static class MapOverview
 {
@@ -76,13 +77,34 @@ public static class MapOverview
     /// </summary>
     public static MapFrame Frame(MapViewport shown, double width, double height)
     {
-        var across = Math.Max(1 / shown.Zoom, LeastFrame / width);
-        var down = Math.Max(1 / shown.Zoom, LeastFrame / height);
-        var centreX = shown.Left + (0.5 / shown.Zoom);
-        var centreY = shown.Top + (0.5 / shown.Zoom);
+        var across = FrameSpan<Real>(shown.Zoom, width);
+        var down = FrameSpan<Real>(shown.Zoom, height);
 
-        return new MapFrame(centreX - (across / 2), centreY - (down / 2), across, down);
+        return new MapFrame(
+            FrameStart(shown.Left, shown.Zoom, across).Value,
+            FrameStart(shown.Top, shown.Zoom, down).Value,
+            across.Value,
+            down.Value);
     }
+
+    /// <summary>
+    /// How much of an overview side <paramref name="size"/> long the rectangle takes at
+    /// <paramref name="zoom"/>, as a fraction: the part on the screen, and never under
+    /// <see cref="LeastFrame"/>. The compositor's expression for the rectangle is this same rule (see
+    /// <see cref="IScalar{T}"/>).
+    /// </summary>
+    public static T FrameSpan<T>(T zoom, T size)
+        where T : IScalar<T> =>
+        T.Max(T.Of(1) / zoom, T.Of(LeastFrame) / size);
+
+    /// <summary>
+    /// Where the rectangle <paramref name="span"/> long starts on an axis, as a fraction, for a screen
+    /// whose near edge is at <paramref name="edge"/> at <paramref name="zoom"/>: centred on the middle
+    /// of what the screen shows.
+    /// </summary>
+    public static T FrameStart<T>(T edge, T zoom, T span)
+        where T : IScalar<T> =>
+        edge + (T.Of(0.5) / zoom) - (span / T.Of(2));
 
     /// <summary>
     /// The camera at <paramref name="at"/>'s zoom with picture point (<paramref name="x"/>,

@@ -31,9 +31,6 @@ public sealed partial class ExploreOverview
     /// <summary>The property holding the picture's size in the overview, in device-independent pixels.</summary>
     private const string Size = "Size";
 
-    /// <summary>The property holding <see cref="MapOverview.LeastFrame"/>.</summary>
-    private const string Least = "Least";
-
     private readonly ExploreZoom _zoom;
 
     private readonly IMotionPolicy _motion;
@@ -85,7 +82,6 @@ public sealed partial class ExploreOverview
 
         _properties = compositor.CreatePropertySet();
         _properties.InsertVector2(Size, Vector2.Zero);
-        _properties.InsertScalar(Least, (float)MapOverview.LeastFrame);
 
         _brush = compositor.CreateSurfaceBrush();
         _brush.Stretch = CompositionStretch.Fill;
@@ -282,18 +278,22 @@ public sealed partial class ExploreOverview
 
     /// <summary>
     /// Put the rectangle round the part of the picture on the screen, from the camera, on the
-    /// compositor: <see cref="MapOverview.Frame"/>'s arithmetic, which a press is resolved through, so
-    /// the two must stay the same.
+    /// compositor: by <see cref="MapOverview.FrameSpan{T}"/> and <see cref="MapOverview.FrameStart{T}"/>,
+    /// the rules <see cref="MapOverview.Frame"/> works it out by for a press.
     /// </summary>
     private void Follow(MapCamera camera, CompositionRectangleGeometry bounds)
     {
-        var across = $"Max(1 / camera.Scale.X, overview.{Least} / overview.{Size}.X)";
-        var down = $"Max(1 / camera.Scale.Y, overview.{Least} / overview.{Size}.Y)";
-        var left = $"({MapCamera.ShownEdge("X")} + (0.5 / camera.Scale.X) - ({across} / 2))";
-        var top = $"({MapCamera.ShownEdge("Y")} + (0.5 / camera.Scale.Y) - ({down} / 2))";
+        var width = new ExpressionScalar($"overview.{Size}.X");
+        var height = new ExpressionScalar($"overview.{Size}.Y");
+        var zoomX = new ExpressionScalar("camera.Scale.X");
+        var zoomY = new ExpressionScalar("camera.Scale.Y");
+        var across = MapOverview.FrameSpan(zoomX, width);
+        var down = MapOverview.FrameSpan(zoomY, height);
+        var left = MapOverview.FrameStart(MapCamera.ShownEdge("X"), zoomX, across);
+        var top = MapOverview.FrameStart(MapCamera.ShownEdge("Y"), zoomY, down);
 
-        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Offset), Expression($"Vector2({left} * overview.{Size}.X, {top} * overview.{Size}.Y)"));
-        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Size), Expression($"Vector2({across} * overview.{Size}.X, {down} * overview.{Size}.Y)"));
+        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Offset), Expression($"Vector2({left * width}, {top * height})"));
+        bounds.StartAnimation(nameof(CompositionRectangleGeometry.Size), Expression($"Vector2({across * width}, {down * height})"));
 
         ExpressionAnimation Expression(string expression)
         {
