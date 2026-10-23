@@ -34,7 +34,7 @@ public static class MapNeighbours
     /// </summary>
     private const double Across = 2;
 
-    /// <summary>A hundredth of a pixel.</summary>
+    /// <summary>The most, in pixels, that rounding moves the edge two shapes share: see <see cref="Further"/>.</summary>
     private const double Hair = 0.01;
 
     /// <summary>

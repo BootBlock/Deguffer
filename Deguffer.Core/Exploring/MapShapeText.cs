@@ -102,7 +102,7 @@ public static class MapShapeText
     /// <paramref name="bytes"/> as a share of <paramref name="ofBytes"/>, to the nearest percent:
     /// "under 1%" rather than "0%" for a shape that is there, and "all" for one that is the whole of it.
     /// </summary>
-    public static string Share(long bytes, long ofBytes)
+    internal static string Share(long bytes, long ofBytes)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ofBytes);
 
