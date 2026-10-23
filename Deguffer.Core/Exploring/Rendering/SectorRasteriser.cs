@@ -25,6 +25,9 @@ public sealed class SectorRasteriser : CanvasPainter
     /// <summary>How every sector is finished. See <see cref="ShapeFinish"/>.</summary>
     private readonly ShapeFinish _finish;
 
+    /// <summary>How far a sector's sheen falls from its inner edge to its middle, or zero for no sheen.</summary>
+    private readonly int _slope;
+
     /// <summary>
     /// Get ready to paint <paramref name="hits"/>' sunburst on a canvas of <paramref name="width"/>
     /// by <paramref name="height"/>, each sector in the colour <paramref name="colourOf"/> gives its
@@ -49,6 +52,7 @@ public sealed class SectorRasteriser : CanvasPainter
 
         _hits = hits;
         _finish = finish;
+        _slope = finish.Shading == MapShading.Gradient ? GradientShading.SlopeAt(finish.Relief) : 0;
 
         // One colour per sector, before a single pixel is written. Resolving it per pixel instead
         // would walk a node's ancestors and index the palette three million times per repaint on a
@@ -112,8 +116,14 @@ public sealed class SectorRasteriser : CanvasPainter
 
     /// <summary>
     /// Paint one pixel of <paramref name="sector"/>, filled <paramref name="colour"/>, finished as the
-    /// drawing says: its line inside the sector's edges, then its bevel, then its cushion or its own
-    /// colour.
+    /// drawing says: its line inside the sector's edges, then its bevel, then its cushion, its sheen or
+    /// its own colour.
+    ///
+    /// <para>A sheen runs along the radius, lighter at a ring's inner edge and darker at its outer, which
+    /// is a treemap's top to bottom in the sector's own direction, as the cushion's two directions are a
+    /// rectangle's. Run down the canvas instead, a ring would be light along its top and dark along its
+    /// bottom, and its neighbours in the ring would be lit by where they sit rather than by what they
+    /// are. Measured from the middle of the pixel, as the ring it is in is.</para>
     /// </summary>
     private void Paint(byte[] pixels, int offset, ExploreSector sector, TileColour colour, float dx, float dy, float radius, float angle)
     {
@@ -131,6 +141,16 @@ public sealed class SectorRasteriser : CanvasPainter
                 distance < line
                     ? ShapeFinish.Mix(colour, _finish.Borders.Tone, _finish.Borders.AmountFor(folder: false))
                     : Faces(edge, dx, dy, radius) ? _finish.Lit(colour) : _finish.Shaded(colour));
+            return;
+        }
+
+        // An aggregate is flat under a sheen, as it is under a cushion.
+        if (_slope > 0 && !sector.IsAggregate)
+        {
+            // Measured in 256ths of the ring's depth, which no eye can tell from a continuous fall.
+            var along = (int)((radius - sector.InnerRadius) / (sector.OuterRadius - sector.InnerRadius) * ShapeFinish.Whole);
+
+            PixelBuffer.Write(pixels, offset, GradientShading.Lit(colour, GradientShading.LightAt(_slope, along, ShapeFinish.Whole)));
             return;
         }
 

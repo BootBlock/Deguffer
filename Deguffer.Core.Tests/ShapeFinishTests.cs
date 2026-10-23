@@ -67,14 +67,16 @@ public sealed class ShapeFinishTests
     }
 
     /// <summary>
-    /// A line is a pixel at 100% and as many as the display's scale makes of one, and a thick line is
-    /// twice that. A light line is mixed towards white.
+    /// A line is a pixel at 100% and as many as the display's scale makes of one, a thick line is
+    /// twice that and a heavy one three times. A light line is mixed towards white.
     /// </summary>
     [Theory]
     [InlineData(1, MapBorderWidth.Thin, 1)]
     [InlineData(1, MapBorderWidth.Thick, 2)]
+    [InlineData(1, MapBorderWidth.Heavy, 3)]
     [InlineData(2, MapBorderWidth.Thin, 2)]
     [InlineData(2, MapBorderWidth.Thick, 4)]
+    [InlineData(2, MapBorderWidth.Heavy, 6)]
     public void ALineIsAsHeavyAsTheDisplaysScale(int pixel, MapBorderWidth width, int expected)
     {
         var finish = ShapeFinish.Of(
@@ -101,7 +103,10 @@ public sealed class ShapeFinishTests
         Assert.Equal(ShapeFinish.Mix(Red, new TileColour(0, 0, 0), 64), bevel.Shaded(Red));
     }
 
-    /// <summary>A deeper relief rises further and stands out more, at every step.</summary>
+    /// <summary>
+    /// A deeper relief rises further and stands out more, at every step, and a sheen falls further from
+    /// its top row with it.
+    /// </summary>
     [Fact]
     public void ADeeperReliefRisesFurther()
     {
@@ -114,7 +119,40 @@ public sealed class ShapeFinishTests
             Assert.True(reliefs[i].Relief > reliefs[i - 1].Relief);
             Assert.True(reliefs[i].Bevel.Highlight > reliefs[i - 1].Bevel.Highlight);
             Assert.True(reliefs[i].Bevel.Shadow > reliefs[i - 1].Bevel.Shadow);
+            Assert.True(GradientShading.SlopeAt(reliefs[i].Relief) > GradientShading.SlopeAt(reliefs[i - 1].Relief));
         }
+    }
+
+    /// <summary>
+    /// A sheen lights a shape's lit edge brighter than its colour by the slope, leaves its middle the
+    /// colour itself, and dims its far edge by as much as it brightened the lit one, in a straight line
+    /// between, in whole numbers out of 256. At the standard relief the slope is the stated sheen, to the
+    /// nearest whole part.
+    /// </summary>
+    [Fact]
+    public void ASheenFallsInAStraightLineFromTheLitEdge()
+    {
+        var slope = GradientShading.SlopeAt(1);
+
+        Assert.Equal(41, slope);
+        Assert.Equal(ShapeFinish.Whole + slope, GradientShading.LightAt(slope, 0, 100));
+        Assert.Equal(ShapeFinish.Whole + 20, GradientShading.LightAt(slope, 25, 100));
+        Assert.Equal(ShapeFinish.Whole, GradientShading.LightAt(slope, 50, 100));
+        Assert.Equal(ShapeFinish.Whole - slope, GradientShading.LightAt(slope, 100, 100));
+        Assert.Equal(ShapeFinish.Whole, GradientShading.LightAt(slope, 0, 0));
+        Assert.Equal(ShapeFinish.Whole, GradientShading.LightAt(0, 10, 100));
+    }
+
+    /// <summary>
+    /// A colour lit by a sheen is each channel times the light out of 256, cut to a whole level as the
+    /// shader cuts it, and no brighter than white.
+    /// </summary>
+    [Fact]
+    public void ASheenLightsEachChannelInWholeNumbers()
+    {
+        Assert.Equal(Red, GradientShading.Lit(Red, ShapeFinish.Whole));
+        Assert.Equal(new TileColour(255, 158, 158), GradientShading.Lit(Red, 320));
+        Assert.Equal(new TileColour(191, 95, 95), GradientShading.Lit(Red, 192));
     }
 
     /// <summary>

@@ -396,7 +396,7 @@ internal sealed class CushionRenderer : IDisposable
             finish.Bevel.Width,
             finish.Bevel.Highlight,
             finish.Bevel.Shadow,
-            0,
+            GradientShading.SlopeAt(finish.Relief),
             0,
             0,
         ];
