@@ -191,7 +191,8 @@ public sealed class ExploreSelectionTests : IDisposable
 
     /// <summary>
     /// An answer that arrives after something else was selected is about a selection that has gone,
-    /// and is never shown against the one that replaced it.
+    /// and is never shown against the one that replaced it, even where it had already been worked
+    /// out by then.
     /// </summary>
     [Fact]
     public void AnAnswerForAnEarlierSelectionIsNeverShown() => UiThread.Run(async () =>
@@ -225,19 +226,19 @@ public sealed class ExploreSelectionTests : IDisposable
             }
         };
 
-        // The second pick waits until the first is being asked about, so its answer is on its way
-        // rather than called off before it started.
         selection.Select([file]);
         await asking.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        // Released while this thread is held, so the first answer is finished, and waiting to be
+        // shown behind this thread, when the second pick is made. Calling the question off is then
+        // too late, and only knowing which question is current keeps that answer off the note.
+        held.Set();
+        Assert.True(released.Task.Wait(TimeSpan.FromSeconds(30)));
+        Thread.Sleep(TimeSpan.FromMilliseconds(500));
+
         selection.Select([folder]);
 
         await Eventually.HoldsAsync(() => notes.Count > 0, "the folder answered");
-
-        held.Set();
-        await released.Task.WaitAsync(TimeSpan.FromSeconds(30));
-
-        // Long enough for the earlier answer to be posted back to this thread and shown, were it shown.
-        await Task.Delay(TimeSpan.FromMilliseconds(500));
 
         Assert.All(notes, Assert.Null);
         Assert.Null(selection.Note);
