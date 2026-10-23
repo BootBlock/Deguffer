@@ -142,8 +142,7 @@ internal sealed class ExploreLayer
     {
         var placed = Viewport.Canvas(Size.Width, Size.Height, width, height, origin);
 
-        Sprite.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
-        Sprite.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
+        Sprite.Place(placed);
     }
 
     /// <summary>Let go of the drawing and of everything on the surface, keeping the layer for the next one.</summary>

@@ -71,8 +71,7 @@ internal sealed class ExploreTiles
 
         Over = compositor.CreateContainerVisual();
         Under = compositor.CreateContainerVisual();
-        Over.IsVisible = false;
-        Under.IsVisible = false;
+        IsShown = false;
     }
 
     /// <summary>The levels drawn more finely than the drawing the map works from, which go over it.</summary>
@@ -81,8 +80,16 @@ internal sealed class ExploreTiles
     /// <summary>The levels drawn no more finely than it, which go under it.</summary>
     public ContainerVisual Under { get; }
 
-    /// <summary>Whether the tiles are on screen.</summary>
-    public bool IsShown => Over.IsVisible;
+    /// <summary>Whether the tiles are on screen: the levels over the drawing and those under it, together.</summary>
+    public bool IsShown
+    {
+        get => Over.IsVisible;
+        private set
+        {
+            Over.IsVisible = value;
+            Under.IsVisible = value;
+        }
+    }
 
     /// <summary>
     /// Which tiles answer the pointer has changed: one has finished coming in, or one that answered has
@@ -119,8 +126,7 @@ internal sealed class ExploreTiles
 
         ShowDownTo(level);
 
-        Over.IsVisible = true;
-        Under.IsVisible = true;
+        IsShown = true;
 
         _draws.Want(picture, tiling, ground, _graphics.Shades, wanted);
     }
@@ -132,8 +138,7 @@ internal sealed class ExploreTiles
     public void Hide()
     {
         _draws.Rest();
-        Over.IsVisible = false;
-        Under.IsVisible = false;
+        IsShown = false;
     }
 
     /// <summary>
@@ -192,8 +197,7 @@ internal sealed class ExploreTiles
     {
         _draws.Stop();
         _cache?.Clear();
-        Over.IsVisible = false;
-        Under.IsVisible = false;
+        IsShown = false;
 
         RaiseIfAnswerLost();
     }
@@ -294,17 +298,8 @@ internal sealed class ExploreTiles
             return;
         }
 
-        var rise = _compositor.CreateScalarKeyFrameAnimation();
-        rise.InsertKeyFrame(0, 0);
-        rise.InsertKeyFrame(1, 1);
-        rise.Duration = motion.Duration;
-
-        var fading = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         visual.Opacity = 0;
-        visual.StartAnimation(nameof(Visual.Opacity), rise);
-        fading.End();
-
-        fading.Completed += (_, _) => Answer(sprite, tile);
+        visual.FadeIn(motion.Duration).Completed += (_, _) => Answer(sprite, tile);
     }
 
     /// <summary>
@@ -378,8 +373,7 @@ internal sealed class ExploreTiles
     {
         var placed = sprite.Tile!.Canvas(_size.Width, _size.Height, _origin);
 
-        sprite.Visual.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
-        sprite.Visual.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
+        sprite.Visual.Place(placed);
     }
 
     /// <summary>

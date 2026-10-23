@@ -415,13 +415,8 @@ internal sealed class ExploreHighlight
 
     /// <summary>
     /// One stroke round <paramref name="geometry"/>, <paramref name="width"/> device-independent
-    /// pixels wide on screen whatever the picture is magnified by.
-    ///
-    /// <para>The geometry is in the canvas's pixels, which the camera and the canvas's placement
-    /// magnify, so the stroke is divided by both, by an expression the compositor works out at every
-    /// frame of a move. Divided by the larger of the two axes, which makes the width an upper bound:
-    /// the two differ only while a resize settles, and an outline briefly a shade thin reads better
-    /// than one briefly heavy, which is what swamps a shape a few pixels across.</para>
+    /// pixels wide on screen whatever the picture is magnified by (<see cref="MapCamera.Unmagnified"/>):
+    /// the geometry is in the canvas's pixels, which the camera and the canvas's placement magnify.
     /// </summary>
     private CompositionSpriteShape Stroke(
         Compositor compositor,
@@ -433,14 +428,7 @@ internal sealed class ExploreHighlight
         var shape = compositor.CreateSpriteShape(geometry);
         shape.StrokeBrush = brush;
         shape.StrokeLineJoin = CompositionStrokeLineJoin.Round;
-
-        var thickness = compositor.CreateExpressionAnimation(
-            "Width / Max(0.0001, Max(camera.Scale.X * placed.Scale.X, camera.Scale.Y * placed.Scale.Y))");
-        thickness.SetScalarParameter("Width", width);
-        thickness.SetReferenceParameter("camera", camera.Properties);
-        thickness.SetReferenceParameter("placed", _placed);
-
-        shape.StartAnimation(nameof(CompositionSpriteShape.StrokeThickness), thickness);
+        shape.StartAnimation(nameof(CompositionSpriteShape.StrokeThickness), camera.Unmagnified(width, _placed));
 
         return shape;
     }

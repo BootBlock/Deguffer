@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Knowledge;
@@ -280,5 +281,5 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
     };
 
     private static ExploreLegendBand Band(string label, TileColour colour) =>
-        new(label, new Color { A = 255, R = colour.Red, G = colour.Green, B = colour.Blue });
+        new(label, colour.ToColor());
 }

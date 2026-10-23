@@ -24,8 +24,6 @@ internal sealed class RowMoves
     /// <summary>The glides under way, so a change during one starts from where its row is drawn.</summary>
     private readonly Dictionary<UIElement, (long Start, float From, Motion Played)> _gliding = [];
 
-    private CompositionEasingFunction? _ease;
-
     /// <summary>How far below its place <paramref name="container"/> is drawn now, part of the way through a glide.</summary>
     public double Offset(UIElement container)
     {
@@ -51,7 +49,7 @@ internal sealed class RowMoves
         var visual = ElementCompositionPreview.GetElementVisual(container);
         var fade = visual.Compositor.CreateScalarKeyFrameAnimation();
         fade.InsertKeyFrame(0, 0);
-        fade.InsertKeyFrame(1, 1, Ease(visual.Compositor));
+        fade.InsertKeyFrame(1, 1, visual.Compositor.MotionEase());
         fade.Duration = played.Duration;
         visual.StartAnimation(nameof(Visual.Opacity), fade);
 
@@ -93,12 +91,9 @@ internal sealed class RowMoves
         var visual = ElementCompositionPreview.GetElementVisual(container);
         var move = visual.Compositor.CreateVector3KeyFrameAnimation();
         move.InsertKeyFrame(0, from);
-        move.InsertKeyFrame(1, Vector3.Zero, Ease(visual.Compositor));
+        move.InsertKeyFrame(1, Vector3.Zero, visual.Compositor.MotionEase());
         move.Duration = played.Duration;
         visual.StartAnimation("Translation", move);
     }
 
-    /// <summary>The curve every other move here eases by.</summary>
-    private CompositionEasingFunction Ease(Compositor compositor) =>
-        _ease ??= compositor.CreateCubicBezierEasingFunction(Motion.EaseControlPoints.First, Motion.EaseControlPoints.Second);
 }

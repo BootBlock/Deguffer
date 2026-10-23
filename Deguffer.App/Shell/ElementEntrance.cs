@@ -19,8 +19,6 @@ namespace Deguffer.App.Shell;
 /// <param name="rise">How far below its place the part starts, in device-independent pixels.</param>
 internal sealed class ElementEntrance(float rise)
 {
-    private CompositionEasingFunction? _ease;
-
     /// <summary>
     /// Put <paramref name="part"/> where its entrance starts, unseen. In place when nothing travels,
     /// because a part held for an entrance that never played can come back with motion since turned off.
@@ -41,11 +39,7 @@ internal sealed class ElementEntrance(float rise)
     {
         var visual = ElementCompositionPreview.GetElementVisual(part);
         var compositor = visual.Compositor;
-
-        // The curve Motion eases by, so a part arrives as every other move here does.
-        var ease = _ease ??= compositor.CreateCubicBezierEasingFunction(
-            Motion.EaseControlPoints.First,
-            Motion.EaseControlPoints.Second);
+        var ease = compositor.MotionEase();
 
         var fade = compositor.CreateScalarKeyFrameAnimation();
         fade.InsertKeyFrame(0, 0);

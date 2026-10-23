@@ -25,8 +25,6 @@ internal sealed class BarMotion
     /// <summary>"Fraction", how much of the bar the fill covers, and "Length", the bar's own.</summary>
     private readonly CompositionPropertySet _drawn;
 
-    private readonly CompositionEasingFunction _ease;
-
     /// <summary>Whether the bar has drawn a figure yet. Its first is drawn where it stands.</summary>
     private bool _hasDrawn;
 
@@ -47,8 +45,6 @@ internal sealed class BarMotion
         _drawn = compositor.CreatePropertySet();
         _drawn.InsertScalar("Fraction", 0);
         _drawn.InsertScalar("Length", 0);
-
-        _ease = compositor.CreateCubicBezierEasingFunction(Motion.EaseControlPoints.First, Motion.EaseControlPoints.Second);
 
         var translation = compositor.CreateExpressionAnimation(shift);
         translation.SetReferenceParameter("drawn", _drawn);
@@ -124,7 +120,7 @@ internal sealed class BarMotion
     {
         var move = _drawn.Compositor.CreateScalarKeyFrameAnimation();
         move.InsertExpressionKeyFrame(0, "this.StartingValue");
-        move.InsertKeyFrame(1, to, _ease);
+        move.InsertKeyFrame(1, to, _drawn.Compositor.MotionEase());
         move.Duration = played.Duration;
         _drawn.StartAnimation("Fraction", move);
     }

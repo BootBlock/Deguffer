@@ -1,4 +1,5 @@
 using System.Numerics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
@@ -31,8 +32,6 @@ internal sealed class ExploreShift
     /// <summary>The move under way, until its animations have finished; null while there is none.</summary>
     private CompositionScopedBatch? _moving;
 
-    private CompositionEasingFunction? _ease;
-
     public ExploreShift(Compositor compositor, MapCamera camera)
     {
         _compositor = compositor;
@@ -64,10 +63,7 @@ internal sealed class ExploreShift
     {
         Finish();
 
-        _placed.Scale = new Vector3((float)placed.ScaleX, (float)placed.ScaleY, 1);
-        _placed.Offset = new Vector3((float)placed.X, (float)placed.Y, 0);
-
-        _ease ??= _compositor.CreateCubicBezierEasingFunction(Motion.EaseControlPoints.First, Motion.EaseControlPoints.Second);
+        _placed.Place(placed);
 
         var moving = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
@@ -135,7 +131,7 @@ internal sealed class ExploreShift
     {
         var animation = _compositor.CreateVector3KeyFrameAnimation();
         animation.InsertKeyFrame(0, from);
-        animation.InsertKeyFrame(1, to, _ease);
+        animation.InsertKeyFrame(1, to, _compositor.MotionEase());
         animation.Duration = motion.Duration;
 
         return animation;
