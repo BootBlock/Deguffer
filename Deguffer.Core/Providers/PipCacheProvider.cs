@@ -154,6 +154,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
         {
             new RunCommandStep(pip, "cache purge", "Clear the pip cache using pip's own command")
             {
+                // Each entry in pip's cache is one file, so a purge ended part-way leaves whole entries or none.
                 WhenCancelled = CancelledCommand.Ended,
                 Estimated = measured.Total,
                 MeasuredPaths = [cacheDirectory],

@@ -34,7 +34,7 @@ internal sealed class ToolProcess : IDisposable
         _process = process;
         _output = output;
         _error = error;
-        _processExited = ExitOf(process);
+        _processExited = ProcessExit.Of(process);
 
         var encoding = OutputEncoding();
         _standardOutput = ReadLinesAsync(output, encoding);
@@ -98,13 +98,11 @@ internal sealed class ToolProcess : IDisposable
     }
 
     /// <summary>
-    /// Waits for the process to exit after its job was ended, then gives its output
-    /// <see cref="OutputAfterEnd"/> to reach its end.
+    /// Gives the output of a tool whose job was ended <see cref="OutputAfterEnd"/> to reach its end.
+    /// The processes themselves are waited for by <see cref="ToolJob.EndAsync"/>.
     /// </summary>
     public async Task EndedAsync()
     {
-        await _processExited.ConfigureAwait(false);
-
         try
         {
             await Task.WhenAll(_standardOutput, _standardError).WaitAsync(OutputAfterEnd).ConfigureAwait(false);
@@ -222,24 +220,6 @@ internal sealed class ToolProcess : IDisposable
         }
     }
 
-    private static async Task ExitOf(SafeProcessHandle process)
-    {
-        var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        using var wait = new ProcessWait(process);
-        var registration = ThreadPool.RegisterWaitForSingleObject(
-            wait, (_, _) => exited.TrySetResult(), state: null, Timeout.Infinite, executeOnlyOnce: true);
-
-        try
-        {
-            await exited.Task.ConfigureAwait(false);
-        }
-        finally
-        {
-            registration.Unregister(null);
-        }
-    }
-
     /// <summary>
     /// The encoding <see cref="System.Diagnostics.Process"/> reads a redirected output in, which every
     /// parser of tool output was written against: the console's output code page, including the OEM
@@ -284,12 +264,5 @@ internal sealed class ToolProcess : IDisposable
         }
 
         return text.ToString();
-    }
-
-    /// <summary>The process handle, waited on without being owned.</summary>
-    private sealed class ProcessWait : WaitHandle
-    {
-        public ProcessWait(SafeProcessHandle process) =>
-            SafeWaitHandle = new SafeWaitHandle(process.DangerousGetHandle(), ownsHandle: false);
     }
 }

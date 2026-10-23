@@ -293,8 +293,9 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 
     /// <summary>
     /// Whether a clean cancelled while the command runs ends the tool, or lets it finish. Required,
-    /// because only the provider knows what the tool leaves behind when it is stopped part-way: a
-    /// package manager's cache is smaller, and Windows' component store or driver store can be damaged.
+    /// because only the provider knows what the tool leaves behind when it is stopped part-way: npm's
+    /// hash-checked cache is only smaller, while a NuGet package folder or Windows' component store can
+    /// be left damaged.
     /// See <see cref="CancelledCommand"/>.
     /// </summary>
     public required CancelledCommand WhenCancelled { get; init; }

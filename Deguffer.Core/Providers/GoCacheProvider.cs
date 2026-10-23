@@ -255,7 +255,9 @@ public sealed class GoCacheProvider : CleanupProviderBase
         var steps = locations
             .Zip(measured.Sizes, (location, size) => (CleanupStep)new RunCommandStep(go, location.Arguments, location.What)
             {
-                WhenCancelled = CancelledCommand.Ended,
+                // Go reads an extracted module folder as complete, so a clean ended part-way could leave a
+                // half-removed module a build then uses. Left to finish.
+                WhenCancelled = CancelledCommand.Finishes,
                 Estimated = size,
                 MeasuredPaths = [location.Path],
             })

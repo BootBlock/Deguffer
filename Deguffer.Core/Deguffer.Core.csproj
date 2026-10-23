@@ -14,8 +14,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <!--
-      Required by [LibraryImport], which generates the marshalling for the one raw volume handle
-      the MFT scanner opens (§5.5). No hand-written unsafe code exists in this project.
+      Required by [LibraryImport], which generates the marshalling for the Win32 calls Core makes,
+      and by the unsafe code that hands Windows buffers it fills in place: the MFT scanner's reads
+      (§5.5), the file queries, and the command line a tool is started with.
     -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>

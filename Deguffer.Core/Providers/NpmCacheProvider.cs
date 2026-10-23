@@ -159,6 +159,8 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         steps.Add(new RunCommandStep(npm, "cache clean --force", "Clear the npm cache using npm's own command")
         {
+            // npm's cache checks every entry against its hash as it reads it, so a clean ended part-way
+            // leaves misses, never a wrong package.
             WhenCancelled = CancelledCommand.Ended,
             Estimated = measured.Total,
             MeasuredPaths = [contentCache],

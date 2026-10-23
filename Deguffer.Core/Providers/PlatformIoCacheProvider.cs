@@ -315,7 +315,9 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                 CachePrune + " --force",
                 "Clear the PlatformIO cache using its own command")
             {
-                WhenCancelled = CancelledCommand.Ended,
+                // PlatformIO takes a package folder holding its .piopm record as installed, so a prune ended
+                // part-way could leave a half-removed package a build then uses. Left to finish.
+                WhenCancelled = CancelledCommand.Finishes,
                 Estimated = measured.Total,
                 MeasuredPaths = [locations.CacheDirectory],
             },
@@ -396,7 +398,9 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                 PackagePrune + " --force",
                 "Remove packages no installed platform still needs, using PlatformIO's own command")
             {
-                WhenCancelled = CancelledCommand.Ended,
+                // PlatformIO takes a package folder holding its .piopm record as installed, so a prune ended
+                // part-way could leave a half-removed package a build then uses. Left to finish.
+                WhenCancelled = CancelledCommand.Finishes,
                 // Approximate, and not for want of trying: PlatformIO prints its total humanised to
                 // two decimal places, so it is rounded before Deguffer ever sees it.
                 Estimated = ScanSize.Approximate(preview.Bytes),

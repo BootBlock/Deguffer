@@ -236,7 +236,9 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             [
                 new RunCommandStep(dotnet, "nuget locals all --clear", "Clear all NuGet caches using NuGet's own command")
                 {
-                    WhenCancelled = CancelledCommand.Ended,
+                    // NuGet takes a package folder holding its .nupkg.metadata as installed, so a clear ended
+                    // part-way could leave a half-removed package that a restore then trusts. Left to finish.
+                    WhenCancelled = CancelledCommand.Finishes,
                     Estimated = measured.Total,
                     MeasuredPaths = present,
                 },

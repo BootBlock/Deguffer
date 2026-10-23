@@ -169,7 +169,7 @@ public sealed class ProcessRunner : IProcessRunner
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
-                job.Terminate();
+                await job.EndAsync().ConfigureAwait(false);
                 await tool.EndedAsync().ConfigureAwait(false);
 
                 ct.ThrowIfCancellationRequested();

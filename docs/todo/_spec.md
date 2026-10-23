@@ -199,10 +199,14 @@ as the profile's cache would measure, clean and protect a project's or another d
 Every tool Deguffer starts has a stated lifetime. A query only reads, so it has a time limit (two
 minutes, DISM's analysis thirty), and a cancelled scan or a limit reached ends it and everything it
 started, before the scan moves on. An eviction command has no limit, and each one says what a
-cancelled clean does to it: a package manager's clean is ended, because what it had not removed is
-still there for the next clean, while DISM's servicing, `pnputil`'s driver removal, File History's
-cleanup and a registry restore are left to finish, because ended part-way they could leave Windows'
-own stores damaged. Every tool that may be ended runs in a job object Deguffer holds for its whole
+cancelled clean does to it. It is ended only where a clean stopped part-way leaves nothing worse than
+misses: npm's and pnpm's stores check every entry against its hash, pip's entries are single files,
+and `lms` only asks LM Studio to remove a runtime later. Everything else is left to finish, because
+ended part-way it could leave damage rather than a smaller cache: DISM's servicing, `pnputil`'s
+driver removal, File History's cleanup, Delivery Optimization's clear and a registry restore in
+Windows' own stores, and NuGet, conda, PlatformIO, Go, uv and Poetry, which can take a half-removed
+package for an installed one. A clean cancelled during such a command reports it as run, and counts
+nothing for it. Every tool that may be ended runs in a job object Deguffer holds for its whole
 life, so nothing it started outlives Deguffer. A tool is started by full path only, with nothing on
 its standard input, so a tool that stops to ask a question reads the end of its input instead of
 waiting.

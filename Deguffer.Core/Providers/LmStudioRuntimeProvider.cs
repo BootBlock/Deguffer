@@ -276,6 +276,7 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             // The command beside it names the runtime, and the heading and the version column say it again.
             "Remove this runtime using LM Studio's own command")
         {
+            // The command only asks LM Studio to remove the runtime when it next starts.
             WhenCancelled = CancelledCommand.Ended,
             Estimated = size,
             MeasuredPaths = [item.Folder],

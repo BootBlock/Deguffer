@@ -63,7 +63,7 @@ public sealed class ToolLifetimeTests : IDisposable
 
         // Exited rather than exiting: the next scan starts as soon as this returns, and a child still
         // at work would run beside the one that scan starts.
-        Assert.True(child.WaitForExit(TimeSpan.Zero) || child.WaitForExit(ExitWait), "The tool the shim started was still running.");
+        Assert.True(child.WaitForExit(TimeSpan.Zero), "The tool the shim started was still running when the call returned.");
     }
 
     [Fact]

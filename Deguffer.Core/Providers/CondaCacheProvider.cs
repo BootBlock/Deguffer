@@ -286,7 +286,9 @@ public sealed class CondaCacheProvider : CleanupProviderBase
                     CleanCategories + " --yes",
                     "Remove unused packages, tarballs and the channel index cache using conda's own command")
                 {
-                    WhenCancelled = CancelledCommand.Ended,
+                    // conda reads a package folder's info directory as the package being there, so a clean ended
+                    // part-way could leave a half-removed package it still links environments from. Left to finish.
+                    WhenCancelled = CancelledCommand.Finishes,
                     Estimated = estimated,
                     MeasuredPaths = packageCaches,
                     MeasuredBefore = probed.TotalOf(..packageCaches.Count),

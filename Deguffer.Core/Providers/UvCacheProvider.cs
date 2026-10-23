@@ -144,7 +144,9 @@ public sealed class UvCacheProvider : CleanupProviderBase
         {
             new RunCommandStep(uv, "cache clean", "Clear the uv cache using uv's own command")
             {
-                WhenCancelled = CancelledCommand.Ended,
+                // uv's cache links its entries to one another, and nothing shows a clean ended part-way leaves
+                // only whole entries behind. Left to finish.
+                WhenCancelled = CancelledCommand.Finishes,
                 Estimated = measured.Total,
                 MeasuredPaths = [cacheDirectory],
             },

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Safety;
 
@@ -70,14 +71,138 @@ internal sealed class ToolJob : IDisposable
     }
 
     /// <summary>
-    /// Ends every process in the job, including those in any job a tool made inside it. Returns
-    /// before they have exited: wait on the tool's own process for that.
+    /// How often <see cref="EndAsync"/> asks whether the job is empty. Windows ends the processes in
+    /// milliseconds, so the wait is a few of these.
     /// </summary>
-    public void Terminate()
+    private static readonly TimeSpan EmptyPoll = TimeSpan.FromMilliseconds(10);
+
+    /// <summary>Room for the process identifiers of a job, before it is asked again with more.</summary>
+    private const int FirstListLength = 32;
+
+    /// <summary>
+    /// Ends every process in the job, including those in any job a tool made inside it, and completes
+    /// once each has exited.
+    ///
+    /// <para><b>Exited, not merely ended.</b> Windows stops counting a process in its job a moment
+    /// before the process has exited and let go of what it held, so the job going empty is not the
+    /// end. Each process is held open before the job is ended, and its exit awaited. One started in
+    /// the moment between is ended all the same, and waited for by the job going empty.</para>
+    /// </summary>
+    /// <exception cref="Win32Exception">
+    /// Windows would not end them, or would not say what the job holds. Thrown rather than passed
+    /// over, because a caller that went on to wait would wait for as long as the tool chose to run.
+    /// </exception>
+    public async Task EndAsync()
     {
-        // An access-denied failure is the job's last process already gone, and there is nothing else
-        // a caller that wants it ended could do differently.
-        ToolProcessNative.TerminateJobObject(_handle, exitCode: 1);
+        var members = Members();
+
+        try
+        {
+            if (!ToolProcessNative.TerminateJobObject(_handle, exitCode: 1))
+            {
+                throw new Win32Exception(Marshal.GetLastPInvokeError());
+            }
+
+            foreach (var member in members)
+            {
+                await ProcessExit.Of(member).ConfigureAwait(false);
+            }
+
+            while (ActiveProcesses() > 0)
+            {
+                await Task.Delay(EmptyPoll).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            foreach (var member in members)
+            {
+                member.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// A handle to each process now in the job, each confirmed to be in it once opened: an identifier
+    /// listed a moment ago can already belong to a process that has nothing to do with the job.
+    /// </summary>
+    private List<SafeProcessHandle> Members()
+    {
+        var members = new List<SafeProcessHandle>();
+
+        foreach (var processId in ProcessIds())
+        {
+            var process = ToolProcessNative.OpenProcess(
+                ToolProcessNative.Synchronize | ToolProcessNative.ProcessQueryLimitedInformation, inheritHandle: false, processId);
+
+            // An invalid handle is a process that exited after it was listed: nothing to wait for.
+            if (!process.IsInvalid && ToolProcessNative.IsProcessInJob(process, _handle, out var inJob) && inJob)
+            {
+                members.Add(process);
+            }
+            else
+            {
+                process.Dispose();
+            }
+        }
+
+        return members;
+    }
+
+    /// <summary>The identifiers of every process in the job, asked again with more room until all fit.</summary>
+    private uint[] ProcessIds()
+    {
+        for (var length = FirstListLength; ; length *= 2)
+        {
+            // Two counts, then one pointer-sized identifier per process.
+            var size = (2 * sizeof(uint)) + (length * nint.Size);
+            var list = Marshal.AllocHGlobal(size);
+
+            try
+            {
+                if (!ToolProcessNative.QueryJobProcessIds(_handle, ToolProcessNative.JobObjectBasicProcessIdList, list, size, 0)
+                    && Marshal.GetLastPInvokeError() is var error and not ToolProcessNative.ErrorMoreData)
+                {
+                    throw new Win32Exception(error);
+                }
+
+                var assigned = (uint)Marshal.ReadInt32(list, 0);
+                var listed = (uint)Marshal.ReadInt32(list, sizeof(uint));
+
+                if (assigned > listed)
+                {
+                    continue;
+                }
+
+                var ids = new uint[listed];
+
+                for (var i = 0; i < ids.Length; i++)
+                {
+                    ids[i] = (uint)Marshal.ReadIntPtr(list, (2 * sizeof(uint)) + (i * nint.Size));
+                }
+
+                return ids;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(list);
+            }
+        }
+    }
+
+    private uint ActiveProcesses()
+    {
+        if (!ToolProcessNative.QueryInformationJobObject(
+                _handle,
+                ToolProcessNative.JobObjectBasicAccountingInformation,
+                out var accounting,
+                Marshal.SizeOf<ToolProcessNative.BasicAccountingInformation>(),
+                0))
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+
+        return accounting.ActiveProcesses;
     }
 
     public void Dispose() => _handle.Dispose();

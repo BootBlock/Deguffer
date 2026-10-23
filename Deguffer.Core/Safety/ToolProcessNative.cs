@@ -10,6 +10,11 @@ internal static partial class ToolProcessNative
     internal const uint CreateNoWindow = 0x08000000;
     internal const int StartfUseStdHandles = 0x00000100;
 
+    internal const int JobObjectBasicAccountingInformation = 1;
+    internal const int JobObjectBasicProcessIdList = 3;
+    internal const int ErrorMoreData = 234;
+    internal const uint Synchronize = 0x00100000;
+    internal const uint ProcessQueryLimitedInformation = 0x00001000;
     internal const int JobObjectExtendedLimitInformation = 9;
     internal const uint JobObjectLimitKillOnJobClose = 0x00002000;
 
@@ -61,6 +66,19 @@ internal static partial class ToolProcessNative
         public nuint Affinity;
         public uint PriorityClass;
         public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct BasicAccountingInformation
+    {
+        public long TotalUserTime;
+        public long TotalKernelTime;
+        public long ThisPeriodTotalUserTime;
+        public long ThisPeriodTotalKernelTime;
+        public uint TotalPageFaultCount;
+        public uint TotalProcesses;
+        public uint ActiveProcesses;
+        public uint TotalTerminatedProcesses;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -121,6 +139,22 @@ internal static partial class ToolProcessNative
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool TerminateJobObject(SafeJobHandle job, uint exitCode);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool QueryInformationJobObject(
+        SafeJobHandle job, int infoClass, out BasicAccountingInformation info, int length, nint returnLength);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "QueryInformationJobObject", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool QueryJobProcessIds(SafeJobHandle job, int infoClass, nint info, int length, nint returnLength);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial SafeProcessHandle OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsProcessInJob(SafeProcessHandle process, SafeJobHandle job, [MarshalAs(UnmanagedType.Bool)] out bool result);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -580,7 +580,9 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 $"cache clear {cache.Name} --all --no-interaction --no-ansi",
                 $"Clear Poetry's cached metadata for {cache.Name} using its own command")
             {
-                WhenCancelled = CancelledCommand.Ended,
+                // Nothing shows Poetry's clear leaves only whole entries behind when it is ended part-way, so it
+                // is left to finish.
+                WhenCancelled = CancelledCommand.Finishes,
                 Estimated = size,
                 MeasuredPaths = [cache.Path],
             }),
