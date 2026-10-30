@@ -25,17 +25,24 @@ public sealed class VolumeIndexLifetimeTests
         .AddDirectory(8, 7, ".npm-cache")
         .AddFile(20, 8, "a.tgz", allocated: 8192, logical: 8000);
 
+    /// <summary>
+    /// Measure <paramref name="path"/> and assert that the table answered. A scanner that fell back would
+    /// walk whatever the machine running the suite has at <see cref="DriveLetters.Faked"/>.
+    /// </summary>
+    private static async Task ByTheTable(DirectoryScanner scanner, string path) =>
+        Assert.Equal(ScanStrategy.MasterFileTable, (await scanner.MeasureAsync(path)).Strategy);
+
     [Fact]
     public async Task AHeldIndexAnswersEveryQuestionOfThePassFromOneBuild()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
 
         using (scanner.Hold())
         {
-            await scanner.MeasureAsync(letter + @":" + Cache);
-            await scanner.MeasureAsync(letter + @":\Users");
+            await ByTheTable(scanner, letter + @":" + Cache);
+            await ByTheTable(scanner, letter + @":\Users");
         }
 
         Assert.Equal(1, factory.OpenCount);
@@ -44,16 +51,16 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task TheIndexIsDroppedWhenTheLastHoldEnds()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
 
         using (scanner.Hold())
         {
-            await scanner.MeasureAsync(letter + @":" + Cache);
+            await ByTheTable(scanner, letter + @":" + Cache);
         }
 
-        await scanner.MeasureAsync(letter + @":" + Cache);
+        await ByTheTable(scanner, letter + @":" + Cache);
 
         Assert.Equal(2, factory.OpenCount);
     }
@@ -66,21 +73,21 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task TheIndexIsKeptWhileAnotherHoldStands()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
 
         var first = scanner.Hold();
         var second = scanner.Hold();
-        await scanner.MeasureAsync(letter + @":" + Cache);
+        await ByTheTable(scanner, letter + @":" + Cache);
 
         first.Dispose();
         first.Dispose();
-        await scanner.MeasureAsync(letter + @":" + Cache);
+        await ByTheTable(scanner, letter + @":" + Cache);
         Assert.Equal(1, factory.OpenCount);
 
         second.Dispose();
-        await scanner.MeasureAsync(letter + @":" + Cache);
+        await ByTheTable(scanner, letter + @":" + Cache);
         Assert.Equal(2, factory.OpenCount);
     }
 
@@ -92,7 +99,7 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task ABuildStoppedByTheLastHoldEndsCancelledNotFaulted()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var sources = new HeldMftSourceFactory(letter, Volume());
         var cache = new MftVolumeIndexCache(sources, ScanTuner.Shipped);
 
@@ -116,7 +123,7 @@ public sealed class VolumeIndexLifetimeTests
     public async Task ABuildStoppedReadingAnAttributeListEndsCancelledNotFaulted()
     {
         const long ListCluster = 900;
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var sources = new ListHeldOpen(
             new MftFixture().AddFileWhoseListOutsideTheTableNamesRecords(16, ListCluster, firstNamed: 1_000, count: 4),
             ListCluster);
@@ -140,7 +147,7 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task APlanningPassLeavesNoIndexBehind()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
         using var temp = new TempDirectory();
@@ -151,7 +158,7 @@ public sealed class VolumeIndexLifetimeTests
         Assert.Equal(ScanStrategy.MasterFileTable, provider.Measured?.Strategy);
         Assert.Equal(1, factory.OpenCount);
 
-        await scanner.MeasureAsync(letter + @":" + Cache);
+        await ByTheTable(scanner, letter + @":" + Cache);
 
         Assert.Equal(2, factory.OpenCount);
     }

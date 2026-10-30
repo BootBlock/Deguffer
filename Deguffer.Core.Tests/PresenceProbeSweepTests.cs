@@ -30,7 +30,7 @@ public sealed partial class PresenceProbeSweepTests
     /// signatures.</item>
     /// <item>Behind a refusal check: an earlier probe or obstacle walk stops on a refusal, so only
     /// absence reaches the call. The Claude Code providers, Epic's <c>Saved</c> folder, a Firefox
-    /// profile's local half, Steam's shader container and Capture One's volume root.</item>
+    /// profile's local half and Steam's shader container.</item>
     /// <item>A refusal costs a recomputation: Deguffer's own scan estimate and refusal record
     /// files.</item>
     /// </list>
@@ -38,7 +38,6 @@ public sealed partial class PresenceProbeSweepTests
     private static readonly SortedDictionary<string, int> Allowed = new(StringComparer.Ordinal)
     {
         ["Deguffer.Core/Execution/RefusalRecord.cs"] = 1,
-        ["Deguffer.Core/Providers/CaptureOneExamination.cs"] = 1,
         ["Deguffer.Core/Providers/ChromiumUserDataDiscovery.cs"] = 2,
         ["Deguffer.Core/Providers/ClaudeCodeConversationProvider.cs"] = 1,
         ["Deguffer.Core/Providers/ClaudeCodeDerivedStateProvider.cs"] = 1,
