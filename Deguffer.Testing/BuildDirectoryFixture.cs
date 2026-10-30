@@ -170,6 +170,66 @@ public static class BuildDirectoryFixture
         return build;
     }
 
+    /// <summary>
+    /// A Dart package after <c>pub get</c>, returning its <c>.dart_tool</c>. The package configuration
+    /// carries <paramref name="generator"/> and <paramref name="configVersion"/> as pub writes them,
+    /// and either set to null leaves that field out. Leaving out a piece reproduces a
+    /// <c>.dart_tool</c> that is not pub's output, such as a committed test fixture or a pub
+    /// workspace member.
+    /// </summary>
+    public static string CreateDartPackage(
+        string projectDirectory,
+        string? generator = "pub",
+        int? configVersion = 2,
+        bool writePackageConfig = true,
+        bool writePackageGraph = true,
+        bool writePubspec = true,
+        bool writeLockFile = true,
+        int payloadBytes = 4096)
+    {
+        if (writePubspec)
+        {
+            WriteText(Path.Combine(projectDirectory, "pubspec.yaml"), "name: example");
+        }
+
+        if (writeLockFile)
+        {
+            WriteText(Path.Combine(projectDirectory, "pubspec.lock"), "packages: {}");
+        }
+
+        WriteText(Path.Combine(projectDirectory, "lib", "main.dart"), "void main() {}");
+
+        var tool = Directory(projectDirectory, ".dart_tool");
+
+        if (writePackageConfig)
+        {
+            var fields = new List<string>();
+
+            if (configVersion is { } version)
+            {
+                fields.Add($"\"configVersion\": {version}");
+            }
+
+            fields.Add("\"packages\": []");
+
+            if (generator is not null)
+            {
+                fields.Add($"\"generator\": \"{generator}\"");
+            }
+
+            WriteText(Path.Combine(tool, "package_config.json"), $"{{{string.Join(", ", fields)}}}");
+        }
+
+        if (writePackageGraph)
+        {
+            WriteText(Path.Combine(tool, "package_graph.json"), "{\"configVersion\": 1, \"packages\": []}");
+        }
+
+        WriteBytes(Path.Combine(tool, "flutter_build", "app.dill"), payloadBytes);
+
+        return tool;
+    }
+
     private static string Directory(params string[] segments)
     {
         var full = Path.Combine(segments);

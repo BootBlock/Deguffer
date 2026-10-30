@@ -417,9 +417,9 @@ are expired only by `clear-cache --gc`.
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
 | Godot `.godot\imported` and `.godot\shader_cache` | Build later, named children only | 2 and 1 | **14.0 GB across 36 projects** |
-| JetBrains-platform system directories of superseded versions | **Build** | 1 | 633 MB, one superseded Android Studio |
-| Flutter/Dart `.dart_tool` | **Build** | 2 | 288 MB across 2 projects |
-| Python tool caches that write `CACHEDIR.TAG` | **Build**, as a declared table | 1–2 | One `.pytest_cache` |
+| JetBrains-platform system directories of superseded versions | ✅ **Built** | 1 | 633 MB, one superseded Android Studio |
+| Flutter/Dart `.dart_tool` | ✅ **Built** | 2 | 288 MB across 2 projects |
+| Python tool caches that write `CACHEDIR.TAG` | ✅ **Built**, as a declared table | 1–2 | One `.pytest_cache` |
 | Gradle per-project `.gradle` | Build later | 1 | 162 MB across 5 |
 | Current-version JetBrains `caches`, `index`, `log`, `tmp` | Build later | 1 | About 160 MB per version |
 | Terraform `.terraform\providers` | Build later | 2 | Absent |
@@ -462,6 +462,20 @@ No documented command clears the import cache. Godot 3 kept the same cache in a 
 
 ### Superseded JetBrains-platform system directories — Build, Tier 1, measured
 
+✅ **Done, narrower.** `JetBrainsSupersededSystemProvider` offers the `caches`, `index` and `tmp`
+folders of a version's system directory under `%LOCALAPPDATA%\JetBrains` or
+`%LOCALAPPDATA%\Google\AndroidStudio*` where the `.home` test finds it replaced or its install gone,
+and its newest entry at any depth is older than 180 days. Not the whole directory: it also holds
+`LocalHistory` and `log`, which `_spec.md` §3 puts in Tier 3, so those stay with every unrecognised
+child. **Reading the
+source corrected this entry:** the IDE's automatic clean uses age alone. It applies no installed test
+and no older-version test; the installed test only sets which rows the manual dialog ticks. It finds
+candidates from configuration folders under `%APPDATA%`, never by listing `%LOCALAPPDATA%`, and
+only for the running product. On Windows the logs are inside the system directory. Deguffer requires
+both the installed test and the age, and keeps a version wherever the IDE would guess: a missing or
+unreadable `.home`, and a folder it could not list, which the IDE skips silently. A version started
+between preview and clean is held back by its rewritten `.home`.
+
 JetBrains documents the system (caches) directory as `%LOCALAPPDATA%\JetBrains\<product><version>`
 and configuration as `%APPDATA%\JetBrains\<product><version>`
 ([directories](https://www.jetbrains.com/help/idea/directories-used-by-the-ide-to-store-settings-caches-plugins-and-logs.html)).
@@ -487,6 +501,13 @@ the IDE.
 
 ### Flutter/Dart `.dart_tool` — Build, Tier 2, measured at 288 MB
 
+✅ **Done.** `DartToolProvider`, as proposed, plus one requirement the measurement forced:
+`package_graph.json` beside `package_config.json`. A fixture in a published package (in the pub
+cache) carries `"generator": "pub"` with both pubspec files beside it, and only pub's real output
+has the graph. `configVersion` must be 2. The hazard was **two** tracked fixtures in the Flutter SDK
+checkout, not three: the third `.dart_tool` there is real, ignored output. Git's tracked-file check is
+now a `BuildDirectoryKind` declaration any kind can make.
+
 Unlike the declined Dart `build`, this one carries evidence inside: `.dart_tool\package_config.json`
 has `"generator": "pub"`, which pub documents as "for `pub` this is always `'pub'`"
 ([package_config.dart](https://github.com/dart-lang/pub/blob/master/lib/src/package_config.dart)).
@@ -498,6 +519,14 @@ state is recompiled. **Hazard:** three measured `.dart_tool` folders sat inside 
 as test fixtures, so the git tracked-file check `obj` already uses applies.
 
 ### Tools that write `CACHEDIR.TAG` — Build as a declared table
+
+✅ **Done.** One provider per row (`PytestCacheProvider`, `MypyCacheProvider`, `RuffCacheProvider`,
+`ToxEnvironmentProvider`, `NoxEnvironmentProvider`), each declaring the lines its tool writes through
+`BuildDirectoryKind.RequiredMarkers`. The tag's header is read, so Cargo's `target` (header alone) and
+Jellyfin's cache folder now need a real tag. What the source showed beyond the table: mypy, tox and
+nox write through Python's text mode, so their files end lines in `\r\n` on Windows, which the
+comparison accepts. nox writes a `.gitignore` of `*` alone with its bare tag; neither names nox, so
+both are required whole, beside `noxfile.py`.
 
 The [Cache Directory Tagging Specification](https://bford.info/cachedir/) requires the first 43
 bytes to be `Signature: 8a477f597d28d172789f06886806bc55`, and calls a tag a hint.

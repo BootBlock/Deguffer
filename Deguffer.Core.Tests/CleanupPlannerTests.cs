@@ -465,7 +465,8 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "dotnet-obj", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "temp-tool-caches",
+                "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool",
+                "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "spotify",
@@ -483,6 +484,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
+                "tox-environments", "nox-environments", "dart-tool",
                 "conda", "maven", "vcpkg", "chromium-service-worker-storage", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",

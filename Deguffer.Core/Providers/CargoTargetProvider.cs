@@ -29,11 +29,17 @@ namespace Deguffer.Core.Providers;
 /// still has its <c>target</c> directories, which a command-based provider could not touch at all.</para>
 ///
 /// <para>Recognition needs both halves. A <c>Cargo.toml</c> beside it says a Rust project is here,
-/// and <c>CACHEDIR.TAG</c> inside says something marked this directory as a cache — which is the
-/// part a folder somebody keeps by hand beside a manifest will not have. The file's contents are not
-/// read, so the claim is "a tool following the cache-directory convention wrote this" rather than
-/// "Cargo wrote this"; the conjunction with the manifest is what narrows it to Cargo. A <c>target</c>
-/// predating the convention is declined, which costs disk space rather than data.</para>
+/// and <c>CACHEDIR.TAG</c> inside, opening with the specification's header, says something marked
+/// this directory as a cache — which is the part a folder somebody keeps by hand beside a manifest
+/// will not have. Only the header is required, so the claim is "a tool following the cache-directory
+/// convention wrote this" rather than "Cargo wrote this"; the conjunction with the manifest is what
+/// narrows it to Cargo. Cargo's own line, "created by cargo", is not required, because the text after
+/// the header is unspecified and has not been verified for every Cargo release that wrote one, and a
+/// rule that declined an older Cargo's output would be a new refusal of what has always been offered.
+/// Cargo writes the tag only into a directory it creates
+/// (<see href="https://github.com/rust-lang/cargo/blob/master/crates/cargo-util/src/paths.rs">paths.rs</see>).
+/// A <c>target</c> predating the convention, or one something else created first, is declined, which
+/// costs disk space rather than data.</para>
 /// </summary>
 public sealed class CargoTargetProvider : BuildDirectoryProvider
 {
@@ -41,7 +47,7 @@ public sealed class CargoTargetProvider : BuildDirectoryProvider
     {
         DirectoryNames = ["target"],
         RequiredSiblings = ["Cargo.toml"],
-        RequiredContents = ["CACHEDIR.TAG"],
+        RequiredMarkers = [MarkerFile.AnyCacheDirectoryTag],
 
         // Neither identifies the directory, and both are what a rule reaching one level too far
         // would take with it: the crate's own source, and the lock file pinning what it compiled

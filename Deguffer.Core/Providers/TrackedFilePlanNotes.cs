@@ -3,11 +3,12 @@ using Deguffer.Core.Execution;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// The sentences only the .NET intermediate-output provider can say, because only it asks git
-/// for a second opinion. Everything else it tells the user comes from
-/// <see cref="SourceTreePlanNotes"/>.
+/// The sentences a source-tree provider says about git's second opinion, for the providers that ask
+/// for one: .NET's <c>obj</c>, and each <see cref="BuildDirectoryKind"/> that sets
+/// <see cref="BuildDirectoryKind.DeclinesTrackedDirectories"/>. Everything else they tell the user
+/// comes from <see cref="SourceTreePlanNotes"/>.
 /// </summary>
-internal static class ObjPlanNotes
+internal static class TrackedFilePlanNotes
 {
     /// <summary>
     /// The git findings, in the order they are shown, or empty if git was asked and found nothing
