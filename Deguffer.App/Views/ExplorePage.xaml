@@ -10,15 +10,6 @@
     Background="Transparent"
     KeyboardAcceleratorPlacementMode="Hidden">
 
-    <!--
-        Backspace goes back, as Alt+Left does, unless a box being typed in has it. An accelerator
-        rather than a KeyDown handler, because a click on a map that cannot zoom focuses nothing and
-        a key then reaches no element to bubble from; an accelerator is heard whatever holds the focus.
-    -->
-    <Page.KeyboardAccelerators>
-        <KeyboardAccelerator Key="Back" Invoked="OnBackspaceInvoked" />
-    </Page.KeyboardAccelerators>
-
     <Page.Resources>
         <!--
             A row of the List layout: one child of the folder on screen. The list is shared with the
@@ -318,9 +309,9 @@
 
             Back and Forward retrace where you have been, as a browser's do, which is not the same
             as up: a folder opened from the list of what grew is several levels from the one before
-            it. The mouse's own Back and Forward buttons reach them from anywhere on the page (see
-            ExplorePage's constructor), and Backspace through the page's accelerator above; Alt+Left
-            and Alt+Right are here, as in a browser.
+            it. The mouse's own Back and Forward buttons reach them from anywhere on the page, and
+            Backspace through the page's accelerator (both in ExploreInput); Alt+Left and Alt+Right
+            are here, as in a browser.
         -->
         <Grid Grid.Row="2" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto"
               Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">
@@ -494,14 +485,6 @@
                             </ToolTip.ContentTemplate>
                         </ToolTip>
                     </ToolTipService.ToolTip>
-
-                    <controls:ExploreMap.KeyboardAccelerators>
-                        <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
-                        <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
-                        <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnRevealInvoked" />
-                    </controls:ExploreMap.KeyboardAccelerators>
                 </controls:ExploreMap>
 
                 <!--
@@ -514,16 +497,15 @@
                           Visibility="Collapsed"
                           SelectionMode="Extended"
                           KeyboardAcceleratorPlacementMode="Hidden"
-                          SelectionChanged="OnRowSelectionChanged"
-                          DoubleTapped="OnRowsDoubleTapped">
+                          SelectionChanged="OnRowSelectionChanged">
                     <ListView.ContextFlyout>
                         <!--
                         One menu, opened by hand from the list and from the map. Two things forced
                         that, both measured rather than reasoned about: an attached ContextFlyout on
                         this ListView never appears, and neither ContextRequested nor RightTapped
                         reaches an ordinary handler on it, because a ListViewItem marks the gesture
-                        handled on its way past. The page subscribes past that in code, which is why
-                        no right-click handler is declared here.
+                        handled on its way past. ExploreInput subscribes past that in code, which is
+                        why no right-click handler is declared here.
 
                         It is still declared here, and not as a page resource, because that is what
                         gives it a lifetime: a StaticResource flyout is built on first use, and the
@@ -537,12 +519,12 @@
                         out by hand: three that change nothing, and a removal that goes to the
                         Recycle Bin unless the user asks for the other one by name.
 
-                        The accelerators are declared on the two surfaces rather than here, because a
-                        flyout item's accelerator only fires while the flyout is open — which is
-                        exactly when the keyboard is not what the user is reaching for. These carry
+                        ExploreInput puts the accelerators on the two surfaces rather than here,
+                        because a flyout item's accelerator only fires while the flyout is open — which
+                        is exactly when the keyboard is not what the user is reaching for. These carry
                         the text so the menu still teaches them.
                     -->
-                    <MenuFlyout>
+                    <MenuFlyout x:Name="RowsMenu">
                         <MenuFlyoutItem Text="Open"
                                         Command="{x:Bind ViewModel.Selection.OpenCommand}"
                                         KeyboardAcceleratorTextOverride="Enter">
@@ -595,14 +577,6 @@
                         </MenuFlyoutItem>
                     </MenuFlyout>
                     </ListView.ContextFlyout>
-
-                    <ListView.KeyboardAccelerators>
-                        <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
-                        <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
-                        <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnRevealInvoked" />
-                    </ListView.KeyboardAccelerators>
                 </ListView>
 
                 <!-- The empty state. A large blank card reads as a screen that has failed rather

@@ -76,9 +76,9 @@ public sealed partial class DuplicatesPage : Page
         {
             _shown = true;
 
-            if (ViewModel.IsRequested && ViewModel.SearchCommand.CanExecute(null))
+            if (ViewModel.IsRequested)
             {
-                ViewModel.SearchCommand.Execute(null);
+                ViewModel.SearchCommand.TryExecute();
             }
         }
 
