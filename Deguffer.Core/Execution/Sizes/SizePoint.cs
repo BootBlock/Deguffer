@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Execution.Sizes;
 
 /// <summary>
@@ -8,17 +10,23 @@ namespace Deguffer.Core.Execution.Sizes;
 /// the file can never describe the user's folders, whoever reads it.</para>
 /// </summary>
 /// <param name="TakenUtc">When the scan that measured it ran.</param>
-/// <param name="Bytes">What the row stated it would reclaim, in bytes.</param>
-/// <param name="Approximate">
-/// Whether the figure was a prediction or a ceiling rather than a measurement
-/// (<see cref="Scanning.ScanSize.IsApproximate"/>, <see cref="Scanning.ScanSize.IsCeiling"/>).
-/// </param>
+/// <param name="Bytes">What the row stated it would reclaim, in bytes (<see cref="ScanSize.Reclaimable"/>).</param>
+/// <param name="Entries">How many entries that removal would take (<see cref="ScanSize.Entries"/>).</param>
+/// <param name="Approximate">Whether the figure was a prediction rather than a measurement (<see cref="ScanSize.IsApproximate"/>).</param>
+/// <param name="Ceiling">Whether the figure was the most a removal could free (<see cref="ScanSize.IsCeiling"/>).</param>
 /// <param name="Elevated">
 /// Whether the scan held administrator rights. One that did can read folders one without them cannot,
 /// so a change between the two is partly the rights and not the cause.
 /// </param>
-public readonly record struct SizePoint(DateTime TakenUtc, long Bytes, bool Approximate, bool Elevated)
+public readonly record struct SizePoint(
+    DateTime TakenUtc, long Bytes, long Entries, bool Approximate, bool Ceiling, bool Elevated)
 {
+    /// <summary>
+    /// The figure as the row stated it, for <see cref="FreeSpace.Format(ScanSize)"/> to word, so the
+    /// history says "about", "up to" or a count of items exactly where the row did.
+    /// </summary>
+    public ScanSize Size => new(Bytes, Bytes, Approximate, Entries, Ceiling);
+
     /// <summary>
     /// What a scan measured of <paramref name="finding"/>'s provider, or null where it measured
     /// nothing: the tool is not here, nowhere is approved to look, or the location was not examined
@@ -38,6 +46,7 @@ public readonly record struct SizePoint(DateTime TakenUtc, long Bytes, bool Appr
 
         var reclaim = finding.Reclaim;
 
-        return new SizePoint(takenUtc, reclaim.Reclaimable, reclaim.IsApproximate || reclaim.IsCeiling, elevated);
+        return new SizePoint(
+            takenUtc, reclaim.Reclaimable, reclaim.Entries, reclaim.IsApproximate, reclaim.IsCeiling, elevated);
     }
 }

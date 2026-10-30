@@ -140,7 +140,7 @@ public sealed partial class ProviderSizeStore
 
     /// <summary>
     /// Whether every entry is one this store writes: a provider's id, and its figures in order of
-    /// time, each a UTC instant and a size no smaller than zero.
+    /// time, each a UTC instant with a size and a count no smaller than zero.
     /// </summary>
     private static bool Usable(IReadOnlyDictionary<string, SizePoint[]> providers) =>
         providers.All(entry => IsProviderId(entry.Key) && Ordered(entry.Value));
@@ -149,7 +149,7 @@ public sealed partial class ProviderSizeStore
     {
         for (var at = 0; at < points.Length; at++)
         {
-            if (points[at] is not { Bytes: >= 0, TakenUtc.Kind: DateTimeKind.Utc }
+            if (points[at] is not { Bytes: >= 0, Entries: >= 0, TakenUtc.Kind: DateTimeKind.Utc }
                 || (at > 0 && points[at].TakenUtc <= points[at - 1].TakenUtc))
             {
                 return false;
@@ -170,10 +170,12 @@ public sealed partial class ProviderSizeStore
     /// One figure as it is written: a class with every member a constructor parameter, so a figure
     /// missing any of them is refused rather than read as a zero.
     /// </summary>
-    private sealed record StoredPoint(DateTime TakenUtc, long Bytes, bool Approximate, bool Elevated)
+    private sealed record StoredPoint(
+        DateTime TakenUtc, long Bytes, long Entries, bool Approximate, bool Ceiling, bool Elevated)
     {
-        public static StoredPoint Of(SizePoint point) => new(point.TakenUtc, point.Bytes, point.Approximate, point.Elevated);
+        public static StoredPoint Of(SizePoint point) =>
+            new(point.TakenUtc, point.Bytes, point.Entries, point.Approximate, point.Ceiling, point.Elevated);
 
-        public SizePoint ToPoint() => new(TakenUtc, Bytes, Approximate, Elevated);
+        public SizePoint ToPoint() => new(TakenUtc, Bytes, Entries, Approximate, Ceiling, Elevated);
     }
 }

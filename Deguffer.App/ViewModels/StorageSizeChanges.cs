@@ -81,6 +81,10 @@ public sealed class StorageSizeChanges
     /// <summary>
     /// Keep what the scan measured, whether or not it ran to its end: each figure that landed is a
     /// measurement of its own, and one a cancelled scan reached is as true as one a whole scan did.
+    ///
+    /// <para>A figure that could not be stored is not reported. The next scan then compares with the
+    /// newest figure that was, and its change names that figure's date, so nothing it states is
+    /// wrong.</para>
     /// </summary>
     public Task EndAsync()
     {
@@ -104,7 +108,7 @@ public sealed class StorageSizeChanges
         [
             .. points.Select((point, at) => new ProviderSizeRow(
                 Local(point.TakenUtc),
-                point.Approximate ? $"about {FreeSpace.Format(point.Bytes)}" : FreeSpace.Format(point.Bytes),
+                FreeSpace.Format(point.Size),
                 at > 0 && SizeChange.Between(points[at - 1], point) is { } change ? change.Amount : string.Empty,
                 largest > 0 ? 100.0 * point.Bytes / largest : 0)),
         ];

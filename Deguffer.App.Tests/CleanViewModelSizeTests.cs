@@ -15,7 +15,7 @@ public sealed class CleanViewModelSizeTests
 {
     /// <summary>
     /// The first scan has nothing to compare with and states no change. The second states how far
-    /// the cause grew since the first, and both are kept, the latest of the day in place of the other.
+    /// the cause grew since the first, and is the newest figure kept.
     /// </summary>
     [Fact]
     public void ASecondScanStatesHowFarEachRowGrew()
@@ -37,7 +37,7 @@ public sealed class CleanViewModelSizeTests
         Assert.True(row.HasChange);
         Assert.StartsWith("+3 KB since ", row.ChangeLabel, StringComparison.Ordinal);
         Assert.Equal(row.ChangeLabel, row.ChangeTip);
-        Assert.Equal(4096, Assert.Single(page.Sizes.Of("cache")).Bytes);
+        Assert.Equal(4096, page.Sizes.Of("cache")[^1].Bytes);
     }
 
     /// <summary>
@@ -144,7 +144,10 @@ public sealed class CleanViewModelSizeTests
         Assert.False(page.Row("cache").HasChange);
     });
 
-    /// <summary>A file the store cannot read gives no row a change, rather than a change against part of it.</summary>
+    /// <summary>
+    /// A file the store cannot read gives no row a change, rather than a change against part of it:
+    /// the cache's own figure is whole, and the entry after it is not one the store would write.
+    /// </summary>
     [Fact]
     public void AnUnreadableHistoryGivesNoChange()
     {
@@ -152,10 +155,14 @@ public sealed class CleanViewModelSizeTests
         using var page = new StoragePage([cache]);
         cache.Steps = [Rows.Folder("a", 1024)];
         var folder = Directory.CreateDirectory(Path.Combine(page.Environment.LocalAppData, "Deguffer"));
-        File.WriteAllText(Path.Combine(folder.FullName, "provider-sizes.json"), """{"format":1,"providers":{"cache":[{"takenUtc":"2026-09""");
+        const string Point = """{"takenUtc":"2026-09-01T09:00:00Z","bytes":512,"entries":1,"approximate":false,"ceiling":false,"elevated":false}""";
+        File.WriteAllText(
+            Path.Combine(folder.FullName, "provider-sizes.json"),
+            "{\"format\":1,\"providers\":{\"cache\":[" + Point + "],\"other\":[" + Point.Replace("512", "-1", StringComparison.Ordinal) + "]}}");
 
         page.Scan();
 
         Assert.False(page.Row("cache").HasChange);
+        Assert.Equal(1024, Assert.Single(page.Sizes.Of("cache")).Bytes);
     }
 }

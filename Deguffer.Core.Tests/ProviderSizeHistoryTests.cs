@@ -39,8 +39,8 @@ public sealed class ProviderSizeHistoryTests : IDisposable
         Assert.True(history.Record([Found("npm", 4096), Found("gradle", 8192, approximate: true)], Then, elevated: true));
 
         var read = new ProviderSizeHistory(new ProviderSizeStore(_environment));
-        Assert.Equal(new SizePoint(Then, 4096, Approximate: false, Elevated: true), Assert.Single(read.Of("npm")));
-        Assert.Equal(new SizePoint(Then, 8192, Approximate: true, Elevated: true), Assert.Single(read.Of("gradle")));
+        Assert.Equal(new SizePoint(Then, 4096, Entries: 0, Approximate: false, Ceiling: false, Elevated: true), Assert.Single(read.Of("npm")));
+        Assert.Equal(new SizePoint(Then, 8192, Entries: 0, Approximate: true, Ceiling: false, Elevated: true), Assert.Single(read.Of("gradle")));
         Assert.Equal(4096, read.Latest()["npm"].Bytes);
         Assert.True(read.HasAny);
     }
@@ -71,7 +71,7 @@ public sealed class ProviderSizeHistoryTests : IDisposable
     public void AnEntryThatIsNotAProviderIdIsRefused(string id)
     {
         IReadOnlyDictionary<string, IReadOnlyList<SizePoint>> history =
-            new Dictionary<string, IReadOnlyList<SizePoint>> { [id] = [new SizePoint(Then, 1, false, false)] };
+            new Dictionary<string, IReadOnlyList<SizePoint>> { [id] = [new SizePoint(Then, 1, 1, false, false, false)] };
 
         Assert.Throws<ArgumentException>(() => _store.Save(history));
         Assert.False(System.IO.File.Exists(File));
@@ -103,7 +103,7 @@ public sealed class ProviderSizeHistoryTests : IDisposable
     {
         new ProviderSizeHistory(_store).Record([Found("npm", 4096), Found("gradle", 2048)], Then, elevated: false);
         var json = System.IO.File.ReadAllText(File);
-        var npm = """{"takenUtc":"2026-09-01T09:00:00Z","bytes":4096,"approximate":false,"elevated":false}""";
+        var npm = """{"takenUtc":"2026-09-01T09:00:00Z","bytes":4096,"entries":0,"approximate":false,"ceiling":false,"elevated":false}""";
         Assert.Contains(npm, json, StringComparison.Ordinal);
 
         var damaged = damage switch
@@ -229,7 +229,7 @@ public sealed class ProviderSizeHistoryTests : IDisposable
     public void AChangeIsSignedAndSaysWhenItIsApproximate()
     {
         static string Date(DateTime utc) => utc.ToString("yyyy-MM-dd");
-        var earlier = new SizePoint(Then, 1L << 30, Approximate: false, Elevated: false);
+        var earlier = new SizePoint(Then, 1L << 30, Entries: 1, Approximate: false, Ceiling: false, Elevated: false);
 
         Assert.Null(SizeChange.Between(null, earlier));
         Assert.Equal(
@@ -245,6 +245,42 @@ public sealed class ProviderSizeHistoryTests : IDisposable
         Assert.Equal(
             "About +1.0 GB since 2026-09-01",
             SizeChange.Between(earlier, earlier with { Bytes = 2L << 30, Approximate = true })!.Describe(Date));
+        Assert.Equal(
+            "About +1.0 GB since 2026-09-01",
+            SizeChange.Between(earlier with { Ceiling = true }, earlier with { Bytes = 2L << 30 })!.Describe(Date));
+    }
+
+    /// <summary>
+    /// A kept figure is worded as its row worded it: a ceiling says "up to", a prediction "about", and
+    /// a removal of entries holding no bytes says how many items, because the history keeps each.
+    /// </summary>
+    [Fact]
+    public void AKeptFigureIsWordedAsItsRowWas()
+    {
+        var history = new ProviderSizeHistory(_store);
+        var ceiling = Found("ceiling", 1L << 30, plan => plan with
+        {
+            Steps = [.. plan.Steps.Select(step => step with { Estimated = step.Estimated with { IsCeiling = true } })],
+        });
+        var empty = Found("empty", 0, plan => plan with
+        {
+            Steps =
+            [
+                .. plan.Steps.OfType<DeleteStep>().Select(step => step with
+                {
+                    Estimated = step.Estimated with { Entries = 3 },
+                    IsLeftover = true,
+                }),
+            ],
+        });
+
+        history.Record([ceiling, empty, Found("predicted", 1L << 30, approximate: true)], Then, elevated: false);
+
+        var read = new ProviderSizeHistory(new ProviderSizeStore(_environment));
+        Assert.Equal(FreeSpace.Format(ceiling.Reclaim), FreeSpace.Format(Assert.Single(read.Of("ceiling")).Size));
+        Assert.StartsWith("up to ", FreeSpace.Format(read.Of("ceiling")[0].Size), StringComparison.Ordinal);
+        Assert.Equal("3 items", FreeSpace.Format(Assert.Single(read.Of("empty")).Size));
+        Assert.StartsWith("about ", FreeSpace.Format(Assert.Single(read.Of("predicted")).Size), StringComparison.Ordinal);
     }
 
     /// <summary>A present provider's finding, with one step of <paramref name="bytes"/>.</summary>

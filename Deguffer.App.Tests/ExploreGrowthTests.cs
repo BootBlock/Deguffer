@@ -224,8 +224,8 @@ public sealed class ExploreGrowthTests : IDisposable
         _explore.Time.Advance(TimeSpan.FromDays(7));
         await ScanWithUsed(800);
 
-        Assert.StartsWith("At the rate since ", page.Growth.Forecast, StringComparison.Ordinal);
-        Assert.EndsWith("measured over 3 scans, this drive fills in about 2 weeks.", page.Growth.Forecast, StringComparison.Ordinal);
+        Assert.StartsWith("Used space rose about 100 MB a week over the 3 scans since ", page.Growth.Forecast, StringComparison.Ordinal);
+        Assert.EndsWith(". At that rate this drive fills in about 2 weeks.", page.Growth.Forecast, StringComparison.Ordinal);
 
         var settings = new ScanHistorySettingsViewModel(_explore.History);
         await settings.RefreshAsync(CancellationToken.None);

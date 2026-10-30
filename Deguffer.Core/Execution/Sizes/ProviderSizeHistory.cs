@@ -13,8 +13,8 @@ namespace Deguffer.Core.Execution.Sizes;
 /// newest figure before its scan, which this keeps however often that is.</para>
 ///
 /// <para>Shared by every caller, as one instance, for the reason <see cref="Exploring.History.ScanHistory"/>
-/// is: two would disagree about what is kept the moment either removed it. The file is read once, at
-/// the first question, and held for the life of the app.</para>
+/// is: two would disagree about what is kept the moment either removed it. The file is read at the
+/// first question and held from then on, until a removal, after which it is read again.</para>
 /// </summary>
 public sealed class ProviderSizeHistory(ProviderSizeStore store)
 {

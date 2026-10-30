@@ -11,8 +11,9 @@ namespace Deguffer.Core.Execution.Sizes;
 /// <param name="Bytes">The later figure less the earlier one.</param>
 /// <param name="SinceUtc">When the earlier scan ran.</param>
 /// <param name="Approximate">
-/// Whether either figure was a prediction, or the two scans held different rights, so part of the
-/// change may be how the location was read rather than what is in it.
+/// Whether either figure was a prediction or a ceiling, so the difference of the two is no
+/// measurement, or the two scans held different rights, so part of it may be how the location was
+/// read rather than what is in it.
 /// </param>
 public sealed record SizeChange(long Bytes, DateTime SinceUtc, bool Approximate)
 {
@@ -21,7 +22,7 @@ public sealed record SizeChange(long Bytes, DateTime SinceUtc, bool Approximate)
         ? new SizeChange(
             now.Bytes - then.Bytes,
             then.TakenUtc,
-            then.Approximate || now.Approximate || then.Elevated != now.Elevated)
+            then.Approximate || then.Ceiling || now.Approximate || now.Ceiling || then.Elevated != now.Elevated)
         : null;
 
     /// <summary>How far it moved, with its sign so growth and shrinkage read apart without colour.</summary>

@@ -33,7 +33,7 @@ public sealed class FillForecastTests
         Assert.Equal(Start, forecast.SinceUtc);
         Assert.Equal(4, forecast.Scans);
         Assert.Equal(
-            "At the rate since 2026-09-01, measured over 4 scans, this drive fills in about 11 weeks.",
+            "Used space rose about 7.0 GB a week over the 4 scans since 2026-09-01. At that rate this drive fills in about 11 weeks.",
             ForecastText.Of(forecast, Date));
     }
 
@@ -147,7 +147,7 @@ public sealed class FillForecastTests
         Assert.Equal(NoForecast.BeyondHorizon, forecast.Why);
         Assert.Equal(84, forecast.Horizon.TotalDays, precision: 6);
         Assert.Equal(
-            "At the rate since 2026-09-01, this drive does not fill within 12 weeks.",
+            "Used space rose about 7.0 GB a week over the 4 scans since 2026-09-01. At that rate this drive does not fill within 12 weeks.",
             ForecastText.Of(forecast, Date));
     }
 
