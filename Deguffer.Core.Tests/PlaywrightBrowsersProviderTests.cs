@@ -19,8 +19,9 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private PlaywrightBrowsersProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+    private PlaywrightBrowsersProvider CreateProvider(ILiveTreeInspector? liveTrees = null) =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning,
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive);
 
     /// <summary>Create the default browser root with the given children, each holding a payload.</summary>
     private string CreateRoot(params string[] children)
@@ -371,5 +372,83 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
 
         Assert.Contains(browser, plan.TargetedPaths);
         Assert.True(plan.EstimatedBytes > 0, "A browser build past MAX_PATH was measured as empty.");
+    }
+
+    /// <summary>
+    /// A test suite's browser runs from inside its build as plain <c>chrome.exe</c>, a name no warning
+    /// singles out, and removing the build under it fails part of the way through on the files it
+    /// holds. The build is held back, named, and asserted to survive, and the builds beside it are
+    /// still offered, each carrying the question to ask again at the clean.
+    /// </summary>
+    [Fact]
+    public async Task HoldsBackABuildARunningBrowserIsUsing()
+    {
+        var root = CreateRoot("chromium-1228", "firefox-1532", "webkit-2210");
+        var running = Path.Combine(root, "chromium-1228");
+
+        var liveTrees = FakeLiveTreeInspector.NothingLive
+            .WithProgram("chrome", executable: Path.Combine(running, "chrome-win", "chrome.exe"));
+
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Equal(
+            [Path.Combine(root, "firefox-1532"), Path.Combine(root, "webkit-2210")],
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.All(plan.Steps.OfType<DeleteStep>(), step => Assert.NotNull(step.UseCheck));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == running);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == root);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(root, ".links"));
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("the build 'chromium-1228' (chrome", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same question asked again at the clean. A test suite started between the preview and the
+    /// clean keeps the build its browser runs from, the step says why, §5.6 proves it survived, and the
+    /// build nothing took up is still removed.
+    /// </summary>
+    [Fact]
+    public async Task ABuildABrowserStartsRunningFromAfterThePreviewSurvivesTheClean()
+    {
+        var root = CreateRoot("chromium-1228", "firefox-1532");
+        var busy = Path.Combine(root, "chromium-1228");
+        var idle = Path.Combine(root, "firefox-1532");
+
+        var liveTrees = FakeLiveTreeInspector.NothingLive;
+        var provider = CreateProvider(liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(busy, plan.TargetedPaths);
+        Assert.Contains(idle, plan.TargetedPaths);
+
+        liveTrees.WithProgram("chrome", Path.Combine(busy, "chrome-win", "chrome.exe"), _temp.Path);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "a build a browser started running from was removed");
+        Assert.False(Directory.Exists(idle), "a build nothing took up was kept");
+        Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: chrome is running from inside it.");
+
+        var check = Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(busy, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(VerificationOutcome.Survived, check.Outcome);
+        Assert.True(result.Verification.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// "Could not tell" is not permission. A build nothing could check is not offered, it is asserted
+    /// to survive, and the plan says why the row is short rather than calling it clear.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoBuildWhenItCannotTellWhetherABuildIsInUse()
+    {
+        var build = Path.Combine(CreateRoot("chromium-1228"), "chromium-1228");
+
+        var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined, "a row holding its only build back read as already clear");
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == build && p.Reason == LiveTreeVeto.UncheckedReason);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("could not check whether anything is using one of these", StringComparison.Ordinal));
     }
 }

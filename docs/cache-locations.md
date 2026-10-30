@@ -3820,6 +3820,13 @@ publish **and** followed by a numeric revision. `chromium-1228` qualifies. `chro
 `chromium-abc`, `chromium-1228-backup` and anything you created yourself do not — they stay in
 Tier 4 and Deguffer tells you it is leaving them alone.
 
+A build a running program is using, such as the browser a test suite launched, is left alone and
+named, and the clean asks again before each removal. The browser is an ordinary `chrome.exe` or
+`firefox.exe`, so Deguffer finds it by where it runs from rather than by its name. Deleting a build
+under a running browser fails part of the way through: the tests break, and what is left is a build
+Playwright can neither launch nor recognise as missing. A build Deguffer could not check is left
+alone too, and the row says so.
+
 ### What is protected
 
 The cache root itself, and **`.links`**. That directory is the subtle one: it looks like more cache,
@@ -3829,7 +3836,7 @@ browsers is something Playwright recovers from cleanly. Deleting the registry th
 breaks its own housekeeping.
 
 Every other folder in there that Deguffer leaves alone, including one that is a link to somewhere
-else, is asserted to have survived the run too.
+else and a build a running program is using, is asserted to have survived the run too.
 
 ### What it costs you
 
@@ -4139,7 +4146,8 @@ Within `Releases`, a child is removed only if its **whole name is three dotted n
 `4.18.1-backup` and anything you created yourself do not qualify: they stay in Tier 4 and Deguffer
 tells you it is leaving them alone.
 
-**Every release is offered, including the one the tooling still points at.** Deguffer cannot know
+**Every release is offered, including the one the tooling still points at,** unless a running
+program is using it (see below). Deguffer cannot know
 whether you still have a Functions v2 project, and withholding 166 MB on the chance that you might
 would be Deguffer making your decision for you. What it does instead is tell you which is which:
 each row carries the date its release arrived, and its description says whether the tooling's own
@@ -4152,6 +4160,12 @@ of those records cannot be read, every row says neither. "Nothing points at this
 about all four records, so a partial reading cannot support it, and describing a release you still
 use as superseded is a worse answer than saying nothing.
 
+A release a running program is using, such as the `func` host of a project being debugged, is left
+alone and named, and the clean asks again before each removal. Deleting a release under a running
+host fails part of the way through on the files it holds, which breaks the session and leaves a
+release the tooling can neither run nor recognise as missing. A release Deguffer could not check is
+left alone too, and the row says so.
+
 ### What is protected
 
 The tooling's folder, `Releases` itself, **`Tags`** and the cached **`feed-v<sequence>.json`**.
@@ -4159,6 +4173,9 @@ The last two are the subtle ones: both look like more cache, and both are how th
 which releases it already holds and which one each runtime line should use. Removing a release is
 something the tooling recovers from by downloading it again. Removing the record of what it has
 interferes with the part that decides.
+
+Every child of `Releases` that Deguffer leaves alone, including a release a running program is
+using, is asserted to have survived the run too.
 
 ### What it costs you
 

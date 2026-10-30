@@ -49,18 +49,23 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
     private const string UnrecognisedReason = "Not a recognised Playwright browser download.";
 
+    /// <summary>Why a build a running program is using is listed as a survivor, in the §5.6 report.</summary>
+    private const string InUseReason = "A running program is using this browser build, so it is left alone.";
+
+    private readonly ILiveTreeInspector _liveTrees;
+
     public PlaywrightBrowsersProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ILiveTreeInspector? liveTrees = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner)
-    {
-    }
+        => _liveTrees = liveTrees ?? LiveTreeInspector.Default;
 
     public override string Id => "playwright";
 
@@ -93,6 +98,9 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
     /// binaries, so warning on those would fire for the user's everyday browser on almost every
     /// scan — and a warning that is always present is one nobody reads. These two names only exist
     /// while Playwright itself is working.
+    ///
+    /// <para>A warning, never the guard. A browser running from a build is found by where it runs
+    /// from, whatever it is called, and that build is held back (see <see cref="BuildPlanAsync"/>).</para>
     /// </summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => ["playwright", "headless_shell"];
 
@@ -167,6 +175,12 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
                 .Select(CleanedPlace.Whole),
         ]);
 
+    public override void InvalidateCaches()
+    {
+        _liveTrees.Invalidate();
+        base.InvalidateCaches();
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveRoot() is { } root && LongPath.DirectoryMayExist(root));
 
@@ -203,7 +217,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var targets = new List<DeletionTarget>();
+        var builds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var spared = new List<(string Path, string Reason)>();
 
         var scan = ChildDirectories.Under(root);
@@ -241,22 +255,52 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
                 continue;
             }
 
-            // The revision is everything after the last hyphen: RecognisedChild ends every name in
-            // one, followed only by digits, however many hyphens the browser's own name holds.
-            var revision = child.Name.LastIndexOf('-');
-
             // Enumeration runs in extended form; a plan always holds display paths, and I/O
             // re-extends at the point of use.
-            targets.Add(new DeletionTarget(
-                LongPath.Display(child.FullName),
-                $"Playwright browser build '{child.Name}', re-downloaded by 'playwright install'.",
+            builds.Add(LongPath.Display(child.FullName), child.Name);
+        }
+
+        // A test suite's browser is chrome.exe or firefox.exe running from inside its build, a name
+        // no warning can single out, and removing the build under it fails part of the way through
+        // on the files it holds open: the suite breaks and a build Playwright can neither launch nor
+        // recognise as missing is left behind. So the build is held back by where the browser runs
+        // from. Each build is its own project, because a browser running from one is using none of
+        // the builds beside it.
+        var live = LiveTreeVeto.Apply(
+            _liveTrees,
+            [.. builds.Keys.Select(build => new RecognisedBuildDirectory(build, build))],
+            lockFiles: [],
+            ct);
+
+        if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"the build '{builds[vetoed.Directory]}'") is { } held)
+        {
+            notes.Add(held);
+        }
+
+        if (LiveTreeVeto.UncheckedNote(live.Unchecked.Count) is { } incomplete)
+        {
+            notes.Add(incomplete);
+        }
+
+        var targets = live.Cleared.Select(cleared =>
+        {
+            var name = builds[cleared.Path];
+
+            // The revision is everything after the last hyphen: RecognisedChild ends every name in
+            // one, followed only by digits, however many hyphens the browser's own name holds.
+            var revision = name.LastIndexOf('-');
+
+            return new DeletionTarget(
+                cleared.Path,
+                $"Playwright browser build '{name}', re-downloaded by 'playwright install'.",
 
                 // The build's own name is the build, wherever LocationVariable puts the cache, so a
                 // kept build stays kept when the user moves it.
-                Identity: new ItemIdentity(child.Name, child.Name),
-                Facets: [new ItemFacet("Revision", child.Name[(revision + 1)..])],
-                Group: child.Name[..revision]));
-        }
+                Identity: new ItemIdentity(name, name),
+                Facets: [new ItemFacet("Revision", name[(revision + 1)..])],
+                Group: name[..revision],
+                UseCheck: cleared.StillUnused);
+        }).ToList();
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
@@ -277,11 +321,11 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(root, spared),
+            ProtectedPaths = BuildProtectedPaths(root, spared, live),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
-            WasNotExamined = targets.Count == 0 && scan.Links.Count > 0,
+            WasNotExamined = targets.Count == 0 && (scan.Links.Count > 0 || live.Held.Count > 0),
         };
     }
 
@@ -292,15 +336,19 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
     /// browsers is a reclaim Playwright recovers from; deleting the registry that tracks them
     /// breaks its own housekeeping, and it looks exactly like a cache while doing so.
     ///
-    /// <para>Every other child left standing is named too, links included. Each is a sibling of a
-    /// targeted build, which is exactly where an over-broad rule takes one with the other.</para>
+    /// <para>Every other child left standing is named too, links included, and so is every build held
+    /// back because a program may be using it. Each is a sibling of a targeted build, which is exactly
+    /// where an over-broad rule takes one with the other.</para>
     /// </summary>
     private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         string root,
-        IReadOnlyList<(string Path, string Reason)> spared) => Protect(
+        IReadOnlyList<(string Path, string Reason)> spared,
+        LiveTreeVetoResult live) => Protect(
     [
         (root, "The browser cache root itself must survive — only recognised browser builds are removed."),
         (Path.Combine(root, ".links"), "Playwright's record of which installations use which browsers."),
         .. spared,
+        .. live.Vetoed.Select(v => (v.Directory, InUseReason)),
+        .. live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)),
     ]);
 }
