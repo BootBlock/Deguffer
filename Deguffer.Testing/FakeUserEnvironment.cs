@@ -13,6 +13,7 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 {
     private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _toolVariables = new(StringComparer.OrdinalIgnoreCase);
     // Holds a string or an int, as the registry holds REG_SZ and REG_DWORD, so a read of the wrong
     // type is told nothing, as it would be on a real machine.
     private readonly Dictionary<string, object> _registry = new(StringComparer.OrdinalIgnoreCase);
@@ -287,6 +288,23 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         EnvironmentReads++;
 
         return _variables.TryGetValue(name, out var value) ? value : null;
+    }
+
+    /// <summary>
+    /// A variable set with <see cref="WithEnvironmentVariable"/> reaches a started tool too, as it does
+    /// on a machine nobody changed since Deguffer started. <see cref="WithToolEnvironmentVariable"/>
+    /// sets one only a started tool still sees.
+    /// </summary>
+    public string? GetToolEnvironmentVariable(string name) =>
+        _toolVariables.TryGetValue(name, out var value) ? value
+        : _variables.TryGetValue(name, out value) ? value
+        : null;
+
+    /// <summary>Pretend Deguffer started with <paramref name="name"/> set, and the machine has since dropped it.</summary>
+    public FakeUserEnvironment WithToolEnvironmentVariable(string name, string value)
+    {
+        _toolVariables[name] = value;
+        return this;
     }
 
     public int InvalidateCount { get; private set; }

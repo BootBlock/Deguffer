@@ -70,13 +70,15 @@ public sealed class ChromiumSearchScopeTests : IDisposable
 
     /// <summary>
     /// The tree holds every listing a walk would make, so it gives the same folders: one beside the
-    /// root, a WebView2 folder four levels down, and not a WebView2 directory without the marker, nor
-    /// one inside a declared browser's folder, which is classified whole and never entered.
+    /// root, one in a package's redirected root, a WebView2 folder four levels down, and not a WebView2
+    /// directory without the marker, nor one inside a declared browser's folder, which is classified
+    /// whole and never entered.
     /// </summary>
     [Fact]
     public void AScannedRootGivesTheFoldersTheDiskGives()
     {
         CreateUserData(Path.Combine(_environment.LocalAppData, "Vendor"));
+        CreateUserData(Path.Combine(_environment.LocalAppData, "Packages", "Vendor.Chat_0123456789abc", "LocalCache", "Roaming", "Chat"));
         CreateUserData(Path.Combine(_environment.RoamingAppData, "Vendor", "Product", "Cache", "EBWebView"));
         Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "Other", "EBWebView"));
         CreateUserData(Path.Combine(_environment.LocalAppData, "Google", "Chrome", "User Data", "EBWebView"));
@@ -84,7 +86,7 @@ public sealed class ChromiumSearchScopeTests : IDisposable
         var fromTree = Discovery(Scanned(_temp.Path)).Discover();
         var fromDisk = Discovery().Discover();
 
-        Assert.Equal(2, fromDisk.Count);
+        Assert.Equal(3, fromDisk.Count);
         Assert.Equal(Described(fromDisk), Described(fromTree));
     }
 
@@ -115,14 +117,16 @@ public sealed class ChromiumSearchScopeTests : IDisposable
     public void AMarkerTheTreeLacksIsAskedOfTheDiskWhereItWouldIdentify()
     {
         var vendor = Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "Vendor")).FullName;
+        var packaged = Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "Packages", "Vendor.Chat_0123456789abc", "LocalCache", "Local", "Chat")).FullName;
         var webView = Directory.CreateDirectory(Path.Combine(_environment.RoamingAppData, "Vendor", "Product", "EBWebView")).FullName;
         var scope = Scanned(_temp.Path);
 
         File.WriteAllText(Path.Combine(vendor, "Local State"), "{}");
+        File.WriteAllText(Path.Combine(packaged, "Local State"), "{}");
         File.WriteAllText(Path.Combine(webView, "Local State"), "{}");
 
         Assert.Equal(
-            [vendor, webView],
+            [packaged, vendor, webView],
             Discovery(scope).Discover().Select(application => application.Path).Order(StringComparer.OrdinalIgnoreCase));
     }
 

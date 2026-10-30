@@ -375,6 +375,29 @@ public sealed class JellyfinTranscodeProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The tag counts as a tag, not as a name. A file called <c>CACHEDIR.TAG</c> that does not open
+    /// with the specification's header is no evidence that anything marked the folder, so the default
+    /// folder beneath it is not offered.
+    /// </summary>
+    [Fact]
+    public async Task AFileNamedLikeTheCacheTagWithoutItsHeaderIsNoEvidence()
+    {
+        CreateData(Data);
+        var segment = Write(Path.Combine(Transcodes, "0b1c2d.ts"), Old);
+        Write(Path.Combine(Data, "cache", JellyfinServerLayout.CacheTag), Old, "notes about this folder");
+        Record(JellyfinServerLayout.DataFolderValue, Data);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(segment), "a folder under a file merely named like the cache tag was emptied.");
+    }
+
+    /// <summary>
     /// The same rule where the cache folder is what moved. Settings the installer does not record move
     /// the cache, and the transcoder with it, to a folder that may carry an old marker or another
     /// tool's cache tag.

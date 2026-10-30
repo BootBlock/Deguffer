@@ -196,7 +196,7 @@ internal static class LiveTreeVeto
             $"{(name is null ? $"{Name(v.Directory)} in {Name(Parent(v.Directory))}" : name(v))} "
             + $"({string.Join("; ", v.Holders)})");
 
-        // Both grammatical forms written out, for the reason ObjPlanNotes records: driving the real
+        // Both grammatical forms written out, for the reason TrackedFilePlanNotes records: driving the real
         // window is what catches a sentence that reads correctly only on a machine with more than
         // one of something.
         return new PlanNote(

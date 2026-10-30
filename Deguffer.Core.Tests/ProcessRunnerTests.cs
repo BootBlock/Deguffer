@@ -56,6 +56,48 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.Equal(folder, outcome.StandardOutput.Trim(), StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// A PATH search takes the extension's case from PATHEXT, which lists <c>.BAT</c> and <c>.CMD</c>
+    /// in capitals, so Composer resolves to <c>composer.BAT</c>. A shim launched directly rather than
+    /// through cmd.exe's quoting mangles a quoted argument, and every query fails.
+    /// </summary>
+    [Theory]
+    [InlineData("tool.cmd")]
+    [InlineData("tool.CMD")]
+    [InlineData("tool.BAT")]
+    [InlineData("tool.Bat")]
+    public async Task ABatchShimOfAnyCaseReceivesAQuotedArgumentWhole(string name)
+    {
+        var shim = Path.Combine(_temp.CreateDirectory("bin"), name);
+        File.WriteAllText(shim, "@echo %~1" + Environment.NewLine);
+        var argument = Path.Combine(_temp.Path, "a folder", "with spaces");
+
+        var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools"))
+            .RunAsync(shim, $"\"{argument}\"", ToolRun.Query, CancellationToken.None);
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.Equal(argument, outcome.StandardOutput.Trim());
+    }
+
+    /// <summary>
+    /// cmd.exe expands %NAME% inside a quoted argument, so a path vetted as written would reach a shim
+    /// as another. The shim is not started at all.
+    /// </summary>
+    [Fact]
+    public async Task ABatchShimIsNotStartedWithAPercentSignInItsArguments()
+    {
+        var marker = Path.Combine(_temp.Path, "ran");
+        var shim = Path.Combine(_temp.CreateDirectory("bin"), "tool.cmd");
+        File.WriteAllText(shim, $"@echo ran> \"{marker}\"" + Environment.NewLine);
+        var argument = Path.Combine(_temp.Path, "%USERNAME%", "cache");
+
+        var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools"))
+            .RunAsync(shim, $"--cache-folder \"{argument}\"", ToolRun.Query, CancellationToken.None);
+
+        Assert.Equal(-1, outcome.ExitCode);
+        Assert.False(File.Exists(marker), "The shim ran with an argument cmd.exe would have rewritten.");
+    }
+
     [Fact]
     public async Task AFolderThatCannotBeMadeFailsTheStepWithoutRunningTheTool()
     {

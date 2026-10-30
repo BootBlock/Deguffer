@@ -166,7 +166,20 @@ for each box name and provider
   version is installed for two architectures. Vagrant is never started for a home with no `boxes`,
   because every command creates its home, and a cancelled prune is left to finish.
 
-### Container tools on WSL
+### Container tools on WSL ✅ done
+
+Shipped as owner records in the WSL report: `DockerDesktopData`, `DockerDesktopSystem`,
+`PodmanMachine`, `PodmanNetworking`, `RancherDesktopData` and `RancherDesktopSystem`, each a
+`DiskOwner` with its own name and route. It differs from the entry in two ways. Podman adds the
+`podman-` prefix only to a machine name that does not already begin with `podman`, so the default
+machine's distribution is `podman-machine-default`
+([dir.go](https://raw.githubusercontent.com/containers/podman/main/pkg/machine/env/dir.go)
+`WithPodmanPrefix`), and Podman also registers `podman-net-usermode` for user-mode networking
+([declares.go](https://raw.githubusercontent.com/containers/podman/main/pkg/machine/wsl/declares.go)).
+Rancher Desktop's only documented prune is the moby engine's `docker` commands, in its guide to
+reclaiming the space a storage driver change leaves behind, so its route names those as that guide's,
+and its own resets, and never `nerdctl`, which its documentation does not give. The Rancher Desktop
+snapshots report below is a separate candidate and is not built.
 
 Podman's WSL machine is a distribution named `podman-<name>`
 ([machine.go](https://raw.githubusercontent.com/containers/podman/main/pkg/machine/wsl/machine.go)),
@@ -201,7 +214,14 @@ Rancher are added.
   `%LOCALAPPDATA%\Genymobile\Genymotion\deployed` are VirtualBox VMs, so they are the VirtualBox
   report's, if they register there (unverified).
 
-### What the virtualisation reports need before any of them ships
+### What the virtualisation reports need before any of them ships ✅ done
+
+Shipped: a report implements `IRegistersVirtualMachineStorage` and returns each disk or VM folder as
+a `VirtualMachineStorage`. The planner reads every registration before a pass (`RegisteredStorage`),
+`VirtualMachineStoragePlan` withholds any step of any row that reaches one and protects it
+(`Withholding.VirtualMachineStorage`), every clean proves all of them standing through
+`VirtualMachineStoragePlan.ProofFor`, whichever rows were scanned, and Explore refuses each one from
+the same registration.
 
 **The negative.** §11 of the first survey records that no run checks afterwards that a registered
 disk survived, and that Explore's refusal is the only guard. Three more reports make that gap three
@@ -218,18 +238,23 @@ report.
 | Electron download cache | **Build** | 1 | 150.9 MB |
 | electron-builder cache | Build later | 1 | 63.9 MB |
 | TypeScript typings cache | **Build** | 1 | 57.7 MB |
-| Bun install cache | **Build**, through `prune` only | 1 | Absent |
-| Yarn 1 cache | **Build** | 1 | Absent |
+| Bun install cache | ✅ **Built**, through `prune` only, Bun 1.4.4+ | 1 | Absent |
+| Yarn 1 cache | ✅ **Built** | 1 | Absent |
 | Deno cache | **Build**, by path, never `deno clean` | 1 | Absent |
 | Conan 2 | **Build**, `conan cache clean` only. ✅ done: `ConanCacheProvider` | 1 | Absent |
 | Scoop download cache | **Build**. ✅ done: `ScoopCacheProvider` | 1 | Absent |
-| Composer | **Build**, low value | 1 | 30.1 MB |
+| Composer | ✅ **Built**, low value | 1 | 30.1 MB |
 | Cypress binaries | Build later | 2 | Absent |
 | Yarn Berry global cache | Build later | 2 | Absent |
 | PDM, Bazelisk, Coursier, opam, Julia, node-gyp, Chocolatey, Terraform plugin cache, RubyGems, Cabal, Stack, Hex | Build later | 1–2 | Absent |
 | winget portable packages, rustup toolchains, pipx, Hatch, Volta, nvm-windows, fnm, `scoop cleanup` | Reject | — | — |
 
 ### Electron download cache — Build, Tier 1, measured at 150.9 MB
+
+✅ **Done** as `ElectronCacheProvider`. Offers only folders named by 64 lowercase hex characters.
+Differs: `electron_config_cache` is read by the `electron` package's `npm/install.js`, not by
+`@electron/get`, which takes only a `cacheRoot` option. Each entry holds only the zip from
+`@electron/get` 4.0 on (`SHASUMS256.txt` beside it before that).
 
 `%LOCALAPPDATA%\electron\Cache`, moved by `electron_config_cache`
 ([installation](https://github.com/electron/electron/blob/main/docs/tutorial/installation.md)). Each
@@ -249,6 +274,12 @@ the source that names these entries was not found, so the name patterns are obse
 A separate provider from Electron's (G1).
 
 ### TypeScript typings cache — Build, Tier 1, measured at 57.7 MB
+
+✅ **Done** as `TypeScriptTypingsCacheProvider`. **Correction:** no process is named `tsserver`. VS
+Code runs it as `Code.exe`, other hosts as `node.exe`, and TypeScript 7 as `tsc`. So a version
+folder is held back by the live-tree check (a program working in it, as the installer's
+`npm install` does, or holding a file in it open), not by a process name. Verified from
+TypeScript 6.0.3's `nodeServer.ts`, the TypeScript 7 Go port's `osvfs`, and VS Code's spawner.
 
 `%LOCALAPPDATA%\Microsoft\TypeScript\<major.minor>`, confirmed from the shipped `_tsserver.js`,
 whose `win32` branch joins `LOCALAPPDATA` with `Microsoft/TypeScript` and `versionMajorMinor`.
@@ -271,6 +302,16 @@ The trap is `<cache>\links`, the global store. With `install.globalStore` on, a 
 `prune --max-age 0`), never `rm`, and `links` is never a path target. The Bun version that added
 `prune` is not stated anywhere found; probe with `--dry-run`.
 
+✅ **Done**: `BunInstallCacheProvider` runs `bun pm cache prune --max-age 0 --cache-dir <cache>`.
+Corrected from source: `prune` first shipped in **Bun 1.4.4** (commit `9510e7415207`,
+[release notes](https://bun.com/blog/bun-v1.4.4)), and `links` arrived in 1.3.14, so 1.3.14 to 1.4.3
+have the store and no safe eviction. A `--dry-run` probe cannot detect it: an older Bun skips unknown
+flags and reads `prune` as a request for the path, and before 1.4.4 `rm --dry-run` really deleted. The
+provider asks `bun --version` instead and offers nothing below 1.4.4. No path fallback was built: an
+older Bun will not report its cache from a folder with no `package.json`, and how 1.3.14 to 1.4.3 link
+the store was not established. The plan measures only the package folders prune's own walk removes,
+link-aware.
+
 ### Yarn 1 cache — Build, Tier 1, researched
 
 `%LOCALAPPDATA%\Yarn\Cache\v6` (`getCacheDir()` and `CACHE_VERSION = 6` in
@@ -281,7 +322,23 @@ The trap is `<cache>\links`, the global store. With `install.globalStore` on, a 
 working directory's parents, so the fixed working directory (§5.1) matters. `Yarn\Data` beside it
 holds installed global packages: Tier 4.
 
+✅ **Done**: `YarnClassicCacheProvider`. Corrected from source: `yarn cache clean` deletes the whole
+cache **root**, the parent of the `v6` that `cache dir` prints, with anything else in it
+([cache.js](https://github.com/yarnpkg/yarn/blob/v1.22.22/src/cli/commands/cache.js#L119-L124)). And
+the fixed working directory is not enough to keep Berry out: Yarn 1 hands itself off to a `yarnPath`
+read from `.yarnrc.yml` in the profile as well as in the working directory's parents, and a Corepack
+shim can run Yarn 4. The provider asks `yarn -v`, offers nothing unless it is `1.x.y`, accepts only a
+root that holds nothing but `vN` folders and not `Data` or `Berry`, and runs
+`yarn cache clean --cache-folder <root> --non-interactive`, which Yarn 4 rejects before running anything
+(Yarn 2 and 3 unverified).
+
 ### Deno cache — Build by path, Tier 1, researched
+
+✅ **Done** as `DenoCacheProvider`. Differs: Deno also honours `XDG_CACHE_HOME\deno` on Windows,
+between `DENO_DIR` and the default. The databases are the seven `*_v2` names `deno_dir.rs` defines,
+each with its SQLite `-wal` and `-shm` files. Other folders Deno tools write (`node_compat_bin`,
+`tsc`, `task_cache_v1` and others) are not in `deno_dir.rs`, so they stay Tier 4. Every step is held
+back while a `deno` process runs.
 
 `DENO_DIR`, `%LOCALAPPDATA%\deno` by default
 ([installation](https://docs.deno.com/runtime/getting_started/installation/)). **A recorded
@@ -338,6 +395,15 @@ Composer already caps its own cache at 300 MiB and six months
 ([config](https://getcomposer.org/doc/06-config.md)). With only `COMPOSER_HOME` set the cache sits in
 `$COMPOSER_HOME/cache` beside `auth.json`, which the command handles and a path fallback must not.
 
+✅ **Done**: `ComposerCacheProvider`. Added from source: `clear-cache` empties every folder the four
+settings `cache-dir`, `cache-files-dir`, `cache-repo-dir` and `cache-vcs-dir` name, with no guard of its
+own, so the provider asks each and runs the clear only where the three are the cache folder's own
+`files`, `repo` and `vcs`, the cache holds nothing else but `.htaccess`, and it does not hold the home.
+Composer 2.11 also reads a project from the working directory and, with `use-parent-dir`, from its
+parents, which `--working-dir` stops. Asking a setting writes `config.json`, `auth.json` and
+`.htaccess` where they are missing. The cache is capped at 300 MiB for `files` alone; `repo` and `vcs`
+are expired only by `clear-cache --gc`.
+
 ### Build later
 
 | Tool | Route | Gap |
@@ -372,9 +438,9 @@ Composer already caps its own cache at 300 MiB and six months
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
 | Godot `.godot\imported` and `.godot\shader_cache` | Build later, named children only | 2 and 1 | **14.0 GB across 36 projects** |
-| JetBrains-platform system directories of superseded versions | **Build** | 1 | 633 MB, one superseded Android Studio |
-| Flutter/Dart `.dart_tool` | **Build** | 2 | 288 MB across 2 projects |
-| Python tool caches that write `CACHEDIR.TAG` | **Build**, as a declared table | 1–2 | One `.pytest_cache` |
+| JetBrains-platform system directories of superseded versions | ✅ **Built** | 1 | 633 MB, one superseded Android Studio |
+| Flutter/Dart `.dart_tool` | ✅ **Built** | 2 | 288 MB across 2 projects |
+| Python tool caches that write `CACHEDIR.TAG` | ✅ **Built**, as a declared table | 1–2 | One `.pytest_cache` |
 | Gradle per-project `.gradle` | Build later | 1 | 162 MB across 5 |
 | Current-version JetBrains `caches`, `index`, `log`, `tmp` | Build later | 1 | About 160 MB per version |
 | Terraform `.terraform\providers` | Build later | 2 | Absent |
@@ -417,6 +483,20 @@ No documented command clears the import cache. Godot 3 kept the same cache in a 
 
 ### Superseded JetBrains-platform system directories — Build, Tier 1, measured
 
+✅ **Done, narrower.** `JetBrainsSupersededSystemProvider` offers the `caches`, `index` and `tmp`
+folders of a version's system directory under `%LOCALAPPDATA%\JetBrains` or
+`%LOCALAPPDATA%\Google\AndroidStudio*` where the `.home` test finds it replaced or its install gone,
+and its newest entry at any depth is older than 180 days. Not the whole directory: it also holds
+`LocalHistory` and `log`, which `_spec.md` §3 puts in Tier 3, so those stay with every unrecognised
+child. **Reading the
+source corrected this entry:** the IDE's automatic clean uses age alone. It applies no installed test
+and no older-version test; the installed test only sets which rows the manual dialog ticks. It finds
+candidates from configuration folders under `%APPDATA%`, never by listing `%LOCALAPPDATA%`, and
+only for the running product. On Windows the logs are inside the system directory. Deguffer requires
+both the installed test and the age, and keeps a version wherever the IDE would guess: a missing or
+unreadable `.home`, and a folder it could not list, which the IDE skips silently. A version started
+between preview and clean is held back by its rewritten `.home`.
+
 JetBrains documents the system (caches) directory as `%LOCALAPPDATA%\JetBrains\<product><version>`
 and configuration as `%APPDATA%\JetBrains\<product><version>`
 ([directories](https://www.jetbrains.com/help/idea/directories-used-by-the-ide-to-store-settings-caches-plugins-and-logs.html)).
@@ -442,6 +522,13 @@ the IDE.
 
 ### Flutter/Dart `.dart_tool` — Build, Tier 2, measured at 288 MB
 
+✅ **Done.** `DartToolProvider`, as proposed, plus one requirement the measurement forced:
+`package_graph.json` beside `package_config.json`. A fixture in a published package (in the pub
+cache) carries `"generator": "pub"` with both pubspec files beside it, and only pub's real output
+has the graph. `configVersion` must be 2. The hazard was **two** tracked fixtures in the Flutter SDK
+checkout, not three: the third `.dart_tool` there is real, ignored output. Git's tracked-file check is
+now a `BuildDirectoryKind` declaration any kind can make.
+
 Unlike the declined Dart `build`, this one carries evidence inside: `.dart_tool\package_config.json`
 has `"generator": "pub"`, which pub documents as "for `pub` this is always `'pub'`"
 ([package_config.dart](https://github.com/dart-lang/pub/blob/master/lib/src/package_config.dart)).
@@ -453,6 +540,14 @@ state is recompiled. **Hazard:** three measured `.dart_tool` folders sat inside 
 as test fixtures, so the git tracked-file check `obj` already uses applies.
 
 ### Tools that write `CACHEDIR.TAG` — Build as a declared table
+
+✅ **Done.** One provider per row (`PytestCacheProvider`, `MypyCacheProvider`, `RuffCacheProvider`,
+`ToxEnvironmentProvider`, `NoxEnvironmentProvider`), each declaring the lines its tool writes through
+`BuildDirectoryKind.RequiredMarkers`. The tag's header is read, so Cargo's `target` (header alone) and
+Jellyfin's cache folder now need a real tag. What the source showed beyond the table: mypy, tox and
+nox write through Python's text mode, so their files end lines in `\r\n` on Windows, which the
+comparison accepts. nox writes a `.gitignore` of `*` alone with its bare tag; neither names nox, so
+both are required whole, beside `noxfile.py`.
 
 The [Cache Directory Tagging Specification](https://bford.info/cachedir/) requires the first 43
 bytes to be `Signature: 8a477f597d28d172789f06886806bc55`, and calls a tag a hint.
@@ -552,7 +647,12 @@ can leave the lock behind.
 
 ### Packaged Electron apps — Build, as a general rule
 
-[../cache-locations.md](../cache-locations.md) records "Not reached: packaged Electron applications".
+✅ **Done.** `ChromiumUserDataWalk` identifies a folder one level into a package's
+`LocalCache\Roaming` or `LocalCache\Local` by `Local State`, for `%LOCALAPPDATA%\Packages` only, and
+names it `<folder> (packaged)`. Measured on a real packaged Electron application. `LocalLow` is not
+included: Microsoft's redirection list names only `Local` and `Roaming`.
+
+[../cache-locations.md](../cache-locations.md) recorded "Not reached: packaged Electron applications", now [Packaged applications](../cache-locations.md#packaged-applications).
 The fix is the existing identification rule — a `Local State` file one level down — applied one level
 under each package's `LocalCache\Roaming` and `LocalCache\Local`, the redirected roots the first
 survey's §3 describes. It never treats `LocalCache` itself as permission to delete; Microsoft defines
@@ -731,21 +831,22 @@ that Windows' own cleanup does reach it, and an elevated measurement should say 
 1. **Bun has eviction commands.** The first survey's long-tail table says "no eviction command as of
    early 2026". `bun pm cache rm` and `bun pm cache prune` exist ([pm](https://bun.com/docs/pm/cli/pm)).
 2. **`scoop cleanup *` is an uninstall.** The same table lists it beside `scoop cache rm *`.
-3. **`Optimize-VHD`'s refusal of sparse files is unsourced here.** The first survey's §11 says
-   `Optimize-VHD` refuses a sparse, compressed or encrypted file, and `VirtualDiskRoutes` tells the
+3. **`Optimize-VHD`'s refusal of sparse files was unsourced.** ✅ done. The first survey's §11 said
+   `Optimize-VHD` refuses a sparse, compressed or encrypted file, and `VirtualDiskRoutes` told the
    user it refuses a sparse file. Microsoft's
    [cmdlet page](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd) does not
-   say so. Find the primary source, or reword the claim.
-4. **`Optimize-VHD` needs Hyper-V rights.** Measured: the Hyper-V module refuses an unelevated user
-   outside Hyper-V Administrators, so the WSL and Docker route that names it should say so.
+   say so, and no primary source was found: the Windows SDK's text for `0xC03A001A` says virtual disk
+   files "must not be sparse", and Microsoft Learn's entry for the same code does not. Both places
+   now say only what is sourced.
+4. **`Optimize-VHD` needs Hyper-V rights.** ✅ done. Measured: the Hyper-V module refuses an
+   unelevated user outside Hyper-V Administrators, and the route that names it now says so.
 5. **`ComponentModelCache` is not a carve-out.** The first survey's §12 proposes it; §3 above
    rejects it as a repair rather than space.
 6. **The Search index may not need service control.** The first survey's §6 makes service control
    the blocker; §5 above names a documented rebuild that needs none, if it shrinks the file.
 
 Items 1, 2, 5 and 6 are corrected in place in [unreached-locations.md](unreached-locations.md).
-Items 3 and 4 change shipped text, and belong with the work that next touches the virtual disk
-report.
+Items 3 and 4 changed shipped text, and were made with the run-wide refusal of registered disks.
 
 ## Additions to the negative list
 

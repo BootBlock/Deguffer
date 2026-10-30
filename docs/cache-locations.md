@@ -562,6 +562,182 @@ could depend on somebody else's server is the one Deguffer does not touch.
 
 ---
 
+## Deno cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\deno`, or `DENO_DIR`, or `deno` inside `XDG_CACHE_HOME` |
+| **Method** | Delete each child Deno defines as derived, by path. Never `deno clean` |
+| **Typical size** | Grows with every module and npm package a Deno program imports |
+
+### What it is
+
+Deno keeps one folder for everything it downloads or works out. Deno's own source
+([`deno_dir.rs`](https://github.com/denoland/deno/blob/main/libs/resolver/cache/deno_dir.rs))
+defines what is in it:
+
+- **`remote`** and **`npm`**: modules and npm packages downloaded for the programs you ran.
+- **`gen`**: Deno's compiled output for the TypeScript it ran.
+- **`registries`**: what the language server read from module registries for completions.
+- **`dl`**: releases that `deno upgrade` and `deno compile` downloaded.
+- **Seven databases** (`dep_analysis_cache_v2`, `fast_check_cache_v2`, `node_analysis_cache_v2`,
+  `check_cache_v2`, `v8_code_cache_v2`, `lint_incremental_cache_v2`, `fmt_incremental_cache_v2`),
+  each with the `-wal` and `-shm` files SQLite keeps beside it, since Deno opens them in WAL mode.
+- **`latest.txt`**: when Deno last checked for a new release.
+- **`location_data`**: what Deno programs saved. Each program's `localStorage`, its default
+  `Deno.openKv()` database and what it stored with the Cache API are in here.
+- **`deno_history.txt`**: what you typed into Deno's interactive shell.
+
+Deno finds the folder through `DENO_DIR`, then `XDG_CACHE_HOME` (Deno honours that on Windows
+too), then `%LOCALAPPDATA%\deno`, the default Deno's
+[installation page](https://docs.deno.com/runtime/getting_started/installation/) states.
+
+### What Deguffer does
+
+It removes `remote`, `npm`, `gen`, `registries`, `dl`, the seven databases with their `-wal` and
+`-shm` files, and `latest.txt`, one item each, by path.
+
+**It does not use `deno clean`.** That command deletes the whole folder
+([`clean.rs`](https://github.com/denoland/deno/blob/main/cli/tools/clean.rs)), and with it
+`location_data` and your REPL history. Its `--except` form keeps the files at the top level but
+still deletes the folders inside `location_data`. A tool's own command is the first choice
+everywhere else in Deguffer, and this is the recorded exception, because here the command destroys
+your data.
+
+Deno holds its databases open while it runs, and its language server runs for as long as your
+editor does. If Deno is running, the plan says so, and each item is checked again just before it
+is removed: while Deno runs, nothing is removed.
+
+Deguffer offers nothing if `DENO_DIR` or `XDG_CACHE_HOME` holds a relative path, because Deno joins
+that to its own working directory. For `XDG_CACHE_HOME` it examines only the `deno` folder inside,
+because a cache home is often a folder in your profile that other tools share. If Deno's folder is a
+link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`location_data`** and **`deno_history.txt`** are named survivors, and Deguffer asserts that both
+survived. Nothing downloads them again. Everything else in the folder is Tier 4 and is reported as
+left alone, including folders other Deno tools write (`node_compat_bin`, `tsc`, `task_cache_v1`
+and others) and a database at a version Deno no longer reads.
+
+### What it costs you
+
+The next Deno program you run downloads what it imports again and type-checks from scratch, so it
+starts more slowly once. A program that imports from an address that no longer serves the module
+fails until the import is changed, as it would on any new machine.
+
+### Why Tier 1
+
+Everything removed is a download from a registry or an address that still serves it, or something
+Deno works out again from your source. What Deno programs saved is the one part with no other copy,
+and it is the part Deguffer leaves.
+
+---
+
+## Electron download cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\electron\Cache`, or wherever `electron_config_cache` points |
+| **Method** | Delete each cached download folder, by path |
+| **Typical size** | One zip for each Electron version, platform and architecture installed: 150.9 MB for Electron 45 on 64-bit Windows |
+
+### What it is
+
+Each time a project installs Electron, Electron's downloader keeps the zip it fetched, so the next
+project that installs the same version does not download it again. Nothing ever removes one.
+
+Each download is in a folder of its own, named by the SHA-256 of the address it came from
+([`Cache.ts`](https://github.com/electron/get/blob/main/src/Cache.ts)): 64 lowercase hexadecimal
+characters, such as `523ee27feac8b931299c79e78b7ca4f365aa3f7069fff666cae93c7fb9ff2fee` for
+Electron 15.3.1. The cache sits in `%LOCALAPPDATA%\electron\Cache`, and the `electron_config_cache`
+environment variable moves it
+([installation](https://github.com/electron/electron/blob/main/docs/tutorial/installation.md)).
+
+### What Deguffer does
+
+It removes each folder named that way, whole, and lists it by the zip's name, which says the
+version. Electron has no command that clears the cache, so Deguffer deletes the paths.
+
+Deguffer offers nothing if `electron_config_cache` holds a relative path, is the root of a drive,
+or holds your profile, a temporary folder or a Windows folder. If the cache folder is a link to
+somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+Everything that is not a folder with that name. Older downloaders left other layouts in the same
+folder: zips directly in it, folders named after the whole address, checksum files and interrupted
+`tmp-` downloads. Deguffer leaves them, and asserts that they and the cache folder itself survived.
+
+### What it costs you
+
+The next time a project installs one of these versions from scratch, it downloads it again.
+Projects already installed keep working, because each has its own unpacked copy in its
+`node_modules`.
+
+### Why Tier 1
+
+Every download comes from Electron's releases, and the downloader fetches it again by itself when a
+project needs it.
+
+---
+
+## TypeScript typings cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Microsoft\TypeScript\<version>` |
+| **Method** | Delete each version folder, by path |
+| **Typical size** | Tens of megabytes for each TypeScript version an editor has run |
+
+### What it is
+
+When an editor opens a JavaScript project, TypeScript's language service downloads type
+declarations for the libraries the project uses, so the editor can offer completions. It keeps them
+in one folder per TypeScript version, named by its major and minor version, such as `6.0`, and
+never removes a folder. TypeScript's own source puts the folder there
+(`getGlobalTypingsCacheLocation` in `src/tsserver/nodeServer.ts`), and nothing moves it.
+
+Each version folder is a small npm project: TypeScript's installer runs `npm install` in it for each
+`@types` package a project needs.
+
+### What Deguffer does
+
+It removes each folder named by a version, whole. TypeScript has no command that clears the cache,
+so Deguffer deletes the paths.
+
+**A version in use is left alone.** No program is called `tsserver`: VS Code runs the language
+service inside its own program, other editors run it under Node, and TypeScript 7 runs as `tsc`. So
+Deguffer does not look for a name. It looks for a program working inside a version folder, as the
+installer's npm does while it downloads, or holding a file in it open, and leaves that version.
+
+If `%LOCALAPPDATA%\Microsoft` or the cache folder is a link to somewhere else, Deguffer says so and
+leaves it alone.
+
+### What is protected
+
+Everything in the folder that is not named by a version, and the folder itself. Deguffer asserts
+that they survived.
+
+### What it costs you
+
+The next time an editor opens a JavaScript project with one of these versions, it downloads the
+declarations that project needs again, so completions for its libraries take a moment longer to
+appear once. Your projects and their own packages are untouched.
+
+### Why Tier 1
+
+Every file is a download from the npm registry, and TypeScript fetches it again by itself when a
+project needs it.
+
+---
+
 ## ccache compiler cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -794,6 +970,212 @@ pruning the store is not harmful, it may only slow a future install.
 
 Everything removed is, by pnpm's own accounting, referenced by nothing. It refills itself the next
 time a project asks for it, with no command from you and nothing to re-configure.
+
+---
+
+## Yarn 1 package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Yarn\Cache`, unless moved; `yarn cache dir` names the `v6` folder inside it |
+| **Method** | `yarn cache clean` (the tool's own command), only where the `yarn` on your PATH is Yarn 1 |
+| **Typical size** | Not measured: no Yarn was installed on the machine this was written against |
+
+### What it is
+
+Yarn 1, also called Yarn Classic, is a package manager for Node.js. It keeps an unpacked copy of every
+package it downloads in one cache that all your projects share. The cache is a versioned folder,
+`v6` for Yarn 1.22, inside a cache root.
+
+Two folders sit beside the cache root and are not cache. **`Data`** holds the packages you installed
+with `yarn global add` and the ones you linked with `yarn link`. **`Berry`** holds the global cache of
+Yarn 2 and later, which Plug'n'Play projects run from directly.
+
+### What Deguffer does
+
+It first asks the `yarn` on your PATH for its version. A `yarnPath` setting in a `.yarnrc.yml` in your
+profile, or a Corepack shim, can make `yarn` run Yarn 4, and Yarn 4's `yarn cache clean` deletes the
+cache Plug'n'Play projects run from. So unless the answer is a Yarn 1 version, Deguffer offers
+nothing and says which Yarn it found.
+
+For Yarn 1 it asks `yarn cache dir` where the cache is, because `yarn config set cache-folder` and
+`YARN_CACHE_FOLDER` can move it. Yarn 1's `cache clean` deletes the **whole cache root**, the folder
+that holds `v6`, and then makes an empty `v6` again
+([cache.js](https://github.com/yarnpkg/yarn/blob/v1.22.22/src/cli/commands/cache.js)). So the root
+is checked before anything runs:
+
+- It must be a folder Deguffer accepts as a tool's own: not a drive root, your profile, a temporary
+  folder or a folder Windows is built from.
+- It must not hold Yarn's `Data` folder or Berry's cache, even where they do not exist yet.
+- It must hold nothing but Yarn's versioned cache folders. Anything else there, or a link, means
+  Deguffer leaves the cache alone and says what it found.
+
+Deguffer then runs `yarn cache clean --cache-folder "<root>" --non-interactive`. Naming the root makes
+Yarn 1 delete the folder Deguffer measured, whatever its settings say by then. Yarn 4 refuses both
+options before it runs anything, so a setting that changed which Yarn runs between the preview and
+the clean stops the command rather than clearing its cache.
+
+A clean that you cancel while this command runs is left to finish. It is one delete of the cache
+root, and Yarn 1 reads a package as cached by a file inside its folder, so a folder cut off part-way
+could be read as whole.
+
+### What is protected
+
+Yarn's **`Data`** and **`Berry`** folders, and **`.yarnrc`** and **`.yarnrc.yml`** in your profile,
+which can hold registry authentication tokens. Deguffer asserts that all four survived the run, and
+Explore refuses all of them.
+
+### What it costs you
+
+The next `yarn install` downloads its packages from the registry again. Every `node_modules` folder
+that is already installed is untouched, and so are your global packages and every Yarn 2 and later
+cache.
+
+### Why Tier 1
+
+Every package in the cache is a copy of something the registry still serves, and Yarn fetches it
+again when an install needs it.
+
+---
+
+## Bun install cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.bun\install\cache`, unless moved |
+| **Method** | `bun pm cache prune --max-age 0` (the tool's own command), Bun 1.4.4 or later only |
+| **Typical size** | Not measured: no Bun was installed on the machine this was written against |
+
+### What it is
+
+Bun is a JavaScript runtime and package manager. It extracts every package it installs into one
+cache, and links the files from there into each project. On Windows those links are hard links, so
+a project's `node_modules` and the cache share the same files on disk.
+
+The cache also holds **`links`**, Bun's global store. With `install.globalStore` on, a project's
+`node_modules` are links into it, and removing it breaks each such project until you run
+`bun install` in it again ([global store](https://bun.com/docs/pm/global-store)). It also holds git
+clones, package listings and Bun's transpiler cache.
+
+### What Deguffer does
+
+Bun has two ways to clear its cache, and only one of them is a cache clean. `bun pm cache rm` deletes
+everything, `links` included. `bun pm cache prune` removes the extracted package folders and keeps
+`links`, git clones, listings and anything it does not recognise. Deguffer only ever runs `prune`.
+
+`prune` first shipped in **Bun 1.4.4** ([release notes](https://bun.com/blog/bun-v1.4.4)). Deguffer
+asks `bun --version` first, and offers nothing for an earlier Bun, saying that `bun upgrade` adds the
+command. An earlier Bun has no clean that keeps `links`, which it has had since 1.3.14.
+
+For Bun 1.4.4 or later it asks `bun pm cache` where the cache is, because `BUN_INSTALL_CACHE_DIR`,
+`BUN_INSTALL` and `install.cache.dir` in `.bunfig.toml` can move it. It then runs
+`bun pm cache prune --max-age 0 --cache-dir "<cache>"`. `--max-age 0` makes every package old enough,
+where the default keeps those used in the last 30 days, and `--cache-dir` sends the prune to the cache
+Deguffer measured. A cache Deguffer would not accept as a tool's own folder, such as your profile or a
+drive root, is left alone, and so is a cache that is a link.
+
+Bun's prune decides by a folder's name, so a cache a setting points at could hold a folder of yours
+that only looks like a package, such as `client@acme`. Deguffer leaves the whole cache alone where a
+package-shaped folder has no `package.json`, or where one of Bun's index folders holds anything but
+links.
+
+Deguffer measures only the package folders `prune` removes, found by the same rule Bun's prune walk
+uses, and counts only the files no project still links. That is what the prune frees.
+
+A clean that you cancel while this command runs is left to finish.
+
+### What is protected
+
+**`links`** inside the cache, everything else prune keeps there (git clones, package listings, the
+transpiler cache and anything it does not recognise), the cache folder itself, Bun's home `%USERPROFILE%\.bun` (moved by
+`BUN_INSTALL`) and **`install\global`**, the packages you installed with `bun add --global`. Deguffer
+asserts that each survived the run, and Explore refuses everything in Bun's home except the package
+folders at the top of the cache.
+
+### What it costs you
+
+The next `bun install` that needs a removed package downloads it again. Installed projects keep their
+own links to the files, so no `node_modules` breaks, and the global store is untouched.
+
+### Why Tier 1
+
+Every package removed is one the registry still serves, and Bun fetches it again when an install
+needs it.
+
+---
+
+## Composer package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Composer`, unless moved |
+| **Method** | `composer clear-cache` (the tool's own command) |
+| **Typical size** | 30.1 MB on the machine this was written against, with Composer 2.4.4 |
+
+### What it is
+
+Composer is the package manager for PHP. Its cache folder holds **`files`**, the package archives it
+downloaded, **`repo`**, the package listings it read from repositories, and **`vcs`**, git mirrors of
+packages it installed from source. Composer trims `files` itself past 300 MiB or six months
+([config](https://getcomposer.org/doc/06-config.md#cache-files-ttl)), so this cache rarely grows
+large.
+
+Composer's **home**, `%APPDATA%\Composer`, is not cache. It holds `config.json`, `auth.json` with the
+credentials Composer signs in to package repositories with, and the packages you installed with
+`composer global require`. With only `COMPOSER_HOME` set, the cache moves into `cache` inside the home,
+next to `auth.json`.
+
+### What Deguffer does
+
+`composer clear-cache` empties every folder that four settings name: `cache-dir`, `cache-files-dir`,
+`cache-repo-dir` and `cache-vcs-dir`. It deletes every entry it finds there, and it has no check of
+its own against a setting that names some other folder
+([ClearCacheCommand.php](https://github.com/composer/composer/blob/2.11.1/src/Composer/Command/ClearCacheCommand.php),
+[Cache.php](https://github.com/composer/composer/blob/2.4.4/src/Composer/Cache.php)). So Deguffer asks
+Composer for each of the four, and for its home, its data folder and `cache-read-only`, with
+`composer config --global --absolute`. It runs the clear only where:
+
+- the cache folder is one Deguffer accepts as a tool's own, and does not hold Composer's home;
+- the other three settings are the cache folder's own `files`, `repo` and `vcs`, or are turned off;
+- the cache folder holds nothing but those three folders and the `.htaccess` Composer writes, and
+  none of them is a link.
+
+Anything else means Deguffer leaves the cache alone and says why. A cache that is turned off or set
+read-only is not offered, because the clear would remove nothing. Nor is the cache offered while the
+`COMPOSER` environment variable names a project file: Composer 2.11's `clear-cache` takes that
+project's cache settings, which the global settings Deguffer asks for never show.
+
+Every Composer command runs with `--working-dir` naming Deguffer's own empty folder. Composer 2.11
+reads a project's `composer.json` from the working folder before its global settings, and with
+`use-parent-dir` set it moves to the nearest parent folder that has one, unless `--working-dir` is
+given. Asking Composer for a setting also creates its home and cache folders, and an empty
+`config.json` and `auth.json`, where they are missing. Every Composer that has run once has already
+made them.
+
+A clean that you cancel while this command runs is left to finish, because `vcs` holds git mirrors,
+and nothing found shows that Composer notices a mirror cut off part-way.
+
+### What is protected
+
+The cache folder itself, which `clear-cache` keeps, and Composer's home with **`auth.json`** and
+**`config.json`** in it, and its data folder where that is somewhere else. Deguffer asserts that each
+survived the run, and Explore refuses the home and everything in it.
+
+### What it costs you
+
+The next `composer install` or `composer update` downloads its packages again. Every project's
+`vendor` folder, your global packages and your Composer credentials are untouched.
+
+### Why Tier 1
+
+Everything removed is a download Composer fetches again when an install needs it, and Composer
+already deletes the oldest of it on its own.
 
 ---
 
@@ -1386,6 +1768,8 @@ called `GPUCache`, so a cache name is never on its own a reason to go in. Deguff
 that file is examined at all. The browser table above only says where to look: a browser's folder
 has to hold `Local State` too, and so does a directory called `EBWebView`.
 
+It looks for that file directly inside `%APPDATA%` and `%LOCALAPPDATA%`, and directly inside each
+packaged application's redirected copies of them (see [Packaged applications](#packaged-applications)).
 To find WebView2's folders, Deguffer looks through the directories under `%APPDATA%` and
 `%LOCALAPPDATA%` down to six levels. It does not follow a link, it does not look inside your
 temporary folder, and it does not look inside another Chromium user-data folder. Everything in one
@@ -1461,13 +1845,32 @@ Every one of the nine is derived content with an authoritative source elsewhere:
 server still has, and compiled output of scripts that are still on your disk. The engine refills all
 of it without being asked, and the cost is a slower first launch.
 
-### Not reached: packaged Electron applications
+### Packaged applications
 
-An application installed from the Microsoft Store does not write to `%APPDATA%`. Windows redirects
-it under `%LOCALAPPDATA%\Packages`. A packaged application's WebView2 folder is reached all the
-same, because Deguffer finds that by its own name. A packaged application that embeds Chromium the
-way an Electron application does keeps a folder with no fixed name there, and Deguffer does not
-currently see its cache.
+An application installed as a package, from the Microsoft Store or from its vendor's own MSIX
+installer, does not write to `%APPDATA%` or `%LOCALAPPDATA%`. Windows keeps what it creates there in
+"a per-user, per-package private location"
+([how packaged desktop apps run](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-behind-the-scenes)),
+which is `LocalCache\Roaming` and `LocalCache\Local` inside the package's folder:
+
+| Installed | Where an Electron application keeps its Chromium folder |
+| --- | --- |
+| Unpackaged | `%APPDATA%\<App>` |
+| As a package | `%LOCALAPPDATA%\Packages\<package>\LocalCache\Roaming\<App>` |
+
+So Deguffer looks one level into each package's `LocalCache\Roaming` and `LocalCache\Local` exactly
+as it looks one level into `%APPDATA%` and `%LOCALAPPDATA%`, and a folder there needs the same
+`Local State` file. On the machine this was measured on, a packaged Electron application kept its
+marker, `Cache`, `Code Cache`, `GPUCache` and the two Dawn caches there, beside its sign-in state
+and a virtual machine's files. Deguffer lists it under its folder's name followed by `(packaged)`,
+because the same application can be installed both ways and each keeps a folder of its own.
+
+**`LocalCache` is not a cache.** Microsoft defines it as files that are left out of backup and
+restore, and on the same machine it held a virtual machine's disk and the Python packages the
+Microsoft Store edition of Python installed. Nothing is removed for being in it: only the nine
+Chromium directories inside an identified folder are, and a folder further down, in `LocalLow`, or
+in `LocalCache` itself is not identified. A packaged application's WebView2 folder is found by its
+own name, as before.
 
 ### Not reached: WebView2 folders further down
 
@@ -4320,6 +4723,93 @@ Roslyn that rebuilds it without being asked.
 
 ---
 
+## Superseded JetBrains IDE caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\JetBrains\<product><version>` for IntelliJ IDEA, Rider, PyCharm and the other IDEs on the IntelliJ platform, and `%LOCALAPPDATA%\Google\AndroidStudio<version>` for Android Studio |
+| **Method** | Delete the caches, indexes and temporary files of a version that is no longer installed and that nothing has changed in for 180 days |
+| **Typical size** | 633 MB for one replaced Android Studio on the machine this was measured on, about 250 days after its last write |
+
+### What it is
+
+Each version of an IDE built on the IntelliJ platform keeps a *system folder* of caches, indexes, local
+history and logs, named after the product and the version. Updating to a new version starts a new
+folder and leaves the old one behind. Settings, keymaps and plugins live in a separate *configuration
+folder* of the same name under `%APPDATA%`
+([JetBrains](https://www.jetbrains.com/help/idea/directories-used-by-the-ide-to-store-settings-caches-plugins-and-logs.html),
+[Android Studio](https://developer.android.com/studio/troubleshoot#directories)).
+
+### What Deguffer does
+
+It offers part of what the IDE already deletes by itself, under a stricter test. After an update, the IDE
+schedules a scan for a week later. On a project opened after that, it deletes every other version's
+system folder in which nothing has changed for 180 days, and never a configuration folder. That rule
+is in the IDE's own source:
+[UpdateCheckerProjectActivity.kt](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/update-checker/src/com/intellij/openapi/updateSettings/impl/UpdateCheckerProjectActivity.kt)
+sets the 180 days, and
+[ConfigImportHelper.java](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/initial-config-import/src/com/intellij/openapi/application/ConfigImportHelper.java)
+chooses the system folder, and the logs folder only where it is separate. On Windows the logs are in
+the system folder's own `log` folder.
+
+**Only three folders inside a version are offered**: `caches`, the IDE's store of what it has read
+from disk, and `index` and `tmp`, its indices and temporary files. The IDE's own source names each one
+([FSRecords.java](https://github.com/JetBrains/intellij-community/blob/master/platform/vfs-impl/src/com/intellij/openapi/vfs/newvfs/persistent/FSRecords.java),
+[PathManager.java](https://github.com/JetBrains/intellij-community/blob/master/platform/util/src/com/intellij/openapi/application/PathManager.java)).
+The IDE deletes the whole version folder, but that folder also holds `LocalHistory`, the version's
+record of earlier states of your files, and `log`. Deguffer treats histories and logs as your data,
+which it never pre-selects, so it leaves both, with the version folder itself and anything else it
+does not recognise.
+
+They are offered only when both of these hold:
+
+- **The version is no longer installed.** Each system folder holds a `.home` file, which the IDE
+  rewrites at every start with the folder it was started from. That folder's `product-info.json`
+  names the version installed there now. Where it names another version, or where the folder is
+  gone, this version is no longer installed. This is the IDE's own test, from
+  [OldDirectoryCleaner.java](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/initial-config-import/src/com/intellij/ide/OldDirectoryCleaner.java).
+  The IDE's automatic clean does not use it, and deletes by age alone; Deguffer requires both.
+- **Nothing in the folder has changed for 180 days.** The newest change to any file or folder at any
+  depth decides, as it does for the IDE. The folder is read once to find it.
+
+Deguffer is stricter than the IDE wherever something cannot be read. The IDE treats a missing or
+unreadable `.home` as "not installed", and skips a folder it cannot list and judges the age by the
+rest. Deguffer keeps the version in each case and says why, because a file Windows would not let it
+read is not evidence, and an age read without part of the folder reads older than it is.
+
+Under `%LOCALAPPDATA%\Google`, only Android Studio's folders are read: the same folder holds Chrome,
+Drive and other Google products.
+
+**If you start an old version between the preview and the clean**, it rewrites its `.home` first, and
+Deguffer holds that version's folder back when you press Clean.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| The configuration folder of the same name under `%APPDATA%` | Your settings, keymaps and plugins, and on one measured machine a credential database (`c.kdbx`), its key (`c.pwd`) and a licence key. Never offered |
+| The version's own folder, its `LocalHistory` and its `log` | Your record of earlier states of your files, and the version's logs. Gone for good if removed, so never offered here |
+| `plugins` inside a version's folder | Not the plugins: the folder the IDE keeps its start-up actions in. Not recognised, so it stays |
+| The installed version's system folder | The IDE you use |
+| A replaced version used within 180 days, or one any part of which could not be read | It may still be in use, and the IDE keeps it too |
+| A version whose installed test could not be read | Deguffer cannot tell whether it is installed |
+| Every other folder in `%LOCALAPPDATA%\JetBrains` and `%LOCALAPPDATA%\Google` | Not an IDE version's system folder |
+| `%LOCALAPPDATA%\JetBrains` and `%LOCALAPPDATA%\Google` themselves | Never a target |
+
+### What it costs you
+
+Nothing, for the IDE you use. If you start an old version again, it builds its caches and indexes
+again from scratch. Its local history, its logs, its settings and its plugins are untouched.
+
+### Why Tier 1
+
+The three folders offered are what one version of the IDE derived from your projects, and that
+version is no longer installed. The vendor deletes them without asking, after the same 180 days.
+
+---
+
 ## Playwright browsers
 
 **Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
@@ -5127,8 +5617,9 @@ its own.
 
 ## Per-project build output
 
-**Tier 1 for .NET intermediate output, Tier 2 for the rest.** The only thing Deguffer looks for
-inside your own folders, and the only thing it will not look for anywhere else.
+**Tier 1 for .NET intermediate output and three Python tools' caches, Tier 2 for the rest.** The
+only thing Deguffer looks for inside your own folders, and the only thing it will not look for
+anywhere else.
 
 | Directory | What it belongs to | Tier |
 | --- | --- | --- |
@@ -5139,6 +5630,12 @@ inside your own folders, and the only thing it will not look for anywhere else.
 | `target` | Rust build output | 2 |
 | `node_modules` | Installed Node.js dependencies | 2 |
 | `.venv`, `venv` | A Python virtual environment | 2 |
+| `.pytest_cache` | pytest's record of the last run | 1 |
+| `.mypy_cache` | mypy's per-module results | 1 |
+| `.ruff_cache` | ruff's per-file results | 1 |
+| `.tox` | tox's test environments | 2 |
+| `.nox` | nox's test environments | 2 |
+| `.dart_tool` | A Dart or Flutter package's resolved dependencies and build state | 2 |
 
 ### It only looks where you tell it to
 
@@ -5189,14 +5686,53 @@ the tool itself writes inside it.
 | `obj` of an old-style project | An old-style project file (the MSBuild 2003 namespace, no `Sdk`) that the build's records name | Only configuration and platform directories, at least one holding the build's file list, which names that same directory |
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
 | `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
-| `target` | `Cargo.toml` | `CACHEDIR.TAG`, which Cargo writes |
+| `target` | `Cargo.toml` | `CACHEDIR.TAG`, opening with the tagging specification's header |
 | `node_modules` | `package.json`, **and a lock file** | — |
 | `.venv` / `venv` | A dependency manifest: `requirements.txt`, `pyproject.toml`, `Pipfile`, `setup.py` or `environment.yml` | `pyvenv.cfg` |
+| `.pytest_cache` | A file pytest reads its settings from: `pytest.toml`, `.pytest.toml`, `pytest.ini`, `.pytest.ini`, `pyproject.toml`, `tox.ini` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "created by pytest" |
+| `.mypy_cache` | `mypy.ini`, `.mypy.ini`, `pyproject.toml` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "automatically created by mypy" |
+| `.ruff_cache` | `.ruff.toml`, `ruff.toml` or `pyproject.toml` | `CACHEDIR.TAG` holding the header alone, **and** the `.gitignore` ruff writes, "# Automatically created by ruff." and `*` |
+| `.tox` | `tox.ini`, `tox.toml`, `pyproject.toml` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "created by tox" |
+| `.nox` | `noxfile.py` | `CACHEDIR.TAG` holding the header alone, **and** the `.gitignore` nox writes, `*` alone |
+| `.dart_tool` | `pubspec.yaml` **and** `pubspec.lock` | `package_config.json` with `"generator": "pub"` and `"configVersion": 2`, and `package_graph.json` |
+
+**A cache directory tag is read, never only found.** The
+[Cache Directory Tagging Specification](https://bford.info/cachedir/) says a `CACHEDIR.TAG` opens
+with a fixed 43-byte header, and many tools write one. So does a person, to keep a folder out of a
+backup. A file of that name says only that somebody called the folder disposable. Deguffer reads the
+header, and where the tool names itself on the next line, reads that line too. ruff and nox write the
+header alone, so for those it reads the `.gitignore` each writes beside the tag in the same step, and
+requires both files exactly as the tool writes them. A line may end in `\n` or `\r\n`, because mypy,
+tox and nox write through Python's text mode, which uses `\r\n` on Windows. Nothing else is
+relaxed: a tag opening with a byte order mark, or with any other character before the header, is not
+a tag. Each tool's text was read from its own source: pytest's
+[cacheprovider.py](https://github.com/pytest-dev/pytest/blob/main/src/_pytest/cacheprovider.py),
+mypy's [build.py](https://github.com/python/mypy/blob/master/mypy/build.py), ruff's
+[cache.rs](https://github.com/astral-sh/ruff/blob/main/crates/ruff/src/cache.rs), tox's
+[path.py](https://github.com/tox-dev/tox/blob/main/src/tox/util/path.py) and nox's
+[virtualenv.py](https://github.com/wntrblm/nox/blob/main/nox/virtualenv.py). Cargo's `target`
+requires the header alone, because a `Cargo.toml` beside it already says which tool this is.
+
+Each of these tools can be told to keep its folder somewhere else, by a setting or a variable. A
+folder moved that way is not beside the configuration, and is not found.
+
+**`.dart_tool` is recognised by what pub writes in it.** pub documents `"generator"` as "for `pub`
+this is always `'pub'`"
+([package_config.dart](https://github.com/dart-lang/pub/blob/master/lib/src/package_config.dart)),
+and writes `package_graph.json` beside it
+([entrypoint.dart](https://github.com/dart-lang/pub/blob/master/lib/src/entrypoint.dart)). The
+generator alone is not enough: a test fixture inside a published package was found carrying
+`"generator": "pub"` with both pubspec files beside it, and no `package_graph.json`. A member of a pub
+workspace has neither the lock file nor the configuration, which pub keeps at the workspace's root
+only ([workspaces](https://dart.dev/tools/pub/workspaces)), so a member's `.dart_tool` is left alone.
+`flutter clean` would remove the folder, but it runs once per project, inside each one, so Deguffer
+removes the folder itself, as it does Cargo's `target`.
 
 Every condition has to hold. A directory that fails any of them is left alone, and the scan says
-how many were left and why. `obj` carries an extra check of its own: git is asked whether the
-directory holds any tracked file, because intermediate output never should, and one that does is not
-intermediate output whatever the manifest beside it claims. The check needs git on `PATH`. Where git
+how many were left and why. `obj` and `.dart_tool` carry an extra check: git is asked whether the
+directory holds any tracked file, because the tool's output never should, and one that does is not
+the tool's output whatever stands beside it. For `.dart_tool` this was found, not imagined: test
+fixtures holding one are committed into the Flutter SDK's own repository. The check needs git on `PATH`. Where git
 is installed but cannot answer, the directory is left alone. Where git cannot be found at all, the
 conditions above decide alone, as they do for every other directory here, and for a directory inside
 a repository the scan says that the tracked-file check did not run.
@@ -5304,14 +5840,14 @@ Everything except the one directory in each row, asserted by name after the dele
 - **The project folder itself** — only the build directory inside it is removed.
 - **Every file the rebuild reads.** `Assets`, `Packages` and `ProjectSettings` for Unity;
   the .NET project file and `packages.config`; `Cargo.toml`; `package.json` and the lock file; the
-  Python manifest. These are what make the directory regenerable, so losing one would falsify the
+  Python manifest; each Python tool's configuration file; `pubspec.yaml` and `pubspec.lock`. These are what make the directory regenerable, so losing one would falsify the
   whole claim.
 - **For Unreal, the `.uproject` descriptor, `Source`, `Content`, `Config` and `Plugins`, and `Saved`
   and `Binaries`.** `Saved` holds the editor's autosaves, which are the only copy of work nobody
   saved, and your editor settings. `Binaries` is compiled output, but on a team an artist often
   receives the compiled game from source control and has no compiler to rebuild it, so on that
   machine it is the only copy. Neither is ever offered.
-- **`bin`, for .NET, and `src` and `Cargo.lock` for Rust.** None of them identifies the directory
+- **`bin`, for .NET, `src` and `Cargo.lock` for Rust, and `lib` for Dart.** None of them identifies the directory
   being removed; each is named because it is what a rule reaching one level too far would take.
   `bin` in particular looks equivalent to `obj` and is not — it can hold hand-placed native
   dependencies and copied assets that no build reproduces — so it is out of scope entirely.
@@ -5330,15 +5866,21 @@ Everything except the one directory in each row, asserted by name after the dele
 | `target` | The next build recompiles the project and every dependency, per profile — minutes to hours on a large workspace, and anything you built and are running from `target` goes with it. |
 | `node_modules` | The project will not build or run until dependencies are installed again. The lock file pins the versions, so what comes back is what was there. |
 | `.venv` / `venv` | The environment has to be created again and the install re-run from the manifest. **A manifest only lists what somebody wrote down** — check it covers what you had before removing an environment you still use. |
+| `.pytest_cache` | pytest makes it again on its next run. Until a run has finished, `--lf` and `--ff` have no record of what failed, so they run everything. |
+| `.mypy_cache`, `.ruff_cache` | The next run checks every file rather than only what changed, so that one run is slower. |
+| `.tox`, `.nox` | The next run builds every environment again and installs its dependencies, from the network unless pip's cache still holds them. |
+| `.dart_tool` | The package will not build until `pub get` resolves its dependencies again, which Flutter and the Dart tools do by themselves on the next build. The lock file pins the versions. Flutter's next build then compiles from the start. |
 
 Where a package manager's own cache still holds the downloads, most of this is offline. Clearing that
 cache in the same run is what makes it a download — so a run that takes both the npm cache and a
 `node_modules` needs the network afterwards.
 
-### Why `obj` is Tier 1 and the others are Tier 2
+### Why `obj` and three Python caches are Tier 1, and the others Tier 2
 
 Tier 1 means the tool re-creates it on demand and you lose only time. That is `obj`: a missing one
-makes the next build slower and nothing else.
+makes the next build slower and nothing else. pytest's, mypy's and ruff's caches are the same: each
+tool records them as it runs and makes them again on the next run, and what goes is one slower run,
+and for pytest the record of which tests failed last.
 
 The others cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but
 only by re-downloading gigabytes or re-indexing for minutes" — is met by each of them differently:
@@ -5356,8 +5898,11 @@ only by re-downloading gigabytes or re-indexing for minutes" — is met by each 
   came from. That is the same argument that puts vcpkg's binary cache in Tier 2 — a cache whose
   entries are recovered by compiling rather than by downloading — and it applies here with more
   force, because there is no cache to fall back on.
-- **`node_modules` and a virtual environment** are the ordinary Tier 2 shape: a download, and a
-  project that does not run until it finishes.
+- **`node_modules`, a virtual environment, `.tox` and `.nox`** are the ordinary Tier 2 shape: a
+  download, and a project that does not run until it finishes. tox and nox hold virtual
+  environments, one for each test configuration.
+- **`.dart_tool`** is a resolution and a compile: `pub get` runs again, and Flutter rebuilds what it
+  kept there.
 
 None of them is pre-selected, and each needs an acknowledgement before it runs.
 
@@ -6821,7 +7366,19 @@ drive stops trusting the number.
 
 It finds each disk from the tools' own records, never by searching for `.vhdx` files: a copied disk
 or a Hyper-V machine's disk looks the same, and only the record says whose it is and which route
-applies. A WSL 1 distribution has no disk and is left out. A disk a record names that is not there
+applies. A WSL 1 distribution has no disk and is left out.
+
+Container tools that run on WSL register distributions of their own, and each is named as that
+tool's, with that tool's route:
+
+| Distribution | Owner | Source |
+| --- | --- | --- |
+| `docker-desktop-data`, `docker-desktop` | Docker Desktop's data, and its own Linux | Docker Desktop's documentation |
+| `podman-machine-default`, or `podman-<name>` | A Podman machine. Podman adds the `podman-` prefix only to a name that does not already begin with `podman` | containers/podman [`pkg/machine/wsl/machine.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/machine.go), [`pkg/machine/env/dir.go`](https://github.com/containers/podman/blob/main/pkg/machine/env/dir.go) (`WithPodmanPrefix`), [`pkg/machine/define/config.go`](https://github.com/containers/podman/blob/main/pkg/machine/define/config.go) (`DefaultMachineName`) |
+| `podman-net-usermode` | The distribution Podman makes for user-mode networking | [`pkg/machine/wsl/declares.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/declares.go), [`usermodenet.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/usermodenet.go) |
+| `rancher-desktop-data`, `rancher-desktop` | Rancher Desktop's data (images, volumes and Kubernetes state under `/var/lib`), and its own Linux, which it imports again when missing and replaces on upgrade | rancher-sandbox/rancher-desktop [`pkg/rancher-desktop/backend/wsl.ts`](https://github.com/rancher-sandbox/rancher-desktop/blob/main/pkg/rancher-desktop/backend/wsl.ts) |
+
+Any other distribution is the user's own. A disk a record names that is not there
 is reported as missing, not as an empty disk, and one Windows will not describe is reported as
 unreadable.
 
@@ -6835,13 +7392,36 @@ For each disk the row states:
   row says why there is no inside figure. Unused volumes are named as holding data.
 - **The route, in order.** For a WSL distribution: delete what is no longer needed inside it, then
   compact the disk with `wsl --manage <distribution> --compact` (WSL 3.0.1 and later), or on an
-  older WSL run `wsl --shutdown` and then `Optimize-VHD` from the Hyper-V module. A sparse disk gives
-  space back by itself once Linux discards it (`sudo fstrim -a`), and `Optimize-VHD` refuses a sparse
-  file. For Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and
-  later give freed space back to the drive by themselves, which 4.59 turned off for the time being,
-  and Docker Desktop's *Clean up data* resets the disk and removes every container and image.
+  older WSL run `wsl --shutdown` and then `Optimize-VHD` from the Hyper-V module. `Optimize-VHD` needs
+  the disk detached or attached read-only
+  ([cmdlet page](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd)), and the
+  Hyper-V module refuses an unelevated user outside the Hyper-V Administrators group (observed), so the
+  route says it needs an elevated PowerShell or that membership. A sparse disk gives space back by
+  itself once Linux discards it (`sudo fstrim -a`), so its route needs no compaction. No Microsoft
+  source settles how `Optimize-VHD` treats a sparse file (the Windows SDK's text for `0xC03A001A` says
+  virtual disk files "must not be sparse", and Microsoft Learn's entry for the same code does not), so
+  the route claims nothing about it. For
+  Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and later give
+  freed space back to the drive by themselves, which 4.59 turned off for the time being, and Docker
+  Desktop's *Clean up data* resets the disk and removes every container and image. For a Podman
+  machine: `podman system prune`, which Podman's command on Windows runs through the machine
+  ([podman-for-windows](https://github.com/containers/podman/blob/main/docs/tutorials/podman-for-windows.md)),
+  then WSL's compaction. For Rancher Desktop's data: with the moby engine, the
+  `docker container prune` and `docker image prune --all` its guide to reclaiming the space a storage
+  driver change leaves behind runs
+  ([Reclaiming Disk Space](https://docs.rancherdesktop.io/how-to-guides/migrating-images)), or its Reset Kubernetes and Factory Reset
+  (`rdctl reset --factory`), then WSL's compaction.
 
 Explore says the same thing when you hover a disk, and refuses to delete one or the folder it is in.
+
+### No clean removes a registered disk
+
+The row is how every clean learns where the disks are. Before a preview plans anything, the planner
+asks each row that reads a virtualisation tool's records (`IRegistersVirtualMachineStorage`) for the
+disks and folders it registered. A step of *any* row that would reach one is withheld, with a
+warning naming the disk, and the disk is protected, so §5.6 proves after the run that it survived.
+Every clean then proves each registered disk still standing, whichever rows it cleans and whether
+or not this row was scanned. Explore's refusal is read from the same registration.
 
 ### Why nothing is run
 

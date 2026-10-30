@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Providers;
 
 /// <summary>
@@ -67,6 +69,38 @@ public sealed record BuildDirectoryKind
     /// output, which is the strongest evidence available because nothing else writes it.
     /// </summary>
     public IReadOnlyList<string> RequiredContents { get; init; } = [];
+
+    /// <summary>
+    /// Files that must all be inside the directory with the lines their tool writes into them.
+    ///
+    /// <para>For a marker whose name is shared. The cache directory tag is the case: pytest, mypy,
+    /// tox, Cargo and many more write a <c>CACHEDIR.TAG</c>, and so does a person keeping a folder out
+    /// of a backup. Its name says only that somebody called the folder disposable, so the header is
+    /// read, and where the tool says who it is, that line is read too.</para>
+    /// </summary>
+    public IReadOnlyList<MarkerFile> RequiredMarkers { get; init; } = [];
+
+    /// <summary>
+    /// A test of what the tool wrote inside the directory, for evidence a name or a line cannot state:
+    /// a field inside a structured file. Given the directory; true means confirmed. Null where the
+    /// declared names and markers are the whole of the evidence.
+    ///
+    /// <para>Dart is the case: what proves a <c>.dart_tool</c> is pub's is a value in the JSON pub
+    /// writes there, not a name or a line of it.</para>
+    /// </summary>
+    public Func<string, bool>? ConfirmsContents { get; init; }
+
+    /// <summary>
+    /// Whether a directory holding a file git tracks is declined, and a directory git could not be
+    /// asked about with it, as <see cref="DotNetObjProvider"/> declines them.
+    ///
+    /// <para>For a kind whose evidence is also committed on purpose. Dart is the case: a test fixture
+    /// holding a <c>.dart_tool</c> with a <c>package_config.json</c> inside, committed into the Flutter
+    /// SDK's own repository, was measured. The tool's own output is never committed, because pub and
+    /// Flutter ignore it in every project they create, so a tracked file inside means the directory is
+    /// somebody's work rather than the tool's.</para>
+    /// </summary>
+    public bool DeclinesTrackedDirectories { get; init; }
 
     /// <summary>
     /// Entries beside the directory that must survive it but are no part of recognising it.

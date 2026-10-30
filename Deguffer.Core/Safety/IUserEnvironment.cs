@@ -155,6 +155,16 @@ public interface IUserEnvironment
     string? GetEnvironmentVariable(string name);
 
     /// <summary>
+    /// Read an environment variable as a tool Deguffer starts sees it, or null if it is unset there.
+    ///
+    /// <para>Not <see cref="GetEnvironmentVariable"/>: <see cref="ProcessRunner"/> hands every tool
+    /// this process's own block, which keeps a variable the machine has since dropped. A guard on a
+    /// variable that changes what a tool's command removes asks this one, because that is the value
+    /// the command will act on.</para>
+    /// </summary>
+    string? GetToolEnvironmentVariable(string name);
+
+    /// <summary>
     /// Read a string value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the value or
     /// the permission to read it is missing.
     ///
@@ -390,6 +400,13 @@ public sealed partial class UserEnvironment : IUserEnvironment
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         return Block.Value(name);
+    }
+
+    public string? GetToolEnvironmentVariable(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        return System.Environment.GetEnvironmentVariable(name);
     }
 
     /// <summary>

@@ -25,7 +25,7 @@ public static class PreviewSummary
 {
     /// <summary>
     /// What a new state gets until somebody gives it words of its own, and what a mixture of causes
-    /// gets in any case. Naming two of nine causes would be less true than naming none.
+    /// gets in any case. Naming two of ten causes would be less true than naming none.
     /// </summary>
     private const string MixedCauses =
         "Nothing to reclaim, and not every location here is clear. Check what each row reports.";
@@ -96,7 +96,7 @@ public static class PreviewSummary
         }
 
         // Every row measures zero from here on, which is not the same as every row being clear.
-        // Nine states measure zero for a reason of their own and say so in their own words; what is
+        // Ten states measure zero for a reason of their own and say so in their own words; what is
         // left after removing the two that are genuinely nothing to act on is the reason the bar
         // has to agree with.
         present.Remove(FindingStatus.AlreadyClear);
@@ -139,6 +139,9 @@ public static class PreviewSummary
         FindingStatus.UpdateInProgress =>
             "Nothing to reclaim yet: some of these were left by a Windows update that has not finished, "
             + "and are offered once it has.",
+        FindingStatus.VirtualMachineKept =>
+            "Nothing to reclaim, and some of these hold a virtual machine's disk or folder, which Deguffer never "
+            + "removes.",
         FindingStatus.ReportOnly =>
             "Nothing to reclaim here. Some rows report space only the tool that owns it can free, and say how.",
         FindingStatus.AwaitingSourceFolders =>

@@ -1,3 +1,4 @@
+using System.Text;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -20,10 +21,36 @@ internal static class BoundedFile
     private static ReadOnlySpan<byte> ByteOrderMark => [0xEF, 0xBB, 0xBF];
 
     /// <summary>
+    /// UTF-8 that refuses invalid bytes, for a caller decoding what it read here as text: a file that
+    /// is not text is not the record it is named for, and a lenient decoder would hide that.
+    /// </summary>
+    public static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>
     /// The file's content with any UTF-8 byte order mark removed, or null where the file is missing,
     /// larger than <paramref name="maximumBytes"/>, or unreadable.
     /// </summary>
     public static ReadOnlyMemory<byte>? Read(string path, int maximumBytes)
+    {
+        // Statements, not one conditional expression: there, null takes the expression's type through
+        // byte[]'s conversion to ReadOnlyMemory<byte>, and an unreadable file comes back empty.
+        if (ReadVerbatim(path, maximumBytes) is not { } content)
+        {
+            return null;
+        }
+
+        return content.Span.StartsWith(ByteOrderMark) ? content[ByteOrderMark.Length..] : content;
+    }
+
+    /// <summary>
+    /// The file's content exactly as it is on disk, byte order mark included, or null where the file
+    /// is missing, larger than <paramref name="maximumBytes"/>, or unreadable.
+    ///
+    /// <para>For a format that fixes its opening bytes. The cache directory tag's header must be the
+    /// first 43 bytes of the file, so a tag opening with a byte order mark is not one, and removing
+    /// the mark before the comparison would accept it.</para>
+    /// </summary>
+    public static ReadOnlyMemory<byte>? ReadVerbatim(string path, int maximumBytes)
     {
         try
         {
@@ -44,9 +71,7 @@ internal static class BoundedFile
                 return null;
             }
 
-            ReadOnlyMemory<byte> content = buffer.AsMemory(0, read);
-
-            return content.Span.StartsWith(ByteOrderMark) ? content[ByteOrderMark.Length..] : content;
+            return buffer.AsMemory(0, read);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

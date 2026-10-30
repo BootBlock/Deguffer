@@ -75,14 +75,6 @@ public sealed record SpotifySettings(
     /// </summary>
     private const int MaximumBytes = 1024 * 1024;
 
-    /// <summary>
-    /// A decoder that throws on bytes that are not UTF-8, where <see cref="Encoding.UTF8"/> would
-    /// replace them. A replacement character inside a path compares unequal to the folder the path
-    /// really names, so a location inside the cache would silently stop overlapping it.
-    /// </summary>
-    private static readonly UTF8Encoding StrictUtf8 =
-        new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-
     /// <summary>Whether this file says for certain where Spotify's storage is, which may be nowhere special.</summary>
     public bool IsSettled => Reading is SpotifySettingsReading.Absent or SpotifySettingsReading.Read;
 
@@ -112,7 +104,9 @@ public sealed record SpotifySettings(
     {
         try
         {
-            var text = StrictUtf8.GetString(content.Span);
+            // Strict, because a replacement character inside a path compares unequal to the folder the
+            // path really names, so a location inside the cache would silently stop overlapping it.
+            var text = BoundedFile.StrictUtf8.GetString(content.Span);
 
             // A NUL is valid UTF-8 and never part of a line Spotify writes. It is what UTF-16 text
             // without a byte order mark looks like when read as UTF-8, and every key in it would
