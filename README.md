@@ -26,7 +26,7 @@ under the MIT licence. Download the zip for your processor from the
 
 ## What it does
 
-- **Storage** checks 86 sources of waste, from package-manager and browser caches to `Windows.old`
+- **Storage** checks 89 sources of waste, from package-manager and browser caches to `Windows.old`
   and old restore points, and sorts each one into a [safety tier](#safety-tiers). You tick what
   goes, and after the clean Deguffer checks that everything it promised to leave alone is still
   there.
@@ -103,7 +103,7 @@ because they can be saved anywhere, and Deguffer will never remove one by any ro
 
 ## What Storage cleans
 
-Each of the 86 sources has its own provider, which knows what that location is and what sits beside
+Each of the 89 sources has its own provider, which knows what that location is and what sits beside
 it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output such as `node_modules`, `obj` and Rust's `target` folders is searched for only in the source
 folders you add in Settings. [What Deguffer cleans, and what it costs you](docs/cache-locations.md)
@@ -121,6 +121,9 @@ explains most of these sources in detail.
 | Cargo crate cache | |
 | Go build and module caches | |
 | Zig build cache | Never the packages Zig fetched. What it built goes only together with the records that point at it |
+| Deno cache | By path, never `deno clean`, which also deletes what Deno programs saved and your REPL history; held back while Deno runs |
+| Electron downloads | The runtime zips Electron's installer keeps, one folder per version; never the layouts older installers left beside them |
+| TypeScript typings cache | One folder per TypeScript version; never one a running program is working in |
 | ccache compiler cache | Cleared with `ccache --clear`, which keeps its settings |
 | sccache compiler cache | sccache's server is stopped first; never its settings |
 | pip package cache | |
@@ -132,7 +135,7 @@ explains most of these sources in detail.
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
 | VS Code extension browsers | The Chromium build an extension such as Cline downloaded and downloads again by itself; never the extension's conversations, checkpoints or settings, or a build a running browser is using |
-| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the Steam client's and the Battle.net launcher's built-in browsers, and every application that embeds the same engine, WebView2 applications included. Never their sign-ins, saved passwords or payment cards |
+| Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the Steam client's and the Battle.net launcher's built-in browsers, and every application that embeds the same engine, WebView2 and packaged applications included. Never their sign-ins, saved passwords or payment cards |
 | Firefox caches | |
 | Steam HTTP cache | The client's own cache beside the program; never your games, your cloud saves, or the sign-in kept by its built-in browser |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings say they are |

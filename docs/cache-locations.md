@@ -562,6 +562,182 @@ could depend on somebody else's server is the one Deguffer does not touch.
 
 ---
 
+## Deno cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\deno`, or `DENO_DIR`, or `deno` inside `XDG_CACHE_HOME` |
+| **Method** | Delete each child Deno defines as derived, by path. Never `deno clean` |
+| **Typical size** | Grows with every module and npm package a Deno program imports |
+
+### What it is
+
+Deno keeps one folder for everything it downloads or works out. Deno's own source
+([`deno_dir.rs`](https://github.com/denoland/deno/blob/main/libs/resolver/cache/deno_dir.rs))
+defines what is in it:
+
+- **`remote`** and **`npm`**: modules and npm packages downloaded for the programs you ran.
+- **`gen`**: Deno's compiled output for the TypeScript it ran.
+- **`registries`**: what the language server read from module registries for completions.
+- **`dl`**: releases that `deno upgrade` and `deno compile` downloaded.
+- **Seven databases** (`dep_analysis_cache_v2`, `fast_check_cache_v2`, `node_analysis_cache_v2`,
+  `check_cache_v2`, `v8_code_cache_v2`, `lint_incremental_cache_v2`, `fmt_incremental_cache_v2`),
+  each with the `-wal` and `-shm` files SQLite keeps beside it, since Deno opens them in WAL mode.
+- **`latest.txt`**: when Deno last checked for a new release.
+- **`location_data`**: what Deno programs saved. Each program's `localStorage`, its default
+  `Deno.openKv()` database and what it stored with the Cache API are in here.
+- **`deno_history.txt`**: what you typed into Deno's interactive shell.
+
+Deno finds the folder through `DENO_DIR`, then `XDG_CACHE_HOME` (Deno honours that on Windows
+too), then `%LOCALAPPDATA%\deno`, the default Deno's
+[installation page](https://docs.deno.com/runtime/getting_started/installation/) states.
+
+### What Deguffer does
+
+It removes `remote`, `npm`, `gen`, `registries`, `dl`, the seven databases with their `-wal` and
+`-shm` files, and `latest.txt`, one item each, by path.
+
+**It does not use `deno clean`.** That command deletes the whole folder
+([`clean.rs`](https://github.com/denoland/deno/blob/main/cli/tools/clean.rs)), and with it
+`location_data` and your REPL history. Its `--except` form keeps the files at the top level but
+still deletes the folders inside `location_data`. A tool's own command is the first choice
+everywhere else in Deguffer, and this is the recorded exception, because here the command destroys
+your data.
+
+Deno holds its databases open while it runs, and its language server runs for as long as your
+editor does. If Deno is running, the plan says so, and each item is checked again just before it
+is removed: while Deno runs, nothing is removed.
+
+Deguffer offers nothing if `DENO_DIR` or `XDG_CACHE_HOME` holds a relative path, because Deno joins
+that to its own working directory. For `XDG_CACHE_HOME` it examines only the `deno` folder inside,
+because a cache home is often a folder in your profile that other tools share. If Deno's folder is a
+link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`location_data`** and **`deno_history.txt`** are named survivors, and Deguffer asserts that both
+survived. Nothing downloads them again. Everything else in the folder is Tier 4 and is reported as
+left alone, including folders other Deno tools write (`node_compat_bin`, `tsc`, `task_cache_v1`
+and others) and a database at a version Deno no longer reads.
+
+### What it costs you
+
+The next Deno program you run downloads what it imports again and type-checks from scratch, so it
+starts more slowly once. A program that imports from an address that no longer serves the module
+fails until the import is changed, as it would on any new machine.
+
+### Why Tier 1
+
+Everything removed is a download from a registry or an address that still serves it, or something
+Deno works out again from your source. What Deno programs saved is the one part with no other copy,
+and it is the part Deguffer leaves.
+
+---
+
+## Electron download cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\electron\Cache`, or wherever `electron_config_cache` points |
+| **Method** | Delete each cached download folder, by path |
+| **Typical size** | One zip for each Electron version, platform and architecture installed: 150.9 MB for Electron 45 on 64-bit Windows |
+
+### What it is
+
+Each time a project installs Electron, Electron's downloader keeps the zip it fetched, so the next
+project that installs the same version does not download it again. Nothing ever removes one.
+
+Each download is in a folder of its own, named by the SHA-256 of the address it came from
+([`Cache.ts`](https://github.com/electron/get/blob/main/src/Cache.ts)): 64 lowercase hexadecimal
+characters, such as `523ee27feac8b931299c79e78b7ca4f365aa3f7069fff666cae93c7fb9ff2fee` for
+Electron 15.3.1. The cache sits in `%LOCALAPPDATA%\electron\Cache`, and the `electron_config_cache`
+environment variable moves it
+([installation](https://github.com/electron/electron/blob/main/docs/tutorial/installation.md)).
+
+### What Deguffer does
+
+It removes each folder named that way, whole, and lists it by the zip's name, which says the
+version. Electron has no command that clears the cache, so Deguffer deletes the paths.
+
+Deguffer offers nothing if `electron_config_cache` holds a relative path, is the root of a drive,
+or holds your profile, a temporary folder or a Windows folder. If the cache folder is a link to
+somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+Everything that is not a folder with that name. Older downloaders left other layouts in the same
+folder: zips directly in it, folders named after the whole address, checksum files and interrupted
+`tmp-` downloads. Deguffer leaves them, and asserts that they and the cache folder itself survived.
+
+### What it costs you
+
+The next time a project installs one of these versions from scratch, it downloads it again.
+Projects already installed keep working, because each has its own unpacked copy in its
+`node_modules`.
+
+### Why Tier 1
+
+Every download comes from Electron's releases, and the downloader fetches it again by itself when a
+project needs it.
+
+---
+
+## TypeScript typings cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Microsoft\TypeScript\<version>` |
+| **Method** | Delete each version folder, by path |
+| **Typical size** | Tens of megabytes for each TypeScript version an editor has run |
+
+### What it is
+
+When an editor opens a JavaScript project, TypeScript's language service downloads type
+declarations for the libraries the project uses, so the editor can offer completions. It keeps them
+in one folder per TypeScript version, named by its major and minor version, such as `6.0`, and
+never removes a folder. TypeScript's own source puts the folder there
+(`getGlobalTypingsCacheLocation` in `src/tsserver/nodeServer.ts`), and nothing moves it.
+
+Each version folder is a small npm project: TypeScript's installer runs `npm install` in it for each
+`@types` package a project needs.
+
+### What Deguffer does
+
+It removes each folder named by a version, whole. TypeScript has no command that clears the cache,
+so Deguffer deletes the paths.
+
+**A version in use is left alone.** No program is called `tsserver`: VS Code runs the language
+service inside its own program, other editors run it under Node, and TypeScript 7 runs as `tsc`. So
+Deguffer does not look for a name. It looks for a program working inside a version folder, as the
+installer's npm does while it downloads, or holding a file in it open, and leaves that version.
+
+If `%LOCALAPPDATA%\Microsoft` or the cache folder is a link to somewhere else, Deguffer says so and
+leaves it alone.
+
+### What is protected
+
+Everything in the folder that is not named by a version, and the folder itself. Deguffer asserts
+that they survived.
+
+### What it costs you
+
+The next time an editor opens a JavaScript project with one of these versions, it downloads the
+declarations that project needs again, so completions for its libraries take a moment longer to
+appear once. Your projects and their own packages are untouched.
+
+### Why Tier 1
+
+Every file is a download from the npm registry, and TypeScript fetches it again by itself when a
+project needs it.
+
+---
+
 ## ccache compiler cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -1292,6 +1468,8 @@ called `GPUCache`, so a cache name is never on its own a reason to go in. Deguff
 that file is examined at all. The browser table above only says where to look: a browser's folder
 has to hold `Local State` too, and so does a directory called `EBWebView`.
 
+It looks for that file directly inside `%APPDATA%` and `%LOCALAPPDATA%`, and directly inside each
+packaged application's redirected copies of them (see [Packaged applications](#packaged-applications)).
 To find WebView2's folders, Deguffer looks through the directories under `%APPDATA%` and
 `%LOCALAPPDATA%` down to six levels. It does not follow a link, it does not look inside your
 temporary folder, and it does not look inside another Chromium user-data folder. Everything in one
@@ -1367,13 +1545,32 @@ Every one of the nine is derived content with an authoritative source elsewhere:
 server still has, and compiled output of scripts that are still on your disk. The engine refills all
 of it without being asked, and the cost is a slower first launch.
 
-### Not reached: packaged Electron applications
+### Packaged applications
 
-An application installed from the Microsoft Store does not write to `%APPDATA%`. Windows redirects
-it under `%LOCALAPPDATA%\Packages`. A packaged application's WebView2 folder is reached all the
-same, because Deguffer finds that by its own name. A packaged application that embeds Chromium the
-way an Electron application does keeps a folder with no fixed name there, and Deguffer does not
-currently see its cache.
+An application installed as a package, from the Microsoft Store or from its vendor's own MSIX
+installer, does not write to `%APPDATA%` or `%LOCALAPPDATA%`. Windows keeps what it creates there in
+"a per-user, per-package private location"
+([how packaged desktop apps run](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-behind-the-scenes)),
+which is `LocalCache\Roaming` and `LocalCache\Local` inside the package's folder:
+
+| Installed | Where an Electron application keeps its Chromium folder |
+| --- | --- |
+| Unpackaged | `%APPDATA%\<App>` |
+| As a package | `%LOCALAPPDATA%\Packages\<package>\LocalCache\Roaming\<App>` |
+
+So Deguffer looks one level into each package's `LocalCache\Roaming` and `LocalCache\Local` exactly
+as it looks one level into `%APPDATA%` and `%LOCALAPPDATA%`, and a folder there needs the same
+`Local State` file. On the machine this was measured on, a packaged Electron application kept its
+marker, `Cache`, `Code Cache`, `GPUCache` and the two Dawn caches there, beside its sign-in state
+and a virtual machine's files. Deguffer lists it under its folder's name followed by `(packaged)`,
+because the same application can be installed both ways and each keeps a folder of its own.
+
+**`LocalCache` is not a cache.** Microsoft defines it as files that are left out of backup and
+restore, and on the same machine it held a virtual machine's disk and the Python packages the
+Microsoft Store edition of Python installed. Nothing is removed for being in it: only the nine
+Chromium directories inside an identified folder are, and a folder further down, in `LocalLow`, or
+in `LocalCache` itself is not identified. A packaged application's WebView2 folder is found by its
+own name, as before.
 
 ### Not reached: WebView2 folders further down
 

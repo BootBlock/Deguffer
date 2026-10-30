@@ -26,12 +26,18 @@ internal static class ConfiguredFolder
     /// whichever process reads it, which Deguffer does not share, so there is no correct reading of it.
     /// A full path is declined where <see cref="WhyNotOwned"/> declines it.</para>
     /// </summary>
+    /// <param name="within">
+    /// The folder the tool keeps inside the one the variable names, for a variable that names a home
+    /// several tools share, such as <c>XDG_CACHE_HOME</c>. Null where the variable names the tool's
+    /// own folder. The folder inside is what is judged and examined, because only it is the tool's.
+    /// </param>
     public static Setting FromVariable(
         string variable,
         string defaultFolder,
         IUserEnvironment environment,
         ISystemDirectories machine,
-        IVolumeInventory volumes)
+        IVolumeInventory volumes,
+        string? within = null)
     {
         var value = environment.GetEnvironmentVariable(variable)?.Trim();
 
@@ -40,10 +46,12 @@ internal static class ConfiguredFolder
             return new Setting(null, null, defaultFolder, null);
         }
 
-        if (LongPath.Configured(value) is not { } configured)
+        if (LongPath.Configured(value) is not { } named)
         {
             return new Setting(value, null, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
         }
+
+        var configured = within is null ? named : Path.Combine(named, within);
 
         return WhyNotOwned(configured, environment, machine, volumes, TempRoots.Resolve(environment, machine, volumes).AccountFolders) is { } declined
             ? new Setting(value, configured, null, declined)
