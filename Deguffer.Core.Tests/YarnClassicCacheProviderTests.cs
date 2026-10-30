@@ -170,10 +170,10 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
     /// </summary>
     public async Task LeavesARootThatIsATemporaryFolderAlone()
     {
-        PopulateCache();
-        _environment.WithTempPath(Root);
+        var temp = Path.Combine(_environment.LocalAppData, "Temp");
+        PopulateCache(temp);
 
-        var plan = await CreateProvider(YarnAnswering()).PlanAsync();
+        var plan = await CreateProvider(YarnAnswering(root: temp)).PlanAsync();
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Message.Contains("temporary", StringComparison.Ordinal));

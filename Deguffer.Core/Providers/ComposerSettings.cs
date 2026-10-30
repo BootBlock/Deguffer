@@ -42,7 +42,7 @@ internal sealed partial record ComposerSettings(
     bool ReadOnly)
 {
     /// <summary>
-    /// The four settings <c>clear-cache</c> empties that may differ from the cache folder, each with
+    /// The three settings <c>clear-cache</c> empties besides the cache folder itself, each with
     /// the child of it Composer defaults it to (<c>Config::$defaultConfig</c>).
     /// </summary>
     public IEnumerable<(string Setting, string DefaultChild, ComposerFolder Value)> CacheParts =>

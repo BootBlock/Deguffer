@@ -37,7 +37,7 @@ public sealed class BunInstallCacheProviderTests : IDisposable
     /// A bun on the PATH that says it is <paramref name="version"/>, reports <paramref name="cache"/>
     /// with no line ending, and prunes as 1.4.4 does: every package folder goes, and the rest stays.
     /// </summary>
-    private FakeProcessRunner BunAnswering(string version = "1.4.4", string? cache = null)
+    private FakeProcessRunner BunAnswering(string version = "1.4.4", string? cache = null, IReadOnlyList<string>? removes = null)
     {
         _environment.WithExecutable("bun");
         cache ??= Cache;
@@ -54,7 +54,7 @@ public sealed class BunInstallCacheProviderTests : IDisposable
 
             Assert.Equal($"pm cache prune --max-age 0 --cache-dir \"{cache}\"", arguments);
 
-            foreach (var package in BunCacheEntries.PackagesIn(cache)!)
+            foreach (var package in removes ?? [])
             {
                 Directory.Delete(package, recursive: true);
             }
@@ -71,8 +71,8 @@ public sealed class BunInstallCacheProviderTests : IDisposable
     {
         string[] packages =
         [
-            Write(4096, "left-pad@1.3.0@@@1", "index.js"),
-            Write(4096, "@types", "node@20.0.0@@@1", "index.d.ts"),
+            Write(4096, "left-pad@1.3.0@@@1", "package.json"),
+            Write(4096, "@types", "node@20.0.0@@@1", "package.json"),
         ];
 
         string[] kept =
@@ -82,8 +82,12 @@ public sealed class BunInstallCacheProviderTests : IDisposable
             Write(1024, "@t@", "transpiled.js"),
             Write(1024, ".tmp", "partial"),
             Write(512, "0123456789abcdef.npm"),
-            Write(512, "left-pad", "1.3.0"),
         ];
+
+        // The index Bun keeps beside a package: a folder of links to it, which prune empties of dead
+        // links and then removes.
+        Directory.CreateDirectory(Path.Combine(Cache, "left-pad"));
+        Junction.ToDirectory(Path.Combine(Cache, "left-pad", "1.3.0"), Path.GetDirectoryName(packages[0])!);
 
         return ([.. packages.Select(file => Path.GetDirectoryName(file)!)], kept);
     }
@@ -183,10 +187,11 @@ public sealed class BunInstallCacheProviderTests : IDisposable
     /// </summary>
     public async Task LeavesACacheThatIsATemporaryFolderAlone()
     {
+        var temp = Path.Combine(_environment.LocalAppData, "Temp");
         PopulateCache();
-        _environment.WithTempPath(Cache);
+        Directory.Move(Cache, temp);
 
-        var plan = await CreateProvider(BunAnswering()).PlanAsync();
+        var plan = await CreateProvider(BunAnswering(cache: temp)).PlanAsync();
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Message.Contains("temporary", StringComparison.Ordinal));
@@ -200,12 +205,16 @@ public sealed class BunInstallCacheProviderTests : IDisposable
     public async Task VerifiesTheLinksStoreAndWhatPruneKeepsSurvived()
     {
         var (packages, kept) = PopulateCache();
-        var provider = CreateProvider(BunAnswering());
+        var provider = CreateProvider(BunAnswering(removes: packages));
 
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(Path.Combine(Cache, "links"), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        Assert.All(kept, entry => Assert.Contains(plan.ProtectedPaths, p =>
+            !p.Path.Equals(Cache, StringComparison.OrdinalIgnoreCase)
+            && (p.Path.Equals(entry, StringComparison.OrdinalIgnoreCase)
+                || entry.StartsWith(p.Path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))));
 
         var result = await provider.ExecuteAsync(plan);
         var verification = await provider.VerifyAsync(plan);
@@ -228,6 +237,41 @@ public sealed class BunInstallCacheProviderTests : IDisposable
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
         Assert.Equal(packages.Order(StringComparer.OrdinalIgnoreCase), command.MeasuredPaths.Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §5.6 bites: a prune that took a git clone with the packages, which Bun's prune keeps, fails the
+    /// verification rather than passing because the cache folder survived.
+    /// </summary>
+    [Fact]
+    public async Task VerificationFailsWhereThePruneTookMoreThanPackages()
+    {
+        var (packages, _) = PopulateCache();
+        var clone = Path.Combine(Cache, "0123456789abcdef.git");
+        var provider = CreateProvider(BunAnswering(removes: [.. packages, clone]));
+
+        var plan = await provider.PlanAsync();
+        await provider.ExecuteAsync(plan);
+
+        Assert.False((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// A cache a setting points at can hold folders that only share a package's name shape, and prune
+    /// deletes them all the same, so the cache is left alone.
+    /// </summary>
+    [Theory]
+    [InlineData("client@acme", "notes.txt")]
+    [InlineData("left-pad", "readme.txt")]
+    public async Task LeavesTheCacheAloneWhereItHoldsSomethingNotLaidOutAsBunsOwn(string folder, string file)
+    {
+        PopulateCache();
+        Write(16, folder, file);
+
+        var plan = await CreateProvider(BunAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(folder, StringComparison.Ordinal));
     }
 
     [Theory]

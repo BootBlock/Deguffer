@@ -34,7 +34,7 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
 {
     private const string HomeReason =
         "This is Bun's own folder: Bun itself, the packages you installed globally, and its install cache. "
-        + "Deguffer removes nothing here from Explore except package folders in the cache.";
+        + "Deguffer removes nothing here from Explore except package folders at the top of the cache.";
 
     private const string CacheReason =
         "This is Bun's install cache. Deguffer clears it with Bun's own prune, from the Storage page, and "
@@ -177,10 +177,19 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
             return EmptyPlan($"Leaving '{cache}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
         }
 
-        if (BunCacheEntries.PackagesIn(cache) is not { } packages)
+        if (BunCacheEntries.Of(cache) is not { } contents)
         {
             return UnreadableRootPlan(cache);
         }
+
+        if (contents.Strangers.FirstOrDefault() is { } stranger)
+        {
+            return EmptyPlan(
+                $"Bun's cache {cache} holds '{stranger}', which is not laid out as Bun's own, and Bun's prune would "
+                + "delete or empty it all the same. Deguffer is leaving the cache alone.");
+        }
+
+        var packages = contents.Packages;
 
         if (packages.Count == 0)
         {
@@ -226,11 +235,16 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
                 },
             ],
             ProtectedPaths = Protect(
+            [
                 (cache, "Bun's prune removes package folders inside its cache and keeps the folder."),
                 (Path.Combine(cache, BunCacheEntries.LinksName),
                     "Bun's global store, which projects' node_modules can link into. Prune keeps it."),
                 (HomeDirectory, "Bun's home, which holds Bun itself."),
-                (Path.Combine(HomeDirectory, "install", "global"), "The packages you installed globally with Bun.")),
+                (Path.Combine(HomeDirectory, "install", "global"), "The packages you installed globally with Bun."),
+                .. contents.Kept
+                    .Where(kept => !kept.Equals(Path.Combine(cache, BunCacheEntries.LinksName), StringComparison.OrdinalIgnoreCase))
+                    .Select(kept => (kept, "Bun's prune keeps this: a git clone, a package listing, its transpiler cache or something it does not recognise.")),
+            ]),
             Notes = notes,
             Fallback = measured.Fallback,
             CountsLinksFromElsewhere = true,

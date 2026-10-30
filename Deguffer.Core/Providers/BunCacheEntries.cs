@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Providers;
 
 /// <summary>
@@ -66,18 +68,18 @@ internal static class BunCacheEntries
     public static bool IsPackage(string name) => Classify(name, isDirectory: true, inScope: false) is BunCacheEntryKind.Package;
 
     /// <summary>
-    /// Every package folder prune would remove from <paramref name="cache"/>, or null where a folder
-    /// it has to look in refused to be listed: a partial list would offer less than the command takes
-    /// and protect nothing it missed.
+    /// What prune would remove from <paramref name="cache"/> and what it would keep, or null where a
+    /// folder it has to look in refused to be listed: a partial list would offer less than the command
+    /// takes and protect nothing it missed.
     /// </summary>
-    public static IReadOnlyList<string>? PackagesIn(string cache)
+    public static BunCacheContents? Of(string cache)
     {
-        List<string> packages = [];
+        var contents = new BunCacheContents();
 
-        return Collect(cache, inScope: false, packages) ? packages : null;
+        return Collect(cache, inScope: false, contents) ? contents : null;
     }
 
-    private static bool Collect(string folder, bool inScope, List<string> packages)
+    private static bool Collect(string folder, bool inScope, BunCacheContents contents)
     {
         if (FolderEntries.Of(folder) is not { } entries)
         {
@@ -86,18 +88,68 @@ internal static class BunCacheEntries
 
         foreach (var entry in entries)
         {
+            var path = Path.Combine(folder, entry.Name);
             var isDirectory = entry is DirectoryInfo && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint);
 
             switch (Classify(entry.Name, isDirectory, inScope))
             {
-                case BunCacheEntryKind.Package:
-                    packages.Add(Path.Combine(folder, entry.Name));
+                // Every package Bun extracts carries its manifest, so a folder with no readable one is
+                // something else that only shares the name shape, and prune would delete it all the
+                // same. A refused probe is no evidence of a manifest.
+                case BunCacheEntryKind.Package when LongPath.ProbeFile(Path.Combine(path, "package.json")) is not PathPresence.Present:
+                    contents.Strangers.Add(path);
                     break;
-                case BunCacheEntryKind.Scope when !Collect(Path.Combine(folder, entry.Name), inScope: true, packages):
+                case BunCacheEntryKind.Package:
+                    contents.Packages.Add(path);
+                    break;
+                case BunCacheEntryKind.Scope when !Collect(path, inScope: true, contents):
                     return false;
+                case BunCacheEntryKind.Index when !HoldsOnlyLinks(path, contents):
+                    return false;
+                case BunCacheEntryKind.Other:
+                    contents.Kept.Add(path);
+                    break;
             }
         }
 
         return true;
     }
+
+    /// <summary>
+    /// An index folder holds links to package folders and nothing else
+    /// (<c>ExtractTarball::extract</c>). Prune removes every link whose package is gone, then the folder
+    /// if that empties it, so a folder holding anything else is not Bun's index.
+    /// </summary>
+    private static bool HoldsOnlyLinks(string index, BunCacheContents contents)
+    {
+        if (FolderEntries.Of(index) is not { } entries)
+        {
+            return false;
+        }
+
+        if (entries.Any(entry => !entry.Attributes.HasFlag(FileAttributes.ReparsePoint)))
+        {
+            contents.Strangers.Add(index);
+        }
+
+        return true;
+    }
+}
+
+/// <summary>
+/// One cache as prune would see it.
+/// </summary>
+internal sealed class BunCacheContents
+{
+    /// <summary>The package folders prune removes.</summary>
+    public List<string> Packages { get; } = [];
+
+    /// <summary>Everything prune keeps by its own rule, each of which must survive (§5.6).</summary>
+    public List<string> Kept { get; } = [];
+
+    /// <summary>
+    /// Folders prune would delete or empty that do not look like Bun's own: a package-shaped name with
+    /// no package manifest, or an index folder holding more than links.
+    /// </summary>
+    public List<string> Strangers { get; } = [];
 }

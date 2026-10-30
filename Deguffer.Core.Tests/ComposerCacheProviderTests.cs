@@ -179,6 +179,7 @@ public sealed class ComposerCacheProviderTests : IDisposable
 
         Assert.True(plan.IsEmpty);
         Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("turned off", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -217,13 +218,37 @@ public sealed class ComposerCacheProviderTests : IDisposable
     /// </summary>
     public async Task LeavesACacheThatIsATemporaryFolderAlone()
     {
+        var temp = Path.Combine(_environment.LocalAppData, "Temp");
         PopulateCache();
-        _environment.WithTempPath(Cache);
+        Directory.Move(Cache, temp);
+        var runner = ComposerAnswering(new()
+        {
+            ["cache-dir"] = temp,
+            ["cache-files-dir"] = Path.Combine(temp, "files"),
+            ["cache-repo-dir"] = Path.Combine(temp, "repo"),
+            ["cache-vcs-dir"] = Path.Combine(temp, "vcs"),
+        });
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("temporary", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Composer's clear-cache takes the cache settings of the project COMPOSER names, which no global
+    /// setting shows, so the clear is not offered at all.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheCacheAloneWhereComposerNamesAProject()
+    {
+        PopulateCache();
+        _environment.WithEnvironmentVariable("COMPOSER", @"C:\Users\testuser\Projects\app\composer.json");
 
         var plan = await CreateProvider(ComposerAnswering()).PlanAsync();
 
         Assert.Empty(plan.Steps);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("temporary", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("COMPOSER", StringComparison.Ordinal));
     }
 
     /// <summary>§5.2: clear-cache would remove an entry Composer never makes along with the rest.</summary>

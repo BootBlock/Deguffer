@@ -103,7 +103,7 @@ because they can be saved anywhere, and Deguffer will never remove one by any ro
 
 ## What Storage cleans
 
-Each of the 84 sources has its own provider, which knows what that location is and what sits beside
+Each of the 87 sources has its own provider, which knows what that location is and what sits beside
 it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output such as `node_modules`, `obj` and Rust's `target` folders is searched for only in the source
 folders you add in Settings. [What Deguffer cleans, and what it costs you](docs/cache-locations.md)
@@ -117,6 +117,9 @@ explains most of these sources in detail.
 | NuGet package cache | Cleared with `dotnet nuget locals all --clear`, not by path |
 | npm package cache | Cleared with `npm cache clean --force` |
 | pnpm store | |
+| Yarn 1 package cache | Cleared with `yarn cache clean`, only where the `yarn` on your PATH is Yarn 1, never Yarn 2 or later |
+| Bun install cache | Cleared with `bun pm cache prune`, which keeps Bun's global store; needs Bun 1.4.4 or later |
+| Composer package cache | Cleared with `composer clear-cache`, only where every folder it empties is Composer's own |
 | Gradle build cache | `caches` and `wrapper` only, never the Gradle user home itself: `.gradle`, or wherever `GRADLE_USER_HOME` points |
 | Cargo crate cache | |
 | Go build and module caches | |

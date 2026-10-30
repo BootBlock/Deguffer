@@ -912,7 +912,7 @@ A clean that you cancel while this command runs is left to finish.
 **`links`** inside the cache, the cache folder itself, Bun's home `%USERPROFILE%\.bun` (moved by
 `BUN_INSTALL`) and **`install\global`**, the packages you installed with `bun add --global`. Deguffer
 asserts that each survived the run, and Explore refuses everything in Bun's home except the package
-folders in the cache.
+folders at the top of the cache.
 
 ### What it costs you
 

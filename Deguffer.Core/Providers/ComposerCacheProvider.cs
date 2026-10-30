@@ -80,8 +80,8 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
         Publisher = "the open-source Composer project",
         Purpose = "Composer keeps a copy of every package archive, repository listing and git mirror it "
             + "downloads, so installing the same version again is served from disk.",
-        Recommendation = "Deguffer runs Composer's own clear-cache. Composer already trims this cache "
-            + "itself past 300 MiB or six months, so it rarely grows large.",
+        Recommendation = "Deguffer runs Composer's own clear-cache. Composer already trims the package "
+            + "archives in this cache itself past 300 MiB or six months, so it rarely grows large.",
     };
 
     /// <summary>Composer runs as PHP, so a running install or update is a <c>php</c> process.</summary>
@@ -161,6 +161,16 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
         if (Environment.FindExecutable("composer") is not { } composer)
         {
             return EmptyPlan("Composer is not installed on this machine.");
+        }
+
+        // Composer 2.11's clear-cache loads the project this names and takes its cache settings, which the
+        // global settings asked here never include (ConfigCommand merges no project under --global), so
+        // the clear could empty a folder nobody vetted.
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("COMPOSER")))
+        {
+            return EmptyPlan(
+                "The COMPOSER environment variable names a project file, and Composer's clear-cache takes that "
+                + "project's cache settings, which Deguffer cannot check from here. It is leaving the cache alone.");
         }
 
         if (await ResolveSettingsAsync(composer, ct).ConfigureAwait(false) is not { } settings)
@@ -279,7 +289,7 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
         foreach (var (setting, child, value) in settings.CacheParts)
         {
             if (!value.Disabled
-                && !string.Equals(value.Folder, Path.Combine(cache, child), StringComparison.OrdinalIgnoreCase))
+                && (value.Folder is not { } part || !Reach(part).IsSameAs(Reach(Path.Combine(cache, child)))))
             {
                 return $"Composer is set to keep part of its cache ({setting}) in '{value.Reported}', outside its cache "
                     + "folder, and its clear-cache empties that folder whatever else it holds. Deguffer cannot tell "

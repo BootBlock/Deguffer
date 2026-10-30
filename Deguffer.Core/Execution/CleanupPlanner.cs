@@ -40,7 +40,7 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, ccache, sccache,
-    /// Maven, vcpkg, pnpm, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
+    /// Maven, vcpkg, pnpm, Yarn 1, Bun, Composer, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
     /// temporary folders, the GPU shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
