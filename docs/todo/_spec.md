@@ -1194,7 +1194,9 @@ on: what the established duplicate finders do, and the ways their users have los
   with several names count for nothing. Each group names its files with their folders, their sizes,
   their last-modified times, the criteria that matched them and, for a content match, the checksum
   and its algorithm. Where two paths differ by little, the page shows where they differ, because two
-  near-identical folder names are how a user marks the copy they meant to keep.
+  near-identical folder names are how a user marks the copy they meant to keep. It marks the
+  letters that differ only inside one name that shares more with its twin than it differs by, and
+  marks whole names otherwise, so that a difference never appears to start in the middle of a word.
 - **The space shown is what the copies occupy, a removal may free less, and the page says so.** On
   ReFS, which a Dev Drive uses, two copies may share their clusters, because Windows 11 copies by
   block cloning there, and removing one may free nothing. Windows Server's deduplication behaves the
