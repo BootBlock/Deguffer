@@ -644,7 +644,7 @@ and it is the part Deguffer leaves.
 | --- | --- |
 | **Location** | `%LOCALAPPDATA%\electron\Cache`, or wherever `electron_config_cache` points |
 | **Method** | Delete each cached download folder, by path |
-| **Typical size** | About 100 MB for each Electron version, platform and architecture installed |
+| **Typical size** | One zip for each Electron version, platform and architecture installed: 150.9 MB for Electron 45 on 64-bit Windows |
 
 ### What it is
 

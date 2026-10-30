@@ -84,7 +84,7 @@ public sealed partial class ElectronCacheProvider : CleanupProviderBase
         Application = "Electron, the framework many desktop applications are built with",
         Publisher = "the OpenJS Foundation's Electron project",
         Purpose = "Each time a project installs Electron, its downloader keeps a copy of the runtime it "
-            + "fetched, one zip of around a hundred megabytes for each version, platform and "
+            + "fetched, one zip of around 150 megabytes for each version, platform and "
             + "architecture. Nothing ever removes one, so they build up with every version a project "
             + "has used.",
         Recommendation = "Nothing here is yours: every entry is a download Electron's installer fetches "

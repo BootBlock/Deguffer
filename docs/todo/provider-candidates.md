@@ -553,7 +553,7 @@ can leave the lock behind.
 names it `<folder> (packaged)`. Measured on a real packaged Electron application. `LocalLow` is not
 included: Microsoft's redirection list names only `Local` and `Roaming`.
 
-[../cache-locations.md](../cache-locations.md) records "Not reached: packaged Electron applications".
+[../cache-locations.md](../cache-locations.md) recorded "Not reached: packaged Electron applications", now [Packaged applications](../cache-locations.md#packaged-applications).
 The fix is the existing identification rule — a `Local State` file one level down — applied one level
 under each package's `LocalCache\Roaming` and `LocalCache\Local`, the redirected roots the first
 survey's §3 describes. It never treats `LocalCache` itself as permission to delete; Microsoft defines
