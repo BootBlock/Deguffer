@@ -299,10 +299,10 @@ public sealed class ExploreFilesTests : IDisposable
 
         var games = builder.AddChildren(
             ExploreTreeBuilder.RootNode,
-            [ExploreFixture.Folder("games"), Written("notes.txt", 200, now), Written("keep.bin", 100, now)]);
+            [ExploreFixture.Folder("games"), ExploreFixture.Written("notes.txt", 200, now), ExploreFixture.Written("keep.bin", 100, now)]);
 
-        var old = builder.AddChildren(games, [ExploreFixture.Folder("old"), Written("setup.exe", 300, now.AddYears(-2))]);
-        builder.AddChildren(old, [Written("game.iso", 400, now.AddYears(-3))]);
+        var old = builder.AddChildren(games, [ExploreFixture.Folder("old"), ExploreFixture.Written("setup.exe", 300, now.AddYears(-2))]);
+        builder.AddChildren(old, [ExploreFixture.Written("game.iso", 400, now.AddYears(-3))]);
 
         return (builder.Build(ExploreChildOrder.BySize), root);
     }
@@ -315,9 +315,6 @@ public sealed class ExploreFilesTests : IDisposable
 
         return builder.Build(ExploreChildOrder.BySize);
     }
-
-    private static ExploreChild Written(string name, long size, DateTime when) =>
-        new(name, IsDirectory: false, IsLink: false, size, ExploreTimestamp.FromUtc(when), ExploreTimestamp.FromUtc(when));
 
     private static int Find(ExploreTree tree, string name)
     {
