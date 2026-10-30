@@ -25,6 +25,9 @@ pub cache, the Android SDK and Docker are all settled subjects with their reason
 read that first. `%LOCALAPPDATA%\Temp` was among them and has since shipped — it is documented there
 as an offered provider rather than a rejected candidate.
 
+[provider-candidates.md](provider-candidates.md) is the second survey, from #407: virtualisation,
+further package managers, per-project and IDE caches, applications and Windows itself.
+
 Each entry below carries a proposed tier and says plainly whether it was **measured** or only
 **researched**. That distinction is the point of the format. A measured entry was present on the
 audited machine and sized there. A researched entry rests on vendor documentation, which is worth
@@ -473,12 +476,12 @@ One class each, on the shape npm and NuGet already use.
 | --- | --- | --- |
 | Maven | `%USERPROFILE%\.m2\repository`, no official purge | `.m2\settings.xml` in the root can hold encrypted server passwords. §5.2 verbatim |
 | Yarn | `yarn cache dir`, then `yarn cache clean` | Yarn 1 and Berry differ; probe rather than assume |
-| Bun | `%USERPROFILE%\.bun\install\cache` | No eviction command as of early 2026, so path-based by necessity |
+| Bun | `%USERPROFILE%\.bun\install\cache`, `bun pm cache prune` | Corrected by [provider-candidates.md](provider-candidates.md) §2: `bun pm cache rm` and `prune` now exist, and only `prune` keeps the global store in `links` |
 | Composer | `composer clear-cache` | Measured at 30 MB, so the location is real rather than hypothetical |
 | vcpkg | `%LOCALAPPDATA%\vcpkg\archives`, plus `buildtrees`, `downloads`, `packages` under the vcpkg root | The cache root moves with `VCPKG_DEFAULT_BINARY_CACHE`, the same problem `PLAYWRIGHT_BROWSERS_PATH` already forced into `IUserEnvironment` |
 | Conan | `conan cache clean` | Build and download folders |
 | Chocolatey | `%TEMP%\chocolatey` by default | Moves if `cacheLocation` is set in `chocolatey.config`; read the config |
-| Scoop | `scoop cache rm *`, `scoop cleanup *` | The second removes superseded app versions under `apps\<name>\<version>` |
+| Scoop | `scoop cache rm *` | Not `scoop cleanup *`: it removes superseded app versions under `apps\<name>\<version>`, which is uninstalling (§2). See [provider-candidates.md](provider-candidates.md) §2 |
 
 ---
 
@@ -1348,6 +1351,10 @@ the operation is stop-service, delete, start-service, under elevation. That is a
 step from anything `CleanupPlan` models today. **Decide whether Deguffer takes on service control at
 all before this is scheduled.**
 
+[provider-candidates.md](provider-candidates.md) §5 found a documented rebuild,
+`ISearchCatalogManager::Reset`, that needs no service control. If it shrinks the file, the question
+above no longer blocks this entry. Whether it does is not yet measured.
+
 ---
 
 ## 7. Things every cleaner does on `C:` and nowhere else
@@ -1612,7 +1619,10 @@ Two carve-outs are defensible, because both are caches rather than installations
 
 - JetBrains' `caches`, `index` and `log` subdirectories under each per-version folder. The IDE
   itself deletes these after 180 days, so an eviction policy already exists to match.
-- Visual Studio's `ComponentModelCache`, a MEF index rebuilt on next launch.
+- Visual Studio's `ComponentModelCache`, a MEF index rebuilt on next launch. Rejected by
+  [provider-candidates.md](provider-candidates.md) §3: 8.5 MB measured, and rebuilding it is a
+  repair rather than a way to free space. The same section narrows the JetBrains carve-out to the
+  whole system directory of a superseded version, which is what the IDE itself deletes.
 
 Both are §5.2 recognised children under a root that must never be targeted whole, because `settings`
 and `plugins` live in the same place.
