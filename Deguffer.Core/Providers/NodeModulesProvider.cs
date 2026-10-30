@@ -16,8 +16,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para>Tier 2 for the obvious half of its definition: reinstalling is a download, and on a project
 /// of any size it is a large one. It is offline where the package manager's own cache still holds
-/// the tarballs, which is exactly the cache <c>NpmCacheProvider</c> and <c>PnpmStoreProvider</c>
-/// clear — so a run that takes both leaves a reinstall needing the network.</para>
+/// the tarballs, which is exactly the cache <c>NpmCacheProvider</c>, <c>PnpmStoreProvider</c>,
+/// <c>YarnClassicCacheProvider</c> and <c>BunInstallCacheProvider</c> clear — so a run that takes
+/// both leaves a reinstall needing the network.</para>
 ///
 /// <para>This is also the directory <see cref="SourceTreeBoundary"/> refuses to walk into, and the
 /// two rules meet without conflicting: a search stops at a name it is looking for, so finding one
