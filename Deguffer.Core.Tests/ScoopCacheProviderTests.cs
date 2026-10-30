@@ -171,16 +171,35 @@ public sealed class ScoopCacheProviderTests : IDisposable
         Assert.Empty(_scoop.Runner.Invocations);
     }
 
+    /// <summary>
+    /// A file link carrying a download's name is still not a download Scoop made: Scoop writes files,
+    /// never links. This is the case the reparse-point test on a file decides.
+    /// </summary>
     [Fact]
-    public async Task ALinkInsideTheCacheWithholdsTheCommand()
+    public async Task AFileLinkWithADownloadsNameWithholdsTheCommandAndIsProtected()
+    {
+        _scoop.Install();
+        _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        var target = _scoop.File(_scoop.Elsewhere("linked"), "target.7z");
+        var link = Path.Combine(_scoop.DefaultCache, "git#2.47.1#0123abc.7z");
+        SymbolicLink.ToFile(link, target);
+
+        await AssertWithheldFor(link);
+    }
+
+    /// <summary>A folder link is not a download whatever its name, because a download is a file.</summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task AFolderLinkInsideTheCacheWithholdsTheCommandAndIsProtected(DirectoryLinkKind kind)
     {
         _scoop.Install();
         _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
         var target = _scoop.Elsewhere("linked");
         Directory.CreateDirectory(target);
-        Junction.ToDirectory(Path.Combine(_scoop.DefaultCache, "git#2.47.1#0123abc.7z"), target);
+        var link = Path.Combine(_scoop.DefaultCache, "git#2.47.1#0123abc.7z");
+        DirectoryLink.Create(kind, link, target);
 
-        Assert.Empty((await _scoop.Provider().PlanAsync()).Steps);
+        await AssertWithheldFor(link);
     }
 
     /// <summary>
@@ -343,6 +362,17 @@ public sealed class ScoopCacheProviderTests : IDisposable
         _scoop.File(cache, ScoopFixture.Download);
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(_scoop.Provider()));
+    }
+
+    private async Task AssertWithheldFor(string link)
+    {
+        var plan = await _scoop.Provider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"'{Path.GetFileName(link)}'", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(_scoop.Runner.Invocations);
     }
 
     private static CommandOutcome RemoveEveryFileIn(string folder)
