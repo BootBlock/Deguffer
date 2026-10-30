@@ -39,7 +39,7 @@ public sealed class MemoryTreeLayoutTests
         var limits = LayoutLimits.Default;
         var available = (Width - (limits.ContainerGap * 2)) * (Height - limits.HeaderHeight - limits.ContainerGap);
         var total = (double)Tree.SizeOf(Tree.RootNode);
-        var parts = tiles.Where(tile => tile.Depth == 1 && !tile.IsAggregate && Tree.SizeOf(tile.Node) > 0).ToArray();
+        var parts = tiles.Where(tile => tile.Depth == 1 && tile.Block != MapBlock.Aggregate && Tree.SizeOf(tile.Node) > 0).ToArray();
 
         Assert.Equal(3, parts.Length);
 
@@ -55,7 +55,7 @@ public sealed class MemoryTreeLayoutTests
     {
         var tiles = IcicleLayout.Compute(Tree, Tree.RootNode, Width, Height, LayoutLimits.Default);
         var total = (double)Tree.SizeOf(Tree.RootNode);
-        var parts = tiles.Where(tile => tile.Depth == 1 && !tile.IsAggregate).ToArray();
+        var parts = tiles.Where(tile => tile.Depth == 1 && tile.Block != MapBlock.Aggregate).ToArray();
 
         Assert.Equal(3, parts.Length);
 

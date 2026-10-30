@@ -1,6 +1,5 @@
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
-using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
@@ -58,17 +57,8 @@ public sealed class MapShapeTextTests
             "Program. Enter opens it.",
             MapShapeText.Help(new MapShapeFacts("explorer.exe", "Program", Opens: true), removal: null));
 
-    /// <summary>Every block has a name and a sentence saying nothing here acts on it, and a node has neither.</summary>
+    /// <summary>A shape's label is its name, then its size, two spaces apart, on every page and for every block.</summary>
     [Fact]
-    public void EveryBlockIsNamedAndSaysItCannotBeActedOn()
-    {
-        foreach (var block in (int[])[ExploreTile.Aggregated, ExploreTile.FreeSpace, ExploreTile.Unaccounted, ExploreTile.ShadowCopies, ExploreTile.ReservedStorage])
-        {
-            Assert.NotEmpty(MapShapeText.BlockName(block));
-            Assert.Matches("one by one|cannot be opened or removed", MapShapeText.BlockHelp(block));
-        }
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => MapShapeText.BlockName(3));
-        Assert.Throws<ArgumentOutOfRangeException>(() => MapShapeText.BlockHelp(0));
-    }
+    public void ALabelIsTheNameThenTheSize() =>
+        Assert.Equal($"Documents  {FreeSpace.Format(450)}", MapShapeText.Label("Documents", 450));
 }

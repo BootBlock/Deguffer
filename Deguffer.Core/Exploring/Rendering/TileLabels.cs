@@ -114,8 +114,8 @@ internal sealed class TileLabels(
                 }
             }
             else if (shapeNames
-                && !tile.IsAggregate
-                && (tile.IsFreeSpace || (tile.Node != root && !covered.Contains(tile.Node)))
+                && tile.Block != MapBlock.Aggregate
+                && (tile.Block == MapBlock.FreeSpace || (tile.Node != root && !covered.Contains(tile.Node)))
                 && shown.HasRoomForALabel(limits))
             {
                 insides.Add(new Named(tile, shown));

@@ -957,9 +957,31 @@ public sealed class ExploreViewModelTests : IDisposable
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
         page.Hover(new ExploreHit(ExploreTile.Unaccounted, 2_500));
 
-        Assert.Equal("In use, but not accounted for by this scan", page.Hovered);
+        Assert.Equal(MapBlock.Unaccounted.Readout, page.Hovered);
         Assert.Equal(ExploreUnaccountedNote.For(isElevated, page.Volume, tree.TotalBytes, ScanStrategy.MasterFileTable), page.HoveredNote);
         Assert.Contains("Reserved storage", page.HoveredNote);
+    });
+
+    /// <summary>
+    /// The line under the map names the aggregate and the free space as the map's labels and a screen
+    /// reader do, with their sizes and nothing more to say of them.
+    /// </summary>
+    [Fact]
+    public void TheLineUnderTheMapNamesABlockAsTheMapDoes() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
+        var page = _explore.Page();
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(ExploreFixture.File("file", 3_000))));
+
+        foreach (var block in (MapBlock[])[MapBlock.Aggregate, MapBlock.FreeSpace])
+        {
+            page.Hover(new ExploreHit(block.Node, 6_000));
+
+            Assert.Equal(block.Readout, page.Hovered);
+            Assert.Equal(FreeSpace.Format(6_000), page.HoveredFigures);
+            Assert.Equal(string.Empty, page.HoveredNote);
+        }
     });
 
     /// <summary>
@@ -981,13 +1003,13 @@ public sealed class ExploreViewModelTests : IDisposable
 
         page.Hover(new ExploreHit(ExploreTile.ShadowCopies, 1_000));
 
-        Assert.Equal("Restore points and shadow copies, by Windows' own figure", page.Hovered);
+        Assert.Equal(MapBlock.ShadowCopies.Readout, page.Hovered);
         Assert.Equal(FreeSpace.Format(1_000), page.HoveredFigures);
         Assert.Equal(HiddenSpaceNote.ShadowCopies(shadow), page.HoveredNote);
 
         page.Hover(new ExploreHit(ExploreTile.ReservedStorage, 500));
 
-        Assert.Equal("Reserved storage, by Windows' own figure", page.Hovered);
+        Assert.Equal(MapBlock.ReservedStorage.Readout, page.Hovered);
         Assert.Equal(HiddenSpaceNote.ReservedStorage(), page.HoveredNote);
     });
 

@@ -29,8 +29,8 @@ public sealed class TreemapVolumeTests
         var tiles = TreemapLayout.Compute(
             tree, tree.RootNode, Width, Height, LayoutLimits.Default, new VolumeSpace(12_000, 6_000));
 
-        var free = tiles.Single(tile => tile.IsFreeSpace);
-        var unaccounted = tiles.Single(tile => tile.IsUnaccounted);
+        var free = tiles.Single(tile => tile.Block == MapBlock.FreeSpace);
+        var unaccounted = tiles.Single(tile => tile.Block == MapBlock.Unaccounted);
         var root = tiles.Single(tile => tile.Node == tree.RootNode);
         const double Canvas = (double)Width * Height;
 
@@ -57,7 +57,7 @@ public sealed class TreemapVolumeTests
             tree, tree.RootNode, Width, Height, LayoutLimits.Default, new VolumeSpace(12_000, 6_000));
 
         // Against the scan alone, 6,000 free beside 3,000 counted would be two thirds of the canvas.
-        Assert.Equal(0.5, Area(tiles.Single(tile => tile.IsFreeSpace)) / ((double)Width * Height), 3);
+        Assert.Equal(0.5, Area(tiles.Single(tile => tile.Block == MapBlock.FreeSpace)) / ((double)Width * Height), 3);
     }
 
     [Fact]
@@ -67,8 +67,8 @@ public sealed class TreemapVolumeTests
         var tiles = TreemapLayout.Compute(
             tree, tree.RootNode, Width, Height, LayoutLimits.Default, new VolumeSpace(9_000, 6_000));
 
-        Assert.DoesNotContain(tiles, tile => tile.IsUnaccounted);
-        Assert.Contains(tiles, tile => tile.IsFreeSpace);
+        Assert.DoesNotContain(tiles, tile => tile.Block == MapBlock.Unaccounted);
+        Assert.Contains(tiles, tile => tile.Block == MapBlock.FreeSpace);
     }
 
     /// <summary>
@@ -133,7 +133,7 @@ public sealed class TreemapVolumeTests
 
         Assert.DoesNotContain(
             Hits(Treemap(tree, tree.RootNode, view, new VolumeSpace(12_000, 6_000))),
-            hit => hit.IsFreeSpace || hit.IsUnaccounted);
+            hit => hit.Block == MapBlock.FreeSpace || hit.Block == MapBlock.Unaccounted);
     }
 
     /// <summary>
@@ -173,7 +173,7 @@ public sealed class TreemapVolumeTests
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, volume, viewport);
 
-        Assert.DoesNotContain(Hits(zoomed), hit => hit.IsFreeSpace || hit.IsUnaccounted);
+        Assert.DoesNotContain(Hits(zoomed), hit => hit.Block == MapBlock.FreeSpace || hit.Block == MapBlock.Unaccounted);
         Assert.True(zoomed.HasVolumeBeside);
     }
 
@@ -188,8 +188,8 @@ public sealed class TreemapVolumeTests
         var surface = Treemap(tree, tree.RootNode, ExploreView.Treemap, new VolumeSpace(12_000, 6_000));
         var hits = Hits(surface);
 
-        var free = Assert.Single(hits.Where(hit => hit.IsFreeSpace).Distinct());
-        var unaccounted = Assert.Single(hits.Where(hit => hit.IsUnaccounted).Distinct());
+        var free = Assert.Single(hits.Where(hit => hit.Block == MapBlock.FreeSpace).Distinct());
+        var unaccounted = Assert.Single(hits.Where(hit => hit.Block == MapBlock.Unaccounted).Distinct());
 
         Assert.False(free.IsNode);
         Assert.False(unaccounted.IsNode);
@@ -228,8 +228,8 @@ public sealed class TreemapVolumeTests
 
         foreach (var (block, colour) in new[]
         {
-            (tiles.Single(tile => tile.IsFreeSpace), TilePalette.FreeSpace),
-            (tiles.Single(tile => tile.IsUnaccounted), TilePalette.Unaccounted),
+            (tiles.Single(tile => tile.Block == MapBlock.FreeSpace), MapBlock.FreeSpace.Colour),
+            (tiles.Single(tile => tile.Block == MapBlock.Unaccounted), MapBlock.Unaccounted.Colour),
         })
         {
             var corner = At(pixels, (int)block.X + 2, (int)block.Y + 2);
@@ -240,8 +240,8 @@ public sealed class TreemapVolumeTests
             Assert.Equal(corner.Red, corner.Blue);
         }
 
-        Assert.NotEqual(TilePalette.FreeSpace, TilePalette.Unaccounted);
-        Assert.NotEqual(TilePalette.Aggregate, TilePalette.Unaccounted);
+        Assert.NotEqual(MapBlock.FreeSpace.Colour, MapBlock.Unaccounted.Colour);
+        Assert.NotEqual(MapBlock.Aggregate.Colour, MapBlock.Unaccounted.Colour);
     }
 
     [Fact]

@@ -109,7 +109,7 @@ public sealed class ExploreOutlineTests
 
         Assert.Contains(
             TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default),
-            tile => tile.IsAggregate);
+            tile => tile.Block == MapBlock.Aggregate);
 
         Assert.Empty(Treemap(tree).Outlines(new HashSet<int> { ExploreTile.Aggregated }));
     }

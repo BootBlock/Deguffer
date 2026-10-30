@@ -162,7 +162,7 @@ public sealed class ShapeChangesTests
         var earlier = Crowded(grown: false);
         var later = Crowded(grown: true);
 
-        Assert.Contains(Treemap(later).Tiles, tile => tile.IsAggregate);
+        Assert.Contains(Treemap(later).Tiles, tile => tile.Block == MapBlock.Aggregate);
 
         var changes = ShapeChanges.Between(Treemap(earlier), Treemap(later));
 

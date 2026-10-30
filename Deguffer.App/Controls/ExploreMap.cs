@@ -809,7 +809,7 @@ public sealed class ExploreMap : UserControl
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        return node => $"{tree.NameOf(node)}  {FreeSpace.Format(tree.SizeOf(node))}";
+        return node => MapShapeText.Label(tree.NameOf(node), tree.SizeOf(node));
     }
 
     /// <summary>
@@ -1648,9 +1648,9 @@ public sealed class ExploreMap : UserControl
     /// What to write on a labelled shape. The blocks standing for the rest of the volume are the
     /// map's own, because they are not nodes of the page's tree.
     /// </summary>
-    private string LabelText(ExploreLabel label) => label.Node >= 0
-        ? _labelText(label.Node)
-        : $"{MapShapeText.BlockName(label.Node)}  {FreeSpace.Format(label.Bytes)}";
+    private string LabelText(ExploreLabel label) => MapBlock.Of(label.Node) is { } block
+        ? MapShapeText.Label(block.Name, label.Bytes)
+        : _labelText(label.Node);
 
     /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
     private void ShowPicked()
@@ -2490,7 +2490,7 @@ public sealed class ExploreMap : UserControl
             return string.Empty;
         }
 
-        var name = shape.IsNode ? FactsOf(drawing, shape.Node)?.Name : MapShapeText.BlockName(shape.Node);
+        var name = MapBlock.Of(shape.Node) is { } block ? block.Name : shape.IsNode ? FactsOf(drawing, shape.Node)?.Name : null;
         var (ofBytes, named) = MapFolders.ShareBasis(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, drawing.Shapes(null));
 
         // A share of the drive is named by no node. A share of a folder the page says nothing of is not
@@ -2506,8 +2506,8 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>What <paramref name="shape"/> is and what can be done with it. See <see cref="MapShapeText.Help"/>.</summary>
     internal string HelpOf(MapShape shape) =>
-        !shape.IsNode ? MapShapeText.BlockHelp(shape.Node)
-        : Readable is { } drawing && FactsOf(drawing, shape.Node) is { } facts ? MapShapeText.Help(facts, Removal?.Invoke(drawing.Tree, shape.Node))
+        MapBlock.Of(shape.Node) is { } block ? block.Help
+        : shape.IsNode && Readable is { } drawing && FactsOf(drawing, shape.Node) is { } facts ? MapShapeText.Help(facts, Removal?.Invoke(drawing.Tree, shape.Node))
         : string.Empty;
 
     /// <summary>Where <paramref name="shape"/> is on the screen now, in fractions of the map, or null where there is no drawing to say.</summary>

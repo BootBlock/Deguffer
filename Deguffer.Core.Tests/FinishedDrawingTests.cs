@@ -262,7 +262,7 @@ public sealed class FinishedDrawingTests
             {
                 if (drawing.At(x + 0.5f, y + 0.5f)?.Node == ExploreTile.Aggregated)
                 {
-                    Assert.Equal(TilePalette.Aggregate, ColourAt(pixels, x, y));
+                    Assert.Equal(MapBlock.Aggregate.Colour, ColourAt(pixels, x, y));
                     aggregated++;
                 }
             }
@@ -511,7 +511,7 @@ public sealed class FinishedDrawingTests
     private static HashSet<TileColour> ColoursOf(ExploreSurface drawing) =>
     [
         .. drawing.MorphShapes(drawing.NodesDrawn.ToHashSet()).Select(shape => shape.Colour),
-        TilePalette.Aggregate,
+        MapBlock.Aggregate.Colour,
     ];
 
     private static byte[] Paint(ExploreSurface drawing)

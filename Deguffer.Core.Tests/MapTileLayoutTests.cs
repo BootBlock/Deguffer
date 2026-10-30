@@ -277,9 +277,9 @@ public sealed class MapTileLayoutTests
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, volume, viewport);
         var level = MapTiling.LevelOf(viewport.Zoom);
 
-        var free = drawing.Tiles.Single(shape => shape.IsFreeSpace);
+        var free = drawing.Tiles.Single(shape => shape.Block == MapBlock.FreeSpace);
         var tile = drawing.Tile(Tiling, Tiling.At(level, 0.9, 0.5)!.Value);
-        var tiled = tile.Shapes.Single(shape => shape.IsFreeSpace);
+        var tiled = tile.Shapes.Single(shape => shape.Block == MapBlock.FreeSpace);
 
         Assert.True(Same(Fraction(free, viewport), Frame(tile, tiled), Tiling.AcrossAt(level)));
     }

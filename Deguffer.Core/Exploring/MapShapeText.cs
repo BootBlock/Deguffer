@@ -1,5 +1,4 @@
 using Deguffer.Core.Exploring.Acting;
-using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
@@ -73,30 +72,15 @@ public static class MapShapeText
     }
 
     /// <summary>
-    /// What a block that stands for no node is called, on the map and to a screen reader alike: see
-    /// <see cref="ExploreTile"/>.
+    /// What is written on a shape on the map: its name, then its size, apart by two spaces. One format
+    /// for every page and every block, so a label reads alike wherever it is.
     /// </summary>
-    public static string BlockName(int block) => block switch
+    public static string Label(string name, long bytes)
     {
-        ExploreTile.Aggregated => "Too small to draw one by one",
-        ExploreTile.FreeSpace => "Free space",
-        ExploreTile.Unaccounted => "Not accounted for",
-        ExploreTile.ShadowCopies => "Restore points and shadow copies",
-        ExploreTile.ReservedStorage => "Reserved storage",
-        _ => throw new ArgumentOutOfRangeException(nameof(block), block, "Not a block: a node has a name of its own."),
-    };
+        ArgumentNullException.ThrowIfNull(name);
 
-    /// <summary>
-    /// What a block is, and that nothing on the map acts on it (§7.1): the aggregate is many items, which
-    /// Explore never acts on at once, and the rest is space that is not a file or a folder.
-    /// </summary>
-    public static string BlockHelp(int block) => block switch
-    {
-        ExploreTile.Aggregated => "Several items, each too small to draw here. The list view shows them one by one.",
-        ExploreTile.FreeSpace or ExploreTile.Unaccounted or ExploreTile.ShadowCopies or ExploreTile.ReservedStorage =>
-            "Space on the drive that is not a file or a folder here, so it cannot be opened or removed.",
-        _ => throw new ArgumentOutOfRangeException(nameof(block), block, "Not a block: a node has facts of its own."),
-    };
+        return $"{name}  {FreeSpace.Format(bytes)}";
+    }
 
     /// <summary>
     /// <paramref name="bytes"/> as a share of <paramref name="ofBytes"/>, to the nearest percent:
