@@ -216,7 +216,8 @@ public sealed class MftVolumeTree(int count)
 
     /// <summary>
     /// Make each link met a node, once every record is in. In record order, then by directory and
-    /// name, so one table always numbers its links alike whatever order its threads met them in.
+    /// mail-store name, so one table always numbers its links alike whatever order its threads met
+    /// them in. Two links that tie on all three are the same value, so their order changes nothing.
     /// </summary>
     public void PlaceLinks() =>
         _links = [.. _met

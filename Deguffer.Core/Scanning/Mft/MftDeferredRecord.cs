@@ -167,6 +167,12 @@ internal sealed class MftDeferredRecord
             : MftAttributeKinds.Name);
 
     /// <summary>
+    /// Whether the base record settles every name the scan needs: a directory's best name, in the
+    /// best namespace. NTFS gives a directory no second link, so nothing elsewhere can add one.
+    /// </summary>
+    private bool NamesSettled => _isDirectory && _draft.BaseRank == 0;
+
+    /// <summary>
     /// What one entry would have to supply, judged by what the base record already settled.
     ///
     /// <para>Every name a file's list sends the reader to is wanted, because each that is not an 8.3
@@ -180,12 +186,6 @@ internal sealed class MftDeferredRecord
     /// pieces, and reading the rest would learn nothing. A directory's own stream is never counted,
     /// so its pieces are not wanted at all.</para>
     /// </summary>
-    /// <summary>
-    /// Whether the base record settles every name the scan needs: a directory's best name, in the
-    /// best namespace. NTFS gives a directory no second link, so nothing elsewhere can add one.
-    /// </summary>
-    private bool NamesSettled => _isDirectory && _draft.BaseRank == 0;
-
     private MftAttributeKinds NeedsOf(MftAttributeListEntry entry)
     {
         switch (entry.Type)

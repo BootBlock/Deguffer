@@ -32,9 +32,11 @@ internal sealed class MftLeftOutPlacement(
     ///
     /// <para><b>A file with several names is left out by the one the path names.</b> Each name is a
     /// node of its own (see <see cref="MftLink"/>), and the removal leaves only the name it was told
-    /// to, so the total still counts the others. Two names of one file in one folder are told apart
-    /// by taking a node not yet placed, which leaves out as many names as the paths ask for. A path
-    /// asked for twice is placed once.</para>
+    /// to, so the total still counts the others. A name is a mail store by itself (§9), so the node
+    /// taken is one the table judges as the path's name is judged, and a store by its own name. Two
+    /// names of one file in one folder that still tie are told apart by taking a node not yet
+    /// placed, which leaves out as many names as the paths ask for. A path asked for twice is placed
+    /// once.</para>
     ///
     /// <para><b>Each folder's names are read once, into a map.</b> The entries left out of a
     /// temporary folder are mostly its own children, thousands of them in a folder of tens of
@@ -96,7 +98,7 @@ internal sealed class MftLeftOutPlacement(
             if (reading.Description is not { } described
                 || RecordOf(described.Identity) is not { } record
                 || record == holding.Record
-                || holding.Names.FileNamed(record, nodes) is not { } node)
+                || NodeNaming(holding.Names, record, below[^1], nodes) is not { } node)
             {
                 return null;
             }
@@ -153,22 +155,29 @@ internal sealed class MftLeftOutPlacement(
         public uint? Find(string name) =>
             Exact.TryGetValue(name, out var child) || Folded.TryGetValue(name, out child) ? child : null;
 
-        /// <summary>
-        /// A node of this folder naming <paramref name="record"/> that is not among
-        /// <paramref name="placed"/>, or null where the folder holds no other.
-        /// </summary>
-        public uint? FileNamed(uint record, IReadOnlySet<uint> placed)
-        {
-            foreach (var node in Files.GetValueOrDefault(record) ?? [])
-            {
-                if (!placed.Contains(node))
-                {
-                    return node;
-                }
-            }
+    }
 
-            return null;
+    /// <summary>
+    /// A node of <paramref name="folder"/> naming <paramref name="record"/> by a name the table cannot
+    /// tell from <paramref name="name"/>, and not among <paramref name="placed"/>, or null where the
+    /// folder holds none. The table keeps a file's name only where it is a mail store's, so a store is
+    /// matched by its name and any other name by not being one.
+    /// </summary>
+    private uint? NodeNaming(ChildNames folder, uint record, string name, IReadOnlySet<uint> placed)
+    {
+        var store = MailStore.Is(name);
+
+        foreach (var node in folder.Files.GetValueOrDefault(record) ?? [])
+        {
+            if (!placed.Contains(node)
+                && tree.IsMailStore(node) == store
+                && (!store || string.Equals(tree.MailStoreName(node), name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return node;
+            }
         }
+
+        return null;
     }
 
     /// <summary>

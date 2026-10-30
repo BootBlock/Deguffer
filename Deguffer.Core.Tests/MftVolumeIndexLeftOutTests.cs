@@ -181,6 +181,39 @@ public sealed class MftVolumeIndexLeftOutTests
     }
 
     /// <summary>
+    /// A file named once as a mail store and once not, in one folder. Leaving out the other name
+    /// leaves the store's name in the sum, where it is named and not counted (§9); leaving out the
+    /// store's name leaves the other name counted. Either way the total and the stores agree with
+    /// what the removal keeps.
+    /// </summary>
+    [Fact]
+    public void LeavesOutTheNameThePathGivesWhereOnlyOneNameIsAStore()
+    {
+        const uint Shared = 30;
+
+        var index = Build(Tree()
+            .AddHardLinkedFile(Shared, [(Temp, "archive.pst"), (Temp, "archive.bin")], allocated: 2048, logical: 2000));
+        var describing = Describing(new Dictionary<string, FileReading>
+        {
+            ["archive.pst"] = Numbered(Shared),
+            ["archive.bin"] = Numbered(Shared),
+        });
+        const long Others = 1000 + 5000 + 3000 + 11000 + 13000;
+
+        var other = index.TryPlace(TempPath, [["archive.bin"]], describing)!;
+        var otherTotal = index.TryMeasure(TempPath, MinimumAge.Off, keepRoot: true, other, out _, out var otherStores);
+
+        Assert.Equal(Others, otherTotal!.Value.Logical);
+        Assert.Equal([.. TempPath, "archive.pst"], Assert.Single(otherStores));
+
+        var store = index.TryPlace(TempPath, [["archive.pst"]], describing)!;
+        var storeTotal = index.TryMeasure(TempPath, MinimumAge.Off, keepRoot: true, store, out _, out var storeStores);
+
+        Assert.Equal(Others + 2000, storeTotal!.Value.Logical);
+        Assert.Empty(storeStores);
+    }
+
+    /// <summary>
     /// Two names of one file in one folder are two entries, and leaving both out leaves out both,
     /// though Windows gives each the same number. A path asked for twice is one entry.
     /// </summary>
