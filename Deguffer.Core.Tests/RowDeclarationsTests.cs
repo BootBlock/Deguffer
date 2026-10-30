@@ -300,18 +300,56 @@ public sealed class RowDeclarationsTests : IDisposable
 
     /// <summary>
     /// The first question in a pass reads every row's declaration for whichever row asked, so a
-    /// pass cancelled while one row is read stops there rather than reading the rest.
+    /// pass cancelled while the first rows are read starts none of the rest.
+    ///
+    /// <para>The first rows are as many as are read at once, so none of the rest has started when
+    /// the pass is cancelled. The cancellation is then held part-way, as a busy thread can hold it,
+    /// while the other first rows end and free their slots: a read that waited for the cancellation
+    /// to reach the parallel loop's own token started the next rows in them.</para>
     /// </summary>
     [Fact]
     public async Task ACancelledPassStopsReadingTheRows()
     {
+        const int atOnce = CleanupPlanner.ProvidersAtOnce;
+        var patience = TimeSpan.FromSeconds(30);
         using var cancelled = new CancellationTokenSource();
+        using var allStarted = new CountdownEvent(atOnce);
+        using var othersEnded = new CountdownEvent(atOnce - 1);
         var readAfter = 0;
         var declarations = new RowDeclarations();
         declarations.Admit(
         [
-            new DeclaringRow(() => { cancelled.Cancel(); return []; }),
-            new DeclaringRow(() => { readAfter++; return []; }),
+            new DeclaringRow(() =>
+            {
+                allStarted.Signal();
+                allStarted.Wait(patience);
+
+                // Registered after the reading's own, so run before them: callbacks run last to first.
+                using var held = cancelled.Token.Register(() =>
+                {
+                    othersEnded.Wait(patience);
+
+                    // Time for the loop to hand the freed slots to the next rows.
+                    Thread.Sleep(200);
+                });
+
+                cancelled.Cancel();
+                return [];
+            }),
+            .. Enumerable.Range(1, atOnce - 1).Select(_ => new DeclaringRow(() =>
+            {
+                allStarted.Signal();
+
+                // Set before any callback runs, so these end while the cancellation is held.
+                cancelled.Token.WaitHandle.WaitOne(patience);
+                othersEnded.Signal();
+                return [];
+            })),
+            .. Enumerable.Range(0, atOnce).Select(_ => new DeclaringRow(() =>
+            {
+                Interlocked.Increment(ref readAfter);
+                return [];
+            })),
         ]);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -377,70 +415,5 @@ public sealed class RowDeclarationsTests : IDisposable
         declarations.Invalidate();
 
         Assert.True(await declarations.OfferedByARowAsync(Path.Combine(folder, "cache")));
-    }
-
-    /// <summary>A row that does nothing but declare.</summary>
-    private sealed class DeclaringRow(Func<IReadOnlyList<ToolRoot>> roots, IReadOnlyList<ToolRoot>? discovered = null)
-        : ICleanupProvider
-    {
-        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
-
-        public DeclaringRow(IReadOnlyList<ToolRoot> roots, IReadOnlyList<ToolRoot>? discovered = null)
-            : this(() => roots, discovered)
-        {
-        }
-
-        public string Id => "declaring";
-
-        public string Name => "Declaring";
-
-        public SafetyTier Tier => SafetyTier.RegenerableCache;
-
-        public StepGrain Grain => StepGrain.Parts;
-
-        public string WhatHappensOnNextUse => "Nothing.";
-
-        public ProviderDescription Description { get; } = new()
-        {
-            Category = ProviderCategory.TemporaryFiles,
-            Application = "A stub, standing in for a real toolchain.",
-            Publisher = "Nobody.",
-            Purpose = "Nothing. This provider exists only for this test.",
-            Recommendation = "Nothing to recommend.",
-        };
-
-        public bool IsAwaitingSourceFolders => false;
-
-        public IReadOnlyList<ToolRoot> ToolRoots => roots();
-
-        public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<ToolRoot>>(discovered ?? []);
-
-        public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
-
-        public void InvalidateCaches()
-        {
-        }
-
-        public PassHold HoldCaches() => PassHold.Nothing;
-
-        public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a declaration.");
-
-        public Task<CleanupResult> ExecuteAsync(
-            CleanupPlan plan,
-            RunReach? runReach = null,
-            RunResidue? residue = null,
-            IProgress<double>? progress = null,
-            CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a declaration.");
-
-        public Task<VerificationResult> VerifyAsync(
-            CleanupPlan plan,
-            RunReach? runReach = null,
-            RunResidue? residue = null,
-            CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a declaration.");
     }
 }

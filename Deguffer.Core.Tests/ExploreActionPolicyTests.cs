@@ -1782,6 +1782,72 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// Each provider's declaration is read in the bounded stage that asks for the probes, rather than
+    /// in series once every probe is in. One provider's probe here waits for another provider's
+    /// declaration, which never comes while declarations wait for the probes.
+    /// </summary>
+    [Fact]
+    public async Task ADeclarationIsReadBesideTheOtherProvidersProbes()
+    {
+        var declared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var root = ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            new FakeVolumeInventory(),
+            [
+                new DeclaringRow(() =>
+                {
+                    declared.TrySetResult();
+                    return [root];
+                }),
+                new DeclaringRow(
+                    () => [],
+                    async ct =>
+                    {
+                        await declared.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+                        return [];
+                    }),
+            ]);
+
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A provider's own probe is in before its declaration is read: the Chromium rows' probe readies
+    /// the scope their declaration walks.
+    /// </summary>
+    [Fact]
+    public async Task AProvidersProbeIsInBeforeItsDeclarationIsRead()
+    {
+        var probed = false;
+        bool? probedFirst = null;
+
+        await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            new FakeVolumeInventory(),
+            [
+                new DeclaringRow(
+                    () =>
+                    {
+                        probedFirst = Volatile.Read(ref probed);
+                        return [];
+                    },
+                    async ct =>
+                    {
+                        await Task.Yield();
+                        Volatile.Write(ref probed, true);
+                        return [];
+                    }),
+            ]);
+
+        Assert.True(probedFirst);
+    }
+
+    /// <summary>
     /// A tool's home at the top of a drive keeps its §5.2 protection. <c>CARGO_HOME</c> may name a
     /// drive root, and Cargo's registry tokens then sit directly under it, so the declaration there
     /// still refuses every child it does not recognise.
