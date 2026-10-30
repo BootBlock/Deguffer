@@ -142,7 +142,7 @@ internal sealed class CushionRenderer : IDisposable
                 _uploaded = quads;
             }
 
-            Draw(quads.Width, quads.Height, region, light, quads.Finish, shapes.Length);
+            Draw(quads, region, light);
         }
 
         return bitmap;
@@ -164,7 +164,6 @@ internal sealed class CushionRenderer : IDisposable
         Marshal.ReleaseComObject(_direct3D);
     }
 
-    /// <summary>Whether <paramref name="direct3D"/> runs on a software adapter.</summary>
     private static bool IsSoftware(IDevice direct3D)
     {
         // A cast of a COM wrapper asks the object for the interface.
@@ -184,7 +183,6 @@ internal sealed class CushionRenderer : IDisposable
         }
     }
 
-    /// <summary>The Direct3D device under <paramref name="device"/>.</summary>
     private static IDevice DeviceUnder(CanvasDevice device)
     {
         var unknown = MarshalInterface<Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice>.FromManaged(device);
@@ -193,7 +191,7 @@ internal sealed class CushionRenderer : IDisposable
         {
             var access = (IDxgiInterfaceAccess)Marshal.GetObjectForIUnknown(unknown);
 
-            Check(access.GetInterface(DeviceId, out var native));
+            Check(access.GetInterface(typeof(IDevice).GUID, out var native));
 
             try
             {
@@ -388,15 +386,16 @@ internal sealed class CushionRenderer : IDisposable
     }
 
     /// <summary>
-    /// Draw <paramref name="count"/> quads over <paramref name="region"/> of a canvas
-    /// <paramref name="width"/> by <paramref name="height"/>, under <paramref name="light"/> where there
-    /// is one. Every piece of state the draw depends on is set, because the device is shared with Win2D,
-    /// and the target is let go of after, so Win2D can read it.
+    /// Draw <paramref name="quads"/>, uploaded, over <paramref name="region"/> of their canvas, under
+    /// <paramref name="light"/> where there is one. Every piece of state the draw depends on is set,
+    /// because the device is shared with Win2D, and the target is let go of after, so Win2D can read it.
     /// </summary>
-    private void Draw(int width, int height, CanvasRegion region, PointerLight? light, ShapeFinish finish, int count)
+    private void Draw(CushionQuads quads, CanvasRegion region, PointerLight? light)
     {
+        var (width, height) = (quads.Width, quads.Height);
+
         Span<byte> constants = stackalloc byte[ConstantsSize];
-        MemoryMarshal.Write(constants, new CushionConstants(width, height, region, light, finish));
+        MemoryMarshal.Write(constants, new CushionConstants(width, height, region, light, quads.Finish));
 
         // The whole buffer, with no box: Direct3D 11 refuses a box on a constant buffer, and drops the
         // update without an error, which left every quad at a size of zero.
@@ -422,7 +421,7 @@ internal sealed class CushionRenderer : IDisposable
         _context.PSSetShader(_pixelShader, 0, 0);
         _context.PSSetConstantBuffers(0, 1, _constants);
 
-        _context.DrawInstanced(4, (uint)count, 0, 0);
+        _context.DrawInstanced(4, (uint)quads.Quads.Length, 0, 0);
 
         _context.OMSetRenderTargets(1, 0, 0);
     }

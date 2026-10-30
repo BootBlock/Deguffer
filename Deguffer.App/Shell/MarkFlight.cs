@@ -1,4 +1,5 @@
 using System.Numerics;
+using Deguffer.App.Controls;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
@@ -61,7 +62,7 @@ internal static class MarkFlight
         move.InsertKeyFrame(0, from);
         move.InsertKeyFrame(1, Vector3.Zero, ease);
         move.Duration = played.Duration;
-        visual.StartAnimation("Translation", move);
+        visual.StartAnimation(VisualTranslation.Property, move);
 
         var grow = compositor.CreateVector3KeyFrameAnimation();
         grow.InsertKeyFrame(0, new Vector3(Speck, Speck, 1));

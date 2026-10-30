@@ -176,7 +176,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     public void FollowMotion()
     {
         _elastic = _motion.For(MotionToken.Camera).Travels;
-        _interaction.Elastic = _elastic;
+        _interaction.Coast(_elastic);
 
         // A camera held while its origin moves follows the tracker again, as it now asks, once the
         // move is resolved.

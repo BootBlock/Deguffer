@@ -56,20 +56,16 @@ internal sealed class MapInteraction
         }
     }
 
-    /// <summary>Whether a hand let go coasts on, which is whether the reader has animation effects on.</summary>
-    public bool Elastic
+    /// <summary>Let a hand let go coast on where <paramref name="elastic"/> says the reader has animation effects on.</summary>
+    public void Coast(bool elastic)
     {
-        get => _elastic;
-        set
+        if (_elastic == elastic)
         {
-            if (_elastic == value)
-            {
-                return;
-            }
-
-            _elastic = value;
-            Configure();
+            return;
         }
+
+        _elastic = elastic;
+        Configure();
     }
 
     /// <summary>

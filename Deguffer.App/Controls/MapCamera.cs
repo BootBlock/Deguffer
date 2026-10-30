@@ -79,7 +79,7 @@ internal sealed class MapCamera
     /// </summary>
     public CompositionPropertySet Properties { get; }
 
-    /// <summary>The map is <paramref name="width"/> by <paramref name="height"/> now.</summary>
+    /// <summary>Hand the expressions the map's size, which the tracker's bounds are worked out from.</summary>
     public void Resize(double width, double height) =>
         Properties.InsertVector2(nameof(Visual.Size), new Vector2((float)width, (float)height));
 

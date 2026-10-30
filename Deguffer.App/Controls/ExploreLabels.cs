@@ -163,9 +163,6 @@ internal sealed class ExploreLabels : Canvas
     /// </summary>
     public void Show(ExploreSurface drawing, double scale, Func<ExploreLabel, string> caption)
     {
-        ArgumentNullException.ThrowIfNull(drawing);
-        ArgumentNullException.ThrowIfNull(caption);
-
         Visibility = Visibility.Visible;
 
         while (Children.Count < drawing.Labels.Count)
@@ -257,7 +254,6 @@ internal sealed class ExploreLabels : Canvas
         _names.Clear();
         _named.Clear();
         _tree = null;
-        Visibility = Visibility.Visible;
     }
 
     /// <summary>
@@ -334,7 +330,7 @@ internal sealed class ExploreLabels : Canvas
                 expression.SetReferenceParameter("carried", carried);
             }
 
-            _visual.StartAnimation("Translation", _placement);
+            _visual.StartAnimation(VisualTranslation.Property, _placement);
             _visual.StartAnimation(nameof(Visual.Opacity), _opacity);
         }
 

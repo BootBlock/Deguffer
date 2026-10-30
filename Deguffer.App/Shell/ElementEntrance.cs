@@ -1,4 +1,5 @@
 using System.Numerics;
+using Deguffer.App.Controls;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
@@ -30,8 +31,8 @@ internal sealed class ElementEntrance(float rise)
         visual.Opacity = 0;
 
         ElementCompositionPreview.SetIsTranslationEnabled(part, true);
-        visual.StopAnimation("Translation");
-        visual.Properties.InsertVector3("Translation", played.Travels ? new Vector3(0, rise, 0) : Vector3.Zero);
+        visual.StopAnimation(VisualTranslation.Property);
+        visual.Properties.InsertVector3(VisualTranslation.Property, played.Travels ? new Vector3(0, rise, 0) : Vector3.Zero);
     }
 
     /// <summary>Bring <paramref name="part"/> in, starting <paramref name="delay"/> from now.</summary>
@@ -53,8 +54,8 @@ internal sealed class ElementEntrance(float rise)
 
         if (!played.Travels)
         {
-            visual.StopAnimation("Translation");
-            visual.Properties.InsertVector3("Translation", Vector3.Zero);
+            visual.StopAnimation(VisualTranslation.Property);
+            visual.Properties.InsertVector3(VisualTranslation.Property, Vector3.Zero);
             return;
         }
 
@@ -62,7 +63,7 @@ internal sealed class ElementEntrance(float rise)
         move.InsertKeyFrame(0, new Vector3(0, rise, 0));
         move.InsertKeyFrame(1, Vector3.Zero, ease);
         Time(move, played, delay);
-        visual.StartAnimation("Translation", move);
+        visual.StartAnimation(VisualTranslation.Property, move);
     }
 
     /// <summary>

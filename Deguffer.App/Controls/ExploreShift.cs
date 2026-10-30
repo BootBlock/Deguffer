@@ -101,7 +101,7 @@ internal sealed class ExploreShift
         foreach (var sprite in _placed.Children.OfType<SpriteVisual>().ToList())
         {
             _placed.Children.Remove(sprite);
-            sprite.Brush?.Dispose();
+            sprite.Brush.Dispose();
             sprite.Dispose();
         }
 
