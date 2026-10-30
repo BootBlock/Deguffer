@@ -334,8 +334,9 @@ Deguffer.Benchmark.Tests/
 
 ## Roadmap
 
-Whether to offer VS Code's workspace storage, which mostly holds AI chat history, is still
-undecided.
+VS Code's workspace storage mostly holds AI chat history, and Deguffer will offer that history as
+user data, one conversation at a time, never selected for you
+([#404](https://github.com/BootBlock/Deguffer/issues/404)).
 
 Some things are left out on purpose. Deguffer will never delete files from `WinSxS`,
 `Windows\Installer` or installers' package caches, because the ways that can go wrong are severe,

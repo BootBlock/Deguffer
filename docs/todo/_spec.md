@@ -167,9 +167,44 @@ Observed on one workstation; sizes will vary, but the *shape* generalises. Paths
 | `%APPDATA%\Code\User\History` | 1.1 GB | Local file history (an undo record) |
 | Agent/assistant session directories | ~1.7 GB | Conversation history and persistent memory. Deleting loses context permanently |
 
-Per-workspace folders can be pruned individually, which makes a good UI: list workspaces by size
-and last-modified, let the user drop dormant ones and keep recent ones. The last-modified date is
-the single most useful signal here.
+~~Per-workspace folders can be pruned individually, which makes a good UI: list workspaces by size
+and last-modified, let the user drop dormant ones and keep recent ones.~~ §8 question 2 showed a
+workspace folder is not a safe identity, so the workspace is not the unit.
+
+**Decided ([#84](https://github.com/BootBlock/Deguffer/issues/84)): a Code - OSS editor's AI chat
+history is offered at Tier 3, one conversation at a time, and nothing else in `workspaceStorage` is.**
+Re-measured, 11.5 GB of the 11.7 GB directory was chat history and Copilot's data around it, and the
+`state.vscdb` files the directory exists for were 106 MB. A later count put 8.6 GB in `chatSessions`
+and 2.4 GB in `chatEditingSessions`, across 35 workspaces. Refusing to show that is Deguffer deciding for the user. Claude Code's conversations already
+set the shape: each named by its title and dates, never pre-selected, and refused while in use. Built
+under [#404](https://github.com/BootBlock/Deguffer/issues/404), to these rules:
+
+- **One conversation is one item:** `chatSessions\<id>.jsonl`, or `<id>.json` before 1.109 and
+  wherever `chat.useLogSessionStorage` is off, so both forms are recognised on every version. With it
+  go the `chatEditingSessions\<id>` folder and Copilot's `transcripts\<id>.jsonl` of the same id. The editing
+  folder holds the snapshots that keep or undo the conversation's edits, the editor does not delete
+  it when it deletes the conversation, and nothing reaches it once the conversation is gone.
+- **Named as the editor names it:** the custom title, else the first line of the first request, and
+  dated by the last request, else the creation date. A file that does not parse is Tier 4.
+- **§5.2, one declared level per containing directory** (`CacheLevel`'s rule), built for each pass
+  from what it found, as `ClaudeCodeConversationProvider` builds its roots. `User`,
+  `workspaceStorage`, each workspace folder and its `GitHub.copilot-chat` recognise nothing.
+  `chatSessions`, `chatEditingSessions` and `GitHub.copilot-chat\transcripts` recognise exactly the
+  ids the pass offers, so an editing folder whose conversation is already gone is not offered.
+  `state.vscdb`, `workspace.json`, every other extension's folder, and Copilot's memory, indexes and
+  logs stay Tier 4, and §5.6 asserts them.
+- **`state.vscdb` is never written.** The editor's history index is in it, so a removed conversation
+  it still lists stays in the editor's history and will not open. The editor tolerates that, and the
+  confirmation says so. The index keeps only the newest 400, and the editor never deletes the files of
+  the rest, so some conversations here are ones the editor can no longer show.
+- **Refused while the editor runs.** It rewrites session state from memory once a minute while a
+  window is open, so a removal under it can be silently undone.
+- **§5.1 was asked, and the answer is no.** The editor's own "Delete All Local Workspace Chat
+  Sessions" has no command-line form, and it deletes only what the index lists.
+
+Visual Studio's `.vs` holds the same material in the same shape, recorded in
+[unreached-locations.md](unreached-locations.md) §2. Whichever is built first sets the shape for the
+other.
 
 ### 4.4 Tier 4 / out of scope
 
@@ -1384,8 +1419,9 @@ where it is.
    absent metadata classified Tier 4, and a missing target path never taken as licence to delete.
    The full answer is in
    [after-the-scanner.md, item 5](after-the-scanner.md#5-raised-while-doing-items-2-and-3-not-yet-decided).
-   Whether to offer `workspaceStorage` at all is decided under
-   [#84](https://github.com/BootBlock/Deguffer/issues/84).
+   [#84](https://github.com/BootBlock/Deguffer/issues/84) decided what of `workspaceStorage` is
+   offered, and §4.3 records the answer: its chat history, one conversation at a time, which needs no
+   workspace identity at all.
 3. **Should Tier 2 re-download estimates be measured or declared?** Showing "≈10 GB to restore"
    changes decisions, but measuring it accurately is hard.
 4. **Undo.** Probably genuinely impossible for these sizes — Recycle Bin is not viable at 10 GB.
