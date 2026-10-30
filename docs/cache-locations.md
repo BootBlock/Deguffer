@@ -433,6 +433,106 @@ could depend on somebody else's server is the one Deguffer does not touch.
 
 ---
 
+## ccache compiler cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Wherever ccache reports. By default `%USERPROFILE%\.ccache` if it exists, otherwise `%LOCALAPPDATA%\ccache`. `CCACHE_DIR` moves it |
+| **Method** | `ccache --clear` |
+| **Typical size** | Up to its size limit, 5 GiB unless it is set otherwise, and it stays there once full |
+
+### What it is
+
+ccache sits in front of a C or C++ compiler and keeps the output of every compile it has seen, so a
+file that has not changed is never compiled twice. It removes old entries only when the cache reaches
+its size limit, so a machine that has filled it keeps it at that size.
+
+### What Deguffer does
+
+It runs ccache's own `ccache --clear`. Deguffer asks ccache where its cache is with
+`ccache --get-config cache_dir`, because the environment, either configuration file and the older
+`.ccache` folder can all move it. The clear empties whichever folder those settings name, so
+Deguffer offers nothing if ccache does not say, as a ccache older than 4.0 does not.
+
+It does not run the clear where ccache is set to keep its cache in a folder that is not ccache's
+own, such as the root of a drive, your profile, a temporary folder or a Windows folder, or where
+ccache answers with something other than a full Windows path, as an MSYS2 or Cygwin ccache does.
+ccache would clear that folder, so Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`ccache.conf`** can sit inside the cache folder. It always does where `CCACHE_DIR` moves the
+cache. It holds your size limit, your compiler settings and your hashing rules. `ccache --clear`
+removes the cached files and keeps that file, while deleting the folder would reset ccache. Deguffer
+asserts that the configuration file and the cache folder survived the run.
+
+### What it costs you
+
+The next build that compiles through ccache compiles everything again, so it takes longer once.
+ccache's settings and your projects are untouched.
+
+### Why Tier 1
+
+Everything removed is compiler output from source that is still on your disk, and ccache stores it
+again the next time a build compiles it.
+
+---
+
+## sccache compiler cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Mozilla\sccache\cache`, or wherever `SCCACHE_DIR` points |
+| **Method** | Stop sccache's server with `sccache --stop-server`, then delete the cached entries |
+| **Typical size** | Up to its size limit, 10 GiB unless it is set otherwise, and it stays there once full |
+
+### What it is
+
+sccache does for Rust, C and C++ what ccache does for C and C++: it keeps the output of every compile
+it has seen. Its cache is split into sixteen folders named `0` to `f`, by the first character of each
+entry's hash, and a `preprocessor` folder that records what the preprocessor produced for each source
+file.
+
+### What Deguffer does
+
+sccache has no command that empties its cache, so Deguffer deletes the sixteen folders and
+`preprocessor`. Anything else in the cache folder stays in Tier 4.
+
+**The server is stopped first.** Compiles go through a background server that keeps the cache's
+index in memory, so files removed under it would leave the server counting entries that are gone.
+If the server is running when the clean reaches the cache, Deguffer runs `sccache --stop-server`
+once and waits a few seconds for the server to exit. If it is still running after that, perhaps
+because a build started it again, Deguffer leaves the cache alone and says why. If sccache is not on
+your PATH, Deguffer cannot stop the server, and it leaves the cache alone while the server runs.
+
+Deguffer resolves the cache through `SCCACHE_DIR` before it falls back to the default. It offers
+nothing if that variable holds a relative path, is the root of a drive, or holds your profile, a
+temporary folder or a Windows folder. A one-character folder name proves nothing about whose folder
+it is. If the cache folder is a link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+sccache keeps its settings in a different folder, `%APPDATA%\Mozilla\sccache\config`, which Deguffer
+never reaches. Deguffer asserts that the cache folder itself, and anything in it that it did not
+recognise, survived the run.
+
+### What it costs you
+
+The next build that compiles through sccache compiles everything again, so it takes longer once. If
+the server was running, the next compile starts it again. Your projects and sccache's settings are
+untouched.
+
+### Why Tier 1
+
+Everything removed is compiler output from source that is still on your disk, and sccache stores it
+again the next time a build compiles it.
+
+---
+
 ## pnpm store
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -1475,12 +1575,16 @@ directly rather than by asking the tool, and only by exact name.
 **A profile you moved somewhere yourself is reported and not examined.** Where `profiles.ini` records
 an absolute path, Firefox keeps that profile's cache in the same directory as its bookmarks and
 passwords rather than separately from them, and the argument above stops applying. Deguffer says so
-in the plan instead of guessing.
+in the plan instead of guessing. The same goes for a relative path that climbs out of Firefox's own
+folder. Either way, Explore refuses to remove that profile or anything inside it. A profile kept at
+the top of a drive or share is the exception: Explore refuses its bookmarks, passwords and settings
+by name, and leaves the rest of the drive to you.
 
 ### What is protected
 
-**The whole roaming half, and everything in the local half that is not one of the five.** Deguffer
-asserts afterwards that these survived:
+**The whole roaming half, and everything in the local half that is not one of the five.** A profile
+kept outside Firefox's folder is protected the same way. Deguffer asserts afterwards that these
+survived:
 
 | Neighbour | What it really is |
 | --- | --- |

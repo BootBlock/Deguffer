@@ -499,6 +499,40 @@ public sealed class FirefoxCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.6 for a profile kept outside Firefox's folder: never examined, and still named by path,
+    /// with the user data inside it, as something that must survive. Both ways a plan is built are
+    /// covered, because a Firefox whose only profile is kept elsewhere returns before the pass that
+    /// names the others.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AProfileStoredElsewhereIsNamedAsASurvivorByPath(bool alongsideAnother)
+    {
+        if (alongsideAnother)
+        {
+            CreateDirectory(Path.Combine(AddProfile().Local, "cache2"));
+        }
+
+        var elsewhere = AddProfile("hand-placed", declared: _temp.CreateDirectory("moved-profile"), isRelative: false);
+        var userData = CreateUserData(elsewhere);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        foreach (var survivor in userData.Prepend(elsewhere.Roaming))
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.All(userData, file => Assert.True(File.Exists(file)));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// The register is a text file on disk, so a path in it is a claim rather than a fact. A
     /// relative entry that climbs back out of Firefox's own folder would put every later step —
     /// the enumeration, the classification, the deletion — on a directory nobody chose.
