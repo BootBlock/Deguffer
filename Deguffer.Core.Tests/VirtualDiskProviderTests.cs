@@ -1,6 +1,8 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.VirtualDisks;
 using Deguffer.Testing;
@@ -244,7 +246,7 @@ public sealed class VirtualDiskProviderTests : IDisposable
         var disk = Assert.Single(VirtualDiskInventory.Read(_environment, _system).Disks);
 
         Assert.Equal(Path.Combine(moved, "disk", "docker_data.vhdx"), disk.Path);
-        Assert.Equal(VirtualDiskKind.DockerData, disk.Kind);
+        Assert.Equal(DockerDesktopData.Instance, disk.Owner);
     }
 
     [Fact]
@@ -287,7 +289,7 @@ public sealed class VirtualDiskProviderTests : IDisposable
         var disk = Assert.Single(VirtualDiskInventory.Read(_environment, _system).Disks);
 
         Assert.Equal(Path.Combine(older, WslRegistrations.DefaultDiskName), disk.Path);
-        Assert.Equal(VirtualDiskKind.DockerData, disk.Kind);
+        Assert.Equal(DockerDesktopData.Instance, disk.Owner);
     }
 
     [Fact]
@@ -401,22 +403,113 @@ public sealed class VirtualDiskProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Explore refuses the disk and the folder it is in, and nothing else there: a distribution can be
-    /// imported to the top of a drive, and what else is there is the user's.
+    /// Explore refuses the disk, and nothing else in its folder: a distribution can be imported to the
+    /// top of a drive, and what else is there is the user's. The refusal comes from the row's
+    /// registration alone, which is the only thing a report has to declare.
     /// </summary>
     [Fact]
     public async Task ExploreRefusesTheDiskAndLeavesWhatIsBesideIt()
+    {
+        // Inside the profile, which Explore otherwise lets its own user act in.
+        var folder = Path.Combine(_environment.UserProfile, "wsl", "Ubuntu");
+        Directory.CreateDirectory(folder);
+        var disk = Disk(folder);
+        var notes = Path.Combine(folder, "notes.txt");
+        File.WriteAllText(notes, "mine");
+        Register(Ubuntu, "Ubuntu", folder);
+
+        var provider = Provider();
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
+
+        Assert.Empty(await provider.DiscoverToolRootsAsync());
+
+        var refused = policy.MayRemove(disk);
+        Assert.False(refused.IsAllowed);
+        Assert.Contains("WSL distribution 'Ubuntu'", refused.Reason, StringComparison.Ordinal);
+        Assert.True(policy.MayRemove(notes).IsAllowed);
+        Assert.False(policy.MayRemove(folder).IsAllowed);
+    }
+
+    /// <summary>
+    /// Each container tool's distributions are its own, named and routed by that tool, and a
+    /// distribution no tool claims is the user's. Podman prefixes a machine's name only where it does not
+    /// already begin with "podman", so its default machine is podman-machine-default.
+    /// </summary>
+    [Theory]
+    [InlineData("Ubuntu", typeof(WslDistributionOwner), "the WSL distribution 'Ubuntu'")]
+    [InlineData("docker-desktop-data", typeof(DockerDesktopData), "Docker Desktop's data")]
+    [InlineData("docker-desktop", typeof(DockerDesktopSystem), "Docker Desktop's own Linux distribution")]
+    [InlineData("podman-machine-default", typeof(PodmanMachine), "the Podman machine 'podman-machine-default'")]
+    [InlineData("podman-dev", typeof(PodmanMachine), "the Podman machine 'podman-dev'")]
+    [InlineData("podman-net-usermode", typeof(PodmanNetworking), "Podman's user-mode networking distribution")]
+    [InlineData("rancher-desktop-data", typeof(RancherDesktopData), "Rancher Desktop's data")]
+    [InlineData("rancher-desktop", typeof(RancherDesktopSystem), "Rancher Desktop's own Linux distribution")]
+    [InlineData("my-podman", typeof(WslDistributionOwner), "the WSL distribution 'my-podman'")]
+    [InlineData("rancher-desktop-old", typeof(WslDistributionOwner), "the WSL distribution 'rancher-desktop-old'")]
+    public void EachDistributionIsTheToolsThatRegisteredIt(string name, Type owner, string whose)
+    {
+        var folder = Folder("wsl", name);
+        Register(Ubuntu, name, folder);
+
+        var disk = Assert.Single(WslRegistrations.Read(_environment));
+
+        Assert.IsType(owner, disk.Owner);
+        Assert.Equal(whose, disk.Whose);
+    }
+
+    /// <summary>
+    /// Each tool's route is its own: Podman's prune before WSL's compaction, and Rancher Desktop's data
+    /// pruned with the engine's own commands, while a distribution the tool makes itself has nothing to
+    /// prune.
+    /// </summary>
+    [Fact]
+    public async Task EachContainerToolsDistributionIsGivenItsOwnRoute()
+    {
+        var podman = Folder("podman", "wsldist", "podman-machine-default");
+        Disk(podman);
+        Register(Ubuntu, "podman-machine-default", podman);
+
+        var rancher = Folder("rancher-desktop", "distro-data");
+        Disk(rancher);
+        Register(Debian, "rancher-desktop-data", rancher);
+
+        var engine = Folder("rancher-desktop", "distro");
+        Disk(engine);
+        Register(DockerData, "rancher-desktop", engine);
+
+        var text = Text(await Provider().PlanAsync());
+
+        Assert.Contains("'podman system prune'", text, StringComparison.Ordinal);
+        Assert.True(
+            text.IndexOf("'podman system prune'", StringComparison.Ordinal)
+                < text.IndexOf("wsl --manage podman-machine-default --compact", StringComparison.Ordinal),
+            "Podman's route prunes inside the machine before WSL compacts its disk.");
+        Assert.Contains("'docker image prune --all'", text, StringComparison.Ordinal);
+        Assert.Contains("rdctl reset --factory", text, StringComparison.Ordinal);
+        Assert.Contains(
+            "Rancher Desktop's own Linux distribution: " + Path.Combine(engine, WslRegistrations.DefaultDiskName),
+            text,
+            StringComparison.Ordinal);
+        Assert.Contains("Rancher Desktop makes this distribution itself", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The route names what Optimize-VHD needs, which the Hyper-V module refuses an unelevated user
+    /// outside Hyper-V Administrators without, and claims nothing about a sparse file that no Microsoft
+    /// page states.
+    /// </summary>
+    [Fact]
+    public async Task TheCompactionRouteSaysWhatOptimizeVhdNeedsAndNothingUnsourced()
     {
         var folder = Folder("wsl", "Ubuntu");
         Disk(folder);
         Register(Ubuntu, "Ubuntu", folder);
 
-        var root = Assert.Single(await Provider().DiscoverToolRootsAsync());
+        var text = Text(await Provider().PlanAsync());
 
-        Assert.Equal(folder, root.Path);
-        Assert.False(root.Recognises(new ToolRootChild(WslRegistrations.DefaultDiskName, ChildKind.File)));
-        Assert.True(root.Recognises(new ToolRootChild("notes.txt", ChildKind.File)));
-        Assert.Contains("Ubuntu", root.Reason, StringComparison.Ordinal);
+        Assert.Contains("Optimize-VHD", text, StringComparison.Ordinal);
+        Assert.Contains("elevated PowerShell or membership of the Hyper-V Administrators group", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("refuses a sparse", text, StringComparison.Ordinal);
     }
 
     /// <summary>Hovering a disk in Explore names its owner and its route, from the same text as the report.</summary>
@@ -433,6 +526,90 @@ public sealed class VirtualDiskProviderTests : IDisposable
         Assert.Contains("WSL distribution 'Ubuntu'", item.Summary, StringComparison.Ordinal);
         Assert.Contains("wsl --manage Ubuntu --compact", item.Removal, StringComparison.Ordinal);
         Assert.DoesNotContain('\n', item.Removal);
+    }
+
+    /// <summary>
+    /// The run-wide refusal (<c>unreached-locations.md</c> §11): another row whose location holds a
+    /// registered disk does not remove it, and the run's §5.6 negative names the disk as having survived.
+    /// The row's plan taken outside the planner shows the fixture would otherwise have taken the disk.
+    /// </summary>
+    [Fact]
+    public async Task ARowWhoseLocationHoldsARegisteredDiskLeavesItAndTheRunProvesIt()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        var imported = Path.Combine(caches, "imported");
+        Directory.CreateDirectory(imported);
+        var disk = Disk(imported);
+        File.WriteAllBytes(Path.Combine(caches, "modules.bin"), new byte[4096]);
+        Register(Ubuntu, "Ubuntu", imported);
+
+        var gradle = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+
+        Assert.Contains((await gradle.PlanAsync()).TargetedPaths, path => LongPath.Contains(path, disk));
+
+        var report = Provider();
+        var planner = new CleanupPlanner([gradle, report]);
+        var findings = await planner.PlanAllAsync();
+        var cache = Assert.Single(findings, finding => finding.Provider == gradle);
+
+        Assert.DoesNotContain(cache.Plan!.TargetedPaths, path => LongPath.Contains(path, disk));
+        Assert.Contains(
+            cache.Plan.ProtectedPaths,
+            p => p.Path == disk && p.Withheld == Withholding.VirtualMachineStorage);
+
+        var results = await planner.ExecuteAsync([cache, .. StandingProof.For(findings, [cache])]);
+
+        Assert.True(File.Exists(disk), "a row whose location held a registered disk deleted it");
+        Assert.All(results, result => Assert.True(result.Verification!.Passed, result.Verification.Summary));
+        Assert.Contains(results, result => result.ProviderId == report.Id);
+        Assert.All(
+            results,
+            result => Assert.Contains(
+                result.Verification!.Checks,
+                check => check.Subject == disk && check.Outcome == VerificationOutcome.Survived));
+    }
+
+    /// <summary>
+    /// A re-plan of only the rows a clean changed still holds them to every registration, though the
+    /// report's own row is not planned again.
+    /// </summary>
+    [Fact]
+    public async Task ARePlanOfOtherRowsStillRefusesTheRegisteredDisk()
+    {
+        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
+        var imported = Path.Combine(caches, "imported");
+        Directory.CreateDirectory(imported);
+        var disk = Disk(imported);
+        Register(Ubuntu, "Ubuntu", imported);
+
+        var gradle = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        var planner = new CleanupPlanner([gradle, Provider()]);
+
+        var replanned = Assert.Single(await planner.PlanAsync([gradle]));
+
+        Assert.DoesNotContain(replanned.Plan!.TargetedPaths, path => LongPath.Contains(path, disk));
+        Assert.Contains(replanned.Plan.ProtectedPaths, p => p.Path == disk);
+    }
+
+    /// <summary>
+    /// Every run proves each registered disk is standing, even one no chosen row's location holds, and a
+    /// disk gone afterwards fails the run's verification by name.
+    /// </summary>
+    [Fact]
+    public async Task ARunAfterWhichARegisteredDiskIsGoneFailsNamingIt()
+    {
+        var folder = Folder("wsl", "Ubuntu");
+        var disk = Disk(folder);
+        Register(Ubuntu, "Ubuntu", folder);
+
+        var planner = new CleanupPlanner([Provider()]);
+        var proving = Assert.Single(StandingProof.For(await planner.PlanAllAsync(), running: []));
+
+        File.Delete(disk);
+
+        var result = Assert.Single(await planner.ExecuteAsync([proving]));
+
+        Assert.Equal(disk, Assert.Single(result.Verification!.Failures).Subject);
     }
 
     [Fact]

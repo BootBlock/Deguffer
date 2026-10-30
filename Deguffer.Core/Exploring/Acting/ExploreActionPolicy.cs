@@ -157,7 +157,7 @@ public sealed class ExploreActionPolicy
             new ParallelOptions { MaxDegreeOfParallelism = Discovery, CancellationToken = ct },
             async (index, token) =>
             {
-                discovered[index] = await asked[index].DiscoverToolRootsAsync(token).ConfigureAwait(false);
+                discovered[index] = await DiscoveredAsync(asked[index], token).ConfigureAwait(false);
                 declared[index] = await DeclaredRoots.ReadAsync(asked[index], ct).ConfigureAwait(false);
             })
             .ConfigureAwait(false);
@@ -167,6 +167,25 @@ public sealed class ExploreActionPolicy
             [.. declared.SelectMany(roots => roots)],
             volumes,
             probedRoots: [.. discovered.SelectMany(roots => roots)]);
+    }
+
+    /// <summary>
+    /// What <paramref name="provider"/> declared once it had asked the machine, and a refusal of every
+    /// virtual machine's disk and folder it registers, so a report protects them here by registering
+    /// them and nothing else (see <see cref="IRegistersVirtualMachineStorage"/>).
+    /// </summary>
+    private static async Task<IReadOnlyList<ToolRoot>> DiscoveredAsync(ICleanupProvider provider, CancellationToken ct)
+    {
+        var discovered = await provider.DiscoverToolRootsAsync(ct).ConfigureAwait(false);
+
+        if (provider is not IRegistersVirtualMachineStorage registrar)
+        {
+            return discovered;
+        }
+
+        var storage = await registrar.RegisteredStorageAsync(ct).ConfigureAwait(false);
+
+        return [.. discovered, .. storage.Select(entry => entry.Refusal()).OfType<ToolRoot>()];
     }
 
     /// <summary>

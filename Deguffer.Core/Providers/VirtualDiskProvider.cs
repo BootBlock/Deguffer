@@ -22,10 +22,14 @@ namespace Deguffer.Core.Providers;
 /// route is named and left to the vendor's commands, in the order they are taken. Nothing here starts
 /// WSL or the Docker engine, and the one command it can run only reads.</para>
 ///
+/// <para><b>Every disk registered, so no run deletes one.</b> The row is how the planner learns where
+/// the disks are (<see cref="IRegistersVirtualMachineStorage"/>): a step of any other row that would
+/// reach one is withheld, and this row's plan proves after every clean that each one is still there.</para>
+///
 /// <para><b>Tier 3</b>, because a disk deleted is a distribution, or every image, container and volume,
 /// gone for good. The tier describes the disk. The row offers nothing to tick either way.</para>
 /// </summary>
-public sealed class VirtualDiskProvider : CleanupProviderBase
+public sealed class VirtualDiskProvider : CleanupProviderBase, IRegistersVirtualMachineStorage
 {
     private readonly ISystemDirectories _system;
 
@@ -91,19 +95,11 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// Explore refuses each disk and the folder it is in, and nothing else beside it: the folder can be
-    /// a drive root a distribution was imported to, and what else is there is the user's.
+    /// Every disk WSL and Docker Desktop record, from the same reading the plan makes. Explore refuses
+    /// each one, and a run refuses and proves each one, through this alone.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ToolRoot>>(
-        [
-            .. Inventory().Disks
-                .Where(disk => Path.GetDirectoryName(disk.Path) is { Length: > 0 })
-                .Select(disk => ToolRoot.Sparing(
-                    Path.GetDirectoryName(disk.Path)!,
-                    $"The virtual disk of {disk.Owner}. Deleting it deletes everything in it.",
-                    [Path.GetFileName(disk.Path)])),
-        ]);
+    public Task<IReadOnlyList<VirtualMachineStorage>> RegisteredStorageAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<VirtualMachineStorage>>([.. Inventory().Disks.Select(disk => disk.AsStorage())]);
 
     /// <summary>
     /// None: the row only reports how large each disk is, and its plan holds no step at all.
@@ -117,7 +113,7 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
 
         var measured = inventory.Disks.Select(disk => (Disk: disk, Size: VirtualDiskFile.Measure(disk.Path))).ToList();
 
-        var inside = measured.Any(entry => entry.Disk.Kind == VirtualDiskKind.DockerData
+        var inside = measured.Any(entry => entry.Disk.Owner is DockerDesktopData
                 && entry.Size.Presence == PathPresence.Present)
             ? await _docker.ReadAsync(ct).ConfigureAwait(false)
             : null;
@@ -130,9 +126,8 @@ public sealed class VirtualDiskProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             ReportsOnly = true,
 
-            // No protected paths: a run leaves out a plan with no step and nothing withheld
-            // (CleanupPlan.HasSomethingToProve), so a list here would be verified by nothing. What keeps
-            // a disk from being deleted is Explore's refusal, declared in DiscoverToolRootsAsync.
+            // No protected paths of its own: the planner adds one for every disk this row registers
+            // (VirtualMachineStoragePlan), so each is proved by every clean whether or not this row runs.
             Notes = VirtualDiskReport.Notes(measured, inside, inventory.Problems),
         };
     }

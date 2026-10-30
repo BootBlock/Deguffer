@@ -158,7 +158,18 @@ for each box name and provider
 - **Survivors** (§5.2): `Vagrantfile`, `data\machine-index`, `insecure_private_key`, `plugins.json`,
   `gems`. Nothing in `.vagrant.d` is a path target; `tmp` has no primary source, so it is not offered.
 
-### Container tools on WSL
+### Container tools on WSL ✅ done
+
+Shipped as owner records in the WSL report: `DockerDesktopData`, `DockerDesktopSystem`,
+`PodmanMachine`, `PodmanNetworking`, `RancherDesktopData` and `RancherDesktopSystem`, each a
+`DiskOwner` with its own name and route. It differs from the entry in two ways. Podman adds the
+`podman-` prefix only to a machine name that does not already begin with `podman`, so the default
+machine's distribution is `podman-machine-default`
+([dir.go](https://raw.githubusercontent.com/containers/podman/main/pkg/machine/env/dir.go)
+`WithPodmanPrefix`), and Podman also registers `podman-net-usermode` for user-mode networking
+([declares.go](https://raw.githubusercontent.com/containers/podman/main/pkg/machine/wsl/declares.go)).
+Rancher Desktop's documented prune is the moby engine's `docker` commands, so its route names those
+and its own resets, and never `nerdctl`, which its documentation does not give.
 
 Podman's WSL machine is a distribution named `podman-<name>`
 ([machine.go](https://raw.githubusercontent.com/containers/podman/main/pkg/machine/wsl/machine.go)),
@@ -193,7 +204,13 @@ Rancher are added.
   `%LOCALAPPDATA%\Genymobile\Genymotion\deployed` are VirtualBox VMs, so they are the VirtualBox
   report's, if they register there (unverified).
 
-### What the virtualisation reports need before any of them ships
+### What the virtualisation reports need before any of them ships ✅ done
+
+Shipped: a report implements `IRegistersVirtualMachineStorage` and returns each disk or VM folder as
+a `VirtualMachineStorage`. The planner reads every registration before a pass (`RegisteredStorage`),
+`VirtualMachineStoragePlan` withholds any step of any row that reaches one and protects it
+(`Withholding.VirtualMachineStorage`), the registering row's plan protects all of its own so every
+run proves them through `StandingProof`, and Explore refuses each one from the same registration.
 
 **The negative.** §11 of the first survey records that no run checks afterwards that a registered
 disk survived, and that Explore's refusal is the only guard. Three more reports make that gap three
@@ -704,12 +721,15 @@ that Windows' own cleanup does reach it, and an elevated measurement should say 
 1. **Bun has eviction commands.** The first survey's long-tail table says "no eviction command as of
    early 2026". `bun pm cache rm` and `bun pm cache prune` exist ([pm](https://bun.com/docs/pm/cli/pm)).
 2. **`scoop cleanup *` is an uninstall.** The same table lists it beside `scoop cache rm *`.
-3. **`Optimize-VHD`'s refusal of sparse files is unsourced here.** The first survey's §11 says
+3. ✅ done: no primary source was found, and the claim is reworded in `VirtualDiskRoutes` and
+   unreached-locations.md §11 to what is sourced (the SDK's `0xC03A001A` text and Microsoft Learn's
+   entry for it disagree on sparse files). **`Optimize-VHD`'s refusal of sparse files is unsourced here.** The first survey's §11 says
    `Optimize-VHD` refuses a sparse, compressed or encrypted file, and `VirtualDiskRoutes` tells the
    user it refuses a sparse file. Microsoft's
    [cmdlet page](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd) does not
    say so. Find the primary source, or reword the claim.
-4. **`Optimize-VHD` needs Hyper-V rights.** Measured: the Hyper-V module refuses an unelevated user
+4. ✅ done: the route now says it needs an elevated PowerShell or membership of the Hyper-V
+   Administrators group. **`Optimize-VHD` needs Hyper-V rights.** Measured: the Hyper-V module refuses an unelevated user
    outside Hyper-V Administrators, so the WSL and Docker route that names it should say so.
 5. **`ComponentModelCache` is not a carve-out.** The first survey's §12 proposes it; §3 above
    rejects it as a repair rather than space.

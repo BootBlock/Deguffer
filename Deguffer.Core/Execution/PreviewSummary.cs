@@ -139,6 +139,9 @@ public static class PreviewSummary
         FindingStatus.UpdateInProgress =>
             "Nothing to reclaim yet: some of these were left by a Windows update that has not finished, "
             + "and are offered once it has.",
+        FindingStatus.VirtualMachineKept =>
+            "Nothing to reclaim, and some of these hold a virtual machine's disk or folder, which Deguffer never "
+            + "removes.",
         FindingStatus.ReportOnly =>
             "Nothing to reclaim here. Some rows report space only the tool that owns it can free, and say how.",
         FindingStatus.AwaitingSourceFolders =>

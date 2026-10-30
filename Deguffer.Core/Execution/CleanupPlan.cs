@@ -98,6 +98,13 @@ public enum Withholding
     /// restart. See <see cref="Safety.IWindowsServicing"/>.
     /// </summary>
     UpdateInProgress,
+
+    /// <summary>
+    /// A virtual machine's disk or folder that a virtualisation tool registered, which Deguffer never
+    /// removes. Protected on its existence, and proved standing by every clean. See
+    /// <see cref="VirtualMachineStoragePlan"/>.
+    /// </summary>
+    VirtualMachineStorage,
 }
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
@@ -339,6 +346,14 @@ public sealed record CleanupPlan
     public bool WaitsForAnUpdate => ProtectedPaths.Any(p => p.Withheld == Withholding.UpdateInProgress);
 
     /// <summary>
+    /// Whether this plan leaves a virtual machine's disk or folder where it is: one its own row
+    /// registered, or one a step here would have reached and was withheld for. The same shape as
+    /// <see cref="HoldsMailStores"/>, for the same reason.
+    /// </summary>
+    public bool HoldsVirtualMachineStorage =>
+        ProtectedPaths.Any(p => p.Withheld == Withholding.VirtualMachineStorage);
+
+    /// <summary>
     /// Every path this plan would destroy, for display and for tests.
     ///
     /// Selected on <see cref="DeleteStep"/> rather than on one concrete kind, so a directory and a
@@ -493,7 +508,8 @@ public sealed record CleanupPlan
 
     /// <summary>
     /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves
-    /// standing whatever anyone chooses to prove — its kept items and its Outlook data files.
+    /// standing whatever anyone chooses to prove — its kept items, its Outlook data files and the virtual
+    /// machines' storage it holds.
     ///
     /// <para>For a row the user did not tick, or whose confirmation was declined. Nothing in it runs,
     /// and those files still have to be shown standing once the run is over, because an over-broad rule
@@ -504,6 +520,7 @@ public sealed record CleanupPlan
     public CleanupPlan ProofOnly() => this with
     {
         Steps = [],
-        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld is Withholding.OnKeepList or Withholding.MailStore)],
+        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld
+            is Withholding.OnKeepList or Withholding.MailStore or Withholding.VirtualMachineStorage)],
     };
 }

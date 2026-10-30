@@ -386,11 +386,17 @@ public sealed class CleanupPlanner
     {
         ArgumentNullException.ThrowIfNull(providers);
 
+        // Every row that registers a virtual machine's storage is read for every pass, a re-plan of a
+        // few rows included: the refusal is the run's, and a re-planned row whose location holds a
+        // disk must be held to it whether or not the report's own row is planned again.
+        IReadOnlyList<ICleanupProvider> registrars =
+            [.. _providers.Concat(providers).Distinct().Where(provider => provider is IRegistersVirtualMachineStorage)];
+
         // Every provider drops its cached view of the machine before any of them plans. Doing
         // this up front rather than per-provider matters: the providers share collaborators by
         // default, so invalidating inside the loop would throw away the snapshot the previous
         // provider just paid for.
-        foreach (var provider in providers)
+        foreach (var provider in providers.Union(registrars))
         {
             provider.InvalidateCaches();
         }
@@ -409,7 +415,10 @@ public sealed class CleanupPlanner
                 holds.Add(provider.HoldCaches());
             }
 
-            return await PlanHeldAsync(providers, keep, status, found, ct).ConfigureAwait(false);
+            // Before any row plans, so every plan in the pass is held to the same set.
+            var registered = await RegisteredStorage.ReadAsync(registrars, ct).ConfigureAwait(false);
+
+            return await PlanHeldAsync(providers, registered, keep, status, found, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -422,6 +431,7 @@ public sealed class CleanupPlanner
 
     private static async Task<IReadOnlyList<Finding>> PlanHeldAsync(
         IReadOnlyList<ICleanupProvider> providers,
+        RegisteredStorage registered,
         MinimumAge keep,
         IProgress<string>? status,
         IProgress<Finding>? found,
@@ -444,7 +454,7 @@ public sealed class CleanupPlanner
 
             try
             {
-                finding = await PlanOneAsync(provider, keep, token).ConfigureAwait(false);
+                finding = await PlanOneAsync(provider, registered, keep, token).ConfigureAwait(false);
             }
             finally
             {
@@ -468,6 +478,7 @@ public sealed class CleanupPlanner
 
     private static async Task<Finding> PlanOneAsync(
         ICleanupProvider provider,
+        RegisteredStorage registered,
         MinimumAge keep,
         CancellationToken ct)
     {
@@ -483,11 +494,11 @@ public sealed class CleanupPlanner
             return new Finding(provider, IsPresent: false, Plan: null);
         }
 
-        return new Finding(
-            provider,
-            present,
-            await provider.PlanAsync(keep, ct).ConfigureAwait(false),
-            awaitingFolders);
+        // Applied here rather than inside the provider: the set is the pass's, gathered from every row
+        // that registers storage, and no row can see another's records. See VirtualMachineStoragePlan.
+        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, ct).ConfigureAwait(false), registered);
+
+        return new Finding(provider, present, plan, awaitingFolders);
     }
 
     /// <summary>
