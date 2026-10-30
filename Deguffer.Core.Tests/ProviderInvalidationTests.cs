@@ -177,6 +177,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         ?? Completed(type)
         ?? Constructed(type)
         ?? Uninitialised(type)
+        ?? OneCase(type)
         ?? (type.IsValueType ? Activator.CreateInstance(type) : null)
         ?? throw new XunitException(
             $"{field.DeclaringType?.Name}.{field.Name} holds a {type.Name}, which this test " +
@@ -248,6 +249,17 @@ public sealed class ProviderInvalidationTests : IDisposable
     private static object? Uninitialised(Type fieldType) =>
         fieldType is { IsClass: true, IsAbstract: false } && fieldType.GetConstructors().Length == 0
             ? RuntimeHelpers.GetUninitializedObject(fieldType)
+            : null;
+
+    /// <summary>
+    /// One case of an abstract record whose cases are nested in it, for a provider that memoises which
+    /// of several outcomes it reached, Scoop's resolution being the first. Built as
+    /// <see cref="Constructed"/> builds a record, and never read.
+    /// </summary>
+    private static object? OneCase(Type fieldType) =>
+        fieldType.IsAbstract
+        && fieldType.GetNestedTypes().FirstOrDefault(nested => !nested.IsAbstract && fieldType.IsAssignableFrom(nested)) is { } @case
+            ? Constructed(@case)
             : null;
 
     /// <summary>
