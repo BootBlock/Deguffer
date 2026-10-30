@@ -108,6 +108,7 @@ public sealed class ConanCacheProviderTests : IDisposable
 
         Assert.True(plan.IsEmpty);
         Assert.False(plan.HasUnreadableRoot);
+        Assert.False(plan.WasNotExamined);
         Assert.Empty(runner.Invocations);
         Assert.False(Directory.Exists(DefaultHome));
     }
@@ -128,6 +129,23 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.True(plan.HasUnreadableRoot);
         Assert.Empty(plan.Steps);
         Assert.Empty(runner.Invocations);
+    }
+
+    [Fact]
+    public async Task ReadsAStoreThatWillNotBeListedAsUnreached()
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+
+        CleanupPlan plan;
+
+        using (new DeniedDirectory(Store))
+        {
+            plan = await CreateProvider(Answering()).PlanAsync();
+        }
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Empty(plan.Steps);
     }
 
     [Fact]
