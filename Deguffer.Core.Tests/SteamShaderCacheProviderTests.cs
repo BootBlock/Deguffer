@@ -516,6 +516,26 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// "Not installed" is a claim about every library, so it is not made while a library the list
+    /// names is on a drive that is not connected, and the plan names that library.
+    /// </summary>
+    [Fact]
+    public async Task NoGameIsCalledUninstalledWhileALibraryCannotBeReached()
+    {
+        var install = RegisterInstall();
+        WriteLibraryList(install, SecondLibrary);
+        CacheFor(install, "730");
+
+        var plan = await CreateProvider().PlanAsync();
+        var step = Assert.Single(plan.Steps.OfType<DeleteStep>());
+
+        Assert.DoesNotContain(step.Facets, f => f.Label == "Installed");
+        Assert.Contains(plan.Notes, n =>
+            n.Severity == PlanNoteSeverity.Information
+            && n.Message.Contains(SecondLibrary, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// A <c>steamapps</c> moved onto another drive with a link. Nothing is removed through it, and
     /// the plan says so rather than deleting the far side of a redirection Steam's record never named.
     /// </summary>
@@ -577,8 +597,12 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
 
         Assert.Equal(first, Assert.Single(plan.TargetedPaths));
         Assert.True(plan.HasUnreadableRoot);
-        Assert.Contains(plan.Notes, n =>
-            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(SecondLibrary, StringComparison.OrdinalIgnoreCase));
+
+        // Named once, by the warning: the game it may hold says nothing about being installed, and
+        // the warning already says nothing in the library was ruled out.
+        var note = Assert.Single(plan.Notes, n => n.Message.Contains(SecondLibrary, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(PlanNoteSeverity.Warning, note.Severity);
+        Assert.DoesNotContain(Assert.Single(plan.Steps.OfType<DeleteStep>()).Facets, f => f.Label == "Installed");
     }
 
     /// <summary>
