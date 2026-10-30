@@ -73,6 +73,28 @@ public sealed class VagrantPruneTargetTests : IDisposable
     }
 
     /// <summary>
+    /// A version installed while the dry run ranks the boxes, which the dry run's report does not
+    /// count. The plan's reading of the folders comes before the dry run, so the clean sees it as a
+    /// change rather than taking it for the layout the report describes.
+    /// </summary>
+    [Fact]
+    public async Task RefusesAVersionInstalledWhileTheDryRunRan()
+    {
+        InstallBionic(Home);
+        WriteIndex(Home, ("default", "hashicorp/bionic64", "virtualbox", "1.0.282"));
+        var runner = new FakeProcessRunner().Replying(_environment.FindExecutable("vagrant")!, _ =>
+        {
+            Install(Home, "hashicorp-VAGRANTSLASH-bionic64", "1.0.300", "virtualbox");
+            return new CommandOutcome(0, BionicReport, string.Empty);
+        });
+
+        var plan = await new VagrantSupersededBoxProvider(_environment, runner, FakeProcessInspector.NothingRunning, system: _system)
+            .PlanAsync();
+
+        Assert.Contains("have changed since the preview", WhyNot(Assert.Single(plan.Steps.OfType<RunCommandStep>())), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A version prune removes, installed again for a second architecture after the preview, which
     /// would stop prune with an error part-way through.
     /// </summary>
