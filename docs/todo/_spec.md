@@ -296,6 +296,9 @@ must:
   is not a fallback, and says nothing.
 - Let the user tune how hard each route drives each kind of drive, with Auto chosen by measurement.
   No value may change what a scan finds.
+- Count a hard-linked file once for each name a folder holds, on every route, as a listing shows it
+  and as a removal takes it. Which route runs depends on elevation, so the routes must agree. Where
+  a figure has to say what an eviction frees, it measures sole-linked bytes instead.
 - Cache results with invalidation, so re-opening the tool is instant.
 - Stream partial results to the UI — never block on a complete scan.
 

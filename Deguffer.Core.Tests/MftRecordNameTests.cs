@@ -4,8 +4,8 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// How a record's name is read: only the best of its names, as the UTF-16 the record holds, and
-/// into a string only by a caller that keeps it.
+/// How a record's names are read: the best of them as the UTF-16 the record holds, and into a
+/// string only by a caller that keeps it, and each of its other links beside it.
 /// </summary>
 public sealed class MftRecordNameTests
 {
@@ -67,6 +67,41 @@ public sealed class MftRecordNameTests
 
         Assert.True(Parsed(stored, new byte[stored.Length], out var handed));
         Assert.Equal(name, handed.ToString());
+    }
+
+    /// <summary>
+    /// A file's names that are not 8.3 aliases are each a link, and the parse hands on every one
+    /// beside the name it places the file by, so each folder naming the file can count it. Here the
+    /// alias sits first, the name the file is placed by second, and the other link last, in another
+    /// folder. The alias is no link: a listing never shows it.
+    /// </summary>
+    [Fact]
+    public void HandsOnEachOtherLinkOfAFileAndNeverItsAlias()
+    {
+        const uint Other = 30;
+
+        var stored = RecordOf(new MftFixture().AddHardLinkedFile(
+            Number,
+            [(MftRecord.RootRecordNumber, "a long file name.bin"), (Other, "elsewhere.bin")],
+            allocated: 4096,
+            logical: 4000,
+            alias: "ALONGF~1.BIN"));
+
+        Assert.Equal(MftParseOutcome.Parsed, MftRecordParser.Parse(stored, Number, out var parsed, out var name, out _, out _));
+        Assert.Equal("a long file name.bin", name.ToString());
+        Assert.Equal(MftRecord.RootRecordNumber, parsed.ParentRecordNumber);
+        Assert.Equal([new MftLink(Other, "elsewhere.bin")], parsed.OtherLinks!);
+    }
+
+    /// <summary>A file with one name and its alias has no other link, and no list is made for one.</summary>
+    [Fact]
+    public void HandsOnNoOtherLinkForAFileWithOneNameAndItsAlias()
+    {
+        var stored = RecordOf(new MftFixture().AddFileWithAnAlias(
+            Number, MftRecord.RootRecordNumber, "a long file name.bin", "ALONGF~1.BIN", allocated: 4096, logical: 4000));
+
+        Assert.Equal(MftParseOutcome.Parsed, MftRecordParser.Parse(stored, Number, out var parsed, out _, out _, out _));
+        Assert.Null(parsed.OtherLinks);
     }
 
     /// <summary>One record parsed over and over, each time into a fresh copy of what it stored.</summary>

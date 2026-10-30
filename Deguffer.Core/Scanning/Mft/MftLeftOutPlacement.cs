@@ -3,11 +3,11 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
-/// Places the entries a measurement leaves out as records of one volume's table, so the sum can step
+/// Places the entries a measurement leaves out as nodes of one volume's table, so the sum can step
 /// over each without entering it. See <see cref="ScanBounds.LeftOut"/>.
 ///
 /// <para>Apart from <see cref="MftVolumeIndex"/> because it answers a different question: which
-/// record a path names, by name for a folder and by file number for a file, where the index totals a
+/// node a path names, by name for a folder and by file number for a file, where the index totals a
 /// subtree it has already found. Built for one measurement and dropped with it.</para>
 /// </summary>
 /// <param name="resolve">How the index finds the directory at a path below the volume root.</param>
@@ -17,7 +17,7 @@ internal sealed class MftLeftOutPlacement(
     Func<IReadOnlyList<string>, uint?> resolve)
 {
     /// <summary>
-    /// The record of each entry of <paramref name="leftOut"/>, given as components below
+    /// The node of each entry of <paramref name="leftOut"/>, given as components below
     /// <paramref name="root"/>, for <see cref="MftVolumeIndex.TryMeasure(IReadOnlyList{string}, MinimumAge, bool, IReadOnlySet{uint}, out bool, out IReadOnlyList{IReadOnlyList{string}})"/>
     /// to leave out. Null where an entry the subtree holds cannot be placed, which sends the caller to
     /// the walk: a total that counted an entry it was told to leave out would promise what the
@@ -29,6 +29,14 @@ internal sealed class MftLeftOutPlacement(
     /// handle a file, for the few files a caller leaves out. The number is believed only where the
     /// table puts that record in the folder the path names, because a table read before the file was
     /// written may hold another file at that number, or nothing.</para>
+    ///
+    /// <para><b>A file with several names is left out by the one the path names.</b> Each name is a
+    /// node of its own (see <see cref="MftLink"/>), and the removal leaves only the name it was told
+    /// to, so the total still counts the others. A name is a mail store by itself (§9), so the node
+    /// taken is one the table judges as the path's name is judged, and a store by its own name. Two
+    /// names of one file in one folder that still tie are told apart by taking a node not yet
+    /// placed, which leaves out as many names as the paths ask for. A path asked for twice is placed
+    /// once.</para>
     ///
     /// <para><b>Each folder's names are read once, into a map.</b> The entries left out of a
     /// temporary folder are mostly its own children, thousands of them in a folder of tens of
@@ -49,11 +57,17 @@ internal sealed class MftLeftOutPlacement(
         IReadOnlyList<IReadOnlyList<string>> leftOut,
         Func<IReadOnlyList<string>, FileReading> describe)
     {
-        var records = new HashSet<uint>();
+        var nodes = new HashSet<uint>();
+        var placed = new HashSet<string>(StringComparer.Ordinal);
         var folders = new Dictionary<string, (uint Record, ChildNames Names)?>(StringComparer.Ordinal);
 
         foreach (var below in leftOut)
         {
+            if (!placed.Add(string.Join(Path.DirectorySeparatorChar, below)))
+            {
+                continue;
+            }
+
             var key = string.Join(Path.DirectorySeparatorChar, below.Take(below.Count - 1));
 
             if (!folders.TryGetValue(key, out var folder))
@@ -70,7 +84,7 @@ internal sealed class MftLeftOutPlacement(
 
             if (holding.Names.Find(below[^1]) is { } named)
             {
-                records.Add(named);
+                nodes.Add(named);
                 continue;
             }
 
@@ -84,42 +98,86 @@ internal sealed class MftLeftOutPlacement(
             if (reading.Description is not { } described
                 || RecordOf(described.Identity) is not { } record
                 || record == holding.Record
-                || tree.Parent[record] != holding.Record)
+                || NodeNaming(holding.Names, record, below[^1], nodes) is not { } node)
             {
                 return null;
             }
 
-            records.Add(record);
+            nodes.Add(node);
         }
 
-        return records;
+        return nodes;
     }
 
-    /// <summary>The named children of one folder, as the index finds a child by its name.</summary>
+    /// <summary>
+    /// The named children of one folder, as the index finds a child by its name, and the nodes of its
+    /// other children by the record each names.
+    /// </summary>
     private ChildNames ChildNamesOf(uint directory)
     {
         var exact = new Dictionary<string, uint>(StringComparer.Ordinal);
         var folded = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
+        var files = new Dictionary<uint, List<uint>>();
 
         for (var i = links.Start[directory]; i < links.Start[directory + 1]; i++)
         {
             var child = links.Children[i];
 
-            if (tree.Names[child] is { } name)
+            if (tree.DirectoryName(child) is { } name)
             {
                 exact.TryAdd(name, child);
                 folded.TryAdd(name, child);
+                continue;
             }
+
+            var record = tree.RecordOf(child);
+
+            if (!files.TryGetValue(record, out var named))
+            {
+                files[record] = named = [];
+            }
+
+            named.Add(child);
         }
 
-        return new ChildNames(exact, folded);
+        return new ChildNames(exact, folded, files);
     }
 
-    /// <summary>One folder's named children, by their exact names and by their names ignoring case.</summary>
-    private sealed record ChildNames(Dictionary<string, uint> Exact, Dictionary<string, uint> Folded)
+    /// <summary>
+    /// One folder's named children, by their exact names and by their names ignoring case, and its
+    /// other children by their records.
+    /// </summary>
+    private sealed record ChildNames(
+        Dictionary<string, uint> Exact,
+        Dictionary<string, uint> Folded,
+        Dictionary<uint, List<uint>> Files)
     {
         public uint? Find(string name) =>
             Exact.TryGetValue(name, out var child) || Folded.TryGetValue(name, out child) ? child : null;
+
+    }
+
+    /// <summary>
+    /// A node of <paramref name="folder"/> naming <paramref name="record"/> by a name the table cannot
+    /// tell from <paramref name="name"/>, and not among <paramref name="placed"/>, or null where the
+    /// folder holds none. The table keeps a file's name only where it is a mail store's, so a store is
+    /// matched by its name and any other name by not being one.
+    /// </summary>
+    private uint? NodeNaming(ChildNames folder, uint record, string name, IReadOnlySet<uint> placed)
+    {
+        var store = MailStore.Is(name);
+
+        foreach (var node in folder.Files.GetValueOrDefault(record) ?? [])
+        {
+            if (!placed.Contains(node)
+                && tree.IsMailStore(node) == store
+                && (!store || string.Equals(tree.MailStoreName(node), name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return node;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
