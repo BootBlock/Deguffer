@@ -1046,9 +1046,9 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     /// <summary>
     /// The declaration Explore reads (§7.1) applies the same refusal the plan does.
     ///
-    /// <para>It reaches a refused root by the other route: <see cref="InUseBuildDirectories"/> works
-    /// down from the process table rather than from a pass over the folder, so the gate in the plan
-    /// does not cover it. The pair is what proves the gate bites — the same live program under the
+    /// <para>It reaches a refused root by a second route: <see cref="InUseBuildDirectories"/> also
+    /// works down from the process table, which the gate in the plan's search does not cover. The
+    /// pair is what proves the gate bites — the same live program under the
     /// same project declares the directory on an ordinary disk and declares nothing on a cloud
     /// mount.</para>
     /// </summary>

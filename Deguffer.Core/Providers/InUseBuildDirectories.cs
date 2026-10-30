@@ -4,22 +4,34 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// The build directories in the user's source folders that a plan holds back because something is
-/// using them, declared so that Explore refuses them too (§7.1).
+/// The build directories in the user's source folders that a plan holds back, because something is
+/// using them or because whether anything is could not be asked, declared so that Explore refuses
+/// them too (§7.1).
 ///
-/// <para><b>Found from the process table rather than from the disk.</b> A plan finds them by walking
-/// every approved root and asking which of what it found is in use. Explore cannot take that route:
-/// its policy is rebuilt each time the page opens and each time a scan starts, and every path is
-/// refused until it is ready, so a walk of the developer's source folders would hold the whole page
-/// shut on each rebuild. The plan's rule gives a shorter way in. A directory is live to it where a
-/// program runs from inside the directory or works anywhere in its project, so every such directory
-/// is a child of a directory on the way down from an approved root to a place a program is — and
-/// those few children are all that is looked at.</para>
+/// <para><b>The plan's own search, and the places programs are.</b> The candidates are every
+/// directory the plan's search finds, so each one the plan holds back is asked about here by the
+/// question the plan asks it. A directory is live to the plan where a program runs from inside it or
+/// works anywhere in its project, so the children of a directory on the way down from an approved
+/// root to a place a program is are candidates as well, and so is each project a solution a program
+/// works beside names. Those reach a directory past a link that the plan's search stops at, which
+/// refuses a directory the plan never reaches rather than allowing one a program is using.</para>
 ///
-/// <para><b>A solution a program works beside adds the projects it names.</b> Visual Studio works in
-/// the solution's folder, and the projects it has open are below that folder rather than above it,
-/// so walking up from where the editor is would never reach them. The solution names them, and each
-/// named project's build directory is a candidate as well.</para>
+/// <para><b>Searched where the scope can ask, and from the scan's tree where it listed the root.</b>
+/// The policy is built again each time the page opens and each time a scan starts, and every path is
+/// refused until it is ready, so a root a scan listed whole is read from the scan's tree rather than
+/// walked beside it (<see cref="SourceDirectoryDiscovery"/>). Any other root the scope reaches is
+/// searched on the disk, as the plan searches it: every root when the page opens, before any scan,
+/// and a root the scan reached without listing it whole. A directory created after a scan is found
+/// by the next one. A root the scope does not reach is not searched, and is refused whole: the scope
+/// said nothing it covers is there, so this refuses nothing a caller meant to ask about, and it is
+/// what holds if one asks anyway.</para>
+///
+/// <para><b>Process-table evidence alone would leave gaps.</b> Where the process table could not be
+/// read, the places are few or none, and the plan holds back every build directory in the approved
+/// roots. A project whose own lock file could not be asked about, such as a Unity project past
+/// <c>MAX_PATH</c>, or whose lock file a program holds open while it works elsewhere, has no program
+/// near it. A project a solution names, where the solution could not be read, is named by nothing.
+/// The plan holds each of them back, so Explore refuses each of them.</para>
 ///
 /// <para><b>Each is judged exactly as the plan judges it.</b> The same boundary as discovery, the
 /// provider's own recogniser, and <see cref="LiveTreeVeto.Apply"/> with the question the plan
@@ -29,21 +41,8 @@ namespace Deguffer.Core.Providers;
 /// allows.</para>
 ///
 /// <para><b>A candidate Windows would not describe is declared as well.</b> It can be neither
-/// recognised nor checked for use, and a program is working beside it, so Explore refuses it rather
-/// than allowing what nothing could judge. See <see cref="PathPresence"/>.</para>
-///
-/// <para><b>What this does not find.</b> A directory whose only evidence is a lock file held open by
-/// a program that neither runs from inside the directory nor works under its project — a Unity
-/// editor holding <c>UnityLockfile</c> with its working directory elsewhere — is live to the plan
-/// and not declared here, because asking about a lock file means naming its directory first, which
-/// is the walk. Nor does it find a project a solution names where the solution could not be read,
-/// because there is nothing to name it by. The plan still holds both back.</para>
-///
-/// <para><b>A candidate the veto could not ask about is declared as well</b>, as the plan withholds
-/// it. But only a candidate is asked about, and the plan walks every root, so the plan withholds two
-/// kinds of directory that Explore does not refuse: every build directory away from where a program
-/// is when the process table itself could not be read, and one whose own lock file could not be
-/// asked about, such as a Unity project past <c>MAX_PATH</c>, when no program is near it.</para>
+/// recognised nor checked for use, so Explore refuses it rather than allowing what nothing could
+/// judge. See <see cref="PathPresence"/>.</para>
 /// </summary>
 internal static class InUseBuildDirectories
 {
@@ -61,7 +60,7 @@ internal static class InUseBuildDirectories
     /// The rule that builds what the plan asks the veto, whose
     /// <see cref="LiveTreeQuestion.NamedProjects"/> are candidates as well.
     /// </param>
-    public static IReadOnlyList<ToolRoot> Declare(
+    public static async Task<IReadOnlyList<ToolRoot>> DeclareAsync(
         ILiveTreeInspector inspector,
         SourceDirectoryDiscovery discovery,
         IReadOnlyList<SourceRoot> roots,
@@ -88,9 +87,11 @@ internal static class InUseBuildDirectories
         var question = questions(ct);
         var named = question.NamedProjects.Select(inspector.Reach).ToList();
 
-        // A set, because approved roots may nest, and a directory below both would otherwise be
-        // asked about twice and declared twice.
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var searched = await discovery.FindAsync(roots, ct).ConfigureAwait(false);
+
+        // A set, because approved roots may nest, and because the search and the places programs are
+        // find many of the same directories. Each would otherwise be asked about and declared twice.
+        var candidates = new HashSet<string>(searched.Named(names), StringComparer.OrdinalIgnoreCase);
 
         foreach (var root in roots)
         {
@@ -134,8 +135,8 @@ internal static class InUseBuildDirectories
             // refuses a directory the plan never reaches rather than allowing one it holds back.
             switch (LongPath.ProbeDirectory(candidate))
             {
-                // Neither recognised nor ruled out, and a program is working beside it, so whether it
-                // is in use is a question nothing could answer. Read as absent, Explore allowed it.
+                // Neither recognised nor ruled out, so whether it is in use is a question nothing could
+                // answer. Read as absent, Explore allowed it.
                 case PathPresence.Refused:
                     unreached.Add(candidate);
                     break;
@@ -153,13 +154,19 @@ internal static class InUseBuildDirectories
             .. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, Reason(vetoed), static _ => false)),
             .. live.Unchecked.Select(candidate => new ToolRoot(candidate, LiveTreeVeto.UncheckedReason, static _ => false)),
             .. unreached.Select(candidate => new ToolRoot(candidate, UnreachedReason, static _ => false)),
+            .. searched.NotSearchedRoots.Select(root => new ToolRoot(root, NotSearchedReason, static _ => false)),
         ];
     }
 
+    /// <summary>Why Explore refuses an approved root the search did not look in.</summary>
+    private const string NotSearchedReason =
+        "Deguffer did not look in here for build output a program is using, because nothing it was "
+        + "asked about was in here. Scan or search a folder that holds this one to act on what is inside.";
+
     /// <summary>Why Explore refuses a candidate Windows would not describe.</summary>
     private const string UnreachedReason =
-        "Windows would not say what is here, so Deguffer could not tell whether the program running "
-        + "beside it is using it. It can go once Windows will describe it, or once that program has closed.";
+        "Windows would not say what is here, so Deguffer could not tell whether a running program is "
+        + "using it. It can go once Windows will describe it.";
 
     /// <summary>
     /// Every directory called one of <paramref name="names"/> whose parent lies on the way down from

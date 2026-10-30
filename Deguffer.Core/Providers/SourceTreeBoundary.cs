@@ -5,17 +5,21 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Where a search through a source folder stops, stated once for both routes that perform one.
+/// Where a search through a source folder stops, stated once for every route that performs one.
 ///
-/// <para>Both routes enforce these limits by not descending, and both take them from
-/// <see cref="Searching"/>: <see cref="SourceTreeWalk"/> as it lists each directory, and the volume
-/// index as it descends the table from the root. Two enforcements of one rule is the price of having
-/// two routes; stating the rule once is what stops them becoming two different <em>rules</em>,
-/// chosen by whether the user happened to elevate.</para>
+/// <para>Every route enforces these limits by not descending, and each takes them from
+/// <see cref="Searching"/>: <see cref="SourceTreeWalk.Under"/> as it lists each directory, the volume
+/// index as it descends the table from the root, and <see cref="SourceTreeWalk.In"/> as it reads an
+/// Explore scan's tree. An enforcement per route is the price of having several; stating the rule
+/// once is what stops them becoming different <em>rules</em>, chosen by whether the user happened to
+/// elevate or had just scanned.</para>
 ///
 /// <para>The walk's third limit — that it never enters a reparse point — is not repeated here. Each
-/// route holds that one where it can see it: the walk does not list a link as a directory, and the
-/// index does not descend through one in the table.</para>
+/// route holds that one where it can see it: the walk does not list a link as a directory, the index
+/// does not descend through one in the table, and the tree marks one as a link.</para>
+///
+/// <para>The reach paragraphs below are about the walk and the index. A scan's tree reaches what the
+/// scan's own route reached, which is one of those two.</para>
 ///
 /// <para><b>The rules are what agree. The reach is not, and cannot be made to.</b> A search's reach
 /// is a property of the token it runs under, and the two routes do not share one. The walk
