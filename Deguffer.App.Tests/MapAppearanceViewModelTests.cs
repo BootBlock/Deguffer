@@ -24,16 +24,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         _preferences = new PreferenceService(new PreferenceStore(_environment));
     }
 
-    public void Dispose()
-    {
-        // A file locked by RefuseWrites is let go of, so the folder can be removed.
-        if (File.Exists(PreferencesFile))
-        {
-            File.SetAttributes(PreferencesFile, FileAttributes.Normal);
-        }
-
-        _temp.Dispose();
-    }
+    public void Dispose() => _temp.Dispose();
 
     private string PreferencesFile => Path.Combine(_environment.LocalAppData, "Deguffer", "preferences.json");
 

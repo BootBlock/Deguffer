@@ -26,7 +26,7 @@ under the MIT licence. Download the zip for your processor from the
 
 ## What it does
 
-- **Storage** checks 82 sources of waste, from package-manager and browser caches to `Windows.old`
+- **Storage** checks 84 sources of waste, from package-manager and browser caches to `Windows.old`
   and old restore points, and sorts each one into a [safety tier](#safety-tiers). You tick what
   goes, and after the clean Deguffer checks that everything it promised to leave alone is still
   there.
@@ -103,7 +103,7 @@ because they can be saved anywhere, and Deguffer will never remove one by any ro
 
 ## What Storage cleans
 
-Each of the 82 sources has its own provider, which knows what that location is and what sits beside
+Each of the 84 sources has its own provider, which knows what that location is and what sits beside
 it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output such as `node_modules`, `obj` and Rust's `target` folders is searched for only in the source
 folders you add in Settings. [What Deguffer cleans, and what it costs you](docs/cache-locations.md)
@@ -121,6 +121,8 @@ explains most of these sources in detail.
 | Cargo crate cache | |
 | Go build and module caches | |
 | Zig build cache | Never the packages Zig fetched. What it built goes only together with the records that point at it |
+| ccache compiler cache | Cleared with `ccache --clear`, which keeps its settings |
+| sccache compiler cache | sccache's server is stopped first; never its settings |
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` per repository; never its `virtualenvs` |
@@ -332,8 +334,9 @@ Deguffer.Benchmark.Tests/
 
 ## Roadmap
 
-Whether to offer VS Code's workspace storage, which mostly holds AI chat history, is still
-undecided.
+VS Code's workspace storage mostly holds AI chat history, and Deguffer will offer that history as
+user data, one conversation at a time, never selected for you
+([#404](https://github.com/BootBlock/Deguffer/issues/404)).
 
 Some things are left out on purpose. Deguffer will never delete files from `WinSxS`,
 `Windows\Installer` or installers' package caches, because the ways that can go wrong are severe,

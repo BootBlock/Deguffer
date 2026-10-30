@@ -34,9 +34,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Asked from several plans at once, and awaited.</b> A pass plans several rows together,
 /// and the first question reads every row's declaration, which takes seconds where a row builds its
-/// own from a walk. That reading runs on a thread of the walk's own (<see cref="DeclaredRoots"/>), so
-/// neither the plan that asked first nor one that asks meanwhile holds a pool thread for it: each
-/// awaits the one reading rather than starting a second.</para>
+/// own from a walk. That reading runs each row on a thread of the walk's own
+/// (<see cref="DeclaredRoots"/>), so neither the plan that asked first nor one that asks meanwhile
+/// holds a pool thread for it: each awaits the one reading rather than starting a second.</para>
 /// </summary>
 public sealed class RowDeclarations
 {
@@ -67,7 +67,7 @@ public sealed class RowDeclarations
     /// removes from the directory it sits in.
     /// </summary>
     /// <param name="ct">
-    /// Checked between rows while the set is read. A row's declaration cannot be stopped part-way, but
+    /// Checked before each row is read. A row's declaration cannot be stopped part-way, but
     /// the first question in a pass reads every row's, for whichever row asked.
     /// </param>
     public async Task<bool> OfferedByARowAsync(string folder, CancellationToken ct = default) =>
