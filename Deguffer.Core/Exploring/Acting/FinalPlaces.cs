@@ -19,10 +19,13 @@ namespace Deguffer.Core.Exploring.Acting;
 /// named on the far side of its parent and not of itself.</para>
 ///
 /// <para><b>A share, a network drive and a drive that keeps its files in the cloud are never
-/// opened</b>, for the reasons <see cref="HostVolume.Unopened"/> gives, and what is there is judged
-/// by its path. A link on a local disk that leads to a share is another matter: the share may be this
-/// computer's own disk under a second name, <c>\localhost\C$</c>, which no rule names, so the
-/// removal is refused.</para>
+/// opened</b>, for the reasons <see cref="HostVolume.Unopened"/> gives. What is on a cloud drive is
+/// judged by its path, since such a drive holds no link. What is on a share or a network drive is
+/// refused, as is what a link on a local disk leads to on one: the share may be this computer's own
+/// disk under a second name, <c>\\localhost\C$</c>, a drive letter mapped to it, or a share of any
+/// folder under any name, and no rule is written in that form. Telling which shares name this
+/// computer would mean recognising every name, address and alias the machine answers to and every
+/// folder it shares, and a list of those that missed one would allow <c>C:\Windows</c>.</para>
 ///
 /// <para><b>Following a link only adds places.</b> A rule and an item keep every path they were
 /// reachable at before, and a refusal that holds at any of them holds, so a link followed can refuse
@@ -57,10 +60,11 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
     /// Where removing <paramref name="target"/> acts once the links above it are followed, or why
     /// Deguffer cannot tell.
     ///
-    /// <para><b>Fails closed.</b> A folder above the item that is there and that Windows will not
-    /// open, that Windows names only by a device path, or that leads to a share, hides where the
-    /// removal would act, so it refuses. A folder above the item that is not there hides nothing: the item is not there
-    /// either, and the removal reports it as gone.</para>
+    /// <para><b>Fails closed.</b> A folder above the item that is on a share or a network drive, that
+    /// is there and that Windows will not open, that Windows names only by a device path, or that
+    /// leads to a share, hides where the removal would act, so it refuses. A folder above the item
+    /// that is not there hides nothing: the item is not there either, and the removal reports it as
+    /// gone.</para>
     /// </summary>
     /// <param name="target">The item, in display form, as the policy has already resolved it. Never the top of a volume.</param>
     public FarSide Item(string target)
@@ -69,9 +73,13 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
         var extended = LongPath.Extended(parent);
         var name = Path.GetFileName(target);
 
-        if (HostVolume.Unopened(volumes, parent) is not null)
+        switch (HostVolume.Unopened(volumes, parent))
         {
-            return new FarSide(null, null);
+            case UnopenedPlace.Share:
+                return new FarSide(null, OnAShare(name, $"'{parent}' is on a network share or a network drive"));
+
+            case UnopenedPlace.Cloud:
+                return new FarSide(null, null);
         }
 
         if (fileSystem.FinalPath(extended) is not { } final)
@@ -88,13 +96,22 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
             null => new FarSide(null, ExploreVerdict.Refuse(
                 $"'{parent}' leads to a drive Windows names by no letter or folder, so Deguffer cannot tell "
                 + $"what removing '{name}' would act on, and leaves it alone.")),
-            var shown when LongPath.IsShare(shown) => new FarSide(null, ExploreVerdict.Refuse(
-                $"A link on the way to '{name}' leads to the network share '{shown}', which can be this "
-                + "computer's own disk under another name, so Deguffer cannot tell what removing it would "
-                + "act on, and leaves it alone.")),
+            var shown when LongPath.IsShare(shown) => new FarSide(
+                null, OnAShare(name, $"'{parent}' leads to the network share '{shown}'")),
             var shown => new FarSide(Path.Join(shown, name), null),
         };
     }
+
+    /// <summary>
+    /// The refusal of <paramref name="name"/>, which is reached through a share, for the reason
+    /// <paramref name="reached"/> states. Its own sentence for both ways there, a share named as one
+    /// and a local name Windows follows to one, because a removal through either acts where no rule
+    /// can be asked.
+    /// </summary>
+    private static ExploreVerdict OnAShare(string name, string reached) =>
+        ExploreVerdict.Refuse(
+            $"{reached}, which can be this computer's own disk under another name, so Deguffer cannot "
+            + $"tell what removing '{name}' would act on, and leaves it alone.");
 }
 
 /// <summary>

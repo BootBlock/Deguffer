@@ -57,7 +57,7 @@ route in order. The one offered row in this area is old Vagrant box versions, th
 | VMware Workstation virtual machines | Report only | 3 | Yes: two VMs, one with a snapshot |
 | Hyper-V virtual machines and checkpoints | Report only, where Hyper-V answers | 3 | Present, but nothing answers unelevated |
 | VirtualBox virtual machines and media | Report only | 3 | Absent |
-| Vagrant superseded box versions | **Build** | 2 | Absent |
+| Vagrant superseded box versions | **Build**. ✅ done: `VagrantSupersededBoxProvider` | 2 | Absent |
 | Rancher Desktop snapshots | Report only | 3 | Absent |
 | Podman and Rancher Desktop distributions | Owner records in the WSL report | 3 | Absent |
 | Rancher Desktop `cache` | Build later | — | Absent |
@@ -153,10 +153,18 @@ for each box name and provider
 
 - **Plan** with `--dry-run`, **clean** with `--force --keep-active-boxes`. Deguffer closes standard
   input, so a prompt would read end of input; how Vagrant treats that is unverified, which is why
-  the pair of flags that never prompts is the step.
+  the pair of flags that never prompts is the step. **Correction:** at
+  [`dc55920a`](https://github.com/hashicorp/vagrant/tree/dc55920a284544919340b975098b4ac9005b08b0)
+  `--keep-active-boxes` does not keep a box in use on an architecture layout, because `Box#in_use?`
+  compares the index's text architecture with a symbol. A version with two architectures for one
+  provider makes the real prune fail part-way. The dry run also ignores `--keep-active-boxes`.
 - **Tier 2**: a re-download. The machines made from a box live in the hypervisor, not in `boxes`.
 - **Survivors** (§5.2): `Vagrantfile`, `data\machine-index`, `insecure_private_key`, `plugins.json`,
   `gems`. Nothing in `.vagrant.d` is a path target; `tmp` has no primary source, so it is not offered.
+- ✅ done: `VagrantSupersededBoxProvider`, with the step above. It reads `data\machine-index\index`
+  itself and withholds the row while a machine records a version the prune would remove, or while a
+  version is installed for two architectures. Vagrant is never started for a home with no `boxes`,
+  because every command creates its home, and a cancelled prune is left to finish.
 
 ### Container tools on WSL ✅ done
 
@@ -233,8 +241,8 @@ report.
 | Bun install cache | ✅ **Built**, through `prune` only, Bun 1.4.4+ | 1 | Absent |
 | Yarn 1 cache | ✅ **Built** | 1 | Absent |
 | Deno cache | **Build**, by path, never `deno clean` | 1 | Absent |
-| Conan 2 | **Build**, `conan cache clean` only | 1 | Absent |
-| Scoop download cache | **Build** | 1 | Absent |
+| Conan 2 | **Build**, `conan cache clean` only. ✅ done: `ConanCacheProvider` | 1 | Absent |
+| Scoop download cache | **Build**. ✅ done: `ScoopCacheProvider` | 1 | Absent |
 | Composer | ✅ **Built**, low value | 1 | 30.1 MB |
 | Cypress binaries | Build later | 2 | Absent |
 | Yarn Berry global cache | Build later | 2 | Absent |
@@ -354,6 +362,12 @@ Tier 2 argument. A `.conanrc` in the working directory or any parent overrides `
 ([conanrc](https://docs.conan.io/2/reference/config_files/conanrc.html)), and Deguffer's fixed folder
 is under the profile, so a `.conanrc` there would apply; the row should say which home it asked.
 
+✅ done: `ConanCacheProvider` runs `conan cache clean -s -b -t`. **Correction:** with no flags the
+clean also takes `-d`, the download and metadata folders, and a package's metadata can exist nowhere
+else, so the flags are explicit and `-d` and `-bs` are never passed. Every Conan command creates its
+home, so Conan is asked (`conan config home`, `conan config show core.cache:storage_path`) only once
+the home it would use is known to exist.
+
 ### Scoop download cache — Build, Tier 1, researched
 
 `$env:SCOOP_CACHE`, else `cache_path` in `%USERPROFILE%\.config\scoop\config.json`, else
@@ -363,6 +377,13 @@ is under the profile, so a `.conanrc` there would apply; the row should say whic
 ([scoop-cache.ps1](https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/libexec/scoop-cache.ps1)).
 **`scoop cleanup *` is rejected**: it removes old app versions under `apps\<app>\<version>`, which is
 uninstalling (§2), and the first survey's long-tail table offered it beside the cache.
+
+✅ done: `ScoopCacheProvider`, through the `scoop.cmd` shim by full path. **Correction:** the default
+is `cache` in Scoop's root, which is `$env:SCOOP`, else `root_path`, else the install the running
+Scoop lives in, and the settings are a portable `<root>\config.json` when one exists, else
+`$XDG_CONFIG_HOME` or `%USERPROFILE%\.config`, then `scoop\config.json`. `cache rm *` removes every
+top-level entry without reading its name, so the step is offered only when every entry is a
+recognised download.
 
 ### Composer — Build, Tier 1, measured at 30.1 MB
 
@@ -709,7 +730,9 @@ it "can take a very long time, during which little or no information is availabl
 That is Windows' own route (§5.1), and if it shrinks the file, the first survey's blocker — stop the
 service, delete, start it — no longer applies. **Gaps:** whether `Reset` needs elevation (its page
 does not say), and whether it shrinks `Windows.db` or rebuilds it in place at the same allocation.
-Both need a measurement on a disposable machine before design.
+Both need a measurement on a disposable machine before design. Service control is no longer the
+fallback if `Reset` falls short: [#70](https://github.com/BootBlock/Deguffer/issues/70) declined it
+for the whole product (§2 of the spec), so an index `Reset` cannot shrink is reported and not offered.
 
 ### Disk Cleanup handlers — the inventory
 
@@ -822,7 +845,8 @@ that Windows' own cleanup does reach it, and an elevated measurement should say 
 5. **`ComponentModelCache` is not a carve-out.** The first survey's §12 proposes it; §3 above
    rejects it as a repair rather than space.
 6. **The Search index may not need service control.** The first survey's §6 makes service control
-   the blocker; §5 above names a documented rebuild that needs none, if it shrinks the file.
+   the blocker; §5 above names a documented rebuild that needs none, if it shrinks the file. ✅ done:
+   service control is declined (§2 of the spec), and `Reset` is the index's only route.
 
 Items 1, 2, 5 and 6 are corrected in place in [unreached-locations.md](unreached-locations.md).
 Items 3 and 4 changed shipped text, and were made with the run-wide refusal of registered disks.

@@ -261,9 +261,9 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     /// A profile at the top of a drive or share, which <see cref="ToolRoots"/> leaves out: refusing
     /// every child of a drive would take the whole drive away from Explore, and a volume root is
     /// never itself removable there. The user data the plan protects by name is refused instead,
-    /// and everything else on the drive stays the user's. Declared here rather than in
-    /// <see cref="ToolRoots"/> because a declaration made here only ever adds a refusal. See
-    /// <see cref="ToolRoot.Sparing"/>.
+    /// and everything else on a local drive stays the user's (Explore refuses everything on a
+    /// share). Declared here rather than in <see cref="ToolRoots"/> because a declaration made here
+    /// only ever adds a refusal. See <see cref="ToolRoot.Sparing"/>.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>(

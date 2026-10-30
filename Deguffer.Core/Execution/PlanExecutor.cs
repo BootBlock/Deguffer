@@ -352,9 +352,11 @@ public sealed class PlanExecutor(
             }
         }
 
-        if (step.TargetCheck?.WhyNot(step, ct) is { } renamed)
+        // Asked before the look so a command already refused costs no walk, and again once the look
+        // and any measurement are done.
+        if (step.TargetCheck?.WhyNot(step, ct) is { } retargeted)
         {
-            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Not run: {renamed}.");
+            return Retargeted(step, retargeted);
         }
 
         // §9, looked for again on the disk immediately before the tool runs, because the tool cannot be
@@ -383,6 +385,14 @@ public sealed class PlanExecutor(
         if (step is { HeldWhileUpdating: true, MeasuredBy: not null } && StillUpdating(step) is { } updating)
         {
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
+        }
+
+        // Asked again, because the look walks every path the command clears and the tool's measurement
+        // can take a minute, and what a target check guards against happens at the machine's pace, not
+        // the run's: a build started, or a handle given to another item, while either ran.
+        if (step.TargetCheck?.WhyNot(step, ct) is { } retargetedSince)
+        {
+            return Retargeted(step, retargetedSince);
         }
 
         var run = ToolRun.Command(step.WhenCancelled);
@@ -876,6 +886,10 @@ public sealed class PlanExecutor(
             removal.RefusedFolders,
             stores);
     }
+
+    /// <summary>A command not run because its <see cref="RunCommandStep.TargetCheck"/> said why not.</summary>
+    private static StepOutcome Retargeted(RunCommandStep step, string why) =>
+        new(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Not run: {why}.");
 
     /// <summary>
     /// A removal the clean was cancelled in the middle of, with what it did before it stopped. Never a
