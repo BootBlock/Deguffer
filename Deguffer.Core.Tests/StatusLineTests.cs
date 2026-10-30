@@ -5,11 +5,11 @@ using Deguffer.Core.Exploring.Acting;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// What a page that removes lists beside its sentence: each §5.6 check the sentence counts as not
-/// passed, by the path it is about and what it found. A count that asks the user to look at the
-/// folders without saying which leaves them nowhere to look.
+/// What a page's status line holds: the sentence, where it came from, and each §5.6 check the
+/// sentence counts as not passed, by the path it is about and what it found. A count that asks the
+/// user to look at the folders without saying which leaves them nowhere to look.
 /// </summary>
-public sealed class OutcomeStatementTests
+public sealed class StatusLineTests
 {
     private const string Sentence = "Deleted 'old' (10 B). 1 of 3 check(s) on what should have survived did not pass.";
 
@@ -24,20 +24,30 @@ public sealed class OutcomeStatementTests
     };
 
     /// <summary>
-    /// The list stands beside its own sentence, and goes as soon as any other sentence replaces it:
-    /// a scan's progress or a refusal is not about the folders a removal named.
+    /// An action's line carries the checks it did not pass, and no other line carries any: a scan's
+    /// progress or a refusal that replaces it is not about the folders a removal named, even where
+    /// its words are the same.
     /// </summary>
     [Fact]
-    public void TheChecksAreListedBesideTheirOwnSentenceAndNoOther()
+    public void OnlyAnActionsLineCarriesChecksAndOnlyTheOnesItDidNotPass()
     {
-        var statement = OutcomeStatement.After(Sentence, Mixed);
+        var after = StatusLine.After(Sentence, Mixed);
 
+        Assert.Equal(StatusOrigin.Outcome, after.Origin);
         Assert.Equal(
             [@"C:\Users\testuser\Documents", @"C:\Users\testuser\Linked"],
-            statement.ChecksBeside(Sentence).Select(check => check.Subject));
-        Assert.Empty(statement.ChecksBeside(@"Scanning C:\Users\testuser…"));
-        Assert.Empty(statement.ChecksBeside(string.Empty));
-        Assert.Empty(OutcomeStatement.Said(Sentence).ChecksBeside(Sentence));
+            after.Checks.Select(check => check.Subject));
+
+        var said = StatusLine.Said(Sentence);
+        Assert.Equal(StatusOrigin.Told, said.Origin);
+        Assert.Empty(said.Checks);
+
+        var refused = StatusLine.Refused(Sentence);
+        Assert.Equal(StatusOrigin.Refusal, refused.Origin);
+        Assert.Empty(refused.Checks);
+
+        Assert.Equal(string.Empty, StatusLine.Empty.Sentence);
+        Assert.Empty(StatusLine.Empty.Checks);
     }
 
     /// <summary>Explore's removal names what its sentence counts.</summary>
@@ -47,6 +57,7 @@ public sealed class OutcomeStatementTests
         var report = new ExploreRemovalReport(ExploreRemovalMode.Permanent, [], Mixed);
 
         Assert.Equal(report.Summary, report.Statement.Sentence);
+        Assert.Equal(StatusOrigin.Outcome, report.Statement.Origin);
         Assert.Equal(Mixed.Unpassed, report.Statement.Checks);
     }
 

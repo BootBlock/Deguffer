@@ -1,10 +1,8 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
-using Deguffer.Core.Viewing;
 using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
@@ -89,22 +87,11 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// <summary>Whether nothing is running, so the locations may change.</summary>
     public bool IsIdle => !IsBusy;
 
-    /// <summary>What the last rule or removal did, or an empty string.</summary>
-    [ObservableProperty]
-    public partial string Outcome { get; private set; } = string.Empty;
-
     /// <summary>
-    /// The §5.6 checks the last removal could not pass, each by the path it is about and what it
-    /// found, listed beside <see cref="Outcome"/> while it still holds that removal's sentence. The
-    /// sentence counts them and asks the user to look at the folders, and a count does not say which.
+    /// What the last rule or removal did, or nothing, with the §5.6 checks a removal could not pass
+    /// beside it.
     /// </summary>
-    public ObservableCollection<VerificationCheck> OutcomeChecks { get; } = [];
-
-    /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
-    public bool HasOutcomeChecks => OutcomeChecks.Count > 0;
-
-    /// <summary>The last statement a removal put on the page.</summary>
-    private OutcomeStatement _stated = OutcomeStatement.Said(string.Empty);
+    public StatusLineViewModel Outcome { get; } = new(StatusLine.Empty);
 
     /// <summary>Why nothing can be marked, ruled or removed now, or an empty string where something can.</summary>
     public string WhyClosed => WhyCannotAct ?? _marks?.WhyRulesCannotMark ?? string.Empty;
@@ -132,7 +119,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         _marks = null;
         _asked = asked;
         _stale = null;
-        Outcome = string.Empty;
+        Outcome.Say(StatusLine.Empty);
 
         // Counted as well as refreshed: the groups the count was of are gone.
         Counted();
@@ -218,11 +205,12 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
             try
             {
                 outcome = await _actions.RunAsync(marks, rule, stop);
-                Outcome = outcome.Summary;
+                Outcome.Say(StatusLine.Said(outcome.Summary));
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
-                Outcome = "The rule stopped part-way. The marks it made before it stopped stay, and each can be undone.";
+                Outcome.Say(StatusLine.Said(
+                    "The rule stopped part-way. The marks it made before it stopped stay, and each can be undone."));
             }
 
             var untouched = outcome?.Untouched.ToDictionary(pair => pair.Group, pair => pair.Reason) ?? [];
@@ -260,7 +248,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
             }
         }
 
-        Outcome = string.Empty;
+        Outcome.Say(StatusLine.Empty);
         Counted();
     }
 
@@ -316,7 +304,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                     rows[copy.Copy.Identity].Removal(copy.Message);
                 }
 
-                Say(answer.Statement);
+                Outcome.Say(answer.Statement);
 
                 // A check left unpassed is §5.6 failing to prove the removal left what it had to.
                 if (answer.Statement.Checks.Count > 0)
@@ -326,27 +314,9 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
-                Outcome = "Stopped before anything was removed.";
+                Outcome.Say(StatusLine.Said("Stopped before anything was removed."));
             }
         });
-    }
-
-    /// <summary>Put a removal's statement on the page and its checks beside it.</summary>
-    private void Say(OutcomeStatement statement)
-    {
-        // Before the sentence, so the change below lists this statement's checks beside it.
-        _stated = statement;
-        Outcome = statement.Sentence;
-        ListBeside(Outcome);
-    }
-
-    partial void OnOutcomeChanged(string value) => ListBeside(value);
-
-    /// <summary>Update the list in place to what <see cref="OutcomeStatement.ChecksBeside"/> says belongs beside <paramref name="shown"/>.</summary>
-    private void ListBeside(string shown)
-    {
-        LiveList.Rewrite(OutcomeChecks, _stated.ChecksBeside(shown));
-        OnPropertyChanged(nameof(HasOutcomeChecks));
     }
 
     /// <summary>

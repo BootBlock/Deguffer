@@ -115,7 +115,7 @@ public sealed class ExploreWorkTests : IDisposable
         page.Selection.Select([folder]);
         await page.Selection.DeleteCommand.ExecuteAsync(null);
 
-        Assert.True(page.HasStatusChecks);
+        Assert.True(page.Status.HasChecks);
         Assert.True(_explore.Work.IsIdle);
         Assert.Equal(1, failures);
     });

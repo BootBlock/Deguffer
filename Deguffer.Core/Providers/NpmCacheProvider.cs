@@ -157,6 +157,9 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         var measured = await MeasureAllAsync([contentCache], ct).ConfigureAwait(false);
 
+        // --force overrides no safety check. Since npm 5, cache clean refuses to run without it and
+        // points at npm cache verify instead, because the cache verifies itself. Freeing the space is
+        // what the user asked for, so the refusal is answered rather than obeyed.
         steps.Add(new RunCommandStep(npm, "cache clean --force", "Clear the npm cache using npm's own command")
         {
             // npm's cache checks every entry against its hash as it reads it, so a clean ended part-way
