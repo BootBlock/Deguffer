@@ -597,8 +597,12 @@ public sealed class SteamShaderCacheProviderTests : IDisposable
 
         Assert.Equal(first, Assert.Single(plan.TargetedPaths));
         Assert.True(plan.HasUnreadableRoot);
-        Assert.Contains(plan.Notes, n =>
-            n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(SecondLibrary, StringComparison.OrdinalIgnoreCase));
+
+        // Named once, by the warning: the game it may hold says nothing about being installed, and
+        // the warning already says nothing in the library was ruled out.
+        var note = Assert.Single(plan.Notes, n => n.Message.Contains(SecondLibrary, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(PlanNoteSeverity.Warning, note.Severity);
+        Assert.DoesNotContain(Assert.Single(plan.Steps.OfType<DeleteStep>()).Facets, f => f.Label == "Installed");
     }
 
     /// <summary>

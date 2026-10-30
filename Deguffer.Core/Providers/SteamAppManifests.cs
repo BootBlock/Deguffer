@@ -61,7 +61,7 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
     private readonly Dictionary<string, SteamApp> _described = new(StringComparer.Ordinal);
 
     /// <summary>Each library that left at least one game's standing unknown, in list order.</summary>
-    private readonly List<string> _unreached = [];
+    private readonly List<SteamLibrary> _unreached = [];
 
     /// <summary>The manifest's name, relative to a library, for the application <paramref name="id"/>.</summary>
     public static string RelativePath(string id) => Path.Combine("steamapps", $"appmanifest_{id}.acf");
@@ -74,13 +74,13 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
         }
 
         var unknowable = !libraries.IsComplete;
-        List<string>? unreached = null;
+        List<SteamLibrary>? unreached = null;
 
         foreach (var library in libraries.Folders)
         {
             if (library.Presence is not PathPresence.Present)
             {
-                (unreached ??= []).Add(library.Folder);
+                (unreached ??= []).Add(library);
                 continue;
             }
 
@@ -99,7 +99,7 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
 
         foreach (var library in unreached ?? [])
         {
-            if (!_unreached.Contains(library, StringComparer.OrdinalIgnoreCase))
+            if (!_unreached.Contains(library))
             {
                 _unreached.Add(library);
             }
@@ -114,15 +114,29 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
     /// found in no other library, so a reader filtering on "Installed" learns why that game carries
     /// no answer. Information rather than a warning: nothing is removed because of it.
     /// </summary>
-    public IReadOnlyList<PlanNote> UnreachedLibraryNotes() =>
+    /// <param name="refusalsNamed">
+    /// Whether the caller already names each library Windows would not describe, as the shader row
+    /// does with <see cref="UnreadableRoot.UnreachedNote"/>, so only absent libraries are left to name.
+    /// </param>
+    public IReadOnlyList<PlanNote> UnreachedLibraryNotes(bool refusalsNamed) =>
     [
-        .. _unreached.Select(library => new PlanNote(
-            PlanNoteSeverity.Information,
-            $"Steam lists a game library at '{LongPath.Display(library)}', and Deguffer could not look in it. "
-            + "A drive that is not connected, a network share that is offline and a folder this account may "
-            + "not read all do that. Its games may still be installed, so a game Deguffer found in no other "
-            + "library is not called uninstalled.")),
+        .. _unreached
+            .Where(library => !refusalsNamed || library.Presence is PathPresence.Absent)
+            .Select(library => new PlanNote(PlanNoteSeverity.Information, WhyUnreached(library))),
     ];
+
+    private static string WhyUnreached(SteamLibrary library)
+    {
+        var folder = LongPath.Display(library.Folder);
+        var consequence = "Its games may still be installed, so a game Deguffer found in no other library "
+            + "is not called uninstalled.";
+
+        return library.Presence is PathPresence.Absent
+            ? $"Steam lists a game library at '{folder}', and it is not there. A drive that is not connected, "
+                + $"a network share that is offline and a library moved without telling Steam all do that. {consequence}"
+            : $"Windows would not say what is at '{folder}', a game library Steam lists, so Deguffer could not "
+                + $"look in it. {UnreadableRoot.Causes} {consequence}";
+    }
 
     /// <summary>
     /// The folder each library holding the application's manifest installed it in,

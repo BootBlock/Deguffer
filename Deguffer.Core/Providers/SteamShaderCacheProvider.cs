@@ -188,7 +188,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
             Collect(library, examination, ct);
         }
 
-        examination.Notes.AddRange(examination.Manifests.UnreachedLibraryNotes());
+        examination.Notes.AddRange(examination.Manifests.UnreachedLibraryNotes(refusalsNamed: true));
 
         if (examination.Targets.Count == 0
             && examination.Declined.Count == 0
@@ -277,7 +277,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     };
 
     /// <summary>
-    /// Whether <paramref name="library"/> may hold a game's shader cache with something in it. See
+    /// Whether <paramref name="steamLibrary"/> may hold a game's shader cache with something in it. See
     /// <see cref="IsPresentAsync"/> for why an obstacle answers yes.
     /// </summary>
     private static bool MayHoldACache(SteamLibrary steamLibrary)

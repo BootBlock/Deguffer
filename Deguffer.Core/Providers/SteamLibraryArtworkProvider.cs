@@ -220,7 +220,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
             return EmptyPlan("Steam is keeping no library artwork on this machine.");
         }
 
-        examination.Notes.AddRange(manifests.UnreachedLibraryNotes());
+        examination.Notes.AddRange(manifests.UnreachedLibraryNotes(refusalsNamed: false));
 
         var (steps, measured) = await PlanDeletionsAsync(examination.Targets, keep, ct).ConfigureAwait(false);
 
