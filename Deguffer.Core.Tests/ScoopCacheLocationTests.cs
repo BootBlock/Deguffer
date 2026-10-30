@@ -139,19 +139,23 @@ public sealed class ScoopCacheLocationTests : IDisposable
         await AssertOffersNothing();
     }
 
+    /// <summary>
+    /// <c>$CACHE</c> is the populated default cache, so a file read where Scoop would ignore it, or
+    /// fail to read it, plans rather than passing by naming a folder that is not there.
+    /// </summary>
     [Theory]
     [InlineData("""{ "cache_path": "cache" }""")]
     [InlineData("""{ "root_path": "scoop" }""")]
     [InlineData("""{ "cache_path": 5 }""")]
-    [InlineData("""{ "cache_path": "a", "CACHE_PATH": "b" }""")]
+    [InlineData("""{ "cache_path": $CACHE, "CACHE_PATH": $CACHE }""")]
     [InlineData("""{ "alias": { "x": "a", "X": "b" } }""")]
-    [InlineData("{ \"cache_path\": \"a\" /* a comment PowerShell 7 accepts */ }")]
+    [InlineData("{ \"cache_path\": $CACHE /* a comment PowerShell 7 accepts */ }")]
     [InlineData("[]")]
     public async Task ASettingsFileScoopCouldReadDifferentlyOffersNothing(string json)
     {
         _scoop.Install();
         _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
-        _scoop.WriteText(_scoop.UserConfig, json);
+        _scoop.WriteText(_scoop.UserConfig, json.Replace("$CACHE", Json(_scoop.DefaultCache), StringComparison.Ordinal));
 
         await AssertOffersNothing();
     }
