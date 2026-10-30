@@ -842,6 +842,9 @@ unseen. The survey behind issue #61 found 23 WebView2 hosts on one machine, and 
 more deeper than the scan looked. A later count, taken for the fix, found 19, with 5 under `Packages`. The blind spot was nesting depth, and MSIX is one of several things that produce it.
 `ChromiumUserDataWalk` now finds an `EBWebView` folder up to six levels down, packaged or not. A
 packaged Electron application, whose folder has no fixed name, is still unreached.
+**Update (#407):** it is reached now. The walk identifies a folder one level into a package's
+`LocalCache\Roaming` or `LocalCache\Local` by its `Local State`, and still never treats `LocalCache`
+as a licence.
 
 ---
 

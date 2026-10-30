@@ -531,6 +531,11 @@ can leave the lock behind.
 
 ### Packaged Electron apps — Build, as a general rule
 
+✅ **Done.** `ChromiumUserDataWalk` identifies a folder one level into a package's
+`LocalCache\Roaming` or `LocalCache\Local` by `Local State`, for `%LOCALAPPDATA%\Packages` only, and
+names it `<folder> (packaged)`. Measured on a real packaged Electron application. `LocalLow` is not
+included: Microsoft's redirection list names only `Local` and `Roaming`.
+
 [../cache-locations.md](../cache-locations.md) records "Not reached: packaged Electron applications".
 The fix is the existing identification rule — a `Local State` file one level down — applied one level
 under each package's `LocalCache\Roaming` and `LocalCache\Local`, the redirected roots the first

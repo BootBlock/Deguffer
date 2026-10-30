@@ -1292,6 +1292,8 @@ called `GPUCache`, so a cache name is never on its own a reason to go in. Deguff
 that file is examined at all. The browser table above only says where to look: a browser's folder
 has to hold `Local State` too, and so does a directory called `EBWebView`.
 
+It looks for that file directly inside `%APPDATA%` and `%LOCALAPPDATA%`, and directly inside each
+packaged application's redirected copies of them (see [Packaged applications](#packaged-applications)).
 To find WebView2's folders, Deguffer looks through the directories under `%APPDATA%` and
 `%LOCALAPPDATA%` down to six levels. It does not follow a link, it does not look inside your
 temporary folder, and it does not look inside another Chromium user-data folder. Everything in one
@@ -1367,13 +1369,32 @@ Every one of the nine is derived content with an authoritative source elsewhere:
 server still has, and compiled output of scripts that are still on your disk. The engine refills all
 of it without being asked, and the cost is a slower first launch.
 
-### Not reached: packaged Electron applications
+### Packaged applications
 
-An application installed from the Microsoft Store does not write to `%APPDATA%`. Windows redirects
-it under `%LOCALAPPDATA%\Packages`. A packaged application's WebView2 folder is reached all the
-same, because Deguffer finds that by its own name. A packaged application that embeds Chromium the
-way an Electron application does keeps a folder with no fixed name there, and Deguffer does not
-currently see its cache.
+An application installed as a package, from the Microsoft Store or from its vendor's own MSIX
+installer, does not write to `%APPDATA%` or `%LOCALAPPDATA%`. Windows keeps what it creates there in
+"a per-user, per-package private location"
+([how packaged desktop apps run](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-behind-the-scenes)),
+which is `LocalCache\Roaming` and `LocalCache\Local` inside the package's folder:
+
+| Installed | Where an Electron application keeps its Chromium folder |
+| --- | --- |
+| Unpackaged | `%APPDATA%\<App>` |
+| As a package | `%LOCALAPPDATA%\Packages\<package>\LocalCache\Roaming\<App>` |
+
+So Deguffer looks one level into each package's `LocalCache\Roaming` and `LocalCache\Local` exactly
+as it looks one level into `%APPDATA%` and `%LOCALAPPDATA%`, and a folder there needs the same
+`Local State` file. On the machine this was measured on, a packaged Electron application kept its
+marker, `Cache`, `Code Cache`, `GPUCache` and the two Dawn caches there, beside its sign-in state
+and a virtual machine's files. Deguffer lists it under its folder's name followed by `(packaged)`,
+because the same application can be installed both ways and each keeps a folder of its own.
+
+**`LocalCache` is not a cache.** Microsoft defines it as files that are left out of backup and
+restore, and on the same machine it held a virtual machine's disk and the Python packages the
+Microsoft Store edition of Python installed. Nothing is removed for being in it: only the nine
+Chromium directories inside an identified folder are, and a folder further down, in `LocalLow`, or
+in `LocalCache` itself is not identified. A packaged application's WebView2 folder is found by its
+own name, as before.
 
 ### Not reached: WebView2 folders further down
 
