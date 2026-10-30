@@ -228,6 +228,62 @@ public sealed class ScoopCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A cache turned into a link after the preview sends the command into a folder the preview never
+    /// listed, even where what is there now reads as Scoop's. It is not run.
+    /// </summary>
+    [Fact]
+    public async Task ACacheTurnedIntoALinkAfterThePreviewStopsTheCommand()
+    {
+        var shim = _scoop.Install();
+        _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        var target = _scoop.Elsewhere("linked-cache");
+        var unexamined = _scoop.File(target, ScoopFixture.Download);
+        _scoop.Runner.Replying(shim, _ => RemoveEveryFileIn(_scoop.DefaultCache));
+        var provider = _scoop.Provider();
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+        Directory.Delete(_scoop.DefaultCache, recursive: true);
+        Junction.ToDirectory(_scoop.DefaultCache, target);
+        var outcome = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.Contains($"Scoop's download cache at {_scoop.DefaultCache} is now a link to somewhere else", outcome.Message, StringComparison.Ordinal);
+        Assert.Empty(_scoop.Runner.Invocations);
+        Assert.True(File.Exists(unexamined));
+    }
+
+    /// <summary>
+    /// A cache Windows will no longer list to the end could hold anything, and the command removes
+    /// whatever it finds there. It is not run.
+    /// </summary>
+    [Fact]
+    public async Task ACacheThatWillNotBeListedAtTheCleanStopsTheCommand()
+    {
+        var shim = _scoop.Install();
+        var download = _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        _scoop.Runner.Replying(shim, _ => RemoveEveryFileIn(_scoop.DefaultCache));
+        var provider = _scoop.Provider();
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+        StepOutcome outcome;
+
+        using (new DeniedDirectory(_scoop.DefaultCache))
+        {
+            outcome = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+        }
+
+        Assert.False(outcome.Succeeded);
+        Assert.Contains(
+            $"Windows would not list Scoop's download cache at {_scoop.DefaultCache} to the end",
+            outcome.Message,
+            StringComparison.Ordinal);
+        Assert.Empty(_scoop.Runner.Invocations);
+        Assert.True(File.Exists(download));
+    }
+
+    /// <summary>
     /// Scoop reads its settings when it starts, so a cache moved after the preview would have the
     /// command empty a folder nobody examined. It is not run.
     /// </summary>
