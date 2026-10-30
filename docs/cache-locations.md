@@ -1471,12 +1471,16 @@ directly rather than by asking the tool, and only by exact name.
 **A profile you moved somewhere yourself is reported and not examined.** Where `profiles.ini` records
 an absolute path, Firefox keeps that profile's cache in the same directory as its bookmarks and
 passwords rather than separately from them, and the argument above stops applying. Deguffer says so
-in the plan instead of guessing.
+in the plan instead of guessing. The same goes for a relative path that climbs out of Firefox's own
+folder. Either way, Explore refuses to remove that profile or anything inside it. A profile kept at
+the top of a drive or share is the exception: Explore refuses its bookmarks, passwords and settings
+by name, and leaves the rest of the drive to you.
 
 ### What is protected
 
-**The whole roaming half, and everything in the local half that is not one of the five.** Deguffer
-asserts afterwards that these survived:
+**The whole roaming half, and everything in the local half that is not one of the five.** A profile
+kept outside Firefox's folder is protected the same way. Deguffer asserts afterwards that these
+survived:
 
 | Neighbour | What it really is |
 | --- | --- |
