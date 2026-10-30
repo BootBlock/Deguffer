@@ -258,9 +258,10 @@ The gear button next to the map opens *Map appearance*, and the map updates as y
 settings there. Each view has its own colours. Shapes can be shaded as a cushion, a bevel, a sheen
 lit from above, or flat colour. You can draw an outline of your chosen strength and width around
 each file and each folder, fill folders with grey or tint them towards grey, and hide the folder
-name bands or the names inside shapes. The soft light that follows the pointer over the map can be turned off,
-softened or brightened. Presets set the shapes, outlines and spacing all at once, and include looks
-based on SpaceMonger and WizTree. Your choices are saved, and the Memory page's map uses them too.
+name bands or the names inside shapes. The soft light that follows the pointer over the map can be
+turned off, softened or brightened. Presets set the shapes, outlines and spacing all at once, and
+include looks based on SpaceMonger and WizTree. Your choices are saved, and the Memory page's map
+uses them too.
 The window stays above Deguffer's main window, reopens where you left it, and opens again with
 Deguffer if you left it open.
 
