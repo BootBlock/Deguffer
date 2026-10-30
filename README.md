@@ -309,7 +309,8 @@ program you pick is one of them, and links to it.
 
 Disabling an entry records that it should not start, in the same place and the same form Task Manager
 uses, so Task Manager and Settings show the change too. The entry itself, its shortcut and its program
-are left alone, and Enable undoes it. Deguffer changes only a record in a form it has seen Windows
+are left alone, and Enable undoes it. The list is in name order, and can be sorted by whether each
+entry starts, where it comes from or its publisher, either way round. Deguffer changes only a record in a form it has seen Windows
 write. A packaged app's startup task can be changed only by the app itself or in Settings, so the page
 offers Settings' own Startup page for those. Nothing is suggested because of the memory a program uses.
 

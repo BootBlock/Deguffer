@@ -1326,8 +1326,10 @@ code.
     place. A process of that name that will not say which program it runs is never read as "not
     this one": where no process is confirmed, whether the program runs is unknown, and where some
     are, the row says there may be more.
-- **The list is in name order, and in no other.** Nothing is ordered, marked or offered by how much
-  memory it uses (§2). The memory figure answers "what is this costing now", which is Memory's
+- **The list is in name order unless the reader chooses another**: whether the entry starts, where it
+  comes from, or its publisher, either way round, with ties in name order and an entry with no known
+  publisher last. The choice is kept between sessions. Nothing is ordered, marked or offered by how
+  much memory it uses (§2). The memory figure answers "what is this costing now", which is Memory's
   question, and it is never a reason the page gives to stop anything starting.
 
 **Whether an entry starts**
@@ -1368,6 +1370,8 @@ code.
   since the list was read, is refused, and the result says so.
 - **One entry at a time, chosen by hand.** No bulk change, no pre-selection and no suggestion. A
   refusal is a sentence on the row, never a disabled button (§7.1).
+- **The change is the page's accent button, directly above the list**, named for the change it will
+  make to the picked entry. With nothing picked, the sentence beside it says to pick one.
 - **No confirmation dialog.** The change removes nothing and the same page undoes it in one step, and
   the result says how. The confirmation §7 asks for exists because a deletion cannot be undone, and
   this is not one.

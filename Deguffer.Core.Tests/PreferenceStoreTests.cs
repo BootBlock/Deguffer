@@ -1,6 +1,7 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning.Media;
+using Deguffer.Core.Startup;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -33,6 +34,8 @@ public class PreferenceStoreTests
             ShowNotInstalled: true,
             ShowAlreadyClear: true,
             StorageOrder: StorageOrder.Tier,
+            StartupOrder: StartupOrder.Publisher,
+            StartupOrderDirection: StartupOrderDirection.Descending,
             BackdropEnabled: false,
             ConfirmBeforeCleaning: false,
             RequireTypedConfirmation: true,
@@ -105,6 +108,8 @@ public class PreferenceStoreTests
 
         // Not the default, which is zero, so a file that lost the order would not pass.
         Assert.Equal(StorageOrder.Tier, loaded.StorageOrder);
+        Assert.Equal(StartupOrder.Publisher, loaded.StartupOrder);
+        Assert.Equal(StartupOrderDirection.Descending, loaded.StartupOrderDirection);
         Assert.False(loaded.BackdropEnabled);
         Assert.False(loaded.ConfirmBeforeCleaning);
         Assert.True(loaded.RequireTypedConfirmation);
@@ -273,6 +278,10 @@ public class PreferenceStoreTests
         Assert.False(AppPreferences.Default.ShowNotInstalled);
         Assert.False(AppPreferences.Default.ShowAlreadyClear);
         Assert.Equal(StorageOrder.Size, AppPreferences.Default.StorageOrder);
+
+        // §7.5 ships the Startup list in name order.
+        Assert.Equal(StartupOrder.Name, AppPreferences.Default.StartupOrder);
+        Assert.Equal(StartupOrderDirection.Ascending, AppPreferences.Default.StartupOrderDirection);
     }
 
     /// <summary>
