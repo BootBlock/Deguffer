@@ -77,7 +77,7 @@ the documented defaults, and NuGet's own command still clears wherever its cache
 location it cannot reach is named in the plan and left out of the figure.
 
 `NuGetScratch` sits in a temporary folder, and this row claims it, so
-[Tool caches in temporary folders](#tool-caches-in-temporary-folders) leaves it to NuGet.
+[Windows temporary folders](#windows-temporary-folders) leaves it to NuGet.
 
 A clean that you cancel while this command runs is left to finish. NuGet takes a package folder that
 holds its `.nupkg.metadata` file as installed, so a clean stopped part-way could leave a half-removed
@@ -90,6 +90,8 @@ can be, `%APPDATA%\NuGet` and `.nuget`, because it is not always where you expec
 in `.nuget`, the credential plugins NuGet runs to sign in to those feeds, and the `.nuget` and
 `%LOCALAPPDATA%\NuGet` folders themselves. Every other child of those two folders that is not one of
 NuGet's caches, a link included, is asserted to have survived the run, along with everything above.
+The exception is a child that holds a cache a NuGet setting moved there, because NuGet's command
+empties that cache.
 
 In Explore, Deguffer refuses everything in `.nuget` except `packages`, everything in
 `%LOCALAPPDATA%\NuGet` except the two caches, and `NuGet.Config`.
@@ -243,7 +245,7 @@ never removed.
 | --- | --- |
 | **Location** | `%LOCALAPPDATA%\uv\cache`, unless moved |
 | **Method** | `uv cache clean` (the tool's own command) |
-| **Typical size** | About 3.5 GB on the machine the spec was written against |
+| **Typical size** | About 3.6 GB on the machine the spec was written against |
 
 ### What it is
 
@@ -412,8 +414,8 @@ home is a link to somewhere else, Deguffer says so and leaves it alone.
 **`gradle.properties`** can hold signing keys and repository credentials, and it sits in the same
 folder as the caches. Deguffer asserts that it survived the run, along with the init scripts
 Gradle runs before every build (**`init.d`**, **`init.gradle`** and **`init.gradle.kts`**),
-**`gradle.encrypted.properties`** and the home itself. Anything else in the home stays in Tier 4, is
-reported as left alone, and is asserted to have survived the run. That includes `jdks`, `native` and
+**`gradle.encrypted.properties`** and the home itself. Every other folder in the home stays in Tier 4,
+is reported as left alone, and is asserted to have survived the run. That includes `jdks`, `native` and
 `daemon` where they exist, which sit beside the two targets.
 
 In Explore, Deguffer refuses everything in the home except `caches` and `wrapper`. Where
@@ -1043,7 +1045,7 @@ this is not about environments being expensive to rebuild.
 | --- | --- |
 | **Location** | `.cache` and `packages` in `%USERPROFILE%\.platformio`, unless moved |
 | **Method** | `pio system prune --cache` for the cache. `pio system prune --core-packages --platform-packages` for the installed packages PlatformIO reports that nothing needs, offered only where it reports some |
-| **Typical size** | The cache is small: 0.9 MB was measured on one workstation. Superseded toolchains can be hundreds of MB each |
+| **Typical size** | The cache is small: 0.9 MB on one workstation, and about 72 MB on another. Superseded toolchains can be hundreds of MB each |
 
 ### What it is
 
@@ -1076,8 +1078,9 @@ The row then offers up to two steps, each one chosen separately:
 - **The unused packages.** Deguffer first runs the same prune for the core and platform packages
   with `--dry-run`, which removes nothing, and offers only what PlatformIO names. The core packages
   it names are superseded versions of PlatformIO's own dependencies. The platform packages are ones
-  that no installed platform requires. The step shows PlatformIO's list, largest first, so you can
-  check a named package against your own boards before you agree. Where PlatformIO names nothing,
+  that no installed platform requires. The step names the first five packages on PlatformIO's list,
+  largest first, and counts the rest, so you can check a named package against your own boards
+  before you agree. Where PlatformIO names nothing,
   no step appears. Where its answer cannot be read, only the cache is offered.
 
 **The package figure is PlatformIO's own, not a measurement.** Measuring `packages` would count every
