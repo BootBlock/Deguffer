@@ -158,6 +158,6 @@ internal static class ScoopLocations
 
     private static string Unfollowed(string subject) =>
         $"{subject}, which Deguffer cannot be sure Scoop reads as the same folder: it is not a full path, or "
-        + "it holds a character PowerShell reads as a wildcard. So Scoop's cache is left alone rather "
+        + "it holds a character PowerShell reads as a wildcard or as the escape of one. So Scoop's cache is left alone rather "
         + "than one folder examined and another emptied.";
 }
