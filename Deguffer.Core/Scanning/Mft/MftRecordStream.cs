@@ -91,7 +91,7 @@ internal static class MftRecordStream
         }
 
         var wholeTable = first.WholeTable
-            & MftExtensionReader.TryResolve(source, first, count - first.Wanted, tuning.ReadsInFlight, pass.SpareBuffer, ct);
+            & MftExtensionReader.TryResolve(source, first, count - first.Wanted, tuning.ListReadsInFlight, pass.SpareBuffer, ct);
 
         foreach (var held in first.Deferred)
         {

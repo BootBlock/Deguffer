@@ -84,6 +84,9 @@ internal sealed record BenchmarkRequest(
                                to 16384.
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
         --parse-threads N      Table routes only. How many threads parse records, 1 to 64.
+        --list-reads-in-flight N
+                               Table routes only. How many attribute lists kept outside the
+                               table are read at once, 1 to 32.
 
         A table route's defaults are what a scan uses on a drive of unknown kind. The Explore
         routes also report what the finished tree keeps on the managed heap.
@@ -127,6 +130,7 @@ internal sealed record BenchmarkRequest(
         var readKiB = UnknownDrive.ReadBytes / 1024;
         var readsInFlight = UnknownDrive.ReadsInFlight;
         var parseThreads = UnknownDrive.ParseThreads;
+        var listReadsInFlight = UnknownDrive.ListReadsInFlight;
         var snapshots = true;
         var readBy = LinkRead.Name;
 
@@ -151,6 +155,8 @@ internal sealed record BenchmarkRequest(
                     value, TableTuning.MinimumReadsInFlight, TableTuning.MaximumReadsInFlight, out readsInFlight),
                 "--parse-threads" when route.ReadsTable() => TryNumber(
                     value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
+                "--list-reads-in-flight" when route.ReadsTable() => TryNumber(
+                    value, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight, out listReadsInFlight),
                 "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
                 "--read-by" when route is Route.Links => TryReadBy(value, out readBy),
                 _ => false,
@@ -165,8 +171,9 @@ internal sealed record BenchmarkRequest(
                     $"For the table routes, --read-size takes a number from " +
                     $"{TableTuning.MinimumReadBytes / 1024} to {TableTuning.MaximumReadBytes / 1024}, " +
                     $"--reads-in-flight a number from {TableTuning.MinimumReadsInFlight} to " +
-                    $"{TableTuning.MaximumReadsInFlight} and --parse-threads from " +
-                    $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads}. " +
+                    $"{TableTuning.MaximumReadsInFlight}, --parse-threads from " +
+                    $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads} and --list-reads-in-flight from " +
+                    $"{TableTuning.MinimumListReadsInFlight} to {TableTuning.MaximumListReadsInFlight}. " +
                     "For the Explore walk, --snapshots takes on or off. For links, --read-by takes name or handle. " +
                     "Nothing else is accepted after the target.";
                 return null;
@@ -194,7 +201,7 @@ internal sealed record BenchmarkRequest(
             path,
             runs,
             new WalkTuning(threads, bufferKiB * 1024),
-            new TableTuning(readKiB * 1024, readsInFlight, parseThreads),
+            new TableTuning(readKiB * 1024, readsInFlight, parseThreads, listReadsInFlight),
             snapshots,
             readBy,
             [.. folders.Select(folder => folder!)]);

@@ -33,7 +33,7 @@ public sealed class MftReadPassTests
     [MemberData(nameof(Tunings))]
     public void HandsOnTheSameRecordsWhateverTheValues(int readBytes, int readsInFlight, int parseThreads)
     {
-        var tuning = new TableTuning(readBytes, readsInFlight, parseThreads);
+        var tuning = new TableTuning(readBytes, readsInFlight, parseThreads, readsInFlight);
         var expected = Handed(LargeTable().WithoutBitmap(), TableTuning.Default);
 
         foreach (var withBitmap in new[] { false, true })
@@ -75,7 +75,7 @@ public sealed class MftReadPassTests
             return inner.ReadBatch(first, destination.Span);
         });
 
-        var handed = Handed(source, new TableTuning(TableTuning.MinimumReadBytes, 8, 4));
+        var handed = Handed(source, new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8));
 
         Assert.Equal(Handed(LargeTable().WithoutBitmap(), TableTuning.Default), handed);
 
@@ -110,7 +110,7 @@ public sealed class MftReadPassTests
         Assert.True(MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(TableTuning.MinimumReadBytes, 4, 2),
+            new TableTuning(TableTuning.MinimumReadBytes, 4, 2, 4),
             (number, _, in _, _) =>
             {
                 handed.Add(number);
@@ -136,7 +136,7 @@ public sealed class MftReadPassTests
         Assert.False(MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(TableTuning.MinimumReadBytes, 8, 4),
+            new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8),
             (number, outcome, in _, _) =>
             {
                 if (outcome == MftParseOutcome.Parsed)
@@ -194,7 +194,7 @@ public sealed class MftReadPassTests
         Assert.False(MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(64 * 1024, ReadsInFlight, 2),
+            new TableTuning(64 * 1024, ReadsInFlight, 2, ReadsInFlight),
             (number, _, in _, _) =>
             {
                 handed.Add(number);
@@ -235,7 +235,7 @@ public sealed class MftReadPassTests
             return Task.FromResult(inner.ReadBatch(first, destination.Span));
         });
 
-        Handed(source, new TableTuning(64 * 1024, 4, 2));
+        Handed(source, new TableTuning(64 * 1024, 4, 2, 4));
 
         // The table is free from 2,000 to 2,998, far more than one read of 64 records.
         Assert.DoesNotContain(reads, read => read.First < 2_900 && read.First + read.Records > 2_100);
@@ -274,7 +274,7 @@ public sealed class MftReadPassTests
             }
         });
 
-        Assert.ThrowsAny<OperationCanceledException>(() => Handed(source, new TableTuning(TableTuning.MinimumReadBytes, 8, 4), cancel.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() => Handed(source, new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8), cancel.Token));
         Assert.Equal(0, Volatile.Read(ref inFlight));
     }
 
@@ -306,7 +306,7 @@ public sealed class MftReadPassTests
             }
         });
 
-        Assert.Throws<IOException>(() => Handed(source, new TableTuning(TableTuning.MinimumReadBytes, 8, 4)));
+        Assert.Throws<IOException>(() => Handed(source, new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8)));
         Assert.Equal(0, Volatile.Read(ref inFlight));
     }
 
@@ -319,7 +319,7 @@ public sealed class MftReadPassTests
         Assert.Throws<InvalidOperationException>(() => MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(TableTuning.MinimumReadBytes, 8, 4),
+            new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8),
             (number, _, in _, _) => number == 1_202 ? throw new InvalidOperationException() : true,
             onProgress: null,
             default));
@@ -335,7 +335,7 @@ public sealed class MftReadPassTests
         Assert.False(MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(TableTuning.MinimumReadBytes, 2, 1),
+            new TableTuning(TableTuning.MinimumReadBytes, 2, 1, 2),
             (number, _, in _, _) =>
             {
                 Interlocked.Increment(ref handed);
@@ -372,7 +372,7 @@ public sealed class MftReadPassTests
         Assert.False(MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(64 * 1024, 4, 1),
+            new TableTuning(64 * 1024, 4, 1, 4),
             (number, _, in _, _) =>
             {
                 if (number != 20)
@@ -409,7 +409,7 @@ public sealed class MftReadPassTests
         MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(TableTuning.MinimumReadBytes, TableTuning.MaximumReadsInFlight, TableTuning.MaximumParseThreads),
+            new TableTuning(TableTuning.MinimumReadBytes, TableTuning.MaximumReadsInFlight, TableTuning.MaximumParseThreads, TableTuning.MaximumListReadsInFlight),
             static (_, _, in _, _) => true,
             done =>
             {
@@ -448,7 +448,7 @@ public sealed class MftReadPassTests
                 return inner.ReadBatch(first, destination.Span);
             });
 
-            var run = Task.Run(() => Handed(source, new TableTuning(64 * 1024, 1, 1)));
+            var run = Task.Run(() => Handed(source, new TableTuning(64 * 1024, 1, 1, 1)));
 
             Assert.Same(run, await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(30))));
             Assert.Contains(3_000L, (await run).Keys);
@@ -493,7 +493,7 @@ public sealed class MftReadPassTests
         var thrown = Assert.Throws<InvalidOperationException>(() => MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(64 * 1024, 4, 2),
+            new TableTuning(64 * 1024, 4, 2, 4),
             static (_, _, in _, _) => true,
             done =>
             {
@@ -534,7 +534,7 @@ public sealed class MftReadPassTests
         MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(TableTuning.MinimumReadBytes, 8, parseThreads),
+            new TableTuning(TableTuning.MinimumReadBytes, 8, parseThreads, 8),
             (_, _, in _, _) =>
             {
                 threads.TryAdd(Environment.CurrentManagedThreadId, true);

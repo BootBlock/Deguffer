@@ -103,6 +103,27 @@ internal static class AutoTuning
     };
 
     /// <summary>
+    /// 32 on every kind: the deepest queue a SATA drive takes, and the most measured.
+    ///
+    /// <para>Not the conservative value. One read at a time was what every scan used before this
+    /// could be set, and it is the slow case these reads were measured to be: each list is a cluster
+    /// or two somewhere on the volume, read after the first pass has ended, so every one waits on the
+    /// last and all of that waiting adds to the scan.</para>
+    ///
+    /// <para>The <c>index</c> route on the NVMe system volume, 2.34 M records in use and 4,051 reads of
+    /// clusters, 1 MiB table reads, eight in flight, two rounds of five runs, the second in reverse
+    /// order. The medians of the later runs, for the lists alone: 0.91 and 2.08 s one at a time, 250
+    /// and 364 ms at eight, and 222 and 130 ms at 32. The other NVMe volume held 25 such lists and
+    /// the SATA SSD 12, which took under a millisecond at every depth, so those runs favour none.</para>
+    ///
+    /// <para>No spinning disk was available. There the drive's command queue reorders what is
+    /// waiting, which it can only do when several reads are, and the reads are already issued in
+    /// cluster order, so a deeper queue is not expected to cost it anything. A buffer is held per read
+    /// in flight, each the size of the largest list read into it, a cluster or two.</para>
+    /// </summary>
+    public static int TableListReadsInFlight(StorageMedia media) => TableTuning.MaximumListReadsInFlight;
+
+    /// <summary>
     /// <c>min(processors, 4)</c>, for the machine rather than a kind of drive.
     ///
     /// <para>Measured on the 1.8 TB NVMe volume, the reads, not the parse, set the pace once the

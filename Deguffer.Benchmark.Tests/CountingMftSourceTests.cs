@@ -1,3 +1,4 @@
+using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 
 namespace Deguffer.Benchmark.Tests;
@@ -71,6 +72,44 @@ public sealed class CountingMftSourceTests
         Assert.Equal(3, source.Reads);
     }
 
+    /// <summary>
+    /// Every read of clusters is counted, a failed one too: the bitmap's, read whole, and each list's,
+    /// read overlapped.
+    /// </summary>
+    [Fact]
+    public async Task CountsEveryClusterReadAskedFor()
+    {
+        using var source = new CountingMftSource(Table(records: 1, unreadableFrom: 1));
+
+        source.TryReadClusters(0, new byte[4096]);
+        await source.TryReadClustersAsync(1, new byte[4096], CancellationToken.None);
+        await source.TryReadClustersAsync(2, new byte[100], CancellationToken.None);
+
+        Assert.Equal(3, source.ClusterReads);
+        Assert.Equal(0, source.Reads);
+    }
+
+    /// <summary>
+    /// The lists' time runs from the first overlapped read of clusters starting to the last ending.
+    /// The bitmap's read, made whole before the first pass, is not one of them, so a table with no
+    /// list outside it reports none.
+    /// </summary>
+    [Fact]
+    public async Task TimesTheOverlappedClusterReadsFromTheFirstStartingToTheLastEnding()
+    {
+        var read = TimeSpan.FromMilliseconds(40);
+        using var source = new CountingMftSource(new SlowClusterReads(Table(records: 1, unreadableFrom: 1), read));
+
+        source.TryReadClusters(0, new byte[4096]);
+        Assert.Equal(TimeSpan.Zero, source.ListReadTime);
+
+        await source.TryReadClustersAsync(1, new byte[4096], CancellationToken.None);
+        await source.TryReadClustersAsync(2, new byte[4096], CancellationToken.None);
+
+        // One read's worth rather than two: a timer can fire a tick early.
+        Assert.InRange(source.ListReadTime, read, TimeSpan.FromSeconds(30));
+    }
+
     private static FixtureMftSource Table(int records, long unreadableFrom) =>
         new(
             [.. Enumerable.Range(0, records).Select(_ => new byte[BytesPerRecord])],
@@ -79,4 +118,33 @@ public sealed class CountingMftSourceTests
             bytesPerCluster: 4096,
             clusters: new Dictionary<long, byte[]>(),
             bitmap: null);
+
+    /// <summary>A table whose overlapped reads of clusters each take <c>read</c>, as a disk's would.</summary>
+    private sealed class SlowClusterReads(IMftSource table, TimeSpan read) : IMftSource
+    {
+        public int BytesPerRecord => table.BytesPerRecord;
+
+        public long RecordCount => table.RecordCount;
+
+        public MftBitmapPlacement? Bitmap => table.Bitmap;
+
+        public int BytesPerCluster => table.BytesPerCluster;
+
+        public int BatchLength(long firstRecord, int capacity) => table.BatchLength(firstRecord, capacity);
+
+        public int ReadBatch(long firstRecord, Span<byte> destination) => table.ReadBatch(firstRecord, destination);
+
+        public ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct) =>
+            table.ReadBatchAsync(firstRecord, destination, ct);
+
+        public bool TryReadClusters(long firstCluster, Span<byte> destination) => table.TryReadClusters(firstCluster, destination);
+
+        public async ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct)
+        {
+            await Task.Delay(read, ct).ConfigureAwait(false);
+            return await table.TryReadClustersAsync(firstCluster, destination, ct).ConfigureAwait(false);
+        }
+
+        public void Dispose() => table.Dispose();
+    }
 }
