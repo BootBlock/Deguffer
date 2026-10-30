@@ -39,11 +39,10 @@ namespace Deguffer.App.ViewModels;
 /// shows round its picture (<see cref="ExploreDisplay"/>) and when it may act
 /// (<see cref="ExploreGate"/>).</para>
 ///
-/// <para><b>Past G1's 500-line ceiling, and the reason is what remains.</b> The scan, the readout
-/// under the pointer, the view and colouring the reader chose and the steps into and out of folders
-/// all read and write the one tree and the one node, and each is a few members long. A type over
-/// any of them would share that state rather than own any of it, and most of the length is the
-/// reasons each member gives.</para>
+/// <para><b>Past the 500 lines at which G1 asks for a reason, and the reason is what remains.</b>
+/// The scan, the readout under the pointer, the view and colouring the reader chose and the steps
+/// into and out of folders all read and write the one tree and the one node, and each is a few
+/// members long. A type over any of them would share that state rather than own any of it.</para>
 /// </summary>
 public sealed partial class ExploreViewModel : ObservableObject
 {
