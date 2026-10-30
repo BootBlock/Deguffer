@@ -44,7 +44,7 @@ namespace Deguffer.App.ViewModels;
 /// into and out of folders all read and write the one tree and the one node, and each is a few
 /// members long. A type over any of them would share that state rather than own any of it.</para>
 /// </summary>
-public sealed partial class ExploreViewModel : ObservableObject
+public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
 {
     private readonly IExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
@@ -686,6 +686,12 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Visiting.Visit(opened);
     }
+
+    /// <summary>Up a folder from the map, as the command goes up from a key or the button.</summary>
+    void IMapNavigator.Ascend() => AscendCommand.TryExecute();
+
+    /// <summary>A shape picked on the map is the whole selection, and a place with no shape is none.</summary>
+    void IMapNavigator.Pick(int? node) => Selection.Select(node is { } picked ? [picked] : []);
 
     [RelayCommand(CanExecute = nameof(CanAscend))]
     private void Ascend()

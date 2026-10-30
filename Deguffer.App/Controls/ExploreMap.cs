@@ -1793,7 +1793,7 @@ public sealed class ExploreMap : UserControl
     ///
     /// <para>§7.1 makes that a safety question rather than a cosmetic one. A right-click picks
     /// what the menu then acts on, so a pick that disagrees with the picture is a Delete aimed at
-    /// something the user never pointed at — the same mistake <c>ExplorePage</c> avoids by picking
+    /// something the user never pointed at — the same mistake <c>ExploreInput</c> avoids by picking
     /// from the row under the pointer rather than from the last selection.</para>
     ///
     /// <para>A zoom or a drag on its way is the same case again. The screen shows the drawing moved

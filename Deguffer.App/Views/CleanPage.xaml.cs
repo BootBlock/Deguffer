@@ -32,6 +32,15 @@ public sealed partial class CleanPage : Page
     /// <summary>How a finished clean's figures come in: a short rise, quieter than a page's.</summary>
     private readonly ElementEntrance _runResultEntrance = new(rise: 8);
 
+    /// <summary>How tall a row is, chosen in the View box.</summary>
+    private readonly DrawnSetting<ViewDensity> _density;
+
+    /// <summary>Whether rows for tools that are not installed are listed.</summary>
+    private readonly DrawnSetting<bool> _notInstalled;
+
+    /// <summary>Where a row stands, chosen in the Order box.</summary>
+    private readonly DrawnSetting<StorageOrder> _order;
+
     public CleanPage()
     {
         // Assigned before InitializeComponent so no x:Bind can ever evaluate against a null
@@ -52,6 +61,20 @@ public sealed partial class CleanPage : Page
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
             new ScanChoiceViewModel(planner.Providers, App.Preferences));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
+
+        _density = new DrawnSetting<ViewDensity>(
+            App.Preferences, current => current.View, (current, density) => current with { View = density }, ShowFindingsAt);
+
+        _notInstalled = new DrawnSetting<bool>(
+            App.Preferences,
+            current => current.ShowNotInstalled,
+            (current, show) => current with { ShowNotInstalled = show },
+            ListNotInstalled);
+
+        // What is written is the order the view-model took, which is the shipped one for a value no
+        // order is named for, rather than the box's raw index. OrderFindings has set it by then.
+        _order = new DrawnSetting<StorageOrder>(
+            App.Preferences, current => current.StorageOrder, (current, _) => current with { StorageOrder = ViewModel.Order }, OrderFindings);
         ViewModel.WhenComplete.ConfirmAsync = CountDownAsync;
         ViewModel.WhenComplete.ExitRequested += (_, _) => App.CloseWhenIdle();
         InitializeComponent();
@@ -64,9 +87,9 @@ public sealed partial class CleanPage : Page
         // undid a choice whose write to disk had failed: PreferenceService leaves Current at the
         // old value on a failed save, so a trip to Settings and back put the list and the selector
         // silently back to Standard, in the same session and with no explanation.
-        ShowFindingsAt(App.Preferences.Current.View);
-        ListNotInstalled(App.Preferences.Current.ShowNotInstalled);
-        OrderFindings(App.Preferences.Current.StorageOrder);
+        ShowFindingsAt(_density.Stored);
+        ListNotInstalled(_notInstalled.Stored);
+        OrderFindings(_order.Stored);
 
         // A row's share bar comes in from nothing as the row itself arrives, rather than standing at
         // its figure under a row still fading in. Never as a row only scrolls into sight.
@@ -192,49 +215,21 @@ public sealed partial class CleanPage : Page
         OrderSelector.SelectedIndex = (int)ViewModel.Order;
     }
 
-    /// <summary>
-    /// Applied first and persisted second, exactly as the view is, and for the same reason: it
-    /// decides where a row stands and nothing about what gets deleted.
-    /// </summary>
-    private void OnOrderSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        var order = (StorageOrder)OrderSelector.SelectedIndex;
+    private void OnOrderSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _order.Choose((StorageOrder)OrderSelector.SelectedIndex);
 
-        OrderFindings(order);
-        App.Preferences.Update(current => current with { StorageOrder = ViewModel.Order });
-    }
+    private void OnShowNotInstalledChanged(object sender, RoutedEventArgs e) =>
+        _notInstalled.Choose(NotInstalledToggle.IsChecked == true);
 
     /// <summary>
-    /// Applied first and persisted second, exactly as the view is, and for the same reason: it
-    /// decides what is on screen and nothing about what gets deleted.
+    /// Shown first and written second (<see cref="DrawnSetting{T}"/>), as the order and the
+    /// not-installed rows are. A failed write therefore costs the user this choice at the next
+    /// launch, and nothing sooner. The result is discarded rather than reported: the info bar on this
+    /// page carries §5.6's verification headline, which is not a thing to displace for a setting the
+    /// user can see took effect.
     /// </summary>
-    private void OnShowNotInstalledChanged(object sender, RoutedEventArgs e)
-    {
-        var show = NotInstalledToggle.IsChecked == true;
-
-        ListNotInstalled(show);
-        App.Preferences.Update(current => current with { ShowNotInstalled = show });
-    }
-
-    /// <summary>
-    /// The view is applied first and persisted second, so it takes effect whether or not the
-    /// preferences file can be written. That inverts <see cref="PreferenceService"/>'s usual order
-    /// deliberately: it holds that order so a rejected write cannot take effect for the session,
-    /// which is right for a setting that governs what gets deleted and wrong for one that governs
-    /// how tall a row is.
-    ///
-    /// A failed write therefore costs the user this choice at the next launch, and nothing sooner,
-    /// because the stored value is read once at construction and never re-read. The result is
-    /// discarded rather than reported: the info bar on this page carries §5.6's verification
-    /// headline, which is not a thing to displace for a setting the user can see took effect.
-    /// </summary>
-    private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        var density = (ViewDensity)ViewSelector.SelectedIndex;
-
-        ShowFindingsAt(density);
-        App.Preferences.Update(current => current with { View = density });
-    }
+    private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _density.Choose((ViewDensity)ViewSelector.SelectedIndex);
 
     /// <summary>
     /// Every preference that changes what a run does, pushed across together.
@@ -489,14 +484,11 @@ public sealed partial class CleanPage : Page
         // The scan the replaced window last ran: the locations it measured alone, or every location.
         if (ElevatedRelaunch.Requested is PreviewRequest { Chosen: { } chosen })
         {
-            if (ViewModel.PreviewChosenCommand.CanExecute(chosen))
-            {
-                ViewModel.PreviewChosenCommand.Execute(chosen);
-            }
+            ViewModel.PreviewChosenCommand.TryExecute(chosen);
         }
-        else if (ViewModel.PreviewCommand.CanExecute(null))
+        else
         {
-            ViewModel.PreviewCommand.Execute(null);
+            ViewModel.PreviewCommand.TryExecute();
         }
     }
 }

@@ -98,16 +98,14 @@ public sealed partial class MemoryPage : Page
         // the reader chose.
         NavigationCacheMode = NavigationCacheMode.Required;
 
-        Map.Hovered += (_, hit) => ViewModel.Hover(hit);
-        Map.Activated += (_, node) => ViewModel.Descend(node);
-        Map.Ascending += (_, _) => ViewModel.Ascend();
-        Map.Facts = ViewModel.ShapeFacts;
-        Map.Picked += (_, node) => ViewModel.Selection.Select(node);
-
-        // Read once, as Explore reads its own, and kept as the reader leaves it on the overview itself.
-        Map.OverviewHidden = App.Preferences.Current.MemoryOverviewHidden;
-        Map.OverviewHiddenChanged += (_, _) =>
-            App.Preferences.Update(current => current with { MemoryOverviewHidden = Map.OverviewHidden });
+        MapWiring.Attach(
+            Map,
+            ViewModel,
+            new DrawnSetting<bool>(
+                App.Preferences,
+                current => current.MemoryOverviewHidden,
+                (current, hidden) => current with { MemoryOverviewHidden = hidden },
+                hidden => Map.OverviewHidden = hidden));
 
         // Both screens share the one guard, because only one of them is ever on screen.
         _guard.Hear(RowsList);
