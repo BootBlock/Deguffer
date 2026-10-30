@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
 
@@ -85,13 +86,27 @@ public sealed class ExploreStatusTextTests
     [Fact]
     public void ARefusalIsStatedAndTakenBackButNothingElseIs()
     {
-        const string Other = "Something another part of the page said.";
+        var prompt = StatusLine.Said(ExploreStatusText.Prompt);
+        var other = StatusLine.Said("Something another part of the page said.");
+        var removal = StatusLine.After("Moved 'old' to the Recycle Bin.", new VerificationResult { Checks = [] });
 
-        Assert.Equal(Refused, ExploreStatusText.Retargeted(ExploreStatusText.Prompt, stated: null, Refused));
-        Assert.Equal(Refused, ExploreStatusText.Retargeted(Other, stated: null, Refused));
-        Assert.Equal(ExploreStatusText.Prompt, ExploreStatusText.Retargeted(Refused, Refused, refusal: null));
-        Assert.Equal(Other, ExploreStatusText.Retargeted(Other, Refused, refusal: null));
-        Assert.Equal(Other, ExploreStatusText.Retargeted(Other, stated: null, refusal: null));
+        Assert.Equal(StatusLine.Refused(Refused), ExploreStatusText.Retargeted(prompt, Refused));
+        Assert.Equal(StatusLine.Refused(Refused), ExploreStatusText.Retargeted(other, Refused));
+        Assert.Equal(prompt, ExploreStatusText.Retargeted(StatusLine.Refused(Refused), refusal: null));
+        Assert.Same(other, ExploreStatusText.Retargeted(other, refusal: null));
+        Assert.Same(removal, ExploreStatusText.Retargeted(removal, refusal: null));
+    }
+
+    /// <summary>
+    /// Which sentence is the page's refusal is said by where it came from, not by its words: a line
+    /// the page says of its own work stays, even where it reads exactly as a refusal did.
+    /// </summary>
+    [Fact]
+    public void ARefusalIsKnownByWhereItCameFromNotByItsWords()
+    {
+        var told = StatusLine.Said(Refused);
+
+        Assert.Same(told, ExploreStatusText.Retargeted(told, refusal: null));
     }
 
     private static ExploreTree Drive(params ExploreChild[] children)

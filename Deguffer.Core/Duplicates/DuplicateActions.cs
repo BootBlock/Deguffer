@@ -24,9 +24,9 @@ public sealed record DuplicateRemovalAnswer(RemovalConfirmation Confirmation, Du
     /// <see cref="Summary"/>, with every §5.6 check the removal did not pass for the page to list
     /// beside it, and none where nothing was removed to check.
     /// </summary>
-    public OutcomeStatement Statement => Report is { } report
-        ? OutcomeStatement.After(Summary, report.Verification)
-        : OutcomeStatement.Said(Summary);
+    public StatusLine Statement => Report is { } report
+        ? StatusLine.After(Summary, report.Verification)
+        : StatusLine.Said(Summary);
 
     /// <summary>What became of the copies the Recycle Bin could not take, which the removal was not handed.</summary>
     private string Stayed => Confirmation.Staying.Count switch

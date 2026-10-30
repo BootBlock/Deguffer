@@ -92,7 +92,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
 
         Assert.NotEmpty(marked);
         Assert.Equal(marked, MarkedOn(page));
-        Assert.Equal(outcome.Summary, page.Marking.Outcome);
+        Assert.Equal(outcome.Summary, page.Marking.Outcome.Sentence);
 
         // Each group the rule left as it was says why, in Core's words; the others say nothing.
         var untouched = outcome.Untouched.ToDictionary(pair => pair.Group.Group, pair => pair.Reason);
@@ -192,7 +192,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.Equal(core.Summary, asked.Summary);
         Assert.Equal(core.Warnings, asked.Warnings);
         Assert.Equal(core.ConfirmLabel, asked.ConfirmLabel);
-        Assert.Equal("Nothing was removed.", page.Marking.Outcome);
+        Assert.Equal("Nothing was removed.", page.Marking.Outcome.Sentence);
     });
 
     public static TheoryData<string> LocationChanges => ["role", "added", "taken away"];
@@ -361,11 +361,11 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.True(File.Exists(kept.Path));
         Assert.Single(Directory.GetFiles(_scene.Bin));
         Assert.Equal("Moved to the Recycle Bin.", Row(page, copy).Note);
-        Assert.StartsWith("Moved 1 copy", page.Marking.Outcome, StringComparison.Ordinal);
+        Assert.StartsWith("Moved 1 copy", page.Marking.Outcome.Sentence, StringComparison.Ordinal);
         Assert.True(_running.MayEndProcess);
         Assert.All(Open(page), Assert.False);
         Assert.NotEmpty(page.Marking.WhyClosed);
-        Assert.Empty(page.Marking.OutcomeChecks);
+        Assert.Empty(page.Marking.Outcome.Checks);
     });
 
     /// <summary>
@@ -408,22 +408,22 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         // §5.6 did not pass, which the taskbar shows as a failure once the removal has ended.
         Assert.True(_work.IsIdle);
         Assert.Equal(1, failures);
-        Assert.Contains("did not pass", page.Marking.Outcome, StringComparison.Ordinal);
-        Assert.True(page.Marking.HasOutcomeChecks);
-        Assert.Equal(2, page.Marking.OutcomeChecks.Count);
+        Assert.Contains("did not pass", page.Marking.Outcome.Sentence, StringComparison.Ordinal);
+        Assert.True(page.Marking.Outcome.HasChecks);
+        Assert.Equal(2, page.Marking.Outcome.Checks.Count);
 
-        var folder = Assert.Single(page.Marking.OutcomeChecks, check => check.Subject == _scene.Folder("Downloads"));
+        var folder = Assert.Single(page.Marking.Outcome.Checks, check => check.Subject == _scene.Folder("Downloads"));
         Assert.Equal(VerificationOutcome.Failed, folder.Outcome);
         Assert.Contains("'note.txt'", folder.Detail, StringComparison.Ordinal);
 
-        var lost = Assert.Single(page.Marking.OutcomeChecks, check => check.Subject == kept.Path);
+        var lost = Assert.Single(page.Marking.Outcome.Checks, check => check.Subject == kept.Path);
         Assert.Equal(VerificationOutcome.Failed, lost.Outcome);
         Assert.StartsWith("MISSING", lost.Detail, StringComparison.Ordinal);
 
         await page.SearchCommand.ExecuteAsync(null);
 
-        Assert.Empty(page.Marking.OutcomeChecks);
-        Assert.False(page.Marking.HasOutcomeChecks);
+        Assert.Empty(page.Marking.Outcome.Checks);
+        Assert.False(page.Marking.Outcome.HasChecks);
     });
 
     /// <summary>
@@ -451,7 +451,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.Empty(Prompt.Asked);
         Assert.True(File.Exists(copy.Path));
         Assert.Equal("This drive has no Recycle Bin.", Row(page, copy).Note);
-        Assert.StartsWith("No marked copy can go to the Recycle Bin", page.Marking.Outcome, StringComparison.Ordinal);
+        Assert.StartsWith("No marked copy can go to the Recycle Bin", page.Marking.Outcome.Sentence, StringComparison.Ordinal);
     });
 
     /// <summary>A new search drops the count of what the last one marked, since those groups are gone.</summary>
@@ -517,7 +517,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.Contains("temporary folder", Row(page, group.Files[0]).WhyNotKept, StringComparison.Ordinal);
         Assert.Equal(page.Marks!.Keeping.Standing(group.Files[0]).WhyNotKept, Row(page, group.Files[0]).WhyNotKept);
         Assert.Equal(page.Groups[0].Marks.WhyNothingCanBeKept(page.Marks.Keeping) ?? string.Empty, page.Groups[0].Note);
-        Assert.StartsWith("No marked copy can go", page.Marking.Outcome, StringComparison.Ordinal);
+        Assert.StartsWith("No marked copy can go", page.Marking.Outcome.Sentence, StringComparison.Ordinal);
     });
 
     /// <summary>
@@ -545,7 +545,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
 
         Assert.True(File.Exists(copy.Path));
         Assert.False(Directory.Exists(_scene.Bin));
-        Assert.Equal(_searches[^1].WhyResultsDoNotApply(page.Locations.Chosen), page.Marking.Outcome);
+        Assert.Equal(_searches[^1].WhyResultsDoNotApply(page.Locations.Chosen), page.Marking.Outcome.Sentence);
         Assert.False(page.Marks!.WasRemovedFrom);
     });
 }
