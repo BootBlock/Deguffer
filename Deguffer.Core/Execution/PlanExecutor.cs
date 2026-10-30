@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Deguffer.Core.Cloud;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.SystemProtection;
@@ -234,9 +235,15 @@ public sealed class PlanExecutor(
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, refused);
         }
 
-        // §5.3 asked again: the plan's answer about what is in use is as old as the preview.
+        // §5.3 asked again: the plan's answer about what is in use is as old as the preview. A check that
+        // can ask its programs to let go does so first, and is then asked like any other.
         if (step is DeleteStep deletion)
         {
+            if (deletion.UseCheck is ReleasingProcessCheck releasing)
+            {
+                await releasing.ReleaseAsync(ct).ConfigureAwait(false);
+            }
+
             var recheck = UseRecheck.Of(deletion, ct);
             heldAtClean.AddRange(recheck.Survivors);
 
