@@ -44,6 +44,7 @@ public sealed class ConanCacheProvider : CleanupProviderBase
 
     private readonly ISystemDirectories _system;
     private readonly ConanRcWalk _conanRcWalk;
+    private readonly PassMemo<ConanHomeAnswer> _ownHome = new();
     private readonly PassMemo<Task<ConanLocation>> _location = new();
 
     public ConanCacheProvider(
@@ -175,6 +176,7 @@ public sealed class ConanCacheProvider : CleanupProviderBase
     /// <summary>A <c>.conanrc</c>, <c>CONAN_HOME</c> and <c>global.conf</c> can all move the home or the store between passes.</summary>
     public override void InvalidateCaches()
     {
+        _ownHome.Forget();
         _location.Forget();
         base.InvalidateCaches();
     }
@@ -331,8 +333,13 @@ public sealed class ConanCacheProvider : CleanupProviderBase
             + "run the clean while it is there. Move it out of the store and scan again.";
     }
 
+    /// <summary>
+    /// The home worked out without Conan, once per pass: a walk to the drive's root for a
+    /// <c>.conanrc</c> and a read of the one it finds, which the plan, the cleaned places and the
+    /// question to Conan all need to agree on.
+    /// </summary>
     private ConanHomeAnswer OwnHome() =>
-        ConanHome.Resolve(Environment, ProcessRunner.WorkingDirectoryFor(Environment), _conanRcWalk);
+        _ownHome.Get(() => ConanHome.Resolve(Environment, ProcessRunner.WorkingDirectoryFor(Environment), _conanRcWalk));
 
     /// <summary>Why a home or store a setting names must not be examined as Conan's, or null where it may.</summary>
     private string? WhyNotOwned(string folder) => ConfiguredFolder.WhyNotOwned(

@@ -419,6 +419,29 @@ public sealed class ConanCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The home is worked out without Conan once per pass, so the plan, the cleaned places and the
+    /// question to Conan all go by one reading of the <c>.conanrc</c> and <c>CONAN_HOME</c>, and the
+    /// next pass reads them again.
+    /// </summary>
+    [Fact]
+    public async Task WorksOutTheHomeOncePerPass()
+    {
+        var first = Path.Combine(_temp.Path, "first-home");
+        var second = Path.Combine(_temp.Path, "second-home");
+        var inSecond = Path.Combine(second, "p", Recipe, "s", "zlib.c");
+        var provider = CreateProvider(new FakeProcessRunner());
+
+        _environment.WithEnvironmentVariable("CONAN_HOME", first);
+        Assert.Contains(await provider.CleanedPlacesAsync(), place => place.Holds(Path.Combine(first, "p", Recipe, "s", "zlib.c")));
+
+        _environment.WithEnvironmentVariable("CONAN_HOME", second);
+        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Holds(inSecond));
+
+        provider.InvalidateCaches();
+        Assert.Contains(await provider.CleanedPlacesAsync(), place => place.Holds(inSecond));
+    }
+
+    /// <summary>
     /// A build started while the preview is on screen is an unfinished build that <c>-t</c> takes, so
     /// the clean asks again immediately before the command and does not run it.
     /// </summary>
