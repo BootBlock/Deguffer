@@ -2,7 +2,6 @@ using System.Windows.Input;
 using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
-using Deguffer.Core.Exploring;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
