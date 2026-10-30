@@ -22,9 +22,6 @@ public sealed record ExploreGrowthRow(string Path, string Change, string Size, i
 
     /// <summary>The folder holding it, under the name, or empty for a volume's root.</summary>
     public string Parent => System.IO.Path.GetDirectoryName(Path) ?? string.Empty;
-
-    /// <summary>Whether the row names a folder on screen that the page can open.</summary>
-    public bool CanOpen => Node >= 0;
 }
 
 /// <summary>One kept scan, as a bar of the used-space strip.</summary>
@@ -102,6 +99,14 @@ public sealed partial class ExploreGrowth : ObservableObject
         Pointed = Comparison is { } growth && growth.Describes(tree) && node is { } over
             ? growth.ListedFor(over)?.Path
             : null;
+
+    /// <summary>
+    /// Whether <paramref name="row"/> names a folder of <paramref name="tree"/> the page can open: a
+    /// row still in the list, of a comparison that can open it (<see cref="ScanGrowth.Opens"/>). A row
+    /// carried over from an earlier comparison names a node of that comparison's tree.
+    /// </summary>
+    public bool Opens(ExploreTree? tree, ExploreGrowthRow row) =>
+        Comparison is { } growth && growth.Opens(tree, row.Node) && Rows.Contains(row);
 
     /// <summary>Show what recording a finished scan produced.</summary>
     public void Show(ScanRecord record)

@@ -116,10 +116,7 @@ internal sealed class ExploreCards
             ExploreTypeRow kind when _page.ShowsTypes && _page.Tree is { } tree && _page.Types.Rows.Contains(kind) =>
                 MapLight.Kind(tree, _page.Types.Dominant, kind.Category),
 
-            // Only a row still in the list: one carried over from an earlier comparison names a node of
-            // that comparison's tree.
-            ExploreGrowthRow { CanOpen: true } folder when _page.ShowsGrowth && _page.Tree is { } tree
-                && _page.Growth.Comparison is { } growth && growth.Describes(tree) && _page.Growth.Rows.Contains(folder) =>
+            ExploreGrowthRow folder when _page.ShowsGrowth && _page.Tree is { } tree && _page.Growth.Opens(tree, folder) =>
                 MapLight.Folder(tree, folder.Node),
 
             _ => null,

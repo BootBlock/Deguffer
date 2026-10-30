@@ -144,6 +144,31 @@ public class ScanGrowthTests
     }
 
     /// <summary>
+    /// A listed folder opens in the tree the comparison is about while that tree holds it. A folder
+    /// removed before the later scan is listed at -1, one removed from the page since names nothing in
+    /// what is left, and a tree the comparison is not about opens nothing.
+    /// </summary>
+    [Fact]
+    public void AListedFolderOpensOnlyWhereTheTreeOnScreenStillHoldsIt()
+    {
+        var before = Tree(@"C:\", ("Logs", 10 * Megabyte), ("Cache", 5 * Megabyte), ("Old", 30 * Megabyte));
+        var after = Tree(@"C:\", ("Logs", 2000 * Megabyte), ("Cache", 50 * Megabyte));
+        var growth = Compare(before, after);
+        var logs = Child(after, "Logs");
+        var cache = Child(after, "Cache");
+        var left = after.Without([cache]);
+        var old = Assert.Single(growth.Listing(), change => change.Kind == FolderChangeKind.Removed);
+
+        Assert.True(growth.Opens(after, logs));
+        Assert.True(growth.Opens(left, logs));
+        Assert.True(growth.Opens(after, cache));
+        Assert.False(growth.Opens(left, cache));
+        Assert.False(growth.Opens(after, old.Node));
+        Assert.False(growth.Opens(Tree(@"C:\", ("Logs", 2000 * Megabyte), ("Cache", 50 * Megabyte)), logs));
+        Assert.False(growth.Opens(null, logs));
+    }
+
+    /// <summary>
     /// A comparison describes the scan it compared and what is left of that scan after a removal, whose
     /// node numbers are the same, and paints a map of it. It describes no other tree.
     /// </summary>

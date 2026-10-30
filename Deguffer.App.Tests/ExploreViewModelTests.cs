@@ -20,7 +20,7 @@ namespace Deguffer.App.Tests;
 /// </summary>
 public sealed class ExploreViewModelTests : IDisposable
 {
-    private const string ScanPrompt = "Choose a drive or a folder and scan it to see what is using the space.";
+    private const string ScanPrompt = ExploreStatusText.Prompt;
 
     private readonly ExploreFixture _explore = new();
 
@@ -371,26 +371,32 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.False(page.CanElevate);
     });
 
-    /// <summary>§7.1: a total that is a lower bound says so, on the status line as well as on the row.</summary>
+    /// <summary>
+    /// A finished scan is said of what it covered as it started, a drive here, though a folder was
+    /// chosen while it ran, and of the volume read as it finished. The route's note and the elevation
+    /// offer are the scan's too.
+    /// </summary>
     [Fact]
-    public void AFinishedScanSaysWhetherItsTotalIsALowerBound() => UiThread.Run(async () =>
+    public void AFinishedScanIsSaidOfWhatItCoveredAndTheVolumeItFound() => UiThread.Run(async () =>
     {
-        _explore.Volumes.With(@"C:\");
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
         var page = _explore.Page();
         var builder = new ExploreTreeBuilder(@"C:\");
-        var refused = builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("refused")]);
-
-        await _explore.ScanAsync(page, ExploreScan.Fast(builder.Build(ExploreChildOrder.BySize)));
-
-        Assert.Equal(@"C:\", _explore.Scanner.Current.Root);
-        Assert.Equal(
-            $"{FreeSpace.Format(0)} on disk accounted for, in files whose lengths add up to {FreeSpace.Format(0)}.",
-            page.Status);
+        var refused = builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("refused"), ExploreFixture.File("file", 7_000)]);
 
         builder.MarkSizeUnknown(refused);
-        await _explore.ScanAsync(page, ExploreScan.Walked(builder.Build(ExploreChildOrder.BySize), FallbackReason.NotElevated));
 
-        Assert.Contains("Some of this drive could not be read, so the totals are lower bounds.", page.Status);
+        var scan = ExploreScan.Walked(builder.Build(ExploreChildOrder.BySize), FallbackReason.NotElevated);
+        var running = page.ScanCommand.ExecuteAsync(null);
+
+        page.ScopeTo(@"C:\Users\testuser");
+        _explore.Scanner.Current.Finish(scan);
+        await running;
+
+        Assert.Equal(@"C:\", _explore.Scanner.Current.Root);
+        Assert.Equal(ExploreStatusText.Finished(scan, page.Volume, scoped: false), page.Status);
+        Assert.Contains("Some of this drive", page.Status);
+        Assert.Contains(ExploreUnaccountedNote.Overcount(page.Volume, 7_000, ScanStrategy.ParallelEnumeration)!, page.Status);
         Assert.True(page.HasRouteNote);
         Assert.True(page.CanElevate);
     });
@@ -808,17 +814,15 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
-    /// The notes and the button that brings them back take turns, and both are off while there is
-    /// nothing to read, which is what makes the button itself the signal.
+    /// A walked scan's route note reaches the card, and the reader's choice moves it between the panel
+    /// and the button, each change said to the card. Which of the two shows is <see cref="ExploreNotes"/>'s.
     /// </summary>
     [Fact]
-    public void TheNotesAndTheirButtonTakeTurns() => UiThread.Run(async () =>
+    public void TheRouteNoteAndTheReadersChoiceReachTheCard() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
         var page = _explore.Page();
-
-        Assert.False(page.ShowsNotes);
-        Assert.False(page.ShowsNotesButton);
+        var raised = new List<string?>();
 
         page.NotesDismissed = true;
 
@@ -830,114 +834,115 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.False(page.ShowsNotes);
         Assert.DoesNotContain("warning", page.NotesButtonLabel);
 
+        page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         page.NotesDismissed = false;
 
         Assert.True(page.ShowsNotes);
         Assert.False(page.ShowsNotesButton);
+        Assert.Contains(nameof(ExploreViewModel.ShowsNotes), raised);
+        Assert.Contains(nameof(ExploreViewModel.ShowsNotesButton), raised);
     });
 
     /// <summary>
-    /// The legend is on screen only where the colours are a scale, ages or growth, the picture is a
-    /// map rather than the list, and something has been scanned into it.
+    /// Each panel round the picture follows <see cref="ExploreDisplay"/> as each of its facts changes:
+    /// a running scan's tree, the finished one, the view, the colouring, the look and the contrast.
+    /// Each change is said to the page for every panel it can move, and the Files search and the
+    /// kinds of file are started and stopped with them.
     /// </summary>
     [Fact]
-    public void TheLegendShowsOnlyBesideAMapColouredByAScale() => UiThread.Run(async () =>
+    public void ThePanelsFollowTheDisplayAsEachOfItsFactsChanges() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
         var page = _explore.Page();
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var raised = new List<string?>();
 
-        page.SelectedColouring = ExploreColouring.Age;
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("Users")]);
+        page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
-        Assert.False(page.ShowsLegend);
+        void Changes(Action change, params string[] said)
+        {
+            raised.Clear();
+            change();
+            Assert.All(said, name => Assert.Contains(name, raised));
+            Follows(page);
+        }
 
-        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(ExploreFixture.Folder("Users"))));
+        Follows(page);
 
+        var running = page.ScanCommand.ExecuteAsync(null);
+
+        raised.Clear();
+        _explore.Scanner.Current.Report(new ExploreProgress(1, null, 0, builder.Build(ExploreChildOrder.ByName)));
+        await Task.Yield();
+
+        Assert.Contains(nameof(ExploreViewModel.ViewNote), raised);
+        Assert.Contains(nameof(ExploreViewModel.ShowsMapControls), raised);
+        Follows(page);
+        Assert.NotNull(page.ViewNote);
+
+        Changes(
+            () => page.SelectedView = ExploreView.Sunburst,
+            nameof(ExploreViewModel.ViewNote), nameof(ExploreViewModel.ShowsMapControls), nameof(ExploreViewModel.SelectedScheme));
+
+        _explore.Scanner.Current.Finish(ExploreScan.Fast(builder.Build(ExploreChildOrder.BySize)));
+        await running;
+        Follows(page);
+
+        Changes(() => page.SelectedView = ExploreView.Treemap, nameof(ExploreViewModel.ShowsMapControls));
+        Assert.True(page.ShowsMapControls);
+
+        Changes(() => page.SelectedColouring = ExploreColouring.Age, nameof(ExploreViewModel.ShowsLegend));
         Assert.True(page.ShowsLegend);
 
-        page.SelectedView = ExploreView.List;
-
-        Assert.False(page.ShowsLegend);
-
-        page.SelectedView = ExploreView.Icicle;
-        page.SelectedColouring = ExploreColouring.Growth;
-
-        Assert.True(page.ShowsLegend);
-
-        page.SelectedColouring = ExploreColouring.Branch;
-
-        Assert.False(page.ShowsLegend);
-        Assert.Empty(page.Legend);
+        Changes(() => page.MapInContrast = true, nameof(ExploreViewModel.ShowsLegend));
+        Changes(() => page.MapInContrast = false, nameof(ExploreViewModel.ShowsLegend));
+        Changes(
+            () => page.SelectedView = ExploreView.Files,
+            nameof(ExploreViewModel.ShowsFileFilters), nameof(ExploreViewModel.ShowsLegend));
+        Changes(() => page.SelectedColouring = ExploreColouring.Growth, nameof(ExploreViewModel.ShowsGrowth));
+        Changes(
+            () => page.SelectedColouring = ExploreColouring.Type,
+            nameof(ExploreViewModel.ShowsGrowth), nameof(ExploreViewModel.ShowsTypes));
+        Changes(
+            () => page.Look = MapLook.Default with { Treemap = ExploreScheme.Deep },
+            nameof(ExploreViewModel.SelectedScheme), nameof(ExploreViewModel.ShowsLegend));
+        Changes(() => page.SelectedView = ExploreView.List, nameof(ExploreViewModel.ShowsFileFilters));
     });
 
     /// <summary>
-    /// A new scheme rewrites the legend's bands where they are rather than clearing it, and the
-    /// bands are the ones the map is drawn in: a legend in one set of colours beside a map in another
-    /// names every band wrongly.
+    /// A new look, or a change to a picture drawn in other colours, rewrites the legend's bands where
+    /// they are rather than clearing it, so the legend is always in the colours the map is drawn in.
     /// </summary>
     [Fact]
     public void ANewSchemeRewritesTheLegendInPlace()
     {
         _explore.Volumes.With(@"C:\");
         var page = _explore.Page();
+        page.SelectedView = ExploreView.Treemap;
         page.SelectedColouring = ExploreColouring.Age;
         var changes = Watch(page.Legend);
 
-        page.SelectedScheme = ExploreScheme.Vivid;
+        page.Look = MapLook.Default with { Treemap = ExploreScheme.Vivid, Icicle = ExploreScheme.Deep };
 
-        var bands = AgePalette.Bands(ExploreScheme.Vivid);
+        Assert.Equal(ExploreScheme.Vivid, page.SelectedScheme);
+        AssertBands(AgePalette.Bands(ExploreScheme.Vivid), page.Legend);
 
+        page.SelectedView = ExploreView.Icicle;
+
+        Assert.Equal(ExploreScheme.Deep, page.SelectedScheme);
+        AssertBands(AgePalette.Bands(ExploreScheme.Deep), page.Legend);
         Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, changes);
-        Assert.Equal(bands.Select(band => band.Label), page.Legend.Select(band => band.Label));
-        Assert.Equal(
-            bands.Select(band => (band.Colour.Red, band.Colour.Green, band.Colour.Blue)),
-            page.Legend.Select(band => (band.Swatch.R, band.Swatch.G, band.Swatch.B)));
-        Assert.All(page.Legend, band => Assert.Equal(255, band.Swatch.A));
+
+        static void AssertBands(IReadOnlyList<AgeBand> bands, IEnumerable<ExploreLegendBand> legend)
+        {
+            Assert.Equal(bands.Select(band => band.Label), legend.Select(band => band.Label));
+            Assert.Equal(
+                bands.Select(band => (band.Colour.Red, band.Colour.Green, band.Colour.Blue)),
+                legend.Select(band => (band.Swatch.R, band.Swatch.G, band.Swatch.B)));
+            Assert.All(legend, band => Assert.Equal(255, band.Swatch.A));
+        }
     }
-
-    /// <summary>
-    /// A scan still running is drawn as the icicle whichever view was picked, and the page says so
-    /// rather than substituting in silence. The treemap's mouse controls are named only while a
-    /// treemap is what is drawn.
-    /// </summary>
-    [Fact]
-    public void ASubstitutedViewIsNamedAndOnlyATreemapOffersItsControls() => UiThread.Run(async () =>
-    {
-        _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
-        var builder = new ExploreTreeBuilder(@"C:\");
-        builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("Users")]);
-
-        var running = page.ScanCommand.ExecuteAsync(null);
-
-        _explore.Scanner.Current.Report(new ExploreProgress(1, null, 0, builder.Build(ExploreChildOrder.ByName)));
-        await Task.Yield();
-
-        page.SelectedView = ExploreView.Treemap;
-
-        Assert.Contains("A treemap reorders every folder", page.ViewNote);
-        Assert.False(page.ShowsMapControls);
-
-        page.SelectedView = ExploreView.Sunburst;
-
-        Assert.Contains("A sunburst turns every wedge", page.ViewNote);
-
-        page.SelectedView = ExploreView.List;
-
-        Assert.StartsWith("In name order while the scan runs", page.ViewNote);
-
-        _explore.Scanner.Current.Finish(ExploreScan.Fast(builder.Build(ExploreChildOrder.BySize)));
-        await running;
-
-        Assert.Null(page.ViewNote);
-
-        page.SelectedView = ExploreView.Treemap;
-
-        Assert.True(page.ShowsMapControls);
-
-        page.SelectedView = ExploreView.Sunburst;
-
-        Assert.False(page.ShowsMapControls);
-    });
 
     [Theory]
     [InlineData(false)]
@@ -1053,33 +1058,6 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
-    /// The status line says which figure the map draws, with the length beside it. A walk says what
-    /// its figures leave out, and a scan that counted more than the drive has in use says so rather
-    /// than showing a drive that only appears to add up.
-    /// </summary>
-    [Fact]
-    public void TheStatusLineSaysWhatTheFiguresAreAndWhereTheyCountTooMuch() => UiThread.Run(async () =>
-    {
-        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
-        var page = _explore.Page();
-
-        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(
-            new ExploreChild("film.mkv", IsDirectory: false, IsLink: false, Size: 0, Length: 9_000, Storage: FileStorage.CloudOnly),
-            ExploreFixture.File("file", 3_000))));
-
-        Assert.Equal(
-            $"{FreeSpace.Format(3_000)} on disk accounted for, in files whose lengths add up to {FreeSpace.Format(12_000)}.",
-            page.Status);
-
-        await _explore.ScanAsync(page, ExploreScan.Walked(Drive(ExploreFixture.File("linked", 7_000)), FallbackReason.NotElevated));
-
-        Assert.Contains(ExploreRouteText.Sizing(ScanStrategy.ParallelEnumeration)!, page.Status);
-        Assert.EndsWith(
-            ExploreUnaccountedNote.Overcount(page.Volume, 7_000, ScanStrategy.ParallelEnumeration)!,
-            page.Status);
-    });
-
-    /// <summary>
     /// The replacement is pointed where this page is pointed now, which is what the Scan button
     /// beside it would use. A relaunch the user declines says so and keeps this page running; one
     /// that starts tells the window to stand down.
@@ -1169,32 +1147,22 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.True(_explore.Volumes.MountPointQueries.Count > asked);
     });
 
-    /// <summary>
-    /// The legend names the colours of a scale, so it goes while the map is drawn in a high contrast
-    /// theme's two colours and comes back with the scale.
-    /// </summary>
-    [Fact]
-    public void TheLegendGoesWhileTheMapIsInHighContrast() => UiThread.Run(async () =>
+    /// <summary>Each panel round the picture is what <see cref="ExploreDisplay"/> says of the page's facts.</summary>
+    private static void Follows(ExploreViewModel page)
     {
-        _explore.Volumes.With(@"C:\");
+        var display = new ExploreDisplay(page.Tree, page.SelectedView, page.SelectedColouring, page.Look, page.MapInContrast);
 
-        var page = _explore.Page();
-
-        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(ExploreFixture.File("a.bin", 10))));
-
-        page.SelectedView = ExploreView.Treemap;
-        page.SelectedColouring = ExploreColouring.Age;
-
-        Assert.True(page.ShowsLegend);
-
-        page.MapInContrast = true;
-
-        Assert.False(page.ShowsLegend);
-
-        page.MapInContrast = false;
-
-        Assert.True(page.ShowsLegend);
-    });
+        Assert.Equal(display.ShowsLegend, page.ShowsLegend);
+        Assert.Equal(display.ShowsFileFilters, page.ShowsFileFilters);
+        Assert.Equal(display.ShowsGrowth, page.ShowsGrowth);
+        Assert.Equal(display.ShowsTypes, page.ShowsTypes);
+        Assert.Equal(display.Zooms, page.ShowsMapControls);
+        Assert.Equal(display.Note, page.ViewNote);
+        Assert.Equal(display.Scheme, page.SelectedScheme);
+        Assert.Equal(display.SearchesFiles, page.Files.IsActive);
+        Assert.Equal(display.MeasuresTypes, page.Types.IsActive);
+        Assert.Equal(display.Legend.Select(band => band.Label), page.Legend.Select(band => band.Label));
+    }
 
     private static ExploreTree Drive(params ExploreChild[] children)
     {
