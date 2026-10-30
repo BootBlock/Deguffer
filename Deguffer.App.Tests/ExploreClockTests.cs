@@ -5,8 +5,9 @@ using Deguffer.Core.Exploring.Rendering;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// Every age the Explore page states is measured against the clock it was given, so the folder list,
-/// the line under the map and the Files layout agree with one another, and a test can pin each one.
+/// Every age the Explore page writes out is measured against the clock it was given, so the folder
+/// list, the line under the map and the Files layout agree with one another, and a test can pin each
+/// one.
 /// </summary>
 public sealed class ExploreClockTests : IDisposable
 {
@@ -29,7 +30,7 @@ public sealed class ExploreClockTests : IDisposable
         var builder = new ExploreTreeBuilder(root);
 
         builder.AddChildren(ExploreTreeBuilder.RootNode, [
-            new ExploreChild("notes.txt", IsDirectory: false, IsLink: false, 10, ExploreTimestamp.FromUtc(written), ExploreTimestamp.FromUtc(written)),
+            ExploreFixture.Written("notes.txt", 10, written),
         ]);
 
         var tree = builder.Build(ExploreChildOrder.BySize);
