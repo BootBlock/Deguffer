@@ -30,7 +30,10 @@ namespace Deguffer.Core.Providers;
 /// (<c>create_export_recipe_layout</c> and <c>create_build_pkg_layout</c>), and be a plain folder,
 /// because Conan makes no links. Anything else, a linked <c>t</c> or <c>b</c>, or one that will not
 /// be listed, is <see cref="ConanStoreReading.Unrecognised"/>: Tier 4, and the reason the clean is not
-/// offered.</para>
+/// offered. So is a recipe or package folder that is a link: <c>-s</c> and <c>-b</c> remove the
+/// <c>s</c> and <c>b</c> inside it by a path through it, and <c>rmdir</c>'s <c>os.path.isdir</c>
+/// follows the link (<c>conan/internal/util/files.py</c>), so they would empty a folder in a tree
+/// nobody here read.</para>
 ///
 /// <para><b>An estimate, in the direction of too much.</b> The database is not read, so a folder Conan
 /// no longer lists is measured though Conan will not touch it. The executor's after-measure says what
@@ -88,8 +91,9 @@ internal static partial class ConanStoreContents
             var isTemp = child.Name.Equals(TempFolder, StringComparison.OrdinalIgnoreCase);
             var isBuilds = child.Name.Equals(BuildsFolder, StringComparison.OrdinalIgnoreCase);
 
-            // Conan goes through a linked t or b as though it were the folder, into a tree nobody here read.
-            if (isLink && (isTemp || isBuilds))
+            // Conan goes through a linked t or b as though it were the folder, and -s and -b through a
+            // linked recipe or package folder to the s or b in it, into a tree nobody here read.
+            if (isLink && (isTemp || isBuilds || ReferenceFolder().IsMatch(child.Name)))
             {
                 reading.NotConans(path);
             }

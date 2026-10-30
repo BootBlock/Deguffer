@@ -491,6 +491,31 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// §5.2: a recipe folder that is a link would have <c>-s</c> empty the <c>s</c> in whatever it
+    /// points at, a tree nobody read, so it holds the clean back and is protected, as a linked
+    /// <c>t</c> or <c>b</c> does.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task WithholdsTheCleanWhereARecipeFolderIsALink(DirectoryLinkKind kind)
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var target = Path.Combine(_temp.Path, "elsewhere", "project");
+        var unread = Write(10, target, "s", "main.c");
+        var link = Path.Combine(Store, "zlib0123456789abd");
+        DirectoryLink.Create(kind, link, target);
+
+        var plan = await CreateProvider(Answering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains("'zlib0123456789abd'", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase));
+        Assert.True(File.Exists(unread));
+    }
+
     /// <summary>A file in <c>t</c> goes with it, so it holds the clean back as a foreign folder does.</summary>
     [Fact]
     public async Task WithholdsTheCleanWhereTheTemporaryFolderHoldsAFile()
