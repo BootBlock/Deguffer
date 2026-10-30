@@ -144,6 +144,7 @@ public sealed class ScoopCacheProviderTests : IDisposable
     [InlineData("git#2.47.1", false)]
     [InlineData("git#2.47.1#a b.zip", false)]
     [InlineData("installers", true)]
+    [InlineData("git#2.47.1#0123abc.7z", true)]
     public async Task AnEntryScoopDidNotMakeWithholdsTheCommandAndIsProtected(string name, bool folder)
     {
         _scoop.Install();
