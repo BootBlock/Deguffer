@@ -255,7 +255,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
     /// </summary>
     private CaptureOneExamination Examine(CancellationToken ct)
     {
-        var examination = new CaptureOneExamination();
+        var examination = new CaptureOneExamination(Volumes);
 
         foreach (var catalog in Documents.Catalogs)
         {

@@ -166,7 +166,7 @@ public sealed class SearchLocations
             return (null, "Windows would not open this folder, so Deguffer cannot tell where it is or what it holds.");
         }
 
-        if (Displayed(final) is not { } folder)
+        if (ReachedFolder.Displayed(final) is not { } folder)
         {
             return (null, "Windows names no drive or folder this volume is mounted at, so Deguffer cannot search it.");
         }
@@ -208,23 +208,15 @@ public sealed class SearchLocations
 
     /// <summary>
     /// Why <paramref name="followed"/> is refused before anything is opened on it, or null where only
-    /// its final path can say.
-    ///
-    /// <para>A share, and a drive letter Windows maps to one, because opening anything there is
-    /// itself a conversation with another machine, and the location is refused whatever it would say.
-    /// A drive that keeps its files in the cloud, because its driver answers an open, and such a drive
-    /// holds no link that could lead back to a local disk. Every other drive waits for the final path:
-    /// a link on it can lead to a local disk, where the location is searched.</para>
+    /// its final path can say. <see cref="HostVolume.Unopened"/> holds the rule and says why.
     /// </summary>
     internal static string? WhyNotOpened(string followed, IVolumeInventory volumes) =>
-        LongPath.IsShare(followed)
-            ? NotLocal
-            : HostVolume.For(volumes, followed) switch
-            {
-                { Kind: DriveType.Network } => NotLocal,
-                { StoresContentRemotely: true } => InTheCloud,
-                _ => null,
-            };
+        HostVolume.Unopened(volumes, followed) switch
+        {
+            UnopenedPlace.Share => NotLocal,
+            UnopenedPlace.Cloud => InTheCloud,
+            _ => null,
+        };
 
     private static string? WhyNotLocal(LocalVolume volume) => volume switch
     {
@@ -235,25 +227,6 @@ public sealed class SearchLocations
             "This is not a disk in or attached to this computer, so Deguffer does not search it.",
         _ => null,
     };
-
-    /// <summary>
-    /// <paramref name="final"/> in display form, or null where Windows gave it only as a device path,
-    /// such as a volume's <c>\\?\Volume{GUID}\</c> name, which names no drive or folder.
-    ///
-    /// <para><b>Measured on 2026-10-09</b> on an NTFS volume mounted in a folder with no drive
-    /// letter: Windows gives the final path of a folder on it, and of a junction leading into it,
-    /// through the folder the volume is mounted at, so a volume Windows names only by its GUID is
-    /// one mounted nowhere a user can name.</para>
-    /// </summary>
-    internal static string? Displayed(string final)
-    {
-        var display = LongPath.Display(final);
-
-        // A drive keeps its separator, which is how C:\ names a drive rather than a path relative to one.
-        return Path.IsPathFullyQualified(display) && !LongPath.IsDeviceSpelling(display)
-            ? Path.TrimEndingDirectorySeparator(display)
-            : null;
-    }
 
     /// <summary>
     /// Adds <paramref name="found"/> to <paramref name="resolved"/>, or folds it into the location that

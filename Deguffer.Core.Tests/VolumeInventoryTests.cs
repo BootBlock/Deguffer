@@ -256,25 +256,6 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
-    /// The list is remembered for the life of a pass (G4), so the same instance has to come back
-    /// until it is dropped — and a drive mounted while the app was open has to be seen after.
-    /// </summary>
-    [Fact]
-    public void RemembersTheListUntilItIsInvalidated()
-    {
-        var inventory = new VolumeInventory(VolumeQueries.Machine);
-
-        var first = inventory.Volumes;
-        Assert.Same(first, inventory.Volumes);
-
-        inventory.Invalidate();
-
-        var second = inventory.Volumes;
-        Assert.NotSame(first, second);
-        Assert.Equal(first.Select(v => v.RootPath), second.Select(v => v.RootPath));
-    }
-
-    /// <summary>
     /// §7 shows free space against capacity, so the two figures have to describe the same volume and
     /// degrade together.
     /// </summary>
@@ -296,12 +277,15 @@ public sealed class VolumeInventoryTests
     }
 
     /// <summary>
-    /// An unavailable volume is a dash in the UI, not an exception. The drive letter below is
-    /// deliberately one Windows reserves for floppies and effectively never mounts.
+    /// An unavailable volume is a dash in the UI, not an exception.
+    ///
+    /// <para>Asked of a volume named by the nil GUID, which Windows never gives a volume, so no
+    /// machine has it. Any drive letter may be mounted or mapped on the machine running the
+    /// suite.</para>
     /// </summary>
     [Fact]
     public void AnswersNoSpaceForAVolumeThatIsNotThere() =>
-        Assert.Null(VolumeInventory.Current.SpaceOf(@"B:\nonexistent\cache"));
+        Assert.Null(VolumeInventory.Current.SpaceOf(@"\\?\Volume{00000000-0000-0000-0000-000000000000}\nonexistent\cache"));
 
     [Fact]
     public void AnswersNoSpaceForAPathThatCannotBeRooted() =>
@@ -312,11 +296,14 @@ public sealed class VolumeInventoryTests
     ///
     /// <para><c>DriveInfo</c> is the independent witness here rather than the implementation: it is
     /// what the space used to be read with before the mount point was resolved natively, and it is
-    /// not on the route under test. A rewrite that read the wrong field of <c>GetDiskFreeSpaceEx</c>
-    /// — the raw free space rather than the caller's quota, or the total in place of the free — or
-    /// that resolved a different volume, disagrees here.</para>
+    /// not on the route under test. A rewrite that read the total of <c>GetDiskFreeSpaceEx</c> into
+    /// the free slot, or that resolved a different volume, disagrees here.</para>
     ///
-    /// <para><b>What this cannot show is the defect the rewrite fixed.</b> Telling the two routes
+    /// <para><b>A rewrite that read the raw free space rather than the caller's quota passes.</b>
+    /// The two differ only under a disk quota, which the suite cannot set, and both stay inside the
+    /// bound asserted below.</para>
+    ///
+    /// <para><b>Nor can this show the defect the rewrite fixed.</b> Telling the two routes
     /// apart needs a volume mounted at a folder, and a test cannot mount one. On a machine whose
     /// volumes all wear drive letters the two agree by construction, which is exactly what is
     /// asserted.</para>

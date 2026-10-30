@@ -22,6 +22,28 @@ namespace Deguffer.Core.Safety;
 public static class HostVolume
 {
     /// <summary>
+    /// Why nothing at <paramref name="path"/> is opened to ask where a link on the way to it leads,
+    /// or null where it may be.
+    ///
+    /// <para>A share, and a drive letter Windows maps to one, because opening anything there is
+    /// itself a conversation with another machine. A drive that keeps its files in the cloud, because
+    /// its driver answers an open, and such a volume supports no reparse points, so it holds no link.
+    /// Every other drive is opened: a link on it can lead anywhere.</para>
+    ///
+    /// <para>The one statement of the rule, for the duplicate search, which says why it does not
+    /// search such a place, and for Explore, which judges what is there by its path.</para>
+    /// </summary>
+    public static UnopenedPlace? Unopened(IVolumeInventory volumes, string path) =>
+        LongPath.IsShare(path)
+            ? UnopenedPlace.Share
+            : For(volumes, path) switch
+            {
+                { Kind: DriveType.Network } => UnopenedPlace.Share,
+                { StoresContentRemotely: true } => UnopenedPlace.Cloud,
+                _ => null,
+            };
+
+    /// <summary>
     /// The volume <paramref name="path"/> is stored on, or null where the inventory holds none that
     /// does.
     ///
@@ -120,4 +142,14 @@ public static class HostVolume
     internal static bool IsMountPoint(string mountPoint, string path) =>
         Path.TrimEndingDirectorySeparator(LongPath.Display(path))
             .Equals(Path.TrimEndingDirectorySeparator(mountPoint), StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>Why <see cref="HostVolume.Unopened"/> does not open a place.</summary>
+public enum UnopenedPlace
+{
+    /// <summary>A share, or a drive letter mapped to one.</summary>
+    Share,
+
+    /// <summary>A drive that keeps its files in the cloud.</summary>
+    Cloud,
 }

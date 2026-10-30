@@ -66,7 +66,7 @@ public sealed class ScanFoldersTests
         temp.CreateFile(10, "Photos", "a.bin");
         Assert.True(VolumePath.TryParse(photos, out var volume));
 
-        var (fixture, parent, next) = Through(volume.Components.SkipLast(1));
+        var (fixture, parent, next) = MftFolders.Through(volume.Components.SkipLast(1));
         fixture.AddDirectory(next, parent, "photos").AddFile(next + 1, next, "other.bin", allocated: 4096, logical: 100);
         var sources = FakeMftSourceFactory.Serving(volume.DriveLetter, fixture);
 
@@ -81,7 +81,7 @@ public sealed class ScanFoldersTests
     [Fact]
     public async Task AFolderTheTableHoldsInBothCasesIsReadByItsExactName()
     {
-        var (fixture, parent, next) = Through([]);
+        var (fixture, parent, next) = MftFolders.Through([]);
         fixture
             .AddDirectory(next, parent, "photos")
             .AddFile(next + 1, next, "other.bin", allocated: 4096, logical: 100)
@@ -93,23 +93,6 @@ public sealed class ScanFoldersTests
 
         Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
         Assert.Equal(@"X:\Photos\a.jpg", scan.Tree.PathOf(Assert.Single(scan.Tree.ChildrenOf(scan.Node).ToArray())));
-    }
-
-    /// <summary>A table holding <paramref name="folders"/>, each inside the one before it, below the volume's top.</summary>
-    /// <returns>The table, the record of the last folder, and the first record number still free.</returns>
-    private static (MftFixture Fixture, uint Parent, uint Next) Through(IEnumerable<string> folders)
-    {
-        var fixture = new MftFixture();
-        uint parent = MftRecord.RootRecordNumber;
-        uint next = MftRecord.ReservedRecordCount;
-
-        foreach (var folder in folders)
-        {
-            fixture.AddDirectory(next, parent, folder);
-            parent = next++;
-        }
-
-        return (fixture, parent, next);
     }
 
     [Fact]

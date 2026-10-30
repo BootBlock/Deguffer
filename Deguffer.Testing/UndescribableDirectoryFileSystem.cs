@@ -77,6 +77,14 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
     /// <summary>True for the refused directory, because a path that could not be asked about may exist.</summary>
     public bool MayExist(string path) => IsRefused(path) || inner.MayExist(path);
 
+    /// <summary>Null for the refused directory, as Windows answers when it will not open it.</summary>
+    public string? FinalPath(string path)
+    {
+        Probed.Add(path);
+
+        return IsRefused(path) ? null : inner.FinalPath(path);
+    }
+
     private bool IsRefused(string path) =>
         LongPath.Display(path).Equals(refused, StringComparison.OrdinalIgnoreCase);
 }

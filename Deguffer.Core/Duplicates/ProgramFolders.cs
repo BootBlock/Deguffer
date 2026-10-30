@@ -8,7 +8,7 @@ namespace Deguffer.Core.Duplicates;
 /// <param name="Program">The program's name as its entry gives it, which is what the page says.</param>
 /// <param name="Final">
 /// The folder the entry's path leads to once every link on the way is followed, or null where Windows
-/// would not open it (<see cref="ResolvedPlaces.FollowedTo"/>). A search's paths are final paths, so a
+/// would not open it (<see cref="ReachedFolder.FollowedTo"/>). A search's paths are final paths, so a
 /// program installed at <c>D:\Apps\Tool</c>, where <c>D:\Apps</c> is a junction to <c>E:\Apps</c>, is
 /// at <c>E:\Apps\Tool</c> to the search.
 /// </param>
@@ -97,7 +97,7 @@ public static class ProgramFolders
         void Consider(string program, string location)
         {
             var folder = new ProgramFolder(
-                location, ReachedFolder.At(location, volumes), program, ResolvedPlaces.FollowedTo(location, volumes, files));
+                location, ReachedFolder.At(location, volumes), program, ReachedFolder.FollowedTo(location, volumes, files.FinalPath));
 
             // Asked of where it leads too: an entry naming a junction to the profile has named the profile.
             if (folder.Forms.Select(form => WhyNamesNoProgram(form, environment, system, profiles)).FirstOrDefault(why => why is not null) is { } why)
