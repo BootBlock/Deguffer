@@ -18,15 +18,23 @@ public sealed class CleanupPlanner
     private readonly IReadOnlyList<ICleanupProvider> _providers;
     private readonly Dictionary<ICleanupProvider, int> _places;
     private readonly RowDeclarations? _declarations;
+    private readonly IVolumeInventory _volumes;
 
     /// <param name="declarations">
     /// The declarations the rows that walk a folder consult, admitted here so that they name every row
     /// in this planner and no other, and dropped at the start of every planning pass alongside the
     /// rows' own caches. See <see cref="RowDeclarations"/>.
     /// </param>
-    public CleanupPlanner(IEnumerable<ICleanupProvider> providers, RowDeclarations? declarations = null)
+    /// <param name="volumes">
+    /// Asked where else a registered disk and a step's path are reachable, so a step naming a disk's
+    /// folder through another letter or mount is still withheld. The machine's own by default, because
+    /// it only reads. See <see cref="VirtualMachineStoragePlan"/>.
+    /// </param>
+    public CleanupPlanner(
+        IEnumerable<ICleanupProvider> providers, RowDeclarations? declarations = null, IVolumeInventory? volumes = null)
     {
         _providers = [.. providers];
+        _volumes = volumes ?? VolumeInventory.Current;
         _places = new Dictionary<ICleanupProvider, int>(_providers.Count, ReferenceEqualityComparer.Instance);
         _declarations = declarations;
 
@@ -390,11 +398,16 @@ public sealed class CleanupPlanner
     {
         ArgumentNullException.ThrowIfNull(providers);
 
+        // Every row that registers a virtual machine's storage is read for every pass, a re-plan of a
+        // few rows included: the refusal is the run's, and a re-planned row whose location holds a
+        // disk must be held to it whether or not the report's own row is planned again.
+        var registrars = RegistrarsAmong(providers);
+
         // Every provider drops its cached view of the machine before any of them plans. Doing
         // this up front rather than per-provider matters: the providers share collaborators by
         // default, so invalidating inside the loop would throw away the snapshot the previous
         // provider just paid for.
-        foreach (var provider in providers)
+        foreach (var provider in providers.Union(registrars))
         {
             provider.InvalidateCaches();
         }
@@ -413,7 +426,10 @@ public sealed class CleanupPlanner
                 holds.Add(provider.HoldCaches());
             }
 
-            return await PlanHeldAsync(providers, keep, status, found, ct).ConfigureAwait(false);
+            // Before any row plans, so every plan in the pass is held to the same set.
+            var registered = await RegisteredStorage.ReadAsync(registrars, _volumes, ct).ConfigureAwait(false);
+
+            return await PlanHeldAsync(providers, registered, _volumes, keep, status, found, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -426,6 +442,8 @@ public sealed class CleanupPlanner
 
     private static async Task<IReadOnlyList<Finding>> PlanHeldAsync(
         IReadOnlyList<ICleanupProvider> providers,
+        RegisteredStorage registered,
+        IVolumeInventory volumes,
         MinimumAge keep,
         IProgress<string>? status,
         IProgress<Finding>? found,
@@ -448,7 +466,7 @@ public sealed class CleanupPlanner
 
             try
             {
-                finding = await PlanOneAsync(provider, keep, token).ConfigureAwait(false);
+                finding = await PlanOneAsync(provider, registered, volumes, keep, token).ConfigureAwait(false);
             }
             finally
             {
@@ -472,6 +490,8 @@ public sealed class CleanupPlanner
 
     private static async Task<Finding> PlanOneAsync(
         ICleanupProvider provider,
+        RegisteredStorage registered,
+        IVolumeInventory volumes,
         MinimumAge keep,
         CancellationToken ct)
     {
@@ -487,11 +507,11 @@ public sealed class CleanupPlanner
             return new Finding(provider, IsPresent: false, Plan: null);
         }
 
-        return new Finding(
-            provider,
-            present,
-            await provider.PlanAsync(keep, ct).ConfigureAwait(false),
-            awaitingFolders);
+        // Applied here rather than inside the provider: the set is the pass's, gathered from every row
+        // that registers storage, and no row can see another's records. See VirtualMachineStoragePlan.
+        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, ct).ConfigureAwait(false), registered, volumes);
+
+        return new Finding(provider, present, plan, awaitingFolders);
     }
 
     /// <summary>
@@ -545,6 +565,23 @@ public sealed class CleanupPlanner
         ArgumentNullException.ThrowIfNull(selected);
 
         confirmations ??= [];
+
+        // Every registered disk and machine folder is proved standing by every clean (§5.6), whichever
+        // rows were scanned or chosen: an over-broad rule anywhere in the run is what could take one, and
+        // the report that knows where they are may not have been scanned at all. Read now, before the
+        // first deletion, so what was there when the clean began is what the proof holds the run to.
+        // Not cancellable: the proof is owed to a cancelled clean as much as a finished one.
+        var registrars = RegistrarsAmong([.. selected.Select(f => f.Provider)]);
+        var registered = await RegisteredStorage.ReadAsync(registrars, _volumes, CancellationToken.None).ConfigureAwait(false);
+
+        selected =
+        [
+            .. selected,
+            .. registrars
+                .Select(registrar => (Registrar: registrar, Proof: VirtualMachineStoragePlan.ProofFor(registrar, registered)))
+                .Where(proof => proof.Proof is not null)
+                .Select(proof => new Finding(proof.Registrar, IsPresent: true, proof.Proof)),
+        ];
 
         // A finding with nothing to remove and nothing to prove is not part of the run, so it is
         // dropped here rather than skipped inside the loop. One with nothing to remove and a
@@ -643,6 +680,15 @@ public sealed class CleanupPlanner
 
         return results;
     }
+
+    /// <summary>
+    /// Every row of this planner's, and of <paramref name="also"/>, that registers a virtual machine's
+    /// storage. A pass or a clean of a few rows is still held to every registration: the refusal is the
+    /// run's, and a row whose location holds a disk must be held to it whether or not the report that
+    /// found the disk is part of it.
+    /// </summary>
+    private IReadOnlyList<ICleanupProvider> RegistrarsAmong(IReadOnlyList<ICleanupProvider> also) =>
+        [.. _providers.Concat(also).Distinct().Where(provider => provider is IRegistersVirtualMachineStorage)];
 
     /// <summary>
     /// The result of a plan the clean was cancelled before starting: no steps, and the §5.6 check of

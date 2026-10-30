@@ -26,7 +26,7 @@ public sealed record VirtualDiskInventory(IReadOnlyList<VirtualDisk> Disks, IRea
         // An installation from before Docker Desktop 4.30 keeps using its docker-desktop-data
         // distribution after an upgrade, and the settings then name a data disk that was never made.
         // Reporting that one as missing would be a false alarm about a disk that is in use elsewhere.
-        var keepsOlderDisk = registered.Any(disk => disk.Kind == VirtualDiskKind.DockerData);
+        var keepsOlderDisk = registered.Any(disk => disk.Owner is DockerDesktopData);
 
         var disks = new List<VirtualDisk>(registered);
 

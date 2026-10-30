@@ -78,6 +78,13 @@ public enum FindingStatus
     UpdateInProgress,
 
     /// <summary>
+    /// A location whose only content is a virtual machine's disk or folder that a virtualisation tool
+    /// registered, which Deguffer never removes. The same case as <see cref="MailStoresHeldBack"/>: it
+    /// measures zero and it is not empty.
+    /// </summary>
+    VirtualMachineKept,
+
+    /// <summary>
     /// A location Deguffer reports on and never acts in, because the only safe route to its space is
     /// the one its own tool provides. It measures zero and can be among the largest files on the drive.
     /// See <see cref="CleanupPlan.ReportsOnly"/>.
@@ -151,6 +158,7 @@ public static class FindingStatusExtensions
             { HoldsKeepListItems: true } => FindingStatus.OnKeepList,
             { HoldsMailStores: true } => FindingStatus.MailStoresHeldBack,
             { WaitsForAnUpdate: true } => FindingStatus.UpdateInProgress,
+            { HoldsVirtualMachineStorage: true } => FindingStatus.VirtualMachineKept,
             _ => FindingStatus.AlreadyClear,
         };
     }
@@ -158,12 +166,13 @@ public static class FindingStatusExtensions
     /// <summary>
     /// The two or three words the row states beside its size.
     ///
-    /// <para>"Already clear" is a claim about the folder, and the eight states above it must not be
+    /// <para>"Already clear" is a claim about the folder, and the nine states above it must not be
     /// reported as that: a folder Windows would not let Deguffer list, a location Deguffer declined
     /// to look at, a cache held back by the guard window, a folder whose contents Windows would not
     /// let a clean take, a location holding what the user keeps, a location holding Outlook data
-    /// files, a location an unfinished update is holding back, and a location Deguffer only reports
-    /// on. Each of the eight measures zero and none of them is clear.</para>
+    /// files, a location an unfinished update is holding back, a location holding a virtual machine's
+    /// storage, and a location Deguffer only reports
+    /// on. Each of the nine measures zero and none of them is clear.</para>
     ///
     /// <para>A row that is absent for want of an approved folder needs its own words for the same
     /// reason. Saying "not installed" or "already clear" there names the wrong problem and offers
@@ -186,6 +195,7 @@ public static class FindingStatusExtensions
         FindingStatus.OnKeepList => "On your keep list",
         FindingStatus.MailStoresHeldBack => "Outlook data kept",
         FindingStatus.UpdateInProgress => "Update in progress",
+        FindingStatus.VirtualMachineKept => "Virtual machine kept",
         FindingStatus.ReportOnly => "Report only",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",

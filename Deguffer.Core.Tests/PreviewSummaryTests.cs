@@ -38,6 +38,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.OnKeepList)]
     [InlineData(FindingStatus.MailStoresHeldBack)]
     [InlineData(FindingStatus.UpdateInProgress)]
+    [InlineData(FindingStatus.VirtualMachineKept)]
     [InlineData(FindingStatus.AwaitingSourceFolders)]
     [InlineData(FindingStatus.ReportOnly)]
     public void DoesNotCallTheCachesClearOverARowThatIsNotClear(FindingStatus unclear)
@@ -57,6 +58,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.OnKeepList, "on your keep list")]
     [InlineData(FindingStatus.MailStoresHeldBack, "Outlook data files")]
     [InlineData(FindingStatus.UpdateInProgress, "a Windows update that has not finished")]
+    [InlineData(FindingStatus.VirtualMachineKept, "a virtual machine's disk or folder")]
     [InlineData(FindingStatus.AwaitingSourceFolders, "need a source folder")]
     [InlineData(FindingStatus.ReportOnly, "only the tool that owns it can free")]
     public void NamesTheCauseWhenOnlyOneKindOfRowIsUnclear(FindingStatus unclear, string expected)

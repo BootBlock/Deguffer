@@ -33,14 +33,25 @@ public static class WslRegistrations
     /// </summary>
     private static readonly HashSet<int> SettledStates = [1, 2, 5, 6, 7];
 
-    /// <summary>The names Docker Desktop registers its own distributions under.</summary>
-    private const string DockerSystemDistribution = "docker-desktop";
-
-    private const string DockerDataDistribution = "docker-desktop-data";
+    /// <summary>
+    /// The tools that register WSL distributions of their own, each recognising its own by name, asked in
+    /// this order. A more particular name goes before a broader one: Podman's networking distribution
+    /// before the prefix every Podman distribution shares. A distribution none of them claims is the
+    /// user's own.
+    /// </summary>
+    private static readonly IReadOnlyList<DiskOwner> DistributionOwners =
+    [
+        DockerDesktopData.Instance,
+        DockerDesktopSystem.Instance,
+        RancherDesktopData.Instance,
+        RancherDesktopSystem.Instance,
+        PodmanNetworking.Instance,
+        PodmanMachine.Instance,
+    ];
 
     /// <summary>
-    /// Every WSL 2 distribution's disk, in the order the registry lists them. Docker Desktop's two
-    /// distributions are marked as Docker's, because the route that frees space in them is Docker's.
+    /// Every WSL 2 distribution's disk, in the order the registry lists them, each marked with the tool
+    /// that owns it, because the route that frees space in it is that tool's.
     /// </summary>
     public static IReadOnlyList<VirtualDisk> Read(IUserEnvironment environment)
     {
@@ -98,10 +109,8 @@ public static class WslRegistrations
             return null;
         }
 
-        var kind = name.Equals(DockerDataDistribution, StringComparison.OrdinalIgnoreCase) ? VirtualDiskKind.DockerData
-            : name.Equals(DockerSystemDistribution, StringComparison.OrdinalIgnoreCase) ? VirtualDiskKind.DockerSystem
-            : VirtualDiskKind.WslDistribution;
+        var owner = DistributionOwners.FirstOrDefault(tool => tool.ClaimsDistribution(name)) ?? WslDistributionOwner.Instance;
 
-        return new VirtualDisk(Path.Combine(basePath, file), kind, name);
+        return new VirtualDisk(Path.Combine(basePath, file), owner, name);
     }
 }
