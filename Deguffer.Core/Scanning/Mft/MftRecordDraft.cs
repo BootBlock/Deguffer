@@ -46,6 +46,9 @@ internal struct MftRecordDraft
     private int _nameLength;
     private string? _name;
 
+    // Null until a second link is met, which almost no record has.
+    private List<MftLink>? _otherLinks;
+
     private ScanSize? _size;
     private bool _sawUnnamedData;
     private ScanSize? _wofSize;
@@ -63,19 +66,13 @@ internal struct MftRecordDraft
 
     /// <summary>
     /// The rank of the best name the base record held on its own. Zero means no name anywhere else
-    /// can displace it, so a list's other names need not be read to place the file.
+    /// can displace it, so a directory's list need not be read for names. A file's always is,
+    /// because its other names are links of their own.
     /// </summary>
     public int BaseRank { get; private set; }
 
     /// <summary>The kinds of attribute the base record held on its own.</summary>
     public MftAttributeKinds BaseSupplied { get; private set; }
-
-    /// <summary>
-    /// Whether the base record's reparse point is CompactOS's, so the file's content is in a stream
-    /// that may be in another record. False for a file whose base record holds any other reparse
-    /// point, which therefore has no such stream however its list reads.
-    /// </summary>
-    public bool BaseIsCompactOs { get; private set; }
 
     /// <summary>
     /// Fold one record's attributes into what is known, saying which kinds it supplied. Returns
@@ -123,11 +120,26 @@ internal struct MftRecordDraft
                     // $FILE_NAME attributes, and picking the DOS alias would make path resolution
                     // fail against the name the user actually typed. Strictly better only, so a tie
                     // keeps the name read first, and the base record is always read first.
+                    //
+                    // Every name that is not an alias is a link of its own, and the one this does not
+                    // place the file by is kept as one of its other links. A draft absorbs one record,
+                    // so the name displaced is still in that record to be read.
                     var rank = MftRecordParser.RankOf(candidate.Namespace);
+                    var at = offset + candidate.NameOffset;
+
                     if (rank < _bestRank)
                     {
+                        if (IsLink(_bestRank))
+                        {
+                            AddOtherLink(_parent, new string(MftRecordParser.NameAt(record, _nameOffset, _nameLength)));
+                        }
+
                         (_parent, _bestRank, _name) = (candidate.Parent, rank, null);
-                        (_nameOffset, _nameLength) = (offset + candidate.NameOffset, candidate.NameLength);
+                        (_nameOffset, _nameLength) = (at, candidate.NameLength);
+                    }
+                    else if (IsLink(rank))
+                    {
+                        AddOtherLink(candidate.Parent, new string(MftRecordParser.NameAt(record, at, candidate.NameLength)));
                     }
 
                     break;
@@ -143,7 +155,6 @@ internal struct MftRecordDraft
                 case MftRecordParser.AttributeReparsePoint:
                     supplied |= MftAttributeKinds.ReparsePoint;
                     _isReparsePoint |= MftRecordParser.IsNameSurrogate(walk.Current);
-                    BaseIsCompactOs |= isBase && MftRecordParser.IsWofReparsePoint(walk.Current);
                     break;
 
                 case MftRecordParser.AttributeData when MftRecordParser.IsUnnamed(walk.Current):
@@ -205,15 +216,33 @@ internal struct MftRecordDraft
     ///
     /// <para>The same answer as absorbing the record's bytes here. A name is kept only where it is
     /// strictly better, so a record's own best name, the first of its best rank, is the only one of
-    /// its names that could displace what is known. A size is kept only where none is known yet, so
-    /// a record's own first size is the only one of its sizes that could be kept. Everything else
-    /// is a flag, and an extension record sets no date, attribute or base-record fact.</para>
+    /// its names that could displace what is known, and every other link it holds is one more of
+    /// the file's. A size is kept only where none is known yet, so a record's own first size is the
+    /// only one of its sizes that could be kept. Everything else is a flag, and an extension record
+    /// sets no date, attribute or base-record fact.</para>
     /// </summary>
     public void Absorb(in MftRecordDraft extension)
     {
+        // Whichever of the two best names is not kept is one of the file's other links, where it is
+        // a link at all. Both are decoded by now: this draft's by MftDeferredRecord, the extension's
+        // by MftExtensionRecord.
         if (extension._bestRank < _bestRank)
         {
+            if (IsLink(_bestRank))
+            {
+                AddOtherLink(_parent, _name!);
+            }
+
             (_parent, _name, _bestRank) = (extension._parent, extension._name, extension._bestRank);
+        }
+        else if (IsLink(extension._bestRank))
+        {
+            AddOtherLink(extension._parent, extension._name!);
+        }
+
+        foreach (var link in extension._otherLinks ?? [])
+        {
+            AddOtherLink(link.ParentRecordNumber, link.Name);
         }
 
         _isReparsePoint |= extension._isReparsePoint;
@@ -247,7 +276,8 @@ internal struct MftRecordDraft
         //
         // The same holds where the base record's own name could have been displaced by one in an
         // extension record that could not be read. Placing the file under its second-best name
-        // is a guess at which directory it belongs to.
+        // is a guess at which directory it belongs to. A file's lost name could also have been
+        // another of its links, which would leave whichever folder holds it short.
         if (_bestRank == NoName || list?.Lost.HasFlag(MftAttributeKinds.Name) == true)
         {
             return MftParseOutcome.Unreadable;
@@ -262,9 +292,14 @@ internal struct MftRecordDraft
         name = _name ?? MftRecordParser.NameAt(record, _nameOffset, _nameLength);
         result = new MftRecord(
             _parent, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten, StorageOf(isDirectory),
-            FileVisibilities.Of(_attributes));
+            FileVisibilities.Of(_attributes), _otherLinks);
         return MftParseOutcome.Parsed;
     }
+
+    /// <summary>Whether a name of this rank is a link of its own rather than an 8.3 alias, or no name.</summary>
+    private static bool IsLink(int rank) => rank < MftRecordParser.RankOf(MftRecordParser.FileNameNamespace.Dos);
+
+    private void AddOtherLink(uint parent, string name) => (_otherLinks ??= []).Add(new MftLink(parent, name));
 
     /// <summary>
     /// How the file is stored, as its attributes say, and compressed wherever CompactOS's stream was

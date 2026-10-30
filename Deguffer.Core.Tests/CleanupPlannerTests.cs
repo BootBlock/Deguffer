@@ -468,7 +468,7 @@ public sealed class CleanupPlannerTests
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache",
                 "squirrel-staging",
-                "platformio", "playwright", "puppeteer", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
+                "platformio", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "windows-update-leftovers",
                 "driver-store", "component-store", "component-store-reset-base", "restore-points", "crash-dumps",

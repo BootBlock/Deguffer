@@ -43,6 +43,31 @@ public class MftExploreReaderTests
         .AddDirectory(Sibling, Profile, ".config");
 
     /// <summary>
+    /// #171: a file with a name in two folders is drawn under each, at its size, and the folders
+    /// above both count it once for each name, as the walk draws it. A name whose folder is outside
+    /// the table draws nothing, and the file still draws under its others.
+    /// </summary>
+    [Fact]
+    public void DrawsAHardLinkedFileUnderEachOfItsNames()
+    {
+        using var source = Tree()
+            .AddFile(20, Cache, "a.tgz", allocated: 1024, logical: 1000)
+            .AddHardLinkedFile(21, [(Cache, "linked.dll"), (Sibling, "linked.dll"), (9000, "gone.dll")], allocated: 4096, logical: 4000)
+            .AddHardLinkedFile(22, [(9000, "gone.bin"), (Sibling, "kept.bin")], allocated: 2048, logical: 2000)
+            .Build();
+
+        var tree = WholeVolume(source);
+
+        Assert.Equal(4096, tree.SizeOf(At(tree, CachePath + @"\linked.dll")));
+        Assert.Equal(4096, tree.SizeOf(At(tree, SiblingPath + @"\linked.dll")));
+        Assert.Equal(2048, tree.SizeOf(At(tree, SiblingPath + @"\kept.bin")));
+        Assert.Equal(1024 + 4096, tree.SizeOf(At(tree, CachePath)));
+        Assert.Equal(4096 + 2048, tree.SizeOf(At(tree, SiblingPath)));
+        Assert.Equal(1024 + 4096 + 4096 + 2048, tree.SizeOf(At(tree, ProfilePath)));
+        Assert.Equal(tree.NodeCount, Reachable(tree).Count);
+    }
+
+    /// <summary>
     /// The tree keeps only what its root reaches, so every node it has answers with a path.
     ///
     /// <para>This route sizes its arrays to the whole record count before it reads one, and most of
@@ -897,24 +922,25 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
-    /// A list that cannot be read could have hidden CompactOS's stream only for a file that is
-    /// CompactOS's. A cloud file whose base record holds its stream and its reparse point keeps its
-    /// size, as it did before CompactOS was read at all, and a CompactOS file's size is unknown.
+    /// A list that cannot be read could have hidden another of a file's names in any folder, so the
+    /// file cannot be placed, whatever its own record holds: its stream and reparse point, as the
+    /// cloud file's does, or CompactOS's, as the other's does. Neither is drawn, and the tree says
+    /// its totals are lower bounds.
     /// </summary>
     [Fact]
-    public void WaitsForCompactOsStreamOnlyWhereTheFileIsCompactOs()
+    public void DrawsNoFileWhoseListCannotBeReadAndSaysTheTreeIsShort()
     {
         using var source = Tree()
+            .AddFile(22, Cache, "a.tgz", allocated: 4096, logical: 4096)
             .AddReparsePointFileWithAMalformedAttributeList(20, Cache, "synced.docx", 8192, MftRecordBytes.CloudFilesTag)
             .AddReparsePointFileWithAMalformedAttributeList(21, Cache, "setup.exe", 0, MftRecordBytes.WindowsOverlayFilterTag)
             .Build();
 
         var tree = WholeVolume(source);
-        var synced = At(tree, CachePath + @"\synced.docx");
+        var cache = At(tree, CachePath);
 
-        Assert.Equal(8192, tree.SizeOf(synced));
-        Assert.False(tree.HasUnknownSizeBelow(synced));
-        Assert.True(tree.HasUnknownSizeBelow(At(tree, CachePath + @"\setup.exe")));
+        Assert.Equal(["a.tgz", "content-v2"], tree.ChildrenOf(cache).ToArray().Select(child => tree.NameOf(child)).Order(StringComparer.Ordinal));
+        Assert.True(tree.HasUnknownSizeBelow(tree.RootNode));
     }
 
     /// <summary>
