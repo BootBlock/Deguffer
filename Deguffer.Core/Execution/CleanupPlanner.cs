@@ -113,7 +113,7 @@ public sealed class CleanupPlanner
         // inspector beside it. Shared deliberately rather than defaulted per provider: six unshared
         // passes would each walk the developer's whole disk on an unelevated run, and the names each
         // provider registers on the way in are what make the one pass answer for all of them.
-        var sourceTrees = new SourceDirectoryDiscovery(scanner, tuning: tuning);
+        var sourceTrees = new SourceDirectoryDiscovery(scanner, tuning: tuning, scope: scope);
         liveTrees ??= LiveTreeInspector.Default;
 
         // One sweep of %LOCALAPPDATA% for both Squirrel providers, on the reasoning above: they ask

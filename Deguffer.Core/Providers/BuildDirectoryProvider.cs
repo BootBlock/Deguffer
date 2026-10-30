@@ -121,22 +121,22 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     public override bool IsAwaitingSourceFolders => ApprovedRoots.Count == 0;
 
     /// <summary>
-    /// Every build directory the plan holds back because something is using it, so that Explore
-    /// refuses it and the project folder holding it (§7.1). <see cref="InUseBuildDirectories"/> says
-    /// how they are found without walking the approved roots, and which live directory that misses.
+    /// Every build directory the plan holds back because something is using it, or because whether
+    /// anything is could not be asked, so that Explore refuses it and the project folder holding it
+    /// (§7.1). <see cref="InUseBuildDirectories"/> says how they are found.
     ///
     /// Sealed for the reason <see cref="Grain"/> is: what makes it true is this class's search and
     /// recognition, and a subclass is a declaration of a directory name.
     /// </summary>
     public sealed override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult(InUseBuildDirectories.Declare(
+        InUseBuildDirectories.DeclareAsync(
             LiveTrees,
             _discovery,
             ApprovedRoots,
             Kind.DirectoryNames,
             candidate => BuildDirectorySignature.TryRecognise(Kind, candidate, ct)?.Project,
             Questions,
-            ct));
+            ct);
 
     /// <summary>
     /// Every folder below an approved source folder that has one of the kind's names, which is the

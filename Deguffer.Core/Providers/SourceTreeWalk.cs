@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -114,5 +115,78 @@ internal static class SourceTreeWalk
             [.. candidates.Order(StringComparer.Ordinal)],
             [.. unreadable.Order(StringComparer.Ordinal)],
             rootListed);
+    }
+
+    /// <summary>
+    /// <see cref="Under"/>, read from an Explore scan's tree rather than from the disk, where the scan
+    /// listed the whole root (<see cref="ProtectionScope"/>). The same directories are found by the
+    /// same search, because the tree holds every listing the walk would make: each folder's folders,
+    /// which of them are links, and which folders refused to be listed.
+    ///
+    /// <para>The tree is as the scan found the disk. A directory created after the scan is found by
+    /// the next one.</para>
+    /// </summary>
+    /// <param name="tree">The scan's tree.</param>
+    /// <param name="node">The node of <paramref name="tree"/> that is <paramref name="root"/>, listed whole.</param>
+    /// <param name="root">The approved root, as <see cref="Under"/> takes it, which spells every path returned.</param>
+    public static WalkedSourceTree In(
+        ExploreTree tree,
+        int node,
+        string root,
+        DirectorySearch search,
+        CancellationToken ct)
+    {
+        var candidates = new List<string>();
+        var unreadable = new List<string>();
+        var top = LongPath.Display(LongPath.Extended(root));
+
+        // Spelled as a path below is spelled here, as the walk matches each against its own children.
+        var handedOff = search.HandedOff
+            .Select(belowRoot => Path.Join(top, string.Join(Path.DirectorySeparatorChar, belowRoot)))
+            .ToFrozenSet(StringComparer.Ordinal);
+
+        var pending = new Stack<(int Node, string Path)>();
+
+        pending.Push((node, top));
+
+        while (pending.TryPop(out var directory))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // What a refused listing held is not used, as the walk uses none of it.
+            if (tree.ListingWasRefused(directory.Node))
+            {
+                unreadable.Add(directory.Path);
+                continue;
+            }
+
+            foreach (var child in tree.ChildrenOf(directory.Node))
+            {
+                // A link is neither a candidate nor entered, as the walk lists neither as a folder.
+                if (!tree.IsDirectory(child) || tree.IsLink(child))
+                {
+                    continue;
+                }
+
+                var name = tree.NameOf(child);
+                var path = Path.Join(directory.Path, name);
+
+                switch (search.Meet(name))
+                {
+                    case SearchStep.Found:
+                        candidates.Add(path);
+                        break;
+
+                    case SearchStep.Entered when handedOff.Count == 0 || !handedOff.Contains(path):
+                        pending.Push((child, path));
+                        break;
+                }
+            }
+        }
+
+        return new WalkedSourceTree(
+            [.. candidates.Order(StringComparer.Ordinal)],
+            [.. unreadable.Order(StringComparer.Ordinal)],
+            RootListed: true);
     }
 }

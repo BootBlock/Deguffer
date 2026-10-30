@@ -547,7 +547,7 @@ not the shell asked.
   refused there. So are the §9 exclusions, `C:\Windows`, `Program Files`, and every path a provider
   names as protected. That includes what a provider can only name once it has asked the machine: a
   location a tool reports in place of its documented default, and a path a plan holds back because a
-  program is using it. Explore reads all of that afresh when it is first opened and again whenever a
+  program is using it, or because it could not tell whether one is. Explore reads all of that afresh when it is first opened and again whenever a
   scan starts, including whether each tool can be found on the `PATH` — which is re-read from the
   machine and user environment keys at that moment, because Windows never pushes an installer's
   change into a running process — so between scans it answers from the machine as it was at the last

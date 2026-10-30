@@ -132,16 +132,16 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     public override bool IsAwaitingSourceFolders => ApprovedRoots.Count == 0;
 
     /// <summary>
-    /// Every <c>obj</c> the plan holds back because something is using it, so that Explore refuses
-    /// it and the project directory holding it (§7.1). <see cref="InUseBuildDirectories"/> says how
-    /// they are found without walking the approved roots.
+    /// Every <c>obj</c> the plan holds back because something is using it, or because whether
+    /// anything is could not be asked, so that Explore refuses it and the project directory holding it
+    /// (§7.1). <see cref="InUseBuildDirectories"/> says how they are found.
     ///
     /// <para>Git's second opinion is not asked. It can only take a directory off the plan's targets,
     /// and one it would take off is still one something is using, so refusing it is as true here as
     /// for any other; asking would put a subprocess per repository into every Explore rebuild.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult(InUseBuildDirectories.Declare(
+        InUseBuildDirectories.DeclareAsync(
             _liveTrees,
             _discovery,
             ApprovedRoots,
@@ -150,7 +150,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
             Questions,
-            ct));
+            ct);
 
     /// <summary>
     /// Every <c>obj</c> below an approved source folder, which is the whole of where the search looks.

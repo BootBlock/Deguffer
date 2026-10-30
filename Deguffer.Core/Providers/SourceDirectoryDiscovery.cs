@@ -42,6 +42,13 @@ public sealed record SourceDiscovery(
     /// </summary>
     public IReadOnlyList<string> UnreachedRoots { get; init; } = [];
 
+    /// <summary>
+    /// Approved roots not looked in because nothing the discovery's scope covers is in one, holds one
+    /// or is one (<see cref="ProtectionScope"/>). Always empty for a search of everything, as a plan's
+    /// is.
+    /// </summary>
+    public IReadOnlyList<string> NotSearchedRoots { get; init; } = [];
+
     /// <summary>The candidates called any of <paramref name="names"/>, for the provider that owns them.</summary>
     public IReadOnlyList<string> Named(IReadOnlyList<string> names) =>
     [
@@ -60,12 +67,18 @@ public sealed record SourceDiscovery(
 /// by consent rather than by a tool's layout: an approved root is the only place this looks, and a
 /// directory found outside one is never returned. The volume index makes that cheap; it does not
 /// make it implicit.
+///
+/// <para><b>Only where the answer can matter.</b> A root that nothing in the scope reaches is not
+/// looked in, and is named in <see cref="SourceDiscovery.NotSearchedRoots"/> instead. One a scan
+/// listed whole is read from the scan's tree rather than listed again. Storage passes no scope, so
+/// every root is searched on the disk.</para>
 /// </summary>
 public sealed class SourceDirectoryDiscovery
 {
     private readonly IDirectoryScanner _scanner;
     private readonly IVolumeInventory _volumes;
     private readonly ScanTuner _tuning;
+    private readonly ProtectionScope _scope;
     private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
 
@@ -86,19 +99,28 @@ public sealed class SourceDirectoryDiscovery
     /// </summary>
     private (IReadOnlyList<SourceRoot> Roots, Task<SourceDiscovery> Search)? _memo;
 
+    /// <summary>
+    /// Whether a scan's tree is too old to read. <see cref="Invalidate"/> asks for the folders as they
+    /// are now, which the tree does not say, so every root searched after it is searched on the disk.
+    /// </summary>
+    private volatile bool _listingStale;
+
     /// <param name="volumes">
     /// The machine's volumes, so that <see cref="Searches"/> can tell a root on a local disk from one
     /// on a cloud client's mount. The shared inventory by default, whose list a planning pass drops
     /// at its start like every other cached view of the machine.
     /// </param>
     /// <param name="tuning">What the walk runs with. <see cref="ScanTuner.Shipped"/> where none is given.</param>
-    public SourceDirectoryDiscovery(IDirectoryScanner scanner, IVolumeInventory? volumes = null, ScanTuner? tuning = null)
+    /// <param name="scope">What the answer will be asked about. <see cref="ProtectionScope.Everything"/> where none is given.</param>
+    public SourceDirectoryDiscovery(
+        IDirectoryScanner scanner, IVolumeInventory? volumes = null, ScanTuner? tuning = null, ProtectionScope? scope = null)
     {
         ArgumentNullException.ThrowIfNull(scanner);
 
         _scanner = scanner;
         _volumes = volumes ?? VolumeInventory.Current;
         _tuning = tuning ?? ScanTuner.Shipped;
+        _scope = scope ?? ProtectionScope.Everything;
     }
 
     /// <summary>
@@ -181,6 +203,7 @@ public sealed class SourceDirectoryDiscovery
         var unreadable = new List<string>();
         var unreached = new List<string>();
         var refused = new List<string>();
+        var notSearched = new List<string>();
         var fellBack = false;
 
         // Each folder a pass will search, as the user spelled it the first time it appears. Gathered
@@ -225,7 +248,20 @@ public sealed class SourceDirectoryDiscovery
         {
             ct.ThrowIfCancellationRequested();
 
-            var searched = await SearchAsync(search.HandingOff(Nested(root, searchable)), root, ct).ConfigureAwait(false);
+            // Waits for a scan's tree where the scope is a scan's, because only the tree says whether
+            // the scan ended with one.
+            var reach = await _scope.ReachAsync(root, ct).ConfigureAwait(false);
+
+            if (reach.Reach == FolderReach.Outside)
+            {
+                notSearched.Add(root);
+                continue;
+            }
+
+            var rootSearch = search.HandingOff(Nested(root, searchable));
+            var searched = reach is { Reach: FolderReach.Listed, Listing: { } tree } && !_listingStale
+                ? FromListing(SourceTreeWalk.In(tree, reach.Node, root, rootSearch, ct))
+                : await SearchAsync(rootSearch, root, ct).ConfigureAwait(false);
 
             candidates.AddRange(searched.Candidates);
             unreadable.AddRange(searched.Unreadable);
@@ -241,6 +277,7 @@ public sealed class SourceDirectoryDiscovery
             [.. refused.Distinct(StringComparer.OrdinalIgnoreCase)])
         {
             UnreachedRoots = [.. unreached.Distinct(StringComparer.OrdinalIgnoreCase)],
+            NotSearchedRoots = notSearched,
         };
 
         return result;
@@ -305,6 +342,7 @@ public sealed class SourceDirectoryDiscovery
             _memo = null;
         }
 
+        _listingStale = true;
         _volumes.Invalidate();
     }
 
@@ -410,10 +448,9 @@ public sealed class SourceDirectoryDiscovery
             : null;
 
     /// <summary>The guaranteed route: enumerate the root ourselves.</summary>
-    private RootSearch Walk(DirectorySearch search, string root, CancellationToken ct)
-    {
-        var walked = SourceTreeWalk.Under(root, search, _tuning.For(root).Walk, ct);
+    private RootSearch Walk(DirectorySearch search, string root, CancellationToken ct) =>
+        FromListing(SourceTreeWalk.Under(root, search, _tuning.For(root).Walk, ct));
 
-        return new RootSearch(walked.Candidates, walked.Unreadable, walked.RootListed);
-    }
+    private static RootSearch FromListing(WalkedSourceTree walked) =>
+        new(walked.Candidates, walked.Unreadable, walked.RootListed);
 }
