@@ -89,7 +89,7 @@ public sealed partial class ExplorePage : Page
 
         _guard = new ListSelectionGuard(() => ViewModel.IsShowingRows, restore => DispatcherQueue.TryEnqueueGuarded(restore));
 
-        ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
+        ViewModel.Elevation.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
         // The Files layout's rows arrive on their own, after a search rather than with a redraw, so
         // the highlight is put back on them the way a redraw puts it back on the folder's rows.
@@ -161,13 +161,13 @@ public sealed partial class ExplorePage : Page
         Map.Facts = ViewModel.ShapeFacts;
         Map.Removal = ViewModel.ShapeRemoval;
         Map.ContrastChanged += (_, _) => ViewModel.MapInContrast = Map.Contrasted;
-        Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
-        Map.ViewportChanged += (_, _) => ViewModel.ViewportChanged();
+        Map.ZoomingIn += (_, from) => ViewModel.Visiting.Zoomed(from);
+        Map.ViewportChanged += (_, _) => ViewModel.Visiting.ViewportChanged();
         Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
         Map.MenuRequested += OnMapMenuRequested;
 
-        // A step away remembers the zoom it left, so Back comes back to it. See ExploreViewModel.Viewing.
-        ViewModel.Viewing = () => Map.Viewport;
+        // A step away remembers the zoom it left, so Back comes back to it. See ExploreVisiting.Viewing.
+        ViewModel.Visiting.Viewing = () => Map.Viewport;
 
         // The mouse's Back and Forward buttons from anywhere on the page, as a browser takes them.
         // Heard past the handled flag, because a row or a button under the pointer marks the press
@@ -179,7 +179,7 @@ public sealed partial class ExplorePage : Page
         // write to disk failed, silently and in the same session.
         var preferences = App.Preferences.Current;
 
-        ViewModel.NotesDismissed = preferences.ExploreNotesDismissed;
+        ViewModel.Notes.Dismissed = preferences.ExploreNotesDismissed;
 
         // Kept as the reader leaves it, on the overview itself.
         Map.OverviewHidden = preferences.ExploreOverviewHidden;
@@ -282,7 +282,7 @@ public sealed partial class ExplorePage : Page
     private void ShowRowsOf(ExploreView view)
     {
         var files = view == ExploreView.Files;
-        object rows = files ? ViewModel.Files.Rows : ViewModel.Rows;
+        object rows = files ? ViewModel.Files.Rows : ViewModel.Listing.Rows;
 
         if (ReferenceEquals(RowsList.ItemsSource, rows))
         {
@@ -351,7 +351,7 @@ public sealed partial class ExplorePage : Page
             ViewModel.VolumeBeside,
             ViewModel.Growth.Comparison,
             ViewModel.Types.Dominant,
-            ViewModel.Revisiting);
+            ViewModel.Visiting.Revisiting);
 
         _cards.Relight();
     }
@@ -463,7 +463,7 @@ public sealed partial class ExplorePage : Page
 
     private void KeepNotes(bool dismissed)
     {
-        ViewModel.NotesDismissed = dismissed;
+        ViewModel.Notes.Dismissed = dismissed;
         App.Preferences.Update(current => current with { ExploreNotesDismissed = dismissed });
 
         // The button that was just pressed is the one that has gone, so focus would be left on a
@@ -496,12 +496,12 @@ public sealed partial class ExplorePage : Page
     /// <summary>
     /// Read the volumes again as the picker opens, where the last reading has gone stale, so its
     /// space figures describe the disk now rather than when the page was first shown. See
-    /// <see cref="ExploreViewModel.RefreshDrivesAsync"/>.
+    /// <see cref="ExploreTargeting.RefreshDrivesAsync"/>.
     ///
     /// <para>Not cancelled when the page is left. NavigationCacheMode keeps the page, so rows written
     /// after it is left are the rows its next visit shows.</para>
     /// </summary>
-    private async void OnDriveListOpened(object sender, object e) => await ViewModel.RefreshDrivesAsync(CancellationToken.None);
+    private async void OnDriveListOpened(object sender, object e) => await ViewModel.Targeting.RefreshDrivesAsync(CancellationToken.None);
 
     /// <summary>
     /// Read the volumes as the page is shown, on the same terms as the picker opening, the first
@@ -518,7 +518,7 @@ public sealed partial class ExplorePage : Page
         var resuming = _resuming;
         _resuming = null;
 
-        if (!await ViewModel.ShownAsync(resuming, CancellationToken.None))
+        if (!await ViewModel.Targeting.ShownAsync(resuming, CancellationToken.None))
         {
             return;
         }
@@ -589,7 +589,7 @@ public sealed partial class ExplorePage : Page
 
         if (await FolderDialog.ChooseAsync(window) is { } folder)
         {
-            ViewModel.ScopeTo(folder);
+            ViewModel.Targeting.ScopeTo(folder);
         }
     }
 
@@ -720,8 +720,8 @@ public sealed partial class ExplorePage : Page
     {
         var command = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
         {
-            PointerUpdateKind.XButton1Released => ViewModel.GoBackCommand,
-            PointerUpdateKind.XButton2Released => ViewModel.GoForwardCommand,
+            PointerUpdateKind.XButton1Released => ViewModel.Visiting.GoBackCommand,
+            PointerUpdateKind.XButton2Released => ViewModel.Visiting.GoForwardCommand,
             _ => null,
         };
 
@@ -742,7 +742,7 @@ public sealed partial class ExplorePage : Page
             return;
         }
 
-        args.Handled = Invoke(ViewModel.GoBackCommand);
+        args.Handled = Invoke(ViewModel.Visiting.GoBackCommand);
     }
 
     /// <summary>

@@ -85,7 +85,7 @@ public sealed class ExploreTypesTests : IDisposable
     {
         var root = _explore.Temp.CreateDirectory("scan");
         var page = _explore.Page();
-        page.ScopeTo(root);
+        page.Targeting.ScopeTo(root);
         page.SelectedColouring = ExploreColouring.Type;
 
         var builder = Builder(root);
@@ -154,7 +154,7 @@ public sealed class ExploreTypesTests : IDisposable
         var tree = Builder(root).Build(ExploreChildOrder.BySize);
         var page = _explore.Page();
 
-        page.ScopeTo(root);
+        page.Targeting.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         return (page, tree);

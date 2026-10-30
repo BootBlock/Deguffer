@@ -86,7 +86,7 @@ public sealed class ExploreGrowthTests : IDisposable
     {
         _explore.Volumes.With(@"C:\", totalBytes: 1000 * Megabyte, freeBytes: 400 * Megabyte, volumeName: Volume);
         var page = _explore.Page();
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
 
         await _explore.ScanAsync(page, ExploreScan.Fast(Drive(("Logs", 10))));
 

@@ -28,7 +28,7 @@ public sealed class ExploreDepthColouringTests : IDisposable
         var tree = builder.Build(ExploreChildOrder.BySize);
         var page = _explore.Page();
 
-        page.ScopeTo(root);
+        page.Targeting.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         page.SelectedColouring = ExploreColouring.Depth;

@@ -79,7 +79,7 @@ internal sealed class ExploreFixture : IDisposable
     public ExploreViewModel Page(bool isElevated = false)
     {
         var page = Built(isElevated);
-        var shown = page.ShownAsync(null, CancellationToken.None);
+        var shown = page.Targeting.ShownAsync(null, CancellationToken.None);
 
         Assert.True(shown.IsCompleted, "The fake inventory answers at once, so the first reading finishes as the page is shown.");
         shown.GetAwaiter().GetResult();

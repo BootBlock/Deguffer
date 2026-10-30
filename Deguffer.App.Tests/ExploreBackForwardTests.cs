@@ -25,9 +25,9 @@ public sealed class ExploreBackForwardTests : IDisposable
     public void BackAndForwardRetraceEveryKindOfStep() => UiThread.Run(async () =>
     {
         var (page, tree, users, profile) = await ScannedAsync();
-        var top = page.Trail[0].Position;
+        var top = page.Listing.Trail[0].Position;
 
-        Assert.False(page.GoBackCommand.CanExecute(null));
+        Assert.False(page.Visiting.GoBackCommand.CanExecute(null));
 
         page.Descend(users);
         page.Descend(profile);
@@ -36,21 +36,21 @@ public sealed class ExploreBackForwardTests : IDisposable
 
         Assert.Equal(tree.RootNode, page.CurrentNode);
 
-        page.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
         Assert.Equal(users, page.CurrentNode);
-        Assert.Equal(["testuser"], page.Rows.Select(row => row.Name));
+        Assert.Equal(["testuser"], page.Listing.Rows.Select(row => row.Name));
 
-        page.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
         Assert.Equal(profile, page.CurrentNode);
 
-        page.GoBackCommand.Execute(null);
-        page.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
         Assert.Equal(tree.RootNode, page.CurrentNode);
-        Assert.False(page.GoBackCommand.CanExecute(null));
+        Assert.False(page.Visiting.GoBackCommand.CanExecute(null));
 
-        page.GoForwardCommand.Execute(null);
+        page.Visiting.GoForwardCommand.Execute(null);
         Assert.Equal(users, page.CurrentNode);
-        Assert.True(page.GoForwardCommand.CanExecute(null));
+        Assert.True(page.Visiting.GoForwardCommand.CanExecute(null));
     });
 
     /// <summary>
@@ -63,10 +63,10 @@ public sealed class ExploreBackForwardTests : IDisposable
         var (page, _, users, _) = await ScannedAsync();
 
         page.Descend(users);
-        page.GoBackCommand.Execute(null);
-        page.GoTo(page.Trail[^1].Position);
+        page.Visiting.GoBackCommand.Execute(null);
+        page.GoTo(page.Listing.Trail[^1].Position);
 
-        Assert.True(page.GoForwardCommand.CanExecute(null));
+        Assert.True(page.Visiting.GoForwardCommand.CanExecute(null));
     });
 
     /// <summary>
@@ -80,27 +80,27 @@ public sealed class ExploreBackForwardTests : IDisposable
         var viewing = MapViewport.Whole;
         var redrawnAt = new List<MapViewport?>();
 
-        page.Viewing = () => viewing;
-        page.ViewChanged += (_, _) => redrawnAt.Add(page.Revisiting);
+        page.Visiting.Viewing = () => viewing;
+        page.ViewChanged += (_, _) => redrawnAt.Add(page.Visiting.Revisiting);
 
         var told = 0;
-        page.GoBackCommand.CanExecuteChanged += (_, _) => told++;
+        page.Visiting.GoBackCommand.CanExecuteChanged += (_, _) => told++;
 
-        page.Zoomed(viewing);
+        page.Visiting.Zoomed(viewing);
 
         Assert.Equal(1, told);
         viewing = Zoomed;
         page.Descend(users);
         viewing = MapViewport.Whole;
 
-        page.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
 
         Assert.Equal(tree.RootNode, page.CurrentNode);
         Assert.Equal(Zoomed, redrawnAt[^1]);
-        Assert.Null(page.Revisiting);
+        Assert.Null(page.Visiting.Revisiting);
 
         viewing = Zoomed;
-        page.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
 
         Assert.Equal(tree.RootNode, page.CurrentNode);
         Assert.Equal(MapViewport.Whole, redrawnAt[^1]);
@@ -127,20 +127,20 @@ public sealed class ExploreBackForwardTests : IDisposable
         var offered = new List<bool>();
 
         // The map: a redraw that hands it a zoom puts it there before the redraw returns.
-        page.Viewing = () => viewing;
-        page.ViewChanged += (_, _) => viewing = page.Revisiting ?? viewing;
-        page.GoForwardCommand.CanExecuteChanged += (_, _) => offered.Add(page.GoForwardCommand.CanExecute(null));
+        page.Visiting.Viewing = () => viewing;
+        page.ViewChanged += (_, _) => viewing = page.Visiting.Revisiting ?? viewing;
+        page.Visiting.GoForwardCommand.CanExecuteChanged += (_, _) => offered.Add(page.Visiting.GoForwardCommand.CanExecute(null));
 
-        page.Zoomed(viewing);
+        page.Visiting.Zoomed(viewing);
         viewing = Zoomed;
 
-        page.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
 
         Assert.Equal(MapViewport.Whole, viewing);
         Assert.True(offered[^1]);
 
         var asked = offered.Count;
-        page.ViewportChanged();
+        page.Visiting.ViewportChanged();
 
         Assert.Equal(asked + 1, offered.Count);
     });
@@ -156,22 +156,22 @@ public sealed class ExploreBackForwardTests : IDisposable
         var viewing = MapViewport.Whole;
         var told = 0;
 
-        page.Viewing = () => viewing;
-        page.GoBackCommand.CanExecuteChanged += (_, _) => told++;
+        page.Visiting.Viewing = () => viewing;
+        page.Visiting.GoBackCommand.CanExecuteChanged += (_, _) => told++;
 
         // A zoom to a shape, then a turn of the wheel back out to the whole picture: Back on the
         // treemap zooms in again.
         viewing = Zoomed;
-        page.Zoomed(viewing);
+        page.Visiting.Zoomed(viewing);
         viewing = MapViewport.Whole;
 
-        Assert.True(page.GoBackCommand.CanExecute(null));
+        Assert.True(page.Visiting.GoBackCommand.CanExecute(null));
 
         told = 0;
         page.SelectedView = Core.Configuration.ExploreView.Sunburst;
 
         Assert.True(told > 0);
-        Assert.False(page.GoBackCommand.CanExecute(null));
+        Assert.False(page.Visiting.GoBackCommand.CanExecute(null));
     });
 
 
@@ -189,29 +189,29 @@ public sealed class ExploreBackForwardTests : IDisposable
         await _explore.ScanAsync(page, ExploreScan.Fast(Drive(@"C:\")));
 
         Assert.Equal(profile, page.CurrentNode);
-        Assert.True(page.GoBackCommand.CanExecute(null));
+        Assert.True(page.Visiting.GoBackCommand.CanExecute(null));
 
         await _explore.ScanAsync(page, ExploreScan.Fast(Drive(@"D:\")));
 
-        Assert.False(page.GoBackCommand.CanExecute(null));
+        Assert.False(page.Visiting.GoBackCommand.CanExecute(null));
 
         page.Descend(users);
         page.Descend(profile);
 
         var told = 0;
-        page.GoBackCommand.CanExecuteChanged += (_, _) => told++;
+        page.Visiting.GoBackCommand.CanExecuteChanged += (_, _) => told++;
 
         var running = page.ScanCommand.ExecuteAsync(null);
         page.ScanCancelCommand.Execute(null);
         await running;
 
-        Assert.False(page.GoBackCommand.CanExecute(null));
+        Assert.False(page.Visiting.GoBackCommand.CanExecute(null));
         Assert.True(told > 0);
 
         // The next tree is the first one, as far as where the reader has been goes.
         await _explore.ScanAsync(page, ExploreScan.Fast(Drive(@"C:\")));
 
-        Assert.False(page.GoBackCommand.CanExecute(null));
+        Assert.False(page.Visiting.GoBackCommand.CanExecute(null));
     });
 
     /// <summary>
@@ -225,24 +225,24 @@ public sealed class ExploreBackForwardTests : IDisposable
         var page = _explore.Page();
         var (tree, folder) = _explore.OnDisk();
 
-        page.ScopeTo(tree.PathOf(tree.RootNode));
+        page.Targeting.ScopeTo(tree.PathOf(tree.RootNode));
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         page.Descend(folder);
-        page.GoBackCommand.Execute(null);
+        page.Visiting.GoBackCommand.Execute(null);
 
-        Assert.True(page.GoForwardCommand.CanExecute(null));
+        Assert.True(page.Visiting.GoForwardCommand.CanExecute(null));
 
         var told = 0;
-        page.GoForwardCommand.CanExecuteChanged += (_, _) => told++;
+        page.Visiting.GoForwardCommand.CanExecuteChanged += (_, _) => told++;
 
         page.Selection.Select([folder]);
         await page.Selection.DeleteCommand.ExecuteAsync(null);
 
-        Assert.False(page.GoForwardCommand.CanExecute(null));
+        Assert.False(page.Visiting.GoForwardCommand.CanExecute(null));
         Assert.True(told > 0);
 
-        page.GoForwardCommand.Execute(null);
+        page.Visiting.GoForwardCommand.Execute(null);
 
         Assert.Equal(tree.RootNode, page.CurrentNode);
     });

@@ -80,7 +80,7 @@ public sealed class ExploreWorkTests : IDisposable
         });
         var page = _explore.Page();
         var (tree, folder) = _explore.OnDisk();
-        page.ScopeTo(tree.PathOf(tree.RootNode));
+        page.Targeting.ScopeTo(tree.PathOf(tree.RootNode));
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
         var failures = 0;
         _explore.Work.Failed += (_, _) => failures++;
@@ -107,7 +107,7 @@ public sealed class ExploreWorkTests : IDisposable
         });
         var page = _explore.Page();
         var (tree, folder) = _explore.OnDisk();
-        page.ScopeTo(tree.PathOf(tree.RootNode));
+        page.Targeting.ScopeTo(tree.PathOf(tree.RootNode));
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
         var failures = 0;
         _explore.Work.Failed += (_, _) => failures++;
