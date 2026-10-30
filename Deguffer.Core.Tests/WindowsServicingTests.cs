@@ -102,6 +102,37 @@ public sealed class WindowsServicingTests
     }
 
     /// <summary>
+    /// The negative list, at the one place every handler passes through: Windows registers
+    /// <c>DownloadsFolder</c> as a cleanup, and it empties the Downloads folder with no age rule. The
+    /// host refuses it under any spelling, for a survey and a run alike, before the registration is read.
+    /// </summary>
+    [Theory]
+    [InlineData("DownloadsFolder")]
+    [InlineData("downloadsfolder")]
+    public void TheHostNeverLoadsTheHandlerThatEmptiesDownloads(string handler)
+    {
+        var refused = DiskCleanupHandlers.NotHosted(handler, @"C:");
+
+        Assert.NotNull(refused);
+        Assert.Contains("never runs it", refused, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The refusal reaches the real host's survey. Only a survey is asked, never a run: with the guard
+    /// broken, a survey of the real handler measures the Downloads folder and clears nothing, so this
+    /// fails by answering something else instead of by emptying it.
+    /// </summary>
+    [Fact]
+    public void TheRealHostRefusesToSurveyTheHandlerThatEmptiesDownloads()
+    {
+        var survey = DiskCleanupHandlers.Default.Survey("DownloadsFolder", @"C:", CancellationToken.None);
+
+        Assert.Equal(DiskCleanupAnswer.Unavailable, survey.Answer);
+        Assert.False(survey.MayOffer);
+        Assert.Contains("never runs it", survey.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A handler Windows does not register is unavailable, which a plan reads as "leave the folder",
     /// never as something elevating would reveal.
     /// </summary>

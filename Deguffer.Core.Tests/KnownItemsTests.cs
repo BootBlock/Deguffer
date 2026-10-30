@@ -243,6 +243,22 @@ public sealed class KnownItemsTests : IDisposable
     }
 
     /// <summary>
+    /// WinGet's portable packages, on the negative list: installed programs in a folder named like a
+    /// download cache. No provider may offer them, so this entry is the only place the app says what
+    /// they are, and it has to send the reader to the uninstall rather than the folder.
+    /// </summary>
+    [Fact]
+    public void WinGetsPortablePackagesAreExplainedAsInstalledPrograms()
+    {
+        var entry = ItemGuide.For(_system, _environment, new FakeVolumeInventory())
+            .Describe(Path.Combine(_environment.LocalAppData, "Microsoft", "WinGet", "Packages"));
+
+        Assert.NotNull(entry);
+        Assert.Contains("not a download cache", entry.Summary, StringComparison.Ordinal);
+        Assert.Contains("'winget uninstall'", entry.Removal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The catalogue against a real machine's directories, which is the one arrangement the app
     /// actually runs in. It asserts the wiring rather than the text: that
     /// <see cref="ItemGuide.ForThisMachine"/> resolves its anchors and finds something through them.
