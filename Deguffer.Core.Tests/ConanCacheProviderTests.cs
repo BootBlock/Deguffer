@@ -521,6 +521,93 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.Contains(IUseCheck.ReadingLimit, inspector.AgeLimits);
     }
 
+    public enum ChangeAfterPreview
+    {
+        HomeMoved,
+        ConfigurationInstalled,
+        UserConfigurationAdded,
+        FolderDroppedIntoTemp,
+        FolderDroppedIntoBuilds,
+        BuildStarted,
+        BuildsUnlisted,
+    }
+
+    /// <summary>
+    /// Conan works out its home and reads its configuration afresh when the clean starts it, and
+    /// <c>-t</c> removes by shape from whatever <c>t</c> and <c>b</c> hold then. So a home moved, a
+    /// configuration installed, or anything new in <c>t</c> or <c>b</c> after the preview, or a
+    /// <c>b</c> that will no longer be listed, stops the clean, and nothing is removed.
+    /// </summary>
+    [Theory]
+    [InlineData(ChangeAfterPreview.HomeMoved, "Conan's home no longer works out as")]
+    [InlineData(ChangeAfterPreview.ConfigurationInstalled, "Conan's configuration in")]
+    [InlineData(ChangeAfterPreview.UserConfigurationAdded, "Conan's configuration in")]
+    [InlineData(ChangeAfterPreview.FolderDroppedIntoTemp, "temporary and build folders")]
+    [InlineData(ChangeAfterPreview.FolderDroppedIntoBuilds, "temporary and build folders")]
+    [InlineData(ChangeAfterPreview.BuildStarted, "temporary and build folders")]
+    [InlineData(ChangeAfterPreview.BuildsUnlisted, "temporary and build folders")]
+    public async Task DoesNotRunTheCleanWhereWhatItWouldReachChangedAfterThePreview(ChangeAfterPreview change, string why)
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var runner = Answering();
+        var provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        var survivor = Path.Combine(Store, "t", Recipe, "e", "conanfile.py");
+        IDisposable? denied = null;
+
+        switch (change)
+        {
+            case ChangeAfterPreview.HomeMoved:
+                var moved = Path.Combine(_temp.Path, "moved-home");
+                CreateHome(moved);
+                survivor = Write(10, moved, "p", "t", "notes", "readme.txt");
+                _environment.WithEnvironmentVariable("CONAN_HOME", moved);
+                break;
+
+            case ChangeAfterPreview.ConfigurationInstalled:
+                WriteConf(DefaultHome, $"core.cache:storage_path = {_environment.UserProfile}\n");
+                break;
+
+            case ChangeAfterPreview.UserConfigurationAdded:
+                WriteConf(DefaultHome, string.Empty, "global_user.conf");
+                break;
+
+            case ChangeAfterPreview.FolderDroppedIntoTemp:
+                survivor = Write(10, Store, "t", "notes", "readme.txt");
+                break;
+
+            case ChangeAfterPreview.FolderDroppedIntoBuilds:
+                survivor = Write(10, Store, "b", "notes", "readme.txt");
+                break;
+
+            case ChangeAfterPreview.BuildStarted:
+                survivor = Write(10, Store, "b", "fmt9988776655443", "b", "fmt.obj");
+                break;
+
+            case ChangeAfterPreview.BuildsUnlisted:
+                denied = new DeniedDirectory(Path.Combine(Store, "b"));
+                break;
+        }
+
+        CleanupResult result;
+
+        using (denied)
+        {
+            result = await provider.ExecuteAsync(plan);
+        }
+
+        var outcome = Assert.Single(result.Steps);
+        Assert.False(outcome.Succeeded);
+        Assert.StartsWith("Not run: ", outcome.Message, StringComparison.Ordinal);
+        Assert.Contains(why, outcome.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(runner.Invocations, call => call.Arguments.StartsWith("cache clean", StringComparison.Ordinal));
+        Assert.True(File.Exists(survivor));
+    }
+
     /// <summary>
     /// §5.2: <c>-t</c> removes <c>t</c> whole and every folder of <c>b</c> without a finished package,
     /// whatever it is called. Anything there Conan did not make holds the clean back, and is protected.

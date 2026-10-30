@@ -36,11 +36,13 @@ namespace Deguffer.Core.Providers;
 /// <see cref="ConfiguredFolder"/> declines is left alone: no step, and only Conan's own files in it
 /// are refused in Explore.</para>
 ///
-/// <para><b>Held back while Conan runs.</b> Conan's cache is not safe for concurrent use, and
-/// <c>-t</c> removes every unfinished build in the store, which is exactly what a build in progress
-/// looks like. The plan offers no step while a <c>conan</c> process is running, and the step asks
-/// again immediately before it starts (<see cref="ConanNotRunning"/>), because a build can start while
-/// the preview is on screen.</para>
+/// <para><b>Held back while Conan runs, and held to what the plan saw.</b> Conan's cache is not safe
+/// for concurrent use, and <c>-t</c> removes every unfinished build in the store, which is exactly
+/// what a build in progress looks like. The plan offers no step while a <c>conan</c> process is
+/// running. Immediately before it starts, the step asks again, and also checks that the home, the
+/// configuration and the store's <c>t</c> and <c>b</c> are as the plan read them
+/// (<see cref="ConanCleanTarget"/>), because any of them can change while the preview is on
+/// screen.</para>
 /// </summary>
 public sealed class ConanCacheProvider : CleanupProviderBase
 {
@@ -294,7 +296,7 @@ public sealed class ConanCacheProvider : CleanupProviderBase
                     WhenCancelled = CancelledCommand.Finishes,
                     Estimated = measured.Total,
                     MeasuredPaths = contents.Measured,
-                    TargetCheck = new ConanNotRunning(Inspector, ConflictingProcessNames),
+                    TargetCheck = new ConanCleanTarget(Inspector, ConflictingProcessNames, ResolveHome, found, contents.TempAndBuilds),
                 },
             ],
             ProtectedPaths = protectedPaths,
@@ -327,8 +329,11 @@ public sealed class ConanCacheProvider : CleanupProviderBase
     /// <c>.conanrc</c> and a read of the one it finds, which the plan, the cleaned places and the
     /// question to Conan all need to agree on.
     /// </summary>
-    private ConanHomeAnswer OwnHome() =>
-        _ownHome.Get(() => ConanHome.Resolve(Environment, ProcessRunner.WorkingDirectoryFor(Environment), _conanRcWalk));
+    private ConanHomeAnswer OwnHome() => _ownHome.Get(ResolveHome);
+
+    /// <summary>The home worked out afresh, for the pass and again when the clean runs.</summary>
+    private ConanHomeAnswer ResolveHome() =>
+        ConanHome.Resolve(Environment, ProcessRunner.WorkingDirectoryFor(Environment), _conanRcWalk);
 
     /// <summary>Why a home or store a setting names must not be examined as Conan's, or null where it may.</summary>
     private string? WhyNotOwned(string folder) => ConfiguredFolder.WhyNotOwned(

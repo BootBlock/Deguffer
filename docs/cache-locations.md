@@ -1414,15 +1414,18 @@ home's `global.conf` and `global_user.conf` itself. A home or store that a setti
 profile, a drive's root or another folder Deguffer never treats as one tool's is left alone, and
 Conan's clean is not run there. Where either file is a template, or sets the store in any way but
 one plain folder, nothing is offered and Conan is not started, because only Conan could say which
-folder it names. Otherwise it asks `conan config home` and `conan config show
-core.cache:storage_path`, and offers nothing unless Conan's answers name the same home and store. It
-runs `conan cache clean -s -b -t`. The download and metadata folders (`-d`) and the backup sources
-(`-bs`) are never asked for, and `conan remove` is never run. `-t` removes the temporary folder `t`
-and every unfinished build in `b` whatever it is called, so the clean is offered only where
-everything in `t` and `b` carries the name Conan gives the folders it makes there, and no recipe or
-package folder is a link. While a `conan` process is running, nothing is offered, and the clean asks
-again just before it runs. A clean you cancel while this command runs is left to finish, because
-Conan would build from a half-removed source or build folder.
+folder it names. Otherwise it asks `conan config home` and
+`conan config show core.cache:storage_path`, and offers nothing unless Conan's answers name the same
+home and store. It runs `conan cache clean -s -b -t`. The download and metadata folders (`-d`) and
+the backup sources (`-bs`) are never asked for, and `conan remove` is never run. `-t` removes the
+temporary folder `t` and every unfinished build in `b` whatever it is called, so the clean is
+offered only where everything in `t` and `b` carries the name Conan gives the folders it makes
+there, and no recipe or package folder is a link. While a `conan` process is running, nothing is
+offered. Just before the clean runs, Deguffer asks again, and also checks that Conan's home,
+`global.conf` and `global_user.conf`, and what is in `t` and `b`, are as the preview found them,
+because Conan reads its home and configuration afresh when it starts. Any change stops the clean,
+and scanning again shows what it would remove now. A clean you cancel while this command runs is
+left to finish, because Conan would build from a half-removed source or build folder.
 
 ### What is protected
 

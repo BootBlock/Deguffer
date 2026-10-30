@@ -78,7 +78,7 @@ internal abstract record ConanLocation
             return new HomeDeclined(home, "Conan's own answer", homeDeclined);
         }
 
-        if (!Same(home, own.Home))
+        if (!SameFolder(home, own.Home))
         {
             return new Unknown(
                 $"Conan reports its home as {home}, but by {own.Source} it is {own.Home}, so the folder Conan "
@@ -101,14 +101,15 @@ internal abstract record ConanLocation
             return new StoreDeclined(home, store, storeDeclined);
         }
 
-        return Same(store, configured.Store)
+        return SameFolder(store, configured.Store)
             ? new Found(home, store, configured.Files)
             : new Unknown(
                 $"Conan reports its package store as {store}, but its configuration in {home} names "
                 + $"{configured.Store}, so the folder Conan uses is not the one Deguffer checked, and nothing is offered.");
     }
 
-    private static bool Same(string one, string two) => string.Equals(
+    /// <summary>Whether two full paths name one folder, as Windows compares names.</summary>
+    public static bool SameFolder(string one, string two) => string.Equals(
         Path.TrimEndingDirectorySeparator(LongPath.Display(one)),
         Path.TrimEndingDirectorySeparator(LongPath.Display(two)),
         StringComparison.OrdinalIgnoreCase);

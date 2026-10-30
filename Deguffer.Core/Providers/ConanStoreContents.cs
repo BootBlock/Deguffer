@@ -66,15 +66,9 @@ internal static partial class ConanStoreContents
     private const string Unrecognised =
         "Not something Conan's clean removes, and not recognised as part of Conan's store.";
 
-    private const string NotConansReason =
-        "Not something Conan made, though its clean would remove it, so the clean is not offered while it is here.";
-
-    private const string LinkNotMeasured =
-        "Conan's clean removes a folder here that is a link, so Deguffer did not measure through it.";
-
     public static ConanStoreReading Read(string store, CancellationToken ct)
     {
-        var reading = new Reading();
+        var reading = new ConanStoreTally();
         var scan = ChildDirectories.Under(store);
 
         if (scan.Unreadable)
@@ -88,27 +82,21 @@ internal static partial class ConanStoreContents
 
             var path = LongPath.Display(child.FullName);
             var isLink = child.Attributes.HasFlag(FileAttributes.ReparsePoint);
-            var isTemp = child.Name.Equals(TempFolder, StringComparison.OrdinalIgnoreCase);
-            var isBuilds = child.Name.Equals(BuildsFolder, StringComparison.OrdinalIgnoreCase);
 
-            // Conan goes through a linked t or b as though it were the folder, and -s and -b through a
-            // linked recipe or package folder to the s or b in it, into a tree nobody here read.
-            if (isLink && (isTemp || isBuilds || ReferenceFolder().IsMatch(child.Name)))
+            if (IsTempOrBuilds(child))
+            {
+                ReadTempOrBuilds(child, reading, ct);
+            }
+
+            // -s and -b go through a linked recipe or package folder to the s or b in it, into a tree
+            // nobody here read.
+            else if (isLink && ReferenceFolder().IsMatch(child.Name))
             {
                 reading.NotConans(path);
             }
             else if (isLink)
             {
                 reading.Kept(path, CacheLevelWalk.LinkReason);
-            }
-            else if (isTemp)
-            {
-                ReadTemp(path, reading, ct);
-            }
-            else if (isBuilds)
-            {
-                reading.Kept(path, "The folder Conan keeps the packages built on this machine in.");
-                ReadLocalBuilds(path, reading, ct);
             }
             else if (ReferenceFolder().IsMatch(child.Name))
             {
@@ -125,26 +113,84 @@ internal static partial class ConanStoreContents
     }
 
     /// <summary>
+    /// <c>t</c> and <c>b</c> in <paramref name="store"/> as they are now, judged exactly as
+    /// <see cref="Read"/> judges them, for the clean to hold to <see cref="ConanStoreReading.TempAndBuilds"/>:
+    /// they are where <c>-t</c> removes by shape rather than by what the database lists.
+    /// </summary>
+    public static IReadOnlySet<ConanStoreEntry> ReadTempAndBuilds(string store, CancellationToken ct)
+    {
+        var scan = ChildDirectories.Under(store);
+
+        if (scan.Unreadable)
+        {
+            return new HashSet<ConanStoreEntry> { new(LongPath.Display(store), ConanStoreEntryKind.Unreadable) };
+        }
+
+        var reading = new ConanStoreTally();
+
+        foreach (var child in scan.Directories.Concat(scan.Links).Where(IsTempOrBuilds))
+        {
+            ct.ThrowIfCancellationRequested();
+            ReadTempOrBuilds(child, reading, ct);
+        }
+
+        return reading.Finish().TempAndBuilds;
+    }
+
+    private static bool IsTempOrBuilds(FileSystemInfo child) =>
+        child.Name.Equals(TempFolder, StringComparison.OrdinalIgnoreCase)
+        || child.Name.Equals(BuildsFolder, StringComparison.OrdinalIgnoreCase);
+
+    private static void ReadTempOrBuilds(FileSystemInfo child, ConanStoreTally reading, CancellationToken ct)
+    {
+        var path = LongPath.Display(child.FullName);
+
+        // Conan goes through a linked t or b as though it were the folder, into a tree nobody here read.
+        if (child.Attributes.HasFlag(FileAttributes.ReparsePoint))
+        {
+            reading.NotConans(path, ConanStoreEntryKind.NotConans);
+        }
+        else if (child.Name.Equals(TempFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            ReadTemp(path, reading, ct);
+        }
+        else
+        {
+            reading.Kept(path, "The folder Conan keeps the packages built on this machine in.");
+            ReadLocalBuilds(path, reading, ct);
+        }
+    }
+
+    /// <summary>
     /// <c>t</c>, which <c>-t</c> removes whole, so it is measured only where everything in it is an
     /// export Conan started.
     /// </summary>
-    private static void ReadTemp(string temp, Reading reading, CancellationToken ct)
+    private static void ReadTemp(string temp, ConanStoreTally reading, CancellationToken ct)
     {
         if (FolderEntries.Of(temp) is not { } entries)
         {
             reading.Unreadable(temp);
-            reading.NotConans(temp);
+            reading.NotConans(temp, ConanStoreEntryKind.Unreadable);
             return;
         }
 
         var foreign = 0;
 
-        foreach (var entry in entries.Where(entry => !IsConansFolder(entry)))
+        foreach (var entry in entries)
         {
             ct.ThrowIfCancellationRequested();
 
-            reading.NotConans(LongPath.Display(entry.FullName));
-            foreign++;
+            var path = LongPath.Display(entry.FullName);
+
+            if (IsConansFolder(entry))
+            {
+                reading.Saw(path, ConanStoreEntryKind.Export);
+            }
+            else
+            {
+                reading.NotConans(path, ConanStoreEntryKind.NotConans);
+                foreign++;
+            }
         }
 
         if (foreign == 0)
@@ -168,14 +214,14 @@ internal static partial class ConanStoreContents
     /// <para>A file in <c>b</c> is not listed: Conan's <c>rmdir</c> passes over anything that is not a
     /// folder.</para>
     /// </summary>
-    private static void ReadLocalBuilds(string builds, Reading reading, CancellationToken ct)
+    private static void ReadLocalBuilds(string builds, ConanStoreTally reading, CancellationToken ct)
     {
         var scan = ChildDirectories.Under(builds);
 
         if (scan.Unreadable)
         {
             reading.Unreadable(builds);
-            reading.NotConans(builds);
+            reading.NotConans(builds, ConanStoreEntryKind.Unreadable);
             return;
         }
 
@@ -187,14 +233,16 @@ internal static partial class ConanStoreContents
 
             if (!IsConansFolder(build))
             {
-                reading.NotConans(path);
+                reading.NotConans(path, ConanStoreEntryKind.NotConans);
             }
             else if (!Finished(path))
             {
+                reading.Saw(path, ConanStoreEntryKind.UnfinishedBuild);
                 reading.Removed(path, isLink: false);
             }
             else
             {
+                reading.Saw(path, ConanStoreEntryKind.FinishedBuild);
                 reading.Kept(path, "A package Conan built on this machine, which may exist nowhere else. Its clean removes only the build folder inside.");
                 ReadInside(path, reading);
             }
@@ -214,7 +262,7 @@ internal static partial class ConanStoreContents
     /// One recipe's or package's folder: <c>s</c> and <c>b</c> go, and everything beside them stays.
     /// A recipe has no <c>b</c> and a package no <c>s</c>, so the two names need no telling apart.
     /// </summary>
-    private static void ReadInside(string folder, Reading reading)
+    private static void ReadInside(string folder, ConanStoreTally reading)
     {
         var scan = ChildDirectories.Under(folder);
 
@@ -249,58 +297,4 @@ internal static partial class ConanStoreContents
     /// </summary>
     [GeneratedRegex("^[A-Za-z0-9_][A-Za-z0-9_+.-]{0,4}[0-9a-f]{13}$")]
     private static partial Regex ReferenceFolder();
-
-    private sealed class Reading
-    {
-        private readonly List<string> _measured = [];
-        private readonly List<(string Path, string Reason)> _kept = [];
-        private readonly List<string> _unrecognised = [];
-        private readonly List<PlanNote> _notes = [];
-        private bool _unreadable;
-
-        public void Removed(string path, bool isLink)
-        {
-            if (isLink)
-            {
-                _notes.Add(new PlanNote(PlanNoteSeverity.Information, $"{LinkNotMeasured} ({path})"));
-            }
-            else
-            {
-                _measured.Add(path);
-            }
-        }
-
-        public void Kept(string path, string reason) => _kept.Add((path, reason));
-
-        /// <summary>Something the clean would remove that is not shown to be Conan's: protected, and it holds the clean back.</summary>
-        public void NotConans(string path)
-        {
-            _unrecognised.Add(path);
-            _kept.Add((path, NotConansReason));
-        }
-
-        public void Unreadable(string path)
-        {
-            _notes.Add(UnreadableRoot.Note(path));
-            _unreadable = true;
-        }
-
-        public ConanStoreReading Finish() => new(_measured, _kept, _unrecognised, _notes, _unreadable);
-    }
 }
-
-/// <summary>What <see cref="ConanStoreContents.Read"/> found.</summary>
-/// <param name="Measured">Every folder the clean removes, for the step to measure and report against.</param>
-/// <param name="Kept">Every folder beside them that must outlive the clean, with why.</param>
-/// <param name="Unrecognised">
-/// Everything the clean would remove that is not shown to be Conan's, each in <paramref name="Kept"/>
-/// as well. One is enough for the clean not to be offered.
-/// </param>
-/// <param name="Notes">What the user is told about what could not be read or measured.</param>
-/// <param name="Unreadable">Whether a folder would not be listed, so the figure leaves something out.</param>
-internal sealed record ConanStoreReading(
-    IReadOnlyList<string> Measured,
-    IReadOnlyList<(string Path, string Reason)> Kept,
-    IReadOnlyList<string> Unrecognised,
-    IReadOnlyList<PlanNote> Notes,
-    bool Unreadable);
