@@ -730,7 +730,9 @@ it "can take a very long time, during which little or no information is availabl
 That is Windows' own route (§5.1), and if it shrinks the file, the first survey's blocker — stop the
 service, delete, start it — no longer applies. **Gaps:** whether `Reset` needs elevation (its page
 does not say), and whether it shrinks `Windows.db` or rebuilds it in place at the same allocation.
-Both need a measurement on a disposable machine before design.
+Both need a measurement on a disposable machine before design. Service control is no longer the
+fallback if `Reset` falls short: [#70](https://github.com/BootBlock/Deguffer/issues/70) declined it
+for the whole product (§2 of the spec), so an index `Reset` cannot shrink is reported and not offered.
 
 ### Disk Cleanup handlers — the inventory
 
@@ -843,7 +845,8 @@ that Windows' own cleanup does reach it, and an elevated measurement should say 
 5. **`ComponentModelCache` is not a carve-out.** The first survey's §12 proposes it; §3 above
    rejects it as a repair rather than space.
 6. **The Search index may not need service control.** The first survey's §6 makes service control
-   the blocker; §5 above names a documented rebuild that needs none, if it shrinks the file.
+   the blocker; §5 above names a documented rebuild that needs none, if it shrinks the file. ✅ done:
+   service control is declined (§2 of the spec), and `Reset` is the index's only route.
 
 Items 1, 2, 5 and 6 are corrected in place in [unreached-locations.md](unreached-locations.md).
 Items 3 and 4 changed shipped text, and were made with the run-wide refusal of registered disks.
