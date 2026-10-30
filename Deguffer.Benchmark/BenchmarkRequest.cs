@@ -222,8 +222,9 @@ internal sealed record BenchmarkRequest(
     }
 
     /// <summary>
-    /// What a scan reads the table with on a drive of unknown kind: the values from before they could
-    /// be set, and the parse threads Auto gives the machine.
+    /// What a scan reads the table with on a drive of unknown kind: the read size and reads in flight
+    /// from before they could be set, the parse threads Auto gives the machine, and the list reads in
+    /// flight Auto gives every kind.
     /// </summary>
     public static TableTuning UnknownDrive { get; } =
         VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.Unknown).Table;

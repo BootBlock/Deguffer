@@ -81,10 +81,11 @@ Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
 - `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
   how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan
   uses, and only `walk`, `measure`, `explorewalk` and `sources` take them.
-- `--read-size KiB`, `--reads-in-flight N` and `--parse-threads N` set how many KiB of records each
-  read of the file table asks for (4 to 16384), how many reads are outstanding at once (1 to 32),
-  and how many threads parse what arrives (1 to 64). They default to what a scan uses on a drive of
-  unknown kind, and only the table routes take them.
+- `--read-size KiB`, `--reads-in-flight N`, `--parse-threads N` and `--list-reads-in-flight N` set
+  how many KiB of records each read of the file table asks for (4 to 16384), how many reads are
+  outstanding at once (1 to 32), how many threads parse what arrives (1 to 64), and how many of the
+  attribute lists kept outside the table are read at once (1 to 32). They default to what a scan
+  uses on a drive of unknown kind, and only the table routes take them.
 - Every result states the values it ran with, so compare two results only where those match, or
   where they are the one thing you changed. The values a scan uses for each kind of drive are in
   `AutoTuning`, beside the measurements they come from.
@@ -100,6 +101,9 @@ one that waits on its own work keeps about as many busy as it has threads doing 
 The table routes also report how many reads each run made, how many records `$MFT`'s bitmap marks in
 use, counted once before the first run, and the bytes of free records each run read beyond those:
 what reading across free records cost the run. That last figure holds only for a complete run.
+They also report how many reads of clusters each run made, the bitmap's and those of the attribute
+lists kept outside the table, and how long the lists took from the first read starting to the last
+ending: the time the list reads add after the first pass.
 
 To report a result, open an issue and paste the output as it stands. It names the drive letter and
 the file system, and never a path, a volume label, a user or a machine. Add the kind of drive

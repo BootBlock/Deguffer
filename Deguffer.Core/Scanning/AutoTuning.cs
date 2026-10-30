@@ -113,13 +113,15 @@ internal static class AutoTuning
     /// <para>The <c>index</c> route on the NVMe system volume, 2.34 M records in use and 4,051 reads of
     /// clusters, 1 MiB table reads, eight in flight, two rounds of five runs, the second in reverse
     /// order. The medians of the later runs, for the lists alone: 0.91 and 2.08 s one at a time, 250
-    /// and 364 ms at eight, and 222 and 130 ms at 32. The other NVMe volume held 25 such lists and
-    /// the SATA SSD 12, which took under a millisecond at every depth, so those runs favour none.</para>
+    /// and 364 ms at eight, and 222 and 130 ms at 32. The other NVMe volume made 26 reads of clusters
+    /// and the SATA SSD 13, one of each the bitmap's, which took under a millisecond at every depth,
+    /// so those runs favour none.</para>
     ///
     /// <para>No spinning disk was available. There the drive's command queue reorders what is
     /// waiting, which it can only do when several reads are, and the reads are already issued in
     /// cluster order, so a deeper queue is not expected to cost it anything. A buffer is held per read
-    /// in flight, each the size of the largest list read into it, a cluster or two.</para>
+    /// in flight, each the whole clusters of the largest list read into it: see
+    /// <see cref="TableTuning"/>.</para>
     /// </summary>
     public static int TableListReadsInFlight(StorageMedia media) => TableTuning.MaximumListReadsInFlight;
 
