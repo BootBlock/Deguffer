@@ -223,6 +223,11 @@ report.
 
 ### Electron download cache — Build, Tier 1, measured at 150.9 MB
 
+✅ **Done** as `ElectronCacheProvider`. Offers only folders named by 64 lowercase hex characters.
+Differs: `electron_config_cache` is read by the `electron` package's `npm/install.js`, not by
+`@electron/get`, which takes only a `cacheRoot` option. Each entry holds only the zip from
+`@electron/get` 4.0 on (`SHASUMS256.txt` beside it before that).
+
 `%LOCALAPPDATA%\electron\Cache`, moved by `electron_config_cache`
 ([installation](https://github.com/electron/electron/blob/main/docs/tutorial/installation.md)). Each
 entry is a folder named by the SHA-256 of the download URL's directory, holding one zip
@@ -241,6 +246,12 @@ the source that names these entries was not found, so the name patterns are obse
 A separate provider from Electron's (G1).
 
 ### TypeScript typings cache — Build, Tier 1, measured at 57.7 MB
+
+✅ **Done** as `TypeScriptTypingsCacheProvider`. **Correction:** no process is named `tsserver`. VS
+Code runs it as `Code.exe`, other hosts as `node.exe`, and TypeScript 7 as `tsc`. So a version
+folder is held back by the live-tree check (a program working in it, as the installer's
+`npm install` does, or holding a file in it open), not by a process name. Verified from
+TypeScript 6.0.3's `nodeServer.ts`, the TypeScript 7 Go port's `osvfs`, and VS Code's spawner.
 
 `%LOCALAPPDATA%\Microsoft\TypeScript\<major.minor>`, confirmed from the shipped `_tsserver.js`,
 whose `win32` branch joins `LOCALAPPDATA` with `Microsoft/TypeScript` and `versionMajorMinor`.
@@ -274,6 +285,12 @@ working directory's parents, so the fixed working directory (§5.1) matters. `Ya
 holds installed global packages: Tier 4.
 
 ### Deno cache — Build by path, Tier 1, researched
+
+✅ **Done** as `DenoCacheProvider`. Differs: Deno also honours `XDG_CACHE_HOME\deno` on Windows,
+between `DENO_DIR` and the default. The databases are the seven `*_v2` names `deno_dir.rs` defines,
+each with its SQLite `-wal` and `-shm` files. Other folders Deno tools write (`node_compat_bin`,
+`tsc`, `task_cache_v1` and others) are not in `deno_dir.rs`, so they stay Tier 4. Every step is held
+back while a `deno` process runs.
 
 `DENO_DIR`, `%LOCALAPPDATA%\deno` by default
 ([installation](https://docs.deno.com/runtime/getting_started/installation/)). **A recorded
@@ -531,7 +548,12 @@ can leave the lock behind.
 
 ### Packaged Electron apps — Build, as a general rule
 
-[../cache-locations.md](../cache-locations.md) records "Not reached: packaged Electron applications".
+✅ **Done.** `ChromiumUserDataWalk` identifies a folder one level into a package's
+`LocalCache\Roaming` or `LocalCache\Local` by `Local State`, for `%LOCALAPPDATA%\Packages` only, and
+names it `<folder> (packaged)`. Measured on a real packaged Electron application. `LocalLow` is not
+included: Microsoft's redirection list names only `Local` and `Roaming`.
+
+[../cache-locations.md](../cache-locations.md) recorded "Not reached: packaged Electron applications", now [Packaged applications](../cache-locations.md#packaged-applications).
 The fix is the existing identification rule — a `Local State` file one level down — applied one level
 under each package's `LocalCache\Roaming` and `LocalCache\Local`, the redirected roots the first
 survey's §3 describes. It never treats `LocalCache` itself as permission to delete; Microsoft defines

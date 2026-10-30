@@ -7,11 +7,24 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>A Chromium user-data folder below an application-data root, and which rule found it.</summary>
 /// <param name="Path">The folder, in display form.</param>
-/// <param name="IsWebView2">
-/// Whether it is a WebView2 folder, found by its name below the root, rather than a direct child of
-/// the root.
-/// </param>
-public readonly record struct ChromiumFolder(string Path, bool IsWebView2);
+/// <param name="Place">Where it was found, which says which rule found it.</param>
+public readonly record struct ChromiumFolder(string Path, ChromiumFolderPlace Place);
+
+/// <summary>The places below an application-data root where a Chromium user-data folder is identified.</summary>
+public enum ChromiumFolderPlace
+{
+    /// <summary>A direct child of the root, where an application embedding the engine keeps its folder.</summary>
+    DataRoot,
+
+    /// <summary>A directory named <c>EBWebView</c>, found by its name at any depth the walk reaches.</summary>
+    WebView2,
+
+    /// <summary>
+    /// A direct child of a packaged application's <c>LocalCache\Roaming</c> or <c>LocalCache\Local</c>,
+    /// where Windows puts what the application writes into the user's application-data roots.
+    /// </summary>
+    Package,
+}
 
 /// <param name="Folders">Every folder found, ordered by path so a plan lists them the same way each time.</param>
 /// <param name="RootUnreadable">
@@ -22,8 +35,9 @@ public sealed record ChromiumFolderWalk(IReadOnlyList<ChromiumFolder> Folders, b
 
 /// <summary>
 /// Where the Chromium user-data folders below one application-data root are: each direct child of
-/// the root holding <c>Local State</c>, and each directory named <c>EBWebView</c> holding it within
-/// <see cref="WebView2Depth"/> levels.
+/// the root holding <c>Local State</c>, each direct child of a packaged application's redirected roots
+/// holding it, and each directory named <c>EBWebView</c> holding it within <see cref="WebView2Depth"/>
+/// levels.
 ///
 /// <para><b>WebView2 is found by the folder's name, and it still has to pass the positive
 /// test.</b> The runtime puts its user-data folder in an <c>EBWebView</c> directory inside whatever
@@ -31,6 +45,18 @@ public sealed record ChromiumFolderWalk(IReadOnlyList<ChromiumFolder> Folders, b
 /// between two and six levels below the root, 14 of them outside <c>Packages</c>. So no table of
 /// vendors could reach them, and the name is the one fact they share. It says only where to look.
 /// A directory of that name without <c>Local State</c> is not identified.</para>
+///
+/// <para><b>A packaged application is found where Windows puts its application data.</b> Windows
+/// redirects what a packaged desktop application creates under <c>Roaming</c> and <c>Local</c> to "a
+/// per-user, per-package private location" (learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-behind-the-scenes),
+/// which is <c>Packages\&lt;package&gt;\LocalCache\Roaming</c> and <c>LocalCache\Local</c> below
+/// <c>%LOCALAPPDATA%</c>. Measured: a packaged Electron application kept its user-data folder, marker
+/// and caches included, at <c>LocalCache\Roaming\&lt;App&gt;</c>. So a direct child of either is
+/// identified by the same marker as a direct child of the root. <c>LocalCache</c> itself is never a
+/// reason to look further: Microsoft defines it as files kept out of backup and restore, not as a
+/// cache, and on the measured machine it held a virtual machine's disk and installed Python
+/// packages. A deeper folder holding the marker under another name is not identified, here or
+/// anywhere.</para>
 ///
 /// <para><b>What bounds the walk, and why each bound is there.</b> Every directory is listed that
 /// could hold such a folder above the depth bound, which is the cost of finding a folder whose
@@ -69,18 +95,34 @@ public static class ChromiumUserDataWalk
     /// </summary>
     public const int WebView2Depth = 6;
 
+    /// <summary>The folder in each package that holds what Windows redirected out of the application-data roots.</summary>
+    public const string PackageCacheFolderName = "LocalCache";
+
+    /// <summary>
+    /// The folders in <see cref="PackageCacheFolderName"/> that stand in for <c>%APPDATA%</c> and
+    /// <c>%LOCALAPPDATA%</c>: the two roots Microsoft names for the redirection. <c>LocalLow</c> sits
+    /// beside them on disk, and no packaged Chromium host was measured there or documented to be.
+    /// </summary>
+    public static readonly IReadOnlyList<string> RedirectedRootNames = ["Roaming", "Local"];
+
     /// <param name="root">An application-data root.</param>
     /// <param name="notEntered">
     /// Folders that are never entered or identified: the user's temporary folder, and each declared
     /// host's own folder, which the caller classifies as a whole.
     /// </param>
+    /// <param name="packages">
+    /// The folder below <paramref name="root"/> that holds each packaged application's data, or null
+    /// where the root holds none.
+    /// </param>
     /// <param name="tuning">What the walk runs with, resolved for the drive that holds <paramref name="root"/>.</param>
     public static ChromiumFolderWalk Under(
         string root,
         IReadOnlyList<string> notEntered,
+        string? packages,
         ScanTuner tuning,
         CancellationToken ct = default)
     {
+
         // Absent is a complete answer, and the walk below would report it as a refusal.
         if (LongPath.ProbeDirectory(root) is PathPresence.Absent)
         {
@@ -88,6 +130,7 @@ public static class ChromiumUserDataWalk
         }
 
         var excluded = NotEntered(notEntered);
+        var packagesKey = PackagesKey(packages);
         var found = new ConcurrentBag<ChromiumFolder>();
         var rootUnreadable = false;
 
@@ -106,7 +149,7 @@ public static class ChromiumUserDataWalk
                 {
                     rootUnreadable = contents.WasRefused;
                 }
-                else if (!Enters(path, depth, Marked(path, contents), found))
+                else if (!Enters(path, PlaceOf(path, depth, packagesKey), depth, Marked(path, contents), found))
                 {
                     return;
                 }
@@ -143,15 +186,18 @@ public static class ChromiumUserDataWalk
     /// <param name="tree">The scan's tree.</param>
     /// <param name="root">The node of <paramref name="tree"/> that is the application-data root, listed whole.</param>
     /// <param name="notEntered">As <see cref="Under"/> takes it.</param>
+    /// <param name="packages">As <see cref="Under"/> takes it.</param>
     public static ChromiumFolderWalk In(
         ExploreTree tree,
         int root,
         IReadOnlyList<string> notEntered,
+        string? packages,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
         var excluded = NotEntered(notEntered);
+        var packagesKey = PackagesKey(packages);
         var found = new ConcurrentBag<ChromiumFolder>();
         var pending = new Stack<(int Node, string Path, int Depth)>();
 
@@ -161,10 +207,14 @@ public static class ChromiumUserDataWalk
         {
             ct.ThrowIfCancellationRequested();
 
-            if (directory.Depth > 0
-                && !Enters(directory.Path, directory.Depth, Marked(tree, directory.Node, directory.Path, directory.Depth), found))
+            if (directory.Depth > 0)
             {
-                continue;
+                var place = PlaceOf(directory.Path, directory.Depth, packagesKey);
+
+                if (!Enters(directory.Path, place, directory.Depth, Marked(tree, directory.Node, directory.Path, place), found))
+                {
+                    continue;
+                }
             }
 
             excluded.TryGetValue(Path.TrimEndingDirectorySeparator(directory.Path), out var notHere);
@@ -195,26 +245,77 @@ public static class ChromiumUserDataWalk
     /// Whether a directory below the root is entered, adding it to <paramref name="found"/> where it
     /// is a Chromium user-data folder. The one rule both walks follow.
     /// </summary>
+    /// <param name="place">Where the directory would be identified, from <see cref="PlaceOf"/>.</param>
     /// <param name="marker">Whether the directory holds <c>Local State</c>.</param>
-    private static bool Enters(string path, int depth, PathPresence marker, ConcurrentBag<ChromiumFolder> found)
+    private static bool Enters(
+        string path,
+        ChromiumFolderPlace? place,
+        int depth,
+        PathPresence marker,
+        ConcurrentBag<ChromiumFolder> found)
     {
-        var webView2 = Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase);
-
         if (marker is not PathPresence.Absent)
         {
             // Identified only on the file itself, since a refusal is no evidence of a folder that
             // holds it. Either way nothing below is entered.
-            if ((depth == 1 || webView2) && marker is PathPresence.Present)
+            if (place is { } identified && marker is PathPresence.Present)
             {
-                found.Add(new ChromiumFolder(path, webView2));
+                found.Add(new ChromiumFolder(path, identified));
             }
 
             return false;
         }
 
         // An EBWebView without the marker has nothing inside that could be looked for.
-        return !webView2 && depth < WebView2Depth;
+        return place is not ChromiumFolderPlace.WebView2 && depth < WebView2Depth;
     }
+
+    /// <summary>
+    /// Where a directory below the root would be identified if it held the marker, or null where a
+    /// marker there identifies nothing. The name comes first, so an <c>EBWebView</c> directly in the
+    /// root or in a package's redirected root is a WebView2 folder, as it always was.
+    /// </summary>
+    /// <param name="packages">From <see cref="PackagesKey"/>.</param>
+    private static ChromiumFolderPlace? PlaceOf(string path, int depth, string? packages)
+    {
+        if (Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return ChromiumFolderPlace.WebView2;
+        }
+
+        if (depth == 1)
+        {
+            return ChromiumFolderPlace.DataRoot;
+        }
+
+        return packages is not null && IsInRedirectedRoot(path, packages) ? ChromiumFolderPlace.Package : null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="path"/> is <c>&lt;packages&gt;\&lt;package&gt;\LocalCache\Roaming\&lt;folder&gt;</c>
+    /// or the same under <c>Local</c>. Read from the path the walk built, so it costs no probe.
+    /// </summary>
+    private static bool IsInRedirectedRoot(string path, string packages)
+    {
+        var redirected = Path.GetDirectoryName(path);
+        var cache = Path.GetDirectoryName(redirected);
+        var package = Path.GetDirectoryName(cache);
+
+        return redirected is not null
+            && cache is not null
+            && package is not null
+            && RedirectedRootNames.Contains(Path.GetFileName(redirected), StringComparer.OrdinalIgnoreCase)
+            && Path.GetFileName(cache).Equals(PackageCacheFolderName, StringComparison.OrdinalIgnoreCase)
+            && Path.GetDirectoryName(package) is { } parent
+            && Path.TrimEndingDirectorySeparator(parent).Equals(packages, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The folder of packages as the walk's paths spell it: display form, long names, and no trailing
+    /// separator, as <see cref="NotEntered"/> keys its folders.
+    /// </summary>
+    private static string? PackagesKey(string? packages) =>
+        packages is null ? null : Path.TrimEndingDirectorySeparator(LongPath.Unaliased(packages));
 
     /// <summary>
     /// The folders never entered, as the names never entered in each folder holding one, so both walks
@@ -257,10 +358,10 @@ public static class ChromiumUserDataWalk
     /// A listing sees one name or the other throughout, but a file table is read record by record over
     /// minutes, and can meet the new record under its temporary name and the old one once freed, so
     /// the tree holds neither. Missing it there would leave the folder undeclared, and its sign-ins
-    /// open to removal. The probe costs one file per folder beside the root and per
-    /// <c>EBWebView</c>, against the listing of every directory it replaces.</para>
+    /// open to removal. The probe costs one file per folder beside the root, per folder in a package's
+    /// redirected roots and per <c>EBWebView</c>, against the listing of every directory it replaces.</para>
     /// </summary>
-    private static PathPresence Marked(ExploreTree tree, int directory, string path, int depth)
+    private static PathPresence Marked(ExploreTree tree, int directory, string path, ChromiumFolderPlace? place)
     {
         var marker = Path.Combine(path, ChromiumLayout.Browser.IdentifyingFile);
 
@@ -278,9 +379,7 @@ public static class ChromiumUserDataWalk
             }
         }
 
-        return depth == 1 || Path.GetFileName(path).Equals(WebView2FolderName, StringComparison.OrdinalIgnoreCase)
-            ? LongPath.ProbeFile(marker)
-            : PathPresence.Absent;
+        return place is not null ? LongPath.ProbeFile(marker) : PathPresence.Absent;
     }
 
     /// <summary>

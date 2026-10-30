@@ -9,7 +9,8 @@ namespace Deguffer.Core.Providers;
 /// What the user knows the application as. For a declared browser that is its product name. For an
 /// application embedding the engine it is the folder's own name: the embedding application creates
 /// the folder under its own vendor name, so this is the only label available and it is the one the
-/// user will recognise in the folder listing. A WebView2 folder is always called <c>EBWebView</c>,
+/// user will recognise in the folder listing. A packaged application's is the same name, marked
+/// <c>(packaged)</c>. A WebView2 folder is always called <c>EBWebView</c>,
 /// so for one of those it is the path of the folder the host chose, below its application-data
 /// root: <c>Microsoft\OneDrive</c>.
 /// </param>
@@ -47,7 +48,8 @@ public sealed record ChromiumUserData(
 
 /// <summary>
 /// Finds the Chromium user-data folders on this machine: one level under <c>%APPDATA%</c> and
-/// <c>%LOCALAPPDATA%</c>, where an application embedding the engine keeps its folder, in each
+/// <c>%LOCALAPPDATA%</c>, where an application embedding the engine keeps its folder, one level under
+/// each package's redirected roots, where Windows puts that folder for a packaged application, in each
 /// <c>EBWebView</c> directory further down, where an application embedding it through WebView2 keeps
 /// its own (see <see cref="ChromiumUserDataWalk"/>), and at each place a <see cref="ChromiumHost"/>
 /// declares, where a browser or a launcher keeps its own.
@@ -98,6 +100,9 @@ public sealed partial class ChromiumUserDataDiscovery(
     /// application, and names the folder it is using on its command line.
     /// </summary>
     public const string WebView2ProcessName = "msedgewebview2";
+
+    /// <summary>The folder of <c>%LOCALAPPDATA%</c> that holds each packaged application's data.</summary>
+    public const string PackagesFolderName = "Packages";
 
     /// <summary>
     /// A WebView2 profile directory: the prefix the runtime writes, then a profile name in the
@@ -201,11 +206,16 @@ public sealed partial class ChromiumUserDataDiscovery(
 
         foreach (var (root, reach) in reaches)
         {
+            // Windows keeps every packaged application's data in one folder of the local root.
+            var packages = root.Equals(environment.LocalAppData, StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(root, PackagesFolderName)
+                : null;
+
             var walk = reach switch
             {
                 { Reach: FolderReach.Outside } => null,
-                { Reach: FolderReach.Listed, Listing: { } tree } when !_listingStale => ChromiumUserDataWalk.In(tree, reach.Node, notEntered, ct),
-                _ => ChromiumUserDataWalk.Under(root, notEntered, _tuning, ct),
+                { Reach: FolderReach.Listed, Listing: { } tree } when !_listingStale => ChromiumUserDataWalk.In(tree, reach.Node, notEntered, packages, ct),
+                _ => ChromiumUserDataWalk.Under(root, notEntered, packages, _tuning, ct),
             };
 
             if (walk is null)
@@ -226,13 +236,13 @@ public sealed partial class ChromiumUserDataDiscovery(
             {
                 ct.ThrowIfCancellationRequested();
 
-                var layout = folder.IsWebView2 ? ChromiumLayout.WebView2 : ChromiumLayout.Browser;
-                var name = folder.IsWebView2 ? HostOf(root, folder.Path) : Path.GetFileName(folder.Path);
+                var webView2 = folder.Place is ChromiumFolderPlace.WebView2;
+                var layout = webView2 ? ChromiumLayout.WebView2 : ChromiumLayout.Browser;
                 var profiles = ProfilesUnder(folder.Path, layout, out var incomplete);
 
                 found.Add(new ChromiumUserData(
-                    name,
-                    folder.IsWebView2 ? WebView2ProcessName : name,
+                    NameOf(root, folder),
+                    webView2 ? WebView2ProcessName : Path.GetFileName(folder.Path),
                     folder.Path,
                     layout,
                     profiles,
@@ -345,6 +355,18 @@ public sealed partial class ChromiumUserDataDiscovery(
 
         return profiles;
     }
+
+    /// <summary>
+    /// What the user knows the folder's application as. A packaged application's folder has its own
+    /// name, as an unpackaged one's does, and says it is packaged: the same application can be
+    /// installed both ways, and each keeps a folder of its own.
+    /// </summary>
+    private static string NameOf(string root, ChromiumFolder folder) => folder.Place switch
+    {
+        ChromiumFolderPlace.WebView2 => HostOf(root, folder.Path),
+        ChromiumFolderPlace.Package => $"{Path.GetFileName(folder.Path)} (packaged)",
+        _ => Path.GetFileName(folder.Path),
+    };
 
     /// <summary>
     /// The folder a WebView2 host chose, below its application-data root, which is how the user can
