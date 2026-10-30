@@ -103,11 +103,14 @@ public sealed class CountingMftSourceTests
         source.TryReadClusters(0, new byte[4096]);
         Assert.Equal(TimeSpan.Zero, source.ListReadTime);
 
-        await source.TryReadClustersAsync(1, new byte[4096], CancellationToken.None);
-        await source.TryReadClustersAsync(2, new byte[4096], CancellationToken.None);
+        for (var cluster = 1; cluster <= 4; cluster++)
+        {
+            await source.TryReadClustersAsync(cluster, new byte[4096], CancellationToken.None);
+        }
 
-        // One read's worth rather than two: a timer can fire a tick early.
-        Assert.InRange(source.ListReadTime, read, TimeSpan.FromSeconds(30));
+        // Two reads' worth of four, because a timer can fire up to a 15.6 ms tick early. A span timed
+        // from the last read alone is one read's worth.
+        Assert.InRange(source.ListReadTime, 2 * read, TimeSpan.FromSeconds(30));
     }
 
     private static FixtureMftSource Table(int records, long unreadableFrom) =>
