@@ -129,6 +129,25 @@ public sealed class ChromiumPackagedApplicationTests : IDisposable
     }
 
     /// <summary>
+    /// Each segment of the shape is asked for: a package's other folders are not redirected roots, and
+    /// a folder of the same shape outside <c>Packages</c> is not a package.
+    /// </summary>
+    [Theory]
+    [InlineData(@"Packages\Vendor.Chat_0123456789abc\LocalState\Roaming\Chat")]
+    [InlineData(@"Vendor\Vendor.Chat_0123456789abc\LocalCache\Roaming\Chat")]
+    public async Task TheShapeIdentifiesOnlyInAPackagesLocalCache(string folder)
+    {
+        var userData = Path.Combine(_environment.LocalAppData, folder);
+        CreateFile(Path.Combine(userData, "Local State"), "{}");
+        var bystander = CreateDirectory(Path.Combine(userData, "Code Cache"));
+
+        var provider = CreateProvider();
+
+        Assert.Empty(provider.Applications());
+        Assert.DoesNotContain(bystander, (await provider.PlanAsync()).TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Only the local root holds the packages. The same shape under <c>%APPDATA%</c> is somebody's
     /// folder of that name, and a marker five levels into it identifies nothing.
     /// </summary>
