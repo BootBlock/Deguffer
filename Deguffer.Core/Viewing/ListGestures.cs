@@ -9,7 +9,10 @@ public enum ListGesture
     /// <summary>The list has settled on rows or containers it was given, and nobody has touched it since.</summary>
     Settled,
 
-    /// <summary>The reader has pressed a key in the list, or pressed and released on it, since it settled.</summary>
+    /// <summary>
+    /// The reader has pressed a key or a pointer in the list since it settled, and no press is held on
+    /// a row.
+    /// </summary>
     Touched,
 
     /// <summary>

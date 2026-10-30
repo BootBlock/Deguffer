@@ -133,7 +133,8 @@ public sealed partial class ExplorePage : Page
             RightTappedEvent, new RightTappedEventHandler(OnRowsRightTapped), handledEventsToo: true);
 
         // The two ways a person moves this list's selection, marked as they arrive rather than
-        // inferred afterwards. ShowAs covers the list's return from behind the map.
+        // inferred afterwards. The guard settles as the list's containers are built again on a return
+        // to the page, and ShowAs settles it as the list comes back from behind the map.
         _guard.Hear(RowsList);
 
         // One signal, followed by both screens that show a selection. The list is not on screen

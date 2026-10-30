@@ -128,6 +128,22 @@ public sealed class ListSelectionGuardTests
         Assert.True(guard.Admits(Unexpected));
     }
 
+    /// <summary>
+    /// A press on a row whose end went unheard must not outlive the next press, or every settle after
+    /// it is refused and the control's own writes are taken for the reader's.
+    /// </summary>
+    [Fact]
+    public void APressReplacesWhateverAnEarlierPressLeft()
+    {
+        var guard = Guard();
+
+        guard.Pressed(onRow: true);
+        guard.Pressed(onRow: false);
+        guard.Settle();
+
+        Assert.Equal(ListGesture.Settled, guard.Gesture);
+    }
+
     private ListSelectionGuard Guard() => new(() => _rewriting, _later.Enqueue);
 
     private static void Unexpected() => Assert.Fail("Nothing was to be restored.");

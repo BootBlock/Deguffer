@@ -82,14 +82,6 @@ public sealed class ListGesturesTests
         Assert.Equal(ListGesture.Settled, gesture.Settle());
     }
 
-    /// <summary>A press is answered afresh, so a press on a row that never heard its end cannot outlive the next one.</summary>
-    [Fact]
-    public void APressReplacesWhateverAnEarlierPressLeft()
-    {
-        Assert.Equal(ListGesture.Touched, ListGestures.Pressed(onRow: false));
-        Assert.Equal(ListGesture.Pressing, ListGestures.Pressed(onRow: true));
-    }
-
     [Fact]
     public void AKeyDuringAPressOnARowLeavesThePressHeld() =>
         Assert.Equal(ListGesture.Pressing, ListGesture.Pressing.Keyed());
