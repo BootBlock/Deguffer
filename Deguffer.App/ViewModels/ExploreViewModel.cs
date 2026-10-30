@@ -246,7 +246,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     /// <summary>
     /// The line under the map: what the page last said, and the §5.6 checks a removal could not pass
-    /// beside it. A refusal the page states is taken back by <see cref="ExplainRefusal"/> once the page
+    /// beside it. A refusal the page states is taken back by <see cref="ExploreTargeting"/> once the page
     /// is pointed somewhere it will scan, and nothing else on the line is.
     /// </summary>
     public StatusLineViewModel Status { get; } = new(StatusLine.Said(ExploreStatusText.Prompt));
