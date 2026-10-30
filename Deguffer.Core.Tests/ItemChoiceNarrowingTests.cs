@@ -34,7 +34,8 @@ public sealed class ItemChoiceNarrowingTests : IDisposable
         }
 
         var provider = new PlaywrightBrowsersProvider(
-            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning,
+            liveTrees: FakeLiveTreeInspector.NothingLive);
         var plan = await provider.PlanAsync();
 
         // What the list does: group, search, then click the heading of what is left on screen. The whole

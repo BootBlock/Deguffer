@@ -21,8 +21,9 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private AzureFunctionsToolsProvider CreateProvider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+    private AzureFunctionsToolsProvider CreateProvider(ILiveTreeInspector? liveTrees = null) =>
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning,
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive);
 
     private string Root => Path.Combine(_environment.LocalAppData, AzureFunctionsToolsProvider.RootName);
 
@@ -494,5 +495,87 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
 
         Assert.Contains(Path.Combine(Releases, "4.18.1"), plan.TargetedPaths);
         Assert.True(plan.EstimatedBytes > 65536, "A release's nested content was not measured.");
+    }
+
+    /// <summary>
+    /// <c>func</c> runs out of the release a project is being debugged against, and removing that
+    /// release under it fails part of the way through on the files it holds. The release is held
+    /// back, named, and asserted to survive, and the releases beside it are still offered, each
+    /// carrying the question to ask again at the clean.
+    /// </summary>
+    [Fact]
+    public async Task HoldsBackAReleaseARunningHostIsUsing()
+    {
+        CreateReleases("4.18.1", "4.0.5455", "2.60.0");
+        RecordTag("v4", "4.18.1");
+        var feed = WriteFeed();
+        var running = Path.Combine(Releases, "4.18.1");
+
+        var liveTrees = FakeLiveTreeInspector.NothingLive
+            .WithProgram("func", executable: Path.Combine(running, "cli_x64", "func.exe"));
+
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Equal(
+            [Path.Combine(Releases, "2.60.0"), Path.Combine(Releases, "4.0.5455")],
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.All(plan.Steps.OfType<DeleteStep>(), step => Assert.NotNull(step.UseCheck));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == running);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Root);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Releases);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == feed);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("release 4.18.1 (func", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same question asked again at the clean. A debugging session started between the preview
+    /// and the clean keeps the release its host runs from, the step says why, §5.6 proves it survived,
+    /// and the release nothing took up is still removed.
+    /// </summary>
+    [Fact]
+    public async Task AReleaseAHostStartsRunningFromAfterThePreviewSurvivesTheClean()
+    {
+        CreateReleases("4.18.1", "2.60.0");
+        var busy = Path.Combine(Releases, "4.18.1");
+        var idle = Path.Combine(Releases, "2.60.0");
+
+        var liveTrees = FakeLiveTreeInspector.NothingLive;
+        var provider = CreateProvider(liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(busy, plan.TargetedPaths);
+        Assert.Contains(idle, plan.TargetedPaths);
+
+        liveTrees.WithProgram("func", Path.Combine(busy, "cli_x64", "func.exe"), _temp.Path);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "a release a host started running from was removed");
+        Assert.False(Directory.Exists(idle), "a release nothing took up was kept");
+        Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: func is running from inside it.");
+
+        var check = Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(busy, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(VerificationOutcome.Survived, check.Outcome);
+        Assert.True(result.Verification.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// "Could not tell" is not permission. A release nothing could check is not offered, it is
+    /// asserted to survive, and the plan says why the row is short rather than calling it clear.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoReleaseWhenItCannotTellWhetherAReleaseIsInUse()
+    {
+        CreateReleases("4.18.1");
+        var release = Path.Combine(Releases, "4.18.1");
+
+        var plan = await CreateProvider(FakeLiveTreeInspector.CannotTell).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined, "a row holding its only release back read as already clear");
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == release && p.Reason == LiveTreeVeto.UncheckedReason);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning
+            && n.Message.Contains("could not check whether anything is using one of these", StringComparison.Ordinal));
     }
 }

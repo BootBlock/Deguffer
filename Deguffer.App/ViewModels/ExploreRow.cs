@@ -244,42 +244,28 @@ public sealed record ExploreCrumb(ExplorePosition Position, string Name, bool Fo
 public sealed record ExploreLegendBand(string Label, Color Swatch)
 {
     /// <summary>
-    /// Every scheme's bands, built once for the life of the app rather than per view-model: the
-    /// scale does not depend on what was scanned (G5).
+    /// <see cref="MapLegend"/>'s bands for every colouring and scheme, converted once for the life of
+    /// the app rather than per view-model: the scale does not depend on what was scanned (G5).
     /// </summary>
-    private static readonly IReadOnlyList<ExploreLegendBand>[] Schemes =
+    private static readonly IReadOnlyList<ExploreLegendBand>[][] Built =
     [
-        .. Enum.GetValues<ExploreScheme>().Select(scheme => (IReadOnlyList<ExploreLegendBand>)
+        .. Enum.GetValues<ExploreColouring>().Select(colouring => (IReadOnlyList<ExploreLegendBand>[])
         [
-            .. AgePalette.Bands(scheme).Select(band => Band(band.Label, band.Colour)),
+            .. Enum.GetValues<ExploreScheme>().Select(scheme => (IReadOnlyList<ExploreLegendBand>)
+            [
+                .. MapLegend.For(colouring, scheme).Select(band => new ExploreLegendBand(band.Label, band.Colour.ToColor())),
+            ]),
         ]),
     ];
 
-    /// <summary>The growth scale's bands, which are the same in every scheme (see <see cref="GrowthPalette"/>).</summary>
-    private static readonly IReadOnlyList<ExploreLegendBand> Growth =
-        [.. GrowthPalette.Bands.Select(band => Band(band.Label, band.Colour))];
-
-    /// <summary>The kinds of file, which are the same in every scheme (see <see cref="TypePalette"/>).</summary>
-    private static readonly IReadOnlyList<ExploreLegendBand> Types =
-        [.. TypePalette.Bands.Select(band => Band(band.Label, band.Colour))];
-
-    /// <summary>The levels of depth, which are the same in every scheme (see <see cref="DepthPalette"/>).</summary>
-    private static readonly IReadOnlyList<ExploreLegendBand> Depths =
-        [.. DepthPalette.Bands.Select(band => Band(band.Label, band.Colour))];
-
     /// <summary>
     /// The bands a map coloured by <paramref name="colouring"/> in <paramref name="scheme"/> needs
-    /// explained, ready to bind, and none for branches, whose colours explain themselves.
+    /// explained, ready to bind. See <see cref="MapLegend.For"/>.
+    ///
+    /// <para>A colouring no member names, which the Colour box can give while nothing in it is selected,
+    /// has no legend, as <see cref="MapLegend.For"/> says of it, rather than an index past the
+    /// table.</para>
     /// </summary>
-    public static IReadOnlyList<ExploreLegendBand> For(ExploreColouring colouring, ExploreScheme scheme) => colouring switch
-    {
-        ExploreColouring.Age => Schemes[(int)scheme],
-        ExploreColouring.Growth => Growth,
-        ExploreColouring.Type => Types,
-        ExploreColouring.Depth => Depths,
-        _ => [],
-    };
-
-    private static ExploreLegendBand Band(string label, TileColour colour) =>
-        new(label, colour.ToColor());
+    public static IReadOnlyList<ExploreLegendBand> For(ExploreColouring colouring, ExploreScheme scheme) =>
+        Enum.IsDefined(colouring) ? Built[(int)colouring][(int)scheme] : [];
 }

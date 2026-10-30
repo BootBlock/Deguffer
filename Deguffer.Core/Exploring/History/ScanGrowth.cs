@@ -115,6 +115,14 @@ public sealed class ScanGrowth
     /// </summary>
     public bool Describes(ExploreTree? tree) => tree is not null && ReferenceEquals(tree.Scanned, Tree);
 
+    /// <summary>
+    /// Whether a listed folder at <paramref name="node"/> can be opened in <paramref name="tree"/>: this
+    /// comparison is about that tree, and the tree still holds the folder. Not a folder removed before
+    /// the later scan, which is listed at -1 and has nothing to show, nor one removed from the tree
+    /// since, whose number names nothing there now.
+    /// </summary>
+    public bool Opens(ExploreTree? tree, int node) => Describes(tree) && tree?.Holds(node) == true;
+
     /// <summary>The summary this compares against.</summary>
     public ScanSummary Earlier { get; }
 

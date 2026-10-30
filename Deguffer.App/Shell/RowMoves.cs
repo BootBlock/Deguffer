@@ -1,4 +1,5 @@
 using System.Numerics;
+using Deguffer.App.Controls;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
@@ -82,8 +83,8 @@ internal sealed class RowMoves
         var visual = ElementCompositionPreview.GetElementVisual(container);
         visual.StopAnimation(nameof(Visual.Opacity));
         visual.Opacity = 1;
-        visual.StopAnimation("Translation");
-        visual.Properties.InsertVector3("Translation", Vector3.Zero);
+        visual.StopAnimation(VisualTranslation.Property);
+        visual.Properties.InsertVector3(VisualTranslation.Property, Vector3.Zero);
     }
 
     private void Translate(UIElement container, Vector3 from, Motion played)
@@ -93,7 +94,7 @@ internal sealed class RowMoves
         move.InsertKeyFrame(0, from);
         move.InsertKeyFrame(1, Vector3.Zero, visual.Compositor.MotionEase());
         move.Duration = played.Duration;
-        visual.StartAnimation("Translation", move);
+        visual.StartAnimation(VisualTranslation.Property, move);
     }
 
 }

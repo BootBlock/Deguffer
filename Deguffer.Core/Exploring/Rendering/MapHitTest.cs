@@ -11,20 +11,16 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// <param name="X">Where the point is across the drawing's canvas, or across the tile where there is one.</param>
 /// <param name="Y">Where it is down it.</param>
 /// <param name="Tile">The tile found, or null where the drawing itself was.</param>
-/// <param name="Reading">
-/// How what was found is read in the tree the page holds now, or null where it is read as it is.
-/// </param>
+/// <param name="Reading">How what was found is read in the tree the page holds now.</param>
 public readonly record struct MapLocation(
-    ExploreSurface Drawing, MapViewport Viewport, float X, float Y, MapTile? Tile = null, MapReading? Reading = null)
+    ExploreSurface Drawing, MapViewport Viewport, float X, float Y, MapTile? Tile, MapReading Reading)
 {
     /// <summary>
     /// What is at the point, read in the tree the page holds now, or null where it is over nothing or
     /// over a shape with no counterpart in that tree.
     /// </summary>
     public ExploreHit? Hit =>
-        (Tile is { } tile ? tile.At(X, Y) : Drawing.At(X, Y)) is { } found
-            ? Reading is { } reading ? reading.Read(found) : found
-            : null;
+        (Tile is { } tile ? tile.At(X, Y) : Drawing.At(X, Y)) is { } found ? Reading.Read(found) : null;
 
     /// <summary>
     /// Where the shape at the point is on a screen showing <paramref name="shown"/>, in fractions of it,
@@ -44,7 +40,7 @@ public readonly record struct MapLocation(
             return shown.PlacementOf(MapViewport.Whole).OnScreen(tile.Frame.Inside(inTile.FrameIn(tile.Width, tile.Height)));
         }
 
-        if (Drawing.TileAt(X, Y) is not { } shape)
+        if (Drawing is not TiledSurface tiled || tiled.TileAt(X, Y) is not { } shape)
         {
             return null;
         }
@@ -89,7 +85,7 @@ public static class MapHitTest
     /// </param>
     /// <param name="tileOver">
     /// The finest tile shown over <paramref name="drawing"/> at a point of the picture, given in
-    /// fractions of it, or null where none is; or null where no tile is shown at all.
+    /// fractions of it, or null where none is.
     /// </param>
     public static MapLocation? Locate(
         MapViewport shown,
@@ -98,18 +94,19 @@ public static class MapHitTest
         ExploreSurface? drawing,
         CanvasRedraw? arriving,
         Func<ISizedTree, MapReading?> readingOf,
-        Func<double, double, MapTile?>? tileOver = null)
+        Func<double, double, MapTile?> tileOver)
     {
+        ArgumentNullException.ThrowIfNull(readingOf);
+        ArgumentNullException.ThrowIfNull(tileOver);
+
         var found = arriving is { Surface: { } landing }
             && Place(shown, x, y, landing) is { } there
             && arriving.Covers(there.X, there.Y)
                 ? there
                 : drawing is null ? null : Over(shown, x, y, drawing, tileOver) ?? Place(shown, x, y, drawing);
 
-        ArgumentNullException.ThrowIfNull(readingOf);
-
-        return found is { } location && readingOf(location.Drawing.Tree) is { } reading
-            ? location with { Reading = reading }
+        return found is { } spot && readingOf(spot.Drawing.Tree) is { } reading
+            ? new MapLocation(spot.Drawing, spot.Viewport, spot.X, spot.Y, spot.Tile, reading)
             : null;
     }
 
@@ -118,10 +115,10 @@ public static class MapHitTest
     /// The tile is of the same picture as the drawing, but it may have been cut from an earlier drawing
     /// of it, so that one is what it is found in.
     /// </summary>
-    private static MapLocation? Over(
-        MapViewport shown, double x, double y, ExploreSurface drawing, Func<double, double, MapTile?>? tileOver)
+    private static Spot? Over(
+        MapViewport shown, double x, double y, ExploreSurface drawing, Func<double, double, MapTile?> tileOver)
     {
-        if (tileOver is null || drawing.Viewport is not { } drawn)
+        if (drawing.Viewport is not { } drawn)
         {
             return null;
         }
@@ -135,7 +132,7 @@ public static class MapHitTest
 
         var frame = tile.Frame;
 
-        return new MapLocation(
+        return new Spot(
             tile.Picture,
             tile.DrawnAt,
             (float)((pictureX - frame.X) / frame.Width * tile.Width),
@@ -150,13 +147,19 @@ public static class MapHitTest
     /// drawing's edge is over nothing even where a shape running off that edge would contain it:
     /// what shows there is another drawing, or nothing.
     /// </summary>
-    private static MapLocation? Place(MapViewport shown, double x, double y, ExploreSurface drawing)
+    private static Spot? Place(MapViewport shown, double x, double y, ExploreSurface drawing)
     {
         var viewport = drawing.Viewport ?? MapViewport.Whole;
         var (inX, inY) = shown.PlacementOf(viewport).InDrawing(x, y);
 
         return inX is >= 0 and < 1 && inY is >= 0 and < 1
-            ? new MapLocation(drawing, viewport, (float)(inX * drawing.Width), (float)(inY * drawing.Height))
+            ? new Spot(drawing, viewport, (float)(inX * drawing.Width), (float)(inY * drawing.Height), Tile: null)
             : null;
     }
+
+    /// <summary>
+    /// Where a point fell, before it is known whether what shows there can be read in the page's tree.
+    /// See <see cref="MapLocation"/>.
+    /// </summary>
+    private readonly record struct Spot(ExploreSurface Drawing, MapViewport Viewport, float X, float Y, MapTile? Tile);
 }

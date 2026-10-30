@@ -120,9 +120,11 @@ internal sealed class ExploreMorph
 
             foreach (var shape in shapes.Shapes.OfType<CompositionSpriteShape>())
             {
-                shape.FillBrush?.Dispose();
+                shape.FillBrush.Dispose();
+
+                // Only in a high contrast theme's colours: see Shape.
                 shape.StrokeBrush?.Dispose();
-                shape.Geometry?.Dispose();
+                shape.Geometry.Dispose();
                 shape.Dispose();
             }
 

@@ -38,8 +38,8 @@ public sealed class ItemIdentityTests : IDisposable
         Populate(Path.Combine(relocated, "chromium-1228"));
         moved.WithEnvironmentVariable(PlaywrightBrowsersProvider.LocationVariable, relocated);
 
-        var before = await OnlyStep(new PlaywrightBrowsersProvider(original, new FakeProcessRunner(), FakeProcessInspector.NothingRunning));
-        var after = await OnlyStep(new PlaywrightBrowsersProvider(moved, new FakeProcessRunner(), FakeProcessInspector.NothingRunning));
+        var before = await OnlyStep(new PlaywrightBrowsersProvider(original, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive));
+        var after = await OnlyStep(new PlaywrightBrowsersProvider(moved, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive));
 
         Assert.NotEqual(before.Path, after.Path);
         Assert.Equal(new ItemIdentity("chromium-1228", "chromium-1228"), before.Identity);
@@ -61,8 +61,8 @@ public sealed class ItemIdentityTests : IDisposable
                 "4.18.1"));
         }
 
-        var before = await OnlyStep(new AzureFunctionsToolsProvider(first, new FakeProcessRunner(), FakeProcessInspector.NothingRunning));
-        var after = await OnlyStep(new AzureFunctionsToolsProvider(second, new FakeProcessRunner(), FakeProcessInspector.NothingRunning));
+        var before = await OnlyStep(new AzureFunctionsToolsProvider(first, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive));
+        var after = await OnlyStep(new AzureFunctionsToolsProvider(second, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive));
 
         Assert.NotEqual(before.Path, after.Path);
         Assert.Equal(new ItemIdentity("4.18.1", "Azure Functions Core Tools 4.18.1"), before.Identity);

@@ -71,14 +71,14 @@ internal sealed class MapGeometry
     /// </summary>
     public CompositionPath Around(IReadOnlyList<ExploreOutline> outlines, float far)
     {
-        if (Shapes(outlines) is not { } shapes)
+        var device = _device();
+
+        if (Shapes(device, outlines) is not { } shapes)
         {
             return Nothing;
         }
 
-        var everything = CanvasGeometry.CreateRectangle(_device(), -far, -far, 2 * far, 2 * far);
-
-        return new CompositionPath(everything.CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Exclude));
+        return new CompositionPath(Far(device, far).CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Exclude));
     }
 
     /// <summary>
@@ -100,8 +100,7 @@ internal sealed class MapGeometry
     /// A geometry over everything to <paramref name="far"/> pixels from the canvas's corner each way:
     /// what <see cref="Around"/> covers with nothing left out of it.
     /// </summary>
-    public CompositionPath Everything(float far) =>
-        new(CanvasGeometry.CreateRectangle(_device(), -far, -far, 2 * far, 2 * far));
+    public CompositionPath Everything(float far) => new(Far(_device(), far));
 
     /// <summary>
     /// Stripes across <paramref name="outlines"/> and nowhere else, in the canvas's own pixels: one
@@ -110,7 +109,9 @@ internal sealed class MapGeometry
     /// </summary>
     public CompositionPath Hatch(IReadOnlyList<ExploreOutline> outlines, float spacing, float width, float phase)
     {
-        if (Shapes(outlines) is not { } shapes)
+        var device = _device();
+
+        if (Shapes(device, outlines) is not { } shapes)
         {
             return Nothing;
         }
@@ -122,14 +123,14 @@ internal sealed class MapGeometry
         var centre = new Vector2((float)(bounds.X + (bounds.Width / 2)), (float)(bounds.Y + (bounds.Height / 2)));
         var left = centre.X - (side / 2);
         var top = centre.Y - (side / 2);
-        var stripes = new List<CanvasGeometry>();
+        var stripes = new CanvasGeometry[Math.Max(0, (int)MathF.Ceiling((side - phase) / spacing))];
 
-        for (var x = left + phase; x < left + side; x += spacing)
+        for (var i = 0; i < stripes.Length; i++)
         {
-            stripes.Add(CanvasGeometry.CreateRectangle(_device(), x, top, width, side));
+            stripes[i] = CanvasGeometry.CreateRectangle(device, left + phase + (i * spacing), top, width, side);
         }
 
-        var turned = CanvasGeometry.CreateGroup(_device(), [.. stripes], CanvasFilledRegionDetermination.Winding)
+        var turned = CanvasGeometry.CreateGroup(device, stripes, CanvasFilledRegionDetermination.Winding)
             .Transform(Matrix3x2.CreateRotation(MathF.PI / 4, centre));
 
         return new CompositionPath(turned.CombineWith(shapes, Matrix3x2.Identity, CanvasGeometryCombine.Intersect));
@@ -144,7 +145,7 @@ internal sealed class MapGeometry
     /// nodes are grouped under the rule that fills wherever any of them does: their union, so a folder
     /// picked with a file inside it is one shape rather than a folder with the file cut out.</para>
     /// </summary>
-    private CanvasGeometry? Shapes(IReadOnlyList<ExploreOutline> outlines)
+    private static CanvasGeometry? Shapes(CanvasDevice device, IReadOnlyList<ExploreOutline> outlines)
     {
         var nodes = new List<CanvasGeometry>();
         var i = 0;
@@ -152,7 +153,7 @@ internal sealed class MapGeometry
         while (i < outlines.Count)
         {
             // Not disposed: making the geometry takes the builder over.
-            var path = new CanvasPathBuilder(_device());
+            var path = new CanvasPathBuilder(device);
             path.SetFilledRegionDetermination(CanvasFilledRegionDetermination.Alternate);
 
             var node = outlines[i].Node;
@@ -172,8 +173,12 @@ internal sealed class MapGeometry
 
         return nodes.Count == 0
             ? null
-            : CanvasGeometry.CreateGroup(_device(), [.. nodes], CanvasFilledRegionDetermination.Winding);
+            : CanvasGeometry.CreateGroup(device, [.. nodes], CanvasFilledRegionDetermination.Winding);
     }
+
+    /// <summary>A rectangle over everything to <paramref name="far"/> pixels from the canvas's corner each way.</summary>
+    private static CanvasGeometry Far(CanvasDevice device, float far) =>
+        CanvasGeometry.CreateRectangle(device, -far, -far, 2 * far, 2 * far);
 
     /// <summary>
     /// Add <paramref name="points"/> to <paramref name="path"/> as one closed figure, and say whether

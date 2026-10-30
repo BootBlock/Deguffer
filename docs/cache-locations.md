@@ -1571,12 +1571,16 @@ directly rather than by asking the tool, and only by exact name.
 **A profile you moved somewhere yourself is reported and not examined.** Where `profiles.ini` records
 an absolute path, Firefox keeps that profile's cache in the same directory as its bookmarks and
 passwords rather than separately from them, and the argument above stops applying. Deguffer says so
-in the plan instead of guessing.
+in the plan instead of guessing. The same goes for a relative path that climbs out of Firefox's own
+folder. Either way, Explore refuses to remove that profile or anything inside it. A profile kept at
+the top of a drive or share is the exception: Explore refuses its bookmarks, passwords and settings
+by name, and leaves the rest of the drive to you.
 
 ### What is protected
 
-**The whole roaming half, and everything in the local half that is not one of the five.** Deguffer
-asserts afterwards that these survived:
+**The whole roaming half, and everything in the local half that is not one of the five.** A profile
+kept outside Firefox's folder is protected the same way. Deguffer asserts afterwards that these
+survived:
 
 | Neighbour | What it really is |
 | --- | --- |
@@ -2080,8 +2084,10 @@ are offered too, as part of their game. Anything else, such as `backup`, `440.ol
 not a picture, stays in Tier 4, and the plan names it.
 
 **Each game is its own item.** Deguffer names a game from Steam's manifest for it where the game is
-installed, and shows the app id where it is not. Keeping a game keeps all of its artwork, in either
-layout.
+installed, and shows the app id where it is not. It says whether the game is installed in any of
+Steam's libraries, and says nothing about it where a library Steam lists could not be looked in, such
+as one on a drive that is not connected: the plan names that library. Keeping a game keeps all of its
+artwork, in either layout.
 
 **Steam's index of the artwork, `assetcache.vdf`, is never removed.** Removing a game's folder does
 not need it to change: with the folders for three games removed and the index left listing them,
@@ -2173,7 +2179,8 @@ so you can choose them one by one and keep one you want to hold on to. It reads 
 Steam's manifest for it, `appmanifest_<app id>.acf`, and says whether the game is still installed in
 any library. A cache for a game you have uninstalled costs nothing to remove. Where a manifest is
 missing, the item shows the app id instead. Where Deguffer could not look in every library, it says
-nothing about whether a game is installed rather than guess.
+nothing about whether a game is installed rather than guess. A library on a drive that is not
+connected counts: the plan names it.
 
 **A library the list names but Deguffer cannot place**, an entry with no full path, is named on the
 plan as a warning, and a shader cache in it is neither cleared nor ruled out.
@@ -3917,6 +3924,13 @@ publish **and** followed by a numeric revision. `chromium-1228` qualifies. `chro
 `chromium-abc`, `chromium-1228-backup` and anything you created yourself do not — they stay in
 Tier 4 and Deguffer tells you it is leaving them alone.
 
+A build a running program is using, such as the browser a test suite launched, is left alone and
+named, and the clean asks again before each removal. The browser is an ordinary `chrome.exe` or
+`firefox.exe`, so Deguffer finds it by where it runs from rather than by its name. Deleting a build
+under a running browser fails part of the way through: the tests break, and what is left is a build
+Playwright can neither launch nor recognise as missing. A build Deguffer could not check is left
+alone too, and the row says so.
+
 ### What is protected
 
 The cache root itself, and **`.links`**. That directory is the subtle one: it looks like more cache,
@@ -3926,7 +3940,7 @@ browsers is something Playwright recovers from cleanly. Deleting the registry th
 breaks its own housekeeping.
 
 Every other folder in there that Deguffer leaves alone, including one that is a link to somewhere
-else, is asserted to have survived the run too.
+else and a build a running program is using, is asserted to have survived the run too.
 
 ### What it costs you
 
@@ -4236,7 +4250,8 @@ Within `Releases`, a child is removed only if its **whole name is three dotted n
 `4.18.1-backup` and anything you created yourself do not qualify: they stay in Tier 4 and Deguffer
 tells you it is leaving them alone.
 
-**Every release is offered, including the one the tooling still points at.** Deguffer cannot know
+**Every release is offered, including the one the tooling still points at,** unless a running
+program is using it (see below). Deguffer cannot know
 whether you still have a Functions v2 project, and withholding 166 MB on the chance that you might
 would be Deguffer making your decision for you. What it does instead is tell you which is which:
 each row carries the date its release arrived, and its description says whether the tooling's own
@@ -4249,6 +4264,12 @@ of those records cannot be read, every row says neither. "Nothing points at this
 about all four records, so a partial reading cannot support it, and describing a release you still
 use as superseded is a worse answer than saying nothing.
 
+A release a running program is using, such as the `func` host of a project being debugged, is left
+alone and named, and the clean asks again before each removal. Deleting a release under a running
+host fails part of the way through on the files it holds, which breaks the session and leaves a
+release the tooling can neither run nor recognise as missing. A release Deguffer could not check is
+left alone too, and the row says so.
+
 ### What is protected
 
 The tooling's folder, `Releases` itself, **`Tags`** and the cached **`feed-v<sequence>.json`**.
@@ -4256,6 +4277,9 @@ The last two are the subtle ones: both look like more cache, and both are how th
 which releases it already holds and which one each runtime line should use. Removing a release is
 something the tooling recovers from by downloading it again. Removing the record of what it has
 interferes with the part that decides.
+
+Every child of `Releases` that Deguffer leaves alone, including a release a running program is
+using, is asserted to have survived the run too.
 
 ### What it costs you
 

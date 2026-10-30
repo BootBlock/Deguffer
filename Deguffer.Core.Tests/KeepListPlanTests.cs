@@ -32,7 +32,7 @@ public sealed class KeepListPlanTests : IDisposable
     private string DefaultRoot => Path.Combine(_environment.LocalAppData, "ms-playwright");
 
     private PlaywrightBrowsersProvider Provider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive);
 
     /// <summary>A browser cache holding the given builds, each with a payload, and Playwright's registry.</summary>
     private static string CreateBuilds(string root, params string[] builds)
