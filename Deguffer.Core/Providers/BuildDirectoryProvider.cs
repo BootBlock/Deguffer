@@ -27,6 +27,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
 {
     private readonly SourceRootStore _roots;
     private readonly SourceDirectoryDiscovery _discovery;
+    private readonly TrackedFileCheck _tracked;
 
     private readonly PassMemo<IReadOnlyList<SourceRoot>> _approved = new();
 
@@ -63,6 +64,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         // shared one ends up holding the union of what every provider looks for.
         _discovery = discovery ?? new SourceDirectoryDiscovery(Scanner, Volumes);
         _discovery.Include(Kind.DirectoryNames);
+        _tracked = new TrackedFileCheck(Environment, Runner);
     }
 
     /// <summary>What proves a candidate directory is this toolchain's (§5.2).</summary>
@@ -191,6 +193,11 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             }
         }
 
+        // Counted before git's second opinion adds to the list, because each reason has its own
+        // sentence, as DotNetObjProvider counts them.
+        var unrecognised = declined.Count;
+        var git = await SecondOpinionAsync(recognised, declined, ct).ConfigureAwait(false);
+
         var live = LiveTreeVeto.Apply(LiveTrees, recognised, Questions, ct);
 
         var (steps, measured) = await PlanDeletionsAsync(
@@ -218,7 +225,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 discovered,
                 Kind.DisplayNames,
                 Subject,
-                declined.Count,
+                unrecognised,
                 live,
                 measured.Note,
 
@@ -226,7 +233,10 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 // editor works from the engine's folder rather than the project's, and a switch on
                 // its command line can move the log the veto asks about out of the project. Only
                 // where something is offered, as every cache provider says it.
-                steps.Count > 0 && BuildRunningProcessNote() is { } running ? [running] : null),
+                [
+                    .. git is null ? [] : TrackedFilePlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count, git.Unasked.Count),
+                    .. steps.Count > 0 && BuildRunningProcessNote() is { } running ? [running] : Array.Empty<PlanNote>(),
+                ]),
             Fallback = measured.Fallback,
             HasUnreadableRoot =
                 discovered.UnreadableDirectories.Count > 0 || discovered.UnreachedRoots.Count > 0,
@@ -237,6 +247,33 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             // rather than on HasUnreadableRoot — CleanupPlan says why the two are separate flags.
             WasNotExamined = steps.Count == 0 && discovered.RefusedRoots.Count > 0,
         };
+    }
+
+    /// <summary>
+    /// Git's opinion on every recognised directory, for a kind that asks for it, with each one git
+    /// reports tracked or could not answer for moved from <paramref name="recognised"/> to
+    /// <paramref name="declined"/>. Null where the kind does not ask. Asked after recognition, so it
+    /// runs over the handful recognised rather than every candidate, and once per repository.
+    /// </summary>
+    private async Task<TrackedFileFindings?> SecondOpinionAsync(
+        List<RecognisedBuildDirectory> recognised,
+        List<string> declined,
+        CancellationToken ct)
+    {
+        if (!Kind.DeclinesTrackedDirectories)
+        {
+            return null;
+        }
+
+        var git = await _tracked.FindTrackedAsync([.. recognised.Select(r => r.Path)], ct).ConfigureAwait(false);
+
+        foreach (var overruled in recognised.Where(r => git.Tracked.Contains(r.Path) || git.Unanswered.Contains(r.Path)).ToList())
+        {
+            recognised.Remove(overruled);
+            declined.Add(overruled.Path);
+        }
+
+        return git;
     }
 
     /// <summary>
