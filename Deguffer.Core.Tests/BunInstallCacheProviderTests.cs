@@ -208,6 +208,20 @@ public sealed class BunInstallCacheProviderTests : IDisposable
         Assert.All(kept, file => Assert.True(File.Exists(file), $"{file} did not survive."));
     }
 
+    /// <summary>A link with a package's name is not a directory to prune, so it is neither measured nor offered.</summary>
+    [Fact]
+    public async Task NeverMeasuresALinkWithAPackagesName()
+    {
+        var (packages, _) = PopulateCache();
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        Junction.ToDirectory(Path.Combine(Cache, "linked@1.0.0@@@1"), elsewhere);
+
+        var plan = await CreateProvider(BunAnswering()).PlanAsync();
+        var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+
+        Assert.Equal(packages.Order(StringComparer.OrdinalIgnoreCase), command.MeasuredPaths.Order(StringComparer.OrdinalIgnoreCase));
+    }
+
     [Theory]
     [InlineData("left-pad@1.3.0@@@1", true, false, "Package")]
     [InlineData("@G@0123abcd", true, false, "Package")]

@@ -149,11 +149,13 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps);
     }
 
-    /// <summary>A cache-folder set to Yarn's own folder would have the clean delete Data and Berry's cache with it.</summary>
+    /// <summary>
+    /// A cache-folder set to Yarn's own folder would have the clean delete Data and Berry's cache with
+    /// it, including where neither exists yet: a later yarn global add makes Data inside the root.
+    /// </summary>
     [Fact]
-    public async Task LeavesARootThatHoldsYarnsDataAlone()
+    public async Task LeavesARootThatHoldsWhereYarnsDataGoesAlone()
     {
-        PopulateData();
         PopulateCache(YarnFolder);
 
         var plan = await CreateProvider(YarnAnswering(root: YarnFolder)).PlanAsync();
@@ -192,6 +194,32 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Message.Contains(name, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task LeavesARootAloneWhereItsVersionFolderIsALink()
+    {
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        Directory.CreateDirectory(Root);
+        Junction.ToDirectory(Path.Combine(Root, "v6"), elsewhere);
+
+        var plan = await CreateProvider(YarnAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+    }
+
+    [Fact]
+    public async Task LeavesARootThatIsALinkAlone()
+    {
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        Directory.CreateDirectory(Path.Combine(elsewhere, "v6"));
+        Directory.CreateDirectory(YarnFolder);
+        Junction.ToDirectory(Root, elsewhere);
+
+        var plan = await CreateProvider(YarnAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link", StringComparison.Ordinal));
     }
 
     /// <summary>§5.6: run as Yarn 1 runs it, the clean takes the root, and Data and Berry's cache outlive it.</summary>

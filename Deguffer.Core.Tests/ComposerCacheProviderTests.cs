@@ -252,6 +252,19 @@ public sealed class ComposerCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains(name, StringComparison.Ordinal));
     }
 
+    /// <summary>clear-cache empties the folder a link points at, which could be anything.</summary>
+    [Fact]
+    public async Task LeavesTheCacheAloneWhereOneOfItsFoldersIsALink()
+    {
+        PopulateCache();
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        Junction.ToDirectory(Path.Combine(Cache, "vcs"), elsewhere);
+
+        var plan = await CreateProvider(ComposerAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+    }
+
     /// <summary>§5.6: run as Composer runs it, the clear empties the cache, and the home and credentials outlive it.</summary>
     [Fact]
     public async Task VerifiesTheHomeAndCredentialsSurvivedTheClear()
