@@ -62,6 +62,8 @@ public sealed class PoolWatchingFileSystem(IFileSystem inner, TimeSpan hold) : I
 
     public bool MayExist(string path) => inner.MayExist(path);
 
+    public string? FinalPath(string path) => inner.FinalPath(path);
+
     private void Watch()
     {
         Interlocked.Increment(ref _calls);

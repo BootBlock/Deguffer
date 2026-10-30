@@ -1986,8 +1986,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
             new FakeVolumeInventory(),
             recording);
 
+        bool IsCaches(string path) => LongPath.Display(path).Equals(caches, StringComparison.OrdinalIgnoreCase);
+
         Assert.True(policy.MayRemove(Path.Combine(caches, "modules-2")).IsAllowed);
-        Assert.Single(recording.Paths, path => LongPath.Display(path).Equals(caches, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(1, recording.Paths.Count(IsCaches) - recording.Resolved.Count(IsCaches));
         Assert.All(recording.Paths, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
     }
 

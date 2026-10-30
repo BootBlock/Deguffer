@@ -523,6 +523,12 @@ not the shell asked.
   permissions are part of a Windows Update security fix. **A folder holding any refused path is refused too**,
   because removing a folder removes what is in it — but only while that path is on disk, so the
   folder a tool leaves behind once its protected contents are gone stays removable.
+  **Every rule is asked where the removal really acts.** A link on the way to the item is followed,
+  so a junction in the profile leading into `C:\Windows` takes the refusal with it, and a refused
+  folder or a tool's root moved by a junction is refused at the link's far side as it is at its own
+  name. The item itself is not followed, because removing a link removes only the link. A folder
+  above the item that Windows will not open, or that leads to a volume with no name, is refused,
+  because Deguffer cannot tell where the removal would act.
 - **What Explore shows and what Explore will act on are different sets**, and the second is much
   smaller. Drawing a rectangle for a path says only that the bytes are there. It is not a
   classification, it is not an offer, and the UI must never let a user read it as one — which is why
