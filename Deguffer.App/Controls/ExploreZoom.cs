@@ -176,7 +176,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     public void FollowMotion()
     {
         _elastic = _motion.For(MotionToken.Camera).Travels;
-        _interaction.Elastic = _elastic;
+        _interaction.Coast(_elastic);
 
         // A camera held while its origin moves follows the tracker again, as it now asks, once the
         // move is resolved.
@@ -283,6 +283,17 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _target = target;
         Retargeted?.Invoke(this, EventArgs.Empty);
 
+        Go(target, motion);
+    }
+
+    /// <summary>
+    /// Ask the tracker to <paramref name="target"/> as <paramref name="motion"/> says: a jump where it
+    /// is instant, a glide otherwise. The one way a glide is asked for, so an instant motion never
+    /// reaches one: the compositor refuses a key frame animation shorter than a millisecond, and an
+    /// instant motion is what a reader with animation effects off is given.
+    /// </summary>
+    private void Go(MapViewport target, Motion motion)
+    {
         // A map not yet laid out has nothing to glide across: it starts where it was asked to go, and
         // the tracker is put there once the map has a size (see Resize).
         if (motion.IsInstant || !HasSize)
@@ -741,9 +752,11 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
+        // Asked again as the reader's setting is now: a hand can have started the move with animation
+        // effects off, and then the camera jumps.
         if (_moving)
         {
-            _requests.Asked(Animate(destination, _motion.For(MotionToken.Camera)), destination);
+            Go(destination, _motion.For(MotionToken.Camera));
             return;
         }
 

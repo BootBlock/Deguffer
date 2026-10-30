@@ -39,8 +39,6 @@ internal static class Direct3D
     /// <summary>Optimisation, and IEEE arithmetic, so the shader's sums stay as near the CPU's as a float can.</summary>
     public const uint CompileFlags = (1 << 15) | (1 << 13);
 
-    public static readonly Guid DeviceId = new("db6f6ddb-ac77-4e88-8253-819df9bbf140");
-
     public static readonly Guid DxgiSurfaceId = new("cafcb56c-6ac3-4889-bf47-9e23bbd260ec");
 
     [DllImport("d3dcompiler_47.dll", CharSet = CharSet.Ansi, ExactSpelling = true)]

@@ -159,7 +159,7 @@ internal sealed class ExploreLayer
     /// <summary>
     /// Take a new surface, of the same size, for a device that has replaced the one this was
     /// written through. What the old one held is gone, and writing into it again put nothing on
-    /// screen: see <see cref="MapGraphics.Replaced"/>.
+    /// screen: see <see cref="CompositionDevice.Replaced"/>.
     /// </summary>
     public void Renew()
     {

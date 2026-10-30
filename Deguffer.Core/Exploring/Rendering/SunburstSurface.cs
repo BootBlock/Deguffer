@@ -31,8 +31,6 @@ public sealed class SunburstSurface : ExploreSurface
     public override CanvasPainter Painter(TileColour background) =>
         new SectorRasteriser(_hits, Width, Height, background, (node, depth) => ColourFor(node, depth), Finish);
 
-    public override CushionQuads? Quads() => null;
-
     public override ExploreHit? At(float x, float y) =>
         _hits.At(x, y) is { } index
             ? new ExploreHit(_hits.Sunburst.Sectors[index].Node, _hits.Sunburst.Sectors[index].Bytes)
@@ -43,16 +41,8 @@ public sealed class SunburstSurface : ExploreSurface
     /// <summary>Null: a sunburst draws the whole picture and is never zoomed.</summary>
     public override double? Ceiling => null;
 
-    /// <summary>Null throughout: a sunburst's shapes are sectors.</summary>
-    public override ExploreTile? TileAt(float x, float y) => null;
-
-    public override IReadOnlyList<ExploreTile> Tiles => [];
-
-    /// <summary>Null throughout, for the same reason.</summary>
-    public override MapFrame? FrameOf(int node) => null;
-
-    /// <summary>Null throughout, for the same reason.</summary>
-    public override MapFrame? Locate(int node) => null;
+    /// <summary>Null throughout, for the reason <see cref="Ceiling"/> is.</summary>
+    public override MapFrame? ScreenOf(int node, MapViewport shown, MapViewport opened) => null;
 
     /// <summary>
     /// The sectors in the ring outside <paramref name="folder"/>'s that it holds, each standing at the

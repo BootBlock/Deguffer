@@ -61,7 +61,7 @@ internal static class UnreadableRoot
     /// What makes Windows decline to describe a path, for every sentence that has to say so. See
     /// <see cref="WhyItCouldNotBeReached"/> for why it names all three.
     /// </summary>
-    private const string Causes =
+    public const string Causes =
         "A link it will not follow, a folder this account may not read and a drive that is not "
         + "connected all do that.";
 

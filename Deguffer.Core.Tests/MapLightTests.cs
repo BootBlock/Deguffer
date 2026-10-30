@@ -143,7 +143,7 @@ public sealed class MapLightTests
     }
 
     private static ExploreSurface Draw(ExploreTree tree, ExploreView view) =>
-        ExploreSurface.Create(
+        Surfaces.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
             ExploreColouring.Type, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 

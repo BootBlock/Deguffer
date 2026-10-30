@@ -176,15 +176,15 @@ public sealed class FolderStepsTests
     public void ADrawingThatCannotZoomHasNoShapeToFlyTo()
     {
         var tree = Nested();
-        var sunburst = ExploreSurface.Create(
+        var sunburst = Surfaces.Create(
             tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, textScale: 1,
             ExploreColouring.Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.Null(sunburst.ScreenOf(Find(tree, "top0"), MapViewport.Whole, MapViewport.Whole));
     }
 
-    private static ExploreSurface Treemap(ExploreTree tree, int? root = null) =>
-        ExploreSurface.Create(
+    private static TiledSurface Treemap(ExploreTree tree, int? root = null) =>
+        (TiledSurface)Surfaces.Create(
             tree, root ?? tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
             ExploreColouring.Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
