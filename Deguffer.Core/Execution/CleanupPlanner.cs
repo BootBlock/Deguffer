@@ -302,6 +302,7 @@ public sealed class CleanupPlanner
             installerDownloads,
             new DeliveryOptimizationProvider(environment, scanner: scanner),
             new PreviousWindowsInstallationProvider(handlers, environment, scanner: scanner),
+            new UpgradeDiscardedFilesProvider(handlers, environment, scanner: scanner),
             new WindowsUpdateLeftoverProvider(environment, scanner: scanner),
             new DriverStoreProvider(handlers, environment, scanner: hardLinks),
             new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner),

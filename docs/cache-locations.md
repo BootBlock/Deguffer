@@ -5704,8 +5704,8 @@ to type the words out.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\CrashDumps`, `ReportArchive` and `ReportQueue` under both `%LOCALAPPDATA%\Microsoft\Windows\WER` and `%PROGRAMDATA%\Microsoft\Windows\WER`, `C:\Windows\LiveKernelReports`, `C:\Windows\Minidump`, and `C:\Windows\MEMORY.DMP`, plus wherever this machine's crash settings send dumps instead |
-| **Method** | Delete each of those eight, one row each, and each dump in a place the settings name, one file at a time |
+| **Location** | `%LOCALAPPDATA%\CrashDumps`, `ReportArchive` and `ReportQueue` under both `%LOCALAPPDATA%\Microsoft\Windows\WER` and `%PROGRAMDATA%\Microsoft\Windows\WER`, `%LOCALAPPDATA%\Microsoft\Windows\TaskManager\LiveKernelDumps`, `C:\Windows\LiveKernelReports`, `C:\Windows\Minidump`, and `C:\Windows\MEMORY.DMP`, plus wherever this machine's crash settings send dumps instead |
+| **Method** | Delete each of those nine, one row each, and each dump in a place the settings name, one file at a time |
 | **Typical size** | Usually tens of megabytes. `MEMORY.DMP` is the exception: on a machine set to write a complete dump it is the size of your installed memory, so one stop error leaves 32 or 64 GB behind |
 
 ### What it is
@@ -5717,18 +5717,22 @@ here and they come from different places:
 - **`WER`** — Windows Error Reporting — holds the reports Windows prepares to send to Microsoft.
   `ReportQueue` is what has not been sent yet, and `ReportArchive` is the record of what has. There
   is one pair for the whole machine and one in your own profile.
+- **`TaskManager\LiveKernelDumps`** in your own profile holds the live kernel memory dumps somebody
+  asked Task Manager for, from its *Create live kernel memory dump file* command. Microsoft gives
+  this as where they go by default.
 - **`Minidump`, `LiveKernelReports` and `MEMORY.DMP`** are the kernel's own. A minidump is written
   for each blue screen; a live kernel report is written when a driver was reset without stopping the
   machine; and `MEMORY.DMP` is the full dump from the most recent stop error.
 
 ### What Deguffer does
 
-It removes the eight locations above, one row each, so you can clear the application dumps and keep
+It removes the nine locations above, one row each, so you can clear the application dumps and keep
 the kernel ones — or the reverse.
 
-**Windows can be told to write dumps somewhere else, and Deguffer reads where.** Three settings move
+**Windows can be told to write dumps somewhere else, and Deguffer reads where.** Four settings move
 them: `DumpFile` and `MinidumpDir` under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl`
-move the kernel's full dump and its minidumps, and `DumpFolder` under
+move the kernel's full dump and its minidumps, `LiveKernelReportsPath` in that key's
+`LiveKernelReports` subkey moves live kernel reports, and `DumpFolder` under
 `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps` moves application
 dumps, for every application or, in a key named after one, for that application alone. Moving the
 full dump to another drive is common when the system drive is small. Each moved place is named in
@@ -5737,7 +5741,11 @@ the plan, whatever was found there.
 A moved folder is never offered as a folder, because it can be any folder: a drive root, Documents,
 anywhere. Deguffer offers only the files directly inside it that are named `*.dmp` and start the way
 a crash dump starts, each one by name, and everything else there stays. The file `DumpFile` names is
-offered by that name on the same test. Deguffer does not look into a moved folder at all where it is
+offered by that name on the same test. Live kernel reports go one level deeper: Windows writes each
+small one into a folder named after the component that asked for it, so Deguffer also offers the
+dumps directly inside a folder named `NDIS`, `PDCRevocation`, `PoW32kWatchdog`, `USBHUB3` or
+`WATCHDOG` there, the five Microsoft names, and never looks into a folder of any other name. Deguffer
+does not look into a moved folder at all where it is
 a drive root, one of your own folders, or another folder other rows remove things from, and it does
 not look through a link. A full kernel dump can be read only by an administrator, so without the
 **Elevate** button a moved one is named and left alone rather than offered on its name.
@@ -5750,7 +5758,7 @@ of exact paths, and nothing else under the Windows directory is reachable, whate
 that break Windows if you get them wrong — are named as things that must still be there when the run
 finishes, and Deguffer checks that they are.
 
-**Most of it needs administrator rights.** Only `%LOCALAPPDATA%\CrashDumps` is yours to clear.
+**Most of it needs administrator rights.** Only the folders in your own profile are yours to clear.
 Deguffer shows the rest either way, tells you which they are, and leaves them unticked until you
 restart it as administrator with the **Elevate** button. It does not hide them, because a folder you
 are never told about is one you can never decide about.
@@ -5992,6 +6000,56 @@ itself keeps working exactly as it is.
 Nothing here comes back except by upgrading again, and what you pay is a named capability — going
 back, and resetting from local files — rather than a slower next use. That is Tier 2's shape. It is
 not Tier 3, because none of it is a record of something you did.
+
+---
+
+## Files discarded by a Windows upgrade
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent.
+
+| | |
+| --- | --- |
+| **Location** | `C:\$WINDOWS.~Q`, `C:\$INPLACE.~TR` and `C:\$Windows.~LS` |
+| **Method** | Windows' own Disk Cleanup handler, *Upgrade Discarded Files*, one row for all three |
+| **Typical size** | Not yet measured: none of the three was on the machine the survey measured |
+
+### What it is
+
+When Windows upgrades, it keeps a copy of any file it did not move to the new version and did not
+recognise as part of Windows. That is Windows' own description, given by the cleanup it registers for
+these folders, and it goes on: "If you are sure that no user's personal files are missing after the
+upgrade, you can delete these files." Microsoft documents nothing else about them. The three names
+are the ones that cleanup's registration lists, in the `SetupDirectories` value under
+`HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Upgrade Discarded Files`.
+
+### What Deguffer does
+
+It asks Windows to run that cleanup, the one Disk Cleanup's *Clean up system files* lists as *Files
+discarded by Windows upgrade*, and never deletes the folders itself. It is offered on exactly the
+terms of the [previous Windows installation](#previous-windows-installation), through the same Windows
+component: only once the upgrade can no longer be undone, never while an update is unfinished, and
+only where Windows' own cleanup says it has something to clear. The uninstall window is also the time
+to notice that something of yours did not come across. Running it needs administrator rights.
+
+### What is protected
+
+The top of the drive is never listed, and what Windows keeps there is named in the plan and checked
+after the run, as for the previous installation. `Windows.old` is a different row, and this one never
+names it.
+
+### What it costs you
+
+**Every file the upgrade set aside is gone for good**, including any of your own among them. Before
+removing these, check that nothing of yours has been missing since the upgrade, and look in these
+folders if something has.
+
+### Why Tier 3
+
+By Windows' own description, what is kept here is whatever the upgrade could not place, which is the
+part of an upgrade most likely to be somebody's own files, and the copy here may be the only one.
+Nothing re-creates it. The previous installation is Tier 2 because what it costs is a capability,
+going back. This costs whatever the files were, and that is Tier 3's definition.
 
 ---
 

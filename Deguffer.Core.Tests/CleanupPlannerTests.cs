@@ -473,7 +473,7 @@ public sealed class CleanupPlannerTests
                 "squirrel-staging",
                 "platformio", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
-                "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "windows-update-leftovers",
+                "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "upgrade-discarded-files", "windows-update-leftovers",
                 "driver-store", "component-store", "component-store-reset-base", "restore-points", "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
                 "claude-code-file-history", "claude-code-conversations", "virtual-disks",
@@ -492,7 +492,7 @@ public sealed class CleanupPlannerTests
 
         Assert.Equal(
             [
-                "retroarch-thumbnails", "recycle-bin", "file-history", "component-store-reset-base", "restore-points", "crash-dumps", "windows-servicing-logs",
+                "retroarch-thumbnails", "recycle-bin", "file-history", "upgrade-discarded-files", "component-store-reset-base", "restore-points", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs", "claude-code-file-history",
                 "claude-code-conversations", "virtual-disks",
             ],
