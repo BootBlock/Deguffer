@@ -60,18 +60,10 @@ public sealed partial class TestAssemblySeamTests
     /// uses names the routes it forbids.
     /// </summary>
     private static IEnumerable<string> TestSources() =>
-        Directory.EnumerateDirectories(MarkdownGuide.RepositoryRoot)
-            .Where(project => Path.GetFileName(project) is { } name
-                && (name.EndsWith(".Tests", StringComparison.Ordinal) || name == "Deguffer.Testing"))
-            .SelectMany(project => Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories))
-            .Where(file => !IsBuildOutput(file)
-                && !string.Equals(Path.GetFullPath(file), Path.GetFullPath(ThisFile()), StringComparison.OrdinalIgnoreCase));
+        TestProjects.SourcesWithFixtures()
+            .Where(file => !string.Equals(Path.GetFullPath(file), Path.GetFullPath(ThisFile()), StringComparison.OrdinalIgnoreCase));
 
     private static string ThisFile([CallerFilePath] string path = "") => path;
-
-    private static bool IsBuildOutput(string file) =>
-        file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-        || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
     [GeneratedRegex(@"\b(?:(?:ShellRecycleBinEmptier|DiskCleanupHandlers|CloudFiles|WindowsUninstallRegistry|ShellUninstallLauncher|WindowsSystemProtection)\s*\.\s*Default|ShellNative\s*\.\s*SHEmptyRecycleBin|RestorePointCalls\s*\.\s*Remove)\b")]
     private static partial Regex RealRoute();

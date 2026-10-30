@@ -48,8 +48,11 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// incidental here — the volume index is the entire cost of the fast path, and one scanner per
     /// provider would rebuild it three times over, making the MFT route slower than the walk it
     /// replaces.
+    ///
+    /// <para>Lazy, so that touching any static here builds nothing of this machine's: a scanner of
+    /// another machine, a test's among them, never loads this account's size cache.</para>
     /// </summary>
-    private static DirectoryScanner Default { get; } = CreateDefault(UserEnvironment.Current);
+    private static readonly Lazy<DirectoryScanner> Default = new(() => CreateDefault(UserEnvironment.Current));
 
     /// <summary>
     /// A scanner of the machine <paramref name="environment"/> describes: its volumes' tables, and
@@ -65,8 +68,20 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// the one index stays shared. Any other environment is a machine of its caller's own, a test's
     /// fixture among them, and gets a scanner of that machine rather than the disks underneath it.
     /// </summary>
-    public static DirectoryScanner For(IUserEnvironment environment) =>
-        environment is UserEnvironment ? Default : CreateDefault(environment);
+    /// <exception cref="InvalidOperationException">
+    /// This machine's, in a process that has closed <see cref="MachineScanFence"/>.
+    /// </exception>
+    public static DirectoryScanner For(IUserEnvironment environment)
+    {
+        if (environment is not UserEnvironment)
+        {
+            return CreateDefault(environment);
+        }
+
+        MachineScanFence.Pass();
+
+        return Default.Value;
+    }
 
     public async ValueTask<ScanResult> MeasureAsync(
         string path,
