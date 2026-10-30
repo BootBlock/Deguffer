@@ -39,9 +39,9 @@ public sealed class CleanupPlanner
     }
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, Maven, vcpkg, pnpm,
-    /// conda, Playwright, Puppeteer, the browser profiles test runners leave in the temporary folders, the GPU
-    /// shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
+    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, ccache, sccache,
+    /// Maven, vcpkg, pnpm, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
+    /// temporary folders, the GPU shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
     /// HTTP cache and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the media cache Adobe's video and audio applications share, the Squirrel updater's staging and the builds it superseded, the Dart analysis
@@ -242,6 +242,8 @@ public sealed class CleanupPlanner
             new CargoCacheProvider(environment, scanner: scanner),
             new GoCacheProvider(environment, scanner: scanner),
             new ZigCacheProvider(environment, scanner: scanner),
+            new CcacheProvider(environment, scanner: scanner),
+            new SccacheProvider(environment, scanner: scanner),
             new MavenRepositoryProvider(environment, scanner: scanner),
             new VcpkgCacheProvider(environment, scanner: scanner),
             new GpuShaderCacheProvider(environment, scanner: scanner),
@@ -274,6 +276,7 @@ public sealed class CleanupPlanner
             new PlatformIoCacheProvider(environment, scanner: scanner),
             new PlaywrightBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
+            new VsCodeExtensionBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new LmStudioRuntimeProvider(environment, scanner: scanner),
             testBrowsers,
             new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),

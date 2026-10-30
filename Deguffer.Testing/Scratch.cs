@@ -17,6 +17,13 @@ internal static class Scratch
     /// </summary>
     internal static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
 
+    /// <summary>
+    /// What Windows answers for the creation time of an entry that is not there. .NET returns it
+    /// rather than throwing, and it is older than any cutoff, so a sweep that compared it straight
+    /// would read "there is nothing here to date" as "certainly stale".
+    /// </summary>
+    internal static readonly DateTime NotFound = DateTime.FromFileTimeUtc(0);
+
     /// <summary>A fresh identifier for one piece of this run's scratch.</summary>
     internal static string NewIdentifier() => Guid.NewGuid().ToString("N");
 

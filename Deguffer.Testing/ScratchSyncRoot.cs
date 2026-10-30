@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 using Deguffer.Core.Cloud;
 using Microsoft.Win32.SafeHandles;
 using Windows.Storage;
@@ -18,7 +17,8 @@ namespace Deguffer.Testing;
 ///
 /// <para><b>Registered under its own name, and removed again.</b> The identifier starts
 /// <c>DegufferTests!</c>, which no real sync app uses, and <see cref="Dispose"/> disconnects before it
-/// unregisters, because Windows refuses to unregister a root that is still connected.</para>
+/// unregisters, because Windows refuses to unregister a root that is still connected. A host killed
+/// before then leaves the registration for <see cref="ScratchSyncRoots"/> to collect.</para>
 /// </summary>
 public sealed class ScratchSyncRoot : IDisposable
 {
@@ -41,8 +41,12 @@ public sealed class ScratchSyncRoot : IDisposable
 
     public ScratchSyncRoot(string path)
     {
+        // Before this run's first root, so what an interrupted run left registered goes now rather
+        // than staying for good.
+        ScratchSyncRoots.SweepOnce();
+
         Path = path;
-        Id = $"{ProviderName}!{WindowsIdentity.GetCurrent().User!.Value}!{Guid.NewGuid():N}";
+        Id = ScratchSyncRoots.NewId();
         _onFetch = (_, _) => Interlocked.Increment(ref _fetches);
 
         Directory.CreateDirectory(path);

@@ -5,17 +5,31 @@ namespace Deguffer.Testing;
 /// <summary>A scratch tree that removes itself, so provider tests can build a real filesystem.</summary>
 public sealed class TempDirectory : IDisposable
 {
+    private readonly ScratchRoot _root;
+
     public TempDirectory()
+        : this(ScratchRoot.Temp)
+    {
+    }
+
+    internal TempDirectory(ScratchRoot root)
     {
         // Before this run's first tree, so what an earlier run's forgiven delete left behind goes
         // now rather than staying for good.
-        ScratchRoot.SweepOnce();
+        root.SweepOnce();
 
-        Path = System.IO.Path.Combine(ScratchRoot.Path, Scratch.NewIdentifier());
+        _root = root;
+        Path = System.IO.Path.Combine(root.Path, Scratch.NewIdentifier());
         Directory.CreateDirectory(Path);
     }
 
     public string Path { get; }
+
+    /// <summary>
+    /// A scratch tree in the user's profile rather than TEMP, for the rare test that needs a folder
+    /// outside <c>AppData\Local</c>. See <see cref="ScratchRoot.Profile"/>.
+    /// </summary>
+    public static TempDirectory InProfile() => new(ScratchRoot.Profile);
 
     /// <summary>Create a directory under the scratch root and return its full path.</summary>
     public string CreateDirectory(params string[] segments)
@@ -68,5 +82,11 @@ public sealed class TempDirectory : IDisposable
     /// Windows refuses even then: a leaked scratch directory is not worth failing a test run over.
     /// <see cref="ScratchRoot"/>'s sweep collects the forgiven one on a later run.
     /// </summary>
-    public void Dispose() => _ = ScratchTree.TryRemove(Path, RemovalAttempts.WithBackoff);
+    public void Dispose()
+    {
+        if (ScratchTree.TryRemove(Path, RemovalAttempts.WithBackoff) && _root.RemovedWhenEmpty)
+        {
+            _root.RemoveIfEmpty();
+        }
+    }
 }

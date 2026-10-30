@@ -202,7 +202,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
     /// another drive's tree, or a copy found where its search was not told it would look.</para>
     ///
     /// <para>Waits here, without holding a thread, for a scan's tree where the discovery reads one,
-    /// so the walk behind <see cref="ToolRoots"/>, read once every probe is in, finds the scope's
+    /// so the walk behind <see cref="ToolRoots"/>, read once this probe is in, finds the scope's
     /// answer ready rather than waiting for the scan. That walk still runs the first time
     /// <see cref="ToolRoots"/> is read, on the thread <see cref="DeclaredRoots"/> reads it on.</para>
     /// </summary>

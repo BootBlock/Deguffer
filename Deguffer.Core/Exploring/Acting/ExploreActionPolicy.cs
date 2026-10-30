@@ -129,7 +129,8 @@ public sealed class ExploreActionPolicy
     /// constructor still takes declarations directly, for a caller that already holds them.</para>
     ///
     /// <para>The providers are asked in parallel, bounded, because most of them answer immediately
-    /// and the handful that do not are each waiting on a subprocess or the process table (G4).</para>
+    /// and the handful that do not are each waiting on a subprocess, the process table or a walk
+    /// (G4).</para>
     /// </summary>
     public static async Task<ExploreActionPolicy> ForAsync(
         ISystemDirectories system,
@@ -145,20 +146,25 @@ public sealed class ExploreActionPolicy
 
         IReadOnlyList<ICleanupProvider> asked = [.. providers];
         var discovered = new IReadOnlyList<ToolRoot>[asked.Count];
+        var declared = new IReadOnlyList<ToolRoot>[asked.Count];
 
+        // Each provider's declaration is read in its own slot of the bound, so the walks some of them
+        // declare from run beside the other providers' probes rather than in series after all of them.
+        // The probe goes first, because a Chromium row's probe readies the scope its walk reads.
         await Parallel.ForAsync(
             0,
             asked.Count,
             new ParallelOptions { MaxDegreeOfParallelism = Discovery, CancellationToken = ct },
             async (index, token) =>
-                discovered[index] = await asked[index].DiscoverToolRootsAsync(token).ConfigureAwait(false))
+            {
+                discovered[index] = await asked[index].DiscoverToolRootsAsync(token).ConfigureAwait(false);
+                declared[index] = await DeclaredRoots.ReadAsync(asked[index], ct).ConfigureAwait(false);
+            })
             .ConfigureAwait(false);
-
-        var declared = await DeclaredRoots.ReadAsync(asked, ct).ConfigureAwait(false);
 
         return new ExploreActionPolicy(
             ProtectedRegions.For(system, environment),
-            declared,
+            [.. declared.SelectMany(roots => roots)],
             volumes,
             probedRoots: [.. discovered.SelectMany(roots => roots)]);
     }

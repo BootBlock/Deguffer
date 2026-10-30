@@ -975,6 +975,91 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A profile <c>profiles.ini</c> keeps outside Firefox's folder holds the same passwords as one
+    /// inside it, and nothing above it is Firefox's to refuse. It is declared whole, so the profile
+    /// and everything in it is refused, while the folder it sits in stays the user's.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                // the profile itself
+    [InlineData("logins.json", false)]     // saved passwords
+    [InlineData("key4.db", false)]
+    [InlineData("places.sqlite", false)]   // bookmarks and history
+    [InlineData("cache2", false)]          // a cache, kept among all of the above
+    [InlineData(@"..\notes", true)]        // a folder beside the profile, which is not Firefox's
+    public void AFirefoxProfileKeptElsewhereIsRefusedWhole(string relative, bool allowed)
+    {
+        var profile = _temp.CreateDirectory("Documents", "FirefoxProfile");
+        _temp.CreateDirectory("Documents", "notes");
+        RegisterFirefoxProfile(profile, isRelative: false);
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(
+                relative.Length == 0 ? profile : Path.GetFullPath(Path.Combine(profile, relative))).IsAllowed);
+    }
+
+    /// <summary>
+    /// A relative entry that climbs out of Firefox's folder is never examined, but Firefox opens it
+    /// all the same, so where it lands is refused as a profile is.
+    /// </summary>
+    [Fact]
+    public void AFirefoxProfileWhoseRelativePathClimbsOutIsRefusedWhereItLands()
+    {
+        var profile = _temp.CreateDirectory("escaped-profile");
+        RegisterFirefoxProfile("../../../../../escaped-profile");
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.Empty(provider.Profiles());
+        Assert.False(policy.MayRemove(profile).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(profile, "logins.json")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A profile at the top of a drive is not declared whole: a refusal of every child of the drive
+    /// would take the whole drive away from Explore. Its user data is refused by name instead, and
+    /// the rest of the drive stays the user's. Asked of the declaration rather than through a policy,
+    /// because a policy reads what each child is from the disk, and this drive is the real one.
+    /// </summary>
+    [Fact]
+    public async Task AFirefoxProfileAtTheTopOfADriveRefusesItsUserDataAndNothingElse()
+    {
+        var drive = Path.GetPathRoot(_temp.Path)!;
+        RegisterFirefoxProfile(drive, isRelative: false);
+
+        // The probed route first, on a provider nothing else has asked: Explore builds a new set of
+        // providers for each policy, and this route must not depend on ToolRoots having run.
+        var provider = new FirefoxCacheProvider(_environment);
+        var root = Assert.Single(await provider.DiscoverToolRootsAsync());
+
+        Assert.DoesNotContain(
+            provider.ToolRoots, declared => declared.Path.Equals(drive, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(drive, root.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.False(root.Recognises(new ToolRootChild("logins.json", ChildKind.File)));
+        Assert.False(root.Recognises(new ToolRootChild("key4.db", ChildKind.File)));
+        Assert.False(root.Recognises(new ToolRootChild("places.sqlite", ChildKind.File)));
+        Assert.True(root.Recognises(new ToolRootChild("Users", ChildKind.Folder)));
+        Assert.True(root.Recognises(new ToolRootChild("notes.txt", ChildKind.File)));
+    }
+
+    /// <summary>
+    /// The probed route only adds refusals, so a profile kept anywhere but the top of a drive is
+    /// declared whole in <see cref="FirefoxCacheProvider.ToolRoots"/> and not again here.
+    /// </summary>
+    [Fact]
+    public async Task AFirefoxProfileKeptInAFolderIsNotDeclaredAgainOnTheProbedRoute()
+    {
+        RegisterFirefoxProfile(_temp.CreateDirectory("Documents", "FirefoxProfile"), isRelative: false);
+
+        Assert.Empty(await new FirefoxCacheProvider(_environment).DiscoverToolRootsAsync());
+    }
+
+    /// <summary>
     /// A Code - OSS editor's user-data folder, level by level. It repeats the Chromium shape one
     /// directory further down: <c>WebStorage</c> holds one directory per webview, and each of those
     /// holds what that view saved beside the one cache Deguffer removes.
@@ -1435,6 +1520,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("poetry", "virtualenvs")]                    // every environment on the machine
     [InlineData("go", "src")]                                // the user's own code
     [InlineData("zig", "p")]                                 // packages, some the only copy
+    [InlineData("ccache", "ccache.conf")]                    // the size limit and compiler settings
+    [InlineData("sccache", "something-unrecognised")]
     [InlineData("vscode-cpptools", "something-unrecognised")]
     [InlineData("dart-analysis-server", ".prompts")]         // the user's answers to the server's prompts
     [InlineData("roslyn-cache", "something-unrecognised")]
@@ -1471,6 +1558,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
         ["poetry", "artifacts"],
         ["go", @"pkg\mod"],
         ["zig", "h"],
+        ["ccache", "0"],
+        ["sccache", "preprocessor"],
         ["vscode-cpptools", "ipch"],
         ["dart-analysis-server", ".analysis-driver"],
         ["playwright", "chromium-1091"],
@@ -1606,14 +1695,15 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// so the provider declares no <em>profile</em> root until <c>profiles.ini</c> names one.
     /// Firefox's two folders above them are declared from constants and need no fixture.
     /// </summary>
-    private void RegisterFirefoxProfile() => File.WriteAllText(
-        _temp.CreateFile(0, "profile", "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"),
-        """
-        [Profile0]
-        Name=default-release
-        IsRelative=1
-        Path=Profiles/default-release
-        """);
+    private void RegisterFirefoxProfile(string declared = "Profiles/default-release", bool isRelative = true) =>
+        File.WriteAllText(
+            _temp.CreateFile(0, "profile", "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"),
+            $"""
+            [Profile0]
+            Name=default-release
+            IsRelative={(isRelative ? 1 : 0)}
+            Path={declared}
+            """);
 
     /// <summary>
     /// Firefox, Affinity and the Azure Functions tooling are deliberately absent. The sweep above probes a
@@ -1634,6 +1724,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new PoetryCacheProvider(_environment),
         new GoCacheProvider(_environment),
         new ZigCacheProvider(_environment),
+        new CcacheProvider(_environment),
+        new SccacheProvider(_environment),
         new VsCodeCppToolsCacheProvider(_environment),
         new DartAnalysisServerProvider(_environment),
         new RoslynCacheProvider(_environment),
@@ -1772,13 +1864,79 @@ public sealed class ExploreActionPolicyTests : IDisposable
             _system,
             _environment,
             new FakeVolumeInventory(),
-            [new StubProvider([declared], [VendorTool(moved)])]);
+            [new DeclaringRow([declared], [VendorTool(moved)])]);
 
         Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
 
         Assert.False(policy.MayRemove(moved).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(moved, "anything")).IsAllowed);
+    }
+
+    /// <summary>
+    /// Each provider's declaration is read in the bounded stage that asks for the probes, rather than
+    /// in series once every probe is in. One provider's probe here waits for another provider's
+    /// declaration, which never comes while declarations wait for the probes.
+    /// </summary>
+    [Fact]
+    public async Task ADeclarationIsReadBesideTheOtherProvidersProbes()
+    {
+        var declared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var root = ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            new FakeVolumeInventory(),
+            [
+                new DeclaringRow(() =>
+                {
+                    declared.TrySetResult();
+                    return [root];
+                }),
+                new DeclaringRow(
+                    () => [],
+                    async ct =>
+                    {
+                        await declared.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+                        return [];
+                    }),
+            ]);
+
+        Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A provider's own probe is in before its declaration is read: the Chromium rows' probe readies
+    /// the scope their declaration walks.
+    /// </summary>
+    [Fact]
+    public async Task AProvidersProbeIsInBeforeItsDeclarationIsRead()
+    {
+        var probed = false;
+        bool? probedFirst = null;
+
+        await ExploreActionPolicy.ForAsync(
+            _system,
+            _environment,
+            new FakeVolumeInventory(),
+            [
+                new DeclaringRow(
+                    () =>
+                    {
+                        probedFirst = Volatile.Read(ref probed);
+                        return [];
+                    },
+                    async ct =>
+                    {
+                        await Task.Yield();
+                        Volatile.Write(ref probed, true);
+                        return [];
+                    }),
+            ]);
+
+        Assert.True(probedFirst);
     }
 
     /// <summary>
@@ -2067,64 +2225,4 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// </summary>
     private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
         new(ProtectedRegions.For(_system, _environment), toolRoots, volumes: _volumes);
-
-    private sealed class StubProvider(
-        IReadOnlyList<ToolRoot> roots,
-        IReadOnlyList<ToolRoot>? discovered = null) : ICleanupProvider
-    {
-        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
-
-        public string Id => "stub";
-
-        public string Name => "Stub";
-
-        public SafetyTier Tier => SafetyTier.RegenerableCache;
-
-        public Execution.StepGrain Grain => Execution.StepGrain.Parts;
-
-        public string WhatHappensOnNextUse => "Nothing.";
-
-        public ProviderDescription Description { get; } = new()
-        {
-            Category = ProviderCategory.TemporaryFiles,
-            Application = "A stub, standing in for a real toolchain.",
-            Publisher = "Nobody.",
-            Purpose = "Nothing. This provider exists only for this test.",
-            Recommendation = "Nothing to recommend.",
-        };
-
-        public bool IsAwaitingSourceFolders => false;
-
-        public IReadOnlyList<ToolRoot> ToolRoots => roots;
-
-        public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<ToolRoot>>(discovered ?? []);
-
-        public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
-
-        public void InvalidateCaches()
-        {
-        }
-
-        public PassHold HoldCaches() => PassHold.Nothing;
-
-        public Task<Execution.CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
-
-        public Task<Execution.CleanupResult> ExecuteAsync(
-            Execution.CleanupPlan plan,
-            Execution.RunReach? runReach = null,
-            Execution.RunResidue? residue = null,
-            IProgress<double>? progress = null,
-            CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
-
-        public Task<Execution.VerificationResult> VerifyAsync(
-            Execution.CleanupPlan plan,
-            Execution.RunReach? runReach = null,
-            Execution.RunResidue? residue = null,
-            CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
-    }
 }

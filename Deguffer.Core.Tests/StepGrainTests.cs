@@ -57,6 +57,7 @@ public class StepGrainTests
             "unreal-intermediate",
             "unreal-project-ddc",
             "vscode-cpptools",
+            "vscode-extension-browsers",
         ];
 
         var declared = CleanupPlanner.CreateDefault().Providers
