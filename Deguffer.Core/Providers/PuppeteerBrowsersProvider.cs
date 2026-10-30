@@ -246,10 +246,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.6. The metadata is the reason this provider enumerates rather than removing a browser
-    /// folder whole: it maps an alias such as <c>stable</c> to a build, and Puppeteer resolves a
-    /// launch through it. Every folder declined at either level is named as well, because the spared
-    /// and the removed are siblings, which is when an over-broad rule takes one with the other.
+    /// §5.6. The root, and what <see cref="PuppeteerCacheSurvey.Survivors"/> names inside it.
     ///
     /// <c>%USERPROFILE%\.cache</c> is asserted to survive when the cache is in its default place,
     /// since the models beside Puppeteer's folder are the costliest mistake this row could make. The
@@ -272,15 +269,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             survivors.Add((shared, "The folder other tools share with Puppeteer is never touched."));
         }
 
-        foreach (var folder in survey.BrowserFolders)
-        {
-            survivors.Add((folder, "A browser folder must survive; only whole builds inside it are removed."));
-            survivors.Add((
-                Path.Combine(folder, PuppeteerCacheLayout.MetadataName),
-                "Puppeteer's record of which build each alias names and where its executable is."));
-        }
-
-        survivors.AddRange(survey.Declined);
+        survivors.AddRange(survey.Survivors);
         survivors.AddRange(live.Vetoed.Select(v => (v.Directory, InUseReason)));
         survivors.AddRange(live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)));
 

@@ -3948,6 +3948,68 @@ has it installed.
 
 ---
 
+## VS Code extension browsers
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%APPDATA%\<editor>\User\globalStorage\<extension>\puppeteer\.chromium-browser-snapshots`, in VS Code and every editor built on it |
+| **Method** | Delete recognised browser builds (`chromium\win64-1108766`, …) |
+| **Typical size** | 747 MB for one Chromium build, measured in Cline's storage |
+
+### What it is
+
+Some VS Code extensions let an assistant use a web browser. Cline is the measured case. The
+extension does not drive the browser you have installed: the first time it needs one, it downloads
+its own build of Chromium into the extension's storage, and it keeps that build there. On the
+measured machine the build was 747 MB, two thirds of Cline's whole storage folder.
+
+The extension finds its browser through `puppeteer-chromium-resolver`, which keeps what it downloads
+in a `.chromium-browser-snapshots` folder in the layout Puppeteer itself uses: one folder per browser,
+and inside it one folder per build, such as `chromium\win64-1108766`. The extensions built from
+Cline's source keep the same layout in their own storage.
+
+### What Deguffer does
+
+It looks in every editor Deguffer recognises as VS Code or an editor built on it, and in each
+extension's storage folder it looks for exactly one path: `puppeteer\.chromium-browser-snapshots`.
+It never searches an extension's storage for large folders, because the large things in there are
+usually conversation transcripts.
+
+Inside that folder it applies [Puppeteer's](#puppeteer-browsers) rules unchanged. A browser folder
+is recognised only if Puppeteer names that browser, and a build only if its name has the shape
+Puppeteer gives that browser's builds. Anything else stays in Tier 4, and Deguffer tells you it is
+leaving it alone.
+
+A link anywhere on the way down is named and never followed. A build a running browser is using is
+left alone and named, and the clean asks again before each removal.
+
+### What is protected
+
+The `User` folder is never a target, and neither is the extension's storage folder or `puppeteer`.
+The extension's storage folder holds its conversation history (`tasks`, 359 MB on the measured
+machine), its checkpoints (`checkpoints`, a shadow git repository of your workspace) and its
+settings. Each folder beside `puppeteer`, each folder beside the browser cache, the cache folder
+itself, each browser folder and Puppeteer's `.metadata` file are checked after the clean to prove
+they survived.
+
+### What it costs you
+
+**The next time the extension opens a browser, it downloads the build again.** That takes a few
+minutes and several hundred megabytes. The extension's conversations, checkpoints and settings are
+untouched.
+
+### Why Tier 1
+
+Unlike [Puppeteer's own cache](#puppeteer-browsers), nothing breaks. The resolver downloads a missing
+build again by itself, without a command from you, so the cost is a wait and not a failure.
+
+Neither the extension nor the resolver has a command that removes the browser, so §5.1 has nothing
+to prefer.
+
+---
+
 ## LM Studio superseded runtimes
 
 **Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
