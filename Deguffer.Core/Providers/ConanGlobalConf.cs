@@ -46,14 +46,6 @@ internal static class ConanGlobalConf
     /// <summary>The delimiters of Jinja's statements, expressions and comments, which no plain file holds.</summary>
     private static readonly string[] TemplateDelimiters = ["{{", "{%", "{#"];
 
-    /// <summary>What Python's <c>str.isspace</c> is true for: Unicode's white space and the four information separators.</summary>
-    private const string PythonWhiteSpace =
-        "\u0009\u000a\u000b\u000c\u000d\u001c\u001d\u001e\u001f\u0020\u0085\u00a0\u1680\u2000\u2001\u2002\u2003"
-        + "\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000";
-
-    /// <summary>What Python's <c>str.splitlines</c> splits on.</summary>
-    private static readonly char[] LineBreaks = ['\u000a', '\u000d', '\u000b', '\u000c', '\u001c', '\u001d', '\u001e', '\u0085', '\u2028', '\u2029'];
-
     /// <summary>The store the configuration in <paramref name="home"/> names, and the files it was read from.</summary>
     public static ConanConfReading Read(string home)
     {
@@ -135,10 +127,10 @@ internal static class ConanGlobalConf
         Verdict? verdict = null;
         var number = 0;
 
-        foreach (var raw in text.Split(LineBreaks))
+        foreach (var raw in PythonText.Lines(text))
         {
             number++;
-            var line = PythonStrip(raw);
+            var line = PythonText.Strip(raw);
 
             if (line.Length == 0 || line.StartsWith('#') || !line.Contains("storage_path", StringComparison.OrdinalIgnoreCase))
             {
@@ -170,12 +162,12 @@ internal static class ConanGlobalConf
             return null;
         }
 
-        if (PythonStrip(line[..equals]) != Setting)
+        if (PythonText.Strip(line[..equals]) != Setting)
         {
             return null;
         }
 
-        var value = PythonStrip(line[(equals + 1)..]);
+        var value = PythonText.Strip(line[(equals + 1)..]);
 
         return value switch
         {
@@ -184,9 +176,6 @@ internal static class ConanGlobalConf
             _ => null,
         };
     }
-
-    /// <summary>Python's <c>str.strip</c>, which takes the information separators as well as what .NET calls white space.</summary>
-    private static string PythonStrip(string text) => text.AsSpan().Trim(PythonWhiteSpace).ToString();
 
     private readonly record struct FileContents(byte[]? Bytes);
 

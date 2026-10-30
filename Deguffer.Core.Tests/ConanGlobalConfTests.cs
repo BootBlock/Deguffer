@@ -93,6 +93,7 @@ public sealed class ConanGlobalConfTests : IDisposable
     [InlineData("core.cache:storage_path = C:store", "Line 1 of")]
     [InlineData("core.cache:storage_path = []", "Line 1 of")]
     [InlineData("tools.build:jobs = 8\ncore.cache:storage_path", "Line 2 of")]
+    [InlineData("tools.build:jobs = 8\r\ncore:non_interactive = True\r\ncore.cache:storage_path", "Line 3 of")]
     public void RefusesWhatIsNotOnePlainFolder(string text, string why)
     {
         Write(text);

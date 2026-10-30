@@ -54,7 +54,7 @@ internal static class ConanRc
 
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (var line in Lines(Encoding.ASCII.GetString(bytes)).Where(line => !line.StartsWith('#')))
+        foreach (var line in PythonText.Lines(Encoding.ASCII.GetString(bytes)).Where(line => !line.StartsWith('#')))
         {
             if (line.Split('=') is not [var key, var value])
             {
@@ -77,38 +77,6 @@ internal static class ConanRc
             || home.StartsWith("..", StringComparison.Ordinal);
 
         return new ConanRcReading.Names(relative ? Path.Combine(Path.GetDirectoryName(file)!, home) : home);
-    }
-
-    /// <summary>
-    /// Python's <c>str.splitlines</c> over ASCII text: a break is a line feed, a carriage return, the
-    /// two together, a vertical tab, a form feed or a file, group or record separator, and a break at
-    /// the very end makes no empty line after it.
-    /// </summary>
-    private static IEnumerable<string> Lines(string text)
-    {
-        var start = 0;
-
-        for (var i = 0; i < text.Length; i++)
-        {
-            if (text[i] is not ('\n' or '\r' or '\v' or '\f' or '\x1c' or '\x1d' or '\x1e'))
-            {
-                continue;
-            }
-
-            yield return text[start..i];
-
-            if (text[i] == '\r' && i + 1 < text.Length && text[i + 1] == '\n')
-            {
-                i++;
-            }
-
-            start = i + 1;
-        }
-
-        if (start < text.Length)
-        {
-            yield return text[start..];
-        }
     }
 }
 
