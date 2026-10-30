@@ -214,18 +214,11 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     ///
     /// <para><b>A profile kept outside Firefox's folder is declared too</b>, whole, because nothing
     /// above it is Firefox's and so nothing else refuses it: <c>D:\Firefox\work</c> holds the same
-    /// <c>logins.json</c> the declared profiles do. A drive or share root is left out for
-    /// <see cref="SpotifyCacheProvider"/>'s reason: refusing every child of a drive would take the
-    /// whole drive away from Explore, and a volume root is never itself removable there.</para>
+    /// <c>logins.json</c> the declared profiles do. A profile at the top of a drive or share is
+    /// declared in <see cref="DiscoverToolRootsAsync"/> instead.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots.Get(() => Declare(Profiles()));
-
-    /// <summary>
-    /// <see cref="ToolRoots"/> over <paramref name="profiles"/>, which is taken as an argument so that
-    /// discovery has run before <see cref="MozillaProfileDiscovery.ProfilesElsewhere"/> is read.
-    /// </summary>
-    private IReadOnlyList<ToolRoot> Declare(IReadOnlyList<MozillaProfile> profiles) =>
+        _toolRoots.Get(() =>
         [
             ToolRoot.Of(
                 _discovery.RoamingRoot,
@@ -237,7 +230,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                 "This is where Firefox keeps the caches for each of your profiles. Deguffer removes "
                 + "them from the Storage page, where it knows which of them are caches.",
                 NothingIsDisposable),
-            .. from profile in profiles
+            .. from profile in Profiles()
                from root in new[]
                {
                    ToolRoot.Of(
@@ -262,14 +255,38 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                    + "folder. Your bookmarks, history, saved passwords and settings are in it, and "
                    + "Deguffer removes nothing from it.",
                    NothingIsDisposable),
-        ];
+        ]);
+
+    /// <summary>
+    /// A profile at the top of a drive or share, which <see cref="ToolRoots"/> leaves out: refusing
+    /// every child of a drive would take the whole drive away from Explore, and a volume root is
+    /// never itself removable there. The user data the plan protects by name is refused instead,
+    /// and everything else on the drive stays the user's. Declared here rather than in
+    /// <see cref="ToolRoots"/> because a declaration made here only ever adds a refusal. See
+    /// <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. from profile in LocatedElsewhere(ct)
+               where Path.GetDirectoryName(profile.Path) is null
+               select ToolRoot.Sparing(
+                   profile.Path,
+                   $"Your '{profile.Name}' Firefox profile is kept at the top of this drive, so its "
+                   + "bookmarks, history, saved passwords and settings are here. Deguffer removes "
+                   + "none of them.",
+                   ProtectedRoamingFiles.Select(file => file.Name)),
+        ]);
 
     /// <summary>
     /// Each profile kept outside Firefox's folder that names a directory, with that directory.
-    /// Read after <see cref="Profiles"/>, which is what fills the list.
     /// </summary>
-    private IEnumerable<(string Name, string Path)> LocatedElsewhere()
+    private IEnumerable<(string Name, string Path)> LocatedElsewhere(CancellationToken ct = default)
     {
+        // Discovery is what fills the list, and it is memoised, so this costs nothing after the
+        // first read of the pass.
+        Profiles(ct);
+
         foreach (var profile in _discovery.ProfilesElsewhere)
         {
             if (profile.Path is { } path)
@@ -281,9 +298,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// §5.6 for the profiles kept outside Firefox's folder: each directory, and the user data inside
-    /// it by name, for the reason <see cref="ProtectedRoamingFiles"/> gives. A drive root is named
-    /// here although <see cref="ToolRoots"/> leaves it out, because asserting that a profile at the
-    /// top of a drive kept its passwords costs nothing.
+    /// it by name, for the reason <see cref="ProtectedRoamingFiles"/> gives.
     /// </summary>
     private IEnumerable<(string Path, string Reason)> SurvivorsElsewhere() =>
         from profile in LocatedElsewhere()

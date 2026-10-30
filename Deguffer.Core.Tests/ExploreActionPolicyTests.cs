@@ -1020,18 +1020,43 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// A profile at the top of a drive is not declared: a refusal of every child of the drive would
-    /// take the whole drive away from Explore, and Explore never removes a volume root itself.
+    /// A profile at the top of a drive is not declared whole: a refusal of every child of the drive
+    /// would take the whole drive away from Explore. Its user data is refused by name instead, and
+    /// the rest of the drive stays the user's. Asked of the declaration rather than through a policy,
+    /// because a policy reads what each child is from the disk, and this drive is the real one.
     /// </summary>
     [Fact]
-    public void AFirefoxProfileAtTheTopOfADriveIsNotDeclared()
+    public async Task AFirefoxProfileAtTheTopOfADriveRefusesItsUserDataAndNothingElse()
     {
         var drive = Path.GetPathRoot(_temp.Path)!;
         RegisterFirefoxProfile(drive, isRelative: false);
 
-        var roots = new FirefoxCacheProvider(_environment).ToolRoots;
+        // The probed route first, on a provider nothing else has asked: Explore builds a new set of
+        // providers for each policy, and this route must not depend on ToolRoots having run.
+        var provider = new FirefoxCacheProvider(_environment);
+        var root = Assert.Single(await provider.DiscoverToolRootsAsync());
 
-        Assert.DoesNotContain(roots, root => root.Path.Equals(drive, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            provider.ToolRoots, declared => declared.Path.Equals(drive, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(drive, root.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.False(root.Recognises(new ToolRootChild("logins.json", ChildKind.File)));
+        Assert.False(root.Recognises(new ToolRootChild("key4.db", ChildKind.File)));
+        Assert.False(root.Recognises(new ToolRootChild("places.sqlite", ChildKind.File)));
+        Assert.True(root.Recognises(new ToolRootChild("Users", ChildKind.Folder)));
+        Assert.True(root.Recognises(new ToolRootChild("notes.txt", ChildKind.File)));
+    }
+
+    /// <summary>
+    /// The probed route only adds refusals, so a profile kept anywhere but the top of a drive is
+    /// declared whole in <see cref="FirefoxCacheProvider.ToolRoots"/> and not again here.
+    /// </summary>
+    [Fact]
+    public async Task AFirefoxProfileKeptInAFolderIsNotDeclaredAgainOnTheProbedRoute()
+    {
+        RegisterFirefoxProfile(_temp.CreateDirectory("Documents", "FirefoxProfile"), isRelative: false);
+
+        Assert.Empty(await new FirefoxCacheProvider(_environment).DiscoverToolRootsAsync());
     }
 
     /// <summary>
