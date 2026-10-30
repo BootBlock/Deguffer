@@ -111,7 +111,7 @@ public sealed class WindowsServicingTests
     [InlineData("downloadsfolder")]
     public void TheHostNeverLoadsTheHandlerThatEmptiesDownloads(string handler)
     {
-        var refused = DiskCleanupHandlers.NotHosted(handler, @"C:");
+        var refused = DiskCleanupHandlers.NotHosted(handler, @"C:\");
 
         Assert.NotNull(refused);
         Assert.Contains("never runs it", refused, StringComparison.Ordinal);
@@ -125,7 +125,7 @@ public sealed class WindowsServicingTests
     [Fact]
     public void TheRealHostRefusesToSurveyTheHandlerThatEmptiesDownloads()
     {
-        var survey = DiskCleanupHandlers.Default.Survey("DownloadsFolder", @"C:", CancellationToken.None);
+        var survey = DiskCleanupHandlers.Default.Survey("DownloadsFolder", @"C:\", CancellationToken.None);
 
         Assert.Equal(DiskCleanupAnswer.Unavailable, survey.Answer);
         Assert.False(survey.MayOffer);

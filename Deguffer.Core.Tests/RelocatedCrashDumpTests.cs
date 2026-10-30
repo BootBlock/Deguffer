@@ -188,6 +188,37 @@ public sealed class RelocatedCrashDumpTests : IDisposable
     }
 
     /// <summary>
+    /// A component's folder that is a link leads somewhere the setting never named, so nothing through
+    /// it is offered: the link is named, the row does not read as clear, and the dump on the far side
+    /// is still there after the run.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedComponentFolderIsNamedRatherThanFollowed(DirectoryLinkKind kind)
+    {
+        var folder = Path.Combine(Elsewhere, "LiveDumps");
+        var full = Dump(Path.Combine(folder, "WATCHDOG-20261030-1200.dmp"));
+        var outside = Path.Combine(_temp.Path, "unrelated");
+        var beyond = Dump(Path.Combine(outside, "WATCHDOG-20261030-1201.dmp"));
+        var link = Path.Combine(folder, "WATCHDOG");
+        DirectoryLink.Create(kind, link, outside);
+        Set($@"{CrashControl}\LiveKernelReports", "LiveKernelReportsPath", @"\??\" + folder);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([full], plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("is a link", StringComparison.Ordinal)
+            && n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(full));
+        Assert.True(File.Exists(beyond), "a dump was removed through a linked component folder");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// The component folders belong to live kernel reports alone. A folder named after one inside the
     /// place <c>MinidumpDir</c> names is somebody else's, as any folder there is.
     /// </summary>

@@ -338,7 +338,7 @@ Composer already caps its own cache at 300 MiB and six months
 
 | Item | Reason |
 | --- | --- |
-| winget `%LOCALAPPDATA%\Microsoft\WinGet\Packages` (79.3 MB measured) | **Installed portable apps, not a cache** ([settings](https://learn.microsoft.com/en-us/windows/package-manager/winget/settings)). Belongs on the negative list |
+| winget `%LOCALAPPDATA%\Microsoft\WinGet\Packages` (79.3 MB measured) | **Installed portable apps, not a cache** ([settings](https://learn.microsoft.com/en-us/windows/package-manager/winget/settings)). Belongs on the negative list. ✅ done: on it, and explained in Explore |
 | rustup toolchains (1.51 GB measured) | Installs, removed with `rustup toolchain uninstall` (§2). Its `downloads` and `tmp` were empty |
 | `scoop cleanup *`, `gem cleanup`, nvm-windows, fnm, Volta | Each removes or manages installed versions, which is uninstalling. Volta is also unmaintained, by its own README |
 | pipx | The `pipx run` cache expires itself after 14 days ([constants.py](https://raw.githubusercontent.com/pypa/pipx/main/src/pipx/constants.py)); the rest is installed environments |
@@ -758,6 +758,7 @@ Not a schedule: cost against value, given the machinery that exists.
 1. **Godot `imported` and `shader_cache`** — the largest measured item, on the Unity provider's
    shape.
 2. **Upgrade Discarded Files, `LiveKernelReportsPath`, `Logs\DISM`** — rows in existing providers.
+   ✅ The first two are done: Upgrade Discarded Files as its own Tier 3 provider, not a row.
 3. **A run-wide refusal of registered virtual disks** — before any new virtualisation report.
 4. **VMware, then VirtualBox, then Hyper-V reports**, and owner records for Podman and Rancher.
 5. **Superseded JetBrains system directories** and **Vagrant `prune`**.

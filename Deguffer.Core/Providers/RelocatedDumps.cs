@@ -168,18 +168,23 @@ internal static class RelocatedDumps
 
         var unconfirmed = OfferDumpsAmong(entries, requiresElevation, scan, ct);
 
-        // A component's folder is entered only by its exact name, and never through a link, so a
-        // folder of the user's own in a moved place is never looked into, whatever it holds.
+        // A component's folder is entered only by its exact name, so a folder of the user's own in a
+        // moved place is never looked into, whatever it holds. One that is a link is named and left,
+        // because the dumps it may lead to are somewhere the setting never named.
         foreach (var component in entries)
         {
-            if (component is not DirectoryInfo
-                || component.Attributes.HasFlag(FileAttributes.ReparsePoint)
-                || !components.Contains(component.Name))
+            if (component is not DirectoryInfo || !components.Contains(component.Name))
             {
                 continue;
             }
 
             var componentFolder = LongPath.Display(component.FullName);
+
+            if (component.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                scan.Declined(componentFolder, lead);
+                continue;
+            }
 
             if (FolderEntries.Of(componentFolder) is not { } inside)
             {
