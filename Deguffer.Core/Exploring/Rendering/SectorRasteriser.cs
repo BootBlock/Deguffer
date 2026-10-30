@@ -130,7 +130,7 @@ public sealed class SectorRasteriser : CanvasPainter
         var line = _finish.Borders.WidthFor(folder: false);
 
         // An aggregate is not a thing on the disk, so it has no bevel, as it has no cushion.
-        var bevelled = _finish.Shading == MapShading.Bevel && !sector.IsAggregate;
+        var bevelled = _finish.Shading == MapShading.Bevel && sector.Block != MapBlock.Aggregate;
         var band = line + (bevelled ? _finish.Bevel.Width : 0);
 
         if (band > 0 && Nearest(sector, radius, angle) is var (distance, edge) && distance < band)
@@ -145,7 +145,7 @@ public sealed class SectorRasteriser : CanvasPainter
         }
 
         // An aggregate is flat under a sheen, as it is under a cushion.
-        if (_slope > 0 && !sector.IsAggregate)
+        if (_slope > 0 && sector.Block != MapBlock.Aggregate)
         {
             // Measured in 256ths of the ring's depth, which no eye can tell from a continuous fall.
             var along = (int)((radius - sector.InnerRadius) / (sector.OuterRadius - sector.InnerRadius) * ShapeFinish.Whole);
@@ -242,7 +242,7 @@ public sealed class SectorRasteriser : CanvasPainter
     {
         // An aggregate is not a thing on the disk, so it is drawn flat: a cushion would give it the
         // same physical presence as the files it stands in for.
-        if (sector.IsAggregate || radius <= 0)
+        if (sector.Block == MapBlock.Aggregate || radius <= 0)
         {
             return (0, 0);
         }

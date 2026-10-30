@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Memory.Acting;
@@ -352,6 +353,26 @@ public sealed class MemoryViewModelTests : IDisposable
         Assert.Equal(string.Empty, page.LabelFor(-1));
         Assert.Equal(string.Empty, page.Hovered);
         Assert.NotEqual(string.Empty, page.LabelFor(page.Tree.RootNode));
+
+        await leave.CancelAsync();
+        await watching;
+    });
+
+    /// <summary>The line under the map names the parts too small to draw as Explore and the map's labels do.</summary>
+    [Fact]
+    public void TheLineUnderTheMapNamesTheAggregateAsTheMapDoes() => UiThread.Run(async () =>
+    {
+        var page = Page(First());
+        using var leave = new CancellationTokenSource();
+
+        var shown = ShownAsync(page);
+        var watching = page.WatchAsync(leave.Token);
+        await shown;
+
+        page.Hover(new ExploreHit(MapBlock.Aggregate.Node, 4_096));
+
+        Assert.Equal(MapBlock.Aggregate.Readout, page.Hovered);
+        Assert.Equal(Core.Scanning.FreeSpace.Format(4_096), page.HoveredFigures);
 
         await leave.CancelAsync();
         await watching;

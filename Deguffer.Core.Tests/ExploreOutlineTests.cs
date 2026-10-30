@@ -109,7 +109,7 @@ public sealed class ExploreOutlineTests
 
         Assert.Contains(
             TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default),
-            tile => tile.IsAggregate);
+            tile => tile.Block == MapBlock.Aggregate);
 
         Assert.Empty(Treemap(tree).Outlines(new HashSet<int> { ExploreTile.Aggregated }));
     }
@@ -121,7 +121,7 @@ public sealed class ExploreOutlineTests
 
         Assert.Contains(
             SunburstLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default).Sectors,
-            sector => sector.IsAggregate);
+            sector => sector.Block == MapBlock.Aggregate);
 
         Assert.Empty(Sunburst(tree).Outlines(new HashSet<int> { ExploreSector.Aggregated }));
     }

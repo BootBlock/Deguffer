@@ -50,7 +50,8 @@ public readonly record struct ExploreSector(
     /// </summary>
     private const float WholeCircle = MathF.Tau - 0.0001f;
 
-    public bool IsAggregate => Node == Aggregated;
+    /// <summary>The block this sector stands for, or null where it is a node of the tree.</summary>
+    public MapBlock? Block => MapBlock.Of(Node);
 
     /// <summary>Whether this sector closes on itself, so that it is a ring rather than a wedge.</summary>
     public bool IsWholeCircle => SweepAngle >= WholeCircle;

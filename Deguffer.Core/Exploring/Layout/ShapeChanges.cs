@@ -120,7 +120,7 @@ public static class ShapeChanges
 
         for (var index = 0; index < tiles.Count; index++)
         {
-            if (!tiles[index].IsAggregate)
+            if (tiles[index].Block != MapBlock.Aggregate)
             {
                 indexed.TryAdd(tiles[index].Node, index);
             }

@@ -109,7 +109,7 @@ public sealed class TreemapZoomTests
         var limits = LayoutLimits.Default;
 
         var whole = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
-        var aggregate = whole.Single(tile => tile.IsAggregate);
+        var aggregate = whole.Single(tile => tile.Block == MapBlock.Aggregate);
         var small = tree.ChildrenOf(tree.RootNode)[1..].ToArray();
 
         Assert.DoesNotContain(whole, tile => small.Contains(tile.Node));
@@ -210,8 +210,8 @@ public sealed class TreemapZoomTests
         var edge = MapViewport.Anchored(MapCeiling.Least, 1, 1, 1, 1, MapCeiling.Least);
         var zoomed = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, volume, edge);
 
-        Assert.DoesNotContain(whole, tile => tile.IsFreeSpace);
-        Assert.DoesNotContain(zoomed, tile => tile.IsFreeSpace);
+        Assert.DoesNotContain(whole, tile => tile.Block == MapBlock.FreeSpace);
+        Assert.DoesNotContain(zoomed, tile => tile.Block == MapBlock.FreeSpace);
 
         var root = zoomed.Single(tile => tile.Node == tree.RootNode);
 

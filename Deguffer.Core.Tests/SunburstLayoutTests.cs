@@ -151,7 +151,7 @@ public sealed class SunburstLayoutTests
         var limits = Sized(LayoutLimits.Default) with { MinimumTileSize = 20 };
         var tree = TreeOf([1_000_000, .. Enumerable.Repeat(1L, 500)]);
 
-        var aggregate = Assert.Single(Layout(tree, limits).Sectors, s => s.IsAggregate);
+        var aggregate = Assert.Single(Layout(tree, limits).Sectors, s => s.Block == MapBlock.Aggregate);
 
         Assert.Equal(500, aggregate.Bytes);
     }
@@ -168,7 +168,7 @@ public sealed class SunburstLayoutTests
 
         var ring = Layout(tree, Sized(LayoutLimits.Default)).Sectors.Where(s => s.Depth == 2).ToList();
 
-        var aggregate = Assert.Single(ring, s => s.IsAggregate);
+        var aggregate = Assert.Single(ring, s => s.Block == MapBlock.Aggregate);
 
         Assert.Equal(600, aggregate.Bytes);
         Assert.Equal(MathF.Tau, ring.Sum(s => s.SweepAngle), 3);
@@ -191,8 +191,8 @@ public sealed class SunburstLayoutTests
 
         var sectors = Layout(tree, limits).Sectors;
 
-        Assert.DoesNotContain(sectors, s => s.Bytes == 1 && !s.IsAggregate);
-        Assert.Contains(sectors, s => s.IsAggregate && s.Bytes == 1);
+        Assert.DoesNotContain(sectors, s => s.Bytes == 1 && s.Block != MapBlock.Aggregate);
+        Assert.Contains(sectors, s => s.Block == MapBlock.Aggregate && s.Bytes == 1);
     }
 
     /// <summary>
@@ -206,7 +206,7 @@ public sealed class SunburstLayoutTests
         var limits = Sized(LayoutLimits.Default) with { MinimumTileSize = 4 };
         var sectors = Layout(WideTree(), limits).Sectors;
 
-        Assert.Contains(sectors, s => s.IsAggregate);
+        Assert.Contains(sectors, s => s.Block == MapBlock.Aggregate);
 
         for (var i = 1; i < sectors.Count; i++)
         {

@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Testing;
@@ -220,9 +221,9 @@ public sealed class TileRenderingTests
     [Fact]
     public void FreeSpaceIsANeutralApartFromTheAggregate()
     {
-        var free = TilePalette.FreeSpace;
+        var free = MapBlock.FreeSpace.Colour;
 
-        Assert.NotEqual(TilePalette.Aggregate, free);
+        Assert.NotEqual(MapBlock.Aggregate.Colour, free);
         Assert.Equal(free.Red, free.Green);
         Assert.Equal(free.Green, free.Blue);
     }
@@ -251,8 +252,8 @@ public sealed class TileRenderingTests
         new TileRasteriser(
             new CushionQuads(
                 tiles, width, height,
-                tile => tile.IsAggregate
-                    ? TilePalette.Aggregate
+                tile => tile.Block == MapBlock.Aggregate
+                    ? MapBlock.Aggregate.Colour
                     : Hues.Colour(branchOf(tile.Node), tile.Depth),
                 ShapeFinish.Cushioned),
             ground)
