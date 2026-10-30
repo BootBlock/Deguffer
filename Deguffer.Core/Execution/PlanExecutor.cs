@@ -887,14 +887,14 @@ public sealed class PlanExecutor(
             stores);
     }
 
-    /// <summary>
-    /// A removal the clean was cancelled in the middle of, with what it did before it stopped. Never a
-    /// success, because the step did not do what it named.
-    /// </summary>
     /// <summary>A command not run because its <see cref="RunCommandStep.TargetCheck"/> said why not.</summary>
     private static StepOutcome Retargeted(RunCommandStep step, string why) =>
         new(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Not run: {why}.");
 
+    /// <summary>
+    /// A removal the clean was cancelled in the middle of, with what it did before it stopped. Never a
+    /// success, because the step did not do what it named.
+    /// </summary>
     private static StepOutcome Stopped(CleanupStep step, RemovalOutcome removal, int stores) => new(
         step.Description,
         Succeeded: false,
