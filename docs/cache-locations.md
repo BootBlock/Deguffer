@@ -4226,6 +4226,93 @@ Roslyn that rebuilds it without being asked.
 
 ---
 
+## Superseded JetBrains IDE caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\JetBrains\<product><version>` for IntelliJ IDEA, Rider, PyCharm and the other IDEs on the IntelliJ platform, and `%LOCALAPPDATA%\Google\AndroidStudio<version>` for Android Studio |
+| **Method** | Delete the caches, indexes and temporary files of a version that is no longer installed and that nothing has changed in for 180 days |
+| **Typical size** | 633 MB for one replaced Android Studio on the machine this was measured on, about 250 days after its last write |
+
+### What it is
+
+Each version of an IDE built on the IntelliJ platform keeps a *system folder* of caches, indexes, local
+history and logs, named after the product and the version. Updating to a new version starts a new
+folder and leaves the old one behind. Settings, keymaps and plugins live in a separate *configuration
+folder* of the same name under `%APPDATA%`
+([JetBrains](https://www.jetbrains.com/help/idea/directories-used-by-the-ide-to-store-settings-caches-plugins-and-logs.html),
+[Android Studio](https://developer.android.com/studio/troubleshoot#directories)).
+
+### What Deguffer does
+
+It offers part of what the IDE already deletes by itself, under a stricter test. After an update, the IDE
+schedules a scan for a week later. On a project opened after that, it deletes every other version's
+system folder in which nothing has changed for 180 days, and never a configuration folder. That rule
+is in the IDE's own source:
+[UpdateCheckerProjectActivity.kt](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/update-checker/src/com/intellij/openapi/updateSettings/impl/UpdateCheckerProjectActivity.kt)
+sets the 180 days, and
+[ConfigImportHelper.java](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/initial-config-import/src/com/intellij/openapi/application/ConfigImportHelper.java)
+chooses the system folder, and the logs folder only where it is separate. On Windows the logs are in
+the system folder's own `log` folder.
+
+**Only three folders inside a version are offered**: `caches`, the IDE's store of what it has read
+from disk, and `index` and `tmp`, its indices and temporary files. The IDE's own source names each one
+([FSRecords.java](https://github.com/JetBrains/intellij-community/blob/master/platform/vfs-impl/src/com/intellij/openapi/vfs/newvfs/persistent/FSRecords.java),
+[PathManager.java](https://github.com/JetBrains/intellij-community/blob/master/platform/util/src/com/intellij/openapi/application/PathManager.java)).
+The IDE deletes the whole version folder, but that folder also holds `LocalHistory`, the version's
+record of earlier states of your files, and `log`. Deguffer treats histories and logs as your data,
+which it never pre-selects, so it leaves both, with the version folder itself and anything else it
+does not recognise.
+
+They are offered only when both of these hold:
+
+- **The version is no longer installed.** Each system folder holds a `.home` file, which the IDE
+  rewrites at every start with the folder it was started from. That folder's `product-info.json`
+  names the version installed there now. Where it names another version, or where the folder is
+  gone, this version is no longer installed. This is the IDE's own test, from
+  [OldDirectoryCleaner.java](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/initial-config-import/src/com/intellij/ide/OldDirectoryCleaner.java).
+  The IDE's automatic clean does not use it, and deletes by age alone; Deguffer requires both.
+- **Nothing in the folder has changed for 180 days.** The newest change to any file or folder at any
+  depth decides, as it does for the IDE. The folder is read once to find it.
+
+Deguffer is stricter than the IDE wherever something cannot be read. The IDE treats a missing or
+unreadable `.home` as "not installed", and skips a folder it cannot list and judges the age by the
+rest. Deguffer keeps the version in each case and says why, because a file Windows would not let it
+read is not evidence, and an age read without part of the folder reads older than it is.
+
+Under `%LOCALAPPDATA%\Google`, only Android Studio's folders are read: the same folder holds Chrome,
+Drive and other Google products.
+
+**If you start an old version between the preview and the clean**, it rewrites its `.home` first, and
+Deguffer holds that version's folder back when you press Clean.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| The configuration folder of the same name under `%APPDATA%` | Your settings, keymaps and plugins, and on one measured machine a credential database (`c.kdbx`), its key (`c.pwd`) and a licence key. Never offered |
+| The version's own folder, its `LocalHistory` and its `log` | Your record of earlier states of your files, and the version's logs. Gone for good if removed, so never offered here |
+| `plugins` inside a version's folder | Not the plugins: the folder the IDE keeps its start-up actions in. Not recognised, so it stays |
+| The installed version's system folder | The IDE you use |
+| A replaced version used within 180 days, or one any part of which could not be read | It may still be in use, and the IDE keeps it too |
+| A version whose installed test could not be read | Deguffer cannot tell whether it is installed |
+| Every other folder in `%LOCALAPPDATA%\JetBrains` and `%LOCALAPPDATA%\Google` | Not an IDE version's system folder |
+| `%LOCALAPPDATA%\JetBrains` and `%LOCALAPPDATA%\Google` themselves | Never a target |
+
+### What it costs you
+
+Nothing, for the IDE you use. If you start an old version again, it builds its caches and indexes
+again from scratch. Its local history, its logs, its settings and its plugins are untouched.
+
+### Why Tier 1
+
+The three folders offered are what one version of the IDE derived from your projects, and that
+version is no longer installed. The vendor deletes them without asking, after the same 180 days.
+
+---
+
 ## Playwright browsers
 
 **Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
@@ -4986,8 +5073,9 @@ its own.
 
 ## Per-project build output
 
-**Tier 1 for .NET intermediate output, Tier 2 for the rest.** The only thing Deguffer looks for
-inside your own folders, and the only thing it will not look for anywhere else.
+**Tier 1 for .NET intermediate output and three Python tools' caches, Tier 2 for the rest.** The
+only thing Deguffer looks for inside your own folders, and the only thing it will not look for
+anywhere else.
 
 | Directory | What it belongs to | Tier |
 | --- | --- | --- |
@@ -4998,6 +5086,12 @@ inside your own folders, and the only thing it will not look for anywhere else.
 | `target` | Rust build output | 2 |
 | `node_modules` | Installed Node.js dependencies | 2 |
 | `.venv`, `venv` | A Python virtual environment | 2 |
+| `.pytest_cache` | pytest's record of the last run | 1 |
+| `.mypy_cache` | mypy's per-module results | 1 |
+| `.ruff_cache` | ruff's per-file results | 1 |
+| `.tox` | tox's test environments | 2 |
+| `.nox` | nox's test environments | 2 |
+| `.dart_tool` | A Dart or Flutter package's resolved dependencies and build state | 2 |
 
 ### It only looks where you tell it to
 
@@ -5048,14 +5142,53 @@ the tool itself writes inside it.
 | `obj` of an old-style project | An old-style project file (the MSBuild 2003 namespace, no `Sdk`) that the build's records name | Only configuration and platform directories, at least one holding the build's file list, which names that same directory |
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
 | `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
-| `target` | `Cargo.toml` | `CACHEDIR.TAG`, which Cargo writes |
+| `target` | `Cargo.toml` | `CACHEDIR.TAG`, opening with the tagging specification's header |
 | `node_modules` | `package.json`, **and a lock file** | — |
 | `.venv` / `venv` | A dependency manifest: `requirements.txt`, `pyproject.toml`, `Pipfile`, `setup.py` or `environment.yml` | `pyvenv.cfg` |
+| `.pytest_cache` | A file pytest reads its settings from: `pytest.toml`, `.pytest.toml`, `pytest.ini`, `.pytest.ini`, `pyproject.toml`, `tox.ini` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "created by pytest" |
+| `.mypy_cache` | `mypy.ini`, `.mypy.ini`, `pyproject.toml` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "automatically created by mypy" |
+| `.ruff_cache` | `.ruff.toml`, `ruff.toml` or `pyproject.toml` | `CACHEDIR.TAG` holding the header alone, **and** the `.gitignore` ruff writes, "# Automatically created by ruff." and `*` |
+| `.tox` | `tox.ini`, `tox.toml`, `pyproject.toml` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "created by tox" |
+| `.nox` | `noxfile.py` | `CACHEDIR.TAG` holding the header alone, **and** the `.gitignore` nox writes, `*` alone |
+| `.dart_tool` | `pubspec.yaml` **and** `pubspec.lock` | `package_config.json` with `"generator": "pub"` and `"configVersion": 2`, and `package_graph.json` |
+
+**A cache directory tag is read, never only found.** The
+[Cache Directory Tagging Specification](https://bford.info/cachedir/) says a `CACHEDIR.TAG` opens
+with a fixed 43-byte header, and many tools write one. So does a person, to keep a folder out of a
+backup. A file of that name says only that somebody called the folder disposable. Deguffer reads the
+header, and where the tool names itself on the next line, reads that line too. ruff and nox write the
+header alone, so for those it reads the `.gitignore` each writes beside the tag in the same step, and
+requires both files exactly as the tool writes them. A line may end in `\n` or `\r\n`, because mypy,
+tox and nox write through Python's text mode, which uses `\r\n` on Windows. Nothing else is
+relaxed: a tag opening with a byte order mark, or with any other character before the header, is not
+a tag. Each tool's text was read from its own source: pytest's
+[cacheprovider.py](https://github.com/pytest-dev/pytest/blob/main/src/_pytest/cacheprovider.py),
+mypy's [build.py](https://github.com/python/mypy/blob/master/mypy/build.py), ruff's
+[cache.rs](https://github.com/astral-sh/ruff/blob/main/crates/ruff/src/cache.rs), tox's
+[path.py](https://github.com/tox-dev/tox/blob/main/src/tox/util/path.py) and nox's
+[virtualenv.py](https://github.com/wntrblm/nox/blob/main/nox/virtualenv.py). Cargo's `target`
+requires the header alone, because a `Cargo.toml` beside it already says which tool this is.
+
+Each of these tools can be told to keep its folder somewhere else, by a setting or a variable. A
+folder moved that way is not beside the configuration, and is not found.
+
+**`.dart_tool` is recognised by what pub writes in it.** pub documents `"generator"` as "for `pub`
+this is always `'pub'`"
+([package_config.dart](https://github.com/dart-lang/pub/blob/master/lib/src/package_config.dart)),
+and writes `package_graph.json` beside it
+([entrypoint.dart](https://github.com/dart-lang/pub/blob/master/lib/src/entrypoint.dart)). The
+generator alone is not enough: a test fixture inside a published package was found carrying
+`"generator": "pub"` with both pubspec files beside it, and no `package_graph.json`. A member of a pub
+workspace has neither the lock file nor the configuration, which pub keeps at the workspace's root
+only ([workspaces](https://dart.dev/tools/pub/workspaces)), so a member's `.dart_tool` is left alone.
+`flutter clean` would remove the folder, but it runs once per project, inside each one, so Deguffer
+removes the folder itself, as it does Cargo's `target`.
 
 Every condition has to hold. A directory that fails any of them is left alone, and the scan says
-how many were left and why. `obj` carries an extra check of its own: git is asked whether the
-directory holds any tracked file, because intermediate output never should, and one that does is not
-intermediate output whatever the manifest beside it claims. The check needs git on `PATH`. Where git
+how many were left and why. `obj` and `.dart_tool` carry an extra check: git is asked whether the
+directory holds any tracked file, because the tool's output never should, and one that does is not
+the tool's output whatever stands beside it. For `.dart_tool` this was found, not imagined: test
+fixtures holding one are committed into the Flutter SDK's own repository. The check needs git on `PATH`. Where git
 is installed but cannot answer, the directory is left alone. Where git cannot be found at all, the
 conditions above decide alone, as they do for every other directory here, and for a directory inside
 a repository the scan says that the tracked-file check did not run.
@@ -5163,14 +5296,14 @@ Everything except the one directory in each row, asserted by name after the dele
 - **The project folder itself** — only the build directory inside it is removed.
 - **Every file the rebuild reads.** `Assets`, `Packages` and `ProjectSettings` for Unity;
   the .NET project file and `packages.config`; `Cargo.toml`; `package.json` and the lock file; the
-  Python manifest. These are what make the directory regenerable, so losing one would falsify the
+  Python manifest; each Python tool's configuration file; `pubspec.yaml` and `pubspec.lock`. These are what make the directory regenerable, so losing one would falsify the
   whole claim.
 - **For Unreal, the `.uproject` descriptor, `Source`, `Content`, `Config` and `Plugins`, and `Saved`
   and `Binaries`.** `Saved` holds the editor's autosaves, which are the only copy of work nobody
   saved, and your editor settings. `Binaries` is compiled output, but on a team an artist often
   receives the compiled game from source control and has no compiler to rebuild it, so on that
   machine it is the only copy. Neither is ever offered.
-- **`bin`, for .NET, and `src` and `Cargo.lock` for Rust.** None of them identifies the directory
+- **`bin`, for .NET, `src` and `Cargo.lock` for Rust, and `lib` for Dart.** None of them identifies the directory
   being removed; each is named because it is what a rule reaching one level too far would take.
   `bin` in particular looks equivalent to `obj` and is not — it can hold hand-placed native
   dependencies and copied assets that no build reproduces — so it is out of scope entirely.
@@ -5189,15 +5322,21 @@ Everything except the one directory in each row, asserted by name after the dele
 | `target` | The next build recompiles the project and every dependency, per profile — minutes to hours on a large workspace, and anything you built and are running from `target` goes with it. |
 | `node_modules` | The project will not build or run until dependencies are installed again. The lock file pins the versions, so what comes back is what was there. |
 | `.venv` / `venv` | The environment has to be created again and the install re-run from the manifest. **A manifest only lists what somebody wrote down** — check it covers what you had before removing an environment you still use. |
+| `.pytest_cache` | pytest makes it again on its next run. Until a run has finished, `--lf` and `--ff` have no record of what failed, so they run everything. |
+| `.mypy_cache`, `.ruff_cache` | The next run checks every file rather than only what changed, so that one run is slower. |
+| `.tox`, `.nox` | The next run builds every environment again and installs its dependencies, from the network unless pip's cache still holds them. |
+| `.dart_tool` | The package will not build until `pub get` resolves its dependencies again, which Flutter and the Dart tools do by themselves on the next build. The lock file pins the versions. Flutter's next build then compiles from the start. |
 
 Where a package manager's own cache still holds the downloads, most of this is offline. Clearing that
 cache in the same run is what makes it a download — so a run that takes both the npm cache and a
 `node_modules` needs the network afterwards.
 
-### Why `obj` is Tier 1 and the others are Tier 2
+### Why `obj` and three Python caches are Tier 1, and the others Tier 2
 
 Tier 1 means the tool re-creates it on demand and you lose only time. That is `obj`: a missing one
-makes the next build slower and nothing else.
+makes the next build slower and nothing else. pytest's, mypy's and ruff's caches are the same: each
+tool records them as it runs and makes them again on the next run, and what goes is one slower run,
+and for pytest the record of which tests failed last.
 
 The others cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but
 only by re-downloading gigabytes or re-indexing for minutes" — is met by each of them differently:
@@ -5215,8 +5354,11 @@ only by re-downloading gigabytes or re-indexing for minutes" — is met by each 
   came from. That is the same argument that puts vcpkg's binary cache in Tier 2 — a cache whose
   entries are recovered by compiling rather than by downloading — and it applies here with more
   force, because there is no cache to fall back on.
-- **`node_modules` and a virtual environment** are the ordinary Tier 2 shape: a download, and a
-  project that does not run until it finishes.
+- **`node_modules`, a virtual environment, `.tox` and `.nox`** are the ordinary Tier 2 shape: a
+  download, and a project that does not run until it finishes. tox and nox hold virtual
+  environments, one for each test configuration.
+- **`.dart_tool`** is a resolution and a compile: `pub get` runs again, and Flutter rebuilds what it
+  kept there.
 
 None of them is pre-selected, and each needs an acknowledgement before it runs.
 

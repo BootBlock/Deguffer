@@ -183,6 +183,12 @@ public sealed class CleanupPlanner
         new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new PytestCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new MypyCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new RuffCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new ToxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new NoxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new DartToolProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
     ];
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
@@ -234,6 +240,7 @@ public sealed class CleanupPlanner
             new VsCodeCppToolsCacheProvider(environment, scanner: scanner),
             new DartAnalysisServerProvider(environment, declarations: declarations, scanner: scanner),
             new RoslynCacheProvider(environment, scanner: scanner),
+            new JetBrainsSupersededSystemProvider(environment, scanner: scanner, tuning: tuning),
             toolCaches,
             new UvCacheProvider(environment, scanner: scanner),
             new PipCacheProvider(environment, scanner: scanner),
