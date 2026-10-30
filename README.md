@@ -131,6 +131,7 @@ explains most of these sources in detail.
 | Roslyn solution index cache | One dated row per set of indexes, so the sets a program left behind when it moved folder can go; never the rest of Visual Studio's folder |
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
+| VS Code extension browsers | The Chromium build an extension such as Cline downloaded and downloads again by itself; never the extension's conversations, checkpoints or settings, or a build a running browser is using |
 | Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the Steam client's and the Battle.net launcher's built-in browsers, and every application that embeds the same engine, WebView2 applications included. Never their sign-ins, saved passwords or payment cards |
 | Firefox caches | |
 | Steam HTTP cache | The client's own cache beside the program; never your games, your cloud saves, or the sign-in kept by its built-in browser |

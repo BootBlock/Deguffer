@@ -23,6 +23,24 @@ internal sealed record PuppeteerCacheSurvey(
     IReadOnlyList<PlanNote> Notes,
     bool Unreadable)
 {
+    /// <summary>
+    /// §5.6 inside the cache root: each browser folder, the metadata beside its builds, and every
+    /// folder declined at either level. The metadata is why a browser folder is enumerated rather than
+    /// removed whole: it maps an alias such as <c>stable</c> to a build, and Puppeteer resolves a
+    /// launch through it. The declined folders are siblings of the removed builds, which is when an
+    /// over-broad rule takes one with the other.
+    /// </summary>
+    public IReadOnlyList<(string Path, string Reason)> Survivors =>
+    [
+        .. BrowserFolders.SelectMany(folder => new[]
+        {
+            (folder, "A browser folder must survive; only whole builds inside it are removed."),
+            (Path.Combine(folder, PuppeteerCacheLayout.MetadataName),
+                "Puppeteer's record of which build each alias names and where its executable is."),
+        }),
+        .. Declined,
+    ];
+
     /// <param name="root">The cache root, already found on disk and not a link.</param>
     public static PuppeteerCacheSurvey Of(string root, CancellationToken ct)
     {
