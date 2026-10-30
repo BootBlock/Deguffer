@@ -1,3 +1,4 @@
+using System.Buffers;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -16,10 +17,15 @@ namespace Deguffer.Core.Providers;
 internal static class ScoopPath
 {
     /// <summary>
-    /// <c>[</c> and <c>]</c> open a wildcard class for <c>-Path</c>, so <c>D:\a[1]\cache</c> lists and
-    /// removes in <c>D:\a1\cache</c>. <c>*</c> and <c>?</c> cannot appear in a Windows path at all.
+    /// The characters <c>-Path</c> reads as a pattern rather than as part of a name. <c>[</c> and
+    /// <c>]</c> open a class, so <c>D:[1]\cache</c> lists and removes in <c>D:1\cache</c>.
+    /// <c>*</c> and <c>?</c> match any name, and no Windows name holds either, so a value carrying one
+    /// names no folder Deguffer could examine and some folder Scoop would list. The backtick is
+    /// PowerShell's escape character in a pattern: under PowerShell 7.6 a cache set to
+    /// <c>D:\d``e\cache</c> was listed as <c>D:\d`e\cache</c>, a different folder, while Windows
+    /// PowerShell 5.1 read it as written, so not even the reading is one Deguffer could mirror.
     /// </summary>
-    private static readonly char[] Wildcards = ['[', ']'];
+    private static readonly SearchValues<char> Wildcards = SearchValues.Create("[]*?`");
 
     /// <summary>
     /// The folder <paramref name="value"/> names, normalised, or null where Scoop might read it as
@@ -42,5 +48,5 @@ internal static class ScoopPath
     }
 
     /// <summary>Whether <c>-Path</c> would read <paramref name="path"/> as a pattern.</summary>
-    public static bool HasWildcard(string path) => path.IndexOfAny(Wildcards) >= 0;
+    public static bool HasWildcard(string path) => path.AsSpan().ContainsAny(Wildcards);
 }

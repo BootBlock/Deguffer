@@ -116,8 +116,9 @@ public sealed class ScoopCacheLocationTests : IDisposable
     }
 
     /// <summary>
-    /// Scoop resolves a relative value against PowerShell's current folder, and pads, device forms and
-    /// wildcard brackets are each read differently by <c>-Path</c> than by Win32. Each would have the
+    /// Scoop resolves a relative value against PowerShell's current folder, and pads, device forms,
+    /// wildcards and the backtick that escapes them are each read differently by <c>-Path</c> than by
+    /// Win32. Each would have the
     /// plan examine one folder and the command empty another, so none of them offers anything, and
     /// Scoop is never started. The default cache is populated, so a value read as unset would plan.
     /// </summary>
@@ -127,6 +128,10 @@ public sealed class ScoopCacheLocationTests : IDisposable
     [InlineData("SCOOP_CACHE", @"C:scoop\cache")]
     [InlineData("SCOOP_CACHE", " {0}")]
     [InlineData("SCOOP_CACHE", @"{0}\a[1]")]
+    [InlineData("SCOOP_CACHE", @"{0}\d``e")]
+    [InlineData("SCOOP_CACHE", @"{0}\c*")]
+    [InlineData("SCOOP_CACHE", @"{0}\c?")]
+    [InlineData("SCOOP", @"{0}\x`y")]
     [InlineData("SCOOP_CACHE", @"\\?\{0}")]
     [InlineData("SCOOP", "scoop")]
     [InlineData("XDG_CONFIG_HOME", ".config")]
