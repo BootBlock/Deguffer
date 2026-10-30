@@ -375,13 +375,14 @@ public sealed class VagrantSupersededBoxProviderTests : IDisposable
 
     /// <summary>
     /// Prune names no architecture, so the remove action raises for a version installed for two, and
-    /// the run ends part-way with an error. The dry run lists such a version once for each.
+    /// the run ends part-way with an error. The dry run lists such a version once for each: here the
+    /// older layout's folder beside another architecture's, which the folders alone do not show as two.
     /// </summary>
     [Fact]
     public async Task OffersNothingWhereAVersionIsInstalledForTwoArchitectures()
     {
         Install(DefaultHome, "generic-VAGRANTSLASH-alpine38", "4.3.12", "libvirt", "amd64");
-        Install(DefaultHome, "generic-VAGRANTSLASH-alpine38", "4.0.0", "libvirt", "amd64");
+        Install(DefaultHome, "generic-VAGRANTSLASH-alpine38", "4.0.0", "libvirt");
         Install(DefaultHome, "generic-VAGRANTSLASH-alpine38", "4.0.0", "libvirt", "arm64");
 
         var plan = await CreateProvider(Reporting(Report(
