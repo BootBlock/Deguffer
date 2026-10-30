@@ -105,42 +105,61 @@ public sealed class CcacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("ccache reports", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// ccache's clear empties whichever folder ccache's settings name, so a folder guessed from the
+    /// documented rules would be vetted and protected while the clear emptied another. Nothing is offered,
+    /// and nothing is run.
+    /// </summary>
     [Fact]
-    public async Task FallsBackToTheDocumentedLocationWhenCcacheCannotAnswer()
+    public async Task OffersNothingWhenCcacheDoesNotSayWhereItsCacheIs()
     {
-        var cache = CreateCache(DefaultRoot);
+        CreateCache(DefaultRoot);
+        var runner = CcacheNotAnswering();
 
-        var plan = await CreateProvider(CcacheNotAnswering()).PlanAsync();
+        var provider = CreateProvider(runner);
+        var plan = await provider.PlanAsync();
 
-        Assert.Equal([cache], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("documented location", StringComparison.Ordinal));
+        Assert.True(plan.IsEmpty);
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("did not say where its cache is", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+        Assert.DoesNotContain(runner.Invocations, i => i.Arguments == "--clear");
     }
 
     /// <summary>
-    /// ccache's own rule: <c>%USERPROFILE%\.ccache</c> wins wherever it exists, so the newer default is
-    /// not assumed.
+    /// An MSYS2 or Cygwin ccache answers in its own form, and its clear empties that folder all the same,
+    /// so the answer is declined rather than read as no answer and replaced by a default.
     /// </summary>
     [Fact]
-    public async Task FallsBackToTheLegacyFolderWhereItExists()
+    public async Task DeclinesAnAnswerThatIsNotAFullWindowsPath()
     {
         CreateCache(DefaultRoot);
-        var legacy = CreateCache(LegacyRoot);
 
-        var plan = await CreateProvider(CcacheNotAnswering()).PlanAsync();
+        var plan = await CreateProvider(CcacheReporting("/c/Users/testuser")).PlanAsync();
 
-        Assert.Equal([legacy], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+        Assert.True(plan.IsEmpty);
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("'/c/Users/testuser'", StringComparison.Ordinal)
+            && n.Message.Contains("not a full path", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Explore refuses what sits beside a cache at either default and where the variable moves it,
+    /// whichever ccache is using, because a scan's declarations do not ask ccache.
+    /// </summary>
     [Fact]
-    public async Task FallsBackToTheCacheVariableBeforeEitherDefault()
+    public void DeclaresBothDefaultsAndTheVariablesFolder()
     {
-        CreateCache(LegacyRoot);
-        var moved = CreateCache(Path.Combine(_temp.Path, "caches", "ccache"));
+        var moved = Path.Combine(_temp.Path, "caches", "ccache");
         _environment.WithEnvironmentVariable(CcacheProvider.CacheVariable, moved);
 
-        var plan = await CreateProvider(CcacheNotAnswering()).PlanAsync();
+        var roots = CreateProvider(new FakeProcessRunner()).ToolRoots.Select(root => root.Path);
 
-        Assert.Equal([moved], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+        Assert.Equal(
+            new[] { moved, LegacyRoot, DefaultRoot }.Order(StringComparer.OrdinalIgnoreCase),
+            roots.Order(StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -283,9 +302,9 @@ public sealed class CcacheProviderTests : IDisposable
     [Fact]
     public async Task CleanedPlacesCoverTheDefaultCacheTheCommandIsSentTo()
     {
-        CreateCache(DefaultRoot);
+        var cache = CreateCache(DefaultRoot);
 
-        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(CcacheNotAnswering())));
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider(CcacheReporting(cache))));
     }
 
     [Fact]

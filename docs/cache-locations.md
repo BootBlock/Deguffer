@@ -453,12 +453,13 @@ its size limit, so a machine that has filled it keeps it at that size.
 
 It runs ccache's own `ccache --clear`. Deguffer asks ccache where its cache is with
 `ccache --get-config cache_dir`, because the environment, either configuration file and the older
-`.ccache` folder can all move it. If ccache does not answer, Deguffer applies ccache's documented
-rules in the same order.
+`.ccache` folder can all move it. The clear empties whichever folder those settings name, so
+Deguffer offers nothing if ccache does not say, as a ccache older than 4.0 does not.
 
 It does not run the clear where ccache is set to keep its cache in a folder that is not ccache's
-own, such as the root of a drive, your profile, a temporary folder or a Windows folder. ccache would
-clear that folder, so Deguffer says so and leaves it alone.
+own, such as the root of a drive, your profile, a temporary folder or a Windows folder, or where
+ccache answers with something other than a full Windows path, as an MSYS2 or Cygwin ccache does.
+ccache would clear that folder, so Deguffer says so and leaves it alone.
 
 ### What is protected
 
@@ -487,7 +488,7 @@ again the next time a build compiles it.
 | --- | --- |
 | **Location** | `%LOCALAPPDATA%\Mozilla\sccache\cache`, or wherever `SCCACHE_DIR` points |
 | **Method** | Stop sccache's server with `sccache --stop-server`, then delete the cached entries |
-| **Typical size** | Up to its size limit, 10 GB unless it is set otherwise, and it stays there once full |
+| **Typical size** | Up to its size limit, 10 GiB unless it is set otherwise, and it stays there once full |
 
 ### What it is
 

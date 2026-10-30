@@ -6,7 +6,7 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// sccache's local disk cache, which keeps the output of every compile it has seen and is bounded by a
-/// size cap (10 GB unless <c>SCCACHE_CACHE_SIZE</c> says otherwise) rather than by age, so a machine
+/// size cap (10 GiB unless <c>SCCACHE_CACHE_SIZE</c> says otherwise) rather than by age, so a machine
 /// that has filled it stays at the cap. Researched from sccache's source rather than measured, because
 /// no sccache was installed on the machine this was written against.
 ///
@@ -107,7 +107,7 @@ public sealed class SccacheProvider : CleanupProviderBase
         Application = "sccache, a compiler cache for Rust, C and C++",
         Publisher = "Mozilla",
         Purpose = "sccache keeps the output of every compile it has seen, so a file that has not changed "
-            + "is never compiled twice. It fills its cache up to a size limit, 10 GB unless it is set "
+            + "is never compiled twice. It fills its cache up to a size limit, 10 GiB unless it is set "
             + "otherwise, and then stays at that size.",
         Recommendation = "sccache has no command that empties its cache, so Deguffer removes the cached "
             + "entries itself, after stopping sccache's background server. sccache keeps its settings in "

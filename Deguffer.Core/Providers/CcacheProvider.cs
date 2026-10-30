@@ -16,10 +16,13 @@ namespace Deguffer.Core.Providers;
 /// while deleting the directory would take the user's size cap, compiler settings and hashing rules with
 /// it. That is the difference between an eviction and a reset.</para>
 ///
-/// <para><b>ccache is asked where its cache is.</b> <c>CCACHE_DIR</c>, <c>cache_dir</c> in either
-/// configuration file, and a legacy <c>%USERPROFILE%\.ccache</c> that takes precedence whenever it exists
-/// all move it, so <c>ccache --get-config cache_dir</c> is the authority, and the documented rules are
-/// the fallback where it does not answer.</para>
+/// <para><b>ccache is asked where its cache is, and nothing is cleared where it does not say.</b>
+/// <c>CCACHE_DIR</c>, <c>cache_dir</c> in either configuration file, and a legacy
+/// <c>%USERPROFILE%\.ccache</c> that takes precedence whenever it exists all move it, and
+/// <c>ccache --clear</c> empties whichever folder those settings name. So
+/// <c>ccache --get-config cache_dir</c> is the only answer the plan acts on. A guess from the documented
+/// rules would vet and protect one folder while the clear emptied another, which is what a ccache older
+/// than 4.0, with no <c>--get-config</c> and <c>cache_dir</c> set, would do.</para>
 /// </summary>
 public sealed class CcacheProvider : CleanupProviderBase
 {
@@ -51,7 +54,7 @@ public sealed class CcacheProvider : CleanupProviderBase
         "ccache is set to keep its cache here, so it keeps its configuration here too.";
 
     private readonly ISystemDirectories _system;
-    private readonly PassMemo<Task<CacheLocation>> _location = new();
+    private readonly PassMemo<Task<CacheLocation?>> _location = new();
 
     public CcacheProvider(
         IUserEnvironment? environment = null,
@@ -128,14 +131,13 @@ public sealed class CcacheProvider : CleanupProviderBase
             roots.Add(ToolRoot.Sparing(declined, DeclinedRootReason, [ConfigurationFile]));
         }
 
-        // Only an answer ccache gave: the documented rules' answer is the variable or a default, which
-        // the declaration above and ToolRoots already make.
+        // An answer that names no full path names no folder to declare.
         if (Environment.FindExecutable("ccache") is { } ccache
-            && await ResolveLocationAsync(ccache, ct).ConfigureAwait(false) is { Answered: true } location)
+            && await ResolveLocationAsync(ccache, ct).ConfigureAwait(false) is { Folder: { } reported } location)
         {
             roots.Add(location.Declined is null
-                ? ToolRoot.Of(location.Folder, ToolRootReason, Shards)
-                : ToolRoot.Sparing(location.Folder, DeclinedRootReason, [ConfigurationFile]));
+                ? ToolRoot.Of(reported, ToolRootReason, Shards)
+                : ToolRoot.Sparing(reported, DeclinedRootReason, [ConfigurationFile]));
         }
 
         return roots;
@@ -156,9 +158,9 @@ public sealed class CcacheProvider : CleanupProviderBase
         }
 
         if (Environment.FindExecutable("ccache") is { } ccache
-            && await ResolveLocationAsync(ccache, ct).ConfigureAwait(false) is { Answered: true, Declined: null } location)
+            && await ResolveLocationAsync(ccache, ct).ConfigureAwait(false) is { Folder: { } reported, Declined: null })
         {
-            caches.Add(location.Folder);
+            caches.Add(reported);
         }
 
         return [.. caches.Distinct(StringComparer.OrdinalIgnoreCase).Select(CleanedPlace.Whole)];
@@ -188,15 +190,21 @@ public sealed class CcacheProvider : CleanupProviderBase
         }
 
         var location = await ResolveLocationAsync(ccache, ct).ConfigureAwait(false);
-        var cache = location.Folder;
+
+        if (location is null)
+        {
+            return EmptyPlan(
+                "ccache did not say where its cache is, and its clear empties whichever folder ccache is set "
+                + "to use, so Deguffer cannot tell what it would remove. ccache 4.0 and later say.");
+        }
 
         // ccache's clear is sent wherever ccache is set to keep its cache, and a cache set to the profile
         // or a drive root would have it clearing folders that are not ccache's to clear.
-        if (location.Declined is { } declined)
+        if (location is not { Folder: { } cache, Declined: null })
         {
             return EmptyPlan(
-                $"ccache is set to keep its cache in '{cache}', and Deguffer will not run ccache's clear "
-                + $"there: {declined} It is leaving it alone.");
+                $"ccache is set to keep its cache in '{location.Reported}', and Deguffer will not run ccache's "
+                + $"clear there: {location.Declined} It is leaving it alone.");
         }
 
         if (NothingToPlanFor(cache, $"ccache is installed but has cached nothing yet ({cache} does not exist).") is { } nothing)
@@ -220,10 +228,7 @@ public sealed class CcacheProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>
         {
-            new(PlanNoteSeverity.Information, location.Answered
-                ? $"ccache reports its cache directory as {cache}."
-                : $"ccache did not say where its cache is, so this is the documented location rather than "
-                  + $"this machine's setting: {cache}."),
+            new(PlanNoteSeverity.Information, $"ccache reports its cache directory as {cache}."),
         };
 
         if (measured.Note is { } scanNote)
@@ -253,59 +258,60 @@ public sealed class CcacheProvider : CleanupProviderBase
         };
     }
 
-    private Task<CacheLocation> ResolveLocationAsync(string ccache, CancellationToken ct) =>
+    private Task<CacheLocation?> ResolveLocationAsync(string ccache, CancellationToken ct) =>
         _location.Get(() => AskLocationAsync(ccache, ct));
 
     /// <summary>
-    /// Ask ccache, and where it does not answer with a full path (a ccache older than 4.0 has no
-    /// <c>--get-config</c>), apply the documented rules: the variable, then the legacy folder if it
-    /// exists, then the default. Either answer is vetted the same way, because ccache's clear is sent
-    /// there whichever said so.
+    /// Where ccache says its cache is, vetted because ccache's clear is sent there, or null where ccache
+    /// said nothing: a ccache older than 4.0 has no <c>--get-config</c>.
+    ///
+    /// <para>An answer that is not a full Windows path is declined rather than read as no answer. An
+    /// MSYS2 or Cygwin ccache reports <c>/c/Users/...</c>, and its clear empties that folder all the
+    /// same.</para>
     /// </summary>
-    private async Task<CacheLocation> AskLocationAsync(string ccache, CancellationToken ct)
+    private async Task<CacheLocation?> AskLocationAsync(string ccache, CancellationToken ct)
     {
         var outcome = await Runner.RunAsync(ccache, "--get-config cache_dir", ToolRun.Query, ct).ConfigureAwait(false);
 
-        var reported = outcome.Succeeded
+        var answer = outcome.Succeeded
             ? outcome.StandardOutput
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(LongPath.Configured)
-                .LastOrDefault(line => line is not null)
+                .LastOrDefault()
             : null;
 
-        if (reported is null)
+        if (answer is null)
         {
-            var setting = FromVariable();
+            return null;
+        }
 
-            // The variable's own value where it names no full path, because that is what the plan quotes
-            // when it declines it.
-            return new CacheLocation(setting.Folder ?? setting.Named ?? setting.Value!, setting.Declined, Answered: false);
+        if (LongPath.Configured(answer) is not { } folder)
+        {
+            return new CacheLocation(
+                answer, Folder: null, "it is not a full path, so Deguffer cannot tell which folder it means.");
         }
 
         return new CacheLocation(
-            reported,
+            answer,
+            folder,
             ConfiguredFolder.WhyNotOwned(
-                reported,
+                folder,
                 Environment,
                 _system,
                 Volumes,
-                TempRoots.Resolve(Environment, _system, Volumes).AccountFolders),
-            Answered: true);
+                TempRoots.Resolve(Environment, _system, Volumes).AccountFolders));
     }
 
-    /// <summary>The documented rules, which the legacy folder decides wherever the variable is unset.</summary>
+    /// <summary>
+    /// The documented rules, for the declarations a scan makes without asking ccache. Both defaults are
+    /// declared whichever is in use, so the legacy folder's precedence decides nothing here.
+    /// </summary>
     private ConfiguredFolder.Setting FromVariable() =>
-        ConfiguredFolder.FromVariable(
-            CacheVariable,
-            LongPath.DirectoryMayExist(LegacyRoot) ? LegacyRoot : DefaultRoot,
-            Environment,
-            _system,
-            Volumes);
+        ConfiguredFolder.FromVariable(CacheVariable, DefaultRoot, Environment, _system, Volumes);
 
-    /// <param name="Folder">The cache, in the form a plan holds it.</param>
+    /// <param name="Reported">What ccache printed, for the plan to quote.</param>
+    /// <param name="Folder">The full path it names, or null where it names none.</param>
     /// <param name="Declined">
     /// Why the clear must not be sent there, as the end of a sentence, or null where it may be.
     /// </param>
-    /// <param name="Answered">Whether ccache itself said so, rather than the documented rules.</param>
-    private sealed record CacheLocation(string Folder, string? Declined, bool Answered);
+    private sealed record CacheLocation(string Reported, string? Folder, string? Declined);
 }
