@@ -5,8 +5,12 @@ namespace Deguffer.Core.Providers;
 /// <summary>Where Conan says it keeps things, or why it could not be told, or why it is not believed.</summary>
 internal abstract record ConanLocation
 {
-    /// <summary>Conan's home and its package store, as Conan reported them, in full form.</summary>
-    public sealed record Found(string Home, string Store) : ConanLocation;
+    /// <summary>
+    /// Conan's home and its package store, as Conan reported them and as Deguffer worked them out, in
+    /// full form.
+    /// </summary>
+    /// <param name="Configuration">The home's configuration files the store was read from.</param>
+    public sealed record Found(string Home, string Store, ConanConfFiles Configuration) : ConanLocation;
 
     /// <summary>Conan's answer could not be used, for the reason given.</summary>
     public sealed record Unknown(string Why) : ConanLocation;
@@ -31,9 +35,16 @@ internal abstract record ConanLocation
     public sealed record NotAsked : ConanLocation;
 
     /// <summary>
-    /// Ask Conan for its home, then for the store in it. Only for a home known to be there: each
-    /// question builds a <c>ConanAPI</c>, which creates a missing home.
+    /// Ask Conan for its home, then for the store in it, and hold each answer to what Deguffer worked
+    /// out without Conan. Only for a home known to be there and a store already judged: each question
+    /// builds a <c>ConanAPI</c>, which creates a missing home and makes the store and its database.
+    ///
+    /// <para><b>Why the answers must agree.</b> The home and the store were judged from Deguffer's own
+    /// reading, and the question itself made the store. An answer that names another folder means
+    /// that reading is not Conan's, so the folder Conan used was never judged.</para>
     /// </summary>
+    /// <param name="own">The home as Deguffer worked it out, and what named it.</param>
+    /// <param name="configured">The store the home's configuration names, and the files it was read from.</param>
     /// <param name="whyNotOwned">
     /// Why a folder Conan names must not be examined as Conan's, or null where it may. Asked of both
     /// answers, because a home is somewhere <c>CONAN_HOME</c> or a <c>.conanrc</c> put it, and a store
@@ -41,7 +52,12 @@ internal abstract record ConanLocation
     /// either.
     /// </param>
     public static async Task<ConanLocation> AskAsync(
-        IProcessRunner runner, string conan, Func<string, string?> whyNotOwned, CancellationToken ct)
+        IProcessRunner runner,
+        string conan,
+        ConanHomeAnswer.Found own,
+        ConanConfReading.Plain configured,
+        Func<string, string?> whyNotOwned,
+        CancellationToken ct)
     {
         var homeRun = await runner.RunAsync(conan, "config home", ToolRun.Query, ct).ConfigureAwait(false);
 
@@ -62,6 +78,13 @@ internal abstract record ConanLocation
             return new HomeDeclined(home, "Conan's own answer", homeDeclined);
         }
 
+        if (!Same(home, own.Home))
+        {
+            return new Unknown(
+                $"Conan reports its home as {home}, but by {own.Source} it is {own.Home}, so the folder Conan "
+                + "uses is not the one Deguffer checked, and nothing is offered.");
+        }
+
         var storeRun = await runner
             .RunAsync(conan, $"config show {ConanConfigOutput.StoragePathSetting}", ToolRun.Query, ct)
             .ConfigureAwait(false);
@@ -73,8 +96,20 @@ internal abstract record ConanLocation
                 + $"Deguffer can use ({storeRun.Message}), so nothing is offered.");
         }
 
-        return whyNotOwned(store) is { } storeDeclined
-            ? new StoreDeclined(home, store, storeDeclined)
-            : new Found(home, store);
+        if (whyNotOwned(store) is { } storeDeclined)
+        {
+            return new StoreDeclined(home, store, storeDeclined);
+        }
+
+        return Same(store, configured.Store)
+            ? new Found(home, store, configured.Files)
+            : new Unknown(
+                $"Conan reports its package store as {store}, but its configuration in {home} names "
+                + $"{configured.Store}, so the folder Conan uses is not the one Deguffer checked, and nothing is offered.");
     }
+
+    private static bool Same(string one, string two) => string.Equals(
+        Path.TrimEndingDirectorySeparator(LongPath.Display(one)),
+        Path.TrimEndingDirectorySeparator(LongPath.Display(two)),
+        StringComparison.OrdinalIgnoreCase);
 }

@@ -16,8 +16,8 @@ internal static class ConanDeclarations
     /// <summary>What Conan keeps in its home beside the store, none of which the clean touches.</summary>
     private static readonly (string Name, string Reason)[] HomeContents =
     [
-        ("global.conf", "Conan's configuration."),
-        ("global_user.conf", "Conan's configuration."),
+        (ConanGlobalConf.FileName, "Conan's configuration."),
+        (ConanGlobalConf.UserFileName, "Conan's configuration."),
         ("profiles", "The profiles your builds use."),
         ("remotes.json", "The remotes Conan downloads from."),
         ("settings.yml", "Conan's settings model."),

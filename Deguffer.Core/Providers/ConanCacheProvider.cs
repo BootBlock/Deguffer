@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -25,12 +26,15 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Conan is asked nothing until its home is known to be there.</b> Every Conan command,
 /// <c>conan config home</c> included, creates the home when it is missing, so the home is first
 /// worked out as Conan would work it out (<see cref="ConanHome"/>), and only once it exists is Conan
-/// asked, and its answer used.</para>
+/// asked. Its answers must agree with Deguffer's own.</para>
 ///
-/// <para><b>A home or store a setting names is vetted first.</b> <c>CONAN_HOME</c>, a
-/// <c>.conanrc</c> and <c>core.cache:storage_path</c> can name any folder, and examining one as
-/// Conan's declares everything in it Conan's (§5.6, §7.1). One <see cref="ConfiguredFolder"/>
-/// declines is left alone: no step, and only Conan's own files in it are refused in Explore.</para>
+/// <para><b>A home or store a setting names is vetted before Conan is started.</b>
+/// <c>CONAN_HOME</c>, a <c>.conanrc</c> and <c>core.cache:storage_path</c> can name any folder, and
+/// examining one as Conan's declares everything in it Conan's (§5.6, §7.1). Conan's first command
+/// makes the store and a database in it, so the store is read from the home's configuration
+/// (<see cref="ConanGlobalConf"/>) and judged before Conan is asked anything. One
+/// <see cref="ConfiguredFolder"/> declines is left alone: no step, and only Conan's own files in it
+/// are refused in Explore.</para>
 ///
 /// <para><b>Held back while Conan runs.</b> Conan's cache is not safe for concurrent use, and
 /// <c>-t</c> removes every unfinished build in the store, which is exactly what a build in progress
@@ -235,21 +239,6 @@ public sealed class ConanCacheProvider : CleanupProviderBase
             return nothing;
         }
 
-        // Every Conan command opens the store's database, creating it, so a store Conan has used holds
-        // one, and a folder without it is not shown to be the store Conan's answer names.
-        var database = Path.Combine(found.Store, ConanStoreContents.Database);
-
-        switch (LongPath.ProbeFile(database))
-        {
-            case PathPresence.Refused:
-                return UnreadableRootPlan(database);
-
-            case PathPresence.Absent:
-                return UnexaminedPlan(
-                    $"Conan reports its package store as {found.Store}, but there is no {ConanStoreContents.Database} "
-                    + "there, the database Conan keeps in every store it uses, so nothing in it is offered.");
-        }
-
         var contents = ConanStoreContents.Read(found.Store, ct);
 
         if (contents.Unrecognised.Count > 0)
@@ -355,7 +344,22 @@ public sealed class ConanCacheProvider : CleanupProviderBase
             ConanHomeAnswer.Found own when WhyNotOwned(own.Home) is { } declined =>
                 Task.FromResult<ConanLocation>(new ConanLocation.HomeDeclined(own.Home, own.Source, declined)),
             ConanHomeAnswer.Found own when LongPath.ProbeDirectory(own.Home) is PathPresence.Present =>
-                ConanLocation.AskAsync(Runner, conan, WhyNotOwned, ct),
+                AskAboutAsync(conan, own, ct),
             _ => Task.FromResult<ConanLocation>(new ConanLocation.NotAsked()),
         });
+
+    /// <summary>
+    /// The store the home's configuration names, judged before Conan is started, because the first
+    /// question Conan is asked makes that folder and a database in it. See <see cref="ConanGlobalConf"/>.
+    /// </summary>
+    private Task<ConanLocation> AskAboutAsync(string conan, ConanHomeAnswer.Found own, CancellationToken ct) =>
+        ConanGlobalConf.Read(own.Home) switch
+        {
+            ConanConfReading.Plain plain when WhyNotOwned(plain.Store) is { } declined =>
+                Task.FromResult<ConanLocation>(new ConanLocation.StoreDeclined(own.Home, plain.Store, declined)),
+            ConanConfReading.Plain plain => ConanLocation.AskAsync(Runner, conan, own, plain, WhyNotOwned, ct),
+            ConanConfReading.Unusable unusable => Task.FromResult<ConanLocation>(
+                new ConanLocation.Unknown($"{unusable.Why} Nothing is offered, and Conan was not started.")),
+            _ => throw new UnreachableException("A reading of Conan's configuration is plain or unusable."),
+        };
 }

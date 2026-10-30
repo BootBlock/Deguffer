@@ -77,6 +77,12 @@ public sealed class ConanCacheProviderTests : IDisposable
         Write(16000, store, "notes", "s", "readme.txt");
     }
 
+    private static void WriteConf(string home, string text, string file = "global.conf")
+    {
+        Directory.CreateDirectory(home);
+        File.WriteAllText(Path.Combine(home, file), text);
+    }
+
     private void CreateHome(string home)
     {
         Write(10, home, "global.conf");
@@ -312,27 +318,35 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.DoesNotContain(runner.Invocations, call => call.Arguments.StartsWith("config show", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The home and its configuration were judged from Deguffer's own reading, so a Conan that reports
+    /// another home works somewhere nobody judged. Nothing is offered, and Conan is asked nothing more.
+    /// </summary>
     [Fact]
-    public async Task UsesTheHomeConanReportsOverItsOwnReading()
+    public async Task OffersNothingWhereConanReportsAnotherHome()
     {
-        Directory.CreateDirectory(DefaultHome);
+        CreateHome(DefaultHome);
+        CreateStore(Store);
         var reported = Path.Combine(_temp.Path, "elsewhere", "conan-home");
         CreateHome(reported);
         CreateStore(Path.Combine(reported, "p"));
+        var runner = Answering(reported);
 
-        var plan = await CreateProvider(Answering(reported)).PlanAsync();
-        var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+        var plan = await CreateProvider(runner).PlanAsync();
 
-        Assert.Contains(Path.Combine(reported, "p", Recipe, "s"), command.MeasuredPaths);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(reported, "global.conf"), StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"Conan reports its home as {reported}", StringComparison.Ordinal));
+        Assert.DoesNotContain(runner.Invocations, call => call.Arguments.StartsWith("config show", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task UsesTheStoreConanReportsWhereTheSettingMovesIt()
+    public async Task UsesTheStoreTheSettingMovesItToWhereConanAgrees()
     {
         CreateHome(DefaultHome);
         var store = Path.Combine(_temp.Path, "storage");
         CreateStore(store);
+        WriteConf(DefaultHome, $"# The shared drive is full.\ncore.cache:storage_path = {store}\n");
 
         // Coloured as CLICOLOR_FORCE makes it.
         var answer = $"\u001b[36mcore.cache:storage_path: \u001b[0m{store}\r\n";
@@ -341,6 +355,46 @@ public sealed class ConanCacheProviderTests : IDisposable
 
         Assert.Contains(Path.Combine(store, Recipe, "s"), command.MeasuredPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(store, ConanStoreContents.Database), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The same for the store: a Conan that uses another one than its configuration names is not believed.</summary>
+    [Fact]
+    public async Task OffersNothingWhereConanReportsAnotherStoreThanItsConfigurationNames()
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var reported = Path.Combine(_temp.Path, "storage");
+        CreateStore(reported);
+
+        var plan = await CreateProvider(Answering(storeAnswer: $"core.cache:storage_path: {reported}\r\n")).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"Conan reports its package store as {reported}", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A configuration Deguffer cannot read plainly names a store only Conan can say, and asking
+    /// Conan would make that store before it could be judged. Conan is not started.
+    /// </summary>
+    [Theory]
+    [InlineData("global.conf", "core.cache:storage_path = {{ os.getenv('USERPROFILE') }}\n", "is a template")]
+    [InlineData("global.conf", "{% include 'storage.conf' %}\n", "is a template")]
+    [InlineData("global_user.conf", "core.cache:storage_path+=C:\\Conan\n", "Line 1 of")]
+    [InlineData("global.conf", "core:non_interactive = True\ncore.cache:storage_path = storage\n", "Line 2 of")]
+    public async Task NeverStartsConanWhereItsConfigurationIsNotPlain(string file, string text, string why)
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        WriteConf(DefaultHome, text, file);
+        var runner = Answering();
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains(why, StringComparison.Ordinal) && note.Message.Contains("Conan was not started", StringComparison.Ordinal));
+        Assert.Empty(runner.Invocations);
     }
 
     [Theory]
@@ -530,23 +584,6 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
     }
 
-    /// <summary>
-    /// Every Conan command opens the store's database and creates it where it is missing, so a folder
-    /// without one is not shown to be the store Conan's answer names.
-    /// </summary>
-    [Fact]
-    public async Task OffersNothingWhereTheStoreHasNoDatabase()
-    {
-        CreateHome(DefaultHome);
-        CreateStore(Store);
-        File.Delete(Path.Combine(Store, ConanStoreContents.Database));
-
-        var plan = await CreateProvider(Answering()).PlanAsync();
-
-        Assert.Empty(plan.Steps);
-        Assert.True(plan.WasNotExamined);
-    }
-
     public enum HomeRoute
     {
         ConanHomeVariable,
@@ -600,21 +637,32 @@ public sealed class ConanCacheProviderTests : IDisposable
 
     /// <summary>
     /// The same for the store: <c>core.cache:storage_path</c> at the profile or a drive's root is never
-    /// walked as a store, and only the database is refused there.
+    /// walked as a store, and only the database is refused there. Where the configuration says so,
+    /// Conan is never started, because its first command would make a database in that folder.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DeclinesAStoreSetToTheProfileOrADriveRoot(bool driveRoot)
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public async Task DeclinesAStoreSetToTheProfileOrADriveRoot(bool driveRoot, bool configured)
     {
         CreateHome(DefaultHome);
         CreateStore(Store);
         var store = driveRoot ? Path.GetPathRoot(_temp.Path)! : _environment.UserProfile;
-        var provider = CreateProvider(Answering(storeAnswer: $"core.cache:storage_path: {store}\r\n"));
+
+        if (configured)
+        {
+            WriteConf(DefaultHome, $"core.cache:storage_path={store}\n");
+        }
+
+        var runner = Answering(storeAnswer: $"core.cache:storage_path: {store}\r\n");
+        var provider = CreateProvider(runner);
 
         var plan = await provider.PlanAsync();
         var roots = await provider.DiscoverToolRootsAsync();
 
+        Assert.Equal(configured, runner.Invocations.Count == 0);
         Assert.Empty(plan.Steps);
         Assert.Empty(plan.ProtectedPaths);
         Assert.Contains(plan.Notes, note => note.Message.Contains("will not run Conan's clean", StringComparison.Ordinal));

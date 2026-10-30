@@ -1408,17 +1408,21 @@ built again without fetching anything. A build that never finished stays behind 
 
 It works out Conan's home the way Conan does: a `.conanrc` in Deguffer's tool folder or any folder
 above it, then `CONAN_HOME`, then `.conan2` in your profile. If that home does not exist, Conan is
-never started, because every Conan command creates its home. Otherwise it asks `conan config home`
-and `conan config show core.cache:storage_path` where the home and store are, and the row names the
-home Conan reported. A home or store that a setting puts at your profile, a drive's root or another
-folder Deguffer never treats as one tool's is left alone, and Conan's clean is not run there. It
+never started, because every Conan command creates its home. Every Conan command also makes its
+package store and a database in it, so Deguffer first reads `core.cache:storage_path` from the
+home's `global.conf` and `global_user.conf` itself. A home or store that a setting puts at your
+profile, a drive's root or another folder Deguffer never treats as one tool's is left alone, and
+Conan's clean is not run there. Where either file is a template, or sets the store in any way but
+one plain folder, nothing is offered and Conan is not started, because only Conan could say which
+folder it names. Otherwise it asks `conan config home` and `conan config show
+core.cache:storage_path`, and offers nothing unless Conan's answers name the same home and store. It
 runs `conan cache clean -s -b -t`. The download and metadata folders (`-d`) and the backup sources
 (`-bs`) are never asked for, and `conan remove` is never run. `-t` removes the temporary folder `t`
-and every unfinished build in `b` whatever it is called, so the clean is offered only where the
-store holds `cache.sqlite3` and everything in `t` and `b` carries the name Conan gives the folders
-it makes there. While a `conan` process is running, nothing is offered, and the clean asks again
-just before it runs. A clean you cancel while this command runs is left to finish, because Conan
-would build from a half-removed source or build folder.
+and every unfinished build in `b` whatever it is called, so the clean is offered only where
+everything in `t` and `b` carries the name Conan gives the folders it makes there, and no recipe or
+package folder is a link. While a `conan` process is running, nothing is offered, and the clean asks
+again just before it runs. A clean you cancel while this command runs is left to finish, because
+Conan would build from a half-removed source or build folder.
 
 ### What is protected
 
