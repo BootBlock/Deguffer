@@ -45,6 +45,21 @@ public sealed class ShapeChangesTests
     }
 
     /// <summary>
+    /// A drawing that is not of rectangles has no shapes that move: between two sunbursts, or from a
+    /// treemap to a sunburst, nothing is reported, though the same two scans move shapes in a treemap.
+    /// </summary>
+    [Fact]
+    public void NothingMovesInADrawingThatIsNotOfRectangles()
+    {
+        var earlier = Scan(("alpha", 300), ("beta", 200), ("gamma", 100));
+        var later = Scan(("gamma", 250), ("beta", 200), ("alpha", 300));
+
+        Assert.NotEmpty(ShapeChanges.Between(Treemap(earlier), Treemap(later)));
+        Assert.Empty(ShapeChanges.Between(Drawing(earlier, ExploreView.Sunburst), Drawing(later, ExploreView.Sunburst)));
+        Assert.Empty(ShapeChanges.Between(Treemap(earlier), Drawing(later, ExploreView.Sunburst)));
+    }
+
+    /// <summary>
     /// A removal closes up. The folder that went shrinks away, as nothing in the tree left is it, and
     /// the shapes beside it grow into the room it left. Nothing appears.
     /// </summary>
@@ -351,9 +366,9 @@ public sealed class ShapeChangesTests
         && inner.X + inner.Width <= outer.X + outer.Width + Precision
         && inner.Y + inner.Height <= outer.Y + outer.Height + Precision;
 
-    private static ExploreSurface Treemap(ISizedTree tree) => Drawing(tree, ExploreView.Treemap);
+    private static TiledSurface Treemap(ISizedTree tree) => (TiledSurface)Drawing(tree, ExploreView.Treemap);
 
-    private static ExploreSurface Icicle(ISizedTree tree) => Drawing(tree, ExploreView.Icicle);
+    private static TiledSurface Icicle(ISizedTree tree) => (TiledSurface)Drawing(tree, ExploreView.Icicle);
 
     private static ExploreSurface Drawing(ISizedTree tree, ExploreView view) =>
         ExploreSurface.Create(

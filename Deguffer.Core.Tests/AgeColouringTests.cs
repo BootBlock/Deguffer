@@ -175,7 +175,7 @@ public class AgeColouringTests
     {
         var tree = TwoChildrenOfDifferentAges();
 
-        var surface = ExploreSurface.Create(
+        var surface = Surfaces.Create(
             tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, ExploreColouring.Age, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.NotEmpty(surface.Labels);
@@ -214,7 +214,7 @@ public class AgeColouringTests
 
         var tree = ManyEqualChildren(500);
 
-        var surface = ExploreSurface.Create(
+        var surface = Surfaces.Create(
             tree, tree.RootNode, ExploreView.Treemap, Small, Small, scale: 1, textScale: 1, colouring, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         var pixels = new byte[PixelBuffer.LengthFor(Small, Small)];
@@ -301,7 +301,7 @@ public class AgeColouringTests
 
     private static byte[] Painted(ExploreTree tree, ExploreColouring colouring)
     {
-        var surface = ExploreSurface.Create(
+        var surface = Surfaces.Create(
             tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, colouring, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         var pixels = new byte[PixelBuffer.LengthFor(Width, Height)];
@@ -338,7 +338,7 @@ public class AgeColouringTests
 
         var tree = builder.Build(ExploreChildOrder.BySize);
 
-        var surface = ExploreSurface.Create(
+        var surface = Surfaces.Create(
             tree, tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1, ExploreColouring.Age, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.NotEmpty(surface.Labels);

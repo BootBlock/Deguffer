@@ -24,14 +24,15 @@ public static class MapFollow
     /// out again as <paramref name="later"/>: two drawings of the same place at the same zoom, which
     /// fills the screen. The zoom <paramref name="later"/> was drawn at where nothing can be followed: a
     /// whole picture, two drawings at different zooms, which the camera moved between, two trees of
-    /// different things, or nothing under the middle found in both.
+    /// different things, a drawing that is not of rectangles, or nothing under the middle found in both.
     /// </summary>
     public static MapViewport Onward(ExploreSurface earlier, ExploreSurface later)
     {
         ArgumentNullException.ThrowIfNull(earlier);
         ArgumentNullException.ThrowIfNull(later);
 
-        if (earlier.Viewport is not { IsWhole: false } viewport
+        if (earlier is not TiledSurface { Viewport: { IsWhole: false } viewport } drawn
+            || later is not TiledSurface redrawn
             || later.Viewport != viewport
             || earlier.Tree is not ITrackedTree before
             || before.CounterpartsIn(later.Tree) is not { } onward)
@@ -44,7 +45,7 @@ public static class MapFollow
         var middle = (X: earlier.Width / 2f, Y: earlier.Height / 2f);
         var under = new List<ExploreTile>();
 
-        foreach (var tile in earlier.Tiles)
+        foreach (var tile in drawn.Tiles)
         {
             if (tile.IsNode
                 && middle.X >= tile.X && middle.X < tile.X + tile.Width
@@ -58,9 +59,9 @@ public static class MapFollow
         {
             // Placed in the whole picture rather than read off the drawing, which holds only what
             // reaches the screen: a shape a reordering sent several screens away is not in it.
-            if (earlier.Locate(under[at].Node) is not { } from
+            if (drawn.Locate(under[at].Node) is not { } from
                 || onward(under[at].Node) is not { } now
-                || later.Locate(now) is not { } to)
+                || redrawn.Locate(now) is not { } to)
             {
                 continue;
             }

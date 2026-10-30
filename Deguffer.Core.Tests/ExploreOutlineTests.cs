@@ -286,7 +286,7 @@ public sealed class ExploreOutlineTests
         + ((point.Y - sunburst.CentreY) * (point.Y - sunburst.CentreY)));
 
     private static ExploreSurface Surface(ExploreTree tree, ExploreView view) =>
-        ExploreSurface.Create(
+        Surfaces.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1, ExploreColouring.Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
     private static ExploreSurface Treemap(ExploreTree tree) => Surface(tree, ExploreView.Treemap);

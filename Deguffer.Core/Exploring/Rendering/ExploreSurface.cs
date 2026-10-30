@@ -5,187 +5,6 @@ using Deguffer.Core.Exploring.Layout;
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
-/// What the pointer found: a node, the block standing in for items too small to draw, or one of the
-/// blocks standing for the rest of the volume.
-/// </summary>
-/// <param name="Bytes">
-/// What was pointed at accounts for this much. Carried rather than looked up because none of the
-/// blocks has a node to look it up from.
-/// </param>
-public readonly record struct ExploreHit(int Node, long Bytes)
-{
-    public bool IsAggregate => Node == ExploreTile.Aggregated;
-
-    public bool IsFreeSpace => Node == ExploreTile.FreeSpace;
-
-    public bool IsUnaccounted => Node == ExploreTile.Unaccounted;
-
-    public bool IsShadowCopies => Node == ExploreTile.ShadowCopies;
-
-    public bool IsReservedStorage => Node == ExploreTile.ReservedStorage;
-
-    /// <summary>
-    /// Whether what was pointed at is a node of the tree, and so something a click may pick (§7.1).
-    /// None of the blocks is.
-    /// </summary>
-    public bool IsNode => Node >= 0;
-}
-
-/// <summary>
-/// Where a view should put one piece of text, in canvas pixels.
-///
-/// <para>Positions rather than drawn text, because the labels are the one part of the picture that
-/// is not in the bitmap: they are real controls laid over it, so they scale with the user's text
-/// size and a screen reader can reach them. What belongs here is the part that is geometry, and
-/// what belongs to the shell is the part that is a control.</para>
-/// </summary>
-/// <param name="X">The left edge of a box one line high. The text is trimmed to fit it.</param>
-/// <param name="Y">The top of that box.</param>
-/// <param name="Rotation">
-/// How far to turn the text about the middle of its box, in degrees clockwise. Zero for anything
-/// laid out in rectangles; a sunburst turns each label to lie along its own ring.
-/// </param>
-/// <param name="Centred">Whether the text sits in the middle of its box or starts at the left of it.</param>
-/// <param name="Colour">
-/// What colour the text has to be to stay legible against the shape underneath it. Decided here
-/// because the surface is what knows the colour it painted that shape in.
-/// </param>
-/// <param name="Bytes">
-/// What the shape accounts for. Carried for the blocks that are not nodes, whose figure a caption
-/// cannot look up in the tree.
-/// </param>
-/// <param name="Room">
-/// Where the text has to stay to be over its own shape and no other: the shape, or for a folder's
-/// name the band set aside for it. What a picture magnified less than it was drawn at fades the
-/// label against (see <see cref="Fade"/>).
-/// </param>
-public readonly record struct ExploreLabel(
-    int Node,
-    float X,
-    float Y,
-    float Width,
-    float Rotation,
-    bool Centred,
-    TileColour Colour,
-    long Bytes,
-    LabelRoom Room)
-{
-    /// <summary>
-    /// How much smaller than where it is gone a label is still whole: it fades over the last fifth of
-    /// the way its shape shrinks before the text reaches the shape's edge. Enough to read as a fade at
-    /// the speed of a zoom, and short enough that a name is never faint while its shape still has
-    /// plenty of room for it.
-    /// </summary>
-    public const float FadeRange = 1.25f;
-
-    /// <summary>
-    /// The least magnification a picture at rest can be shown at. One only to within the canvas
-    /// rounded to whole device pixels, which is half a pixel across it, and under a 256th of any
-    /// canvas wider than 128 pixels. A label is whole down to this, so the rounding never dims one
-    /// where its drawing put it, as it would a name that just fits, whose fade would otherwise run
-    /// over less than that rounding.
-    /// </summary>
-    public const float AtRest = 1 - (1f / 256);
-
-    /// <summary>
-    /// The least a magnification can be for <see cref="Fade"/> to be measured against it. A text with no
-    /// extent fits at any magnification, and a fade has to run between two different ones.
-    /// </summary>
-    private const float LeastGone = 1f / 1024;
-
-    /// <summary>
-    /// The point of the label that stays on its place in the picture as the picture is magnified,
-    /// while the text keeps the reader's size: the start of the line, or its middle for a centred
-    /// label, along the top of its box.
-    /// </summary>
-    public (float X, float Y) Anchor => (Centred ? X + (Width / 2) : X, Y);
-
-    /// <summary>
-    /// How opaque the label is as its picture is magnified, on each axis, for text
-    /// <paramref name="textWidth"/> by <paramref name="textHeight"/> canvas pixels.
-    ///
-    /// <para>Text keeps its size while the shape it names grows and shrinks with the picture, so
-    /// shrinking the picture brings the shape's edges in on it. Where the text reaches an edge it is
-    /// gone, so it never lies over a shape that is not its own, and it fades out over the
-    /// <see cref="FadeRange"/> before that. A shape that grows takes its name with it and never loses
-    /// it.</para>
-    ///
-    /// <para>The text as measured rather than the box it was laid out in, because a short name in a
-    /// wide shape stays readable long after the box would have run out of room.</para>
-    /// </summary>
-    public (LabelFade Across, LabelFade Down) Fade(float textWidth, float textHeight)
-    {
-        var (anchorX, anchorY) = Anchor;
-        var before = Centred ? 0.5f : 0;
-
-        return (
-            AxisFade(anchorX - Room.Left, Room.Right - anchorX, textWidth * before, textWidth * (1 - before)),
-            AxisFade(anchorY - Room.Top, Room.Bottom - anchorY, 0, textHeight));
-    }
-
-    /// <summary>
-    /// The fade along one axis, for a text running <paramref name="textBefore"/> before the anchor and
-    /// <paramref name="textAfter"/> after it, in a room reaching <paramref name="roomBefore"/> and
-    /// <paramref name="roomAfter"/> from it.
-    ///
-    /// <para>Magnified by <c>m</c>, the room reaches <c>m</c> times as far and the text as far as it
-    /// did, so a side is outgrown below the magnification that is their ratio.</para>
-    /// </summary>
-    private static LabelFade AxisFade(float roomBefore, float roomAfter, float textBefore, float textAfter)
-    {
-        var gone = Math.Max(Math.Max(Outgrown(textBefore, roomBefore), Outgrown(textAfter, roomAfter)), LeastGone);
-
-        // Already past its room where it was drawn, or within the rounding of it. The layout chose to
-        // name it, so it is whole there, as it was before the picture moved, and goes as soon as the
-        // picture shrinks.
-        return gone >= AtRest
-            ? new LabelFade(AtRest / FadeRange, AtRest)
-            : new LabelFade(gone, Math.Min(AtRest, gone * FadeRange));
-    }
-
-    private static float Outgrown(float text, float room) =>
-        text <= 0 ? 0 : room <= 0 ? float.PositiveInfinity : text / room;
-}
-
-/// <summary>
-/// The rectangle a label's text has to stay inside, in canvas pixels. See
-/// <see cref="ExploreLabel.Room"/>.
-/// </summary>
-public readonly record struct LabelRoom(float Left, float Top, float Right, float Bottom);
-
-/// <summary>
-/// How a label's opacity follows the magnification of its picture along one axis, where one is the
-/// magnification it was drawn at: none at or below <paramref name="Gone"/>, all of it at or above
-/// <paramref name="Whole"/>, and in proportion between. <paramref name="Whole"/> is never above
-/// <see cref="ExploreLabel.AtRest"/>, so a label is whole where its drawing put it, and always above
-/// <paramref name="Gone"/>.
-/// </summary>
-public readonly record struct LabelFade(float Gone, float Whole);
-
-/// <summary>One corner of a shape's outline, in canvas pixels.</summary>
-public readonly record struct ExplorePoint(float X, float Y);
-
-/// <summary>
-/// One closed boundary of one node's shape, for a caller that wants to draw a line round it.
-///
-/// <para>An outline rather than a filled shape, because the point of it is to say which shape is
-/// selected without hiding what the shape says. A wash over the top would change the colour the
-/// picture spent its whole palette establishing.</para>
-///
-/// <para>A polygon rather than a rectangle or a sector, so the shell has one thing to draw for all
-/// three views. A sunburst's arcs come out as enough short segments that the curve reads as a
-/// curve — a hundredth of a pixel from true at the radii drawn here — and the alternative is a
-/// shape union the shell would have to take apart again.</para>
-///
-/// <para><b>One boundary, not one shape.</b> A ring has two, an inner and an outer, and joining
-/// them would draw a radial line across it that is not there. So a node can come back more than
-/// once, which is also why each of these names the node it belongs to: the answer is a partial
-/// mapping — a node this drawing did not draw is simply absent — and without the name a caller
-/// cannot tell which shape it was handed, nor a test tell a right answer from a wrong one.</para>
-/// </summary>
-public readonly record struct ExploreOutline(int Node, IReadOnlyList<ExplorePoint> Points);
-
-/// <summary>
 /// One drawing of one node of one tree: its geometry, what is under a given point, where the text
 /// goes, and how to paint it.
 ///
@@ -197,6 +16,11 @@ public readonly record struct ExploreOutline(int Node, IReadOnlyList<ExplorePoin
 /// <para>Any <see cref="ISizedTree"/> can be drawn, which is how a scanned drive and a picture of
 /// memory share every layout, hit test and rasteriser. What the colours say is the one thing that
 /// depends on the tree, and <see cref="ShapeColours"/> carries it.</para>
+///
+/// <para>Only what every drawing answers. What only a drawing of rectangles can answer (its
+/// rectangles, the one under a point, where a node's sits, and the quads the GPU shades) is on
+/// <see cref="TiledSurface"/>, so a caller that needs it asks for that type and a sunburst is never
+/// made to answer with nothing.</para>
 ///
 /// <para>In Core rather than in the shell for the usual reason: none of it needs a window, and a
 /// decision belongs in Core (G1).</para>
@@ -318,35 +142,6 @@ public abstract class ExploreSurface
     public ShapeFinish Finish { get; }
 
     /// <summary>
-    /// Lay <paramref name="root"/> of a scanned <paramref name="tree"/> out for
-    /// <paramref name="view"/>, coloured to say <paramref name="colouring"/>. See the overload taking
-    /// <see cref="ShapeColours"/> for everything else.
-    /// </summary>
-    /// <param name="scheme">Which set of colours the colouring is drawn in.</param>
-    /// <param name="nowUtc">
-    /// What "now" is, for the age bands. Passed in rather than read, so a drawing coloured by age is
-    /// provable without a clock (G8) — the same seam
-    /// <see cref="Scanning.RelativeAge.Describe"/> takes.
-    /// </param>
-    public static ExploreSurface Create(
-        ExploreTree tree,
-        int root,
-        ExploreView view,
-        int width,
-        int height,
-        double scale,
-        double textScale,
-        ExploreColouring colouring,
-        ExploreScheme scheme,
-        DateTime nowUtc,
-        ExploreSpacing spacing,
-        VolumeSpace volume) =>
-        Create(
-            tree, root, view, width, height, scale, textScale,
-            ShapeColours.For(tree, colouring, scheme, nowUtc, growth: null, types: null),
-            spacing, volume);
-
-    /// <summary>
     /// The picture <paramref name="tree"/> is actually drawn as when <paramref name="view"/> is
     /// asked for.
     ///
@@ -450,13 +245,6 @@ public abstract class ExploreSurface
     /// </summary>
     public abstract CanvasPainter Painter(TileColour background);
 
-    /// <summary>
-    /// The drawing's shapes as the GPU shades them (see <see cref="CushionQuads"/>), or null for a
-    /// drawing whose shapes are not rectangles: a sunburst's sectors are painted on the CPU alone.
-    /// Made once per shading of the drawing, for the reason <see cref="Painter"/> is.
-    /// </summary>
-    public abstract CushionQuads? Quads();
-
     /// <summary>What is at this canvas point, or null where the point is over nothing.</summary>
     public abstract ExploreHit? At(float x, float y);
 
@@ -467,34 +255,6 @@ public abstract class ExploreSurface
     /// them all off the canvas still answers yes.
     /// </summary>
     public abstract bool HasVolumeBeside { get; }
-
-    /// <summary>
-    /// The rectangle of the shape at this canvas point, or null where the point is over nothing or
-    /// this drawing is not made of rectangles. The shape is the one <see cref="At"/> names there.
-    /// </summary>
-    public abstract ExploreTile? TileAt(float x, float y);
-
-    /// <summary>
-    /// Every rectangle drawn, a folder before what is drawn of it, in pixels of the drawing. None for
-    /// a sunburst, which draws sectors rather than rectangles.
-    /// </summary>
-    public abstract IReadOnlyList<ExploreTile> Tiles { get; }
-
-    /// <summary>
-    /// Where <paramref name="node"/> is drawn, in fractions of the canvas: its own rectangle, or where it
-    /// is not drawn one by one, the rectangle of the deepest folder above it that is, which is where
-    /// the screen shows it. Null where it is not under this drawing's root, or this drawing is not made
-    /// of rectangles.
-    /// </summary>
-    public abstract MapFrame? FrameOf(int node);
-
-    /// <summary>
-    /// Where <paramref name="node"/>'s own shape is in the picture at this drawing's zoom, in fractions
-    /// of the canvas, whether or not this drawing reached it: off the canvas too, for a treemap that can
-    /// be zoomed (<see cref="TreemapLayout.Locate"/>). Null where the picture draws no shape of the
-    /// node's own, or is not made of rectangles.
-    /// </summary>
-    public abstract MapFrame? Locate(int node);
 
     /// <summary>
     /// The shapes this drawing draws directly in <paramref name="folder"/>, in the order it draws them:
@@ -552,10 +312,7 @@ public abstract class ExploreSurface
     /// the shape a change of folder on the map flies into, or pulls back out of. Null where this
     /// drawing cannot be zoomed or does not draw the node's branch.
     /// </summary>
-    public MapFrame? ScreenOf(int node, MapViewport shown, MapViewport opened) =>
-        Viewport is { } drawn && FrameOf(node) is { } frame
-            ? shown.PlacementOf(drawn).OnScreen(frame).Inside(opened.PictureOf(MapFrame.Whole))
-            : null;
+    public abstract MapFrame? ScreenOf(int node, MapViewport shown, MapViewport opened);
 
     /// <summary>
     /// Where each of <paramref name="nodes"/> was drawn, for a caller that wants to mark it out.

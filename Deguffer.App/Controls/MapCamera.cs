@@ -247,9 +247,21 @@ internal sealed class MapCamera
     /// <summary>
     /// Ease a stretch back to nothing as <paramref name="motion"/> says, and call
     /// <paramref name="done"/> once it has, unless a press stopped it first.
+    ///
+    /// <para>An instant motion takes the stretch away at once and calls <paramref name="done"/> before
+    /// this returns. The compositor refuses a key frame animation shorter than a millisecond, and a
+    /// reader with animation effects off reaches this whenever a drag held at an edge rounds a hair
+    /// past it.</para>
     /// </summary>
     public void SpringBack(Motion motion, Action done)
     {
+        if (motion.IsInstant)
+        {
+            Unstretch();
+            done();
+            return;
+        }
+
         var back = _compositor.CreateVector3KeyFrameAnimation();
         back.InsertKeyFrame(1, Vector3.Zero, _compositor.MotionEase());
         back.Duration = motion.Duration;
