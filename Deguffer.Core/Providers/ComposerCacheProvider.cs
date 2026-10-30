@@ -115,7 +115,9 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
 
         List<ToolRoot> roots = [];
 
-        foreach (var home in new[] { settings.Home.Folder, settings.DataDirectory.Folder }.OfType<string>())
+        foreach (var home in new[] { settings.Home.Folder, settings.DataDirectory.Folder }
+                     .OfType<string>()
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             roots.Add(new ToolRoot(home, HomeReason, static _ => false));
         }

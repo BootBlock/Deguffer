@@ -56,6 +56,29 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.Equal(folder, outcome.StandardOutput.Trim(), StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// A PATH search takes the extension's case from PATHEXT, which lists <c>.BAT</c> and <c>.CMD</c>
+    /// in capitals, so Composer resolves to <c>composer.BAT</c>. A shim launched directly rather than
+    /// through cmd.exe's quoting mangles a quoted argument, and every query fails.
+    /// </summary>
+    [Theory]
+    [InlineData("tool.cmd")]
+    [InlineData("tool.CMD")]
+    [InlineData("tool.BAT")]
+    [InlineData("tool.Bat")]
+    public async Task ABatchShimOfAnyCaseReceivesAQuotedArgumentWhole(string name)
+    {
+        var shim = Path.Combine(_temp.CreateDirectory("bin"), name);
+        File.WriteAllText(shim, "@echo %~1" + Environment.NewLine);
+        var argument = Path.Combine(_temp.Path, "a folder", "with spaces");
+
+        var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools"))
+            .RunAsync(shim, $"\"{argument}\"", ToolRun.Query, CancellationToken.None);
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+        Assert.Equal(argument, outcome.StandardOutput.Trim());
+    }
+
     [Fact]
     public async Task AFolderThatCannotBeMadeFailsTheStepWithoutRunningTheTool()
     {

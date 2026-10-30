@@ -191,8 +191,11 @@ public sealed class ProcessRunner : IProcessRunner
     private static (string Application, string CommandLine) CommandLineFor(string fileName, string arguments)
     {
         // npm and friends ship as .cmd shims on Windows, and CreateProcess cannot launch a batch
-        // file directly — it has to go through the interpreter.
-        if (Path.GetExtension(fileName) is ".cmd" or ".bat")
+        // file directly — it has to go through the interpreter. In any case: a PATH search takes the
+        // extension's case from PATHEXT, which lists .BAT and .CMD in capitals, and a shim launched
+        // without this quoting mangles any quoted argument.
+        if (Path.GetExtension(fileName).Equals(".cmd", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(fileName).Equals(".bat", StringComparison.OrdinalIgnoreCase))
         {
             var cmd = NativeSystemTool.In(SystemDirectories.Current, "cmd.exe");
             return (cmd, $"\"{cmd}\" /d /c \"\"{fileName}\" {arguments}\"");
