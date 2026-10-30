@@ -34,6 +34,9 @@ internal sealed partial record ScoopCacheEntries(IReadOnlyList<string> Recognise
 {
     private const string InputListExtension = ".txt";
 
+    /// <summary>How many unrecognised entries a sentence names before it summarises the rest.</summary>
+    private const int EntriesNamed = 3;
+
     /// <summary>
     /// The entries of <paramref name="cache"/>, by full path in display form, or null where the
     /// folder would not be listed to the end. A partial listing is discarded, because what decides
@@ -70,6 +73,19 @@ internal sealed partial record ScoopCacheEntries(IReadOnlyList<string> Recognise
     /// input list is recognised by, so it refuses those.
     /// </summary>
     public static bool IsDownloadName(string name) => DownloadName().IsMatch(name);
+
+    /// <summary>
+    /// The unrecognised entries as a sentence names them, such as <c>2 entries that Scoop did not
+    /// make: 'notes.txt', 'installers'</c>.
+    /// </summary>
+    public string DescribeUnrecognised()
+    {
+        var named = string.Join(", ", Unrecognised.Take(EntriesNamed).Select(entry => $"'{Path.GetFileName(entry)}'"));
+        var rest = Unrecognised.Count > EntriesNamed ? $" and {Unrecognised.Count - EntriesNamed} more" : string.Empty;
+        var count = Unrecognised.Count == 1 ? "1 entry" : $"{Unrecognised.Count} entries";
+
+        return $"{count} that Scoop did not make: {named}{rest}";
+    }
 
     private static bool IsFile(FileSystemInfo entry) =>
         entry is FileInfo && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint);

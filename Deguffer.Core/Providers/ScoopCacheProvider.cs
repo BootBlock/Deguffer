@@ -22,7 +22,8 @@ namespace Deguffer.Core.Providers;
 /// <para><b>§5.2 decides whether the command is offered at all.</b> The command removes what it
 /// lists without reading the names, so it is offered only where every entry in the folder is one
 /// Scoop wrote (<see cref="ScoopCacheEntries"/>). Anything else there means no step, a note naming
-/// it, and its survival asserted.</para>
+/// it, and its survival asserted. The command lists the folder only when it runs, so the run asks
+/// the same question again immediately before it (<see cref="ScoopCacheContents"/>).</para>
 ///
 /// <para><b>Global installs share this cache.</b> <c>cache_path</c> takes no <c>$global</c>, so
 /// <c>scoop install --global</c> downloads into the same per-user folder.</para>
@@ -30,9 +31,6 @@ namespace Deguffer.Core.Providers;
 public sealed class ScoopCacheProvider : CleanupProviderBase
 {
     private const string Arguments = "cache rm *";
-
-    /// <summary>How many unrecognised entries the note names before it summarises the rest.</summary>
-    private const int EntriesNamed = 3;
 
     private readonly ISystemDirectories _system;
     private readonly PassMemo<ScoopResolution> _resolution = new();
@@ -158,7 +156,10 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
 
         if (entries.Unrecognised.Count > 0)
         {
-            return UnexaminedPlan(Unrecognised(cache, entries.Unrecognised)) with
+            return UnexaminedPlan(
+                $"Scoop's download cache at {cache} holds {entries.DescribeUnrecognised()}. Scoop's own command "
+                + "removes everything in that folder without looking at it, so Deguffer will not run it while "
+                + "they are there. Move them out of the folder and scan again.") with
             {
                 ProtectedPaths = BuildProtectedPaths(layout, entries.Unrecognised),
             };
@@ -203,6 +204,7 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
                     WhenCancelled = CancelledCommand.Ended,
                     Estimated = measured.Total,
                     MeasuredPaths = [cache],
+                    TargetCheck = new ScoopCacheContents(Environment, cache),
                 },
             ],
             ProtectedPaths = BuildProtectedPaths(layout, []),
@@ -224,17 +226,6 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
         .. layout.ConfigFiles.Select(file => (file, "Scoop's settings, which can hold a GitHub token and a proxy password.")),
         .. unrecognised.Select(entry => (entry, "Not a download Scoop made, so it is left alone.")),
     ]);
-
-    private static string Unrecognised(string cache, IReadOnlyList<string> entries)
-    {
-        var named = string.Join(", ", entries.Take(EntriesNamed).Select(entry => $"'{Path.GetFileName(entry)}'"));
-        var rest = entries.Count > EntriesNamed ? $" and {entries.Count - EntriesNamed} more" : string.Empty;
-        var count = entries.Count == 1 ? "1 entry" : $"{entries.Count} entries";
-
-        return $"Scoop's download cache at {cache} holds {count} that Scoop did not make: {named}{rest}. "
-            + "Scoop's own command removes everything in that folder without looking at it, so Deguffer "
-            + "will not run it while they are there. Move them out of the folder and scan again.";
-    }
 
     /// <summary>The layout of the Scoop on <c>PATH</c>, or null where there is none.</summary>
     private ScoopResolution? Resolve() =>

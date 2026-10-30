@@ -184,6 +184,54 @@ public sealed class ScoopCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The command lists the cache when it runs, not when the preview did, so a file saved there in
+    /// between stops it, is named, and survives. The fake Scoop removes every file it finds, as the
+    /// real one does.
+    /// </summary>
+    [Fact]
+    public async Task AFileSavedIntoTheCacheAfterThePreviewStopsTheCommand()
+    {
+        var shim = _scoop.Install();
+        var download = _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        _scoop.Runner.Replying(shim, _ => RemoveEveryFileIn(_scoop.DefaultCache));
+        var provider = _scoop.Provider();
+
+        var plan = await provider.PlanAsync();
+        var saved = _scoop.File(_scoop.DefaultCache, "report.docx");
+        var outcome = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.StartsWith("Not run:", outcome.Message, StringComparison.Ordinal);
+        Assert.Contains("'report.docx'", outcome.Message, StringComparison.Ordinal);
+        Assert.Empty(_scoop.Runner.Invocations);
+        Assert.True(File.Exists(saved));
+        Assert.True(File.Exists(download));
+    }
+
+    /// <summary>
+    /// Scoop reads its settings when it starts, so a cache moved after the preview would have the
+    /// command empty a folder nobody examined. It is not run.
+    /// </summary>
+    [Fact]
+    public async Task ACacheMovedAfterThePreviewStopsTheCommand()
+    {
+        var shim = _scoop.Install();
+        _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        var moved = _scoop.Elsewhere("moved-cache");
+        var unexamined = _scoop.File(moved, "report.docx");
+        _scoop.Runner.Replying(shim, _ => RemoveEveryFileIn(moved));
+        var provider = _scoop.Provider();
+
+        var plan = await provider.PlanAsync();
+        _scoop.WriteText(_scoop.UserConfig, $$"""{ "cache_path": {{System.Text.Json.JsonSerializer.Serialize(moved)}} }""");
+        var outcome = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+
+        Assert.StartsWith("Not run:", outcome.Message, StringComparison.Ordinal);
+        Assert.Empty(_scoop.Runner.Invocations);
+        Assert.True(File.Exists(unexamined));
+    }
+
+    /// <summary>
     /// §5.6, with the command run as Scoop runs it: every top-level file goes and the folder stays.
     /// The verification proves the cache folder, Scoop's own folders and its settings outlived it.
     /// </summary>
