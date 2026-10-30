@@ -475,9 +475,9 @@ One class each, on the shape npm and NuGet already use.
 | Tool | Location and method | Note |
 | --- | --- | --- |
 | Maven | `%USERPROFILE%\.m2\repository`, no official purge | `.m2\settings.xml` in the root can hold encrypted server passwords. §5.2 verbatim |
-| Yarn | `yarn cache dir`, then `yarn cache clean` | Yarn 1 and Berry differ; probe rather than assume |
-| Bun | `%USERPROFILE%\.bun\install\cache`, `bun pm cache prune` | Corrected by [provider-candidates.md](provider-candidates.md) §2: `bun pm cache rm` and `prune` now exist, and only `prune` keeps the global store in `links` |
-| Composer | `composer clear-cache` | Measured at 30 MB, so the location is real rather than hypothetical |
+| Yarn | `yarn cache dir`, then `yarn cache clean` | ✅ Yarn 1 shipped as `YarnClassicCacheProvider`, which asks `yarn -v` and never runs Berry's clean. The clean deletes the whole cache root, not `v6`. Berry stays *Build later* in [provider-candidates.md](provider-candidates.md) §2 |
+| Bun | `%USERPROFILE%\.bun\install\cache`, `bun pm cache prune` | ✅ Shipped as `BunInstallCacheProvider`, through `prune` only. `prune` first shipped in Bun 1.4.4, and an earlier Bun is offered nothing, because its only eviction, `rm`, deletes the global store in `links` |
+| Composer | `composer clear-cache` | ✅ Shipped as `ComposerCacheProvider`. Measured at 30 MB |
 | vcpkg | `%LOCALAPPDATA%\vcpkg\archives`, plus `buildtrees`, `downloads`, `packages` under the vcpkg root | The cache root moves with `VCPKG_DEFAULT_BINARY_CACHE`, the same problem `PLAYWRIGHT_BROWSERS_PATH` already forced into `IUserEnvironment` |
 | Conan | `conan cache clean` | Build and download folders |
 | Chocolatey | `%TEMP%\chocolatey` by default | Moves if `cacheLocation` is set in `chocolatey.config`; read the config |

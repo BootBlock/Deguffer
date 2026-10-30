@@ -164,11 +164,19 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task LeavesARootSetToTheProfileAlone()
+    /// <summary>
+    /// A root that is the account's temporary folder holds what other rows remove. It holds only
+    /// versioned cache folders here, so nothing but the folder check can decline it.
+    /// </summary>
+    public async Task LeavesARootThatIsATemporaryFolderAlone()
     {
-        var plan = await CreateProvider(YarnAnswering(root: _environment.UserProfile)).PlanAsync();
+        PopulateCache();
+        _environment.WithTempPath(Root);
+
+        var plan = await CreateProvider(YarnAnswering()).PlanAsync();
 
         Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("temporary", StringComparison.Ordinal));
     }
 
     /// <summary>§5.2: the clean deletes the whole root, so anything there Yarn does not make stops it.</summary>

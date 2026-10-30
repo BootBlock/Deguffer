@@ -66,9 +66,11 @@ internal sealed partial record YarnClassicCache(string Version, bool IsClassic, 
     /// deletes the root this plan measured and vetted, whatever its settings say by the time it runs,
     /// because an explicit <c>--cache-folder</c> wins over them and has no fallback
     /// (<a href="https://github.com/yarnpkg/yarn/blob/v1.22.22/src/config.js#L352-L372">config.js</a>).
-    /// And Yarn 2 and later refuse the whole command line before running anything, because neither
-    /// <c>--cache-folder</c> nor <c>--non-interactive</c> is an option of theirs, should a setting
-    /// hand the program to one between the plan and the clean.
+    /// And Yarn 4 refuses the whole command line before running anything, because neither
+    /// <c>--cache-folder</c> nor <c>--non-interactive</c> is an option of its own and clipanion rejects
+    /// an unknown option while parsing, should a setting hand the program to it between the plan and
+    /// the clean. Yarn 2 and 3 parse with older clipanion releases, which were not read, so for them
+    /// the version asked at plan time is the guard.
     /// </summary>
     public static string CleanArguments(string root) => $"cache clean --cache-folder \"{root}\" --non-interactive";
 

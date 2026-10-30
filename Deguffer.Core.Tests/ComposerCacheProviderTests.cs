@@ -211,21 +211,19 @@ public sealed class ComposerCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task LeavesACacheSetToTheProfileAlone()
+    /// <summary>
+    /// A cache that is the account's temporary folder holds what other rows remove. It holds only
+    /// Composer's own folders here, so nothing but the folder check can decline it.
+    /// </summary>
+    public async Task LeavesACacheThatIsATemporaryFolderAlone()
     {
         PopulateCache();
-        var profile = _environment.UserProfile;
-        var runner = ComposerAnswering(new()
-        {
-            ["cache-dir"] = profile,
-            ["cache-files-dir"] = Path.Combine(profile, "files"),
-            ["cache-repo-dir"] = Path.Combine(profile, "repo"),
-            ["cache-vcs-dir"] = Path.Combine(profile, "vcs"),
-        });
+        _environment.WithTempPath(Cache);
 
-        var plan = await CreateProvider(runner).PlanAsync();
+        var plan = await CreateProvider(ComposerAnswering()).PlanAsync();
 
         Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("temporary", StringComparison.Ordinal));
     }
 
     /// <summary>§5.2: clear-cache would remove an entry Composer never makes along with the rest.</summary>

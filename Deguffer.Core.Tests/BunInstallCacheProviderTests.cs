@@ -177,11 +177,19 @@ public sealed class BunInstallCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task LeavesACacheSetToTheProfileAlone()
+    /// <summary>
+    /// A cache that is the account's temporary folder holds what other rows remove. It holds only
+    /// packages here, so nothing but the folder check can decline it.
+    /// </summary>
+    public async Task LeavesACacheThatIsATemporaryFolderAlone()
     {
-        var plan = await CreateProvider(BunAnswering(cache: _environment.UserProfile)).PlanAsync();
+        PopulateCache();
+        _environment.WithTempPath(Cache);
+
+        var plan = await CreateProvider(BunAnswering()).PlanAsync();
 
         Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("temporary", StringComparison.Ordinal));
     }
 
     /// <summary>
