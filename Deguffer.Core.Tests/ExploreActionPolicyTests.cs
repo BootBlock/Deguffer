@@ -1772,7 +1772,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
             _system,
             _environment,
             new FakeVolumeInventory(),
-            [new StubProvider([declared], [VendorTool(moved)])]);
+            [new DeclaringRow([declared], [VendorTool(moved)])]);
 
         Assert.True(policy.MayRemove(Path.Combine(GradleRoot, "caches")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
@@ -2131,64 +2131,4 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// </summary>
     private ExploreActionPolicy Policy(params ToolRoot[] toolRoots) =>
         new(ProtectedRegions.For(_system, _environment), toolRoots, volumes: _volumes);
-
-    private sealed class StubProvider(
-        IReadOnlyList<ToolRoot> roots,
-        IReadOnlyList<ToolRoot>? discovered = null) : ICleanupProvider
-    {
-        public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
-
-        public string Id => "stub";
-
-        public string Name => "Stub";
-
-        public SafetyTier Tier => SafetyTier.RegenerableCache;
-
-        public Execution.StepGrain Grain => Execution.StepGrain.Parts;
-
-        public string WhatHappensOnNextUse => "Nothing.";
-
-        public ProviderDescription Description { get; } = new()
-        {
-            Category = ProviderCategory.TemporaryFiles,
-            Application = "A stub, standing in for a real toolchain.",
-            Publisher = "Nobody.",
-            Purpose = "Nothing. This provider exists only for this test.",
-            Recommendation = "Nothing to recommend.",
-        };
-
-        public bool IsAwaitingSourceFolders => false;
-
-        public IReadOnlyList<ToolRoot> ToolRoots => roots;
-
-        public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<ToolRoot>>(discovered ?? []);
-
-        public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
-
-        public void InvalidateCaches()
-        {
-        }
-
-        public PassHold HoldCaches() => PassHold.Nothing;
-
-        public Task<Execution.CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
-
-        public Task<Execution.CleanupResult> ExecuteAsync(
-            Execution.CleanupPlan plan,
-            Execution.RunReach? runReach = null,
-            Execution.RunResidue? residue = null,
-            IProgress<double>? progress = null,
-            CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
-
-        public Task<Execution.VerificationResult> VerifyAsync(
-            Execution.CleanupPlan plan,
-            Execution.RunReach? runReach = null,
-            Execution.RunResidue? residue = null,
-            CancellationToken ct = default) =>
-            throw new NotSupportedException("This stub exists only to carry a tool-root declaration.");
-    }
 }
