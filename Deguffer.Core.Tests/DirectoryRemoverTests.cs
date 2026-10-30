@@ -410,8 +410,6 @@ public sealed class DirectoryRemoverTests : IDisposable
                 File.GetAttributes(directory).HasFlag(FileAttributes.ReadOnly),
                 "a directory that survived the removal had its attributes reset");
         }
-
-        File.SetAttributes(directory, FileAttributes.Normal);
     }
 
     /// <summary>
@@ -436,8 +434,6 @@ public sealed class DirectoryRemoverTests : IDisposable
             "a directory that survived the removal had its attributes reset");
         Assert.False(File.Exists(free));
         Assert.False(outcome.RootRemoved);
-
-        File.SetAttributes(directory, FileAttributes.Normal);
     }
 
     [Fact]
