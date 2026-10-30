@@ -2315,7 +2315,7 @@ passwords rather than separately from them, and the argument above stops applyin
 in the plan instead of guessing. The same goes for a relative path that climbs out of Firefox's own
 folder. Either way, Explore refuses to remove that profile or anything inside it. A profile kept at
 the top of a drive or share is the exception: Explore refuses its bookmarks, passwords and settings
-by name, and leaves the rest of the drive to you.
+by name, and leaves the rest of a local drive to you. Explore removes nothing from a share.
 
 ### What is protected
 

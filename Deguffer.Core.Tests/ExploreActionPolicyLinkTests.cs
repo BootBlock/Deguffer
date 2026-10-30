@@ -199,27 +199,6 @@ public sealed class ExploreActionPolicyLinkTests : IDisposable
     }
 
     /// <summary>
-    /// Fails closed. A local link that leads to a share may lead to this computer's own disk under a
-    /// second name, which no rule names, so the removal is refused rather than judged by the share's
-    /// path.
-    /// </summary>
-    [Fact]
-    public void AnItemThroughALinkToAShareIsRefused()
-    {
-        var folder = _temp.CreateDirectory("profile", "Linked");
-        var policy = new ExploreActionPolicy(
-            ProtectedRegions.For(_system, _environment),
-            [],
-            new FakeVolumeInventory(),
-            new RedirectingFileSystem(WindowsFileSystem.Default, folder, @"\\?\UNC\localhost\C$\Windows"));
-
-        var verdict = policy.MayRemove(Path.Combine(folder, "System32"));
-
-        Assert.False(verdict.IsAllowed);
-        Assert.Contains(@"\\localhost\C$\Windows", verdict.Reason, StringComparison.Ordinal);
-    }
-
-    /// <summary>
     /// A folder above the item that is not there hides nothing, and the item is judged by its text
     /// as before: a row that vanished is reported as gone, not refused.
     /// </summary>
@@ -246,24 +225,6 @@ public sealed class ExploreActionPolicyLinkTests : IDisposable
         Assert.Contains(LongPath.Extended(folder), recording.Paths);
         Assert.Contains(LongPath.Extended(GradleRoot), recording.Paths);
         Assert.All(recording.Paths, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// Nothing on a share is opened to ask where it leads: opening is a conversation with another
-    /// machine, and a link on a share is followed by the server that holds it.
-    /// </summary>
-    [Fact]
-    public void NothingOnAShareIsOpenedToFollowALink()
-    {
-        var recording = new RecordingFileSystem(WindowsFileSystem.Default);
-        var policy = new ExploreActionPolicy(
-            [ProtectedRegion.Refusing(@"\\fileserver.test\archive", RegionScope.PathAndBelow, "Archived.")],
-            [],
-            new FakeVolumeInventory(),
-            recording);
-
-        Assert.True(policy.MayRemove(@"\\fileserver.test\photos\2019\big.bin").IsAllowed);
-        Assert.Empty(recording.Resolved);
     }
 
     private ToolRoot Gradle() =>

@@ -575,8 +575,11 @@ not the shell asked.
   above the item that Windows will not open, that leads to a volume with no name, or that leads to
   a network share, which can be this computer's own disk under a second name, is refused, because
   Deguffer cannot tell where the removal would act. Nothing on a share, a network drive or a drive
-  that keeps its files in the cloud is opened to follow a link, so what is there is judged by its
-  path.
+  that keeps its files in the cloud is opened to follow a link. What is on a share or a network
+  drive is refused for the same reason: `\\localhost\C$\Windows`, or a letter mapped to
+  `\\localhost\C$`, is `C:\Windows`, and recognising every name this computer answers to and every
+  folder it shares is a list that fails open when it misses one. What is on a cloud drive, which
+  holds no link, is judged by its path.
 - **What Explore shows and what Explore will act on are different sets**, and the second is much
   smaller. Drawing a rectangle for a path says only that the bytes are there. It is not a
   classification, it is not an offer, and the UI must never let a user read it as one — which is why

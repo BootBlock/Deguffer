@@ -31,7 +31,8 @@ public static class HostVolume
     /// Every other drive is opened: a link on it can lead anywhere.</para>
     ///
     /// <para>The one statement of the rule, for the duplicate search, which says why it does not
-    /// search such a place, and for Explore, which judges what is there by its path.</para>
+    /// search such a place, and for Explore, which refuses to remove what is on a share and judges
+    /// what is on a cloud drive by its path.</para>
     /// </summary>
     public static UnopenedPlace? Unopened(IVolumeInventory volumes, string path) =>
         LongPath.IsShare(path)
