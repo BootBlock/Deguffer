@@ -62,7 +62,9 @@ public sealed partial class PresenceProbeSweepTests
     {
         var found = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (var file in ProductSources())
+        // LongPath itself is left out, because it defines the three.
+        foreach (var file in ProductSources.Files()
+            .Where(file => !Path.GetFileName(file).Equals("LongPath.cs", StringComparison.OrdinalIgnoreCase)))
         {
             var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
 
@@ -79,23 +81,6 @@ public sealed partial class PresenceProbeSweepTests
 
         Assert.Equal(Allowed, found);
     }
-
-    /// <summary>
-    /// Every C# file in a product project, found by name so a project added later is covered the
-    /// moment it exists. <c>LongPath</c> itself is left out, because it defines the three.
-    /// </summary>
-    private static IEnumerable<string> ProductSources() =>
-        Directory.EnumerateDirectories(MarkdownGuide.RepositoryRoot, "Deguffer.*")
-            .Where(project => Path.GetFileName(project) is { } name
-                && !name.EndsWith(".Tests", StringComparison.Ordinal)
-                && name != "Deguffer.Testing")
-            .SelectMany(project => Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories))
-            .Where(file => !IsBuildOutput(file)
-                && !Path.GetFileName(file).Equals("LongPath.cs", StringComparison.OrdinalIgnoreCase));
-
-    private static bool IsBuildOutput(string file) =>
-        file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-        || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A call or a method group, which <c>FirstOrDefault(LongPath.FileExists)</c> is.</summary>
     [GeneratedRegex(@"\bLongPath\s*\.\s*(?:FileExists|DirectoryExists|EntryExists)\b")]

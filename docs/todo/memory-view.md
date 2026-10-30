@@ -50,6 +50,7 @@ window a message, stops a service or terminates a process outside the tests.
 
 [unreached-locations.md](unreached-locations.md) already leaves open whether Deguffer should control
 services at all, for the one case that needs it (the search index), and leans towards no.
+[#70](https://github.com/BootBlock/Deguffer/issues/70) has since decided it: no, anywhere in the product (§2 of the spec).
 
 So whether to build this is a question about what Deguffer is, and it is the maintainer's. What does
 carry over unchanged, if the answer is yes, is §7.1's discipline, and the rest of this document
@@ -305,7 +306,7 @@ user's own close. `RmForceShutdown` terminates what does not respond in 30 secon
 | Terminating anything | `TerminateProcess` runs no more of the program's code, so nothing is saved ([TerminateProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)). |
 | A process with no visible top-level window outside a console host | There is no close of its own to send it. §5.2's reasoning applies: what has no recognised route is not offered. |
 | A console program | It has no close of its own to send. The console control signals another program can raise are Ctrl+C and Ctrl+Break, by attaching to the console ([GenerateConsoleCtrlEvent](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent)), and Ctrl+C stops a build rather than closing anything. Closing the console window ends every attached process (above). |
-| A service | Stopping needs the `SERVICE_STOP` right, which a service's default security grants only to LocalSystem and Administrators ([Service security and access rights](https://learn.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights)), and a service that accepts the stop control; a trigger-start service starts again when its trigger fires ([Service trigger events](https://learn.microsoft.com/en-us/windows/win32/services/service-trigger-events)); disabling one is what "free up RAM" advice gets wrong. The open question in unreached-locations.md is decided first. |
+| A service | Stopping needs the `SERVICE_STOP` right, which a service's default security grants only to LocalSystem and Administrators ([Service security and access rights](https://learn.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights)), and a service that accepts the stop control; a trigger-start service starts again when its trigger fires ([Service trigger events](https://learn.microsoft.com/en-us/windows/win32/services/service-trigger-events)); disabling one is what "free up RAM" advice gets wrong. The open question in unreached-locations.md is decided first. [#70](https://github.com/BootBlock/Deguffer/issues/70) decided it: Deguffer never controls a service (§2 of the spec). |
 | A suspended packaged application | Windows reclaims it when it needs to (section 6). |
 | A critical process | Ending one stops the machine with bug check `CRITICAL_PROCESS_DIED` ([0xEF](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0xef--critical-process-died)). `IsProcessCritical` needs only `PROCESS_QUERY_LIMITED_INFORMATION` ([IsProcessCritical](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocesscritical)). |
 | A process whose criticality cannot be read | Unelevated, the probe could open none of the twelve system processes it checked by name, and none of the 344 it could open reported itself critical. Elevated was not measured, so the refusal is stated as a rule, not left to access being denied. |
@@ -382,7 +383,7 @@ In the order the decisions depend on each other:
    in the table in section 7 with its reason, identifies the target by identifier and creation time,
    checks again immediately before sending, and reports commit charge before and after.
 4. **Services stay out** until the open question in unreached-locations.md is decided, and a memory
-   view is not a reason to decide it.
+   view is not a reason to decide it. [#70](https://github.com/BootBlock/Deguffer/issues/70) has since decided it, and the answer is no.
 
 If it is adopted, the work splits along the seams in section 8: the specification, the snapshot
 source and its tests, the layout seam over the tree, the page, and the close action last.
