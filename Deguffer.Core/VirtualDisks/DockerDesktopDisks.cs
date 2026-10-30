@@ -82,12 +82,12 @@ public static class DockerDesktopDisks
         {
             var root = Folder(settings, "CustomWslDistroDir") ?? Path.Combine(environment.LocalAppData, "Docker", "wsl");
 
-            return [new VirtualDisk(Path.Combine(root, "disk", "docker_data.vhdx"), VirtualDiskKind.DockerData, null)];
+            return [new VirtualDisk(Path.Combine(root, "disk", "docker_data.vhdx"), DockerDesktopData.Instance, null)];
         }
 
         var data = Folder(settings, "dataFolder") ?? Path.Combine(system.ProgramData, "DockerDesktop", "vm-data");
 
-        return [new VirtualDisk(Path.Combine(data, "DockerDesktop.vhdx"), VirtualDiskKind.DockerData, null)];
+        return [new VirtualDisk(Path.Combine(data, "DockerDesktop.vhdx"), DockerDesktopData.Instance, null)];
     }
 
     private static string? Folder(JsonElement settings, string name) =>

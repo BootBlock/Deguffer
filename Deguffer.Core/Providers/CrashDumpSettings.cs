@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Safety;
 using Microsoft.Win32;
 
@@ -16,12 +17,17 @@ namespace Deguffer.Core.Providers;
 /// Whether what Windows writes there is written by the kernel, and so is removable only by an
 /// administrator. Dumps of ordinary applications are written as the account the application ran as.
 /// </param>
+/// <param name="ComponentFolders">
+/// The folders one level down that Windows also writes dumps into, by name, where the setting names a
+/// folder Windows lays out that way. Empty where it writes only into the folder itself.
+/// </param>
 public sealed record CrashDumpSetting(
     string Setting,
     string Holds,
     string Value,
     bool NamesFile,
-    bool RequiresElevation)
+    bool RequiresElevation,
+    IReadOnlySet<string> ComponentFolders)
 {
     /// <summary>The value as a full path, or null where it is not one.</summary>
     public string? Path => LongPath.Configured(Value);
@@ -52,6 +58,21 @@ internal static class CrashDumpSettings
 
     public const string DumpFolderValue = "DumpFolder";
 
+    public const string LiveKernelReportsKey = $@"{CrashControlKey}\LiveKernelReports";
+
+    public const string LiveKernelReportsPathValue = "LiveKernelReportsPath";
+
+    /// <summary>
+    /// The folders Windows writes live kernel minidumps into, one per component, inside wherever live
+    /// kernel reports go. Microsoft's "Kernel live dump code reference" lays the folder out as full
+    /// dumps directly inside it and minidumps in <c>&lt;ComponentName&gt;\*.dmp</c>, and names these
+    /// five. A folder of any other name there is not recognised, so its dumps are left where they are.
+    /// </summary>
+    public static readonly IReadOnlySet<string> LiveKernelReportComponents =
+        FrozenSet.ToFrozenSet(["NDIS", "PDCRevocation", "PoW32kWatchdog", "USBHUB3", "WATCHDOG"], StringComparer.OrdinalIgnoreCase);
+
+    private static readonly IReadOnlySet<string> NoComponents = FrozenSet<string>.Empty;
+
     private const RegistryView View = RegistryView.Registry64;
 
     /// <summary>Every dump location a setting names, in the order a reader of the registry meets them.</summary>
@@ -61,6 +82,19 @@ internal static class CrashDumpSettings
 
         Add(settings, environment, CrashControlKey, DumpFileValue, "the full kernel dump", namesFile: true, requiresElevation: true);
         Add(settings, environment, CrashControlKey, MinidumpDirValue, "small kernel dumps", namesFile: false, requiresElevation: true);
+
+        // Microsoft's "WER Settings" reference documents this value from Windows 10 1703 on, in the
+        // object manager's form ("\??\C:\LiveDumpsFolder"), which LongPath.Configured reads.
+        Add(
+            settings,
+            environment,
+            LiveKernelReportsKey,
+            LiveKernelReportsPathValue,
+            "live kernel reports",
+            namesFile: false,
+            requiresElevation: true,
+            components: LiveKernelReportComponents);
+
         Add(settings, environment, LocalDumpsKey, DumpFolderValue, "application crash dumps", namesFile: false, requiresElevation: false);
 
         // Each key is named after the executable it applies to, and its folder replaces the one above
@@ -87,7 +121,8 @@ internal static class CrashDumpSettings
         string valueName,
         string holds,
         bool namesFile,
-        bool requiresElevation)
+        bool requiresElevation,
+        IReadOnlySet<string>? components = null)
     {
         if (environment.ReadLocalMachineRegistryValue(keyPath, valueName, View) is not { } value
             || string.IsNullOrWhiteSpace(value))
@@ -100,6 +135,7 @@ internal static class CrashDumpSettings
             holds,
             value.Trim(),
             namesFile,
-            requiresElevation));
+            requiresElevation,
+            components ?? NoComponents));
     }
 }

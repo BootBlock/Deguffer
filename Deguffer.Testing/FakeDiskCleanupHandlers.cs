@@ -57,6 +57,7 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
         ["Temporary Setup Files"] = ["$Windows.~BT"],
         ["Windows ESD installation files"] =
             [Path.Combine("ESD", "Windows"), "$Windows.~WS", Path.Combine("ESD", "Download")],
+        ["Upgrade Discarded Files"] = ["$WINDOWS.~Q", "$INPLACE.~TR", "$Windows.~LS"],
         ["Windows Reset Log Files"] =
             [Path.Combine("$SysReset", "Logs"), Path.Combine("$SysReset", "OldOSLogs"), Path.Combine("Windows", "Logs", "PBR")],
     });

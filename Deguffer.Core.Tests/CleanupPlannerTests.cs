@@ -467,14 +467,14 @@ public sealed class CleanupPlannerTests
                 "dotnet-obj", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool",
                 "nuget", "gradle", "npm", "pnpm", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
-                "uv", "pip", "poetry", "conda", "cargo", "go", "zig", "ccache", "sccache", "maven", "vcpkg", "gpu-shader-cache",
+                "uv", "pip", "poetry", "conda", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "maven", "vcpkg", "gpu-shader-cache",
                 "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
-                "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "windows-update-leftovers",
+                "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "upgrade-discarded-files", "windows-update-leftovers",
                 "driver-store", "component-store", "component-store-reset-base", "restore-points", "crash-dumps",
                 "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
                 "claude-code-file-history", "claude-code-conversations", "virtual-disks",
@@ -494,7 +494,7 @@ public sealed class CleanupPlannerTests
 
         Assert.Equal(
             [
-                "retroarch-thumbnails", "recycle-bin", "file-history", "component-store-reset-base", "restore-points", "crash-dumps", "windows-servicing-logs",
+                "retroarch-thumbnails", "recycle-bin", "file-history", "upgrade-discarded-files", "component-store-reset-base", "restore-points", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs", "claude-code-file-history",
                 "claude-code-conversations", "virtual-disks",
             ],

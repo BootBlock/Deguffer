@@ -40,6 +40,12 @@ internal sealed record RelocatedDumpScan(
 /// looked into at all: other rows remove things there, or the user keeps their own files there, and
 /// a dump the user saved beside them is not a record this row may offer.</para>
 ///
+/// <para><b>Live kernel reports go one level deeper, by name.</b> Windows writes a full live dump
+/// directly into the folder <c>LiveKernelReportsPath</c> names and each minidump into a folder named
+/// after the component that asked for it. The dumps directly inside a folder of one of those names are
+/// offered on the same test, and the folder survives with everything else. A folder of any other name
+/// is never looked into: in a place that can be anywhere, it may be the user's own.</para>
+///
 /// <para><b><c>DumpFile</c> names the one file</b>, so it is offered by that name where its header
 /// says it is a dump. A file that cannot be read is left alone rather than offered on its name:
 /// a refusal is not evidence of what a file is, and the full kernel dump is readable only by an
@@ -53,6 +59,10 @@ internal static class RelocatedDumps
     private const string FolderReason =
         "The folder this machine's crash settings name must survive — only the crash dumps directly "
         + "inside it are removed.";
+
+    private const string ComponentFolderReason =
+        "A folder Windows writes one component's live kernel reports into must survive — only the "
+        + "crash dumps directly inside it are removed.";
 
     /// <param name="settings">Every dump location the settings name.</param>
     /// <param name="declared">
@@ -107,7 +117,9 @@ internal static class RelocatedDumps
                 continue;
             }
 
-            ExamineFolder(place.Key.Path, lead, requiresElevation, scan, ct);
+            IReadOnlySet<string> components = place.SelectMany(s => s.ComponentFolders).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            ExamineFolder(place.Key.Path, lead, requiresElevation, components, scan, ct);
         }
 
         return new RelocatedDumpScan(
@@ -118,7 +130,17 @@ internal static class RelocatedDumps
             scan.LeftUnexamined);
     }
 
-    private static void ExamineFolder(string folder, string lead, bool requiresElevation, Collector scan, CancellationToken ct)
+    /// <param name="components">
+    /// The folders inside <paramref name="folder"/> Windows also writes dumps into, by name. Any other
+    /// folder there is never looked into.
+    /// </param>
+    private static void ExamineFolder(
+        string folder,
+        string lead,
+        bool requiresElevation,
+        IReadOnlySet<string> components,
+        Collector scan,
+        CancellationToken ct)
     {
         if (!Reached(folder, lead, scan))
         {
@@ -144,6 +166,66 @@ internal static class RelocatedDumps
 
         scan.Protected.Add((folder, FolderReason));
 
+        var unconfirmed = OfferDumpsAmong(entries, requiresElevation, scan, ct);
+
+        // A component's folder is entered only by its exact name, so a folder of the user's own in a
+        // moved place is never looked into, whatever it holds. One that is a link is named and left,
+        // because the dumps it may lead to are somewhere the setting never named.
+        foreach (var component in entries)
+        {
+            if (component is not DirectoryInfo || !components.Contains(component.Name))
+            {
+                continue;
+            }
+
+            var componentFolder = LongPath.Display(component.FullName);
+
+            if (component.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                scan.Declined(componentFolder, lead);
+                continue;
+            }
+
+            if (FolderEntries.Of(componentFolder) is not { } inside)
+            {
+                scan.Unreached(componentFolder, lead);
+                continue;
+            }
+
+            scan.Protected.Add((componentFolder, ComponentFolderReason));
+            unconfirmed += OfferDumpsAmong(inside, requiresElevation, scan, ct);
+        }
+
+        var listed = components.Count == 0
+            ? $"{lead} Deguffer offers the crash dumps directly inside it one by one, and never the "
+                + "folder or anything else in it."
+            : $"{lead} Deguffer offers the crash dumps directly inside it, and directly inside the "
+                + $"folders Windows names after the components it reports on ({string.Join(", ", components.Order(StringComparer.OrdinalIgnoreCase))}), "
+                + "one by one, and never a folder or anything else there.";
+
+        if (unconfirmed > 0)
+        {
+            scan.LeftUnexamined = true;
+            listed += unconfirmed == 1
+                ? " It could not read one file named as a dump there to confirm that it is one, so it "
+                    + "leaves that file alone."
+                : $" It could not read {unconfirmed} files named as dumps there to confirm that they "
+                    + "are dumps, so it leaves them alone.";
+        }
+
+        scan.Notes.Add(new PlanNote(PlanNoteSeverity.Information, listed));
+    }
+
+    /// <summary>
+    /// Offers each dump among <paramref name="entries"/>, and counts the files named as dumps it could
+    /// not read to confirm.
+    /// </summary>
+    private static int OfferDumpsAmong(
+        IReadOnlyList<FileSystemInfo> entries,
+        bool requiresElevation,
+        Collector scan,
+        CancellationToken ct)
+    {
         var unconfirmed = 0;
 
         foreach (var entry in entries)
@@ -172,20 +254,7 @@ internal static class RelocatedDumps
             }
         }
 
-        var listed = $"{lead} Deguffer offers the crash dumps directly inside it one by one, and never "
-            + "the folder or anything else in it.";
-
-        if (unconfirmed > 0)
-        {
-            scan.LeftUnexamined = true;
-            listed += unconfirmed == 1
-                ? " It could not read one file named as a dump there to confirm that it is one, so it "
-                    + "leaves that file alone."
-                : $" It could not read {unconfirmed} files named as dumps there to confirm that they "
-                    + "are dumps, so it leaves them alone.";
-        }
-
-        scan.Notes.Add(new PlanNote(PlanNoteSeverity.Information, listed));
+        return unconfirmed;
     }
 
     private static void ExamineFile(string file, string lead, bool requiresElevation, Collector scan)

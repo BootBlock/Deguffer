@@ -562,6 +562,182 @@ could depend on somebody else's server is the one Deguffer does not touch.
 
 ---
 
+## Deno cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\deno`, or `DENO_DIR`, or `deno` inside `XDG_CACHE_HOME` |
+| **Method** | Delete each child Deno defines as derived, by path. Never `deno clean` |
+| **Typical size** | Grows with every module and npm package a Deno program imports |
+
+### What it is
+
+Deno keeps one folder for everything it downloads or works out. Deno's own source
+([`deno_dir.rs`](https://github.com/denoland/deno/blob/main/libs/resolver/cache/deno_dir.rs))
+defines what is in it:
+
+- **`remote`** and **`npm`**: modules and npm packages downloaded for the programs you ran.
+- **`gen`**: Deno's compiled output for the TypeScript it ran.
+- **`registries`**: what the language server read from module registries for completions.
+- **`dl`**: releases that `deno upgrade` and `deno compile` downloaded.
+- **Seven databases** (`dep_analysis_cache_v2`, `fast_check_cache_v2`, `node_analysis_cache_v2`,
+  `check_cache_v2`, `v8_code_cache_v2`, `lint_incremental_cache_v2`, `fmt_incremental_cache_v2`),
+  each with the `-wal` and `-shm` files SQLite keeps beside it, since Deno opens them in WAL mode.
+- **`latest.txt`**: when Deno last checked for a new release.
+- **`location_data`**: what Deno programs saved. Each program's `localStorage`, its default
+  `Deno.openKv()` database and what it stored with the Cache API are in here.
+- **`deno_history.txt`**: what you typed into Deno's interactive shell.
+
+Deno finds the folder through `DENO_DIR`, then `XDG_CACHE_HOME` (Deno honours that on Windows
+too), then `%LOCALAPPDATA%\deno`, the default Deno's
+[installation page](https://docs.deno.com/runtime/getting_started/installation/) states.
+
+### What Deguffer does
+
+It removes `remote`, `npm`, `gen`, `registries`, `dl`, the seven databases with their `-wal` and
+`-shm` files, and `latest.txt`, one item each, by path.
+
+**It does not use `deno clean`.** That command deletes the whole folder
+([`clean.rs`](https://github.com/denoland/deno/blob/main/cli/tools/clean.rs)), and with it
+`location_data` and your REPL history. Its `--except` form keeps the files at the top level but
+still deletes the folders inside `location_data`. A tool's own command is the first choice
+everywhere else in Deguffer, and this is the recorded exception, because here the command destroys
+your data.
+
+Deno holds its databases open while it runs, and its language server runs for as long as your
+editor does. If Deno is running, the plan says so, and each item is checked again just before it
+is removed: while Deno runs, nothing is removed.
+
+Deguffer offers nothing if `DENO_DIR` or `XDG_CACHE_HOME` holds a relative path, because Deno joins
+that to its own working directory. For `XDG_CACHE_HOME` it examines only the `deno` folder inside,
+because a cache home is often a folder in your profile that other tools share. If Deno's folder is a
+link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`location_data`** and **`deno_history.txt`** are named survivors, and Deguffer asserts that both
+survived. Nothing downloads them again. Everything else in the folder is Tier 4 and is reported as
+left alone, including folders other Deno tools write (`node_compat_bin`, `tsc`, `task_cache_v1`
+and others) and a database at a version Deno no longer reads.
+
+### What it costs you
+
+The next Deno program you run downloads what it imports again and type-checks from scratch, so it
+starts more slowly once. A program that imports from an address that no longer serves the module
+fails until the import is changed, as it would on any new machine.
+
+### Why Tier 1
+
+Everything removed is a download from a registry or an address that still serves it, or something
+Deno works out again from your source. What Deno programs saved is the one part with no other copy,
+and it is the part Deguffer leaves.
+
+---
+
+## Electron download cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\electron\Cache`, or wherever `electron_config_cache` points |
+| **Method** | Delete each cached download folder, by path |
+| **Typical size** | One zip for each Electron version, platform and architecture installed: 150.9 MB for Electron 45 on 64-bit Windows |
+
+### What it is
+
+Each time a project installs Electron, Electron's downloader keeps the zip it fetched, so the next
+project that installs the same version does not download it again. Nothing ever removes one.
+
+Each download is in a folder of its own, named by the SHA-256 of the address it came from
+([`Cache.ts`](https://github.com/electron/get/blob/main/src/Cache.ts)): 64 lowercase hexadecimal
+characters, such as `523ee27feac8b931299c79e78b7ca4f365aa3f7069fff666cae93c7fb9ff2fee` for
+Electron 15.3.1. The cache sits in `%LOCALAPPDATA%\electron\Cache`, and the `electron_config_cache`
+environment variable moves it
+([installation](https://github.com/electron/electron/blob/main/docs/tutorial/installation.md)).
+
+### What Deguffer does
+
+It removes each folder named that way, whole, and lists it by the zip's name, which says the
+version. Electron has no command that clears the cache, so Deguffer deletes the paths.
+
+Deguffer offers nothing if `electron_config_cache` holds a relative path, is the root of a drive,
+or holds your profile, a temporary folder or a Windows folder. If the cache folder is a link to
+somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+Everything that is not a folder with that name. Older downloaders left other layouts in the same
+folder: zips directly in it, folders named after the whole address, checksum files and interrupted
+`tmp-` downloads. Deguffer leaves them, and asserts that they and the cache folder itself survived.
+
+### What it costs you
+
+The next time a project installs one of these versions from scratch, it downloads it again.
+Projects already installed keep working, because each has its own unpacked copy in its
+`node_modules`.
+
+### Why Tier 1
+
+Every download comes from Electron's releases, and the downloader fetches it again by itself when a
+project needs it.
+
+---
+
+## TypeScript typings cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Microsoft\TypeScript\<version>` |
+| **Method** | Delete each version folder, by path |
+| **Typical size** | Tens of megabytes for each TypeScript version an editor has run |
+
+### What it is
+
+When an editor opens a JavaScript project, TypeScript's language service downloads type
+declarations for the libraries the project uses, so the editor can offer completions. It keeps them
+in one folder per TypeScript version, named by its major and minor version, such as `6.0`, and
+never removes a folder. TypeScript's own source puts the folder there
+(`getGlobalTypingsCacheLocation` in `src/tsserver/nodeServer.ts`), and nothing moves it.
+
+Each version folder is a small npm project: TypeScript's installer runs `npm install` in it for each
+`@types` package a project needs.
+
+### What Deguffer does
+
+It removes each folder named by a version, whole. TypeScript has no command that clears the cache,
+so Deguffer deletes the paths.
+
+**A version in use is left alone.** No program is called `tsserver`: VS Code runs the language
+service inside its own program, other editors run it under Node, and TypeScript 7 runs as `tsc`. So
+Deguffer does not look for a name. It looks for a program working inside a version folder, as the
+installer's npm does while it downloads, or holding a file in it open, and leaves that version.
+
+If `%LOCALAPPDATA%\Microsoft` or the cache folder is a link to somewhere else, Deguffer says so and
+leaves it alone.
+
+### What is protected
+
+Everything in the folder that is not named by a version, and the folder itself. Deguffer asserts
+that they survived.
+
+### What it costs you
+
+The next time an editor opens a JavaScript project with one of these versions, it downloads the
+declarations that project needs again, so completions for its libraries take a moment longer to
+appear once. Your projects and their own packages are untouched.
+
+### Why Tier 1
+
+Every file is a download from the npm registry, and TypeScript fetches it again by itself when a
+project needs it.
+
+---
+
 ## ccache compiler cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -1292,6 +1468,8 @@ called `GPUCache`, so a cache name is never on its own a reason to go in. Deguff
 that file is examined at all. The browser table above only says where to look: a browser's folder
 has to hold `Local State` too, and so does a directory called `EBWebView`.
 
+It looks for that file directly inside `%APPDATA%` and `%LOCALAPPDATA%`, and directly inside each
+packaged application's redirected copies of them (see [Packaged applications](#packaged-applications)).
 To find WebView2's folders, Deguffer looks through the directories under `%APPDATA%` and
 `%LOCALAPPDATA%` down to six levels. It does not follow a link, it does not look inside your
 temporary folder, and it does not look inside another Chromium user-data folder. Everything in one
@@ -1367,13 +1545,32 @@ Every one of the nine is derived content with an authoritative source elsewhere:
 server still has, and compiled output of scripts that are still on your disk. The engine refills all
 of it without being asked, and the cost is a slower first launch.
 
-### Not reached: packaged Electron applications
+### Packaged applications
 
-An application installed from the Microsoft Store does not write to `%APPDATA%`. Windows redirects
-it under `%LOCALAPPDATA%\Packages`. A packaged application's WebView2 folder is reached all the
-same, because Deguffer finds that by its own name. A packaged application that embeds Chromium the
-way an Electron application does keeps a folder with no fixed name there, and Deguffer does not
-currently see its cache.
+An application installed as a package, from the Microsoft Store or from its vendor's own MSIX
+installer, does not write to `%APPDATA%` or `%LOCALAPPDATA%`. Windows keeps what it creates there in
+"a per-user, per-package private location"
+([how packaged desktop apps run](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-behind-the-scenes)),
+which is `LocalCache\Roaming` and `LocalCache\Local` inside the package's folder:
+
+| Installed | Where an Electron application keeps its Chromium folder |
+| --- | --- |
+| Unpackaged | `%APPDATA%\<App>` |
+| As a package | `%LOCALAPPDATA%\Packages\<package>\LocalCache\Roaming\<App>` |
+
+So Deguffer looks one level into each package's `LocalCache\Roaming` and `LocalCache\Local` exactly
+as it looks one level into `%APPDATA%` and `%LOCALAPPDATA%`, and a folder there needs the same
+`Local State` file. On the machine this was measured on, a packaged Electron application kept its
+marker, `Cache`, `Code Cache`, `GPUCache` and the two Dawn caches there, beside its sign-in state
+and a virtual machine's files. Deguffer lists it under its folder's name followed by `(packaged)`,
+because the same application can be installed both ways and each keeps a folder of its own.
+
+**`LocalCache` is not a cache.** Microsoft defines it as files that are left out of backup and
+restore, and on the same machine it held a virtual machine's disk and the Python packages the
+Microsoft Store edition of Python installed. Nothing is removed for being in it: only the nine
+Chromium directories inside an identified folder are, and a folder further down, in `LocalLow`, or
+in `LocalCache` itself is not identified. A packaged application's WebView2 folder is found by its
+own name, as before.
 
 ### Not reached: WebView2 folders further down
 
@@ -5649,8 +5846,8 @@ to type the words out.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\CrashDumps`, `ReportArchive` and `ReportQueue` under both `%LOCALAPPDATA%\Microsoft\Windows\WER` and `%PROGRAMDATA%\Microsoft\Windows\WER`, `C:\Windows\LiveKernelReports`, `C:\Windows\Minidump`, and `C:\Windows\MEMORY.DMP`, plus wherever this machine's crash settings send dumps instead |
-| **Method** | Delete each of those eight, one row each, and each dump in a place the settings name, one file at a time |
+| **Location** | `%LOCALAPPDATA%\CrashDumps`, `ReportArchive` and `ReportQueue` under both `%LOCALAPPDATA%\Microsoft\Windows\WER` and `%PROGRAMDATA%\Microsoft\Windows\WER`, `%LOCALAPPDATA%\Microsoft\Windows\TaskManager\LiveKernelDumps`, `C:\Windows\LiveKernelReports`, `C:\Windows\Minidump`, and `C:\Windows\MEMORY.DMP`, plus wherever this machine's crash settings send dumps instead |
+| **Method** | Delete each of those nine, one row each, and each dump in a place the settings name, one file at a time |
 | **Typical size** | Usually tens of megabytes. `MEMORY.DMP` is the exception: on a machine set to write a complete dump it is the size of your installed memory, so one stop error leaves 32 or 64 GB behind |
 
 ### What it is
@@ -5662,18 +5859,22 @@ here and they come from different places:
 - **`WER`** — Windows Error Reporting — holds the reports Windows prepares to send to Microsoft.
   `ReportQueue` is what has not been sent yet, and `ReportArchive` is the record of what has. There
   is one pair for the whole machine and one in your own profile.
+- **`TaskManager\LiveKernelDumps`** in your own profile holds the live kernel memory dumps somebody
+  asked Task Manager for, from its *Create live kernel memory dump file* command. Microsoft gives
+  this as where they go by default.
 - **`Minidump`, `LiveKernelReports` and `MEMORY.DMP`** are the kernel's own. A minidump is written
   for each blue screen; a live kernel report is written when a driver was reset without stopping the
   machine; and `MEMORY.DMP` is the full dump from the most recent stop error.
 
 ### What Deguffer does
 
-It removes the eight locations above, one row each, so you can clear the application dumps and keep
+It removes the nine locations above, one row each, so you can clear the application dumps and keep
 the kernel ones — or the reverse.
 
-**Windows can be told to write dumps somewhere else, and Deguffer reads where.** Three settings move
+**Windows can be told to write dumps somewhere else, and Deguffer reads where.** Four settings move
 them: `DumpFile` and `MinidumpDir` under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl`
-move the kernel's full dump and its minidumps, and `DumpFolder` under
+move the kernel's full dump and its minidumps, `LiveKernelReportsPath` in that key's
+`LiveKernelReports` subkey moves live kernel reports, and `DumpFolder` under
 `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps` moves application
 dumps, for every application or, in a key named after one, for that application alone. Moving the
 full dump to another drive is common when the system drive is small. Each moved place is named in
@@ -5682,7 +5883,11 @@ the plan, whatever was found there.
 A moved folder is never offered as a folder, because it can be any folder: a drive root, Documents,
 anywhere. Deguffer offers only the files directly inside it that are named `*.dmp` and start the way
 a crash dump starts, each one by name, and everything else there stays. The file `DumpFile` names is
-offered by that name on the same test. Deguffer does not look into a moved folder at all where it is
+offered by that name on the same test. Live kernel reports go one level deeper: Windows writes each
+small one into a folder named after the component that asked for it, so Deguffer also offers the
+dumps directly inside a folder named `NDIS`, `PDCRevocation`, `PoW32kWatchdog`, `USBHUB3` or
+`WATCHDOG` there, the five Microsoft names, and never looks into a folder of any other name. Deguffer
+does not look into a moved folder at all where it is
 a drive root, one of your own folders, or another folder other rows remove things from, and it does
 not look through a link. A full kernel dump can be read only by an administrator, so without the
 **Elevate** button a moved one is named and left alone rather than offered on its name.
@@ -5695,7 +5900,7 @@ of exact paths, and nothing else under the Windows directory is reachable, whate
 that break Windows if you get them wrong — are named as things that must still be there when the run
 finishes, and Deguffer checks that they are.
 
-**Most of it needs administrator rights.** Only `%LOCALAPPDATA%\CrashDumps` is yours to clear.
+**Most of it needs administrator rights.** Only the folders in your own profile are yours to clear.
 Deguffer shows the rest either way, tells you which they are, and leaves them unticked until you
 restart it as administrator with the **Elevate** button. It does not hide them, because a folder you
 are never told about is one you can never decide about.
@@ -5937,6 +6142,56 @@ itself keeps working exactly as it is.
 Nothing here comes back except by upgrading again, and what you pay is a named capability — going
 back, and resetting from local files — rather than a slower next use. That is Tier 2's shape. It is
 not Tier 3, because none of it is a record of something you did.
+
+---
+
+## Files discarded by a Windows upgrade
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent.
+
+| | |
+| --- | --- |
+| **Location** | `C:\$WINDOWS.~Q`, `C:\$INPLACE.~TR` and `C:\$Windows.~LS` |
+| **Method** | Windows' own Disk Cleanup handler, *Upgrade Discarded Files*, one row for all three |
+| **Typical size** | Not yet measured: none of the three was on the machine the survey measured |
+
+### What it is
+
+When Windows upgrades, it keeps a copy of any file it did not move to the new version and did not
+recognise as part of Windows. That is Windows' own description, given by the cleanup it registers for
+these folders, and it goes on: "If you are sure that no user's personal files are missing after the
+upgrade, you can delete these files." Microsoft documents nothing else about them. The three names
+are the ones that cleanup's registration lists, in the `SetupDirectories` value under
+`HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Upgrade Discarded Files`.
+
+### What Deguffer does
+
+It asks Windows to run that cleanup, the one Disk Cleanup's *Clean up system files* lists as *Files
+discarded by Windows upgrade*, and never deletes the folders itself. It is offered on exactly the
+terms of the [previous Windows installation](#previous-windows-installation), through the same Windows
+component: only once the upgrade can no longer be undone, never while an update is unfinished, and
+only where Windows' own cleanup says it has something to clear. The uninstall window is also the time
+to notice that something of yours did not come across. Running it needs administrator rights.
+
+### What is protected
+
+The top of the drive is never listed, and what Windows keeps there is named in the plan and checked
+after the run, as for the previous installation. `Windows.old` is a different row, and this one never
+names it.
+
+### What it costs you
+
+**Every file the upgrade set aside is gone for good**, including any of your own among them. Before
+removing these, check that nothing of yours has been missing since the upgrade, and look in these
+folders if something has.
+
+### Why Tier 3
+
+By Windows' own description, what is kept here is whatever the upgrade could not place, which is the
+part of an upgrade most likely to be somebody's own files, and the copy here may be the only one.
+Nothing re-creates it. The previous installation is Tier 2 because what it costs is a capability,
+going back. This costs whatever the files were, and that is Tier 3's definition.
 
 ---
 
@@ -6764,7 +7019,19 @@ drive stops trusting the number.
 
 It finds each disk from the tools' own records, never by searching for `.vhdx` files: a copied disk
 or a Hyper-V machine's disk looks the same, and only the record says whose it is and which route
-applies. A WSL 1 distribution has no disk and is left out. A disk a record names that is not there
+applies. A WSL 1 distribution has no disk and is left out.
+
+Container tools that run on WSL register distributions of their own, and each is named as that
+tool's, with that tool's route:
+
+| Distribution | Owner | Source |
+| --- | --- | --- |
+| `docker-desktop-data`, `docker-desktop` | Docker Desktop's data, and its own Linux | Docker Desktop's documentation |
+| `podman-machine-default`, or `podman-<name>` | A Podman machine. Podman adds the `podman-` prefix only to a name that does not already begin with `podman` | containers/podman [`pkg/machine/wsl/machine.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/machine.go), [`pkg/machine/env/dir.go`](https://github.com/containers/podman/blob/main/pkg/machine/env/dir.go) (`WithPodmanPrefix`), [`pkg/machine/define/config.go`](https://github.com/containers/podman/blob/main/pkg/machine/define/config.go) (`DefaultMachineName`) |
+| `podman-net-usermode` | The distribution Podman makes for user-mode networking | [`pkg/machine/wsl/declares.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/declares.go), [`usermodenet.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/usermodenet.go) |
+| `rancher-desktop-data`, `rancher-desktop` | Rancher Desktop's data (images, volumes and Kubernetes state under `/var/lib`), and its own Linux, which it imports again when missing and replaces on upgrade | rancher-sandbox/rancher-desktop [`pkg/rancher-desktop/backend/wsl.ts`](https://github.com/rancher-sandbox/rancher-desktop/blob/main/pkg/rancher-desktop/backend/wsl.ts) |
+
+Any other distribution is the user's own. A disk a record names that is not there
 is reported as missing, not as an empty disk, and one Windows will not describe is reported as
 unreadable.
 
@@ -6778,13 +7045,36 @@ For each disk the row states:
   row says why there is no inside figure. Unused volumes are named as holding data.
 - **The route, in order.** For a WSL distribution: delete what is no longer needed inside it, then
   compact the disk with `wsl --manage <distribution> --compact` (WSL 3.0.1 and later), or on an
-  older WSL run `wsl --shutdown` and then `Optimize-VHD` from the Hyper-V module. A sparse disk gives
-  space back by itself once Linux discards it (`sudo fstrim -a`), and `Optimize-VHD` refuses a sparse
-  file. For Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and
-  later give freed space back to the drive by themselves, which 4.59 turned off for the time being,
-  and Docker Desktop's *Clean up data* resets the disk and removes every container and image.
+  older WSL run `wsl --shutdown` and then `Optimize-VHD` from the Hyper-V module. `Optimize-VHD` needs
+  the disk detached or attached read-only
+  ([cmdlet page](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd)), and the
+  Hyper-V module refuses an unelevated user outside the Hyper-V Administrators group (observed), so the
+  route says it needs an elevated PowerShell or that membership. A sparse disk gives space back by
+  itself once Linux discards it (`sudo fstrim -a`), so its route needs no compaction. No Microsoft
+  source settles how `Optimize-VHD` treats a sparse file (the Windows SDK's text for `0xC03A001A` says
+  virtual disk files "must not be sparse", and Microsoft Learn's entry for the same code does not), so
+  the route claims nothing about it. For
+  Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and later give
+  freed space back to the drive by themselves, which 4.59 turned off for the time being, and Docker
+  Desktop's *Clean up data* resets the disk and removes every container and image. For a Podman
+  machine: `podman system prune`, which Podman's command on Windows runs through the machine
+  ([podman-for-windows](https://github.com/containers/podman/blob/main/docs/tutorials/podman-for-windows.md)),
+  then WSL's compaction. For Rancher Desktop's data: with the moby engine, the
+  `docker container prune` and `docker image prune --all` its guide to reclaiming the space a storage
+  driver change leaves behind runs
+  ([Reclaiming Disk Space](https://docs.rancherdesktop.io/how-to-guides/migrating-images)), or its Reset Kubernetes and Factory Reset
+  (`rdctl reset --factory`), then WSL's compaction.
 
 Explore says the same thing when you hover a disk, and refuses to delete one or the folder it is in.
+
+### No clean removes a registered disk
+
+The row is how every clean learns where the disks are. Before a preview plans anything, the planner
+asks each row that reads a virtualisation tool's records (`IRegistersVirtualMachineStorage`) for the
+disks and folders it registered. A step of *any* row that would reach one is withheld, with a
+warning naming the disk, and the disk is protected, so §5.6 proves after the run that it survived.
+Every clean then proves each registered disk still standing, whichever rows it cleans and whether
+or not this row was scanned. Explore's refusal is read from the same registration.
 
 ### Why nothing is run
 

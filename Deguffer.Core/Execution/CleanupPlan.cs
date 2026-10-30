@@ -98,6 +98,14 @@ public enum Withholding
     /// restart. See <see cref="Safety.IWindowsServicing"/>.
     /// </summary>
     UpdateInProgress,
+
+    /// <summary>
+    /// A virtual machine's disk or folder that a virtualisation tool registered, inside what a step would
+    /// have reached, which Deguffer never removes. Protected on its existence. Every clean proves it
+    /// standing whether or not this plan runs, through its registering row (see
+    /// <see cref="VirtualMachineStoragePlan.ProofFor"/>).
+    /// </summary>
+    VirtualMachineStorage,
 }
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
@@ -337,6 +345,14 @@ public sealed record CleanupPlan
     /// would be a claim about a folder that is full and will be offered after the next restart.
     /// </summary>
     public bool WaitsForAnUpdate => ProtectedPaths.Any(p => p.Withheld == Withholding.UpdateInProgress);
+
+    /// <summary>
+    /// Whether this plan leaves a virtual machine's disk or folder where it is, because a step here would
+    /// have reached it and was withheld. The same shape as
+    /// <see cref="HoldsMailStores"/>, for the same reason.
+    /// </summary>
+    public bool HoldsVirtualMachineStorage =>
+        ProtectedPaths.Any(p => p.Withheld == Withholding.VirtualMachineStorage);
 
     /// <summary>
     /// Every path this plan would destroy, for display and for tests.

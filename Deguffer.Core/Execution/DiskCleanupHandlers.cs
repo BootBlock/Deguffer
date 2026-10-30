@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
@@ -33,6 +34,20 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
 
     private const string VolumeCaches = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches";
 
+    /// <summary>
+    /// Registrations this host refuses to load, whatever asks for them. Windows registers each one as
+    /// a cleanup, and each one removes something that is not a cache.
+    ///
+    /// <para><b><c>DownloadsFolder</c></b> is Windows' data-driven cleaner pointed at
+    /// <c>%USERPROFILE%\Downloads</c> with <c>FileList=*.*</c>, no <c>LastAccess</c>, and
+    /// <c>Flags=65</c>: <c>DDEVCF_DOSUBDIRS</c> and <c>DDEVCF_REMOVEDIRS</c>, which Microsoft's
+    /// registration reference defines as searching recursively and removing every matching directory
+    /// with its subdirectories. It empties the user's Downloads folder whatever its age, and the
+    /// handler's own host is the last place that can refuse it for every caller at once.</para>
+    /// </summary>
+    internal static readonly FrozenSet<string> NeverHosted =
+        FrozenSet.ToFrozenSet(["DownloadsFolder"], StringComparer.OrdinalIgnoreCase);
+
     private DiskCleanupHandlers()
     {
     }
@@ -42,7 +57,7 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
         ArgumentException.ThrowIfNullOrWhiteSpace(handler);
         ArgumentException.ThrowIfNullOrWhiteSpace(volume);
 
-        if (NotADrive(volume) is { } refused)
+        if (NotHosted(handler, volume) is { } refused)
         {
             return new DiskCleanupSurvey(DiskCleanupAnswer.Unavailable, refused);
         }
@@ -83,7 +98,7 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
         ArgumentException.ThrowIfNullOrWhiteSpace(handler);
         ArgumentException.ThrowIfNullOrWhiteSpace(volume);
 
-        if (NotADrive(volume) is { } refused)
+        if (NotHosted(handler, volume) is { } refused)
         {
             return new DiskCleanupOutcome(Ran: false, refused);
         }
@@ -125,14 +140,25 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
     }
 
     /// <summary>
-    /// Why <paramref name="volume"/> is not something a handler may be given, or null where it is the
-    /// top of a drive in display form. The handler resolves its registered directories against what
-    /// it is given, so a value that names somewhere else sends Windows' cleanup there.
+    /// Why <paramref name="handler"/> may not be loaded for <paramref name="volume"/>, or null where it
+    /// may. Asked first by both <see cref="Survey"/> and <see cref="Run"/>, before the registration is
+    /// read, so neither can reach a handler the other would refuse.
+    ///
+    /// <para>The volume must be the top of a drive in display form: the handler resolves its registered
+    /// directories against what it is given, so a value that names somewhere else sends Windows'
+    /// cleanup there.</para>
     /// </summary>
-    private static string? NotADrive(string volume) =>
-        VolumeRoot.IsDriveTop(volume)
+    internal static string? NotHosted(string handler, string volume)
+    {
+        if (NeverHosted.Contains(handler))
+        {
+            return $"Windows' '{handler}' cleanup removes what is not a cache, so Deguffer never runs it.";
+        }
+
+        return VolumeRoot.IsDriveTop(volume)
             ? null
             : $"'{volume}' is not the top of a drive, so Windows was not asked to clear anything on it.";
+    }
 
     private static string Unregistered(string handler) =>
         $"Windows no longer registers its '{handler}' cleanup, so nothing was cleared.";

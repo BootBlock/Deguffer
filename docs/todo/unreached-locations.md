@@ -842,6 +842,9 @@ unseen. The survey behind issue #61 found 23 WebView2 hosts on one machine, and 
 more deeper than the scan looked. A later count, taken for the fix, found 19, with 5 under `Packages`. The blind spot was nesting depth, and MSIX is one of several things that produce it.
 `ChromiumUserDataWalk` now finds an `EBWebView` folder up to six levels down, packaged or not. A
 packaged Electron application, whose folder has no fixed name, is still unreached.
+**Update (#407):** it is reached now. The walk identifies a folder one level into a package's
+`LocalCache\Roaming` or `LocalCache\Local` by its `Local State`, and still never treats `LocalCache`
+as a licence.
 
 ---
 
@@ -1576,9 +1579,13 @@ report the two numbers separately. The audited machine carried an 8.49 GB contai
 
 What has changed since §5.4 was written is that the compaction half is now harder, not easier:
 
-- WSL gained sparse VHD support, which reclaims space automatically. Sparse disks then **break
-  `Optimize-VHD`**, which refuses any file that is sparse, compressed or encrypted. The Windows-side
-  compaction path a provider would reach for fails on exactly the disks that are newest.
+- WSL gained sparse VHD support, which reclaims space automatically. No Microsoft page documents
+  `Optimize-VHD` on a sparse disk. The Windows SDK's message for `ERROR_VIRTUAL_DISK_LIMITATION`
+  (`0xC03A001A`, in `winerror.h`) says virtual disk files "must not be sparse", while Microsoft
+  Learn's entry for the same code names only compressed and encrypted files, and Microsoft's own WSL
+  makes its disks sparse and runs them. So the Windows-side compaction path a provider would reach
+  for is undocumented on exactly the disks that are newest. `Optimize-VHD` also needs an elevated
+  user or one in Hyper-V Administrators: the Hyper-V module refuses anyone else (observed).
 - For a sparse disk the reclaim is `fstrim` run inside the Linux guest, which is not an operation a
   Windows cleanup tool can perform.
 - Sparse VHD was placed behind `--allow-unsafe` in WSL 2.5.6 after reports of VHDX corruption.
@@ -1595,10 +1602,14 @@ tick. The tier is 3 rather than the 2 proposed above, because the tier describes
 deleted disk is a distribution or every container and volume gone for good. Explore names each
 disk's owner and route on hover, and refuses to delete one.
 
-**Still open:** no run checks afterwards that a disk survived. The report has no step, so no run
-includes it, and no other provider's plan knows where the disks are, so a provider whose scope
-happened to hold an imported distribution's folder could remove it unnoticed. Explore's refusal is
-the only guard today. A run-wide refusal of the registered disks would close it.
+**Closed: every run refuses the registered disks.** Before a preview plans anything, the planner
+asks each row that registers a virtual machine's storage (`IRegistersVirtualMachineStorage`) where
+its disks are. A step of any row that would reach one is withheld, and the disk is protected, so
+§5.6 proves after the run that it survived. Every clean then proves each registered disk still
+standing, whether or not the report's row was scanned, and Explore's refusal is read from the same
+registration. Container
+tools on WSL are named by their own distributions: Docker Desktop, Podman and Rancher Desktop, each
+with its own route.
 
 ---
 
@@ -1679,6 +1690,8 @@ competing cleaners actively do. Worth encoding as knowledge, not merely omitting
 | Squirrel `packages\RELEASES` and `.betaId` | An index and an identifier, in a folder of downloaded packages. `Update.exe --processStart` reads the index with no error handling to decide which build to launch, so removing it stops the application starting from its own shortcut. Named survivors on the Squirrel provider — see §12 |
 | Steam `userdata`, `steamapps\workshop`, `widevine` | Cloud saves, settings and screenshots; subscribed Workshop content; and a downloaded decryption module. All three sit near caches the client keeps, and none of them is one. The first two are named survivors on the Steam provider, and `widevine` is refused at Tier 4 in its Explore declaration |
 | `.vs\...\.suo` | The user's own solution options, inside an otherwise disposable directory |
+| The `DownloadsFolder` Disk Cleanup handler | Windows registers it as a cleanup, and it empties the user's Downloads folder, subfolders included, with no age rule (`Flags=65`, no `LastAccess`). The Disk Cleanup host refuses to load it by name, for a survey and a run alike (`DiskCleanupHandlers.NeverHosted`) |
+| `%LOCALAPPDATA%\Microsoft\WinGet\Packages` | Programs WinGet installed without an installer, in a folder named like a download cache. Each runs from here through a link on the command path and is listed under Apps. Tier 4: no provider offers it, and Explore explains it and points to `winget uninstall` |
 
 ---
 
