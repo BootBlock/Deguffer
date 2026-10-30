@@ -43,8 +43,7 @@ public enum StartupOrderDirection
 /// </summary>
 public static class StartupRowOrder
 {
-    // Current culture and ignoring case, as StartupReader orders a reading, so the shipped order is the
-    // order the reading arrives in and choosing Name moves nothing.
+    // Current culture and ignoring case: these are names a reader reads, in the reader's own language.
     private static readonly StringComparer Words = StringComparer.CurrentCultureIgnoreCase;
 
     /// <summary>

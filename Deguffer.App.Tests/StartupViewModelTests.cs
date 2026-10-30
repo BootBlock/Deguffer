@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Memory;
@@ -20,6 +21,10 @@ public sealed class StartupViewModelTests : IDisposable
 
     /// <summary>The state Task Manager writes to disable an entry (§7.5).</summary>
     private const uint DisabledState = 3;
+
+    /// <summary>Segoe Fluent Icons' Accept and Blocked, by code point.</summary>
+    private const string AcceptGlyph = "\uE8FB";
+    private const string BlockedGlyph = "\uE733";
 
     private readonly TempDirectory _temp = new();
     private readonly FakeStartupRegistry _registry = new();
@@ -135,6 +140,11 @@ public sealed class StartupViewModelTests : IDisposable
 
         var bravo = page.Rows[2];
         page.SelectedRow = bravo;
+
+        // Counted by what the list was told: a list cleared and refilled ends up holding the same rows.
+        var changes = new List<NotifyCollectionChangedAction>();
+        page.Rows.CollectionChanged += (_, e) => changes.Add(e.Action);
+
         page.Order = StartupOrder.Name;
 
         Assert.Equal(["Charlie", "Bravo", "Alpha"], page.Rows.Select(r => r.Key.Name));
@@ -145,6 +155,8 @@ public sealed class StartupViewModelTests : IDisposable
 
         Assert.Equal(["Alpha", "Bravo", "Charlie"], page.Rows.Select(r => r.Key.Name));
         Assert.Same(bravo, page.SelectedRow);
+        Assert.NotEmpty(changes);
+        Assert.All(changes, action => Assert.Equal(NotifyCollectionChangedAction.Move, action));
     });
 
     /// <summary>The change button's word and icon name the same change.</summary>
@@ -159,12 +171,12 @@ public sealed class StartupViewModelTests : IDisposable
         await page.RefreshAsync();
 
         page.SelectedRow = page.Rows[0];
-        var disable = page.ChangeGlyph;
         Assert.Equal("Disable", page.ChangeLabel);
+        Assert.Equal(BlockedGlyph, page.ChangeGlyph);
 
         page.SelectedRow = page.Rows[1];
         Assert.Equal("Enable", page.ChangeLabel);
-        Assert.NotEqual(disable, page.ChangeGlyph);
+        Assert.Equal(AcceptGlyph, page.ChangeGlyph);
     });
 
     [Fact]
