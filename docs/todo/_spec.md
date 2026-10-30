@@ -173,20 +173,24 @@ workspace folder is not a safe identity, so the workspace is not the unit.
 
 **Decided ([#84](https://github.com/BootBlock/Deguffer/issues/84)): a Code - OSS editor's AI chat
 history is offered at Tier 3, one conversation at a time, and nothing else in `workspaceStorage` is.**
-Re-measured, 98% of the directory was chat history (8.6 GB of `chatSessions` and 2.4 GB of
-`chatEditingSessions` across 35 workspaces), and the `state.vscdb` files the directory exists for were
-106 MB. Refusing to show that is Deguffer deciding for the user. Claude Code's conversations already
+Re-measured, 11.5 GB of the 11.7 GB directory was chat history and Copilot's data around it, and the
+`state.vscdb` files the directory exists for were 106 MB. A later count put 8.6 GB in `chatSessions`
+and 2.4 GB in `chatEditingSessions`, across 35 workspaces. Refusing to show that is Deguffer deciding for the user. Claude Code's conversations already
 set the shape: each named by its title and dates, never pre-selected, and refused while in use. Built
 under [#404](https://github.com/BootBlock/Deguffer/issues/404), to these rules:
 
-- **One conversation is one item:** `chatSessions\<id>.jsonl` (`<id>.json` before 1.109), with the
-  `chatEditingSessions\<id>` folder and Copilot's `transcripts\<id>.jsonl` of the same id. The editing
+- **One conversation is one item:** `chatSessions\<id>.jsonl`, or `<id>.json` before 1.109 and
+  wherever `chat.useLogSessionStorage` is off, so both forms are recognised on every version. With it
+  go the `chatEditingSessions\<id>` folder and Copilot's `transcripts\<id>.jsonl` of the same id. The editing
   folder holds the snapshots that keep or undo the conversation's edits, the editor does not delete
   it when it deletes the conversation, and nothing reaches it once the conversation is gone.
 - **Named as the editor names it:** the custom title, else the first line of the first request, and
   dated by the last request, else the creation date. A file that does not parse is Tier 4.
-- **§5.2 through `CacheLevel`:** `User`, `workspaceStorage` and each workspace folder recognise
-  nothing, and the three conversation directories recognise exactly the ids the pass offers.
+- **§5.2, one declared level per containing directory** (`CacheLevel`'s rule), built for each pass
+  from what it found, as `ClaudeCodeConversationProvider` builds its roots. `User`,
+  `workspaceStorage`, each workspace folder and its `GitHub.copilot-chat` recognise nothing.
+  `chatSessions`, `chatEditingSessions` and `GitHub.copilot-chat\transcripts` recognise exactly the
+  ids the pass offers, so an editing folder whose conversation is already gone is not offered.
   `state.vscdb`, `workspace.json`, every other extension's folder, and Copilot's memory, indexes and
   logs stay Tier 4, and §5.6 asserts them.
 - **`state.vscdb` is never written.** The editor's history index is in it, so a removed conversation
