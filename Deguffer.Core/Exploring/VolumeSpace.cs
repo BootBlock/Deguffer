@@ -131,9 +131,10 @@ public readonly record struct VolumeSpace(
     /// counted there are never drawn a second time.</para>
     ///
     /// <para><b>A scan that counted more than is in use leaves nothing, and says by how much.</b>
-    /// Drawn by space on disk, the file table cannot count more than the volume holds. What can is a
-    /// walk, which counts a hard link once per name and a CompactOS file at its length, and files
-    /// written while the scan ran. The block is clamped at zero, and
+    /// Both routes count a hard-linked file once for each of its names (see
+    /// <see cref="Scanning.Mft.MftLink"/>), and on a system volume much of Windows' component store
+    /// is such a file. A walk also counts a CompactOS file at its length, and files written while
+    /// the scan ran. The block is clamped at zero, and
     /// <see cref="VolumeParts.Overcounted"/> keeps what the clamp hid, so the page can say so rather
     /// than draw a picture that only appears to add up.</para>
     /// </summary>

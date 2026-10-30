@@ -150,42 +150,47 @@ internal sealed class MftDeferredRecord
 
     /// <summary>
     /// The list itself could not be trusted, so anything the base record did not settle could have
-    /// been anywhere. A file has one reparse point, and the piece of its stream starting at cluster 0
-    /// states the whole stream's sizes, so either one held by the base record is settled; a name
-    /// is settled only where nothing could displace it.
+    /// been anywhere.
     ///
-    /// <para>CompactOS's stream is in doubt only where the file could be CompactOS's: its reparse
-    /// point is unsettled, which loses the size already, or the base record holds CompactOS's own.
-    /// Any other reparse point settles that there is no such stream, so the file keeps its size.</para>
+    /// <para>A file's names are never settled: any record the list named could have held another of
+    /// its links, in a folder whose total would then be short with nothing to say so. Its names are
+    /// lost, and a file with a lost name cannot be placed, whatever its own record says of its
+    /// size.</para>
+    ///
+    /// <para>A directory has no second name, so its name is settled where nothing could displace
+    /// it. It has one reparse point, so one held by the base record is settled too. Nothing else of
+    /// a directory is read.</para>
     /// </summary>
-    private void FailList()
-    {
-        var unsettled = (MftAttributeKinds.DataStart | MftAttributeKinds.ReparsePoint) & ~_draft.BaseSupplied;
-
-        if (_draft.BaseIsCompactOs && !_draft.BaseSupplied.HasFlag(MftAttributeKinds.WofDataStart))
-        {
-            unsettled |= MftAttributeKinds.WofDataStart;
-        }
-
-        Fail(unsettled | (_draft.BaseRank != 0 ? MftAttributeKinds.Name : MftAttributeKinds.None));
-    }
+    private void FailList() =>
+        Fail(_isDirectory
+            ? (MftAttributeKinds.ReparsePoint & ~_draft.BaseSupplied) | (NamesSettled ? MftAttributeKinds.None : MftAttributeKinds.Name)
+            : MftAttributeKinds.Name);
 
     /// <summary>
     /// What one entry would have to supply, judged by what the base record already settled.
     ///
-    /// <para>A name is wanted only where the base record's own best name could be displaced. One
-    /// already in the best namespace cannot be, and a tie goes to the base record.</para>
+    /// <para>Every name a file's list sends the reader to is wanted, because each that is not an 8.3
+    /// alias is another of its links, and the file is counted under each (see <see cref="MftLink"/>).
+    /// A directory has one name and no links, so its names are wanted only where the base record's
+    /// own best name could be displaced. One already in the best namespace cannot be, and a tie goes
+    /// to the base record.</para>
     ///
     /// <para>Only the piece of the stream starting at cluster 0 is wanted, because only that piece
     /// states the stream's allocated, data and valid sizes. A fragmented file can list hundreds of
     /// pieces, and reading the rest would learn nothing. A directory's own stream is never counted,
     /// so its pieces are not wanted at all.</para>
     /// </summary>
+    /// <summary>
+    /// Whether the base record settles every name the scan needs: a directory's best name, in the
+    /// best namespace. NTFS gives a directory no second link, so nothing elsewhere can add one.
+    /// </summary>
+    private bool NamesSettled => _isDirectory && _draft.BaseRank == 0;
+
     private MftAttributeKinds NeedsOf(MftAttributeListEntry entry)
     {
         switch (entry.Type)
         {
-            case MftRecordParser.AttributeFileName when _draft.BaseRank != 0:
+            case MftRecordParser.AttributeFileName when !NamesSettled:
                 return MftAttributeKinds.Name;
 
             case MftRecordParser.AttributeData when !entry.IsNamed:

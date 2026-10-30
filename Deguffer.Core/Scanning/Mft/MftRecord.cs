@@ -52,6 +52,11 @@ namespace Deguffer.Core.Scanning.Mft;
 /// dates and the storage come from, so the table answers it for nothing more than the read it
 /// already makes.
 /// </param>
+/// <param name="OtherLinks">
+/// The file's other names, each in the directory that holds it, or null where the file has only the
+/// one it travels with. See <see cref="MftLink"/>. Null rather than empty, because almost no record
+/// has one and an empty list for each would be allocated only to be thrown away.
+/// </param>
 public readonly record struct MftRecord(
     uint ParentRecordNumber,
     ScanSize? Size,
@@ -60,7 +65,8 @@ public readonly record struct MftRecord(
     long CreatedFileTime,
     long LastWrittenFileTime,
     FileStorage Storage = FileStorage.Plain,
-    FileVisibility Visibility = FileVisibility.Shown)
+    FileVisibility Visibility = FileVisibility.Shown,
+    IReadOnlyList<MftLink>? OtherLinks = null)
 {
     /// <summary>
     /// The root directory always occupies record 5. Path resolution starts here, and the root is

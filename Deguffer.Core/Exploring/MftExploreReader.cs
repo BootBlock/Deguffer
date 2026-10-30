@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -122,6 +123,11 @@ internal static class MftExploreReader
         // is read.
         var sawUnreadableRecord = false;
 
+        // Each of a file's other names, met on whichever parse thread, with the record it names. Each
+        // becomes a node of its own once the table is read, so the file is drawn under every folder
+        // that names it, as the walk draws it. See MftLink.
+        var linksMet = new ConcurrentQueue<(int Record, MftRecord Described, MftLink Link)>();
+
         var couldNotReadWholeTable = !MftRecordStream.TryReadAll(
             source,
             records,
@@ -159,8 +165,17 @@ internal static class MftExploreReader
                 }
 
                 // A parent outside the table is ordinary on a live volume: a directory removed
-                // mid-read, or a table that grew after its size was measured. Such a record cannot
-                // be reached from the root, so it draws nothing and dropping it costs nothing.
+                // mid-read, or a table that grew after its size was measured. Such a name cannot
+                // be reached from the root, so it draws nothing and dropping it costs nothing. The
+                // file's other names are judged one by one.
+                foreach (var link in record.OtherLinks ?? [])
+                {
+                    if (link.ParentRecordNumber < (uint)count)
+                    {
+                        linksMet.Enqueue(((int)number, record, link));
+                    }
+                }
+
                 if (record.ParentRecordNumber >= (uint)count)
                 {
                     return true;
@@ -173,22 +188,42 @@ internal static class MftExploreReader
                     nameNumbers[number] = names.Intern(name);
                 }
 
-                parents[number] = (int)record.ParentRecordNumber;
-                sizes[number] = record.Size?.Allocated ?? 0;
-                lengths[number] = record.Size?.Logical ?? 0;
-                storage[number] = record.Storage;
-                flags[number] = ExploreNodeFlags.Present
-                    | (record.IsDirectory ? ExploreNodeFlags.Directory : ExploreNodeFlags.None)
-                    | (record.IsReparsePoint ? ExploreNodeFlags.Link : ExploreNodeFlags.None)
-                    | (record.Size is null ? ExploreNodeFlags.SizeUnknown : ExploreNodeFlags.None);
-                created[number] = ExploreTimestamp.FromFileTime(record.CreatedFileTime);
-                modified[number] = ExploreTimestamp.FromFileTime(record.LastWrittenFileTime);
-                visibility[number] = record.Visibility;
-
+                Describe((int)number, record, (int)record.ParentRecordNumber);
                 return true;
             },
             onProgress,
             ct);
+
+        // In record order, then by folder and name, so one table always numbers its links alike
+        // whatever order the parse threads met them in. Grown once, and only where a link was met.
+        var links = linksMet
+            .OrderBy(met => met.Record)
+            .ThenBy(met => met.Link.ParentRecordNumber)
+            .ThenBy(met => met.Link.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        if (links.Length > 0)
+        {
+            var nodes = count + links.Length;
+
+            Array.Resize(ref nameNumbers, nodes);
+            Array.Resize(ref parents, nodes);
+            Array.Resize(ref sizes, nodes);
+            Array.Resize(ref lengths, nodes);
+            Array.Resize(ref storage, nodes);
+            Array.Resize(ref flags, nodes);
+            Array.Resize(ref created, nodes);
+            Array.Resize(ref modified, nodes);
+            Array.Resize(ref visibility, nodes);
+
+            for (var i = 0; i < links.Length; i++)
+            {
+                var (_, described, link) = links[i];
+
+                nameNumbers[count + i] = names.Intern(link.Name);
+                Describe(count + i, described, (int)link.ParentRecordNumber);
+            }
+        }
 
         // The volume's root is forced present whether or not record 5 parsed. Resolution starts
         // here and every directory on the volume hangs off it, so a table whose root record declined
@@ -233,6 +268,23 @@ internal static class MftExploreReader
             FallbackReason.None,
             !couldNotReadWholeTable,
             !couldNotReadWholeTable && !sawUnreadableRecord);
+
+        // One node: a record under the name it was placed by, or one of a file's other names, which
+        // reads its record's size, dates and flags. Each node is written by one thread.
+        void Describe(int node, in MftRecord record, int parent)
+        {
+            parents[node] = parent;
+            sizes[node] = record.Size?.Allocated ?? 0;
+            lengths[node] = record.Size?.Logical ?? 0;
+            storage[node] = record.Storage;
+            flags[node] = ExploreNodeFlags.Present
+                | (record.IsDirectory ? ExploreNodeFlags.Directory : ExploreNodeFlags.None)
+                | (record.IsReparsePoint ? ExploreNodeFlags.Link : ExploreNodeFlags.None)
+                | (record.Size is null ? ExploreNodeFlags.SizeUnknown : ExploreNodeFlags.None);
+            created[node] = ExploreTimestamp.FromFileTime(record.CreatedFileTime);
+            modified[node] = ExploreTimestamp.FromFileTime(record.LastWrittenFileTime);
+            visibility[node] = record.Visibility;
+        }
     }
 
     /// <summary>

@@ -38,6 +38,7 @@ public static class MftVolumeIndexBuilder
             return false;
         }
 
+        tree.PlaceLinks();
         index = new MftVolumeIndex(tree, BuildChildLinks(tree));
         return true;
     }
@@ -89,14 +90,8 @@ public static class MftVolumeIndexBuilder
         }
 
         // A parent outside the table is a different thing entirely, and an ordinary one on a live
-        // volume: a directory removed mid-read, or a table that grew after its size was measured.
-        // Such a record is unreachable from the root, so it cannot be inside anything this index
-        // will be asked to total, and dropping it costs nothing.
-        if (record.ParentRecordNumber < tree.Count)
-        {
-            tree.Set(number, in record, name);
-        }
-
+        // volume, which the tree drops name by name. See MftVolumeTree.Set.
+        tree.Set(number, in record, name);
         return true;
     }
 
@@ -105,16 +100,19 @@ public static class MftVolumeIndexBuilder
     /// sum, then one pass to place them. Two linear passes and two arrays, no per-node allocation —
     /// a dictionary of lists would allocate one list per directory, which on a volume with 100k
     /// directories is 100k objects for a structure that never changes after construction.
+    ///
+    /// <para>Over every node, so each of a file's names is a child of the directory holding it. A
+    /// parent is always a record, which is what sizes <c>Start</c> by the records alone.</para>
     /// </summary>
     private static MftChildLinks BuildChildLinks(MftVolumeTree tree)
     {
         var start = new int[tree.Count + 1];
 
-        for (var i = 0; i < tree.Count; i++)
+        for (var i = 0; i < tree.NodeCount; i++)
         {
             if (tree.IsLinkable(i))
             {
-                start[tree.Parent[i] + 1]++;
+                start[tree.ParentOf(i) + 1]++;
             }
         }
 
@@ -126,11 +124,11 @@ public static class MftVolumeIndexBuilder
         var children = new uint[start[tree.Count]];
         var cursor = new int[tree.Count];
 
-        for (var i = 0; i < tree.Count; i++)
+        for (var i = 0; i < tree.NodeCount; i++)
         {
             if (tree.IsLinkable(i))
             {
-                var parent = tree.Parent[i];
+                var parent = tree.ParentOf(i);
                 children[start[parent] + cursor[parent]++] = (uint)i;
             }
         }

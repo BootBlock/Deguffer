@@ -215,6 +215,38 @@ public sealed class MftFixture
             t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0)));
 
     /// <summary>
+    /// A file with a name in each of several directories, as <c>mklink /H</c> leaves one: one record
+    /// holding a Win32 <c>$FILE_NAME</c> for each name, in the order given. A second name in the same
+    /// directory is a link too, and is listed as an entry of its own.
+    /// </summary>
+    /// <param name="alias">
+    /// An 8.3 alias for the first name, written first and in its directory, which is not a link and
+    /// is never listed. Null for none.
+    /// </param>
+    public MftFixture AddHardLinkedFile(
+        uint number,
+        IReadOnlyList<(uint Parent, string Name)> names,
+        long allocated,
+        long logical,
+        DateTime? created = null,
+        DateTime? lastWritten = null,
+        string? alias = null) =>
+        Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            _bytesPerRecord,
+            [
+                t => MftAttributeBytes.WriteStandardInformation(t, FileTime(created), FileTime(lastWritten)),
+                .. alias is null
+                    ? Array.Empty<AttributeWriter>()
+                    : [t => MftAttributeBytes.WriteFileName(t, Reference(names[0].Parent), alias, allocated, logical, nameSpace: 2)],
+                .. names.Select(name => (AttributeWriter)(t => MftAttributeBytes.WriteFileName(
+                    t, Reference(name.Parent), name.Name, allocated, logical, nameSpace: 1))),
+                t => MftAttributeBytes.WriteNonResidentData(t, allocated, logical, startVirtualCluster: 0),
+            ]));
+
+    /// <summary>
     /// A file whose record carries no <c>$STANDARD_INFORMATION</c>, so nothing can date it. It still
     /// has a name, a parent and a size, and it still has to place and draw —
     /// <see cref="MftRecordBytes.FileWithoutTimestamps"/> says why refusing it would be the wrong

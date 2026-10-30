@@ -225,15 +225,18 @@ public class MftVolumeIndexTests
 
     /// <summary>
     /// A sparse run in a list has no place on the disk, so the entries it should hold are not there
-    /// to be read, and a list missing them cannot say where the size went.
+    /// to be read, and a list missing them cannot say where the size went, or whether the file has
+    /// another name in some other folder. A file with a name that may be lost cannot be placed, so
+    /// the index is refused.
     /// </summary>
     [Fact]
-    public void RefusesToTotalAFileWhoseAttributeListIsSparse()
+    public void RefusesToBuildAnIndexWhenAFilesAttributeListIsSparse()
     {
-        var index = Build(Tree()
-            .AddFileWithASparseAttributeList(21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22));
+        using var source = Tree()
+            .AddFileWithASparseAttributeList(21, Cache, "fragmented.tgz", allocated: 8_388_608, logical: 8_000_000, extension: 22)
+            .Build();
 
-        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -260,7 +263,7 @@ public class MftVolumeIndexTests
     /// live volume. Its sizes may belong to something else entirely, so the subtree is not totalled.
     /// </summary>
     [Theory]
-    [MemberData(nameof(EveryMismatch))]
+    [MemberData(nameof(EveryExtensionRecordMismatch))]
     public void RefusesToTotalASubtreeWhoseExtensionRecordChangedMidRead(ListMismatch mismatch)
     {
         var index = Build(Tree()
@@ -308,16 +311,18 @@ public class MftVolumeIndexTests
 
     /// <summary>
     /// A list that cannot be read in full may have lost the very entry naming where the size went,
-    /// so it is not read as a shorter list.
+    /// or one naming another of the file's links, so it is not read as a shorter list. The file
+    /// cannot be placed, and the index is refused.
     /// </summary>
     [Fact]
-    public void RefusesToTotalASubtreeHoldingAFileWithAMalformedAttributeList()
+    public void RefusesToBuildAnIndexWhenAFilesAttributeListIsMalformed()
     {
-        var index = Build(Tree()
+        using var source = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096)
-            .AddFileWithAMalformedAttributeList(21, Cache, "fragmented.tgz"));
+            .AddFileWithAMalformedAttributeList(21, Cache, "fragmented.tgz")
+            .Build();
 
-        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
@@ -456,36 +461,115 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
-    /// A name in the best namespace cannot be displaced by another, and a tie goes to the base
-    /// record, so a file whose own record holds one is placed without reading its other links at
-    /// all. A stale extension record holding one of them costs the file nothing.
+    /// #171: a file's other name, kept in an extension record, is another link, so the file is
+    /// counted in each folder that names it, as the walk lists it in each.
     /// </summary>
-    [Theory]
-    [MemberData(nameof(EveryExtensionRecordMismatch))]
-    public void PlacesAFileByTheNameItsOwnRecordHoldsWhateverItsOtherLinksSay(ListMismatch mismatch)
+    [Fact]
+    public void CountsAFileUnderAnotherNameKeptInAnExtensionRecord()
     {
         var index = Build(Tree()
             .AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
-                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22, mismatch));
+                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22));
 
         Assert.Equal(5000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
-        Assert.Equal(0, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+        Assert.Equal(5000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+        Assert.Equal(10_000, index.TryMeasure(["Users", "testuser"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// Where that extension record, or the list naming it, cannot be established, one of the file's
+    /// names is lost, and the folder it would count in could be any on the volume. The index is
+    /// refused, as for a file whose only name is lost.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryMismatch))]
+    public void RefusesToBuildAnIndexWhenAFilesOtherNameCannotBeEstablished(ListMismatch mismatch)
+    {
+        using var source = Tree()
+            .AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
+                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22, mismatch)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
     }
 
     /// <summary>
     /// A list that names the file's own record as it was before that record was reused is a list
-    /// from another moment. Nothing it says about where the size went can be trusted, even though
-    /// the name it leaves in the base record places the file.
+    /// from another moment, and any record it named could have held another of the file's links. So
+    /// a file whose own record holds a name in the best namespace still cannot be placed by it alone.
     /// </summary>
     [Fact]
-    public void RefusesToTotalAFileWhoseListNamesItsOwnRecordAsItWas()
+    public void RefusesToBuildAnIndexWhenAFilesListIsFromAnotherMoment()
+    {
+        using var source = Tree()
+            .AddFileWithDataInAnExtensionRecord(
+                21, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ListNamesItsOwnRecordAsItWas)
+            .Build();
+
+        Assert.False(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out _));
+    }
+
+    /// <summary>
+    /// #171: a file with names in two folders, and a second name in one of them, is counted once for
+    /// each name: twice in the folder holding two, once in the other, and three times above both.
+    /// That is what the walk lists, and what the removal takes and counts.
+    /// </summary>
+    [Fact]
+    public void CountsAFileOnceForEachOfItsNames()
     {
         var index = Build(Tree()
-            .AddHardLinkedFileWithItsOtherNameInAnExtensionRecord(
-                21, Cache, "linked.dll", otherParent: Sibling, "linked.dll", logical: 5000, extension: 22,
-                ListMismatch.ListNamesItsOwnRecordAsItWas));
+            .AddFile(20, Cache, "a.tgz", allocated: 1024, logical: 1000)
+            .AddHardLinkedFile(21, [(Cache, "a.dll"), (Sibling, "a.dll"), (Cache, "b.dll")], allocated: 4096, logical: 4000));
 
-        Assert.Null(index.TryMeasure(["Users", "testuser", ".npm-cache"]));
+        var cache = index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value;
+
+        Assert.Equal(1000 + 4000 + 4000, cache.Logical);
+        Assert.Equal(1024 + 4096 + 4096, cache.Allocated);
+
+        // a.tgz, both names of the linked file, content-v2 and the folder itself.
+        Assert.Equal(5, cache.Entries);
+
+        Assert.Equal(4000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+        Assert.Equal(1000 + (3 * 4000), index.TryMeasure(["Users", "testuser"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// A file whose first name is in a folder outside the table, removed while the table was read,
+    /// is still counted under the name that is in it.
+    /// </summary>
+    [Fact]
+    public void CountsAFileUnderItsOtherNameWhereItsFirstIsOutsideTheTable()
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFile(21, [(5_000, "a.dll"), (Sibling, "a.dll")], allocated: 4096, logical: 4000));
+
+        Assert.Equal(4000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+        Assert.Equal(4000, index.TryMeasure(["Users", "testuser"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// A mail store with a name in two folders is named by the path of its name inside the folder
+    /// measured, because the plan protects it by that path. Each name of a file is judged a store by
+    /// itself, as the walk judges each name it lists, so a store's other name that is not a store's
+    /// is counted.
+    /// </summary>
+    [Fact]
+    public void NamesAMailStoreByItsNameInsideTheFolderMeasured()
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFile(21, [(Cache, "archive.pst"), (Sibling, "archive.pst")], allocated: 4096, logical: 4000)
+            .AddHardLinkedFile(22, [(Cache, "data.bin"), (Sibling, "outlook.ost")], allocated: 2048, logical: 2000));
+
+        var cache = index.TryMeasure(["Users", "testuser", ".npm-cache"], MinimumAge.Off, out _, out var cacheStores);
+        var config = index.TryMeasure(["Users", "testuser", ".config"], MinimumAge.Off, out _, out var configStores);
+
+        Assert.Equal(2000, cache!.Value.Logical);
+        Assert.Equal(["Users", "testuser", ".npm-cache", "archive.pst"], Assert.Single(cacheStores));
+
+        Assert.Equal(0, config!.Value.Logical);
+        Assert.Equal(
+            [["Users", "testuser", ".config", "archive.pst"], ["Users", "testuser", ".config", "outlook.ost"]],
+            configStores.OrderBy(store => store[^1], StringComparer.Ordinal));
     }
 
     /// <summary>

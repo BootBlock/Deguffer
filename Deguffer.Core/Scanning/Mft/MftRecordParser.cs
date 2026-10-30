@@ -215,18 +215,6 @@ internal static class MftRecordParser
         return ReadReparseTag(attribute) is { } tag && (tag & NameSurrogateBit) != 0;
     }
 
-    /// <summary>
-    /// Whether a <c>$REPARSE_POINT</c> is CompactOS's, which is the only kind whose file keeps its
-    /// content in <see cref="WofStreamName"/>. A file whose reparse point is anything else has no such
-    /// stream to wait for.
-    /// </summary>
-    internal static bool IsWofReparsePoint(ReadOnlySpan<byte> attribute)
-    {
-        const uint WofTag = 0x8000_0017;
-
-        return ReadReparseTag(attribute) == WofTag;
-    }
-
     /// <summary>The tag a <c>$REPARSE_POINT</c> declares, or null where it is too short to declare one.</summary>
     private static uint? ReadReparseTag(ReadOnlySpan<byte> attribute)
     {

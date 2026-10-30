@@ -156,6 +156,58 @@ public sealed class MftVolumeIndexLeftOutTests
     }
 
     /// <summary>
+    /// #171: a file with a name in two folders is left out by the name the path gives, and the
+    /// other name still counts, because the removal leaves only the name it was told to. Its number
+    /// is the record the table placed under its other name, which a check of that record's own
+    /// folder alone would refuse.
+    /// </summary>
+    [Fact]
+    public void LeavesOutOnlyTheNameOfAHardLinkedFileThePathGives()
+    {
+        const uint Shared = 30;
+
+        var index = Build(Tree()
+            .AddHardLinkedFile(Shared, [(Session, "shared.bin"), (Temp, "shared.bin")], allocated: 2048, logical: 2000));
+
+        var placed = index.TryPlace(
+            TempPath,
+            [["shared.bin"]],
+            Describing(new Dictionary<string, FileReading> { ["shared.bin"] = Numbered(Shared) }));
+
+        var bounded = Measure(index, placed!)!.Value;
+
+        Assert.Equal(1000 + 5000 + 3000 + 11000 + 13000 + 2000, bounded.Logical);
+        Assert.Equal(1000 + 5000 + 3000 + 11000 + 13000 + 4000, index.TryMeasure(TempPath)!.Value.Logical);
+    }
+
+    /// <summary>
+    /// Two names of one file in one folder are two entries, and leaving both out leaves out both,
+    /// though Windows gives each the same number. A path asked for twice is one entry.
+    /// </summary>
+    [Fact]
+    public void LeavesOutEachOfTwoNamesOfOneFileInOneFolder()
+    {
+        const uint Shared = 30;
+
+        var index = Build(Tree()
+            .AddHardLinkedFile(Shared, [(Temp, "one.bin"), (Temp, "two.bin")], allocated: 2048, logical: 2000));
+        var describing = Describing(new Dictionary<string, FileReading>
+        {
+            ["one.bin"] = Numbered(Shared),
+            ["two.bin"] = Numbered(Shared),
+        });
+
+        var both = index.TryPlace(TempPath, [["one.bin"], ["two.bin"]], describing)!;
+        var once = index.TryPlace(TempPath, [["one.bin"], ["one.bin"]], describing)!;
+
+        Assert.Equal(2, both.Count);
+        Assert.Equal(1000 + 5000 + 3000 + 11000 + 13000, Measure(index, both)!.Value.Logical);
+
+        Assert.Single(once);
+        Assert.Equal(1000 + 5000 + 3000 + 11000 + 13000 + 2000, Measure(index, once)!.Value.Logical);
+    }
+
+    /// <summary>
     /// A file Windows would not describe may still be there, so the table cannot say which record to
     /// leave out and the caller walks instead. One Windows says is gone is in no total to leave out of.
     /// </summary>

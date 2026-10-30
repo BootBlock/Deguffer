@@ -423,7 +423,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
     {
         var volume = asked.Volume;
 
-        if (index is null || LeftOutRecords(index, asked) is not { } leftOut)
+        if (index is null || LeftOutNodes(index, asked) is not { } leftOut)
         {
             return null;
         }
@@ -447,10 +447,10 @@ public sealed class DirectoryScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// The records of the entries the bounds leave out below the path, none where they leave nothing
+    /// The table nodes of the entries the bounds leave out below the path, none where they leave nothing
     /// out, or null where the index cannot place one.
     /// </summary>
-    private static IReadOnlySet<uint>? LeftOutRecords(MftVolumeIndex index, Asked asked) =>
+    private static IReadOnlySet<uint>? LeftOutNodes(MftVolumeIndex index, Asked asked) =>
         LeftOutEntries.Of(asked.Path, asked.Bounds) is { } entries
             ? index.TryPlace(asked.Volume.Components, entries.Below, components => DescribeEntry(asked.Volume.DriveLetter, components))
             : MftVolumeIndex.NothingLeftOut;
