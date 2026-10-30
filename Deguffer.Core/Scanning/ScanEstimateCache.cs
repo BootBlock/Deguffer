@@ -71,9 +71,17 @@ public sealed class ScanEstimateCache
     }
 
     /// <param name="store">Writes the file's whole text: the seam a test counts writes through.</param>
+    /// <exception cref="InvalidOperationException">
+    /// This machine's, in a process that has closed <see cref="MachineScanFence"/>.
+    /// </exception>
     internal ScanEstimateCache(IUserEnvironment environment, Action<string, string> store)
     {
         ArgumentNullException.ThrowIfNull(environment);
+
+        if (environment is UserEnvironment)
+        {
+            MachineScanFence.Pass();
+        }
 
         _file = Path.Combine(environment.LocalAppData, "Deguffer", "scan-estimates.json");
         _store = store;
@@ -86,10 +94,26 @@ public sealed class ScanEstimateCache
     /// <see cref="DirectoryScanner.For"/> shares one scanner. Any other environment is a machine of its
     /// caller's own and gets a cache of its own.
     /// </summary>
-    public static ScanEstimateCache For(IUserEnvironment environment) =>
-        environment is UserEnvironment ? Machine : new ScanEstimateCache(environment);
+    /// <exception cref="InvalidOperationException">
+    /// This machine's, in a process that has closed <see cref="MachineScanFence"/>.
+    /// </exception>
+    public static ScanEstimateCache For(IUserEnvironment environment)
+    {
+        if (environment is not UserEnvironment)
+        {
+            return new ScanEstimateCache(environment);
+        }
 
-    private static ScanEstimateCache Machine { get; } = new(UserEnvironment.Current);
+        MachineScanFence.Pass();
+
+        return Machine.Value;
+    }
+
+    /// <summary>
+    /// Lazy, because the first touch of any static here would otherwise load this account's file,
+    /// which every test that saved a cache of its own machine's did.
+    /// </summary>
+    private static readonly Lazy<ScanEstimateCache> Machine = new(() => new(UserEnvironment.Current));
 
     /// <param name="Entries">
     /// Absent from a file written before the count existed, which then reads as nothing counted. The
