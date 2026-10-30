@@ -180,18 +180,29 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(WalkTuning.Default, BenchmarkRequest.Parse(["walk", @"C:\"], out _)!.Walk);
 
     [Fact]
-    public void TheTableReadsSizeReadsInFlightAndParseThreadsCanBeChosen()
+    public void TheTableReadsSizeReadsInFlightParseThreadsAndListReadsCanBeChosen()
     {
         var request = BenchmarkRequest.Parse(
-            ["index", "C", "--read-size", "2048", "--reads-in-flight", "8", "--parse-threads", "2", "--runs", "2"], out _);
+            ["index", "C", "--read-size", "2048", "--reads-in-flight", "8", "--parse-threads", "2", "--list-reads-in-flight", "24", "--runs", "2"],
+            out _);
 
-        Assert.Equal(new TableTuning(2048 * 1024, 8, 2), request!.Table);
+        Assert.Equal(new TableTuning(2048 * 1024, 8, 2, 24), request!.Table);
         Assert.Equal(2, request.Runs);
     }
+
+    /// <summary>A table route not told otherwise reads as a scan of a drive of unknown kind does.</summary>
+    [Fact]
+    public void ATableRouteNotToldOtherwiseRunsAsAScanOfAnUnknownDriveDoes() =>
+        Assert.Equal(
+            VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.Unknown).Table,
+            BenchmarkRequest.Parse(["index", "C"], out _)!.Table);
 
     [Theory]
     [InlineData("--reads-in-flight", "0")]
     [InlineData("--reads-in-flight", "33")]
+    [InlineData("--list-reads-in-flight", "0")]
+    [InlineData("--list-reads-in-flight", "33")]
+    [InlineData("--list-reads-in-flight")]
     [InlineData("--parse-threads", "0")]
     [InlineData("--parse-threads", "65")]
     [InlineData("--parse-threads")]
@@ -206,6 +217,7 @@ public sealed class BenchmarkRequestTests
     [InlineData("--read-size", "1024")]
     [InlineData("--reads-in-flight", "4")]
     [InlineData("--parse-threads", "4")]
+    [InlineData("--list-reads-in-flight", "4")]
     public void TheWalkTakesNoTableValue(params string[] rest)
     {
         Assert.Null(BenchmarkRequest.Parse(["walk", @"C:\", .. rest], out var error));

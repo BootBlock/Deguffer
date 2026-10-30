@@ -49,11 +49,15 @@ public enum ScanRoute
 /// <param name="ListingBufferKiB">How many KiB of entries each listing asks Windows for.</param>
 /// <param name="TableReadKiB">How many KiB of records each read of the file table asks for.</param>
 /// <param name="TableReadsInFlight">How many reads of the file table are outstanding at once.</param>
+/// <param name="TableListReadsInFlight">
+/// How many of the attribute lists kept outside the file table are read at once.
+/// </param>
 public sealed record MediaScanPreferences(
     int? WalkThreads = null,
     int? ListingBufferKiB = null,
     int? TableReadKiB = null,
-    int? TableReadsInFlight = null)
+    int? TableReadsInFlight = null,
+    int? TableListReadsInFlight = null)
 {
     public static readonly MediaScanPreferences Auto = new();
 }

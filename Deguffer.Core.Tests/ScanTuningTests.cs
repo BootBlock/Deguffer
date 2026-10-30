@@ -18,7 +18,8 @@ public sealed class ScanTuningTests
 
     /// <summary>
     /// A drive of unknown kind is read as every drive was before the values could be set, but for
-    /// the parse threads, which belong to the machine and were measured on it.
+    /// the parse threads, which belong to the machine and were measured on it, and the attribute list
+    /// reads, where one at a time was what was measured to be slow.
     /// </summary>
     [Fact]
     public void AutoIsWhatScansUsedBeforeTheValuesCouldBeSetOnADriveOfUnknownKind()
@@ -29,8 +30,20 @@ public sealed class ScanTuningTests
         Assert.Equal(TableTuning.Default.ReadBytes, tuning.Table.ReadBytes);
         Assert.Equal(TableTuning.Default.ReadsInFlight, tuning.Table.ReadsInFlight);
         Assert.Equal(Math.Min(Environment.ProcessorCount, 4), tuning.Table.ParseThreads);
+        Assert.Equal(TableTuning.MaximumListReadsInFlight, tuning.Table.ListReadsInFlight);
         Assert.Equal(MediaScanPreferences.Auto, tuning.Chosen);
     }
+
+    /// <summary>
+    /// The attribute lists kept outside the table are read 32 at once on every kind, never one at a
+    /// time, whatever depth the table itself is read at.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryKindOfDrive))]
+    public void AutoReadsTheListsKeptOutsideTheTable32AtOnceOnEveryKindOfDrive(StorageMedia media) =>
+        Assert.Equal(32, VolumeTuning.Resolve(ScanPreferences.Default, media).Table.ListReadsInFlight);
+
+    public static TheoryData<StorageMedia> EveryKindOfDrive() => [.. Enum.GetValues<StorageMedia>()];
 
     /// <summary>
     /// The values measured to differ by kind: NVMe reads the table fastest in reads of 1 MiB with
@@ -58,7 +71,8 @@ public sealed class ScanTuningTests
     {
         var preferences = ScanPreferences.Default.With(
             StorageMedia.Rotational,
-            new MediaScanPreferences(WalkThreads: 2, ListingBufferKiB: 64, TableReadKiB: 256, TableReadsInFlight: 5));
+            new MediaScanPreferences(
+                WalkThreads: 2, ListingBufferKiB: 64, TableReadKiB: 256, TableReadsInFlight: 5, TableListReadsInFlight: 3));
 
         var spinning = VolumeTuning.Resolve(preferences, StorageMedia.Rotational);
         var nvme = VolumeTuning.Resolve(preferences, StorageMedia.Nvme);
@@ -66,6 +80,7 @@ public sealed class ScanTuningTests
         Assert.Equal(new WalkTuning(2, 64 * 1024), spinning.Walk);
         Assert.Equal(256 * 1024, spinning.Table.ReadBytes);
         Assert.Equal(5, spinning.Table.ReadsInFlight);
+        Assert.Equal(3, spinning.Table.ListReadsInFlight);
         Assert.Equal(VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.Nvme), nvme);
     }
 
@@ -94,7 +109,7 @@ public sealed class ScanTuningTests
     {
         var preferences = ScanPreferences.Default with
         {
-            Unknown = new MediaScanPreferences(threads, listingKiB, tableKiB, TableReadsInFlight: threads),
+            Unknown = new MediaScanPreferences(threads, listingKiB, tableKiB, TableReadsInFlight: threads, TableListReadsInFlight: threads),
             TableParseThreads = threads,
         };
 
@@ -110,6 +125,9 @@ public sealed class ScanTuningTests
         Assert.Equal(
             threads > 0 ? TableTuning.MaximumReadsInFlight : TableTuning.MinimumReadsInFlight,
             tuning.Table.ReadsInFlight);
+        Assert.Equal(
+            threads > 0 ? TableTuning.MaximumListReadsInFlight : TableTuning.MinimumListReadsInFlight,
+            tuning.Table.ListReadsInFlight);
         Assert.Equal(
             threads > 0 ? TableTuning.MaximumParseThreads : TableTuning.MinimumParseThreads,
             tuning.Table.ParseThreads);
@@ -283,7 +301,8 @@ public sealed class ScanTuningTests
     [Fact]
     public void ADrivesLineSaysWhichValuesAutoChose()
     {
-        var preferences = ScanPreferences.Default.With(StorageMedia.Nvme, new MediaScanPreferences(TableReadKiB: 4096)) with
+        var preferences = ScanPreferences.Default.With(
+            StorageMedia.Nvme, new MediaScanPreferences(TableReadKiB: 4096, TableListReadsInFlight: 12)) with
         {
             TableParseThreads = 3,
         };
@@ -296,7 +315,8 @@ public sealed class ScanTuningTests
         Assert.Contains($"{auto.Walk.ListingBufferBytes / 1024} KiB listing buffer (Auto)", line, StringComparison.Ordinal);
         Assert.Contains($"{4096:N0} KiB table reads", line, StringComparison.Ordinal);
         Assert.DoesNotContain("table reads (Auto)", line, StringComparison.Ordinal);
-        Assert.Contains($"{auto.Table.ReadsInFlight} in flight (Auto)", line, StringComparison.Ordinal);
+        Assert.Contains($", {auto.Table.ReadsInFlight} in flight (Auto)", line, StringComparison.Ordinal);
+        Assert.Contains(", 12 list reads in flight,", line, StringComparison.Ordinal);
         Assert.EndsWith("parsed on 3 threads", line, StringComparison.Ordinal);
     }
 
@@ -320,6 +340,7 @@ public sealed class ScanTuningTests
         Assert.Null(EnteredSetting.ListingBufferKiB(double.NaN));
         Assert.Null(EnteredSetting.TableReadKiB(double.NaN));
         Assert.Null(EnteredSetting.TableReadsInFlight(double.NaN));
+        Assert.Null(EnteredSetting.TableListReadsInFlight(double.NaN));
         Assert.Null(EnteredSetting.TableParseThreads(double.NaN));
 
         Assert.Equal(8, EnteredSetting.WalkThreads(7.5));
@@ -331,6 +352,9 @@ public sealed class ScanTuningTests
         Assert.Equal(TableTuning.MaximumReadBytes / 1024, EnteredSetting.TableReadKiB(1e9));
         Assert.Equal(TableTuning.MinimumReadsInFlight, EnteredSetting.TableReadsInFlight(0));
         Assert.Equal(TableTuning.MaximumReadsInFlight, EnteredSetting.TableReadsInFlight(1000));
+        Assert.Equal(TableTuning.MinimumListReadsInFlight, EnteredSetting.TableListReadsInFlight(0));
+        Assert.Equal(TableTuning.MaximumListReadsInFlight, EnteredSetting.TableListReadsInFlight(1000));
+        Assert.Equal(17, EnteredSetting.TableListReadsInFlight(16.6));
         Assert.Equal(TableTuning.MinimumParseThreads, EnteredSetting.TableParseThreads(-3));
         Assert.Equal(TableTuning.MaximumParseThreads, EnteredSetting.TableParseThreads(1000));
         Assert.Equal(6, EnteredSetting.TableParseThreads(5.5));

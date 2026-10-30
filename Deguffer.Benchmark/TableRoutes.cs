@@ -88,7 +88,13 @@ internal static class TableRoutes
     }
 
     private static RunTally Tally(CountingMftSource source, bool complete) =>
-        new(source.RecordsRead, source.BytesRead, complete, Reads: source.Reads);
+        new(
+            source.RecordsRead,
+            source.BytesRead,
+            complete,
+            Reads: source.Reads,
+            ClusterReads: source.ClusterReads,
+            ListReadTime: source.ListReadTime);
 
     /// <summary>The records a pass reads: every record the table holds, as far as a pass can number them.</summary>
     private static int Count(IMftSource source) => (int)Math.Min(source.RecordCount, int.MaxValue);

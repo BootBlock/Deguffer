@@ -58,7 +58,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         set => Apply(current => current with { Route = (ScanRoute)value });
     }
 
-    /// <summary>Which kind of drive the four boxes below set. Not stored: it is where the reader is looking.</summary>
+    /// <summary>Which kind of drive the five boxes below set. Not stored: it is where the reader is looking.</summary>
     public int KindIndex
     {
         get;
@@ -87,6 +87,10 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     public double MinimumTableReadsInFlight => TableTuning.MinimumReadsInFlight;
 
     public double MaximumTableReadsInFlight => TableTuning.MaximumReadsInFlight;
+
+    public double MinimumTableListReadsInFlight => TableTuning.MinimumListReadsInFlight;
+
+    public double MaximumTableListReadsInFlight => TableTuning.MaximumListReadsInFlight;
 
     public double MinimumTableParseThreads => TableTuning.MinimumParseThreads;
 
@@ -133,6 +137,15 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         set => ApplyChosen(chosen => chosen with { TableReadsInFlight = EnteredSetting.TableReadsInFlight(value) });
     }
 
+    /// <summary>
+    /// The chosen kind's attribute-list reads in flight, on the terms <see cref="WalkThreads"/> states.
+    /// </summary>
+    public double TableListReadsInFlight
+    {
+        get => Shown(Chosen.TableListReadsInFlight);
+        set => ApplyChosen(chosen => chosen with { TableListReadsInFlight = EnteredSetting.TableListReadsInFlight(value) });
+    }
+
     /// <summary>What an empty box means for the chosen kind, as its placeholder: <c>Auto (16)</c>.</summary>
     public string AutoWalkThreads => AutoText(Auto.Walk.Threads);
 
@@ -141,6 +154,8 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     public string AutoTableReadKiB => AutoText(Auto.Table.ReadBytes / 1024);
 
     public string AutoTableReadsInFlight => AutoText(Auto.Table.ReadsInFlight);
+
+    public string AutoTableListReadsInFlight => AutoText(Auto.Table.ListReadsInFlight);
 
     public string AutoTableParseThreads => AutoText(Auto.Table.ParseThreads);
 

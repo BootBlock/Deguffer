@@ -20,7 +20,8 @@ internal static class Tuning
         {
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads");
+                $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
+                $"{table.ListReadsInFlight} list reads in flight");
         }
 
         if (route is Route.Folders)
