@@ -70,6 +70,8 @@ public sealed partial class ExploreOverview
     {
         InitializeComponent();
 
+        Margin = new Thickness(MapOverview.Margin);
+
         _zoom = zoom;
         _motion = motion;
         _pointer = pointer;
@@ -187,7 +189,6 @@ public sealed partial class ExploreOverview
             Frame.Height = 0;
         }
 
-        Margin = new Thickness(MapOverview.Margin);
         Present();
     }
 
@@ -349,7 +350,7 @@ public sealed partial class ExploreOverview
         var compositor = _visual.Compositor;
 
         IsHitTestVisible = false;
-        _visual.StopAnimation("Translation");
+        _visual.StopAnimation(VisualTranslation.Property);
         _visual.StopAnimation(nameof(Visual.Opacity));
 
         var fade = compositor.CreateScalarKeyFrameAnimation();

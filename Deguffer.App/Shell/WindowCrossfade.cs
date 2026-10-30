@@ -81,7 +81,7 @@ internal sealed class WindowCrossfade
         }
 
         _capturing = true;
-        var still = await MapGraphics.For(_window.Compositor).Capture(_window, size);
+        var still = await Still(size);
         _capturing = false;
 
         if (still is null)
@@ -116,4 +116,13 @@ internal sealed class WindowCrossfade
             (still as IDisposable)?.Dispose();
         };
     }
+
+    /// <summary>
+    /// A still of the window and everything drawn under it as it is now, at <paramref name="size"/>
+    /// pixels, or null where the device was lost on the way. Taken on the device the maps draw through
+    /// rather than a second one, because the window has the one compositor (G5).
+    /// </summary>
+    private Task<ICompositionSurface?> Still(SizeInt32 size) =>
+        CompositionDevice.For(_window.Compositor).UnlessLostAsync<ICompositionSurface>(async graphics =>
+            await graphics.CaptureAsync(_window, size, CompositionDevice.Format, CompositionDevice.Alpha, 1));
 }

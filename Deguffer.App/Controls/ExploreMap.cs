@@ -166,7 +166,7 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// How many times the device had been replaced when the drawings kept were written. See
-    /// <see cref="MapGraphics.Generation"/>.
+    /// <see cref="CompositionDevice.Generation"/>.
     /// </summary>
     private int _generation;
 
@@ -355,7 +355,7 @@ public sealed class ExploreMap : UserControl
         var compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
 
         _graphics = MapGraphics.For(compositor);
-        _generation = _graphics.Generation;
+        _generation = _graphics.Device.Generation;
         _camera = new MapCamera(compositor);
         _zoom = new ExploreZoom(ElementCompositionPreview.GetElementVisual(this), _camera, SystemMotion.Current, DispatcherQueue);
         var owner = new DispatcherQueueSynchronizationContext(DispatcherQueue);
@@ -496,11 +496,11 @@ public sealed class ExploreMap : UserControl
             TintHighlight();
             _zoom.FollowMotion();
 
-            _graphics.Replaced += OnDeviceReplaced;
+            _graphics.Device.Replaced += OnDeviceReplaced;
 
             // The device was replaced while the map was away, so nothing it kept is on its surfaces
             // any more, and every redraw the rest of this would ask for is owed in full.
-            if (_generation != _graphics.Generation)
+            if (_generation != _graphics.Device.Generation)
             {
                 OnDeviceReplaced(_graphics, EventArgs.Empty);
                 return;
@@ -559,7 +559,7 @@ public sealed class ExploreMap : UserControl
             _pictures.Trim();
             _departing.Tiles.Release();
             _buffers.Release();
-            _graphics.Trim();
+            _graphics.Device.Trim();
 
             // The labels go back with it. Dropping the redraw drops the thing that would have put
             // them back, and Loaded only redraws where the size has actually moved — so without
@@ -576,7 +576,7 @@ public sealed class ExploreMap : UserControl
             SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
             _capabilities.Changed -= OnCapabilitiesChanged;
             SystemMotion.Current.Changed -= OnMotionChanged;
-            _graphics.Replaced -= OnDeviceReplaced;
+            _graphics.Device.Replaced -= OnDeviceReplaced;
         };
 
         // The ground is baked into the canvas, so unlike every themed control around it the map
@@ -2216,7 +2216,7 @@ public sealed class ExploreMap : UserControl
         {
             _pictures.Tiles.Release();
             _departing.Tiles.Release();
-            _graphics.Trim();
+            _graphics.Device.Trim();
         }
 
         if (Math.Abs(sender.RasterizationScale - _scale) > 0.001)
@@ -2232,7 +2232,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnDeviceReplaced(object? sender, EventArgs e)
     {
-        _generation = _graphics.Generation;
+        _generation = _graphics.Device.Generation;
 
         LandStep();
         _redraws.Cancel();

@@ -49,7 +49,7 @@ internal sealed class BarMotion
         var translation = compositor.CreateExpressionAnimation(shift);
         translation.SetReferenceParameter("drawn", _drawn);
         ElementCompositionPreview.SetIsTranslationEnabled(fill, true);
-        visual.StartAnimation("Translation", translation);
+        visual.StartAnimation(VisualTranslation.Property, translation);
     }
 
     /// <summary>

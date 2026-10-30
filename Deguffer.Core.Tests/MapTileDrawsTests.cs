@@ -211,7 +211,7 @@ public sealed class MapTileDrawsTests
         workers);
 
     private static List<MapTileKey> Keys(int level, int count) =>
-        [.. Tiling.Covering(MapViewport.Whole, level, 0.5, 0.5).Take(count)];
+        [.. Tiling.Covered(MapViewport.Whole, level, 0.5, 0.5).Take(count)];
 
     private static TiledSurface Picture(ISizedTree tree)
     {
