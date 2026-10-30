@@ -39,8 +39,8 @@ public sealed class ScratchRootTests : IDisposable
     /// A tree a failing test left a read-only entry in goes on the next sweep, as any other does.
     ///
     /// <para>Windows refuses to delete a read-only file or directory, and a recursive delete does
-    /// not clear the bit. Before the removal cleared it, a tree like this was refused by its own
-    /// <c>Dispose</c> and then by every sweep after, so it stayed for good. The sweep makes one
+    /// not clear the bit. A removal that left it set would have a tree like this refused by its own
+    /// <c>Dispose</c> and then by every sweep after, so it would stay for good. The sweep makes one
     /// attempt, so this also pins that clearing the bit is not left for a second.</para>
     /// </summary>
     [Fact]
@@ -226,8 +226,8 @@ public sealed class ScratchRootTests : IDisposable
     /// A tree in the profile is made under the profile root, and making one sweeps that root.
     ///
     /// <para>The profile root is where a test puts a sync root Windows must list, and a host killed
-    /// during that test leaves the tree there. Nothing swept it before, so it stayed in the user's
-    /// profile for good.</para>
+    /// during that test leaves the tree there. Unswept, it would stay in the user's profile for
+    /// good.</para>
     /// </summary>
     [Fact]
     public void MakesAProfileTreeUnderTheProfileRootAndSweepsIt()

@@ -61,8 +61,8 @@ internal static class ScratchTree
                 }
 
                 // Windows refuses a read-only entry on every attempt, so no amount of waiting
-                // removes it, and the recursive delete never clears the bit itself. A tree holding
-                // one used to be refused by its own Dispose and by every later sweep, for good. The
+                // removes it, and the recursive delete never clears the bit itself. Left set, it
+                // would have the tree refused by its own Dispose and by every later sweep. The
                 // retry after clearing is taken at once and only once: the wait is for a handle,
                 // and the attempt count is what bounds a tree that is refused for some other reason.
                 if (ClearReadOnly(extended) && !retriedAfterClearing)
