@@ -66,33 +66,19 @@ public sealed class CloudFilesTests : IDisposable
 
     /// <summary>
     /// Windows leaves a root under <c>AppData\Local</c> out of its list, and the suite's scratch folder is
-    /// under it, so this one root is registered in the profile folder instead and removed afterwards.
+    /// under it, so this one root is registered in a scratch tree in the profile folder instead.
     /// </summary>
     [Fact]
     public void ListsARootUnderTheNameItsSyncAppRegistered()
     {
-        var parent = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".deguffer-tests");
-        var path = Path.Combine(parent, Scratch.NewIdentifier());
+        using var profile = TempDirectory.InProfile();
+        using var root = new ScratchSyncRoot(profile.CreateDirectory("Synced"));
 
-        try
-        {
-            using var root = new ScratchSyncRoot(path);
+        var listed = Assert.Single(_cloud.SyncRoots(), candidate => candidate.Id == root.Id);
 
-            var listed = Assert.Single(_cloud.SyncRoots(), candidate => candidate.Id == root.Id);
-
-            Assert.Equal(path, listed.Path, ignoreCase: true);
-            Assert.Equal(ScratchSyncRoot.ProviderName, listed.ProviderName);
-            Assert.DoesNotContain(_cloud.SyncRoots(), candidate => candidate.Id == _root.Id);
-        }
-        finally
-        {
-            Directory.Delete(path, recursive: true);
-
-            if (!Directory.EnumerateFileSystemEntries(parent).Any())
-            {
-                Directory.Delete(parent);
-            }
-        }
+        Assert.Equal(root.Path, listed.Path, ignoreCase: true);
+        Assert.Equal(ScratchSyncRoot.ProviderName, listed.ProviderName);
+        Assert.DoesNotContain(_cloud.SyncRoots(), candidate => candidate.Id == _root.Id);
     }
 
     [Fact]
