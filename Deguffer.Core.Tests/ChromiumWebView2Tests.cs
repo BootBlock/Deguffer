@@ -151,12 +151,13 @@ public sealed class ChromiumWebView2Tests : IDisposable
     /// <summary>
     /// A deeper directory holding <c>Local State</c> that is not called <c>EBWebView</c> is not
     /// identified. The walk exists to find WebView2, and a marker at any depth would identify folders
-    /// nobody declared: the packaged Electron application here among them.
+    /// nobody declared. A packaged application's folder is identified one level into its redirected
+    /// roots, as an unpackaged one is one level into the root, and this one is a level further down.
     /// </summary>
     [Fact]
     public async Task ADeeperFolderWithTheMarkerButNotTheNameIsNotIdentified()
     {
-        var folder = Path.Combine(_environment.LocalAppData, "Packages", "Vendor.Chat_0123456789abc", "LocalCache", "Roaming", "Chat");
+        var folder = Path.Combine(_environment.LocalAppData, "Packages", "Vendor.Chat_0123456789abc", "LocalCache", "Roaming", "Vendor", "Chat");
         Directory.CreateDirectory(folder);
         File.WriteAllText(Path.Combine(folder, "Local State"), "{}");
         var bystander = CreateDirectory(Path.Combine(folder, "Code Cache"));
