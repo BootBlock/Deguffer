@@ -58,8 +58,8 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
     public override StepGrain Grain => StepGrain.Items;
 
     public override string WhatHappensOnNextUse =>
-        "The extension downloads its browser again the next time it opens one, which takes a few "
-        + "minutes and several hundred megabytes. Its conversations, checkpoints and settings are untouched.";
+        "The extension downloads its browser again the next time it opens one, which is several hundred "
+        + "megabytes. Its conversations, checkpoints and settings are untouched.";
 
     public override ProviderDescription Description { get; } = new()
     {

@@ -1147,7 +1147,10 @@ your disk, so the whole cost of removing it is one slower start.
 ### What is protected
 
 **Everything in `User`, which is the most valuable directory in the folder.** The founding audit
-measured `workspaceStorage` alone at 11.3 GB, and not one byte of any of it is a cache:
+measured `workspaceStorage` alone at 11.3 GB, and this row treats none of it as a cache. The one
+exception is a browser an extension downloaded for itself, which the
+[extension browsers row](#vs-code-extension-browsers) removes from that extension's storage, and
+nothing beside it:
 
 | Neighbour | What it really is |
 | --- | --- |
@@ -1162,7 +1165,8 @@ partition that is not the one cache it recognises. Deguffer asserts afterwards t
 directories above survived.
 
 The folder holds Chromium's `Local State` as well, so the [Chromium rows](#chromium-application-caches)
-reach it too, and the [log row](#vs-code-editor-logs-and-crash-reports) works in the same folder.
+reach it too, the [log row](#vs-code-editor-logs-and-crash-reports) works in the same folder, and
+the [extension browsers row](#vs-code-extension-browsers) works inside `User\globalStorage`.
 Each row leaves what another row removes there, such as `Code Cache` or `logs`, out of what it
 reports as left alone and out of what it asserts, because a clean with both rows ticked removes it.
 Anything no row removes is asserted by every row that reaches the folder.
@@ -3996,8 +4000,8 @@ they survived.
 
 ### What it costs you
 
-**The next time the extension opens a browser, it downloads the build again.** That takes a few
-minutes and several hundred megabytes. The extension's conversations, checkpoints and settings are
+**The next time the extension opens a browser, it downloads the build again**, which is several
+hundred megabytes. The extension's conversations, checkpoints and settings are
 untouched.
 
 ### Why Tier 1

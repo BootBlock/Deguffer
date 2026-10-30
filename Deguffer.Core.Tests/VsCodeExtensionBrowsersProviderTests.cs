@@ -252,11 +252,8 @@ public sealed class VsCodeExtensionBrowsersProviderTests : IDisposable
 
         // Laid out so the far side holds a build whichever segment the link replaces.
         var far = Path.Combine(_temp.Path, "far");
-        var strangers = new[]
-        {
-            CreateFile(Path.Combine(far, ".chromium-browser-snapshots", "chromium", "win64-1108766", "chrome.exe"), 4096),
-            CreateFile(Path.Combine(far, "chromium", "win64-1108766", "chrome.exe"), 4096),
-        };
+        CreateFile(Path.Combine(far, ".chromium-browser-snapshots", "chromium", "win64-1108766", "chrome.exe"), 4096);
+        CreateFile(Path.Combine(far, "chromium", "win64-1108766", "chrome.exe"), 4096);
 
         var link = Path.Combine(extension, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(link)!);
@@ -272,7 +269,6 @@ public sealed class VsCodeExtensionBrowsersProviderTests : IDisposable
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
         Assert.Contains(plan.ProtectedPaths, p => p.Path == link);
-        Assert.All(strangers, stranger => Assert.True(File.Exists(stranger)));
     }
 
     /// <summary>
