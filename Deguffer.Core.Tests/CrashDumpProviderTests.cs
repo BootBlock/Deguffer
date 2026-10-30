@@ -38,6 +38,8 @@ public sealed class CrashDumpProviderTests : IDisposable
 
     private string UserWerFolder => Path.Combine(_environment.LocalAppData, "Microsoft", "Windows", "WER");
 
+    private string TaskManagerDumps => Path.Combine(_environment.LocalAppData, "Microsoft", "Windows", "TaskManager", "LiveKernelDumps");
+
     private CrashDumpProvider CreateProvider() =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system, volumes: new FakeVolumeInventory());
 
@@ -101,6 +103,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var crashDumps = Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
         var userArchive = Populate(Path.Combine(UserWerFolder, "ReportArchive"));
         var userQueue = Populate(Path.Combine(UserWerFolder, "ReportQueue"));
+        var taskManager = Populate(TaskManagerDumps);
         var archive = Populate(Path.Combine(WerFolder, "ReportArchive"));
         var queue = Populate(Path.Combine(WerFolder, "ReportQueue"));
         var minidump = Populate(Path.Combine(Windows, "Minidump"));
@@ -115,7 +118,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
-            new[] { crashDumps, userArchive, userQueue, archive, queue, live, minidump, memoryDump }.Order(StringComparer.OrdinalIgnoreCase),
+            new[] { crashDumps, userArchive, userQueue, taskManager, archive, queue, live, minidump, memoryDump }.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
 
         Assert.Equal(SafetyTier.UserData, plan.Tier);
@@ -128,6 +131,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
         Populate(Path.Combine(UserWerFolder, "ReportArchive"));
         Populate(Path.Combine(UserWerFolder, "ReportQueue"));
+        Populate(TaskManagerDumps);
         Populate(Path.Combine(WerFolder, "ReportArchive"));
         Populate(Path.Combine(WerFolder, "ReportQueue"));
         Populate(Path.Combine(Windows, "Minidump"));
@@ -275,6 +279,7 @@ public sealed class CrashDumpProviderTests : IDisposable
     {
         var crashDumps = Populate(Path.Combine(_environment.LocalAppData, "CrashDumps"));
         var userQueue = Populate(Path.Combine(UserWerFolder, "ReportQueue"));
+        var taskManager = Populate(TaskManagerDumps);
         Populate(Path.Combine(WerFolder, "ReportArchive"));
         Populate(Path.Combine(Windows, "Minidump"));
 
@@ -284,7 +289,7 @@ public sealed class CrashDumpProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("administrator", StringComparison.OrdinalIgnoreCase));
 
         var steps = plan.Steps.OfType<DeleteStep>().ToDictionary(s => s.Path, s => s.RequiresElevation);
-        string[] own = [crashDumps, userQueue];
+        string[] own = [crashDumps, userQueue, taskManager];
 
         Assert.All(own, path => Assert.False(steps[path]));
         Assert.All(steps.Where(s => !own.Contains(s.Key)), s => Assert.True(s.Value));
@@ -440,12 +445,12 @@ public sealed class CrashDumpProviderTests : IDisposable
     ///
     /// Asserting that a root is absent from its own targets proves nothing: a target is built by
     /// combining the root with a relative path, so only an empty relative path could make the two
-    /// equal. What has to hold is that the declared set is exactly these eight, since a ninth entry
+    /// equal. What has to hold is that the declared set is exactly these nine, since a tenth entry
     /// added without a test is a path nobody decided to delete — and that only <c>MEMORY.DMP</c> is
     /// a file, since a directory declared as a file would be measured and removed by the wrong code.
     /// </summary>
     [Fact]
-    public void TheDeclarationIsTheEightPathsAndNothingElse()
+    public void TheDeclarationIsTheNinePathsAndNothingElse()
     {
         var provider = CreateProvider();
 
@@ -454,6 +459,7 @@ public sealed class CrashDumpProviderTests : IDisposable
                 Path.Combine(_environment.LocalAppData, "CrashDumps"),
                 Path.Combine(UserWerFolder, "ReportArchive"),
                 Path.Combine(UserWerFolder, "ReportQueue"),
+                TaskManagerDumps,
                 Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportArchive"),
                 Path.Combine(ProgramData, "Microsoft", "Windows", "WER", "ReportQueue"),
                 Path.Combine(Windows, "LiveKernelReports"),

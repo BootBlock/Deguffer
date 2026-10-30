@@ -842,6 +842,9 @@ unseen. The survey behind issue #61 found 23 WebView2 hosts on one machine, and 
 more deeper than the scan looked. A later count, taken for the fix, found 19, with 5 under `Packages`. The blind spot was nesting depth, and MSIX is one of several things that produce it.
 `ChromiumUserDataWalk` now finds an `EBWebView` folder up to six levels down, packaged or not. A
 packaged Electron application, whose folder has no fixed name, is still unreached.
+**Update (#407):** it is reached now. The walk identifies a folder one level into a package's
+`LocalCache\Roaming` or `LocalCache\Local` by its `Local State`, and still never treats `LocalCache`
+as a licence.
 
 ---
 
@@ -1679,6 +1682,8 @@ competing cleaners actively do. Worth encoding as knowledge, not merely omitting
 | Squirrel `packages\RELEASES` and `.betaId` | An index and an identifier, in a folder of downloaded packages. `Update.exe --processStart` reads the index with no error handling to decide which build to launch, so removing it stops the application starting from its own shortcut. Named survivors on the Squirrel provider — see §12 |
 | Steam `userdata`, `steamapps\workshop`, `widevine` | Cloud saves, settings and screenshots; subscribed Workshop content; and a downloaded decryption module. All three sit near caches the client keeps, and none of them is one. The first two are named survivors on the Steam provider, and `widevine` is refused at Tier 4 in its Explore declaration |
 | `.vs\...\.suo` | The user's own solution options, inside an otherwise disposable directory |
+| The `DownloadsFolder` Disk Cleanup handler | Windows registers it as a cleanup, and it empties the user's Downloads folder, subfolders included, with no age rule (`Flags=65`, no `LastAccess`). The Disk Cleanup host refuses to load it by name, for a survey and a run alike (`DiskCleanupHandlers.NeverHosted`) |
+| `%LOCALAPPDATA%\Microsoft\WinGet\Packages` | Programs WinGet installed without an installer, in a folder named like a download cache. Each runs from here through a link on the command path and is listed under Apps. Tier 4: no provider offers it, and Explore explains it and points to `winget uninstall` |
 
 ---
 

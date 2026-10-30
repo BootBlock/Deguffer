@@ -235,6 +235,21 @@ internal static class ProfileItems
             "Deleting a folder here removes a program without unregistering it, leaving broken "
             + "shortcuts behind, so uninstall it through Settings under Apps instead."),
 
+        // WinGet's own documentation (doc/Settings.md, portablePackageUserRoot) gives this as the
+        // default, and its portable-apps spec (#182) gives the Links folder, the PATH entry and the
+        // Apps & Features entry each install adds.
+        new(
+            KnownPlace.LocalAppData,
+            @"Microsoft\WinGet\Packages",
+            "Programs installed by WinGet that have no installer of their own, one folder per "
+            + "package. Despite the name it is not a download cache: each folder is the installed "
+            + "program, which runs from here through a link WinGet adds to 'Links' beside it and to "
+            + "the command path, and which Settings lists under Apps.",
+
+            "Deleting a folder here removes a program while leaving it listed as installed and its "
+            + "command pointing at nothing, so remove it with 'winget uninstall' or through Settings "
+            + "under Apps instead."),
+
         new(
             KnownPlace.LocalAppData,
             @"Microsoft\OneDrive",

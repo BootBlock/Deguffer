@@ -39,7 +39,7 @@ public sealed class CleanupPlanner
     }
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, ccache, sccache,
+    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, Cargo, Go, Zig, Deno, Electron's downloads, TypeScript's typings, ccache, sccache,
     /// Maven, vcpkg, pnpm, Yarn 1, Bun, Composer, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
     /// temporary folders, the GPU shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
@@ -245,6 +245,9 @@ public sealed class CleanupPlanner
             new CargoCacheProvider(environment, scanner: scanner),
             new GoCacheProvider(environment, scanner: scanner),
             new ZigCacheProvider(environment, scanner: scanner),
+            new DenoCacheProvider(environment, scanner: scanner),
+            new ElectronCacheProvider(environment, scanner: scanner),
+            new TypeScriptTypingsCacheProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new CcacheProvider(environment, scanner: scanner),
             new SccacheProvider(environment, scanner: scanner),
             new MavenRepositoryProvider(environment, scanner: scanner),
@@ -302,6 +305,7 @@ public sealed class CleanupPlanner
             installerDownloads,
             new DeliveryOptimizationProvider(environment, scanner: scanner),
             new PreviousWindowsInstallationProvider(handlers, environment, scanner: scanner),
+            new UpgradeDiscardedFilesProvider(handlers, environment, scanner: scanner),
             new WindowsUpdateLeftoverProvider(environment, scanner: scanner),
             new DriverStoreProvider(handlers, environment, scanner: hardLinks),
             new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner),

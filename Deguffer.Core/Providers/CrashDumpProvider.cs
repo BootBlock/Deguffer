@@ -238,7 +238,7 @@ public sealed class CrashDumpProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// The eight locations, and the §9 exclusions that must be shown to survive a rule reaching into
+    /// The nine locations, and the §9 exclusions that must be shown to survive a rule reaching into
     /// the same directory.
     ///
     /// <c>%PROGRAMDATA%</c> is declared as the root rather than the <c>WER</c> folder inside it, so
@@ -267,6 +267,14 @@ public sealed class CrashDumpProvider : CleanupProviderBase
                     Path.Combine("Microsoft", "Windows", "WER", "ReportQueue"),
                     "Error reports gathered for this account's applications but not yet sent. "
                     + "Removing one means it is never sent."),
+
+                // Microsoft's "Task Manager live memory dump" page gives this as where the live kernel
+                // dumps somebody asks Task Manager for are stored by default, and Windows' own
+                // "Temporary Files" cleanup names it. Task Manager's settings name no other place.
+                new DeclaredLocation(
+                    Path.Combine("Microsoft", "Windows", "TaskManager", "LiveKernelDumps"),
+                    "Snapshots of kernel memory somebody asked Task Manager for, taken without stopping "
+                    + "the machine. Each one is the record of the moment it was taken."),
             ],
             []),
 

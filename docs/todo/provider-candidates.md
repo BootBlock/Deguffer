@@ -223,6 +223,11 @@ report.
 
 ### Electron download cache — Build, Tier 1, measured at 150.9 MB
 
+✅ **Done** as `ElectronCacheProvider`. Offers only folders named by 64 lowercase hex characters.
+Differs: `electron_config_cache` is read by the `electron` package's `npm/install.js`, not by
+`@electron/get`, which takes only a `cacheRoot` option. Each entry holds only the zip from
+`@electron/get` 4.0 on (`SHASUMS256.txt` beside it before that).
+
 `%LOCALAPPDATA%\electron\Cache`, moved by `electron_config_cache`
 ([installation](https://github.com/electron/electron/blob/main/docs/tutorial/installation.md)). Each
 entry is a folder named by the SHA-256 of the download URL's directory, holding one zip
@@ -241,6 +246,12 @@ the source that names these entries was not found, so the name patterns are obse
 A separate provider from Electron's (G1).
 
 ### TypeScript typings cache — Build, Tier 1, measured at 57.7 MB
+
+✅ **Done** as `TypeScriptTypingsCacheProvider`. **Correction:** no process is named `tsserver`. VS
+Code runs it as `Code.exe`, other hosts as `node.exe`, and TypeScript 7 as `tsc`. So a version
+folder is held back by the live-tree check (a program working in it, as the installer's
+`npm install` does, or holding a file in it open), not by a process name. Verified from
+TypeScript 6.0.3's `nodeServer.ts`, the TypeScript 7 Go port's `osvfs`, and VS Code's spawner.
 
 `%LOCALAPPDATA%\Microsoft\TypeScript\<major.minor>`, confirmed from the shipped `_tsserver.js`,
 whose `win32` branch joins `LOCALAPPDATA` with `Microsoft/TypeScript` and `versionMajorMinor`.
@@ -294,6 +305,12 @@ root that holds nothing but `vN` folders and not `Data` or `Berry`, and runs
 (Yarn 2 and 3 unverified).
 
 ### Deno cache — Build by path, Tier 1, researched
+
+✅ **Done** as `DenoCacheProvider`. Differs: Deno also honours `XDG_CACHE_HOME\deno` on Windows,
+between `DENO_DIR` and the default. The databases are the seven `*_v2` names `deno_dir.rs` defines,
+each with its SQLite `-wal` and `-shm` files. Other folders Deno tools write (`node_compat_bin`,
+`tsc`, `task_cache_v1` and others) are not in `deno_dir.rs`, so they stay Tier 4. Every step is held
+back while a `deno` process runs.
 
 `DENO_DIR`, `%LOCALAPPDATA%\deno` by default
 ([installation](https://docs.deno.com/runtime/getting_started/installation/)). **A recorded
@@ -367,7 +384,7 @@ are expired only by `clear-cache --gc`.
 
 | Item | Reason |
 | --- | --- |
-| winget `%LOCALAPPDATA%\Microsoft\WinGet\Packages` (79.3 MB measured) | **Installed portable apps, not a cache** ([settings](https://learn.microsoft.com/en-us/windows/package-manager/winget/settings)). Belongs on the negative list |
+| winget `%LOCALAPPDATA%\Microsoft\WinGet\Packages` (79.3 MB measured) | **Installed portable apps, not a cache** ([settings](https://learn.microsoft.com/en-us/windows/package-manager/winget/settings)). Belongs on the negative list. ✅ done: on it, and explained in Explore |
 | rustup toolchains (1.51 GB measured) | Installs, removed with `rustup toolchain uninstall` (§2). Its `downloads` and `tmp` were empty |
 | `scoop cleanup *`, `gem cleanup`, nvm-windows, fnm, Volta | Each removes or manages installed versions, which is uninstalling. Volta is also unmaintained, by its own README |
 | pipx | The `pipx run` cache expires itself after 14 days ([constants.py](https://raw.githubusercontent.com/pypa/pipx/main/src/pipx/constants.py)); the rest is installed environments |
@@ -560,7 +577,12 @@ can leave the lock behind.
 
 ### Packaged Electron apps — Build, as a general rule
 
-[../cache-locations.md](../cache-locations.md) records "Not reached: packaged Electron applications".
+✅ **Done.** `ChromiumUserDataWalk` identifies a folder one level into a package's
+`LocalCache\Roaming` or `LocalCache\Local` by `Local State`, for `%LOCALAPPDATA%\Packages` only, and
+names it `<folder> (packaged)`. Measured on a real packaged Electron application. `LocalLow` is not
+included: Microsoft's redirection list names only `Local` and `Roaming`.
+
+[../cache-locations.md](../cache-locations.md) recorded "Not reached: packaged Electron applications", now [Packaged applications](../cache-locations.md#packaged-applications).
 The fix is the existing identification rule — a `Local State` file one level down — applied one level
 under each package's `LocalCache\Roaming` and `LocalCache\Local`, the redirected roots the first
 survey's §3 describes. It never treats `LocalCache` itself as permission to delete; Microsoft defines
@@ -612,15 +634,15 @@ measured 42.7 MB); WhatsApp's WebView2 cache; NVIDIA's `DXCache` (2.83 GB measur
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
 | Windows Search index, through `ISearchCatalogManager::Reset` | Build later | 2 | **7.45 GB** |
-| *Upgrade Discarded Files* handler | **Build**, a fourth row in `PreviousWindowsInstallationProvider` | 2 | Absent |
-| `LiveKernelReportsPath` and Task Manager's live kernel dumps | **Build**, in `CrashDumpProvider` | 3 | Absent |
+| *Upgrade Discarded Files* handler | ✅ done: `UpgradeDiscardedFilesProvider`, its own row | 3 | Absent |
+| `LiveKernelReportsPath` and Task Manager's live kernel dumps | ✅ done, in `CrashDumpProvider` | 3 | Absent |
 | `Logs\DISM` and `LogFiles\setupcln` | Build later, in `WindowsServicingLogProvider` | 3 | 28 MB |
 | *Windows Defender* handler (`LocalCopy`, `Support`) | Build later | 3 | Refused unelevated |
 | *Diagnostic Data Viewer* and *Feedback Hub Archive* handlers | Build later | 3 | Refused unelevated |
 | *Old ChkDsk Files* (`FOUND.00x`) | Build later | 3 | Absent |
 | BranchCache | Build later, only where large | 1 | Refused unelevated |
 | Reserved storage, hibernation, Compact OS, `MaxPatchCacheSize`, Defender retention, Diagnostic Data Viewer capacity | Name, never change | — | — |
-| `DownloadsFolder` handler | Negative list | — | — |
+| `DownloadsFolder` handler | Negative list. ✅ done: the host refuses it | — | — |
 | Defender definitions, AppX destaging, `wsreset`, `TempState`, `$PatchCache$`, Offline Files, `SoftwareDistribution`, DiagTrack logs, legacy handlers | Reject | — | Some |
 
 ### Windows Search index — Build later, Tier 2, measured at 7.45 GB
@@ -650,7 +672,7 @@ measured machine registers 32.
 | Handler | Status |
 | --- | --- |
 | Previous Installations, Temporary Setup Files, Windows ESD installation files | Covered by `PreviousWindowsInstallationProvider` |
-| **Upgrade Discarded Files** (`SetupDirectories=$WINDOWS.~Q;$INPLACE.~TR;$Windows.~LS`) | **Not covered.** The same `setupcln.dll` as the three above, so a fourth row in `Cleanups`. Build |
+| **Upgrade Discarded Files** (`SetupDirectories=$WINDOWS.~Q;$INPLACE.~TR;$Windows.~LS`) | ✅ done as `UpgradeDiscardedFilesProvider`, Tier 3, sharing `SetupCleanupProviderBase` with the three above. Not a fourth Tier 2 row: the handler's own description (`setupcln.dll` string 1005) says it keeps "a copy of any files that were not moved" and to delete them only "if you are sure that no user's personal files are missing", which is §3's permanent loss |
 | Windows Reset Log Files, Windows Upgrade Log Files | Covered by `WindowsServicingLogProvider`, which removes `Panther` by path. Whether `Panther` should go through its handler instead is an open question that provider and the first survey's §6 already record |
 | Device Driver Packages, User file versions, Delivery Optimization Files, Update Cleanup, D3D Shader Cache, Recycle Bin, dump and error-report handlers | Covered by their providers |
 | Temporary Files | Covered for `%TEMP%` and `C:\Windows\Temp`. See the `SystemTemp` question below |
@@ -660,7 +682,7 @@ measured machine registers 32.
 | Language Pack | Reject: what it removes is undocumented and could not be observed unelevated |
 | Setup Log Files, RetailDemo Offline Content, Downloaded Program Files, Internet Cache Files, Offline Pages Files, Active Setup Temp Folders, Content Indexer Cleaner, Temporary Sync Files | Reject: legacy, or 0 to 8 MB measured |
 | Thumbnail Cache | Already on the negative list |
-| **DownloadsFolder** (`Folder=%USERPROFILE%\Downloads`, `FileList=*.*`, subfolders removed, no age) | **Never.** It empties the Downloads folder. Add it to the negative list by name, so no future handler host selects it |
+| **DownloadsFolder** (`Folder=%USERPROFILE%\Downloads`, `FileList=*.*`, subfolders removed, no age) | **Never.** It empties the Downloads folder. ✅ done: `DiskCleanupHandlers.NeverHosted` refuses it by name for a survey and a run, and the negative list in `unreached-locations.md` names it |
 
 **A hosting question for every handler below.** The documentation says a handler's `CleanupString`
 is "run at the completion of the disk cleanup", which reads as the cleanup manager's job. Several
@@ -675,6 +697,12 @@ when Deguffer hosts it directly is neither documented nor verified, and it has t
   and `CrashDumpSettings` reads `DumpFile`, `MinidumpDir` and `DumpFolder` but not this value. The
   *Temporary Files* handler also names `%LOCALAPPDATA%\Microsoft\Windows\TaskManager\LiveKernelDumps`,
   dumps Task Manager writes on request, which nothing covers.
+  ✅ done. The value is documented on Microsoft's
+  [WER Settings](https://learn.microsoft.com/en-us/windows/win32/wer/wer-settings) page, not the live
+  dump reference, as a `REG_SZ` in NT form (`\??\C:\...`). A moved folder also offers the dumps in the
+  five component folders the live dump reference names, by name only. The Task Manager folder is a
+  declared location, per Microsoft's
+  [Task Manager live dump](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/task-manager-live-dump) page.
 - **`WindowsServicingLogProvider`, Build later**: `Logs\DISM` (7.3 MB) and `System32\LogFiles\setupcln` (20.6 MB)
   are not covered. Same reasoning and tier as `CBS`.
 
@@ -753,8 +781,8 @@ report.
 
 | Location | Why not |
 | --- | --- |
-| The `DownloadsFolder` Disk Cleanup handler | Empties the user's Downloads folder, with no age rule |
-| `%LOCALAPPDATA%\Microsoft\WinGet\Packages` | Installed portable apps, in a folder named like a download cache |
+| The `DownloadsFolder` Disk Cleanup handler | Empties the user's Downloads folder, with no age rule. ✅ done: refused by the Disk Cleanup host |
+| `%LOCALAPPDATA%\Microsoft\WinGet\Packages` | Installed portable apps, in a folder named like a download cache. ✅ done: explained in Explore, offered by nothing |
 | `.godot\export_credentials.cfg` | Export passwords and encryption keys, inside a folder Godot calls cache |
 | Deno's `location_data` and `deno_history.txt` | `localStorage`, the default KV database and REPL history, removed by the tool's own `deno clean` |
 | Bun's `<cache>\links` | The live global store projects link into |
@@ -781,6 +809,7 @@ Not a schedule: cost against value, given the machinery that exists.
 1. **Godot `imported` and `shader_cache`** — the largest measured item, on the Unity provider's
    shape.
 2. **Upgrade Discarded Files, `LiveKernelReportsPath`, `Logs\DISM`** — rows in existing providers.
+   ✅ The first two are done: Upgrade Discarded Files as its own Tier 3 provider, not a row.
 3. **A run-wide refusal of registered virtual disks** — before any new virtualisation report.
 4. **VMware, then VirtualBox, then Hyper-V reports**, and owner records for Podman and Rancher.
 5. **Superseded JetBrains system directories** and **Vagrant `prune`**.
