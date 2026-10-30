@@ -1,5 +1,4 @@
 using System.Text;
-using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
@@ -26,24 +25,27 @@ internal static class ConanRc
 
     private const string HomeKey = "conan_home";
 
+    /// <summary>Far past a file of one or two settings, and small enough to read whole.</summary>
+    private const int MaximumBytes = 64 * 1024;
+
     /// <summary>The one <c>.conanrc</c> at <paramref name="file"/>, known to be there.</summary>
     public static ConanRcReading Read(string file)
     {
-        byte[] bytes;
-
-        try
-        {
-            bytes = File.ReadAllBytes(LongPath.Extended(file));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        // Verbatim, so that a byte order mark, which Python's locale reading keeps, is outside ASCII
+        // below rather than silently dropped.
+        if (BoundedFile.ReadVerbatim(file, MaximumBytes) is not { } content)
         {
             // Conan reads a file it cannot open as naming nothing. What kept Deguffer out need not
-            // keep Conan out, though, so which home Conan settles on is not known.
+            // keep Conan out, though, and Conan reads a file of any size, so which home it settles
+            // on is not known.
             return new ConanRcReading.Unusable(
-                $"Deguffer could not read {file}, which tells Conan where its home is ({ex.Message}).");
+                $"Deguffer could not read {file}, which tells Conan where its home is, or it is larger than "
+                + $"{MaximumBytes / 1024} KB, which no .conanrc needs to be.");
         }
 
-        if (bytes.Any(b => b > 0x7F))
+        var bytes = content.Span;
+
+        if (bytes.ContainsAnyInRange((byte)0x80, (byte)0xFF))
         {
             return new ConanRcReading.Unusable(
                 $"{file} holds characters outside ASCII, and Conan reads it in an encoding that "
