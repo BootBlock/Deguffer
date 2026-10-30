@@ -28,7 +28,7 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task AHeldIndexAnswersEveryQuestionOfThePassFromOneBuild()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
 
@@ -44,7 +44,7 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task TheIndexIsDroppedWhenTheLastHoldEnds()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
 
@@ -66,7 +66,7 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task TheIndexIsKeptWhileAnotherHoldStands()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
 
@@ -92,7 +92,7 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task ABuildStoppedByTheLastHoldEndsCancelledNotFaulted()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var sources = new HeldMftSourceFactory(letter, Volume());
         var cache = new MftVolumeIndexCache(sources, ScanTuner.Shipped);
 
@@ -116,7 +116,7 @@ public sealed class VolumeIndexLifetimeTests
     public async Task ABuildStoppedReadingAnAttributeListEndsCancelledNotFaulted()
     {
         const long ListCluster = 900;
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var sources = new ListHeldOpen(
             new MftFixture().AddFileWhoseListOutsideTheTableNamesRecords(16, ListCluster, firstNamed: 1_000, count: 4),
             ListCluster);
@@ -140,7 +140,7 @@ public sealed class VolumeIndexLifetimeTests
     [Fact]
     public async Task APlanningPassLeavesNoIndexBehind()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var factory = FakeMftSourceFactory.Serving(letter, Volume());
         var scanner = new DirectoryScanner(factory, tuning: RouteTuners.Table);
         using var temp = new TempDirectory();
