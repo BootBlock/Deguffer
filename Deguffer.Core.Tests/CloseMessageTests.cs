@@ -11,8 +11,7 @@ namespace Deguffer.Core.Tests;
 /// <c>WM_QUERYENDSESSION</c> here, a <c>TerminateProcess</c> there, each reasonable on its own — and
 /// this fails the moment one is declared, in either project.</para>
 ///
-/// <para>The declarations are read rather than the prose, so a comment explaining why Deguffer never
-/// terminates anything does not read as a termination.</para>
+/// <para>The declarations are read rather than the prose, as <see cref="ProductSources.Win32Imports"/> says.</para>
 /// </summary>
 public sealed partial class CloseMessageTests
 {
@@ -51,7 +50,7 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void NoCallThatEndsOrCommandsAnotherProgramIsDeclared()
     {
-        var declared = Imports();
+        var declared = ProductSources.Win32Imports();
 
         foreach (var banned in NeverDeclared)
         {
@@ -70,7 +69,7 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void TheOnlyMessageDegufferPostsIsWindowClose()
     {
-        var declared = Imports();
+        var declared = ProductSources.Win32Imports();
 
         Assert.Equal(
             Path.Combine("Deguffer.Core", "Memory", "WindowCalls.cs"),
@@ -95,7 +94,7 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void TheOnlySessionEndIsAskedOfWindowsAndNeverForced()
     {
-        var declared = Imports();
+        var declared = ProductSources.Win32Imports();
         var file = Path.Combine("Deguffer.Core", "Execution", "WindowsSession.cs");
 
         Assert.Equal(file, Assert.Single(declared[TheOnlySessionEnd]));
@@ -133,12 +132,12 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void TheOnlyJobEndedIsOneDegufferMadeForItsOwnTools()
     {
-        var declared = Imports();
+        var declared = ProductSources.Win32Imports();
 
         Assert.Equal(Path.Combine("Deguffer.Core", "Safety", "ToolProcessNative.cs"), Assert.Single(declared[TheOnlyJobEnd]));
         Assert.False(declared.Contains("OpenJobObjectW") || declared.Contains("OpenJobObject"), "A job is opened rather than made.");
 
-        var callers = Sources
+        var callers = ProductSources.Files()
             .Where(file => TerminateCall().IsMatch(File.ReadAllText(file)))
             .Select(file => Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file));
 
@@ -153,54 +152,6 @@ public sealed partial class CloseMessageTests
 
     private static string Core =>
         Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core");
-
-    /// <summary>
-    /// Both projects, because the rule is about Deguffer rather than about one assembly, and the
-    /// shell already carries Win32 calls of its own.
-    /// </summary>
-    private static IEnumerable<string> Sources =>
-        new[] { Core, Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App") }
-            .SelectMany(project => Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories))
-            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
-
-    /// <summary>
-    /// Every Win32 call Deguffer declares, by the name Windows knows it under, with the file that
-    /// declares it. The entry point where one is named, because that is what is called, and the
-    /// method's own name otherwise.
-    ///
-    /// <para>Every declaration is kept, not the last of each name, so a second declaration of the
-    /// one message call cannot hide behind the first.</para>
-    /// </summary>
-    private static ILookup<string, string> Imports()
-    {
-        var imports = new List<(string Name, string File)>();
-
-        foreach (var file in Sources)
-        {
-            foreach (Match match in Import().Matches(File.ReadAllText(file)))
-            {
-                var entryPoint = match.Groups["entry"].Value;
-
-                imports.Add((
-                    entryPoint.Length > 0 ? entryPoint : match.Groups["method"].Value,
-                    Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file)));
-            }
-        }
-
-        // The sweep is worth nothing if it stops matching declarations, and a count that only has to
-        // beat zero would not notice. Deguffer declared 60-odd when this was written.
-        Assert.True(
-            imports.Count > 50,
-            $"Only {imports.Count} Win32 declarations were found, so the sweep is no longer reading the source.");
-
-        return imports.ToLookup(import => import.Name, import => import.File, StringComparer.Ordinal);
-    }
-
-    [GeneratedRegex(
-        """\[(?:LibraryImport|DllImport)\("[^"]+"(?:[^\]]*?EntryPoint\s*=\s*"(?<entry>[^"]+)")?[^\]]*\)\](?:\s*\[[^\]]*\])*\s*(?:public|internal|private|protected)?\s*(?:static\s+|extern\s+|partial\s+|unsafe\s+)*[^\s(]+\s+(?<method>\w+)\s*\(""",
-        RegexOptions.Singleline)]
-    private static partial Regex Import();
 
     [GeneratedRegex(@"\bPostMessage\(\s*\w+\s*,\s*(?<message>\w+)")]
     private static partial Regex PostCall();

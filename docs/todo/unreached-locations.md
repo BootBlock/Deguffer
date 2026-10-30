@@ -8,7 +8,7 @@
 > derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies,
 > §11's virtual disk report and §12's Squirrel staging and superseded builds have shipped; everything
 > else is unstarted.
-> **Open questions 1, 2 and 3 are answered** — see the foot of this document.
+> **Open questions 1, 2, 3 and 4 are answered** — see the foot of this document.
 > Flip to ✅ COMPLETE and `git mv` into `done/` when the list is exhausted, or supersede it with a
 > newer plan.
 
@@ -49,7 +49,7 @@ form throughout this document.
 | Store-Python `LocalCache\local-packages` | 5.4 GB | 3 | Same redirection blind spot; it is installed packages, not cache |
 | `$Recycle.Bin` on non-system volumes | 3.6 GB | 3 | Cleaners empty `C:` only. `C:` held 0 bytes here. **Shipped — see §7** |
 | `%LOCALAPPDATA%\NVIDIA\DXCache` + `GLCache` | 3.2 GB | 1 | GPU shader cache; no provider category existed. **Shipped — see §5** |
-| Windows Search index (`Windows.db`) | 2.2 GB | 2 | Needs a service stop, so no cleaner attempts it |
+| Windows Search index (`Windows.db`) | 2.2 GB | 2 | Needs a service stop, so no cleaner attempts it. **Service control declined — see §6** |
 | `C:\$WinREAgent` | 1.7 GB | 2 | Disk Cleanup's update pass does not remove it |
 | .NET SDKs, 8 versions, one out of support | 1.8 GB | 4 | An uninstall, not a delete. §2 rules it out |
 | Visual Studio `.vs\` per solution | 1.5 GB | mixed | Inside source trees, beside the `obj\` already walked. **Re-measured across 51 solutions, and the tier is a correction — see §2** |
@@ -1204,10 +1204,10 @@ four, and none of them is visible from the code alone.
   keep-the-directory removal mode does not exist and would be the fix if the assumption is wrong.
 
 Left out deliberately: `C:\$WinREAgent` and its siblings, which need the pending-restart check
-established first and are still where this section left them; the Windows Search index, which needs
-the service-control policy decided; and finding dumps by shape anywhere on the disk. On the last, one
-thing the work adds: the *provider* shape here is a declared-path one, and a by-shape search is a
-discovery one, so the two share nothing but the tier. Whoever builds it should read
+established first and are still where this section left them; the Windows Search index, which
+waits on Windows' own rebuild being measured (below); and finding dumps by shape anywhere on the
+disk. On the last, one thing the work adds: the *provider* shape here is a declared-path one, and a
+by-shape search is a discovery one, so the two share nothing but the tier. Whoever builds it should read
 `ChromiumUserDataDiscovery` rather than this.
 
 Five locations, all of them records of something that already happened: `%LOCALAPPDATA%\CrashDumps`
@@ -1357,6 +1357,17 @@ all before this is scheduled.**
 [provider-candidates.md](provider-candidates.md) §5 found a documented rebuild,
 `ISearchCatalogManager::Reset`, that needs no service control. If it shrinks the file, the question
 above no longer blocks this entry. Whether it does is not yet measured.
+
+**Outcome for service control:** declined, in
+[#70](https://github.com/BootBlock/Deguffer/issues/70), and §2 of the spec now says so for the whole
+product. Deguffer never stops a service, so no file in the index's directory is ever deleted by
+path, and no step names one. `Windows-gather.db`, `Windows-usn.db`, `Projects`, `GatherLogs` and
+every `-wal` and `-shm` file are live state of the running service, and what `Reset` rebuilds among
+them is the service's decision, not Deguffer's. The entry waits on `Reset` alone: if a measurement on
+a disposable machine shows it shrinks `Windows.db`, the index is a Tier 2 row through it, sized
+before and after by what Windows holds there. If it does not, the index is reported and not offered.
+Setting `SetupCompletedSuccessfully` to `0` under `HKLM\SOFTWARE\Microsoft\Windows Search` to
+force a rebuild is repeated widely and documented by nobody, and is not a route either way.
 
 ---
 
@@ -1712,13 +1723,14 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | Visual Studio `.vs` per solution | Split out of the row above once measured properly. Not the Tier 1 folder with one `.suo` the survey assumed: a quarter of it by size is AI chat history, file snapshots and coverage records, and it needs recognised children applied *inside* it at two nesting levels | 1.5 GB |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
 | Cloud sync dehydration ✅ | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
-| Windows Search index | Service control, which Deguffer does not do today. Decide the policy before the provider | 2.2 GB |
+| Windows Search index | Expected service control. Declined for the whole product (§2 of the spec), so the index waits on Windows' own `Reset` being measured — §6 records it | 2.2 GB |
 | Completed upgrade scaffolding ✅ | Expected one path-based provider behind a pending-restart check. Three of the five names had a Disk Cleanup handler, which needed a step kind of its own, and a fourth turned out to be logs — §6 records all of it | 1.7 GB |
 
 The last two rows are different in kind from the rest. Cloud-sync dehydration and service control
 are not new providers, they are new **capabilities**, and each widens what the safety model has to
 reason about. The tier model handles them. The plan and execution types did not when this was
-written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
+written; `ReleaseLocalCopiesStep` has since given them the first (see §10). The second was
+declined rather than built (§6).
 
 ---
 
@@ -1803,8 +1815,10 @@ written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
    inside the folder holds that folder back, compared with 8.3 aliases expanded, and so does an
    entry whose alias cannot be expanded. Nothing else does. The servicing stack and Setup
    running is the third check. Every unreadable answer reads as "not finished". See §6.
-4. **Should Deguffer control services at all?** It gates the search index, and possibly nothing else.
-   If nothing else, the answer is probably no, and the index belongs in §9.
+4. ~~**Should Deguffer control services at all?**~~ **Answered: no, anywhere in the product.** It
+   gated the search index and `SoftwareDistribution\Download`. The index has a route that needs
+   none, so it is a candidate through that route rather than an exclusion in §9 of the spec, and
+   `SoftwareDistribution` stays protected. See §6 above and §2 of the spec.
 5. **What does a non-deleting step look like in `CleanupPlan`?** Still open, and narrowed rather
    than answered. §6 added a second *deletion* kind for `C:\Windows\MEMORY.DMP`, and what that
    settled is where the boundary runs: everything that destroys a path derives from `DeleteStep` and
@@ -1814,4 +1828,4 @@ written; `ReleaseLocalCopiesStep` has since given them the first (see §10).
    a second subject exists.
    **Answered for dehydration itself** by issue #93: it is `ReleaseLocalCopiesStep`, a sibling of
    `DeleteStep` and `RunCommandStep` that targets nothing and whose §5.6 negative asserts survival.
-   Service control, question 4, would be the second subject.
+   Service control, question 4, would have been the second subject, and is declined.
