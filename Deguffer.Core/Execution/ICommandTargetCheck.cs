@@ -11,6 +11,10 @@ namespace Deguffer.Core.Execution;
 /// version of a driver. The command would then remove a package the plan never saw, and §5.6 could
 /// not notice, because a folder the plan never listed is not one it protects.</para>
 ///
+/// <para><b>And for a tool whose arguments reach further once another program starts.</b>
+/// <c>conan cache clean -t</c> removes every unfinished build, and a build started after the preview
+/// is one the plan never saw. The arguments are unchanged and name something new.</para>
+///
 /// <para>Implemented by the provider that knows how its tool resolves the handle, so the run holds no
 /// knowledge of any tool, for the reason <see cref="IUseCheck"/> gives.</para>
 /// </summary>

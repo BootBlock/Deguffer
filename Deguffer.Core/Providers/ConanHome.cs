@@ -25,12 +25,12 @@ internal static class ConanHome
 
     /// <param name="environment">Whose profile and variables Conan would see.</param>
     /// <param name="workingDirectory">The folder Conan is started in, where its <c>.conanrc</c> search begins.</param>
-    public static ConanHomeAnswer Resolve(IUserEnvironment environment, string workingDirectory)
+    /// <param name="walk">How far above that folder the search goes, which for Conan is the drive's root.</param>
+    public static ConanHomeAnswer Resolve(IUserEnvironment environment, string workingDirectory, ConanRcWalk walk)
     {
-        string? named = null;
-        string? source = null;
+        Naming? named = null;
 
-        switch (FindConanRc(workingDirectory))
+        switch (walk.Find(workingDirectory))
         {
             case ConanRcSearch.Refused refused:
                 return new ConanHomeAnswer.Refused(refused.Path);
@@ -42,7 +42,7 @@ internal static class ConanHome
                         return new ConanHomeAnswer.Unknown(unusable.Why);
 
                     case ConanRcReading.Names names:
-                        (named, source) = (names.Home, $"the {ConanRc.FileName} at {found.Path}");
+                        named = new Naming(names.Home, $"the {ConanRc.FileName} at {found.Path}");
                         break;
                 }
 
@@ -51,42 +51,18 @@ internal static class ConanHome
 
         if (named is null && environment.GetEnvironmentVariable("CONAN_HOME") is { } variable)
         {
-            (named, source) = (variable, "the CONAN_HOME variable");
+            named = new Naming(variable, "the CONAN_HOME variable");
         }
 
-        if (named is null)
+        if (named is not { } naming)
         {
             return new ConanHomeAnswer.Found(Path.Combine(environment.UserProfile, DefaultFolder), "the default");
         }
 
-        return ExpandUser(named, environment.UserProfile) is { } expanded && LongPath.Configured(expanded) is { } home
-            ? new ConanHomeAnswer.Found(home, source!)
+        return ExpandUser(naming.Value, environment.UserProfile) is { } expanded && LongPath.Configured(expanded) is { } home
+            ? new ConanHomeAnswer.Found(home, naming.Source)
             : new ConanHomeAnswer.Unknown(
-                $"Conan stops with an error where its home, named by {source}, is not a full path ('{named}').");
-    }
-
-    /// <summary>
-    /// <c>find_file_walk_up</c>: the folder itself, then each folder above it, the drive's root
-    /// included. A refusal stops the walk, because Python's answer to one depends on its version: an
-    /// older one gives up on the whole file and a newer one walks on past it.
-    /// </summary>
-    private static ConanRcSearch? FindConanRc(string workingDirectory)
-    {
-        for (var folder = workingDirectory; folder is not null; folder = Path.GetDirectoryName(folder))
-        {
-            var candidate = Path.Combine(folder, ConanRc.FileName);
-
-            switch (LongPath.ProbeFile(candidate))
-            {
-                case PathPresence.Present:
-                    return new ConanRcSearch.Found(candidate);
-
-                case PathPresence.Refused:
-                    return new ConanRcSearch.Refused(candidate);
-            }
-        }
-
-        return null;
+                $"Conan stops with an error where its home, named by {naming.Source}, is not a full path ('{naming.Value}').");
     }
 
     /// <summary>
@@ -102,12 +78,8 @@ internal static class ConanHome
         _ => path,
     };
 
-    private abstract record ConanRcSearch
-    {
-        public sealed record Found(string Path) : ConanRcSearch;
-
-        public sealed record Refused(string Path) : ConanRcSearch;
-    }
+    /// <summary>A home a setting names, before it is expanded, and which setting named it.</summary>
+    private readonly record struct Naming(string Value, string Source);
 }
 
 /// <summary>What <see cref="ConanHome.Resolve"/> came to.</summary>

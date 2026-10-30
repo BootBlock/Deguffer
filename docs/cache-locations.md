@@ -1405,17 +1405,23 @@ It works out Conan's home the way Conan does: a `.conanrc` in Deguffer's tool fo
 above it, then `CONAN_HOME`, then `.conan2` in your profile. If that home does not exist, Conan is
 never started, because every Conan command creates its home. Otherwise it asks `conan config home`
 and `conan config show core.cache:storage_path` where the home and store are, and the row names the
-home Conan reported. It runs `conan cache clean -s -b -t`. The download and metadata folders (`-d`)
-and the backup sources (`-bs`) are never asked for, and `conan remove` is never run. While a `conan`
-process is running, nothing is offered. A clean you cancel while this command runs is left to
-finish, because Conan would build from a half-removed source or build folder.
+home Conan reported. A home or store that a setting puts at your profile, a drive's root or another
+folder Deguffer never treats as one tool's is left alone, and Conan's clean is not run there. It
+runs `conan cache clean -s -b -t`. The download and metadata folders (`-d`) and the backup sources
+(`-bs`) are never asked for, and `conan remove` is never run. `-t` removes the temporary folder `t`
+and every unfinished build in `b` whatever it is called, so the clean is offered only where the
+store holds `cache.sqlite3` and everything in `t` and `b` carries the name Conan gives the folders
+it makes there. While a `conan` process is running, nothing is offered, and the clean asks again
+just before it runs. A clean you cancel while this command runs is left to finish, because Conan
+would build from a half-removed source or build folder.
 
 ### What is protected
 
 Conan's home and its configuration (`global.conf`, `profiles`, `remotes.json`, `extensions`,
 `settings.yml` and the rest), `sources`, the store, `cache.sqlite3`, and in every recipe and package
-folder everything except `s` and `b`, including each package built on this machine. Explore refuses
-the home and the store.
+folder everything except `s` and `b`, including each package built on this machine, and anything in
+`t` or `b` that Conan did not make. Explore refuses the home and the store, and in a home or store
+it has left alone, only Conan's own files.
 
 ### What it costs you
 

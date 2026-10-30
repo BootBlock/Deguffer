@@ -22,6 +22,16 @@ namespace Deguffer.Core.Providers;
 /// <c>conaninfo.txt</c>, which is a build that never finished. <c>-s</c> removes each recipe's
 /// <c>s</c> and <c>-b</c> each package's <c>b</c>, wherever the database says the package is.</para>
 ///
+/// <para><b>§5.2: <c>-t</c> goes by shape, so Deguffer goes by name.</b> Conan removes <c>t</c> whole,
+/// and every folder of <c>b</c> without a finished package in it whatever the folder is called, in
+/// whichever folder <c>core.cache:storage_path</c> names. A store pointed at a folder that already
+/// held a <c>b</c> or a <c>t</c> would lose what was in them. So every entry of <c>t</c> and every
+/// folder of <c>b</c> must carry the name Conan gives the folders it makes there
+/// (<c>create_export_recipe_layout</c> and <c>create_build_pkg_layout</c>), and be a plain folder,
+/// because Conan makes no links. Anything else, a linked <c>t</c> or <c>b</c>, or one that will not
+/// be listed, is <see cref="ConanStoreReading.Unrecognised"/>: Tier 4, and the reason the clean is not
+/// offered.</para>
+///
 /// <para><b>An estimate, in the direction of too much.</b> The database is not read, so a folder Conan
 /// no longer lists is measured though Conan will not touch it. The executor's after-measure says what
 /// the run really freed.</para>
@@ -34,6 +44,10 @@ internal static partial class ConanStoreContents
     /// <summary><c>PkgCache.temp_folder</c>.</summary>
     public const string TempFolder = "t";
 
+    /// <summary>
+    /// The database <c>PkgCache</c> opens in the store, creating it where it is missing, at the start
+    /// of every Conan command.
+    /// </summary>
     public const string Database = "cache.sqlite3";
 
     public const string SourceFolder = "s";
@@ -49,6 +63,9 @@ internal static partial class ConanStoreContents
     private const string Unrecognised =
         "Not something Conan's clean removes, and not recognised as part of Conan's store.";
 
+    private const string NotConansReason =
+        "Not something Conan made, though its clean would remove it, so the clean is not offered while it is here.";
+
     private const string LinkNotMeasured =
         "Conan's clean removes a folder here that is a link, so Deguffer did not measure through it.";
 
@@ -59,7 +76,7 @@ internal static partial class ConanStoreContents
 
         if (scan.Unreadable)
         {
-            return new ConanStoreReading([], [], [UnreadableRoot.Note(store)], Unreadable: true);
+            return new ConanStoreReading([], [], [], [UnreadableRoot.Note(store)], Unreadable: true);
         }
 
         foreach (var child in scan.Directories.Concat(scan.Links))
@@ -68,16 +85,23 @@ internal static partial class ConanStoreContents
 
             var path = LongPath.Display(child.FullName);
             var isLink = child.Attributes.HasFlag(FileAttributes.ReparsePoint);
+            var isTemp = child.Name.Equals(TempFolder, StringComparison.OrdinalIgnoreCase);
+            var isBuilds = child.Name.Equals(BuildsFolder, StringComparison.OrdinalIgnoreCase);
 
-            if (child.Name.Equals(TempFolder, StringComparison.OrdinalIgnoreCase))
+            // Conan goes through a linked t or b as though it were the folder, into a tree nobody here read.
+            if (isLink && (isTemp || isBuilds))
             {
-                reading.Removed(path, isLink);
+                reading.NotConans(path);
             }
             else if (isLink)
             {
                 reading.Kept(path, CacheLevelWalk.LinkReason);
             }
-            else if (child.Name.Equals(BuildsFolder, StringComparison.OrdinalIgnoreCase))
+            else if (isTemp)
+            {
+                ReadTemp(path, reading, ct);
+            }
+            else if (isBuilds)
             {
                 reading.Kept(path, "The folder Conan keeps the packages built on this machine in.");
                 ReadLocalBuilds(path, reading, ct);
@@ -97,12 +121,48 @@ internal static partial class ConanStoreContents
     }
 
     /// <summary>
+    /// <c>t</c>, which <c>-t</c> removes whole, so it is measured only where everything in it is an
+    /// export Conan started.
+    /// </summary>
+    private static void ReadTemp(string temp, Reading reading, CancellationToken ct)
+    {
+        if (FolderEntries.Of(temp) is not { } entries)
+        {
+            reading.Unreadable(temp);
+            reading.NotConans(temp);
+            return;
+        }
+
+        var foreign = 0;
+
+        foreach (var entry in entries.Where(entry => !IsConansFolder(entry)))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            reading.NotConans(LongPath.Display(entry.FullName));
+            foreign++;
+        }
+
+        if (foreign == 0)
+        {
+            reading.Removed(temp, isLink: false);
+        }
+        else
+        {
+            reading.Kept(temp, "The folder Conan keeps unfinished exports in, which holds something Conan did not make.");
+        }
+    }
+
+    /// <summary>
     /// The folders of <c>b</c>, each a package built on this machine. One that finished keeps its
     /// package and loses its build folder, and one that did not goes whole, as <c>-t</c> takes it.
     ///
     /// <para><b>Finished is Conan's test, read as Conan reads it.</b> <c>os.path.exists</c> answers
     /// false where Windows refuses to describe the file, so a manifest Deguffer cannot see is one Conan
     /// cannot see either, and the folder is removed.</para>
+    ///
+    /// <para>A file in <c>b</c> is not listed: Conan's <c>rmdir</c> passes over anything that is not a
+    /// folder.</para>
     /// </summary>
     private static void ReadLocalBuilds(string builds, Reading reading, CancellationToken ct)
     {
@@ -111,6 +171,7 @@ internal static partial class ConanStoreContents
         if (scan.Unreadable)
         {
             reading.Unreadable(builds);
+            reading.NotConans(builds);
             return;
         }
 
@@ -119,18 +180,27 @@ internal static partial class ConanStoreContents
             ct.ThrowIfCancellationRequested();
 
             var path = LongPath.Display(build.FullName);
-            var isLink = build.Attributes.HasFlag(FileAttributes.ReparsePoint);
 
-            if (isLink || !Finished(path))
+            if (!IsConansFolder(build))
             {
-                reading.Removed(path, isLink);
-                continue;
+                reading.NotConans(path);
             }
-
-            reading.Kept(path, "A package Conan built on this machine, which may exist nowhere else. Its clean removes only the build folder inside.");
-            ReadInside(path, reading);
+            else if (!Finished(path))
+            {
+                reading.Removed(path, isLink: false);
+            }
+            else
+            {
+                reading.Kept(path, "A package Conan built on this machine, which may exist nowhere else. Its clean removes only the build folder inside.");
+                ReadInside(path, reading);
+            }
         }
     }
+
+    private static bool IsConansFolder(FileSystemInfo entry) =>
+        entry is DirectoryInfo
+        && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint)
+        && ReferenceFolder().IsMatch(entry.Name);
 
     private static bool Finished(string build) =>
         LongPath.ProbeEntry(Path.Combine(build, PackageFolder, "conanmanifest.txt")) is PathPresence.Present
@@ -168,8 +238,10 @@ internal static partial class ConanStoreContents
     }
 
     /// <summary>
-    /// <c>PkgCache._get_path</c>: up to five characters of a reference name, which Conan allows to be
-    /// letters, digits and <c>_ + . -</c>, then thirteen lower-case hex digits.
+    /// <c>PkgCache._get_path</c>, and the same shape for a folder of <c>t</c> or <c>b</c>: up to five
+    /// characters of a reference name, which Conan allows to be letters, digits and <c>_ + . -</c>,
+    /// then the first thirteen lower-case hex digits of a SHA-256. A build folder hashes a random UUID
+    /// in as well, which changes the digits and not the shape.
     /// </summary>
     [GeneratedRegex("^[A-Za-z0-9_][A-Za-z0-9_+.-]{0,4}[0-9a-f]{13}$")]
     private static partial Regex ReferenceFolder();
@@ -178,6 +250,7 @@ internal static partial class ConanStoreContents
     {
         private readonly List<string> _measured = [];
         private readonly List<(string Path, string Reason)> _kept = [];
+        private readonly List<string> _unrecognised = [];
         private readonly List<PlanNote> _notes = [];
         private bool _unreadable;
 
@@ -195,23 +268,35 @@ internal static partial class ConanStoreContents
 
         public void Kept(string path, string reason) => _kept.Add((path, reason));
 
+        /// <summary>Something the clean would remove that is not shown to be Conan's: protected, and it holds the clean back.</summary>
+        public void NotConans(string path)
+        {
+            _unrecognised.Add(path);
+            _kept.Add((path, NotConansReason));
+        }
+
         public void Unreadable(string path)
         {
             _notes.Add(UnreadableRoot.Note(path));
             _unreadable = true;
         }
 
-        public ConanStoreReading Finish() => new(_measured, _kept, _notes, _unreadable);
+        public ConanStoreReading Finish() => new(_measured, _kept, _unrecognised, _notes, _unreadable);
     }
 }
 
 /// <summary>What <see cref="ConanStoreContents.Read"/> found.</summary>
 /// <param name="Measured">Every folder the clean removes, for the step to measure and report against.</param>
 /// <param name="Kept">Every folder beside them that must outlive the clean, with why.</param>
+/// <param name="Unrecognised">
+/// Everything the clean would remove that is not shown to be Conan's, each in <paramref name="Kept"/>
+/// as well. One is enough for the clean not to be offered.
+/// </param>
 /// <param name="Notes">What the user is told about what could not be read or measured.</param>
 /// <param name="Unreadable">Whether a folder would not be listed, so the figure leaves something out.</param>
 internal sealed record ConanStoreReading(
     IReadOnlyList<string> Measured,
     IReadOnlyList<(string Path, string Reason)> Kept,
+    IReadOnlyList<string> Unrecognised,
     IReadOnlyList<PlanNote> Notes,
     bool Unreadable);

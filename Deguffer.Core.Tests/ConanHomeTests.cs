@@ -23,7 +23,9 @@ public sealed class ConanHomeTests : IDisposable
 
     private string WorkingDirectory => Path.Combine(Parent, "tool-working-directory");
 
-    private ConanHomeAnswer Resolve() => ConanHome.Resolve(_environment, WorkingDirectory);
+    private ConanHomeAnswer Resolve() => Resolve(new ConanRcWalk(_temp.Path));
+
+    private ConanHomeAnswer Resolve(ConanRcWalk walk) => ConanHome.Resolve(_environment, WorkingDirectory, walk);
 
     private void WriteConanRc(string text)
     {
@@ -134,5 +136,34 @@ public sealed class ConanHomeTests : IDisposable
         {
             Assert.Equal(conanrc, Assert.IsType<ConanHomeAnswer.Refused>(Resolve()).Path);
         }
+    }
+
+    /// <summary>
+    /// The walk ends at the folder it is given, which it still searches, so a test's walk never leaves
+    /// the folder the test made and never reads a <c>.conanrc</c> the machine has above it.
+    /// </summary>
+    [Fact]
+    public void TheWalkSearchesItsEndAndNothingAboveIt()
+    {
+        var end = _environment.LocalAppData;
+        File.WriteAllText(Path.Combine(_environment.UserProfile, ".conanrc"), "conan_home=./above-the-end");
+
+        Assert.Equal(Path.Combine(_environment.UserProfile, ".conan2"), Assert.IsType<ConanHomeAnswer.Found>(Resolve(new ConanRcWalk(end))).Home);
+
+        File.WriteAllText(Path.Combine(end, ".conanrc"), "conan_home=./at-the-end");
+
+        Assert.Equal(Path.Combine(end, "at-the-end"), Assert.IsType<ConanHomeAnswer.Found>(Resolve(new ConanRcWalk(end))).Home);
+    }
+
+    /// <summary>
+    /// Conan reads a <c>.conanrc</c> of any size, and Deguffer reads one no further than a bound, so a
+    /// larger one leaves the home unknown rather than read as naming nothing.
+    /// </summary>
+    [Fact]
+    public void LeavesTheHomeUnknownWhereTheConanRcIsPastTheBound()
+    {
+        WriteConanRc("conan_home=./conan-home\n" + new string('#', 64 * 1024));
+
+        Assert.IsType<ConanHomeAnswer.Unknown>(Resolve());
     }
 }

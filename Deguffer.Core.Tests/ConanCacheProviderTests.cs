@@ -14,8 +14,8 @@ public sealed class ConanCacheProviderTests : IDisposable
 {
     private const string Recipe = "zlib0123456789abc";
     private const string Package = "zlibfedcba9876543";
-    private const string FinishedBuild = "fmt__00112233445566";
-    private const string UnfinishedBuild = "fmt__66554433221100";
+    private const string FinishedBuild = "fmt0011223344556";
+    private const string UnfinishedBuild = "fmt6655443322110";
 
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
@@ -37,7 +37,7 @@ public sealed class ConanCacheProviderTests : IDisposable
             .Responding(Conan, "config show core.cache:storage_path", storeAnswer);
 
     private ConanCacheProvider CreateProvider(FakeProcessRunner runner, FakeProcessInspector? inspector = null) =>
-        new(_environment, runner, inspector ?? FakeProcessInspector.NothingRunning);
+        new(new ConanRcWalk(_temp.Path), _environment, runner, inspector ?? FakeProcessInspector.NothingRunning);
 
     private static string Write(int bytes, params string[] segments)
     {
@@ -85,7 +85,7 @@ public sealed class ConanCacheProviderTests : IDisposable
     {
         var environment = new FakeUserEnvironment(_temp.Path);
         var runner = new FakeProcessRunner();
-        var provider = new ConanCacheProvider(environment, runner, FakeProcessInspector.NothingRunning);
+        var provider = new ConanCacheProvider(new ConanRcWalk(_temp.Path), environment, runner, FakeProcessInspector.NothingRunning);
 
         Assert.False(await provider.IsPresentAsync());
         Assert.True((await provider.PlanAsync()).IsEmpty);
@@ -410,5 +410,215 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.Contains(places, place => place.Holds(Path.Combine(Store, "b", UnfinishedBuild, "p", "conanmanifest.txt")));
         Assert.Contains(places, place => place.Holds(Path.Combine(Store, "t", Recipe, "e", "conanfile.py")));
         Assert.DoesNotContain(places, place => place.Holds(Path.Combine(Store, Recipe, "e", "conanfile.py")));
+    }
+
+    /// <summary>
+    /// A build started while the preview is on screen is an unfinished build that <c>-t</c> takes, so
+    /// the clean asks again immediately before the command and does not run it.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunTheCleanOnceConanStartsAfterThePreview()
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var runner = Answering();
+        var inspector = FakeProcessInspector.NothingRunning;
+        var provider = CreateProvider(runner, inspector);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        inspector.WithRunning("conan");
+        var result = await provider.ExecuteAsync(plan);
+
+        var outcome = Assert.Single(result.Steps);
+        Assert.False(outcome.Succeeded);
+        Assert.Contains("conan is running now", outcome.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(runner.Invocations, call => call.Arguments.StartsWith("cache clean", StringComparison.Ordinal));
+        Assert.Contains(IUseCheck.ReadingLimit, inspector.AgeLimits);
+    }
+
+    /// <summary>
+    /// §5.2: <c>-t</c> removes <c>t</c> whole and every folder of <c>b</c> without a finished package,
+    /// whatever it is called. Anything there Conan did not make holds the clean back, and is protected.
+    /// </summary>
+    [Theory]
+    [InlineData("b", "notes")]
+    [InlineData("b", "fmt0011223344556x")]
+    [InlineData("t", "notes")]
+    public async Task WithholdsTheCleanWhereItWouldTakeAFolderConanDidNotMake(string parent, string name)
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var foreign = Path.Combine(Store, parent, name);
+        Write(10, foreign, "readme.txt");
+
+        var plan = await CreateProvider(Answering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"'{Path.Combine(parent, name)}'", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(foreign, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A file in <c>t</c> goes with it, so it holds the clean back as a foreign folder does.</summary>
+    [Fact]
+    public async Task WithholdsTheCleanWhereTheTemporaryFolderHoldsAFile()
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var file = Write(10, Store, "t", "notes.txt");
+
+        var plan = await CreateProvider(Answering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(file, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+    }
+
+    /// <summary>
+    /// Every Conan command opens the store's database and creates it where it is missing, so a folder
+    /// without one is not shown to be the store Conan's answer names.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingWhereTheStoreHasNoDatabase()
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        File.Delete(Path.Combine(Store, ConanStoreContents.Database));
+
+        var plan = await CreateProvider(Answering()).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+    }
+
+    public enum HomeRoute
+    {
+        ConanHomeVariable,
+        ConanRc,
+        ConansAnswer,
+    }
+
+    /// <summary>
+    /// A home a setting puts at the profile is not Conan's to declare whole. Conan's clean is not run
+    /// there, and only Conan's own entries are refused in Explore.
+    /// </summary>
+    [Theory]
+    [InlineData(HomeRoute.ConanHomeVariable)]
+    [InlineData(HomeRoute.ConanRc)]
+    [InlineData(HomeRoute.ConansAnswer)]
+    public async Task DeclinesAHomeSetToTheProfile(HomeRoute route)
+    {
+        var profile = _environment.UserProfile;
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        CreateStore(Path.Combine(profile, "p"));
+
+        switch (route)
+        {
+            case HomeRoute.ConanHomeVariable:
+                _environment.WithEnvironmentVariable("CONAN_HOME", profile);
+                break;
+
+            case HomeRoute.ConanRc:
+                File.WriteAllText(Path.Combine(_environment.LocalAppData, ".conanrc"), $"conan_home={profile}");
+                break;
+        }
+
+        var runner = Answering(profile);
+        var provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+        var root = Assert.Single(await provider.DiscoverToolRootsAsync());
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, note => note.Message.Contains("will not run Conan's clean", StringComparison.Ordinal));
+        Assert.DoesNotContain(runner.Invocations, call => call.Arguments.StartsWith("config show", StringComparison.Ordinal));
+        Assert.Equal(route is HomeRoute.ConansAnswer, runner.Invocations.Count > 0);
+        Assert.Equal(profile, root.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(ToolRootClaim.NamedEntries, root.Claim);
+        Assert.False(root.Recognises(new ToolRootChild("global.conf", ChildKind.File)));
+        Assert.False(root.Recognises(new ToolRootChild("p", ChildKind.Folder)));
+        Assert.True(root.Recognises(new ToolRootChild("Documents", ChildKind.Folder)));
+        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Holds(Path.Combine(profile, "p", Recipe, "s", "zlib.c")));
+    }
+
+    /// <summary>
+    /// The same for the store: <c>core.cache:storage_path</c> at the profile or a drive's root is never
+    /// walked as a store, and only the database is refused there.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeclinesAStoreSetToTheProfileOrADriveRoot(bool driveRoot)
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var store = driveRoot ? Path.GetPathRoot(_temp.Path)! : _environment.UserProfile;
+        var provider = CreateProvider(Answering(storeAnswer: $"core.cache:storage_path: {store}\r\n"));
+
+        var plan = await provider.PlanAsync();
+        var roots = await provider.DiscoverToolRootsAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Empty(plan.ProtectedPaths);
+        Assert.Contains(plan.Notes, note => note.Message.Contains("will not run Conan's clean", StringComparison.Ordinal));
+        var root = Assert.Single(roots, root => root.Path.Equals(store, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(ToolRootClaim.NamedEntries, root.Claim);
+        Assert.False(root.Recognises(new ToolRootChild(ConanStoreContents.Database, ChildKind.File)));
+        Assert.Contains(roots, root => root.Path.Equals(DefaultHome, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §5.6, the negative: a clean that also takes something the plan names as a survivor fails
+    /// verification.
+    /// </summary>
+    [Theory]
+    [InlineData("package")]
+    [InlineData("export")]
+    [InlineData("metadata")]
+    [InlineData("built")]
+    [InlineData("database")]
+    public async Task VerificationFailsWhereTheCleanTookASurvivor(string survivor)
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var taken = survivor switch
+        {
+            "package" => Path.Combine(Store, Package, "p"),
+            "export" => Path.Combine(Store, Recipe, "e"),
+            "metadata" => Path.Combine(Store, Recipe, "d"),
+            "built" => Path.Combine(Store, "b", FinishedBuild, "p"),
+            _ => Path.Combine(Store, ConanStoreContents.Database),
+        };
+
+        var runner = Answering().Replying(Conan, arguments =>
+        {
+            if (arguments != "cache clean -s -b -t")
+            {
+                return null;
+            }
+
+            Directory.Delete(Path.Combine(Store, Recipe, "s"), recursive: true);
+            Directory.Delete(Path.Combine(Store, "t"), recursive: true);
+
+            if (File.Exists(taken))
+            {
+                File.Delete(taken);
+            }
+            else
+            {
+                Directory.Delete(taken, recursive: true);
+            }
+
+            return new CommandOutcome(0, string.Empty, string.Empty);
+        });
+        var provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+        await provider.ExecuteAsync(plan);
+
+        Assert.False((await provider.VerifyAsync(plan)).Passed);
     }
 }
