@@ -453,6 +453,26 @@
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
 
+            <!-- What the Storage page keeps of each scan, so a row can say how far its cause grew
+                 (#358). A provider's id, a size and a time, and no path: it is still a record of the
+                 machine, so it is removed here beside the scan summaries. -->
+            <InfoBar IsOpen="{x:Bind Sizes.RemoveFailed, Mode=OneWay}"
+                     IsClosable="False"
+                     Severity="Warning"
+                     Title="Not removed"
+                     Message="Deguffer could not remove the size history. Something may be holding the file open. Try again in a moment." />
+
+            <views:SettingsRow Glyph="&#xE9D2;"
+                               Title="Size of each Storage location"
+                               Description="{x:Bind viewModels:SizeHistorySettingsViewModel.Description}">
+                <views:SettingsRow.Control>
+                    <Button Content="Remove"
+                            Click="OnRemoveSizeHistory"
+                            IsEnabled="{x:Bind Sizes.HasAny, Mode=OneWay}"
+                            AutomationProperties.Name="Remove the size history of every Storage location" />
+                </views:SettingsRow.Control>
+            </views:SettingsRow>
+
             <!-- Every value here changes how fast a scan reads the disk, never what it finds: the
                  table is still read whole, the walk still never follows a link, and a refused
                  folder is still reported, whatever is set. So these come last, after the settings

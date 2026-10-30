@@ -125,6 +125,7 @@
                 <TextBlock Grid.Column="5"
                            Text="{x:Bind SizeLabel, Mode=OneWay}"
                            Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
+                           ToolTipService.ToolTip="{x:Bind ChangeTip, Mode=OneWay}"
                            Style="{StaticResource Figure}"
                            FontSize="15"
                            TextAlignment="Right"
@@ -230,6 +231,15 @@
                                    FontSize="11"
                                    TextAlignment="Right"
                                    HorizontalAlignment="Right" />
+
+                        <!-- How far the figure moved since the scan before (#358). A number against
+                             a date and nothing more (§7.1): it ticks nothing and orders nothing. -->
+                        <TextBlock Text="{x:Bind ChangeLabel, Mode=OneWay}"
+                                   Visibility="{x:Bind HasChange, Mode=OneWay}"
+                                   Style="{StaticResource SecondaryText}"
+                                   FontSize="11"
+                                   TextAlignment="Right"
+                                   HorizontalAlignment="Right" />
                         <controls:FillBar Style="{StaticResource ShareBar}"
                                           Value="{x:Bind SharePercent, Mode=OneWay}"
                                           Margin="0,5,0,0" />
@@ -268,6 +278,13 @@
                          disclosure reads as belonging to its row and not to the list. -->
                     <StackPanel Spacing="2" Margin="72,0,16,0">
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
+                                   Style="{StaticResource SecondaryText}"
+                                   FontSize="13" />
+
+                        <!-- The change since the scan before, folded away here for the reason the
+                             sentence above is, and on the figure's tooltip for a pointer. -->
+                        <TextBlock Text="{x:Bind ChangeLabel, Mode=OneWay}"
+                                   Visibility="{x:Bind HasChange, Mode=OneWay}"
                                    Style="{StaticResource SecondaryText}"
                                    FontSize="13" />
 

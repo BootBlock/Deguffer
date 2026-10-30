@@ -6,6 +6,7 @@ using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Execution.Sizes;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -99,6 +100,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// The locations the Scan button's drop-down scans on their own. Built over this page's planner,
     /// so its rows are the planner's own providers.
     /// </param>
+    /// <param name="sizes">Each provider's figure at each scan, which every row states its change against.</param>
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,
@@ -112,7 +114,8 @@ public sealed partial class CleanViewModel : ObservableObject
         Func<IConfirmationPrompt> prompt,
         string appVersion,
         WhenCompleteViewModel whenComplete,
-        ScanChoiceViewModel scanChoice)
+        ScanChoiceViewModel scanChoice,
+        ProviderSizeHistory sizes)
     {
         _planner = planner;
         _environment = environment;
@@ -126,6 +129,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _prompt = prompt;
         WhenComplete = whenComplete;
         ScanChoice = scanChoice;
+        Sizes = new StorageSizeChanges(sizes, Findings, isElevated);
         _coverage = new ScanCoverage(planner.Providers.Count, planner.Providers.Count);
         _origin = new ReportOrigin(
             appVersion,
@@ -248,6 +252,9 @@ public sealed partial class CleanViewModel : ObservableObject
     public WhenCompleteViewModel WhenComplete { get; }
 
     public ScanChoiceViewModel ScanChoice { get; }
+
+    /// <summary>Each row's change since the scan before, and each provider's own history.</summary>
+    public StorageSizeChanges Sizes { get; }
 
     /// <summary>
     /// The row whose items are listed in place of the rows, or null while the rows are shown.
@@ -829,11 +836,20 @@ public sealed partial class CleanViewModel : ObservableObject
         // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
 
-        await Task.Run(
-            () => measured is null
-                ? _planner.PlanAllAsync(keep, progress, found, ct)
-                : _planner.PlanAsync(measured, keep, progress, found, ct),
-            ct);
+        await Sizes.BeginAsync(ct);
+
+        try
+        {
+            await Task.Run(
+                () => measured is null
+                    ? _planner.PlanAllAsync(keep, progress, found, ct)
+                    : _planner.PlanAsync(measured, keep, progress, found, ct),
+                ct);
+        }
+        finally
+        {
+            await Sizes.EndAsync();
+        }
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
@@ -875,7 +891,16 @@ public sealed partial class CleanViewModel : ObservableObject
         // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
 
-        await Task.Run(() => _planner.PlanAsync(providers, keep, progress, found, ct), ct);
+        await Sizes.BeginAsync(ct);
+
+        try
+        {
+            await Task.Run(() => _planner.PlanAsync(providers, keep, progress, found, ct), ct);
+        }
+        finally
+        {
+            await Sizes.EndAsync();
+        }
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
@@ -931,6 +956,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         row.Replan(finding, _selections.Memory, _keeps.Current);
         row.IsListed = IsListed(row);
+        Sizes.Show(row);
         ScanChoice.Missing.Record(finding.Provider, row.Status);
 
         // The row's steps are new, and a re-plan runs while the keep list is not to be changed.
@@ -983,6 +1009,7 @@ public sealed partial class CleanViewModel : ObservableObject
         // Rows arrive as their providers finish, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
         row.IsListed = IsListed(row);
+        Sizes.Show(row);
 
         // As each row lands rather than once at the end, so a scan that is cancelled part-way still
         // marks the locations it did find missing.

@@ -59,7 +59,8 @@ public sealed partial class CleanPage : Page
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme),
             AppVersion.Current,
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
-            new ScanChoiceViewModel(planner.Providers, App.Preferences));
+            new ScanChoiceViewModel(planner.Providers, App.Preferences),
+            App.ProviderSizes);
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
         _density = new DrawnSetting<ViewDensity>(
@@ -450,11 +451,14 @@ public sealed partial class CleanPage : Page
         };
 
         // Assigned once the dialog exists, because the content's way to the item list closes it.
-        dialog.Content = new ProviderInfoView(finding, row =>
-        {
-            dialog.Hide();
-            ViewModel.ShowItems(row);
-        });
+        dialog.Content = new ProviderInfoView(
+            finding,
+            row =>
+            {
+                dialog.Hide();
+                ViewModel.ShowItems(row);
+            },
+            ViewModel.Sizes.HistoryOf(finding));
 
         // Three quarters of the window, in both directions. The dialog's template sizes itself from
         // these four theme resources, and pinning each pair to the same number is what turns a

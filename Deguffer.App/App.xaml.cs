@@ -4,6 +4,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Execution.Sizes;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -101,6 +102,13 @@ public partial class App : Application
     /// </summary>
     public static ScanHistory ScanHistory { get; } =
         new(new ScanHistoryStore(UserEnvironment.Current));
+
+    /// <summary>
+    /// Each Storage location's size at each scan, shared by the Storage page, which adds to it and
+    /// states each row's change against it, and Settings, which removes it, for the same reason.
+    /// </summary>
+    public static ProviderSizeHistory ProviderSizes { get; } =
+        new(new ProviderSizeStore(UserEnvironment.Current));
 
     /// <summary>
     /// What is changing the machine, on every page. Shared because each page is kept alive between

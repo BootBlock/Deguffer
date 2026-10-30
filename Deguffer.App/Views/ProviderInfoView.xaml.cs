@@ -26,14 +26,28 @@ public sealed partial class ProviderInfoView : UserControl
     /// Closes the dialog and lists the row's items on the Storage page. The page's rather than this
     /// control's, because the list takes the place of the page's rows.
     /// </param>
-    public ProviderInfoView(FindingViewModel finding, Action<FindingViewModel> showItems)
+    /// <param name="history">The figures kept for the row's provider, oldest first.</param>
+    public ProviderInfoView(
+        FindingViewModel finding, Action<FindingViewModel> showItems, IReadOnlyList<ProviderSizeRow> history)
     {
         Finding = finding;
         _showItems = showItems;
+        History = history;
+        HistoryNewestFirst = [.. history.Reverse()];
         InitializeComponent();
     }
 
     public FindingViewModel Finding { get; }
+
+    /// <summary>The kept figures oldest first, as the bars run from left to right.</summary>
+    public IReadOnlyList<ProviderSizeRow> History { get; }
+
+    /// <summary>The kept figures newest first, as the list reads from the top.</summary>
+    public IReadOnlyList<ProviderSizeRow> HistoryNewestFirst { get; }
+
+    public bool HasHistory => History.Count > 0;
+
+    public bool HasNoHistory => History.Count == 0;
 
     private void OnShowItemsClicked(object sender, RoutedEventArgs e) => _showItems(Finding);
 }

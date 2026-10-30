@@ -197,6 +197,43 @@ public sealed class ExploreGrowthTests : IDisposable
         Assert.Empty(page.Growth.UsedSpace);
     });
 
+    /// <summary>
+    /// The card forecasts from the drive's kept scans (#358): too few at first, and once three scans a
+    /// week apart show used space rising, when the drive fills at that rate. Removing the kept scans
+    /// in Settings takes the forecast with them.
+    /// </summary>
+    [Fact]
+    public void TheCardForecastsWhenTheDriveFillsFromTheKeptScans() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 1000 * Megabyte, freeBytes: 400 * Megabyte, volumeName: Volume);
+        var page = _explore.Page();
+
+        async Task ScanWithUsed(long usedMegabytes)
+        {
+            _explore.Volumes.Without(@"C:\").With(
+                @"C:\", totalBytes: 1000 * Megabyte, freeBytes: (1000 - usedMegabytes) * Megabyte, volumeName: Volume);
+            await _explore.ScanAsync(page, ExploreScan.Fast(Drive(("Logs", usedMegabytes))));
+        }
+
+        await ScanWithUsed(600);
+
+        Assert.StartsWith("Too few scans of this drive", page.Growth.Forecast, StringComparison.Ordinal);
+
+        _explore.Time.Advance(TimeSpan.FromDays(7));
+        await ScanWithUsed(700);
+        _explore.Time.Advance(TimeSpan.FromDays(7));
+        await ScanWithUsed(800);
+
+        Assert.StartsWith("At the rate since ", page.Growth.Forecast, StringComparison.Ordinal);
+        Assert.EndsWith("measured over 3 scans, this drive fills in about 2 weeks.", page.Growth.Forecast, StringComparison.Ordinal);
+
+        var settings = new ScanHistorySettingsViewModel(_explore.History);
+        await settings.RefreshAsync(CancellationToken.None);
+        settings.RemoveAll();
+
+        Assert.Empty(page.Growth.Forecast);
+    });
+
     /// <summary>A new scan starting takes the comparison off screen, because it describes the tree being replaced.</summary>
     [Fact]
     public void AScanStartingClearsTheComparison() => UiThread.Run(async () =>
